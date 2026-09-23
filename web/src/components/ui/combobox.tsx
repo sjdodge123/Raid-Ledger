@@ -40,8 +40,7 @@ function ComboboxImpl<T>(p: ComboboxProps<T>, ref: ForwardedRef<HTMLInputElement
                 aria-activedescendant={activeId} aria-autocomplete="list" autoComplete="off"
                 id={p.id} name={p.name} placeholder={p.placeholder} disabled={p.disabled} autoFocus={p.autoFocus}
                 invalid={p.invalid} fieldSize={p.fieldSize} value={c.text} trailing={p.trailing} data-testid={p.testIds?.input}
-                onFocus={p.openOnFocus ? c.show : undefined}
-                onChange={(e) => c.onInputChange(e.target.value)} onKeyDown={c.onKeyDown} onBlur={c.close}
+                onFocus={p.openOnFocus ? c.show : undefined} onChange={(e) => c.onInputChange(e.target.value)} onKeyDown={c.onKeyDown} onBlur={c.close}
             />
             <ComboboxLiveRegion text={c.open ? (c.status?.text ?? '') : ''} />
             {c.open && (

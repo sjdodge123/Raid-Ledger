@@ -104,13 +104,13 @@ function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGame
 
 /** Game search combobox with the "Game" label, selected badge and clear button. */
 export function GameSearchInput({ value, onChange, error, initialSuggestions, id = 'game-search', autoFocus, testIds }: GameSearchInputProps): JSX.Element {
-    const s = useGameSearchState(value, onChange, initialSuggestions);
+    const { inputRef, ...s } = useGameSearchState(value, onChange, initialSuggestions);
     return (
         <div className="relative">
             <label htmlFor={id} className="block text-sm font-medium text-secondary mb-2">Game</label>
             {/* autoFocus (ROK-1416): the input receives focus when the form opens as the inert-binding repair target. */}
             <Combobox<IgdbGameDto>
-                ref={s.inputRef} id={id} label="Game" autoFocus={autoFocus} placeholder="Search for a game..."
+                ref={inputRef} id={id} label="Game" autoFocus={autoFocus} placeholder="Search for a game..."
                 options={s.options} getKey={(g) => String(g.id)} getLabel={(g) => g.name}
                 value={value} onChange={s.pick} inputValue={s.query} onInputChange={s.type}
                 loading={s.loading} loadingText="Searching..." emptyText={s.isQuery ? 'No games found' : 'Type to search...'}
