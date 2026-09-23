@@ -40,6 +40,9 @@ const box = (): HTMLElement => screen.getByRole('combobox', { name: 'Game' });
 
 beforeEach(() => {
     Element.prototype.scrollIntoView = vi.fn();
+    // The MAJOR-1 specs read mock.calls; clear explicitly rather than lean on
+    // vitest's clearMocks default (true in v5, false in v4).
+    vi.mocked(useGameSearch).mockClear();
     mockResults([WOW, WOWF]);
 });
 
