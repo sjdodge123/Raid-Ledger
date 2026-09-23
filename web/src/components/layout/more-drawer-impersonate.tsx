@@ -60,7 +60,7 @@ export function ImpersonateSection({ impersonateUsers, onImpersonate }: Imperson
                 <div className="mt-2 rounded-lg bg-panel/50 overflow-hidden">
                     <div className="p-3">
                         <input ref={searchRef} type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users..."
-                            className="w-full px-3 py-2 text-base lg:text-sm bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500" />
+                            className="w-full px-3 py-2 text-base lg:text-sm bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-success/80" />
                     </div>
                     <div className="max-h-48 overflow-y-auto"><ImpersonateList filtered={filtered} search={search} onSelect={handleSelect} /></div>
                 </div>
