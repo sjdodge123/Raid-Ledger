@@ -64,6 +64,7 @@ function fake(customId: string, extra: Record<string, unknown> = {}) {
     deferUpdate: jest.fn().mockResolvedValue(undefined),
     deferReply: jest.fn().mockResolvedValue(undefined),
     editReply: jest.fn().mockResolvedValue(undefined),
+    deleteReply: jest.fn().mockResolvedValue(undefined),
     ...extra,
   };
 }
@@ -149,7 +150,7 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
     expect(body.content).not.toBe(
       'When do you want to play Deep Rock Galactic?',
     );
-    expect(body.content).toBe('1 game matches `deep rock galactic`');
+    expect(body.content).toBe('1 game matches “deep rock galactic”');
     expect(ids(body)).toEqual(
       expect.arrayContaining([
         'lfgc:pick:deep rock galactic',
@@ -164,7 +165,7 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
     search.mockResolvedValue([DRG, VALHEIM]);
     const i = submit('a');
     await submitComposerSearch(deps(), i as never);
-    expect(edited(i).content).toBe('2 games match `a`');
+    expect(edited(i).content).toBe('2 games match “a”');
     expect(ids(edited(i))).toContain('lfgc:pick:a');
   });
 
@@ -174,17 +175,19 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
     const i = submit('valhiem');
     await submitComposerSearch(deps(), i as never);
     expect(edited(i).content).toBe(
-      'No exact match for `valhiem`. Did you mean:',
+      'No exact match for “valhiem”. Did you mean:',
     );
     expect(ids(edited(i))).toContain('lfgc:pick:valhiem');
   });
 
-  it('nothing at all ends in Try again, never a dead end', async () => {
+  it('nothing at all says so and offers only Back, which reopens the modal', async () => {
     search.mockResolvedValue([]);
     fuzzy.mockResolvedValue([]);
     const i = submit('bg3');
     await submitComposerSearch(deps(), i as never);
+    expect(edited(i).content).toBe('No games match “bg3”');
     expect(ids(edited(i))).toEqual(['lfgc:back:bg3']);
+    expect(selectValues(edited(i))).toEqual([]);
   });
 
   it('replaces an ephemeral step in place rather than stacking', async () => {
@@ -205,7 +208,7 @@ describe('submitComposerSearch (ROK-1658 — the list is always shown)', () => {
     search.mockResolvedValue([SURVIVOR, DRG]);
     const i = submit('deep rock galactic');
     await submitComposerSearch(deps(), i as never);
-    expect(edited(i).content).toBe('2 games match `deep rock galactic`');
+    expect(edited(i).content).toBe('2 games match “deep rock galactic”');
     expect(selectValues(edited(i))).toEqual(['7', '9']);
   });
 
@@ -213,7 +216,7 @@ describe('submitComposerSearch (ROK-1658 — the list is always shown)', () => {
     search.mockResolvedValue([SURVIVOR, DRG]);
     const i = fake('lfgc:backc:deep rock galactic');
     await backToComposerCandidates(deps(), i as never);
-    expect(edited(i).content).toBe('2 games match `deep rock galactic`');
+    expect(edited(i).content).toBe('2 games match “deep rock galactic”');
     expect(selectValues(edited(i))).toEqual(['7', '9']);
   });
 });
@@ -227,7 +230,7 @@ describe('pick + back (AC9)', () => {
     expect(ids(edited(i))).toContain('lfgc:backc:deep');
   });
 
-  it('a candidate gone since the search offers Try again', async () => {
+  it('a candidate gone since the search offers Back to the modal', async () => {
     findGame.mockResolvedValue(null);
     const i = fake('lfgc:pick:deep', { values: ['7'] });
     await pickComposerGame(deps(), i as never);
@@ -238,7 +241,7 @@ describe('pick + back (AC9)', () => {
     search.mockResolvedValue([DRG]);
     const i = fake('lfgc:backc:deep rock galactic');
     await backToComposerCandidates(deps(), i as never);
-    expect(edited(i).content).toBe('1 game matches `deep rock galactic`');
+    expect(edited(i).content).toBe('1 game matches “deep rock galactic”');
     expect(ids(edited(i))).toContain('lfgc:pick:deep rock galactic');
   });
 
@@ -261,7 +264,25 @@ describe('goComposer (AC4 — the one write path)', () => {
       ttlMinutes: 30,
       timezone: 'UTC',
     });
-    expect(edited(i).content).toMatch(/^You're in/);
+    expect(i.editReply).not.toHaveBeenCalled();
+    expect(i.deleteReply).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the ephemeral once the group posts (prototype step 5)', async () => {
+    const i = fake('lfgc:go:week:7:c:deep');
+    await goComposer(deps(), i as never);
+    expect(i.deferUpdate).toHaveBeenCalled();
+    expect(i.deleteReply).toHaveBeenCalledTimes(1);
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it('a repeat press posts nothing new, so it says so instead of closing', async () => {
+    const d = deps();
+    d.createIntent.mockResolvedValue({ ...RESULT, created: false });
+    const i = fake('lfgc:go:week:7:c:deep');
+    await goComposer(d, i as never);
+    expect(i.deleteReply).not.toHaveBeenCalled();
+    expect(edited(i).content).toMatch(/^You're already in/);
   });
 
   it('re-checks AC5 at press time and writes nothing for a blocked caller', async () => {

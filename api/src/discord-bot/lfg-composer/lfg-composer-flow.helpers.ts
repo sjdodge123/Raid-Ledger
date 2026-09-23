@@ -70,7 +70,7 @@ function refusalFor(caller: LfgCaller | null): string | null {
 }
 
 /**
- * `Post an LFG`, `Back` to search and `Try again` — open the (prefilled) modal.
+ * `Post an LFG` and `← Back` from results — open the (prefilled) modal.
  *
  * @param deps - Flow dependencies.
  * @param interaction - The pressed button.
@@ -126,7 +126,7 @@ export async function renderComposerSearch(
 /**
  * The modal's submit. Opened from the pinned card it answers with a NEW
  * ephemeral; opened from an ephemeral step's button it replaces that step in
- * place, so Back/Try again never stack a trail of stale replies.
+ * place, so Back never stacks a trail of stale replies.
  */
 export async function submitComposerSearch(
   deps: ComposerFlowDeps,
@@ -197,8 +197,10 @@ async function replyStale(interaction: ButtonInteraction): Promise<void> {
 
 /**
  * The one irreversible press. Re-checks AC5 (a card can outlive a ban), then
- * writes through `createIntent` and replaces the step with the `+1` button's
- * own confirmation — no Back, because there is nothing left to go back to.
+ * writes through `createIntent`. A new group card posts to the board, so the
+ * ephemeral closes (prototype step 5). A repeat press posts nothing new, so it
+ * keeps the `+1` button's "You're already in" confirmation instead of
+ * vanishing silently.
  */
 export async function goComposer(
   deps: ComposerFlowDeps,
@@ -220,6 +222,10 @@ export async function goComposer(
     ...parseUrgencyChoice(value),
     timezone,
   });
+  if (result.created) {
+    await interaction.deleteReply();
+    return;
+  }
   const clientUrl = await deps.settingsService.getClientUrl();
   await interaction.editReply(buildLfgJoinConfirmation(result, clientUrl));
 }

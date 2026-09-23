@@ -91,7 +91,7 @@ describe('buildCandidatesReply', () => {
       false,
       CLIENT_URL,
     );
-    expect(reply.content).toBe('2 games match `rock`');
+    expect(reply.content).toBe('2 games match “rock”');
     const select = reply.components[0].toJSON().components[0];
     expect(select.type).toBe(ComponentType.StringSelect);
     expect(select).toMatchObject({
@@ -104,7 +104,7 @@ describe('buildCandidatesReply', () => {
 
   it('asks rather than tells on the trigram path', () => {
     const reply = buildCandidatesReply('valhiem', [DRG], true, CLIENT_URL);
-    expect(reply.content).toBe('No exact match for `valhiem`. Did you mean:');
+    expect(reply.content).toBe('No exact match for “valhiem”. Did you mean:');
   });
 
   it('always goes back and always offers the games page (AC8)', () => {
@@ -130,6 +130,9 @@ describe('buildUrgencyReply', () => {
     expect(reply.content).toBe('When do you want to play Deep Rock Galactic?');
     const row = reply.components[0].toJSON();
     expect(row.components).toHaveLength(LFG_URGENCY_CHOICES.length);
+    expect(row.components.map((c) => ('style' in c ? c.style : null))).toEqual(
+      LFG_URGENCY_CHOICES.map(() => ButtonStyle.Primary),
+    );
   });
 
   it.each(['search', 'candidates'] as const)(
@@ -142,8 +145,11 @@ describe('buildUrgencyReply', () => {
         choices: LFG_URGENCY_CHOICES,
         clientUrl: CLIENT_URL,
       });
-      expect(labels(reply)).toContain(LFG_COMPOSER_COPY.BACK_BUTTON);
-      const tail = reply.components[1].toJSON().components[0];
+      const tailRow = reply.components[1].toJSON().components;
+      expect(tailRow.map((c) => ('label' in c ? c.label : c.type))).toEqual([
+        LFG_COMPOSER_COPY.BACK_BUTTON,
+      ]);
+      const tail = tailRow[0];
       expect('custom_id' in tail ? tail.custom_id : undefined).toBe(
         'lfgc:backc:deep rock',
       );
@@ -172,18 +178,20 @@ describe('orderUrgencyChoices', () => {
 });
 
 describe('buildNoMatchReply', () => {
-  it('ends in Try again and View games — never in nothing to press', () => {
+  it('carries ONLY Back and View games — no select, no separate Try again', () => {
     const reply = buildNoMatchReply('bg3', CLIENT_URL);
-    expect(reply.content).toBe('Nothing in the library matches `bg3`.');
-    expect(labels(reply)).toEqual([
-      LFG_COMPOSER_COPY.TRY_AGAIN_BUTTON,
-      LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON,
-    ]);
+    expect(reply.content).toBe('No games match “bg3”');
+    expect(reply.components).toHaveLength(1);
+    expect(labels(reply)).toEqual(['← Back', 'View games ↗']);
   });
 
-  it('still offers Try again on a deployment with no web URL', () => {
-    expect(labels(buildNoMatchReply('bg3', null))).toEqual([
-      LFG_COMPOSER_COPY.TRY_AGAIN_BUTTON,
-    ]);
+  it('still offers Back on a deployment with no web URL', () => {
+    expect(labels(buildNoMatchReply('bg3', null))).toEqual(['← Back']);
+  });
+
+  it('shows a typed term literally, markdown and all', () => {
+    expect(buildNoMatchReply('*bg3*', null).content).toBe(
+      'No games match “\\*bg3\\*”',
+    );
   });
 });

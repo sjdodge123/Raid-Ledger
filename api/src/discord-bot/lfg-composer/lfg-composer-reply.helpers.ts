@@ -1,15 +1,16 @@
 /**
  * ROK-1612 AC8/AC9 — the three ephemeral replies, none of which is a dead end.
  *
- * Every reply built here carries `← Back` and `View games ↗`. That is the
- * invariant the AC exists to protect: no path may leave someone with a
- * dismissed modal and nothing to press. `Back` is a BUTTON, never a modal
- * submit response, because `ModalSubmitInteraction` has no `showModal` — the
+ * Every reply built here carries `← Back`; every RESULTS message also carries
+ * `View games ↗`, and the When step carries Back alone (the approved ROK-1658
+ * prototype, steps 3a–3d and 4). No path may leave someone with a dismissed
+ * modal and nothing to press. `Back` is a BUTTON, never a modal submit
+ * response, because `ModalSubmitInteraction` has no `showModal` — the
  * constraint the whole flow is shaped around.
  *
- * Where Back goes (AC9, as amended by ROK-1658): from the candidate select and
- * the dead end it reopens the modal prefilled; from the urgency step it always
- * returns to the select, because the select is now the only way in.
+ * Where Back goes (AC9, as amended by ROK-1658): from any results message —
+ * nothing-found included — it reopens the modal prefilled; from the When step
+ * it returns to the results list, because the select is the only way in.
  */
 import {
   ActionRowBuilder,
@@ -48,25 +49,26 @@ export interface LfgComposerReply {
 /** Discord caps a select option label at 100 characters. */
 const OPTION_LABEL_MAX = 100;
 
+/** A `← Back` button with the given destination id. */
+function buildBackButton(backId: string): ButtonBuilder {
+  return new ButtonBuilder()
+    .setCustomId(backId)
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel(LFG_COMPOSER_COPY.BACK_BUTTON);
+}
+
 /**
- * The `← Back` / `View games ↗` tail every reply ends with.
+ * The `← Back` / `View games ↗` tail every results message ends with.
  *
  * @param term - Typed text, carried so Back can reopen the modal prefilled.
  * @param clientUrl - Deployment client URL; absent drops the link button.
- * @param backLabel - `← Back`, or `Try again` on the dead end.
- * @param backId - Where Back goes; the prefilled modal unless told otherwise.
  * @returns One action row of one or two buttons.
  */
 export function buildComposerTailRow(
   term: string,
   clientUrl?: string | null,
-  backLabel: string = LFG_COMPOSER_COPY.BACK_BUTTON,
-  backId: string = buildBackCustomId(term),
 ): ActionRowBuilder<ButtonBuilder> {
-  const back = new ButtonBuilder()
-    .setCustomId(backId)
-    .setStyle(ButtonStyle.Secondary)
-    .setLabel(backLabel);
+  const back = buildBackButton(buildBackCustomId(term));
   const view = buildViewGamesButton(clientUrl);
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     view ? [back, view] : [back],
@@ -129,7 +131,9 @@ export interface UrgencyReplyInputs {
 }
 
 /**
- * Step 4 — names the game, offers the horizons, and still goes back.
+ * Step 4 — names the game, offers the horizons, and goes back to the results.
+ * Back is the only other control: the prototype's When step has no
+ * `View games ↗` (`clientUrl` is accepted for call-site symmetry, unused).
  *
  * @param inputs - Game, term, origin, vocabulary and client URL.
  * @returns The ephemeral reply.
@@ -146,18 +150,16 @@ export function buildUrgencyReply(
         origin: inputs.origin,
         choices: inputs.choices,
       }),
-      buildComposerTailRow(
-        inputs.term,
-        inputs.clientUrl,
-        LFG_COMPOSER_COPY.BACK_BUTTON,
-        buildBackToCandidatesCustomId(inputs.term),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        buildBackButton(buildBackToCandidatesCustomId(inputs.term)),
       ),
     ],
   };
 }
 
 /**
- * The dead end that is not one — `Try again` reopens the modal prefilled.
+ * Nothing found — no select, only `← Back` (reopens the modal prefilled) and
+ * `View games ↗`. The prototype has no separate `Try again` (ROK-1658).
  *
  * @param term - What was typed and found nothing.
  * @param clientUrl - Deployment client URL.
@@ -169,8 +171,6 @@ export function buildNoMatchReply(
 ): LfgComposerReply {
   return {
     content: composerNoMatchHeading(normalizeComposerTerm(term)),
-    components: [
-      buildComposerTailRow(term, clientUrl, LFG_COMPOSER_COPY.TRY_AGAIN_BUTTON),
-    ],
+    components: [buildComposerTailRow(term, clientUrl)],
   };
 }

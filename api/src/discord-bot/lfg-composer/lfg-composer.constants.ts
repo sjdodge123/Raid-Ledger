@@ -1,3 +1,5 @@
+import { escapeMarkdown } from 'discord.js';
+
 /**
  * ROK-1612 — the pinned LFG composer card: ids, copy and limits.
  *
@@ -27,7 +29,11 @@ export const LFG_COMPOSER_IDS = {
   PICK: 'lfgc:pick',
   /** An urgency button — the one irreversible press. */
   GO: 'lfgc:go',
-  /** `Back`, and the dead-end `Try again`; both reopen the prefilled modal. */
+  /**
+   * `← Back` from any results message; reopens the prefilled modal. The
+   * retired dead-end `Try again` button carried this same id, so an ephemeral
+   * sent before ROK-1658 still routes here unchanged.
+   */
   BACK: 'lfgc:back',
   /**
    * `Back` from the urgency step when the game came from a candidate select —
@@ -60,7 +66,6 @@ export const LFG_COMPOSER_COPY = {
   MODAL_INPUT_LABEL: 'Game',
   MODAL_PLACEHOLDER: 'Start typing a game name',
   BACK_BUTTON: '← Back',
-  TRY_AGAIN_BUTTON: 'Try again',
   SELECT_PLACEHOLDER: 'Pick a game',
   /** A press carrying an urgency the live vocabulary no longer has. */
   STALE_REPLY: 'That option has changed — press Back and pick again.',
@@ -68,20 +73,28 @@ export const LFG_COMPOSER_COPY = {
   FAILED_REPLY: 'Something went wrong. Please try again.',
 } as const;
 
-/** `N games match \`rock\`` — the ambiguous header. */
+/**
+ * The typed term in curly quotes, as the approved prototype shows it (ROK-1658).
+ * Escaped so `*bg3*` reads as typed rather than rendering as italics.
+ */
+function quoted(term: string): string {
+  return `“${escapeMarkdown(term)}”`;
+}
+
+/** `3 games match “rock”` / `1 game matches “valheim”` — the results header. */
 export function composerCandidatesHeading(count: number, term: string): string {
   const games = count === 1 ? 'game matches' : 'games match';
-  return `${String(count)} ${games} \`${term}\``;
+  return `${String(count)} ${games} ${quoted(term)}`;
 }
 
 /** The trigram reply. Phrased as a question because it never auto-selects. */
 export function composerDidYouMeanHeading(term: string): string {
-  return `No exact match for \`${term}\`. Did you mean:`;
+  return `No exact match for ${quoted(term)}. Did you mean:`;
 }
 
-/** The dead end. Offers `Try again` and `View games ↗`, never nothing. */
+/** Nothing found. Carries only `← Back` and `View games ↗` — no select. */
 export function composerNoMatchHeading(term: string): string {
-  return `Nothing in the library matches \`${term}\`.`;
+  return `No games match ${quoted(term)}`;
 }
 
 /** The urgency step names the game so the press is never ambiguous. */
