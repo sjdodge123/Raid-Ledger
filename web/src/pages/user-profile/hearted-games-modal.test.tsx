@@ -67,6 +67,11 @@ describe('HeartedGamesModal — search filter', () => {
         expect(screen.getByPlaceholderText('Search games...')).toBeInTheDocument();
     });
 
+    it('gives the search input an accessible name (ROK-1645)', () => {
+        renderWithProviders(<HeartedGamesModal {...defaultProps} />);
+        expect(screen.getByRole('textbox', { name: 'Search hearted games' })).toBeInTheDocument();
+    });
+
     it('filters items by game name (case-insensitive)', async () => {
         const user = userEvent.setup();
         renderWithProviders(<HeartedGamesModal {...defaultProps} />);
