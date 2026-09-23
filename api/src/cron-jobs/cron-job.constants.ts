@@ -137,6 +137,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'DMs unsigned game followers and posts channel "spots still available" bumps every 15 minutes. Suppresses both paths for events created less than RECRUITMENT_SHORT_NOTICE_HOURS (default 12) before they start.',
     category: 'Notifications',
   },
+  WeeklyDigestService_postDigest: {
+    description:
+      'Posts the weekly community digest to its Discord channel. Ticks hourly; posts once per ISO week at the configured day + hour (community timezone) when enabled.',
+    category: 'Notifications',
+  },
   SteamSyncProcessor_scheduledSync: {
     description: 'Syncs Steam library data for all linked users daily at 4 AM',
     category: 'Data Sync',

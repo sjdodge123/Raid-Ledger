@@ -44,6 +44,7 @@ import { lineupGraceCountdownTests } from "./tests/lineup-grace-countdown.test.j
 import { lineupTieTests } from "./tests/lineup-tie.test.js";
 import { discordDeactivationTests } from "./tests/discord-deactivation.test.js";
 import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
+import { weeklyDigestTests } from "./tests/weekly-digest.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
 import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
@@ -185,6 +186,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lineupTieTests,
     ...discordDeactivationTests,
     ...recruitmentReminderTests,
+    ...weeklyDigestTests,
     ...seriesDualBindingTests,
     ...ephemeralVoiceTests,
     ...lfmEmbedTests,

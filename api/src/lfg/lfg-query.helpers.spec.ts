@@ -23,13 +23,17 @@ import {
 import {
   deriveLfgState,
   deriveViability,
+  listActiveGroups,
+  listActiveGroupsForChannel,
   listGroupMembers,
   toGroupSummary,
   type LfgDb,
   type LfgGroupAggregate,
 } from './lfg-query.helpers';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
-import { LFG_URGENCIES } from './lfg.constants';
+import { LFG_LIST_LIMIT, LFG_URGENCIES } from './lfg.constants';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -220,5 +224,38 @@ describe('listGroupMembers — per-member urgency', () => {
     ]);
     const members = await listGroupMembers(mockDb as unknown as LfgDb, 22);
     expect(members.map((m) => m.urgency)).toEqual(['now', 'week']);
+  });
+});
+
+describe('listActiveGroupsForChannel — viewer-free read (ROK-1435)', () => {
+  function renderOwnIntent(mockDb: ReturnType<typeof createDrizzleMock>) {
+    const cols = mockDb.select.mock.calls[0][0] as { hasOwnIntent: SQL };
+    return new PgDialect().sqlToQuery(cols.hasOwnIntent);
+  }
+
+  it('never computes hasOwnIntent against anybody’s id', async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([]);
+    await listActiveGroupsForChannel(mockDb as unknown as LfgDb);
+    const own = renderOwnIntent(mockDb);
+    expect(own.sql).toBe('false');
+    expect(own.params).toEqual([]);
+  });
+
+  it('keeps listActiveGroups computing it for the caller', async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([]);
+    await listActiveGroups(mockDb as unknown as LfgDb, 42);
+    const own = renderOwnIntent(mockDb);
+    expect(own.sql).toContain('bool_or');
+    expect(own.params).toEqual([42]);
+  });
+
+  it('shares the list read’s order and limit', async () => {
+    const mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([]);
+    await listActiveGroupsForChannel(mockDb as unknown as LfgDb);
+    expect(mockDb.limit).toHaveBeenCalledWith(LFG_LIST_LIMIT);
+    expect(mockDb.groupBy).toHaveBeenCalledTimes(1);
   });
 });
