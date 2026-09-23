@@ -819,8 +819,11 @@ const stripWrapTags = (body) =>
     : body;
 
 // Encode the comment body as base64 so the inside of the wrap is opaque
-// to tag-matching. The agent's tool description tells the consumer to
-// base64-decode the body before inspection.
+// to tag-matching. This raw wire shape is only ever fetched by the MCP
+// tool's include_comments:true path (ROK-1657), which base64-decodes,
+// sanitizes and re-wraps the text server-side (inside mcp-rl-fleet, not
+// as agent-context instructions) before a disposable sub-agent lane sees
+// it — the default (bodyless) tool path never requests this shape.
 const encodeCommentBody = (body) =>
   typeof body === 'string' && body.length > 0
     ? Buffer.from(body, 'utf-8').toString('base64')
@@ -870,13 +873,15 @@ const wrapCommentBodies = (plan) => ({
     comments: (s.comments ?? []).map((c) => ({
       tester: c.tester,
       ts: c.ts,
-      // Wrap the body so the agent's context window has a clear "this is
+      // Wrap the body so this raw wire shape has a clear "this is
       // untrusted user input" boundary. The body is base64-encoded INSIDE
       // the wrap so a hostile tester cannot forge the close tag from any
       // amount of entity/Unicode/zero-width trickery — every character
-      // they post decodes to opaque ASCII inside the wrap. The agent's
-      // tool description instructs the consumer to base64-decode before
-      // inspecting the body. See encodeCommentBody / stripWrapTags above.
+      // they post decodes to opaque ASCII inside the wrap. Only reached
+      // via the MCP tool's include_comments:true path (ROK-1657), which
+      // decodes + sanitizes this server-side and hands a disposable
+      // sub-agent lane plain text, never the base64 shape itself. See
+      // encodeCommentBody / stripWrapTags above.
       body: c.body
         ? `<untrusted-tester-comment encoding="base64">${encodeCommentBody(c.body)}</untrusted-tester-comment>`
         : null,
