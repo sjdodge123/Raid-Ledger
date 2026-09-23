@@ -239,10 +239,10 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
-| `filter-entry.tsx` → `FilterEntry`, `FilterEntryTrigger` | **The** filter entry point — the funnel standard (§4.1, ROK-1659). Pairs `FilterPanel` with the right opener for the viewport: `FilterEntryTrigger` renders the toolbar funnel at ≥1024px and nothing below it; `FilterEntry` renders the inline panel at ≥1024px and the `FilterFab` + `BottomSheet` below. Pages build on this, not `filter-panel.tsx` directly. | Any list/grid filtering, anywhere — `/games`, Common Ground, Calendar | `activeCount`, `isOpen`, `onOpenChange`, `onClearAll`, `children`, `stackAboveCreate`; trigger: `activeCount`, `isOpen`, `onOpenChange` |
-| `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | The lower-level pieces `filter-entry.tsx` composes: `FilterPanel` is the inline collapsible panel ("Filters" + "Clear all", scrolls internally past `max-h-[500px]`) that becomes a `BottomSheet` below `DESKTOP_MQ`; `FilterPanelTrigger` is the bare 44px funnel button. Reach for these only when `FilterEntry` doesn't fit. | Building a new filter entry point, or reading how one works | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `onClose`, `children`; trigger: `activeCount`, `isOpen`, `onClick` |
-| `filter-fab.tsx` → `FilterFab` (+ `fab-position.ts`) | The Filters FAB (§4.1, ROK-1659): 56px round, `right-4`, `lg:hidden`, neutral tone (`bg-surface border-edge-strong`) with the active-filter badge. Normally reached through `FilterEntry`, not mounted directly. | Phone/tablet filter entry, below 1024px | `activeCount`, `isOpen`, `onClick`, `stackAboveCreate` (lifts it above a page's create `FAB` — `fab-position.ts`) |
-| `filter-count-badge.tsx` → `FilterCountBadge` | The active-filter count badge shared by `FilterPanelTrigger` and `FilterFab`: solid `bg-success` pill, renders nothing at 0, count re-exposed via `aria-describedby` since both openers are named "Filters". | Never mounted directly — internal to `filter-panel.tsx` / `filter-fab.tsx` | `count`, `id` |
+| `filter-entry.tsx` → `FilterEntry`, `FilterEntryTrigger` | **The** filter entry point — the funnel standard (§4.1, ROK-1659). Pairs `FilterPanel` with the right opener for the viewport: `FilterEntryTrigger` renders the toolbar funnel at ≥1024px and nothing below it; `FilterEntry` renders the inline panel at ≥1024px and the `FilterFab` + `BottomSheet` below. Pages build on this, not `filter-panel.tsx` directly. | Any list/grid filtering, anywhere — `/games`, Common Ground, Calendar | `activeCount`, `isOpen`, `onOpenChange`, `onClearAll`, `children`, `stackAboveCreate`, `describeCount`; trigger: `activeCount`, `isOpen`, `onOpenChange`, `describeCount` |
+| `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | The lower-level pieces `filter-entry.tsx` composes: `FilterPanel` is the inline collapsible panel ("Filters" + "Clear all", scrolls internally past `max-h-[500px]`) that becomes a `BottomSheet` below `DESKTOP_MQ`, and closes on Escape with focus returned to the trigger (§4.1); `FilterPanelTrigger` is the bare 44px funnel button. Reach for these only when `FilterEntry` doesn't fit. | Building a new filter entry point, or reading how one works | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `onClose`, `children`; trigger: `activeCount`, `isOpen`, `onClick`, `describeCount` |
+| `filter-fab.tsx` → `FilterFab` (+ `fab-position.ts`) | The Filters FAB (§4.1, ROK-1659): 56px round, `right-4`, `lg:hidden`, neutral tone (`bg-surface border-edge-strong`) with the active-filter badge. Normally reached through `FilterEntry`, not mounted directly. | Phone/tablet filter entry, below 1024px | `activeCount`, `isOpen`, `onClick`, `stackAboveCreate` (lifts it above a page's create `FAB` — `fab-position.ts`), `describeCount` |
+| `filter-count-badge.tsx` → `FilterCountBadge` | The active-filter count badge shared by `FilterPanelTrigger` and `FilterFab`: solid `bg-success` pill, renders nothing at 0, count re-exposed via `aria-describedby` since both openers are named "Filters". | Never mounted directly — internal to `filter-panel.tsx` / `filter-fab.tsx` | `count`, `id`, `describe` (screen-reader wording override, defaults to `describeActiveFilters` → "N active filters"; the calendar passes `describeHiddenGames` → "N games hidden"), `offset` (`'fab'` 4px corner inset for the 56px FAB, default; `'trigger'` 6px for the 44px toolbar funnel) |
 | `button.tsx` → `Button` (ROK-1646) | **The** button. Five variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), `destructive-soft` (`bg-danger/10 text-danger border-danger/30`) — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), forwarded ref, all `ButtonHTMLAttributes` |
 | `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
 | `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-14` so text clears a 44px button), `mono`, forwarded ref |
@@ -311,22 +311,31 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
 
 - **Desktop (≥1024px, `DESKTOP_MQ`)** — a toolbar `FilterPanelTrigger` (funnel + active-filter badge)
   opens the inline `FilterPanel`, which owns "Filters" + "Clear all" and scrolls internally past its
-  `max-h-[500px]` cap. Reference: `pages/games/coop-filter-section.tsx`, `pages/players-page.tsx:87-93`.
-  Escape closes the desktop panel only where the consumer wires it (`useEscapeToClose`, a local function
-  at `coop-filter-section.tsx:30,51` — not a `FilterPanel` affordance; `players-page.tsx` lacks it).
+  `max-h-[500px]` cap. Reference: `components/ui/filter-entry.tsx` (`FilterEntry` / `FilterEntryTrigger`,
+  the standard pairing) and its adopters `pages/games/games-filter-panel.tsx`,
+  `components/lineups/CommonGroundFilters.tsx`, `pages/calendar/CalendarFilterEntry.tsx`.
+  `pages/players-page.tsx:84-90` wires the lower-level `FilterPanelTrigger` / `FilterPanel` pair directly
+  instead of `FilterEntry` (not yet migrated to the shared entry point).
+  Escape-to-close is built into `FilterPanel` itself (`useEscapeToClose`, `filter-panel.tsx:61-82`) — not
+  a per-page affordance. It closes the desktop panel and, when focus was inside it, returns focus to the
+  open funnel (`[data-testid="filter-panel-trigger"][aria-expanded="true"]`), because the collapsed panel
+  is `inert`. Every `FilterPanel` consumer gets this for free, including `players-page.tsx`.
 - **Phone + tablet (<1024px)** — no toolbar trigger. A floating **Filters FAB** (56px round, `right-4`,
-  `lg:hidden` — above the bottom tab bar: `bottom-72` while it shows, `bottom-16` once it hides or at
-  768–1023px where there is no tab bar) opens the same `FilterPanel` as a `BottomSheet`, which uses its
-  own height cap instead. Neutral tone (`bg-surface border border-edge-strong shadow-lg`, funnel
-  `text-foreground`) — it is a secondary trigger, not a page's primary action, so it does NOT take the
-  `FAB` primitive's default emerald fill. `aria-label="Filters"`, `aria-describedby` naming the count,
-  `aria-expanded`.
+  `lg:hidden` — above the bottom tab bar: `bottom: 72px` (`FAB_BOTTOM_ABOVE_TAB_BAR`) while it shows,
+  `bottom: 16px` (`FAB_BOTTOM_NO_TAB_BAR`) once it hides or at 768px and up where there is no tab bar —
+  computed by `useFilterFabBottom`, `components/ui/fab-position.ts`) opens the same `FilterPanel` as a
+  `BottomSheet`, which uses its own height cap instead. Neutral tone (`bg-surface border border-edge-strong
+  shadow-lg`, funnel `text-foreground`) — it is a secondary trigger, not a page's primary action, so it
+  does NOT take the `FAB` primitive's default emerald fill. `aria-label="Filters"`, `aria-describedby`
+  naming the count, `aria-expanded`.
 - **The badge counts ACTIVE filters, not results** — hidden at zero active filters, on both the desktop
   trigger and the FAB.
 - **Stacking** (documented here; `/events` is the live case and out of scope for ROK-1659) — a page's
-  create `FAB` and its Filters FAB share the right edge, 12px apart (`bottom-72`/`bottom-140`, or
-  `bottom-16`/`bottom-84` once the tab bar hides); the create FAB keeps the emerald fill, the Filters FAB
-  stays neutral, and the page's bottom padding clears both (§3.1 `fab.tsx`).
+  create `FAB` and its Filters FAB share the right edge, 12px apart (`FAB_STACK_GAP_PX`,
+  `fab-position.ts`): `72px`/`140px` while the tab bar shows, or `16px`/`84px` once it hides — the create
+  FAB's own bottom offset plus the 56px FAB height and the 12px gap (`useFilterFabBottom(stackAboveCreate)`);
+  the create FAB keeps the emerald fill, the Filters FAB stays neutral, and the page's bottom padding
+  clears both (§3.1 `fab.tsx`).
 - When a predicate drops NULL-data rows, disclose it in a hint line (`CoopFilterHint`) rather than
   silently emptying the grid.
 
@@ -731,11 +740,12 @@ them; do not fix them as scope creep.
 
 1. ~~**`CommonGroundFilters` vs `FilterPanel`**~~ (`components/lineups/CommonGroundFilters.tsx` vs
    `components/ui/filter-panel.tsx`) — **Resolved by ROK-1659:** the bespoke always-visible card is
-   retired; Common Ground's four controls (min owners, genre, max players, co-op) moved into `FilterPanel`
-   children behind the same Filters FAB (phone/tablet) / toolbar funnel (desktop) as `/games` and
-   `/players`. The auto-seed hook (ROK-1255), restore/suppress (ROK-1400) and co-op dormancy moved across
-   unchanged. The badge counts co-op only — min owners 2 and auto-seeded players are defaults and don't
-   count.
+   retired; Common Ground's three controls (min owners, players, co-op) moved into `FilterEntry` children
+   behind the same Filters FAB (phone/tablet) / toolbar funnel (desktop) as `/games` (`/players` is not
+   yet migrated — it still wires the lower-level `FilterPanelTrigger` / `FilterPanel` pair directly, shown
+   at every width, §4.1). Common Ground has no genre control. The auto-seed hook (ROK-1255),
+   restore/suppress (ROK-1400) and co-op dormancy moved across unchanged. The badge counts co-op only —
+   min owners 2 and auto-seeded players are defaults and don't count.
 
 2. **Chip class strings duplicated across two files** — `pages/games/library-filter-chips.tsx` and
    `pages/games/lfg-filter-chip.tsx` carry byte-identical `BASE_CLS` / `ON_CLS` / `OFF_CLS`; only the
