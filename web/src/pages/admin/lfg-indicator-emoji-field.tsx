@@ -7,6 +7,9 @@
  */
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
+import { Button } from '../../components/ui/button';
+import { Field } from '../../components/ui/field';
+import { Input } from '../../components/ui/input';
 import { useLfgIndicatorEmoji } from '../../hooks/admin/use-lfg-board-settings';
 
 const HINT =
@@ -25,17 +28,16 @@ export function LfgIndicatorEmojiField({ current }: { current: string | null | u
     };
     return (
         <div className="mt-4 border-t border-edge pt-4">
-            <label htmlFor="lfg-indicator-emoji" className="text-sm font-medium text-foreground">Group-start emoji</label>
-            <p className="text-xs text-muted mt-1">{HINT}</p>
-            <div className="mt-2 flex items-center gap-2">
-                <input id="lfg-indicator-emoji" data-testid="lfg-indicator-emoji-input" value={value}
-                    placeholder="🎉" maxLength={64} onChange={(e) => setValue(e.target.value)}
-                    className="w-48 rounded-lg border border-edge bg-panel px-3 py-1.5 text-sm text-foreground" />
-                <button type="button" aria-label="Save group-start emoji" onClick={onSave} disabled={save.isPending || value === (current ?? '')}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-60">
-                    Save
-                </button>
-            </div>
+            <Field label="Group-start emoji" hint={HINT} id="lfg-indicator-emoji">
+                <div className="flex items-center gap-2">
+                    <Input data-testid="lfg-indicator-emoji-input" value={value} placeholder="🎉" maxLength={64}
+                        onChange={(e) => setValue(e.target.value)} className="w-48" />
+                    <Button size="sm" aria-label="Save group-start emoji" onClick={onSave}
+                        loading={save.isPending} disabled={value === (current ?? '')}>
+                        Save
+                    </Button>
+                </div>
+            </Field>
         </div>
     );
 }
