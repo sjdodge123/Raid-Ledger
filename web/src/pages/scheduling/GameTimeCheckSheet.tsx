@@ -39,7 +39,7 @@ import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { StepOneDoneContext } from './game-time-check-step';
 import { SheetTitleRow } from './SheetTitleRow';
 import { SheetHeaderContext, type SheetHeaderOverride } from './sheet-header-context';
-import { SheetDirtyContext } from '../../components/features/game-time/sheet-dirty-context';
+import { SheetDirtyContext, useSheetDirtySources } from '../../components/features/game-time/sheet-dirty-context';
 import { useDirtyCloseGuard } from '../../components/features/game-time/use-dirty-close-guard';
 import { DiscardChangesConfirm } from '../../components/features/game-time/DiscardChangesConfirm';
 
@@ -113,7 +113,7 @@ interface CheckSheetFrameProps {
 /** The open sheet: title row (or the body's override), then the bounded body. */
 function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps): JSX.Element {
     const [header, setHeader] = useState<SheetHeaderOverride | null>(null);
-    const [dirty, setDirty] = useState(false);
+    const { dirty, report } = useSheetDirtySources();
     const guard = useDirtyCloseGuard(dirty, onClose);
     return (
         <BottomSheet isOpen onClose={guard.requestClose} maxHeight="95vh" initiallyExpanded ariaLabel="Game time check">
@@ -123,7 +123,7 @@ function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps)
                     onBack={header?.onBack} backLabel={header?.backLabel} backTestId={header?.backTestId}
                 />
                 <SheetHeaderContext.Provider value={setHeader}>
-                    <SheetDirtyContext.Provider value={setDirty}>
+                    <SheetDirtyContext.Provider value={report}>
                         <StepOneDoneContext.Provider value={onDone}>
                             <div data-testid="game-time-check-content" className={CONTENT_BOX}>
                                 {body}
