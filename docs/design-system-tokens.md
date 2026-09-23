@@ -26,9 +26,9 @@ shared light block (`:114-123`) only; contrast on `#ffffff` is recomputed by
 
 | You write | Dark paints | Light paints | Anchor |
 |---|---|---|---|
-| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#047857` emerald-700, 5.48:1 | `:58` / `:118` |
-| `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#b45309` amber-700, 5.02:1 | `:60` / `:120` |
-| `bg-danger` / `text-danger` / `bg-danger/50` … | `#ef4444` red-500 | `#dc2626` red-600, 4.83:1 | `:62` / `:122` |
+| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#047857` emerald-700, 5.48:1 | `:58` / `:120` |
+| `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:60` / `:122` |
+| `bg-danger` / `text-danger` / `bg-danger/50` … | `#ef4444` red-500 | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint) | `:62` / `:124` |
 | `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:114` |
 | `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:115` |
 

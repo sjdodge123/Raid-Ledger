@@ -88,6 +88,14 @@ Sibling agents may be working in the same tree. **Commit with explicit paths —
 the file out, stage the deletion, commit with the explicit path, move it back, then verify with
 `git ls-files`.
 
+## Design system
+
+Read `docs/design-system.md` before any UI change (adding, relocating, or restyling a component). Reuse
+an inventory primitive (§3) instead of building a parallel one; use tokens only, never a raw slate/hex.
+Verify `default-dark` AND `default-light` — one family checked is not done. Adding or changing a token,
+primitive, shared component or pattern updates the doc (plus `docs/design-system-tokens.md` for tokens,
+plus `/dev/design-system`) in the same branch — not a follow-up.
+
 ## Scope
 
 - Pre-existing failures go to `TECH-DEBT-BACKLOG.md` under a dated `###` section — **documenting is the
