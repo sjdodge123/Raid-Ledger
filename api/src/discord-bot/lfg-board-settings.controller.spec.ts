@@ -153,6 +153,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
       enabled: false,
       channelId: null,
       nowIndicatorEmoji: null,
+      composerEnabled: false,
     });
 
     await put(true);
@@ -163,6 +164,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
       enabled: true,
       channelId: null,
       nowIndicatorEmoji: null,
+      composerEnabled: false,
     });
   });
 
@@ -182,6 +184,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
       enabled: true,
       channelId: '999888777',
       nowIndicatorEmoji: null,
+      composerEnabled: false,
     });
   });
   // ROK-1523 final review — a disable on a busy board retires posts one at a

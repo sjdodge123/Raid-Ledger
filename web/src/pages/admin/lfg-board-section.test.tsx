@@ -7,9 +7,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { LfgBoardSection } from './lfg-board-section';
 
+type Data = { enabled: boolean; composerEnabled?: boolean };
 const state = {
-    status: { data: { enabled: false } as { enabled: boolean } | undefined },
+    status: { data: { enabled: false } as Data | undefined },
     update: { mutate: vi.fn(), isPending: false },
+    updateComposer: { mutate: vi.fn(), isPending: false },
 };
 // ROK-1619 — the indicator-emoji field's mutation.
 const emojiSave = { mutate: vi.fn(), isPending: false };
@@ -41,6 +43,8 @@ describe('LfgBoardSection (ROK-1471)', () => {
         state.status.data = { enabled: false };
         state.update.isPending = false;
         state.update.mutate = vi.fn();
+        state.updateComposer.mutate = vi.fn();
+        state.updateComposer.isPending = false;
     });
 
     it('renders unchecked when the board is disabled', () => {
@@ -106,5 +110,62 @@ describe('LfgBoardSection (ROK-1471)', () => {
             { emoji: ':praise_sun:' },
             expect.any(Object),
         );
+    });
+});
+
+describe('LfgBoardSection — pinned composer toggle (ROK-1612 AC6)', () => {
+    const composer = () => screen.getByLabelText('Pin the LFG composer card');
+
+    it('describes the card by its real title and the forum-board placement', () => {
+        renderSection();
+        expect(screen.getByText(/"Looking for a group\?" card/)).toBeInTheDocument();
+        expect(screen.getByText(/pinned "How this board works" post/)).toBeInTheDocument();
+    });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        state.status.data = { enabled: true, composerEnabled: false };
+        state.update.mutate = vi.fn();
+        state.updateComposer.mutate = vi.fn();
+        state.updateComposer.isPending = false;
+    });
+
+    it('renders off by default and on when the API says so', () => {
+        const { unmount } = renderSection();
+        expect(composer()).not.toBeChecked();
+        unmount();
+        state.status.data = { enabled: true, composerEnabled: true };
+        renderSection();
+        expect(composer()).toBeChecked();
+    });
+
+    it('switching it on PUTs the composer opt-in, not the board toggle', () => {
+        state.updateComposer.mutate = vi.fn((_v, opts) => opts?.onSuccess?.({ enabled: true }));
+        renderSection();
+
+        fireEvent.click(composer());
+
+        expect(state.updateComposer.mutate).toHaveBeenCalledWith({ enabled: true }, expect.any(Object));
+        expect(state.update.mutate).not.toHaveBeenCalled();
+        expect(toastSuccess).toHaveBeenCalledWith('Composer card pinned');
+    });
+
+    it('switching it off sends enabled=false', () => {
+        state.status.data = { enabled: true, composerEnabled: true };
+        renderSection();
+        fireEvent.click(composer());
+        expect(state.updateComposer.mutate).toHaveBeenCalledWith({ enabled: false }, expect.any(Object));
+    });
+
+    it('is disabled while a write is in flight, and reports a failed write', () => {
+        state.updateComposer.isPending = true;
+        const { unmount } = renderSection();
+        expect(composer()).toBeDisabled();
+        unmount();
+        state.updateComposer.isPending = false;
+        state.updateComposer.mutate = vi.fn((_v, opts) => opts?.onError?.(new Error('nope')));
+        renderSection();
+        fireEvent.click(composer());
+        expect(toastError).toHaveBeenCalledWith('Failed to update the LFG composer setting');
     });
 });

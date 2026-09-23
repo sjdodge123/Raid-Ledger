@@ -14,6 +14,7 @@ import { adminFetch } from './admin-fetch';
 import type {
     BotInviteInfo,
     LfgBoardSettingsResponse,
+    LfgComposerSettings,
 } from '@raid-ledger/contract';
 
 const BOT_KEY = ['admin', 'settings', 'discord-bot'] as const;
@@ -40,6 +41,8 @@ export function useBotInviteInfo(): UseQueryResult<BotInviteInfo> {
 export interface LfgBoardSettingsHook {
     status: UseQueryResult<LfgBoardSettingsResponse>;
     update: UseMutationResult<LfgBoardSettingsResponse, Error, { enabled: boolean }>;
+    /** ROK-1612 AC6 — the pinned composer card's opt-in. */
+    updateComposer: UseMutationResult<LfgComposerSettings, Error, LfgComposerSettings>;
 }
 
 /**
@@ -63,7 +66,15 @@ export function useLfgBoardSettings(): LfgBoardSettingsHook {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: [...LFG_BOARD_KEY] }),
     });
 
-    return { status, update };
+    const updateComposer = useMutation<LfgComposerSettings, Error, LfgComposerSettings>({
+        mutationFn: (data) =>
+            adminFetch('/admin/settings/discord-bot/lfg-board/composer', {
+                method: 'PUT', body: JSON.stringify(data),
+            }, 'Failed to update the LFG composer setting'),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: [...LFG_BOARD_KEY] }),
+    });
+
+    return { status, update, updateComposer };
 }
 
 /**

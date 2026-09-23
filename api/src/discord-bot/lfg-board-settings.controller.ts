@@ -17,8 +17,10 @@ import { SettingsService } from '../settings/settings.service';
 import {
   getLfgBoardChannelId,
   getLfgBoardEnabled,
+  getLfgComposerEnabled,
   getLfgNowIndicatorEmoji,
   setLfgBoardEnabled,
+  setLfgComposerEnabled,
   setLfgNowIndicatorEmoji,
 } from '../settings/settings-lfg-board.helpers';
 import { preflightLfgBoard } from './lfg-board/lfg-board-preflight.helpers';
@@ -28,8 +30,10 @@ import {
 } from './lfg-board/lfg-board.constants';
 import {
   LfgBoardSettingsSchema,
+  LfgComposerSettingsSchema,
   LfgNowIndicatorEmojiSchema,
   type LfgBoardSettingsResponse,
+  type LfgComposerSettings,
 } from '@raid-ledger/contract';
 import { handleValidationError } from './validation.util';
 
@@ -62,12 +66,14 @@ export class LfgBoardSettingsController {
    */
   @Get('lfg-board')
   async getSettings(): Promise<LfgBoardSettingsResponse> {
-    const [enabled, channelId, nowIndicatorEmoji] = await Promise.all([
-      getLfgBoardEnabled(this.settingsService),
-      getLfgBoardChannelId(this.settingsService),
-      getLfgNowIndicatorEmoji(this.settingsService),
-    ]);
-    return { enabled, channelId, nowIndicatorEmoji };
+    const [enabled, channelId, nowIndicatorEmoji, composerEnabled] =
+      await Promise.all([
+        getLfgBoardEnabled(this.settingsService),
+        getLfgBoardChannelId(this.settingsService),
+        getLfgNowIndicatorEmoji(this.settingsService),
+        getLfgComposerEnabled(this.settingsService),
+      ]);
+    return { enabled, channelId, nowIndicatorEmoji, composerEnabled };
   }
 
   /**
@@ -87,6 +93,30 @@ export class LfgBoardSettingsController {
       const { emoji } = LfgNowIndicatorEmojiSchema.parse(body);
       await setLfgNowIndicatorEmoji(this.settingsService, emoji);
       return { nowIndicatorEmoji: emoji || null };
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * ROK-1612 AC6 — flip the pinned composer card's opt-in (default off).
+   *
+   * Persists, then hands the Discord side to `LfgComposerPinService` in the
+   * background: ON pins the card in the board channel now, OFF deletes it (or
+   * strips the forum intro's buttons) now — not on the next bot reconnect.
+   *
+   * @param body - `{ enabled: boolean }`, validated by the contract schema.
+   * @returns The persisted opt-in.
+   */
+  @Put('lfg-board/composer')
+  @HttpCode(HttpStatus.OK)
+  async setComposer(@Body() body: unknown): Promise<LfgComposerSettings> {
+    try {
+      const { enabled } = LfgComposerSettingsSchema.parse(body);
+      await setLfgComposerEnabled(this.settingsService, enabled);
+      this.runInBackground(LFG_BOARD_EVENTS.COMPOSER_TOGGLED, 'lfg-composer');
+      this.logger.log(`LFG composer card ${enabled ? 'enabled' : 'disabled'}`);
+      return { enabled };
     } catch (error) {
       handleValidationError(error);
     }
@@ -133,18 +163,25 @@ export class LfgBoardSettingsController {
    * @param enabled - The toggle's new, already persisted, state.
    */
   private runToggleHandlers(enabled: boolean): void {
-    this.eventEmitter
-      .emitAsync(LFG_BOARD_EVENTS.TOGGLED, {
-        enabled,
-      } satisfies LfgBoardToggledPayload)
-      .catch((err: unknown) => {
-        this.logger.error(
-          `The LFG board toggle handlers failed in the background: ${
-            err instanceof Error ? err.message : String(err)
-          }. The setting is saved; re-flip the toggle to retry.`,
-        );
-        Sentry.captureException(err, { tags: { context: 'lfg-board-toggle' } });
-      });
+    this.runInBackground(LFG_BOARD_EVENTS.TOGGLED, 'lfg-board-toggle', {
+      enabled,
+    } satisfies LfgBoardToggledPayload);
+  }
+
+  /** Emit without awaiting; a failure is logged + reported, never thrown. */
+  private runInBackground(
+    event: string,
+    context: string,
+    payload?: LfgBoardToggledPayload,
+  ): void {
+    this.eventEmitter.emitAsync(event, payload).catch((err: unknown) => {
+      this.logger.error(
+        `The ${context} handlers failed in the background: ${
+          err instanceof Error ? err.message : String(err)
+        }. The setting is saved; re-flip the toggle to retry.`,
+      );
+      Sentry.captureException(err, { tags: { context } });
+    });
   }
 
   /** Missing board permissions, or undefined when clean / bot not connected. */
