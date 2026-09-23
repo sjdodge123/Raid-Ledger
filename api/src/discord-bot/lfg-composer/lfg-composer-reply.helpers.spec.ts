@@ -4,8 +4,12 @@
  */
 import { ButtonStyle, ComponentType } from 'discord.js';
 import { LFG_URGENCY_CHOICES } from '../commands/lfg.command.helpers';
-import { LFG_COMPOSER_COPY } from './lfg-composer.constants';
 import {
+  LFG_COMPOSER_COPY,
+  LFG_COMPOSER_TERM_MAX,
+} from './lfg-composer.constants';
+import {
+  GAMES_PAGE_SEARCH_MAX,
   buildComposerCard,
   buildComposerModal,
   gamesPageUrl,
@@ -28,6 +32,15 @@ function modalInput(
   const row = modal.toJSON().components[0];
   if (!('components' in row)) throw new Error('expected an action row');
   return row.components[0] as unknown as Record<string, unknown>;
+}
+
+/** The URL of the one Link button across a reply's rows, if any. */
+function linkUrl(
+  rows: ReadonlyArray<{ toJSON(): { components: ReadonlyArray<object> } }>,
+): string | undefined {
+  return rows
+    .flatMap((row) => row.toJSON().components)
+    .find((c): c is { url: string } => 'url' in c)?.url;
 }
 
 /** Every button label in a reply, flattened across its rows. */
@@ -193,5 +206,55 @@ describe('buildNoMatchReply', () => {
     expect(buildNoMatchReply('*bg3*', null).content).toBe(
       'No games match “\\*bg3\\*”',
     );
+  });
+});
+
+describe('View games carries the searched term (ROK-1658 operator note)', () => {
+  const TERM = 'deep rock & stone';
+
+  it('opens /games searching for what the results message was built from', () => {
+    const url = linkUrl(
+      buildCandidatesReply(TERM, [DRG], false, CLIENT_URL).components,
+    );
+    expect(url).toBe(`${CLIENT_URL}/games?q=deep+rock+%26+stone`);
+    expect(new URL(url ?? '').searchParams.get('q')).toBe(TERM);
+  });
+
+  it('opens /games searching for the term that found nothing', () => {
+    const url = linkUrl(
+      buildNoMatchReply('pokémon #1 & co', CLIENT_URL).components,
+    );
+    expect(url?.startsWith(`${CLIENT_URL}/games?q=`)).toBe(true);
+    expect(url).not.toMatch(/[ #&]/);
+    expect(new URL(url ?? '').searchParams.get('q')).toBe('pokémon #1 & co');
+  });
+
+  it('keeps the pinned card on plain /games — nothing has been searched yet', () => {
+    const url = linkUrl(buildComposerCard(CLIENT_URL).components);
+    expect(url).toBe(`${CLIENT_URL}/games`);
+    expect(new URL(url ?? '').searchParams.has('q')).toBe(false);
+  });
+
+  it('never hands /games a q longer than it accepts', () => {
+    const url = linkUrl(
+      buildNoMatchReply('x'.repeat(150), CLIENT_URL).components,
+    );
+    const q = new URL(url ?? '').searchParams.get('q') ?? '';
+    expect(q).toBe('x'.repeat(LFG_COMPOSER_TERM_MAX));
+    expect(q.length).toBeLessThanOrEqual(GAMES_PAGE_SEARCH_MAX);
+  });
+
+  it('trims the term and links plain /games when it is blank', () => {
+    expect(gamesPageUrl(CLIENT_URL, '  bg3  ')).toBe(
+      `${CLIENT_URL}/games?q=bg3`,
+    );
+    expect(gamesPageUrl(CLIENT_URL, '   ')).toBe(`${CLIENT_URL}/games`);
+  });
+
+  it('still drops the link on a deployment with no web URL', () => {
+    expect(gamesPageUrl(null, TERM)).toBeNull();
+    const reply = buildCandidatesReply(TERM, [DRG], false, null);
+    expect(linkUrl(reply.components)).toBeUndefined();
+    expect(labels(reply)).not.toContain(LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON);
   });
 });

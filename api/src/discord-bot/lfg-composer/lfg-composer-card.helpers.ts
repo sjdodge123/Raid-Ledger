@@ -29,23 +29,49 @@ import {
 } from './lfg-composer.constants';
 import { normalizeComposerTerm } from './lfg-composer-state.helpers';
 
-/** The games page a `View games ↗` button opens, or null when unconfigured. */
-export function gamesPageUrl(clientUrl?: string | null): string | null {
+/**
+ * Mirror of the web's `MAX_SEARCH_QUERY_LENGTH`
+ * (`web/src/pages/games/use-search-query-param.ts`): the /games page ignores a
+ * `?q=` longer than this, so the link must never carry one.
+ */
+export const GAMES_PAGE_SEARCH_MAX = 100;
+
+/**
+ * The games page a `View games ↗` button opens, or null when unconfigured.
+ *
+ * With a searched term the link carries `?q=<term>` so /games opens with the
+ * search box already filled (ROK-1658 operator note) — the term goes through
+ * `URLSearchParams`, so spaces, `&`, `#` and unicode arrive intact.
+ *
+ * @param clientUrl - Deployment client URL.
+ * @param term - What the player searched; absent or blank links plain /games.
+ * @returns The URL, or null when the deployment has no web URL.
+ */
+export function gamesPageUrl(
+  clientUrl?: string | null,
+  term?: string | null,
+): string | null {
   const base = clientUrl?.trim();
-  return base ? `${base.replace(/\/+$/, '')}/games` : null;
+  if (!base) return null;
+  const url = `${base.replace(/\/+$/, '')}/games`;
+  const q = normalizeComposerTerm(term ?? '').slice(0, GAMES_PAGE_SEARCH_MAX);
+  return q ? `${url}?${new URLSearchParams({ q }).toString()}` : url;
 }
 
 /**
  * The `View games ↗` link button, or null when the deployment has no web URL.
  *
  * @param clientUrl - Deployment client URL.
+ * @param term - The searched term, carried into the link as `?q=`; the pinned
+ *   card passes none (nothing has been searched yet).
  * @returns The button, or null — callers spread the result so an unconfigured
  *   instance simply renders one fewer control.
  */
 export function buildViewGamesButton(
   clientUrl?: string | null,
+  term?: string | null,
 ): ButtonBuilder | null {
-  const url = gamesPageUrl(clientUrl);
+  const url = gamesPageUrl(clientUrl, term);
   if (!url) return null;
   return new ButtonBuilder()
     .setStyle(ButtonStyle.Link)

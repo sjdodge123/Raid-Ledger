@@ -60,7 +60,8 @@ function buildBackButton(backId: string): ButtonBuilder {
 /**
  * The `← Back` / `View games ↗` tail every results message ends with.
  *
- * @param term - Typed text, carried so Back can reopen the modal prefilled.
+ * @param term - Typed text, carried so Back can reopen the modal prefilled and
+ *   so `View games ↗` opens /games already searching for it.
  * @param clientUrl - Deployment client URL; absent drops the link button.
  * @returns One action row of one or two buttons.
  */
@@ -69,7 +70,7 @@ export function buildComposerTailRow(
   clientUrl?: string | null,
 ): ActionRowBuilder<ButtonBuilder> {
   const back = buildBackButton(buildBackCustomId(term));
-  const view = buildViewGamesButton(clientUrl);
+  const view = buildViewGamesButton(clientUrl, term);
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     view ? [back, view] : [back],
   );
