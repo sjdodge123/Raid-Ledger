@@ -12,6 +12,8 @@ import { createContext, useContext } from 'react';
 export interface FieldContextValue {
     /** The control's id — `<label htmlFor>` points at it. */
     id: string;
+    /** The `<label>`'s id — for a popup (Combobox listbox) that must share the name. */
+    labelId: string;
     /** Space-separated ids of the hint and error, when rendered. */
     describedBy?: string;
     invalid: boolean;

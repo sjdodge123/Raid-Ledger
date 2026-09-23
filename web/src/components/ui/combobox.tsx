@@ -14,6 +14,7 @@
  */
 import { useRef, type JSX } from 'react';
 import { Input } from './input';
+import { useFieldContext } from './field-context';
 import { ComboboxPopup } from './combobox-popup';
 import { useCombobox } from './use-combobox';
 import { useAnchoredPopup, useScrollIntoView } from './use-anchored-popup';
@@ -24,6 +25,7 @@ export type { ComboboxProps, ComboboxOptionState } from './combobox-types';
 /** The shared combobox. See the file header for the contract. */
 export function Combobox<T>(p: ComboboxProps<T>): JSX.Element {
     const c = useCombobox(p);
+    const field = useFieldContext();
     const anchorRef = useRef<HTMLDivElement>(null);
     const popupRef = useRef<HTMLDivElement>(null);
     const pos = useAnchoredPopup(anchorRef, popupRef, c.open, c.close);
@@ -41,7 +43,7 @@ export function Combobox<T>(p: ComboboxProps<T>): JSX.Element {
             />
             {c.open && (
                 <ComboboxPopup
-                    popupRef={popupRef} pos={pos} listboxId={c.listboxId} label={p.label}
+                    popupRef={popupRef} pos={pos} listboxId={c.listboxId} label={p.label} labelledBy={field?.labelId}
                     items={c.items} status={c.status} activeIndex={c.activeIndex} optionId={c.optionId}
                     isSelected={(o) => p.getKey(o) === selectedKey} getKey={p.getKey}
                     render={p.renderOption ?? ((o) => <span className="truncate">{p.getLabel(o)}</span>)}

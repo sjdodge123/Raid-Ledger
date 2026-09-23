@@ -32,7 +32,7 @@ function useFieldValue(p: FieldProps, base: string): FieldContextValue {
     const invalid = !!p.error;
     const required = !!p.required;
     const value = useMemo(
-        () => ({ id: base, describedBy, invalid, required }),
+        () => ({ id: base, labelId: `${base}-label`, describedBy, invalid, required }),
         [base, describedBy, invalid, required],
     );
     return value;
@@ -41,9 +41,10 @@ function useFieldValue(p: FieldProps, base: string): FieldContextValue {
 function FieldLabel({ htmlFor, label, required, hidden }: {
     htmlFor: string; label: string; required?: boolean; hidden?: boolean;
 }): JSX.Element {
+    const id = `${htmlFor}-label`;
     const cls = hidden ? 'sr-only' : 'block mb-1.5 text-sm font-medium text-secondary';
     return (
-        <label htmlFor={htmlFor} className={cls}>
+        <label id={id} htmlFor={htmlFor} className={cls}>
             {label}
             {required && <span aria-hidden="true" className="ml-0.5 text-danger">*</span>}
         </label>

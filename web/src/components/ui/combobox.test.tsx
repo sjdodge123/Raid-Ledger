@@ -64,6 +64,13 @@ describe('Combobox — ARIA wiring', () => {
             getLabel={(g) => g.name} value={null} onChange={() => undefined} /></Field>);
         expect(screen.getByRole('combobox', { name: 'Pick a game' })).toBeInTheDocument();
     });
+
+    it('names the portalled listbox after the Field label', async () => {
+        render(<Field label="Pick a game"><Combobox<Game> options={GAMES} getKey={(g) => g.id}
+            getLabel={(g) => g.name} value={null} onChange={() => undefined} /></Field>);
+        await userEvent.type(screen.getByRole('combobox', { name: 'Pick a game' }), '{ArrowDown}');
+        expect(screen.getByRole('listbox', { name: 'Pick a game' })).toBeInTheDocument();
+    });
 });
 
 describe('Combobox — keyboard', () => {

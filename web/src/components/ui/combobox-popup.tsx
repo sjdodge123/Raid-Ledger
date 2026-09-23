@@ -15,6 +15,8 @@ export interface ComboboxPopupProps<T> {
     pos: PopupPosition | null;
     listboxId: string;
     label?: string;
+    /** The surrounding Field's label id, used when there is no `label`. */
+    labelledBy?: string;
     items: T[];
     status?: ComboboxStatus;
     activeIndex: number;
@@ -55,7 +57,7 @@ export function ComboboxPopup<T>({ popupRef, ...p }: ComboboxPopupProps<T>): JSX
     return createPortal(
         <div ref={popupRef} className={POPUP} style={popupStyle(p.pos)} onMouseDown={(e) => e.preventDefault()}>
             {p.status && <StatusRow status={p.status} />}
-            <ul role="listbox" id={p.listboxId} aria-label={p.label}>
+            <ul role="listbox" id={p.listboxId} aria-label={p.label} aria-labelledby={p.label ? undefined : p.labelledBy}>
                 {p.items.map((o, i) => {
                     const state = { active: i === p.activeIndex, selected: p.isSelected(o) };
                     return (
