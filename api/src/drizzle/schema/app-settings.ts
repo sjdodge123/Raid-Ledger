@@ -41,6 +41,14 @@ export const SETTING_KEYS = {
   UPDATE_AVAILABLE: 'update_available',
   /** ROK-1242: html_url of the latest GitHub release; '' when no per-release URL. */
   LATEST_RELEASE_URL: 'latest_release_url',
+  /** ROK-1475: count of `fix:` commits on main the running build lacks; '' = unknown. */
+  FIXES_AVAILABLE: 'fixes_available',
+  /** ROK-1475: short sha of main's head at the last successful build check. */
+  LATEST_COMMIT_SHA: 'latest_commit_sha',
+  /** ROK-1475: GitHub /compare URL for the fixes span; '' when up to date. */
+  FIXES_COMPARE_URL: 'fixes_compare_url',
+  /** ROK-1475: short running sha the stored fixes count was computed against. */
+  FIXES_COMPUTED_FOR_SHA: 'fixes_computed_for_sha',
   DISCORD_BOT_TOKEN: 'discord_bot_token',
   DISCORD_BOT_ENABLED: 'discord_bot_enabled',
   DISCORD_BOT_DEFAULT_CHANNEL: 'discord_bot_default_channel',

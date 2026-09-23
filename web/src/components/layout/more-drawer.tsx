@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getAuthToken } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
+import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import { ProfileSubmenuContent, AdminSubmenuContent } from './more-drawer-submenus';
 import { ImpersonateSection } from './more-drawer-impersonate';
 import { GameTimeCheckSheet } from '../../pages/scheduling/GameTimeCheckSheet';
@@ -31,10 +32,13 @@ function useCloseOnRouteChange(pathname: string, onClose: () => void) {
 
 function useDrawerKeyboardAndScroll(isOpen: boolean, onClose: () => void) {
     useEffect(() => {
+        if (!isOpen) return;
         const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-        if (isOpen) { document.addEventListener('keydown', handleEscape); document.body.style.overflow = 'hidden'; }
-        return () => { document.removeEventListener('keydown', handleEscape); document.body.style.overflow = ''; };
+        document.addEventListener('keydown', handleEscape);
+        return () => document.removeEventListener('keydown', handleEscape);
     }, [isOpen, onClose]);
+    // Ref-counted: the game-time sheet this drawer opens holds its own lock (ROK-1640).
+    useBodyScrollLock(isOpen);
 }
 
 function useImpersonateUsers(user: ReturnType<typeof useAuth>['user'], isImpersonating: boolean) {

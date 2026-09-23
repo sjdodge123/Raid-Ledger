@@ -1,5 +1,6 @@
 /**
- * VersionCheckService — commit-vs-main comparison (ROK-1393).
+ * VersionCheckService — commit-vs-main comparison (ROK-1393, reworked by
+ * ROK-1475 into the build-level `fixes_available` signal).
  *
  * When COMMIT_SHA is set (every image built by ci.yml docker-build), the
  * service compares the running commit against origin/main's head via the
@@ -52,14 +53,40 @@ function commitBody(sha: string, date: string) {
   return { sha, commit: { committer: { date } } };
 }
 
-function mockCommitsApi(mainDate: string, runningDate: string = T0): jest.Mock {
-  const fetchMock = jest.fn((url: string) =>
-    Promise.resolve(
-      url.endsWith('/commits/main')
-        ? jsonResponse(200, commitBody(MAIN, mainDate))
-        : jsonResponse(200, commitBody(RUNNING, runningDate)),
-    ),
-  );
+const RELEASE = {
+  tag_name: 'v1.1.0',
+  html_url: 'https://github.com/sjdodge123/Raid-Ledger/releases/tag/v1.1.0',
+};
+
+function compareBody(messages: string[]) {
+  return {
+    ahead_by: messages.length,
+    commits: messages.map((message) => ({ commit: { message } })),
+  };
+}
+
+/** Routes releases / commits/main / compare; running build is v1.1.0. */
+function mockGitHub(opts: {
+  mainSha: string;
+  compare: ReturnType<typeof compareBody> | 403 | null;
+}): jest.Mock {
+  process.env.APP_VERSION = 'v1.1.0';
+  const fetchMock = jest.fn((url: string) => {
+    if (url.includes('/releases/latest')) {
+      return Promise.resolve(jsonResponse(200, RELEASE));
+    }
+    if (url.endsWith('/commits/main')) {
+      return Promise.resolve(jsonResponse(200, commitBody(opts.mainSha, T0)));
+    }
+    if (url.includes('/compare/') && opts.compare !== null) {
+      return Promise.resolve(
+        opts.compare === 403
+          ? jsonResponse(403, {})
+          : jsonResponse(200, opts.compare),
+      );
+    }
+    return Promise.resolve(jsonResponse(500, {}));
+  });
   global.fetch = fetchMock as unknown as typeof fetch;
   return fetchMock;
 }
@@ -72,6 +99,7 @@ function settingsMap(settings: MockSettingsService): Map<string, string> {
 
 describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
   const originalCommitSha = process.env.COMMIT_SHA;
+  const originalAppVersion = process.env.APP_VERSION;
   let originalFetch: typeof fetch;
 
   beforeEach(() => {
@@ -84,52 +112,68 @@ describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
     if (originalCommitSha === undefined) delete process.env.COMMIT_SHA;
     else process.env.COMMIT_SHA = originalCommitSha;
     jest.clearAllMocks();
+    if (originalAppVersion === undefined) delete process.env.APP_VERSION;
+    else process.env.APP_VERSION = originalAppVersion;
   });
 
-  it('marks updateAvailable=true when main head is 31h newer than the running commit', async () => {
+  // ROK-1475 changed these three cases: the commit comparison no longer
+  // drives UPDATE_AVAILABLE (now the feature-level release signal). It feeds
+  // the build-level FIXES_AVAILABLE count instead, via the compare API, and
+  // the old 30 h behind-main threshold no longer gates it (a fix is a fix).
+  it('records the fix: count and compare URL when main is ahead, without touching UPDATE_AVAILABLE', async () => {
     const settings = makeSettings();
-    const fetchMock = mockCommitsApi(plusHours(T0, 31));
+    const fetchMock = mockGitHub({
+      mainSha: MAIN,
+      compare: compareBody(['fix(a): x', 'chore: y', 'fix: z', 'feat: w']),
+    });
 
     await createService(settings).checkForUpdates();
 
     const map = settingsMap(settings);
-    expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('true');
-    expect(map.get(SETTING_KEYS.LATEST_VERSION)).toBe(MAIN.slice(0, 7));
-    expect(map.get(SETTING_KEYS.LATEST_RELEASE_URL)).toBe(COMPARE_URL);
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/commits/main'),
-      expect.anything(),
+    expect(map.get(SETTING_KEYS.FIXES_AVAILABLE)).toBe('2');
+    expect(map.get(SETTING_KEYS.LATEST_COMMIT_SHA)).toBe(MAIN.slice(0, 7));
+    expect(map.get(SETTING_KEYS.FIXES_COMPARE_URL)).toBe(COMPARE_URL);
+    expect(map.get(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA)).toBe(
+      RUNNING.slice(0, 7),
     );
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining(`/commits/${RUNNING}`),
-      expect.anything(),
-    );
-  });
-
-  it('marks updateAvailable=false when main head is only 29h newer', async () => {
-    const settings = makeSettings();
-    mockCommitsApi(plusHours(T0, 29));
-
-    await createService(settings).checkForUpdates();
-
-    expect(settingsMap(settings).get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe(
-      'false',
-    );
-  });
-
-  it('marks updateAvailable=false and skips the second fetch when running sha equals main head', async () => {
-    const settings = makeSettings();
-    const fetchMock = jest.fn(() =>
-      Promise.resolve(jsonResponse(200, commitBody(RUNNING, T0))),
-    );
-    global.fetch = fetchMock as unknown as typeof fetch;
-
-    await createService(settings).checkForUpdates();
-
-    const map = settingsMap(settings);
     expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('false');
-    expect(map.get(SETTING_KEYS.LATEST_RELEASE_URL)).toBe('');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining(`/compare/${RUNNING}...${MAIN}`),
+      expect.anything(),
+    );
+  });
+
+  it('records fixes even when main is only minutes ahead (no 30 h gate)', async () => {
+    const settings = makeSettings();
+    mockGitHub({ mainSha: MAIN, compare: compareBody(['fix: one']) });
+
+    await createService(settings).checkForUpdates();
+
+    expect(settingsMap(settings).get(SETTING_KEYS.FIXES_AVAILABLE)).toBe('1');
+  });
+
+  it('writes fixesAvailable=0 and skips the compare call when running sha equals main head', async () => {
+    const settings = makeSettings();
+    const fetchMock = mockGitHub({ mainSha: RUNNING, compare: null });
+
+    await createService(settings).checkForUpdates();
+
+    const map = settingsMap(settings);
+    expect(map.get(SETTING_KEYS.FIXES_AVAILABLE)).toBe('0');
+    expect(map.get(SETTING_KEYS.FIXES_COMPARE_URL)).toBe('');
+    const urls = fetchMock.mock.calls.map(([u]: [string]) => u);
+    expect(urls.filter((u) => u.includes('/compare/'))).toEqual([]);
+  });
+
+  it('keeps the previous fixes values when the compare API is rate-limited', async () => {
+    const settings = makeSettings();
+    mockGitHub({ mainSha: MAIN, compare: 403 });
+
+    await createService(settings).checkForUpdates();
+
+    const map = settingsMap(settings);
+    expect(map.has(SETTING_KEYS.FIXES_AVAILABLE)).toBe(false);
+    expect(map.get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe('false');
   });
 
   it('skips writing settings on 403 from the commits API', async () => {
@@ -156,8 +200,8 @@ describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
     expect(settings.set).not.toHaveBeenCalled();
   });
 
-  it('getRunningBuildLabel returns the short COMMIT_SHA', () => {
-    expect(createService(makeSettings()).getRunningBuildLabel()).toBe(
+  it('getRunningCommitSha returns the short COMMIT_SHA', () => {
+    expect(createService(makeSettings()).getRunningCommitSha()).toBe(
       RUNNING.slice(0, 7),
     );
   });
@@ -184,6 +228,6 @@ describe('VersionCheckService — commit-vs-main comparison (ROK-1393)', () => {
     expect(settingsMap(settings).get(SETTING_KEYS.UPDATE_AVAILABLE)).toBe(
       'true',
     );
-    expect(service.getRunningBuildLabel()).toBe(service.getVersion());
+    expect(service.getRunningCommitSha()).toBeNull();
   });
 });
