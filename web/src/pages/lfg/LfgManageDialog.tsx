@@ -20,6 +20,15 @@ export interface LfgManageDialogProps {
     onWithdraw: () => void;
     isWithdrawing?: boolean;
     onClose: () => void;
+    /**
+     * ROK-1619 AC7: `pressWouldSpawnNow` from the group read. The server
+     * already answers false for a viewer holding a now-hand, so a viewer on
+     * `Tonight`/`This week` one short of the threshold sees the glyph on
+     * `Right now` here exactly as on the group page's join control.
+     */
+    spawnsNow?: boolean;
+    /** The server-resolved indicator glyph (`spawnIndicatorEmoji`). */
+    spawnEmoji?: string;
 }
 
 /**
@@ -60,7 +69,9 @@ function WithdrawRow({ isWithdrawing, onWithdraw }: { isWithdrawing: boolean; on
 
 export function LfgManageDialog({
     isOpen, gameName, ownUrgency, onPickUrgency, onWithdraw, isWithdrawing = false, onClose,
+    spawnsNow, spawnEmoji,
 }: LfgManageDialogProps): JSX.Element | null {
+    const spawnGlyph = spawnsNow ? spawnEmoji : undefined;
     return (
         <LfgSheetOrModal isOpen={isOpen} onClose={onClose} title={LFG_DIALOG_COPY.manageTitle}>
             <div data-testid="lfg-manage-body" className="space-y-3">
@@ -68,7 +79,8 @@ export function LfgManageDialog({
                     <p className="text-sm font-medium text-foreground">{LFG_COPY.urgencyPrompt}</p>
                     {ownUrgency && <p className="text-xs text-muted">{currentLine(ownUrgency)}</p>}
                     <div className="[&_button]:min-h-[44px] lg:[&_button]:min-h-0">
-                        <LfgUrgencyChoice label={gameName} disabled={isWithdrawing} onPick={onPickUrgency} />
+                        <LfgUrgencyChoice label={gameName} disabled={isWithdrawing} onPick={onPickUrgency}
+                            spawnGlyph={spawnGlyph} />
                     </div>
                 </div>
                 {ownUrgency && <WithdrawRow isWithdrawing={isWithdrawing} onWithdraw={onWithdraw} />}

@@ -378,6 +378,12 @@ export function LfgHeartedPrompt(): JSX.Element | null {
                 choosingId={choosing?.gameId ?? null}
                 pendingId={pendingId}
             />
+            {/* ROK-1619 AC7 exemption: no `spawnGlyph` here. `GET /lfg/hearted`
+                carries only `activeCount` — not `nowCount`, `playingNow`,
+                `pressWouldSpawnNow` or `spawnIndicatorEmoji` — and the web must
+                not re-derive the spawn predicate. Showing the glyph would need
+                a per-game group-detail read for every entry, a new request the
+                story rules out. */}
             {choosing && (
                 <div className="mt-3">
                     <LfgUrgencyChoice
