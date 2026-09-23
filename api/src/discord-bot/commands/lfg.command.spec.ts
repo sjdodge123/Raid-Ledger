@@ -5,6 +5,23 @@ import {
   LFG_LIST_SENTINEL,
   LFG_UNLINKED_REPLY,
 } from './lfg.command.helpers';
+import { readOpenGroupHorizon } from '../../lfg/lfg-group-horizon.helpers';
+
+// ROK-1656 — the open-group read is a real query the fake DB cannot answer;
+// it is pinned against Postgres in `lfg-now-spawn.integration.spec.ts`. Here
+// it defaults to "no open group" and individual cases override it.
+jest.mock('../../lfg/lfg-group-horizon.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-group-horizon.helpers'),
+  readOpenGroupHorizon: jest.fn().mockResolvedValue(null),
+}));
+// ROK-1656 — likewise the playing-now read: default "no session".
+jest.mock('../../lfg/lfg-playing.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-playing.helpers'),
+  findOpenLfgNowEventId: jest.fn().mockResolvedValue(null),
+}));
+const readOpen = readOpenGroupHorizon as jest.MockedFunction<
+  typeof readOpenGroupHorizon
+>;
 
 type Row = Record<string, unknown>;
 
@@ -428,7 +445,8 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       ['now:60', { urgency: 'now', ttlMinutes: 60 }],
       ['tonight', { urgency: 'tonight' }],
       ['week', { urgency: 'week' }],
-      [null, { urgency: 'week' }],
+      // ROK-1656 — no urgency and no open group: tonight, not this week.
+      [null, { urgency: 'tonight' }],
       // A stale registered command sending a value this build never offered
       // must keep working — a 400 would throw away a player's hand.
       ['nonsense', { urgency: 'week' }],
@@ -448,6 +466,50 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
         ...expected,
         timezone: 'UTC',
       });
+    });
+
+    // ROK-1656 AC2 — the bare command reads the group the way the board `+1`
+    // does, so a now group's joiner lands on `now` with the group's bucket.
+    it('no urgency on a game with an open now group inherits now + its TTL', async () => {
+      readOpen.mockResolvedValueOnce({
+        urgency: 'now',
+        nowExpiresAt: new Date(),
+        ttlMinutes: 60,
+      });
+      const lfgService = makeLfgService();
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        lfgService,
+      );
+      const { interaction } = urgentInteraction('42', null);
+
+      await command.handleInteraction(interaction);
+
+      expect(readOpen).toHaveBeenLastCalledWith(expect.anything(), 42);
+      expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+        urgency: 'now',
+        ttlMinutes: 60,
+        timezone: 'UTC',
+      });
+    });
+
+    // ROK-1656 — the player never picked the horizon, so the reply names it.
+    it.each([
+      [null, '**When:** Tonight'],
+      ['tonight', null],
+    ])('urgency %s -> reply horizon line %s', async (choice, line) => {
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        makeLfgService(),
+      );
+      const { interaction, editReply } = urgentInteraction('42', choice);
+      await command.handleInteraction(interaction);
+      const payload = editReply.mock.calls[0][0] as {
+        embeds: Array<{ toJSON: () => { description?: string } }>;
+      };
+      const description = payload.embeds[0].toJSON().description ?? '';
+      if (line) expect(description).toContain(line);
+      else expect(description).not.toContain('**When:**');
     });
   });
 });

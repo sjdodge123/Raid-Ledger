@@ -79,6 +79,19 @@ describe('formatExpiryLabel', () => {
 });
 
 describe('buildJoinReply (ROK-1454 D11)', () => {
+  it('ROK-1656 — renders the horizon line a bare /lfg chose', () => {
+    const embed = buildJoinReply(
+      {
+        group: group({ activeCount: 1, state: 'lfg' }),
+        created: true,
+        memberNames: ['ana'],
+        horizonLine: '**When:** Tonight',
+      },
+      CTX,
+    );
+    expect(embed.toJSON().description).toContain('**When:** Tonight');
+  });
+
   it('tells the FIRST hand nothing was posted, and names the game', () => {
     const embed = buildJoinReply(
       {
@@ -388,7 +401,9 @@ describe('parseUrgencyChoice (ROK-1479, ROK-1616)', () => {
     ['now:60', { urgency: 'now', ttlMinutes: 60 }],
     ['tonight', { urgency: 'tonight' }],
     ['week', { urgency: 'week' }],
-    [null, { urgency: 'week' }],
+    // ROK-1656 — no urgency given means tonight, not this week.
+    [null, { urgency: 'tonight' }],
+    // A value this build never offered is still the contract's week default.
     ['now:15', { urgency: 'week' }],
   ])('reads %s as %o', (raw, expected) => {
     expect(parseUrgencyChoice(raw)).toEqual(expected);
