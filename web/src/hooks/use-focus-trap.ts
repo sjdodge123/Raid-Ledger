@@ -60,6 +60,10 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
 
         const timer = requestAnimationFrame(() => {
             if (!containerRef.current) return;
+            // Focus already inside (an autoFocus input, or someone who typed
+            // within the first frame): moving it would blur that field — and a
+            // Combobox closes its popup on blur (ROK-1647).
+            if (containerRef.current.contains(document.activeElement)) return;
             if (initialFocusRef?.current) {
                 initialFocusRef.current.focus();
                 return;

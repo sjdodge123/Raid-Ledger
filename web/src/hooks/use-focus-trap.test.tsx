@@ -1,4 +1,5 @@
-import { renderHook } from '@testing-library/react';
+import { act, render, renderHook, screen } from '@testing-library/react';
+import { useRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { useFocusTrap } from './use-focus-trap';
 
@@ -289,5 +290,42 @@ it('excludes disabled buttons', () => {
     describe('focusable element selectors', () => {
         focusableElementSelectorsGroup1();
         focusableElementSelectorsGroup2();
+    });
+});
+
+describe('useFocusTrap — initial focus (ROK-1647)', () => {
+    function Dialog() {
+        const closeRef = useRef<HTMLButtonElement>(null);
+        const trapRef = useFocusTrap<HTMLDivElement>(true, closeRef);
+        return (
+            <div ref={trapRef}>
+                <button ref={closeRef}>Close</button>
+                <input aria-label="Game" />
+            </div>
+        );
+    }
+
+    function renderWithHeldFrame() {
+        let frame: FrameRequestCallback | undefined;
+        const raf = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => { frame = cb; return 1; });
+        render(<Dialog />);
+        raf.mockRestore();
+        return () => act(() => frame?.(0));
+    }
+
+    afterEach(() => { document.body.innerHTML = ''; });
+
+    it('moves focus to the initial element when focus is outside the dialog', () => {
+        const runFrame = renderWithHeldFrame();
+        runFrame();
+        expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    });
+
+    it('leaves focus on a field the user reached before the first frame', () => {
+        const runFrame = renderWithHeldFrame();
+        const input = screen.getByRole('textbox', { name: 'Game' });
+        act(() => input.focus()); // fill()/a fast typist lands before the rAF
+        runFrame();
+        expect(input, 'the trap must not blur a field focused inside the dialog').toHaveFocus();
     });
 });
