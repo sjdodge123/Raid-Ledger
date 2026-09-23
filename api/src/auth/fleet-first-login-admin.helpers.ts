@@ -23,6 +23,7 @@
  * Only the logging-in user's own row (`id = $me`) is ever touched.
  */
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { UserRole } from '@raid-ledger/contract';
@@ -71,6 +72,11 @@ export async function promoteFirstDiscordLogin<T extends LoginUser>(
   try {
     promoted = await promoteIfNoDiscordAdmin(db, user.id);
   } catch (err) {
+    // Swallowed so login proceeds, but reported: a silent failure here reads
+    // to the operator as "the fleet forgot to make me admin".
+    Sentry.captureException(err, {
+      tags: { context: 'fleet-first-login-admin' },
+    });
     logger.warn(`fleet first Discord login promotion failed: ${String(err)}`);
     return user;
   }

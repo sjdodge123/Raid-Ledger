@@ -9,6 +9,7 @@
  * AC3: without DEMO_MODE the callback never writes a role, marker or not.
  */
 import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import type { JwtService } from '@nestjs/jwt';
@@ -24,6 +25,11 @@ import {
   FLEET_FIRST_LOGIN_ENV,
   isFirstLoginAdminEnabled,
 } from './fleet-first-login-admin.helpers';
+
+jest.mock('@sentry/nestjs', () => ({
+  ...jest.requireActual<object>('@sentry/nestjs'),
+  captureException: jest.fn(),
+}));
 
 type Db = PostgresJsDatabase<typeof schema>;
 const DISCORD_ID = '123456789012345678';
@@ -156,6 +162,16 @@ describe('ROK-1537 AC1 — first Discord login in a fleet env becomes admin', ()
       'op',
     );
     expect(user?.role).toBe('member');
+    // Prove the promotion was ATTEMPTED and its failure surfaced — a member
+    // role alone would also hold if the path never ran at all.
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
+      expect.stringContaining('promotion failed: Error: boom'),
+    ]);
+    expect(jest.mocked(Sentry.captureException)).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'boom' }),
+      { tags: { context: 'fleet-first-login-admin' } },
+    );
     warn.mockRestore();
   });
 });
