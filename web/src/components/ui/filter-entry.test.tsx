@@ -141,8 +141,12 @@ describe('FilterFab', () => {
         { width: 390, direction: 'down', stack: false, bottom: '16px' },
         { width: 390, direction: null, stack: true, bottom: '140px' },
         { width: 390, direction: 'down', stack: true, bottom: '84px' },
-        { width: 900, direction: null, stack: false, bottom: '16px' },
-        { width: 900, direction: null, stack: true, bottom: '16px' },
+        // 768–1023px: no tab bar, but the feedback button (bottom-6, 48px) holds
+        // the corner — the FAB stacks one 12px gap above it (fleet gate 88c9da95214b).
+        { width: 800, direction: null, stack: false, bottom: '84px' },
+        { width: 800, direction: 'down', stack: false, bottom: '84px' },
+        { width: 800, direction: null, stack: true, bottom: '84px' },
+        { width: 900, direction: null, stack: false, bottom: '84px' },
     ] as const)('sits at $bottom (width $width, scroll $direction, stackAboveCreate $stack)', ({ width, direction, stack, bottom }) => {
         mockViewportWidth(width);
         scroll.direction = direction;

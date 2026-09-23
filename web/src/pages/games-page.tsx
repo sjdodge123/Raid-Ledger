@@ -117,7 +117,7 @@ export function GamesPage() {
   const state = useGamesPageState();
   const data = useGamesData(state.searchQuery, state.selectedGenres, state.coopFilters);
   return (
-    <div className="pb-24 lg:pb-0">
+    <div className="pb-24 md:pb-40 lg:pb-0">
       <GamesMobileToolbar activeTab={state.activeTab === "manage" ? "manage" : "discover"} onTabChange={(tab) => state.setActiveTab(tab)} showManageTab={state.canManage} />
       <div className="max-w-7xl mx-auto px-4 py-8">
         <LineupBanner />

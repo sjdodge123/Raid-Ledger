@@ -16,7 +16,8 @@ interface FABProps {
  * with both, this FAB keeps the bottom slot (72, or 16 while the tab bar hides)
  * and the Filters FAB stacks directly above it (`stackAboveCreate`: 140 / 84,
  * same `right-4` edge, 12px gap). The page's bottom padding must clear the
- * whole stack. Offsets and the rule: `fab-position.ts`.
+ * whole stack. From 768px (this FAB hidden) the Filters FAB clears the
+ * feedback button instead (84). Offsets and the rule: `fab-position.ts`.
  */
 export function FAB({ onClick, icon: Icon = PlusIcon, label }: FABProps) {
     const bottom = useCreateFabBottom();

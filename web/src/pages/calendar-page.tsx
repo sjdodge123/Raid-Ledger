@@ -115,7 +115,7 @@ function CalendarPageLayout({ state, gameTimeSlots, filter, isDesktop }: {
     const entry = <CalendarFilterEntry filter={filter} isOpen={state.filtersOpen} onOpenChange={state.setFiltersOpen} />;
     const trigger = <CalendarFilterTrigger filter={filter} isOpen={state.filtersOpen} onOpenChange={state.setFiltersOpen} />;
     return (
-        <div className="pb-20 lg:pb-0" style={{ overflowX: 'clip' }}>
+        <div className="pb-20 md:pb-40 lg:pb-0" style={{ overflowX: 'clip' }}>
             <CalendarMobileToolbar activeView={state.calendarView} onViewChange={state.setCalendarView} />
             <CalendarMobileNav currentDate={state.currentDate} calendarView={state.calendarView} onPrev={state.handleMobileNavPrev} onNext={state.handleMobileNavNext} onToday={state.handleMobileNavToday} />
             <CalendarMainContent state={state} gameTimeSlots={gameTimeSlots} selectedGames={filter.selectedGames}

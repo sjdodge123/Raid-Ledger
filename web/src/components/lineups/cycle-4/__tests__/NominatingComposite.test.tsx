@@ -414,6 +414,14 @@ describe('NominatingComposite — funnel filter standard (ROK-1659)', () => {
         expect(fab).toHaveAttribute('aria-expanded', 'true');
     });
 
+    it('tablet: the Filters FAB renders outside the sticky toolbar, so its z-index is not trapped', async () => {
+        mockViewportWidth(800);
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        const toolbar = await screen.findByTestId('nominating-hero-toolbar');
+        expect(toolbar).toHaveClass('sticky');
+        expect(toolbar).not.toContainElement(screen.getByTestId('filter-fab'));
+    });
+
     it('desktop: the toolbar funnel opens the inline panel; no FAB', async () => {
         mockViewportWidth(1280);
         renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
