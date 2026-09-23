@@ -1,4 +1,4 @@
-import { type ReactNode, lazy, Suspense, useState, useCallback, useRef } from 'react';
+import { type ReactNode, lazy, Suspense, useState, useCallback, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -16,6 +16,7 @@ import { usePluginHydration } from '../../hooks/use-plugins';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useShellHeight } from './use-shell-height';
+import { resolveVpDebug } from '../../dev/vpdebug-flag';
 
 /** ROK-1661 diagnostic; checks DEMO_MODE itself. Lazy, so it costs nothing without `?vpdebug=1`. */
 const ViewportReadout = lazy(() => import('../../dev/ViewportReadout').then((m) => ({ default: m.ViewportReadout })));
@@ -45,14 +46,18 @@ interface LayoutProps {
  * It is the ONLY element that paints `--color-backdrop`: the root canvas is
  * `--color-surface` and body is transparent (`index.css`), so whatever Safari
  * shows past the document's end reads as footer, not page background.
- * `?vpdebug=1` overlays the DEMO_MODE-only viewport readout (`dev/ViewportReadout.tsx`).
+ * `?vpdebug=1` (remembered until `?vpdebug=0`, `dev/vpdebug-flag.ts`) shows the
+ * DEMO_MODE-only viewport readout (`dev/ViewportReadout.tsx`), positioned inside
+ * this shell just above the footer, so the shell is `relative` only while it shows.
  */
 function ViewportShell({ children }: LayoutProps) {
     const shellHeight = useShellHeight();
-    const showReadout = new URLSearchParams(useLocation().search).get('vpdebug') === '1';
+    const { search } = useLocation();
+    const showReadout = useMemo(() => resolveVpDebug(search), [search]);
     const minHeight = shellHeight > 0 ? `${shellHeight}px` : undefined;
+    const position = showReadout ? ' relative' : '';
     return (
-        <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip', minHeight }}>
+        <div className={`min-h-dvh flex flex-col bg-backdrop${position}`} style={{ overflowX: 'clip', minHeight }}>
             {children}
             {showReadout && (
                 <Suspense fallback={null}>

@@ -1,17 +1,30 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ViewportReadout } from './ViewportReadout';
 
 const status = vi.hoisted(() => ({ demoMode: true }));
 vi.mock('../hooks/use-system-status', () => ({ useSystemStatus: () => ({ data: status }) }));
 
+function stubGeometry(scrollY: number, scrollHeight: number, innerHeight: number) {
+    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(scrollY);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(innerHeight);
+    vi.spyOn(document.documentElement, 'scrollHeight', 'get').mockReturnValue(scrollHeight);
+}
+
+afterEach(() => {
+    vi.restoreAllMocks();
+    status.demoMode = true;
+});
+
 describe('ViewportReadout (ROK-1661 diagnostic)', () => {
-    it('shows the live viewport numbers in DEMO_MODE as a non-interactive overlay, and nothing outside it', () => {
+    it('shows the live viewport numbers in DEMO_MODE in the shell, not on the fixed layer, and nothing outside it', () => {
         const { unmount } = render(<ViewportReadout shellHeight={950} />);
         const panel = screen.getByTestId('viewport-readout');
-        expect(panel).toHaveClass('fixed', 'pointer-events-none', 'font-mono');
-        for (const label of ['innerHeight', 'clientHeight', 'vv.height', 'vv.offsetTop', 'vv.scale', 'scrollY',
-            'scrollHeight', 'shell minHeight', 'footer bottom', 'orientation']) {
+        expect(panel).toHaveClass('absolute', 'bottom-20', 'right-2', 'pointer-events-none', 'font-mono');
+        expect(panel).not.toHaveClass('fixed');
+        for (const label of ['innerHeight', 'clientHeight', 'vv.height', 'vv.offsetTop', 'vv.pageTop', 'vv.scale',
+            'scrollY', 'max scroll', 'scrollHeight', 'fixed probe bottom', 'shell minHeight', 'footer bottom',
+            'html bg', 'body bg', 'orientation']) {
             expect(panel).toHaveTextContent(label);
         }
         expect(panel).toHaveTextContent('950px');
@@ -20,5 +33,22 @@ describe('ViewportReadout (ROK-1661 diagnostic)', () => {
         status.demoMode = false;
         render(<ViewportReadout shellHeight={950} />);
         expect(screen.queryByTestId('viewport-readout')).toBeNull();
+    });
+
+    it('nudge pulls a scroll past the document end back to scrollHeight - innerHeight', () => {
+        stubGeometry(1300, 1180, 1048);
+        const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+        render(<ViewportReadout shellHeight={1048} />);
+        fireEvent.click(screen.getByRole('button', { name: 'nudge' }));
+        expect(scrollTo).toHaveBeenCalledWith(window.scrollX, 132);
+        expect(screen.getByTestId('viewport-readout')).toHaveTextContent(/max scroll\s*132/);
+    });
+
+    it('nudge leaves a scroll inside the document where it is', () => {
+        stubGeometry(40, 1180, 1048);
+        const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+        render(<ViewportReadout shellHeight={1048} />);
+        fireEvent.click(screen.getByRole('button', { name: 'nudge' }));
+        expect(scrollTo).toHaveBeenCalledWith(window.scrollX, 40);
     });
 });
