@@ -311,7 +311,7 @@ Button-wide problems:
 
 ### 4.3 `Input` (`input.tsx`)
 
-- **Props:** `InputHTMLAttributes` plus `{ invalid?; size?: 'md' | 'lg' | 'sm'; leading?: ReactNode; trailing?: ReactNode; mono?: boolean }`, with a forwarded ref.
+- **Props:** `Omit<InputHTMLAttributes, 'size'>` plus `{ invalid?; fieldSize?: 'md' | 'lg' | 'sm'; leading?: ReactNode; trailing?: ReactNode; mono?: boolean }`, with a forwarded ref. The prop is `fieldSize`, not `size`: the native `size?: number` attribute would otherwise clash and fail to typecheck (Codex).
 - **Sizes:**
   - `lg` = `px-4 py-3`, the create-event density.
   - `sm` = `lg:min-h-9 lg:px-2 lg:py-1`, for inline row editors. **It stays 44px below `lg`.**
@@ -322,11 +322,11 @@ Button-wide problems:
 ### 4.4 `Select` (`select.tsx`) and `Textarea` (`textarea.tsx`)
 
 - **`Select`:**
-  - Props: `SelectHTMLAttributes` plus `{ invalid?; size?; placeholder? }`.
+  - Props: `Omit<SelectHTMLAttributes, 'size'>` plus `{ invalid?; fieldSize?; placeholder? }` (same `fieldSize` rename as `Input`).
   - Stays a **native** `<select>` (all 26 sites are native): `FIELD_FRAME appearance-none pr-9`, with a chevron icon in `text-muted`.
   - Replaces SE-1 through SE-6.
 - **`Textarea`:**
-  - Props: `{ invalid?; rows?; maxLength?; showCount?: boolean; resize?: 'none' | 'y' }`.
+  - Props: `TextareaHTMLAttributes` plus `{ invalid?; showCount?: boolean; resize?: 'none' | 'y' }`, with a forwarded ref, so `value`, `onChange`, `name`, `rows`, `maxLength` and `disabled` pass through natively (Codex).
   - `FIELD_FRAME` without the min height. The counter is `text-xs text-dim` (ReasonField's logic and the FeedbackDialog/branding counters move into it).
   - Replaces all 9 textarea variants.
 
