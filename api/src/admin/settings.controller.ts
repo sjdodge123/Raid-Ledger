@@ -290,7 +290,7 @@ export class AdminSettingsController {
       configured: false,
       deprecated: true,
       message:
-        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
+        'GitHub PAT integration has been replaced by Sentry error tracking.',
     };
   }
   /** @deprecated ROK-306 */
@@ -300,7 +300,7 @@ export class AdminSettingsController {
     return {
       success: false,
       message:
-        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306). No configuration needed.',
+        'GitHub PAT integration has been replaced by Sentry error tracking. No configuration needed.',
     };
   }
   /** @deprecated ROK-306 */
@@ -310,7 +310,7 @@ export class AdminSettingsController {
     return {
       success: false,
       message:
-        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
+        'GitHub PAT integration has been replaced by Sentry error tracking.',
     };
   }
   /** @deprecated ROK-306 */

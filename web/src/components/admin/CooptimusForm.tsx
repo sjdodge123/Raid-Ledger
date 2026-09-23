@@ -12,7 +12,7 @@ function CooptimusSetupInstructions() {
             <p className="text-sm text-foreground"><strong>Permission-first setup:</strong></p>
             <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
                 <li>Co-Optimus&apos;s API is keyless but Cloudflare-gated for unattended clients</li>
-                <li>Email them (see the ROK-275 spike) and request an allowlisted user-agent</li>
+                <li>Email them and request an allowlisted user-agent</li>
                 <li>Paste the granted user-agent string below</li>
                 <li>Use Test to verify access — co-op data then syncs weekly</li>
             </ol>

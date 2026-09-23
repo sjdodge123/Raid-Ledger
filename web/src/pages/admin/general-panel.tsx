@@ -96,7 +96,7 @@ function SessionLengthSection() {
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
             <div>
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Session Length</h3>
-                <p className="text-xs text-muted mt-1">How long a signed-in session stays valid before users must log in again (ROK-1353).</p>
+                <p className="text-xs text-muted mt-1">How long a signed-in session stays valid before users must log in again.</p>
             </div>
             <SessionLengthForm />
         </div>
