@@ -23,7 +23,7 @@ export function PlayersMobileToolbar({ searchQuery, onSearchChange, hasActiveFil
                         onChange={(e) => onSearchChange(e.target.value)}
                         placeholder="Search players..."
                         aria-label="Search players"
-                        className="w-full pl-10 pr-4 py-2.5 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                        className="w-full pl-10 pr-4 py-2.5 bg-panel/50 border border-edge rounded-lg text-base lg:text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-success/80 focus:outline-none"
                     />
                 </div>
                 {onFilterToggle && (

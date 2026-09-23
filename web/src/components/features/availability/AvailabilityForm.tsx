@@ -62,7 +62,7 @@ function AvailabilityModalHeader({ isEditing, onClose }: { isEditing: boolean; o
     return (
         <div className="flex items-center justify-between p-4 border-b border-edge">
             <h2 className="text-lg font-semibold text-foreground">{isEditing ? 'Edit Availability' : 'Add Availability'}</h2>
-            <button onClick={onClose} className="text-muted hover:text-foreground transition-colors">
+            <button type="button" aria-label="Close" onClick={onClose} className="text-muted hover:text-foreground transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>

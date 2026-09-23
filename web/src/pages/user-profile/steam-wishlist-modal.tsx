@@ -30,7 +30,7 @@ export function SteamWishlistModal({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={`Steam Wishlist (${total})`} maxWidth="max-w-2xl">
-      <ModalSearchInput value={search} onChange={setSearch} placeholder="Search wishlist..." />
+      <ModalSearchInput label="Search wishlist" value={search} onChange={setSearch} placeholder="Search wishlist..." />
       <ModalListBody isEmpty={filtered.length === 0}>
         {filtered.map((e) => <WishlistCard key={e.gameId} entry={e} pricing={pricingMap.get(e.gameId)} />)}
       </ModalListBody>

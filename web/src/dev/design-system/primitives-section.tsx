@@ -108,7 +108,7 @@ function InputStates(): JSX.Element {
                 </label>
             </StateFrame>
             <StateFrame label="ModalSearchInput" note="Third search-input geometry in the codebase — see docs/design-system.md §6.4.">
-                <ModalSearchInput value="" onChange={() => undefined} />
+                <ModalSearchInput label="Search games" value="" onChange={() => undefined} />
             </StateFrame>
         </>
     );
