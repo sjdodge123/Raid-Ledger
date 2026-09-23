@@ -70,11 +70,7 @@ import {
   assertPostsOnFirstHand,
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
-import {
-  assertComposerPinned,
-  disableComposer,
-  enableComposer,
-} from '../lfg-composer-pin.js';
+import { assertComposerPinned } from '../lfg-composer-pin.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
 import { pickBoardIntro } from '../lfg-board-intro-pick.js';
 import { assertThreadMembersFollowGroup } from '../lfg-board-thread-members-phase.js';
@@ -638,7 +634,6 @@ async function cleanup(run: Run): Promise<void> {
   }
   if (run.threadId) await deleteThread(run.threadId);
   for (const id of run.retiredThreadIds) await deleteThread(id);
-  await disableComposer(run);
   await setLfgBoardEnabled(run.ctx.api, false).catch((err: unknown) => {
     console.log(
       `  [lfg-board] could not disable the board in cleanup: ${String(err)}`,
@@ -666,7 +661,6 @@ const lfgBoardLifecycle: SmokeTest = {
       };
       try {
         await enableBoard(run);
-        await enableComposer(run);
         await assertComposerPinned(run);
         await assertPostsOnFirstHand(run, 'T24');
         await assertUpgradesOnSecondHand(run, 'T25');

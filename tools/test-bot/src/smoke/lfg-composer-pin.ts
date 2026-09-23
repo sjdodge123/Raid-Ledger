@@ -7,6 +7,9 @@
  * rides on the intro post's starter message (`LfgComposerPinService`). This
  * phase asserts that THIS env's bot's intro post carries the composer button.
  *
+ * ROK-1658: there is no separate opt-in. Enabling the board alone puts the
+ * button up, and disabling it takes the button down.
+ *
  * It does not assert the pin: the CI guild is shared, its forum's one pin slot
  * belongs to whichever env's bot pinned first, and Discord refuses the rest
  * (30047). The product logs that and still puts the buttons on its own intro,
@@ -18,10 +21,7 @@
 import { type Message } from "discord.js";
 import { getGuild } from "../client.js";
 import { pollForCondition } from "../helpers/polling.js";
-import {
-  readForumThreads,
-  setLfgComposerEnabled,
-} from "./fixtures-lfg-board.js";
+import { readForumThreads } from "./fixtures-lfg-board.js";
 import { pickBoardIntro } from "./lfg-board-intro-pick.js";
 import { forumId, INTRO_TITLE, type Run } from "./lfg-board-shared.js";
 
@@ -84,34 +84,10 @@ function isComposerReady(state: IntroState): boolean {
 }
 
 /**
- * AC6 — the composer is opt-in (default OFF), so enabling the board alone
- * clears the buttons. Switch it on and check the PUT persisted.
+ * This env's intro post carries the composer card's `Post an LFG` button.
+ * No composer PUT precedes this: the board alone puts it up (ROK-1658).
  *
  * @param run - The board run, after `enableBoard`.
- */
-export async function enableComposer(run: Run): Promise<void> {
-  const put = await setLfgComposerEnabled(run.ctx.api, true);
-  if (!put.enabled) {
-    throw new Error(
-      "ROK-1612 AC6: PUT /admin/settings/discord-bot/lfg-board/composer " +
-        `{enabled:true} answered { enabled: ${String(put.enabled)} }`,
-    );
-  }
-}
-
-/** AC6 cleanup — back to the default so later tests see no card. */
-export async function disableComposer(run: Run): Promise<void> {
-  await setLfgComposerEnabled(run.ctx.api, false).catch((err: unknown) => {
-    console.log(
-      `  [lfg-board] could not disable the composer in cleanup: ${String(err)}`,
-    );
-  });
-}
-
-/**
- * This env's intro post carries the composer card's `Post an LFG` button.
- *
- * @param run - The board run, after `enableBoard` + {@link enableComposer}.
  */
 export async function assertComposerPinned(run: Run): Promise<void> {
   try {
@@ -126,6 +102,32 @@ export async function assertComposerPinned(run: Run): Promise<void> {
         `composer button "${COMPOSER_OPEN_CUSTOM_ID}" within ` +
         `${String(COMPOSER_READY_MS)}ms of enabling the board; last seen ` +
         `${JSON.stringify(last)} in forum ${forumId(run)}`,
+    );
+  }
+}
+
+/**
+ * ROK-1658 — disabling the board strips the composer button from this env's
+ * intro post (the intro itself stays).
+ *
+ * @param run - The board run, after the board was switched off.
+ */
+export async function assertComposerCleared(run: Run): Promise<void> {
+  try {
+    await pollForCondition(async () => {
+      const state = await readIntro(run);
+      return state.introId !== null &&
+        !state.ids.includes(COMPOSER_OPEN_CUSTOM_ID)
+        ? state
+        : null;
+    }, COMPOSER_READY_MS);
+  } catch {
+    const last = await readIntro(run).catch(() => null);
+    throw new Error(
+      "ROK-1658: disabling the board must strip the composer button " +
+        `"${COMPOSER_OPEN_CUSTOM_ID}" from this env's intro post within ` +
+        `${String(COMPOSER_READY_MS)}ms; last seen ${JSON.stringify(last)} ` +
+        `in forum ${forumId(run)}`,
     );
   }
 }
