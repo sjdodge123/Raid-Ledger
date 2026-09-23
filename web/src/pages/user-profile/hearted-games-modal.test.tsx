@@ -67,11 +67,6 @@ describe('HeartedGamesModal — search filter', () => {
         expect(screen.getByPlaceholderText('Search games...')).toBeInTheDocument();
     });
 
-    it('gives the search input an accessible name (ROK-1645)', () => {
-        renderWithProviders(<HeartedGamesModal {...defaultProps} />);
-        expect(screen.getByRole('textbox', { name: 'Search hearted games' })).toBeInTheDocument();
-    });
-
     it('filters items by game name (case-insensitive)', async () => {
         const user = userEvent.setup();
         renderWithProviders(<HeartedGamesModal {...defaultProps} />);
@@ -131,5 +126,12 @@ describe('HeartedGamesModal — search filter', () => {
 
         expect(screen.queryByText('On Sale')).not.toBeInTheDocument();
         expect(screen.queryByText('Best Price')).not.toBeInTheDocument();
+    });
+});
+
+describe('HeartedGamesModal — accessibility (ROK-1645)', () => {
+    it('gives the search input an accessible name', () => {
+        renderWithProviders(<HeartedGamesModal userId={1} isOpen onClose={vi.fn()} total={4} pricingMap={mockPricingMap} />);
+        expect(screen.getByRole('textbox', { name: 'Search hearted games' })).toBeInTheDocument();
     });
 });
