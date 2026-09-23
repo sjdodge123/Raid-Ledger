@@ -13,7 +13,7 @@
  * them pass.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
 // ─── Hook mocks ────────────────────────────────────────────────────────────
@@ -157,18 +157,26 @@ describe('PublicLineupPage (ROK-1067)', () => {
 });
 
 /**
- * ROK-1341: the public lineup page lives on the chromeless `/p/*` route. Its
- * own <main> containers must use min-h-dvh (not min-h-screen) so the themed
- * background covers the full mobile scroll area — otherwise the inner main
- * re-locks to one viewport height and reinstates the bottom-band gap that the
- * Layout-root fix addresses for the rest of the app.
+ * ROK-1341 → ROK-1661: the public lineup page lives on the chromeless `/p/*`
+ * route, whose Layout `<main>` is a flex column floored on the VISIBLE viewport
+ * with the themed background. Each state must fill it with `flex-1` and set no
+ * viewport floor of its own: `min-h-screen` re-locked the background to one
+ * viewport (ROK-1341), and `min-h-dvh` resolves ~100px past the visible bottom
+ * on iPad Safari (ROK-1661). Nor may it nest a second `<main>` landmark.
  */
-describe('Regression: ROK-1341 — public lineup page main uses min-h-dvh', () => {
+describe('Regression: ROK-1341/ROK-1661 — public lineup panels fill the shell, no own viewport floor', () => {
     beforeEach(() => {
         mockPublicLineupResult = { data: null, isLoading: false, error: null };
     });
 
-    it('content page <main> uses min-h-dvh and not min-h-screen', () => {
+    function expectFillsShell(container: HTMLElement) {
+        const panel = container.firstElementChild as HTMLElement;
+        expect(panel).toHaveClass('flex-1');
+        expect(panel.className).not.toMatch(/\bmin-h-(dvh|screen|svh|lvh)\b/);
+        expect(container.querySelector('main')).toBeNull();
+    }
+
+    it('content page fills the shell', () => {
         mockPublicLineupResult = {
             data: makePayload({
                 status: 'decided',
@@ -177,17 +185,17 @@ describe('Regression: ROK-1341 — public lineup page main uses min-h-dvh', () =
             isLoading: false,
             error: null,
         };
-        const { container } = renderPage();
-        const main = container.querySelector('main')!;
-        expect(main.className).toContain('min-h-dvh');
-        expect(main.className).not.toContain('min-h-screen');
+        expectFillsShell(renderPage().container);
     });
 
-    it('not-found <main> uses min-h-dvh and not min-h-screen', () => {
+    it('not-found, error and loading panels fill the shell', () => {
         mockPublicLineupResult = { data: null, isLoading: false, error: { status: 404 } };
-        const { container } = renderPage();
-        const main = container.querySelector('main')!;
-        expect(main.className).toContain('min-h-dvh');
-        expect(main.className).not.toContain('min-h-screen');
+        expectFillsShell(renderPage().container);
+        cleanup();
+        mockPublicLineupResult = { data: null, isLoading: false, error: { status: 500 } };
+        expectFillsShell(renderPage().container);
+        cleanup();
+        mockPublicLineupResult = { data: null, isLoading: true, error: null };
+        expectFillsShell(renderPage().container);
     });
 });
