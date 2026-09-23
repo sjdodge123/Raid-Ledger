@@ -28,7 +28,7 @@ async function openAddCharacterForGame(page: Page, gameName: string) {
     const dialog = page.getByRole('dialog', { name: 'Add Character' });
     await expect(dialog).toBeVisible({ timeout: 15_000 });
     await dialog.getByRole('combobox', { name: 'Game', exact: true }).fill(gameName);
-    // The results dropdown is portalled to <body>, outside the dialog.
+    // The Combobox portals its listbox into the surrounding dialog; match by role page-wide.
     const option = page.getByRole('option').filter({ has: page.getByText(gameName, { exact: true }) });
     await expect(option, `the seeded "${gameName}" should be in the game search results`).toBeVisible({ timeout: 15_000 });
     await option.click();

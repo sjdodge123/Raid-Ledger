@@ -15,9 +15,6 @@
     padding-bottom: 0.5rem;
 }
 
-
-
-
 /* Sections */
 .assignment-popup__section {
     display: flex;
@@ -357,8 +354,6 @@
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__search-wrapper {
     background: var(--color-surface, #ffffff);
 }
-
-
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__section-title {
     color: #64748b;
