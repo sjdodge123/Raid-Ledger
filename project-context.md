@@ -100,9 +100,8 @@ The admin Logs page (`api/src/logs/`) lists and exports these. logrotate (`Docke
 |---------|--------------|------------|
 | api | `api.log` | supervisor `[program:api]` tee of API stdout/stderr |
 | slow-queries | `slow-queries.log` | API slow-queries cron (digest of `pg_stat_statements`) |
-| nginx | `nginx-access.log`, `nginx-error.log` | `nginx/monolith.conf.template` server block |
-| nginx | `nginx.log` | tee of nginx stdout/stderr — empty in practice (infra PR 2) |
-| postgresql | `postgresql.log` | tee of postgres stderr — empty at `log_min_messages=FATAL` (infra PR 2) |
+| nginx | `nginx-access.log`, `nginx-error.log` | `nginx/monolith.conf.template` server block; the main-context `error_log` in `/etc/nginx/nginx.conf` also points at `nginx-error.log` (ROK-1164). No `nginx.log` — the entrypoint removes an empty legacy one |
+| postgresql | `postgresql.log` | tee of postgres stderr at `log_min_messages=WARNING` (startup lines, warnings/errors, statements slower than 200 ms without bind values; checkpoints off) |
 | redis | `redis.log` | tee of redis-server output (`user=redis`, pre-created by the entrypoint, ROK-1036) |
 | supervisor | `supervisor-events.log` | `/app/supervisor-events.sh` eventlistener (PROCESS_STATE events) |
 
