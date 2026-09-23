@@ -39,6 +39,7 @@ import {
   readGroupHorizon,
   horizonJoinRequest,
 } from '../../lfg/lfg-group-horizon.helpers';
+import { resolveLfgCommandUrgency } from '../commands/lfg-command-urgency.helpers';
 import type { LfgGroupDetailDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
@@ -399,6 +400,81 @@ describe('ROK-1614 — the board +1 inherits the horizon and the spawn follows',
     await postIntent(b.token, game.id, horizonJoinRequest(horizon)).expect(201);
 
     expect(await countAdHocEvents(game.id)).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROK-1656 — a bare `/lfg` joins an open group on its horizon, else tonight
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', () => {
+  // The slash command is a Discord interaction, so — like the ROK-1614 case
+  // above — this drives the RESOLUTION `lfg.command.ts` performs (the one
+  // `resolveLfgCommandUrgency` call, with no urgency given) against the real
+  // DB, then posts what it returned.
+  //
+  // MUTATION: make `resolveLfgCommandUrgency` return `parseUrgencyChoice(raw)`
+  // unconditionally and this fails on `expect(received).toMatchObject(...)`,
+  // urgency 'tonight' instead of 'now' — and no session spawns.
+  it('inherits a now group and counts toward its spawn threshold', async () => {
+    const [a, b] = await members('alpha', 'beta');
+    const game = await createGame(testApp, 'PEAK');
+    await postNow(a.token, game.id).expect(201);
+
+    const request = await resolveLfgCommandUrgency(testApp.db, game.id, null);
+    expect(request).toEqual({ urgency: 'now', ttlMinutes: 60 });
+
+    const seen = await captureLfm(async () => {
+      await postIntent(b.token, game.id, request).expect(201);
+    });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({ gameId: game.id, urgency: 'now' });
+    await waitFor(async () => {
+      expect(await countAdHocEvents(game.id)).toBe(1);
+    });
+    const [event] = await adHocEvents(game.id);
+    expect(await rosterDiscordIds(event.id)).toEqual(
+      [a.discordId, b.discordId].sort(),
+    );
+  });
+
+  // MUTATION: drop the live-hand query from `readOpenGroupHorizon` (return
+  // the horizon unconditionally) and the empty/lapsed cases fail with
+  // urgency 'week' where 'tonight' was expected.
+  it('raises tonight on a game nobody is looking for', async () => {
+    const game = await createGame(testApp, 'Valheim');
+    await expect(
+      resolveLfgCommandUrgency(testApp.db, game.id, null),
+    ).resolves.toEqual({ urgency: 'tonight' });
+  });
+
+  it('raises tonight when the only hand on the game has lapsed', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'Valheim');
+    const started = (await postWeek(a.token, game.id).expect(201))
+      .body as LfgIntentResponseDto;
+    await setExpiresAt(testApp, started.id, new Date(Date.now() - 60_000));
+    await expect(
+      resolveLfgCommandUrgency(testApp.db, game.id, null),
+    ).resolves.toEqual({ urgency: 'tonight' });
+  });
+
+  it('joins a live WEEK group on week rather than the tonight default', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'Valheim');
+    await postWeek(a.token, game.id).expect(201);
+    await expect(
+      resolveLfgCommandUrgency(testApp.db, game.id, null),
+    ).resolves.toEqual({ urgency: 'week' });
+  });
+
+  it('an explicit urgency ignores the open group (AC3)', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'PEAK');
+    await postNow(a.token, game.id).expect(201);
+    await expect(
+      resolveLfgCommandUrgency(testApp.db, game.id, 'week'),
+    ).resolves.toEqual({ urgency: 'week' });
   });
 });
 
