@@ -24,7 +24,7 @@ import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
 
 import { loadRlInfraIp, resolveProxmoxHost, shellQuote } from '../exec.js';
-import { shapeStatusBody, statusPath } from './test-plan-comments.js';
+import { shapeErrorBody, shapeStatusBody, statusPath } from './test-plan-comments.js';
 
 // ROK-1337 — v2 plan_id format: `YYYY-MM-DD-HHmm-XXXX` (UTC, 4 hex chars).
 // One slug can host many concurrent plans, each addressed by plan_id under
@@ -407,7 +407,7 @@ export async function executeStatus(p: { slug: string; plan_id?: string; include
     const { status, body } = await curlOnVM('GET', url, undefined, headers);
     if (status === 404) return { ok: false, error: 'no_plan_for_slug', slug: p.slug };
     if (status >= 200 && status < 300) return shapeStatusBody(body, includeComments);
-    return { ok: false, error: 'http_status_' + status, body };
+    return { ok: false, error: 'http_status_' + status, body: shapeErrorBody(body) };
   } catch (err) {
     const e = err as Error;
     return { ok: false, error: 'curl_failed', message: e.message };
