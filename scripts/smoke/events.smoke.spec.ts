@@ -36,7 +36,9 @@ test.describe('Events list', () => {
 
         // Desktop tabs live inside a "hidden md:flex" container.
         // Scope to that container to avoid matching mobile toolbar buttons.
-        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel');
+        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel')
+            // The search box is also bg-panel (ROK-1647 SearchInput); pin the tab group by its buttons.
+            .filter({ has: page.getByRole('button', { name: 'Upcoming' }) });
         await expect(desktopTabs).toBeVisible({ timeout: 10_000 });
 
         const upcomingTab = desktopTabs.getByRole('button', { name: 'Upcoming' });
@@ -393,7 +395,9 @@ test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
 
         // Navigate to Past events to find a completed event
         await page.goto('/events');
-        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel');
+        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel')
+            // The search box is also bg-panel (ROK-1647 SearchInput); pin the tab group by its buttons.
+            .filter({ has: page.getByRole('button', { name: 'Upcoming' }) });
         await expect(desktopTabs).toBeVisible({ timeout: 10_000 });
         await desktopTabs.getByRole('button', { name: 'Past' }).click();
         await expect(page.getByRole('heading', { name: /Past Events/i })).toBeVisible({ timeout: 10_000 });
