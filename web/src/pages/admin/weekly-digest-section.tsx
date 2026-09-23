@@ -4,11 +4,11 @@
  * back to the default notification channel. Every control saves on change,
  * like the sibling LFG board and channel pickers.
  */
-import { useRef } from 'react';
 import type { WeeklyDigestSettings } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
 import { ChannelSelector } from '../../components/admin/channel-selector';
 import { useWeeklyDigestSettings } from '../../hooks/admin/use-weekly-digest-settings';
+import { useSerializedSave } from './use-serialized-save';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
@@ -24,25 +24,20 @@ const TOGGLE_TRACK =
 const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
 /**
- * Query + mutation wiring: every change PUTs the full settings object. A save
- * builds on the newest pending payload, not the (possibly stale) query snapshot,
- * so a second edit made before the first settles never drops the first (Codex P2).
+ * Query + mutation wiring: every change PUTs the full settings object. Saves
+ * run one at a time and each builds on the newest unsaved edit, so neither a
+ * quick second edit nor an out-of-order response can drop an edit (Codex P2).
  */
 function useDigestForm() {
     const { status, channels, update } = useWeeklyDigestSettings();
     const current = status.data;
-    const pending = useRef<WeeklyDigestSettings | null>(null);
+    const enqueue = useSerializedSave<WeeklyDigestSettings>((payload) => update.mutateAsync(payload)
+        .then(() => { toast.success('Weekly digest settings saved'); })
+        .catch(() => { toast.error('Failed to update weekly digest settings'); }));
     const save = (patch: Partial<WeeklyDigestSettings>): Promise<void> => {
         if (!current) return Promise.resolve();
-        const base: WeeklyDigestSettings = pending.current ?? {
-            enabled: current.enabled, channelId: current.channelId, day: current.day, hour: current.hour,
-        };
-        const next = { ...base, ...patch };
-        pending.current = next;
-        return update.mutateAsync(next)
-            .then(() => { toast.success('Weekly digest settings saved'); })
-            .catch(() => { toast.error('Failed to update weekly digest settings'); })
-            .finally(() => { if (pending.current === next) pending.current = null; });
+        const { enabled, channelId, day, hour } = current;
+        return enqueue({ enabled, channelId, day, hour }, patch);
     };
     return { status, current, channels: channels.data ?? [], isPending: update.isPending, save };
 }

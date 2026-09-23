@@ -66,7 +66,12 @@ describe('WeeklyDigestSection (ROK-1435 L5) — render and saves', () => {
         expect(state.update.mutateAsync).toHaveBeenNthCalledWith(3, { ...BASE, channelId: 'c2' });
     });
 
-    it('a second edit made before the first save settles keeps the first edit (Codex P2)', async () => {
+});
+
+describe('WeeklyDigestSection (ROK-1435 L5) — saves run one at a time (Codex P2)', () => {
+    beforeEach(resetState);
+
+    it('three rapid edits while the first save is pending send exactly two PUTs (Codex P2)', async () => {
         let resolveFirst: (v: WeeklyDigestSettingsResponse) => void = () => undefined;
         const first = new Promise<WeeklyDigestSettingsResponse>((r) => { resolveFirst = r; });
         state.update.mutateAsync = vi.fn()
@@ -75,11 +80,36 @@ describe('WeeklyDigestSection (ROK-1435 L5) — render and saves', () => {
         render(<WeeklyDigestSection />);
         fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
         fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '18' } });
-        expect(state.update.mutateAsync).toHaveBeenNthCalledWith(1, { ...BASE, day: 5 });
-        expect(state.update.mutateAsync).toHaveBeenNthCalledWith(2, { ...BASE, day: 5, hour: 18 });
+        fireEvent.change(screen.getByLabelText('Channel'), { target: { value: 'c2' } });
+        expect(state.update.mutateAsync, 'no second PUT while the first is in flight').toHaveBeenCalledTimes(1);
         resolveFirst({ ...SAVED, day: 5 });
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(2));
+        expect(state.update.mutateAsync).toHaveBeenCalledTimes(2);
+        expect(state.update.mutateAsync).toHaveBeenNthCalledWith(1, { ...BASE, day: 5 });
+        expect(state.update.mutateAsync).toHaveBeenNthCalledWith(2, { ...BASE, day: 5, hour: 18, channelId: 'c2' });
     });
+
+    it('the newer PUT is only sent after the older one settles, even when it fails (Codex P2)', async () => {
+        const order: string[] = [];
+        let rejectFirst: (e: Error) => void = () => undefined;
+        state.update.mutateAsync = vi.fn()
+            .mockImplementationOnce(() => { order.push('send day'); return new Promise((_, rej) => { rejectFirst = rej; }); })
+            .mockImplementation(() => { order.push('send hour'); return Promise.resolve(SAVED); });
+        render(<WeeklyDigestSection />);
+        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
+        fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '18' } });
+        order.push('day settles');
+        rejectFirst(new Error('boom'));
+        await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
+        expect(toastError).toHaveBeenCalledTimes(1);
+        expect(order, 'the hour PUT must wait for the day PUT to settle').toEqual(['send day', 'day settles', 'send hour']);
+        expect(state.update.mutateAsync).toHaveBeenLastCalledWith({ ...BASE, day: 5, hour: 18 });
+    });
+
+});
+
+describe('WeeklyDigestSection (ROK-1435 L5) — channel', () => {
+    beforeEach(resetState);
 
     it('picking the default-channel option clears the dedicated channel (null)', () => {
         state.status.data = { ...SAVED, channelId: 'c1' };
