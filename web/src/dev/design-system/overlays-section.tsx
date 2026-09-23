@@ -74,7 +74,7 @@ function ChipsAndText(): JSX.Element {
 
 function FabStatic(): JSX.Element {
     return (
-        <StateFrame label="FAB — static replica" note="Real component is position:fixed + md:hidden (components/ui/fab.tsx). One per mobile page, primary create action only.">
+        <StateFrame label="FAB — static replica" note="Real component is position:fixed + md:hidden (components/ui/fab.tsx). One primary create action per mobile page — a neutral-toned Filters FAB (design-system.md §4.1, ROK-1659) may stack directly above it, same right edge, 12px gap.">
             <span className="w-14 h-14 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-500/25 flex items-center justify-center">
                 <PlusIcon className="w-6 h-6" />
             </span>

@@ -239,7 +239,10 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
-| `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive — the funnel standard (§4.1, ROK-1659). Desktop (≥1024px, `DESKTOP_MQ`): toolbar trigger + inline collapsible panel with "Filters" + "Clear all", scrolling internally past its `max-h-[500px]` cap. Phone + tablet (<1024px): no toolbar trigger — a Filters FAB opens the same panel as a `BottomSheet` instead. Trigger badges the count of ACTIVE filters, not a result count. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `hasActiveFilters`, `onClick` |
+| `filter-entry.tsx` → `FilterEntry`, `FilterEntryTrigger` | **The** filter entry point — the funnel standard (§4.1, ROK-1659). Pairs `FilterPanel` with the right opener for the viewport: `FilterEntryTrigger` renders the toolbar funnel at ≥1024px and nothing below it; `FilterEntry` renders the inline panel at ≥1024px and the `FilterFab` + `BottomSheet` below. Pages build on this, not `filter-panel.tsx` directly. | Any list/grid filtering, anywhere — `/games`, Common Ground, Calendar | `activeCount`, `isOpen`, `onOpenChange`, `onClearAll`, `children`, `stackAboveCreate`; trigger: `activeCount`, `isOpen`, `onOpenChange` |
+| `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | The lower-level pieces `filter-entry.tsx` composes: `FilterPanel` is the inline collapsible panel ("Filters" + "Clear all", scrolls internally past `max-h-[500px]`) that becomes a `BottomSheet` below `DESKTOP_MQ`; `FilterPanelTrigger` is the bare 44px funnel button. Reach for these only when `FilterEntry` doesn't fit. | Building a new filter entry point, or reading how one works | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `onClose`, `children`; trigger: `activeCount`, `isOpen`, `onClick` |
+| `filter-fab.tsx` → `FilterFab` (+ `fab-position.ts`) | The Filters FAB (§4.1, ROK-1659): 56px round, `right-4`, `lg:hidden`, neutral tone (`bg-surface border-edge-strong`) with the active-filter badge. Normally reached through `FilterEntry`, not mounted directly. | Phone/tablet filter entry, below 1024px | `activeCount`, `isOpen`, `onClick`, `stackAboveCreate` (lifts it above a page's create `FAB` — `fab-position.ts`) |
+| `filter-count-badge.tsx` → `FilterCountBadge` | The active-filter count badge shared by `FilterPanelTrigger` and `FilterFab`: solid `bg-success` pill, renders nothing at 0, count re-exposed via `aria-describedby` since both openers are named "Filters". | Never mounted directly — internal to `filter-panel.tsx` / `filter-fab.tsx` | `count`, `id` |
 | `button.tsx` → `Button` (ROK-1646) | **The** button. Five variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), `destructive-soft` (`bg-danger/10 text-danger border-danger/30`) — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), forwarded ref, all `ButtonHTMLAttributes` |
 | `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
 | `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-14` so text clears a 44px button), `mono`, forwarded ref |
@@ -337,8 +340,8 @@ instead of 768px).
 visible below 1024px alongside the FAB, or fall back to a chip row as a page's filter set (§4.3) — pick
 the one trigger the viewport calls for.
 
-**Light / Dark** — panel and sheet are tokens and follow the family; the emerald count badge and the
-Filters FAB's neutral surface are tokens too (`design-system-tokens.md` §3).
+**Light / Dark** — panel and sheet are tokens and follow the family; the count badge (`bg-success`) and
+the Filters FAB's neutral surface (`bg-surface`/`border-edge-strong`) are tokens too (`design-system-tokens.md` §3).
 
 ### 4.2 Cards
 
@@ -522,14 +525,16 @@ ROOT, not in a scoped preview (`design-system-tokens.md` §3). Rendered: `/dev/d
 ### 4.12 Badges with counts
 
 **DO** — absolutely-positioned circle on the trigger: `absolute -top-1 -right-1 flex items-center
-justify-center w-5 h-5 text-xs font-bold text-white bg-emerald-500 rounded-full`
-(`filter-panel.tsx::FilterBadge`). Inline count pills use `px-2 py-0.5 text-xs rounded-full` with a tinted
-background.
+justify-center min-w-5 h-5 px-1 text-xs font-bold text-white bg-success rounded-full`
+(`filter-count-badge.tsx::FilterCountBadge`, ROK-1659 — shared by `FilterPanelTrigger` and `FilterFab`;
+`min-w-5 px-1` over a fixed `w-5` so a two-digit count doesn't clip). Inline count pills use `px-2 py-0.5
+text-xs rounded-full` with a tinted background.
 
-**DON'T** show a zero-count badge — `FilterPanelTrigger` only renders it when `hasActiveFilters`.
+**DON'T** show a zero-count badge — `FilterCountBadge` renders nothing at `count <= 0`.
 
-**Light / Dark** — a solid-fill badge is identical in both by design (§6.10); a tinted pill must use
-`bg-<hue>-500/10` + `text-<hue>-400` to pick up the remap.
+**Light / Dark** — a solid-fill badge is identical in both by design (§6.10) whether it is a raw hue or,
+as here, the `success` token; a tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
+remap.
 
 ### 4.13 Journey hero — one component, every phase, every width
 
