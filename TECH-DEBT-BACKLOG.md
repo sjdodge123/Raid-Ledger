@@ -1802,3 +1802,7 @@ same day (#1278, #1279, #1280).
 ### 2026-09-23 — chore/rok-1647-search-combobox (surfaced during the ROK-1647 review)
 
 - **low** `web/src/components/ui/search-input.tsx` (clear button) with `fieldSize="sm"` (`UserMenu.tsx:156`, `events-page.tsx:188`) — the 44px `Button ghost iconOnly` clear button overflows the 36px `sm` frame at `lg` by ~4px top and bottom (visible on hover). Primitive-level (ROK-1646), not introduced by the ROK-1647 call sites. Suggested: size the trailing clear button to the field (`min-h-9` at `lg` for `sm`) inside `SearchInput`, keeping 44px below `lg`.
+
+### 2026-09-23 — chore/rok-1647-search-combobox (surfaced during the ROK-1647 fleet gate)
+
+- **med** fleet runner slot 3 `/workspace/node_modules` — `vitest` resolves to **4.1.11** while `package-lock.json` pins **5.0.1**; the laptop/GitHub install has 5.0.1. Behaviour differs: 5.x defaults `clearMocks: true`, 4.x does not, so `web/src/components/events/game-search-input.test.tsx:129` failed only on the runner (`AssertionError: a prefilled value must not enable the game search on mount: expected true to be false`, task `7d0d443fa1b8`) until the test cleared its own mock. Pre-existing: the runner's dependency tree is not re-installed when the lockfile changes, independent of this branch. Other runners may be stale too. Suggested: have `rl_validate_ci` (or the runner scaffold) run `npm ci` whenever the synced `package-lock.json` hash differs from the one the runner last installed, and print the resolved vitest/jest/playwright versions in the gate header.
