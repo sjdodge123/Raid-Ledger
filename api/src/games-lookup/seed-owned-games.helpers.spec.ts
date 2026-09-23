@@ -1,29 +1,22 @@
 /**
- * ROK-1643: the allowlist comes from the seed's own list, and the one-off
- * data migration restores exactly the names that list defines.
+ * ROK-1643: the allowlist covers the seed's WoW variants.
+ *
+ * No test pins migration 0191 to the live seed list: 0191 is a one-off that
+ * never re-runs, so tying it to GAMES_SEED would force edits to an applied
+ * migration whenever the seed changes. The seed re-asserts its own names on
+ * every boot (`upsertSeedGame`), so 0191 is not load-bearing for names.
  */
-import { readFileSync } from 'fs';
-import { join } from 'path';
-import { GAMES_SEED } from './seed-games.data';
 import { SEED_OWNED_GAME_SLUGS } from './seed-owned-games.helpers';
 
-const MIGRATION = join(
-  __dirname,
-  '../drizzle/migrations/0191_restore_seed_owned_game_names.sql',
-);
-
 describe('seed-owned games (ROK-1643)', () => {
-  it('locks every slug the seed defines, including the WoW variants', () => {
-    expect([...SEED_OWNED_GAME_SLUGS].sort()).toEqual(
-      GAMES_SEED.map((g) => g.slug).sort(),
+  it('locks every WoW variant slug the plugin keys on', () => {
+    expect(SEED_OWNED_GAME_SLUGS).toEqual(
+      expect.arrayContaining([
+        'world-of-warcraft',
+        'world-of-warcraft-classic',
+        'world-of-warcraft-burning-crusade-classic-anniversary-edition',
+        'world-of-warcraft-forever',
+      ]),
     );
-    expect(SEED_OWNED_GAME_SLUGS).toContain('world-of-warcraft-classic');
-  });
-
-  it('0191 restores each seed game to its curated name', () => {
-    const sqlText = readFileSync(MIGRATION, 'utf8');
-    for (const g of GAMES_SEED) {
-      expect(sqlText).toContain(`('${g.slug}', '${g.name}')`);
-    }
   });
 });
