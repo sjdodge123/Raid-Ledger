@@ -23,7 +23,12 @@ import { getGuild } from "../client.js";
 import { pollForCondition } from "../helpers/polling.js";
 import { readForumThreads } from "./fixtures-lfg-board.js";
 import { pickBoardIntro } from "./lfg-board-intro-pick.js";
-import { forumId, INTRO_TITLE, type Run } from "./lfg-board-shared.js";
+import {
+  forumId,
+  INTRO_TITLE,
+  INTRO_TITLES,
+  type Run,
+} from "./lfg-board-shared.js";
 
 /** `LFG_COMPOSER_IDS.OPEN` — the card's `Post an LFG` custom id. */
 export const COMPOSER_OPEN_CUSTOM_ID = "lfgc:open";
@@ -46,9 +51,11 @@ function customIds(message: Message): string[] {
 interface IntroState {
   /** This bot's intro post's id, or null when it owns none yet. */
   introId: string | null;
+  /** Its title — ROK-1658 renames a legacy-titled intro to `INTRO_TITLE`. */
+  title: string | null;
   /** Whether that post holds the forum's one pin — reported, not required. */
   pinned: boolean;
-  /** How many posts carry the intro title — the shared guild holds several. */
+  /** How many posts carry an intro title — the shared guild holds several. */
   introTitled: number;
   /** Custom ids on the intro's starter message. */
   ids: string[];
@@ -56,30 +63,39 @@ interface IntroState {
 
 /**
  * Read THIS env's bot's intro post. The CI guild is shared, so the forum holds
- * one "How this board works" per bot; ownership names ours (see
+ * one intro per bot, under the current or the legacy title; ownership names ours (see
  * `pickBoardIntro`). The starter is force-fetched so a cached copy from
  * before the composer's edit cannot mask it.
  */
 async function readIntro(run: Run): Promise<IntroState> {
   const threads = await readForumThreads(forumId(run));
-  const intro = pickBoardIntro(threads, INTRO_TITLE);
-  const introTitled = threads.filter((t) => t.name === INTRO_TITLE).length;
-  if (!intro) return { introId: null, pinned: false, introTitled, ids: [] };
+  const intro = pickBoardIntro(threads, INTRO_TITLES);
+  const introTitled = threads.filter((t) => INTRO_TITLES.includes(t.name)).length;
+  if (!intro) {
+    return { introId: null, title: null, pinned: false, introTitled, ids: [] };
+  }
   const thread = await getGuild().channels.fetch(intro.id);
   const starter = thread?.isThread()
     ? await thread.fetchStarterMessage({ force: true }).catch(() => null)
     : null;
   return {
     introId: intro.id,
+    title: intro.name,
     pinned: intro.pinned,
     introTitled,
     ids: starter ? customIds(starter) : [],
   };
 }
 
+/**
+ * The button is up AND the intro carries the current title: the same
+ * reconcile that sets the button renames a legacy-titled intro (ROK-1658).
+ */
 function isComposerReady(state: IntroState): boolean {
   return (
-    state.introId !== null && state.ids.includes(COMPOSER_OPEN_CUSTOM_ID)
+    state.introId !== null &&
+    state.title === INTRO_TITLE &&
+    state.ids.includes(COMPOSER_OPEN_CUSTOM_ID)
   );
 }
 
@@ -98,8 +114,9 @@ export async function assertComposerPinned(run: Run): Promise<void> {
   } catch {
     const last = await readIntro(run).catch(() => null);
     throw new Error(
-      "ROK-1612 AC1: this env's LFG board intro post must carry the " +
-        `composer button "${COMPOSER_OPEN_CUSTOM_ID}" within ` +
+      "ROK-1612 AC1 / ROK-1658: this env's LFG board intro post must carry " +
+        `the composer button "${COMPOSER_OPEN_CUSTOM_ID}" and the title ` +
+        `"${INTRO_TITLE}" within ` +
         `${String(COMPOSER_READY_MS)}ms of enabling the board; last seen ` +
         `${JSON.stringify(last)} in forum ${forumId(run)}`,
     );

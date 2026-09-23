@@ -79,7 +79,7 @@ import {
   describeThreads,
   expectedThreadName,
   forumId,
-  INTRO_TITLE,
+  INTRO_TITLES,
   isGroupThread,
   JOIN_LABEL,
   pollForThread,
@@ -238,9 +238,12 @@ async function enableBoard(run: Run): Promise<void> {
     // env seeded one. Not "pinned" either: the forum has ONE pin slot, held by
     // whichever env pinned first; Discord refuses ours (30047) and the product
     // logs it and carries on — see `pickBoardIntro`.
-    (t) => pickBoardIntro([t], INTRO_TITLE) !== null,
-    `AC16 step 1: enabling the board must seed an intro post titled ` +
-      `"${INTRO_TITLE}", owned by this env's bot, in forum ${run.forumChannelId}, and none appeared`,
+    // ROK-1658: an intro of ours under the legacy title is ADOPTED, not
+    // re-seeded, so either title counts here; `assertComposerPinned` then
+    // requires the rename to the current title.
+    (t) => pickBoardIntro([t], INTRO_TITLES) !== null,
+    `AC16 step 1: enabling the board must seed (or adopt) an intro post titled ` +
+      `one of ${JSON.stringify(INTRO_TITLES)}, owned by this env's bot, in forum ${run.forumChannelId}, and none appeared`,
     BOARD_READY_MS,
   );
   run.preexistingThreads = new Set(
