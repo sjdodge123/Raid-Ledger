@@ -49,6 +49,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { findLfgBoardBindingChannelId } from '../lfg-board/lfg-board-channel.db-helpers';
 import {
   LFG_BOARD_EVENTS,
+  LFG_BOARD_INTRO_BODY,
   type LfgBoardToggledPayload,
 } from '../lfg-board/lfg-board.constants';
 import { buildComposerCard, sameComponents } from './lfg-composer-card.helpers';
@@ -172,21 +173,43 @@ export class LfgComposerPinService {
    * Board off (ROK-1658) — take down BOTH homes the composer can have. A
    * stored intro id does not rule out a legacy text binding carrying a card
    * pinned while the old composer switch was on, so neither check
-   * short-circuits the other.
+   * short-circuits the other — and neither's failure skips the other: each
+   * cleanup has its own catch (a deleted intro's 10008 must not leave the
+   * text card up).
+   *
+   * @returns The intro's outcome when it did something, else the text
+   *   channel's; null when a cleanup failed and the other did nothing.
    */
   private async takeDown(
     guild: Guild,
     botUserId: string,
-  ): Promise<ComposerReconcileOutcome> {
-    const intro = await this.forumIntro(guild);
-    const cleared = intro
-      ? await this.clearIntro(intro, botUserId)
-      : 'no-target';
-    const channel = await this.boundTextChannel(guild);
-    const removed = channel
-      ? await this.removeFrom(channel, botUserId)
-      : 'no-target';
-    return cleared === 'no-target' ? removed : cleared;
+  ): Promise<ComposerReconcileOutcome | null> {
+    const cleared = await this.tryTakeDown('the intro post', async () => {
+      const intro = await this.forumIntro(guild);
+      return intro ? this.clearIntro(intro, botUserId) : 'no-target';
+    });
+    const removed = await this.tryTakeDown('the bound channel', async () => {
+      const channel = await this.boundTextChannel(guild);
+      return channel ? this.removeFrom(channel, botUserId) : 'no-target';
+    });
+    if (cleared && cleared !== 'no-target') return cleared;
+    if (removed && removed !== 'no-target') return removed;
+    return cleared === null || removed === null ? null : 'no-target';
+  }
+
+  /** One take-down step, isolated: a failure is logged and returns null. */
+  private async tryTakeDown(
+    where: string,
+    step: () => Promise<ComposerReconcileOutcome>,
+  ): Promise<ComposerReconcileOutcome | null> {
+    try {
+      return await step();
+    } catch (err) {
+      this.logger.warn(
+        `Could not take the LFG composer down from ${where}: ${describe(err)}.`,
+      );
+      return null;
+    }
   }
 
   /** Board off (ROK-1658) — take down any card this bot left in the bound channel. */
@@ -238,8 +261,11 @@ export class LfgComposerPinService {
   /**
    * Put the composer buttons on the forum's pinned intro post, in place.
    *
-   * Content is left alone — the intro text is the board's own copy; only the
-   * button row is set, so a second run writes the same row over itself.
+   * The intro is posted once, on first enable, so a board seeded before the
+   * current copy keeps its old text. The same edit therefore also brings the
+   * content up to {@link LFG_BOARD_INTRO_BODY} (ROK-1658) — ONE edit carrying
+   * both, and none at all when both already match. The post is bot-authored,
+   * so the bot may edit it.
    */
   private async attachToIntro(
     thread: ThreadChannel,
@@ -248,10 +274,14 @@ export class LfgComposerPinService {
   ): Promise<ComposerReconcileOutcome> {
     const starter = await thread.fetchStarterMessage();
     if (!starter || starter.author.id !== botUserId) return 'no-target';
-    if (sameComponents(starter.components, payload.components)) {
+    const copyCurrent = starter.content === LFG_BOARD_INTRO_BODY;
+    if (copyCurrent && sameComponents(starter.components, payload.components)) {
       return 'intro-unchanged';
     }
-    await starter.edit({ components: payload.components });
+    await starter.edit({
+      content: LFG_BOARD_INTRO_BODY,
+      components: payload.components,
+    });
     this.logger.log(`LFG composer buttons set on the intro post ${thread.id}.`);
     return 'intro-edited';
   }
