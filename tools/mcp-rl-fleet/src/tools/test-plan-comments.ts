@@ -16,11 +16,19 @@
 // unassigned), replaces the wrap tag's own name with "[wrap-tag]" so a body
 // cannot spell its close tag, replaces every "<" (and U+226E) with U+2039 and
 // every ">" (and U+226F) with U+203A (no tag can form), caps each body at 500
-// characters and the response at 4000 — a comment reached after the budget is
-// spent gets `body: null`, counted once in a top-level
+// characters and the response at 4000 — the budget is spent NEWEST-first (by
+// comment ts, across steps; output order is unchanged), so an older comment
+// reached after it is spent gets `body: null`, counted once in a top-level
 // `comment_bodies_omitted` — and emits
 // `<untrusted-tester-comment>plain text</untrusted-tester-comment>` with no
-// encoding attribute. Only a disposable sub-agent lane sets include_comments.
+// encoding attribute. When the dashboard withholds every body (the
+// X-Agent-Token was missing or rejected) a top-level
+// `comment_bodies_unavailable` says so. Only a disposable sub-agent lane sets
+// include_comments.
+//
+// A 2xx body that is not JSON is never passed through: it becomes an
+// `unparseable_dashboard_body` error whose raw body is withheld when it
+// carries the wrap tag, exactly as on the non-2xx path.
 
 export const COMMENT_BODY_CAP = 500;
 export const COMMENT_TOTAL_CAP = 4000;
@@ -28,6 +36,10 @@ export const TRUNCATION_MARK = '…[truncated]';
 export const UNDECODABLE_COMMENT = '[undecodable comment]';
 const WRAP_OPEN = '<untrusted-tester-comment>';
 const WRAP_CLOSE = '</untrusted-tester-comment>';
+export const WITHHELD_RAW = '[withheld: tester-comment markup]';
+export const BODIES_UNAVAILABLE =
+  'dashboard returned no comment bodies: the X-Agent-Token was missing or rejected ' +
+  '(RL_AGENT_TOKEN in the MCP server env must match the dashboard)';
 
 type Json = Record<string, unknown>;
 type Budget = { remaining: number; omitted: number };
@@ -178,21 +190,70 @@ export function renderCommentBody(raw: unknown, budget: Budget): string | null {
   return `${WRAP_OPEN}${out}${WRAP_CLOSE}`;
 }
 
-/** Opt-in path: metadata + decoded, sanitised, capped plain-text bodies. */
-export function renderCommentBodies(body: unknown): unknown {
-  const budget: Budget = { remaining: COMMENT_TOTAL_CAP, omitted: 0 };
-  const out = mapPlans(body, (plan) =>
-    mapStepComments(plan, (c) => ({
-      ...commentMetadata(c),
-      body: renderCommentBody(isObj(c) ? c.body : undefined, budget),
-    })),
+/** Every comment in the body, in output (traversal) order. */
+function collectComments(body: unknown): unknown[] {
+  const all: unknown[] = [];
+  mapPlans(body, (plan) =>
+    mapStepComments(plan, (c) => {
+      all.push(c);
+      return {};
+    }),
   );
-  if (budget.omitted === 0 || !isObj(out)) return out;
-  return { ...out, comment_bodies_omitted: budget.omitted };
+  return all;
 }
 
-/** Shape a successful dashboard status body per the ROK-1657 contract. */
+const tsMs = (c: unknown): number => {
+  const ms = isObj(c) && typeof c.ts === 'string' ? Date.parse(c.ts) : NaN;
+  return Number.isNaN(ms) ? -Infinity : ms;
+};
+
+/** Output indices newest-first: ts descending, later position first on a tie. */
+function newestFirst(all: unknown[]): number[] {
+  const ms = all.map(tsMs);
+  return all.map((_, i) => i).sort((a, b) => ms[b] - ms[a] || b - a);
+}
+
+/** A stripped-shape comment: the dashboard says a body exists but sent none. */
+const bodyWithheld = (c: unknown): boolean =>
+  isObj(c) && c.has_body === true && typeof c.body !== 'string';
+
+/**
+ * Opt-in path: metadata + decoded, sanitised, capped plain-text bodies. The
+ * shared budget is spent newest-first so a busy plan keeps its latest
+ * comments; the output keeps the dashboard's order.
+ */
+export function renderCommentBodies(body: unknown): unknown {
+  const budget: Budget = { remaining: COMMENT_TOTAL_CAP, omitted: 0 };
+  const all = collectComments(body);
+  const rendered: Array<string | null> = all.map(() => null);
+  for (const i of newestFirst(all)) {
+    const c = all[i];
+    rendered[i] = renderCommentBody(isObj(c) ? c.body : undefined, budget);
+  }
+  let next = 0;
+  const out = mapPlans(body, (plan) =>
+    mapStepComments(plan, (c) => ({ ...commentMetadata(c), body: rendered[next++] })),
+  );
+  if (!isObj(out)) return out;
+  return {
+    ...out,
+    ...(budget.omitted > 0 ? { comment_bodies_omitted: budget.omitted } : {}),
+    ...(all.some(bodyWithheld) ? { comment_bodies_unavailable: BODIES_UNAVAILABLE } : {}),
+  };
+}
+
+/** A raw (non-JSON) dashboard body is withheld when it carries the wrap tag. */
+const withholdRawBody = (raw: string): string =>
+  /untrusted-tester-comment/i.test(raw) ? WITHHELD_RAW : raw;
+
+/**
+ * Shape a successful dashboard status body per the ROK-1657 contract. A 2xx
+ * body that did not parse as JSON is never returned as the result.
+ */
 export function shapeStatusBody(body: unknown, includeComments: boolean): unknown {
+  if (typeof body === 'string') {
+    return { ok: false, error: 'unparseable_dashboard_body', body: withholdRawBody(body) };
+  }
   return includeComments ? renderCommentBodies(body) : redactCommentBodies(body);
 }
 
@@ -202,8 +263,6 @@ export function shapeStatusBody(body: unknown, includeComments: boolean): unknow
  * withheld, so an error path can never leak an unsanitised wrap.
  */
 export function shapeErrorBody(body: unknown): unknown {
-  if (typeof body === 'string') {
-    return /untrusted-tester-comment/i.test(body) ? '[withheld: tester-comment markup]' : body;
-  }
+  if (typeof body === 'string') return withholdRawBody(body);
   return redactCommentBodies(body);
 }
