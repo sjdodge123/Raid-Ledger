@@ -16,6 +16,9 @@ import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { CalendarGameFilterControls } from './CalendarGameFilter';
 import type { CalendarGameFilter } from './use-calendar-game-filter';
 
+/** The calendar badge counts hidden games, not filters — say so to assistive tech. */
+const describeHiddenGames = (n: number): string => `${n} ${n === 1 ? 'game' : 'games'} hidden`;
+
 interface CalendarFilterOpenProps {
     filter: CalendarGameFilter;
     isOpen: boolean;
@@ -25,7 +28,10 @@ interface CalendarFilterOpenProps {
 /** The toolbar funnel (1024px and up only). */
 export function CalendarFilterTrigger({ filter, isOpen, onOpenChange }: CalendarFilterOpenProps): JSX.Element | null {
     if (filter.allKnownGames.length === 0) return null;
-    return <FilterEntryTrigger activeCount={filter.hiddenCount} isOpen={isOpen} onOpenChange={onOpenChange} />;
+    return (
+        <FilterEntryTrigger activeCount={filter.hiddenCount} isOpen={isOpen} onOpenChange={onOpenChange}
+            describeCount={describeHiddenGames} />
+    );
 }
 
 /** Inline panel at 1024px and up; Filters FAB + BottomSheet below. */
@@ -34,7 +40,7 @@ export function CalendarFilterEntry({ filter, isOpen, onOpenChange }: CalendarFi
     if (filter.allKnownGames.length === 0) return null;
     return (
         <FilterEntry activeCount={filter.hiddenCount} isOpen={isOpen} onOpenChange={onOpenChange}
-            onClearAll={filter.selectAllGames}>
+            onClearAll={filter.selectAllGames} describeCount={describeHiddenGames}>
             <CalendarGameFilterControls allKnownGames={filter.allKnownGames} selectedGames={filter.selectedGames}
                 toggleGame={filter.toggleGame} deselectAllGames={filter.deselectAllGames}
                 likedSlugs={filter.likedSlugs} layout={isDesktop ? 'panel' : 'sheet'} />

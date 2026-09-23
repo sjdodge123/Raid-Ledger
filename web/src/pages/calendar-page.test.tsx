@@ -81,15 +81,32 @@ function deliver(games: ReturnType<typeof makeGame>[]) {
     deliverGames(games, useGameFilterStore.getState().reportGames);
 }
 
-/** Open the desktop filter modal by clicking the [Filter: …] chip.
- * Note: the mobile FAB also has aria-label "Filter by Game"; we use the
- * .calendar-filter-chip class to disambiguate. */
+/** The desktop toolbar funnel (1024px and up). */
 function getChip(): HTMLElement {
     return screen.getByTestId('filter-panel-trigger');
 }
 
 function openModalViaChip() {
     fireEvent.click(getChip());
+}
+
+/** A checkbox row's accessible name: its aria-labelledby text minus aria-hidden decoration (the emoji). */
+function nameOf(cb: HTMLElement): string {
+    const label = document.getElementById(cb.getAttribute('aria-labelledby') ?? '')?.cloneNode(true) as HTMLElement | undefined;
+    label?.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
+    return label?.textContent ?? '';
+}
+
+/** Game names of the panel's checkbox rows, in DOM order (the Checkbox primitive labels via aria-labelledby). */
+function checkboxNames(): string[] {
+    return within(screen.getByTestId('filter-panel')).getAllByRole('checkbox').map(nameOf);
+}
+
+function resetStore() {
+    mockIsDesktop = true;
+    vi.clearAllMocks();
+    useGameFilterStore.getState()._reset();
+    mockRegistryGames = [];
 }
 
 // ---------------------------------------------------------------------------
@@ -102,15 +119,22 @@ function accumulatorTestsGroup1() {
         expect(screen.getByTestId('calendar-view')).toBeInTheDocument();
     });
 
-    it('filter chip is hidden before any games arrive', () => {
+    it('filter funnel is hidden before any games arrive', () => {
         render_page();
         expect(screen.queryByTestId('filter-panel-trigger')).toBeNull();
     });
 
-    it('shows filter chip after games arrive', () => {
+    it('shows the filter funnel after games arrive', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
-        expect(screen.queryByTestId('filter-panel-trigger')).not.toBeNull();
+        expect(screen.getByTestId('filter-panel-trigger')).toHaveAccessibleName('Filters');
+    });
+
+    it('no control is still named "Filter by Game" (ROK-1662 retired it)', () => {
+        mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
+        render_page();
+        expect(screen.queryByRole('button', { name: /filter by game/i })).toBeNull();
+        expect(screen.queryByText(/filter by game/i)).toBeNull();
     });
 }
 
@@ -121,10 +145,7 @@ function accumulatorTestsGroup2() {
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('gw2', 'Guild Wars 2')]);
 
         openModalViaChip();
-        const dialog = screen.getByTestId('filter-panel');
-        const gameNames = Array.from(dialog.querySelectorAll('input[type="checkbox"]')).map(
-            (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
-        );
+        const gameNames = checkboxNames();
         expect(gameNames).toContain('World of Warcraft');
         expect(gameNames).toContain('Final Fantasy XIV');
         expect(gameNames).toContain('Guild Wars 2');
@@ -137,12 +158,10 @@ function accumulatorTestsGroup2() {
         deliver([makeGame('wow', 'World of Warcraft')]);
 
         openModalViaChip();
-        const dialog = screen.getByTestId('filter-panel');
-        const checkboxes = within(dialog).getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(1);
+        expect(within(screen.getByTestId('filter-panel')).getAllByRole('checkbox')).toHaveLength(1);
     });
 
-    it('sorts games alphabetically inside the filter modal', () => {
+    it('sorts games alphabetically inside the filter panel', () => {
         render_page();
         deliver([
             makeGame('wow', 'World of Warcraft'),
@@ -151,23 +170,12 @@ function accumulatorTestsGroup2() {
         ]);
 
         openModalViaChip();
-        const dialog = screen.getByTestId('filter-panel');
-        const labels = Array.from(dialog.querySelectorAll('input[type="checkbox"]'))
-            .map((cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '');
-
-        expect(labels[0]).toBe('Apex Legends');
-        expect(labels[1]).toBe('Final Fantasy XIV');
-        expect(labels[2]).toBe('World of Warcraft');
+        expect(checkboxNames()).toEqual(['Apex Legends', 'Final Fantasy XIV', 'World of Warcraft']);
     });
 }
 
 describe('CalendarPage — allKnownGames accumulator', () => {
-    beforeEach(() => {
-        mockIsDesktop = true;
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
-    });
+    beforeEach(resetStore);
 
     afterEach(() => {
         activeQueryClient?.clear();
@@ -178,12 +186,7 @@ describe('CalendarPage — allKnownGames accumulator', () => {
 });
 
 describe('CalendarPage — auto-select behaviour', () => {
-    beforeEach(() => {
-        mockIsDesktop = true;
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
-    });
+    beforeEach(resetStore);
 
     afterEach(() => {
         activeQueryClient?.clear();
@@ -197,8 +200,8 @@ describe('CalendarPage — auto-select behaviour', () => {
         render_page();
 
         openModalViaChip();
-        const dialog = screen.getByTestId('filter-panel');
-        const checkboxes = within(dialog).getAllByRole('checkbox');
+        const checkboxes = within(screen.getByTestId('filter-panel')).getAllByRole('checkbox');
+        expect(checkboxes).toHaveLength(2);
         checkboxes.forEach((cb) => expect(cb).toBeChecked());
     });
 
@@ -207,82 +210,78 @@ describe('CalendarPage — auto-select behaviour', () => {
         deliver([makeGame('wow', 'World of Warcraft')]);
 
         openModalViaChip();
-        const dialog = screen.getByTestId('filter-panel');
-        const wowCheckbox = within(dialog).getByRole('checkbox');
-        fireEvent.change(wowCheckbox, { target: { checked: false } });
+        const panel = screen.getByTestId('filter-panel');
+        const wowCheckbox = within(panel).getByRole('checkbox', { name: 'World of Warcraft' });
+        fireEvent.click(wowCheckbox);
         expect(wowCheckbox).not.toBeChecked();
 
         deliver([makeGame('apex', 'Apex Legends')]);
 
-        const updatedCheckboxes = within(screen.getByTestId('filter-panel')).getAllByRole('checkbox');
-        const apexCb = updatedCheckboxes.find(
-            (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent === 'Apex Legends',
-        );
-        expect(apexCb).not.toBeChecked();
+        expect(within(panel).getByRole('checkbox', { name: 'Apex Legends' })).not.toBeChecked();
     });
 });
 
-describe('CalendarPage — filter chip', () => {
-    beforeEach(() => {
-        mockIsDesktop = true;
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
-    });
+describe('CalendarPage — funnel badge (games hidden)', () => {
+    beforeEach(resetStore);
 
     afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('chip label reads "Filter: All games" when every game is selected', () => {
+    it('no badge while every game is selected', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft'), makeRegistryGame('apex', 'Apex Legends', 2)];
         render_page();
 
         expect(screen.queryByTestId('filter-count-badge')).toBeNull();
+        expect(getChip()).not.toHaveAttribute('aria-describedby');
     });
 
-    it('chip label reads "Filter: No games" when user clicks None (CalendarView shows zero events)', () => {
+    it('badge = every game after "None" (CalendarView shows zero events)', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
         openModalViaChip();
-        const dialog = screen.getByTestId('filter-panel');
-        const noneBtn = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'None');
-        fireEvent.click(noneBtn!);
-        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
+        fireEvent.click(within(screen.getByTestId('filter-panel')).getByRole('button', { name: 'None' }));
+        fireEvent.click(getChip());
 
-        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent(String(useGameFilterStore.getState().allKnownGames.length));
+        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('2');
+        expect(getChip()).toHaveAccessibleDescription('2 games hidden');
     });
 
-    it('chip label reads "Filter: N games" when partial selection', () => {
+    it('badge = number of games hidden on a partial selection', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends'), makeGame('ff14', 'FFXIV')]);
 
         openModalViaChip();
-        const dialog = screen.getByTestId('filter-panel');
-        const apexLabel = Array.from(dialog.querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent === 'Apex Legends',
-        ) as HTMLElement | undefined;
-        expect(apexLabel).toBeDefined();
-        fireEvent.click(apexLabel!);
+        fireEvent.click(within(screen.getByTestId('filter-panel')).getByRole('checkbox', { name: 'Apex Legends' }));
+        fireEvent.click(getChip());
 
-        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
-
-        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent(String(useGameFilterStore.getState().allKnownGames.length - 2));
+        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('1');
+        expect(getChip()).toHaveAccessibleDescription('1 game hidden');
     });
 
-    it('clicking the chip opens the filter modal', () => {
+    it('clicking the funnel opens the filter panel', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(getChip()).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByTestId('filter-panel')).toHaveAttribute('aria-hidden', 'true');
         openModalViaChip();
-        expect(screen.getByTestId('filter-panel')).toBeInTheDocument();
+        expect(getChip()).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByTestId('filter-panel')).not.toHaveAttribute('aria-hidden');
     });
 
-    it('chip is hidden when no games are known', () => {
+    it('funnel is hidden when no games are known', () => {
         render_page();
         expect(screen.queryByTestId('filter-panel-trigger')).toBeNull();
+    });
+
+    it('no toolbar funnel below 1024px (the Filters FAB opens filters there)', () => {
+        mockIsDesktop = false;
+        mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
+        render_page();
+        expect(screen.queryByTestId('filter-panel-trigger')).toBeNull();
+        expect(screen.getByTestId('filter-fab')).toBeInTheDocument();
     });
 });
 
@@ -303,98 +302,76 @@ function openModal() {
     openModalViaChip();
 }
 
-function modalOverflowTestsGroup1() {
-    it('filter modal is not visible initially', () => {
+function panelTestsGroup1() {
+    it('filter panel is collapsed initially', () => {
         setupWithGames();
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(getChip()).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Alpha' })).toBeNull();
     });
 
-    it('opens filter modal when the chip is clicked', () => {
+    it('opens the filter panel when the funnel is clicked', () => {
         openModal();
-        expect(screen.getByTestId('filter-panel')).toBeInTheDocument();
+        expect(screen.getByRole('checkbox', { name: 'Alpha' })).toBeInTheDocument();
     });
 
-    it('modal shows all games', () => {
+    it('panel shows all games', () => {
         openModal();
-        const dialog = screen.getByTestId('filter-panel');
-        expect(dialog).toHaveTextContent('Alpha');
-        expect(dialog).toHaveTextContent('Beta');
-        expect(dialog).toHaveTextContent('Gamma');
-        expect(dialog).toHaveTextContent('Delta');
-        expect(dialog).toHaveTextContent('Epsilon');
-        expect(dialog).toHaveTextContent('Foxtrot');
+        expect(checkboxNames()).toHaveLength(6);
     });
 }
 
-function modalOverflowTestsGroup2() {
-    it('modal title is "Filter by Game"', () => {
+function panelTestsGroup2() {
+    it('panel heading is "Filters"', () => {
         openModal();
-        const dialog = screen.getByTestId('filter-panel');
-        expect(dialog).toHaveTextContent('Filter by Game');
+        const panel = screen.getByTestId('filter-panel');
+        expect(within(panel).getByRole('heading', { name: 'Filters' })).toBeInTheDocument();
     });
 
-    it('modal closes when close button (X) is clicked', () => {
+    it('panel collapses when the funnel is clicked again', () => {
         openModal();
-        const closeBtn = screen.getByRole('button', { name: 'Close modal' });
-        fireEvent.click(closeBtn);
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        fireEvent.click(getChip());
+        expect(getChip()).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByRole('checkbox', { name: 'Alpha' })).toBeNull();
     });
 
-    it('modal closes on Escape key', () => {
+    it('Escape collapses the panel and returns focus to the funnel', () => {
         openModal();
-        expect(screen.getByTestId('filter-panel')).toBeInTheDocument();
+        const alpha = screen.getByRole('checkbox', { name: 'Alpha' });
+        alpha.focus();
+        expect(document.activeElement).toBe(alpha);
+
         fireEvent.keyDown(document, { key: 'Escape' });
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+        expect(getChip()).toHaveAttribute('aria-expanded', 'false');
+        expect(document.activeElement).toBe(getChip());
     });
 }
 
-function modalOverflowTestsGroup3() {
-    it('modal closes when backdrop is clicked', () => {
+function panelTestsGroup3() {
+    it('"Clear all" shows only while a game is hidden; "None" is always there', () => {
         openModal();
-        const dialog = screen.getByTestId('filter-panel');
-        const backdrop = dialog.parentElement?.querySelector('[aria-hidden="true"]') as HTMLElement | null;
-        expect(backdrop).toBeTruthy();
-        fireEvent.click(backdrop!);
-        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        const panel = screen.getByTestId('filter-panel');
+        expect(within(panel).getByRole('button', { name: 'None' })).toBeInTheDocument();
+        expect(within(panel).queryByRole('button', { name: 'Clear all' })).toBeNull();
+
+        fireEvent.click(within(panel).getByRole('checkbox', { name: 'Beta' }));
+        expect(within(panel).getByRole('button', { name: 'Clear all' })).toBeInTheDocument();
     });
 
-    it('modal has All and None buttons', () => {
+    it('panel shows games sorted alphabetically', () => {
         openModal();
-        const dialog = screen.getByTestId('filter-panel');
-        const buttons = Array.from(dialog.querySelectorAll('button'));
-        expect(buttons.find((b) => b.textContent === 'All')).toBeTruthy();
-        expect(buttons.find((b) => b.textContent === 'None')).toBeTruthy();
-    });
-
-    it('modal shows games sorted alphabetically', () => {
-        openModal();
-        const dialog = screen.getByTestId('filter-panel');
-        const checkboxes = Array.from(dialog.querySelectorAll('input[type="checkbox"]'));
-        const names = checkboxes.map(
-            (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
-        );
-        expect(names[0]).toBe('Alpha');
-        expect(names[1]).toBe('Beta');
-        expect(names[2]).toBe('Delta');
-        expect(names[3]).toBe('Epsilon');
-        expect(names[4]).toBe('Foxtrot');
-        expect(names[5]).toBe('Gamma');
+        expect(checkboxNames()).toEqual(['Alpha', 'Beta', 'Delta', 'Epsilon', 'Foxtrot', 'Gamma']);
     });
 }
 
-describe('CalendarPage — filter modal (desktop overflow)', () => {
-    beforeEach(() => {
-        mockIsDesktop = true;
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
-    });
+describe('CalendarPage — filter panel (desktop)', () => {
+    beforeEach(resetStore);
 
     afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    modalOverflowTestsGroup1();
-    modalOverflowTestsGroup2();
-    modalOverflowTestsGroup3();
+    panelTestsGroup1();
+    panelTestsGroup2();
+    panelTestsGroup3();
 });
