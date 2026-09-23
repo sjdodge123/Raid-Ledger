@@ -102,9 +102,9 @@ function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGame
     };
     // Removing the clear button (`trailing`) remounts the input, so refocus
     // after that commit — a synchronous focus() would land on the old node.
-    const [refocus, setRefocus] = useState(false);
-    useEffect(() => { if (refocus) { setRefocus(false); inputRef.current?.focus(); } }, [refocus]);
-    const clear = (): void => { setEngaged(false); onChange(null); setQuery(''); setRefocus(true); };
+    const refocus = useRef(false);
+    useEffect(() => { if (refocus.current) { refocus.current = false; inputRef.current?.focus(); } });
+    const clear = (): void => { setEngaged(false); onChange(null); setQuery(''); refocus.current = true; };
     return {
         inputRef, searching, hasSuggestions, pick, type, clear, query,
         options: searching ? (search?.data?.data ?? []) : (initialSuggestions ?? []),

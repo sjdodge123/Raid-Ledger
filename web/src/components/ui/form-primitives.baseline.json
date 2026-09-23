@@ -53,7 +53,6 @@
     "components/events/event-invite-actions.tsx": 2,
     "components/events/event-plans-list.tsx": 3,
     "components/events/events-mobile-toolbar.tsx": 2,
-    "components/events/game-search-input.tsx": 1,
     "components/events/invite-modal-sections.tsx": 2,
     "components/events/invite-modal.tsx": 5,
     "components/events/mobile-event-card.tsx": 1,
