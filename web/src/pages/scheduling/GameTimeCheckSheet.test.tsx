@@ -80,7 +80,7 @@ describe('GameTimeCheckSheet — ONE view (ROK-1579)', () => {
   it('gives the body a DEFINITE height so the week editor fills it instead of scrolling', () => {
     renderSheet();
     const box = screen.getByTestId('game-time-check-content');
-    expect(box.className).toMatch(/h-\[calc\(95dvh-\d+px\)\]/);
+    expect(box.className).toMatch(/h-\[calc\(var\(--sheet-vh,1dvh\)_\*_95_-_\d+px\)\]/);
     expect(box.className).toContain('min-h-0');
     expect(box).toContainElement(screen.getByTestId('phone-week-check'));
   });

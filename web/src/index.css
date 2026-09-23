@@ -114,13 +114,15 @@ html {
     --color-busy: #7c3aed;
     --color-slot: #0e7490;
     /* Ratios below are WCAG 2.x on --color-surface (#ffffff) and are asserted by
-       semantic-tokens.guard.test.ts, which recomputes them from these values. */
+       semantic-tokens.guard.test.ts, which recomputes them from these values — warning
+       and danger are ALSO asserted on the panel, the JourneyHero card and their own
+       /10 tint over the panel (ROK-1586 fleet plan 2026-09-22-2005-3f02). */
     --color-success: #047857;
     /* emerald-700 — 5.48:1 (emerald-600 #059669 was 3.77:1, sub-AA for small text) */
-    --color-warning: #b45309;
-    /* amber-700   — 5.02:1 (amber-600 #d97706 was 3.19:1, sub-AA for small text) */
-    --color-danger: #dc2626;
-    /* red-600     — 4.83:1 */
+    --color-warning: #92400e;
+    /* amber-800   — 7.09:1; 6.47 panel, 6.36 hero, 5.58 /10 tint (amber-700 #b45309 was 4.02 on the tint) */
+    --color-danger: #b91c1c;
+    /* red-700     — 6.47:1; 5.91 panel, 5.80 hero, 4.99 /10 tint (red-600 #dc2626 was 4.41 / 4.33 / 3.78) */
     --color-secondary: #334155;
     --color-foreground: #0f172a;
     --color-edge: #cbd5e1;
