@@ -143,6 +143,40 @@ export async function readGroupHorizon(
 }
 
 /**
+ * ROK-1656 — the horizon of a group that is actually OPEN, or null when nobody
+ * holds a live hand on the game.
+ *
+ * {@link readGroupHorizon} answers `week` for BOTH a live week group and a
+ * game with no group at all, which is right for a joiner (there is nothing
+ * more urgent to inherit) but wrong for a caller that must tell the two apart:
+ * a bare `/lfg` joins an open week group on `week`, and starts a new group on
+ * its own `tonight` default. The extra query only runs on the `week` answer —
+ * a now or tonight horizon already proves a live hand exists.
+ *
+ * "Live" is {@link liveIntent}, the same predicate the group reads use, so a
+ * lapsed, withdrawn or ineligible holder never makes a game look open.
+ *
+ * @param db - Drizzle handle (or a transaction).
+ * @param gameId - Game whose group to read.
+ * @param now - Instant to measure expiry against.
+ */
+export async function readOpenGroupHorizon(
+  db: LfgDb,
+  gameId: number,
+  now: Date = new Date(),
+): Promise<LfgGroupHorizon | null> {
+  const horizon = await readGroupHorizon(db, gameId, now);
+  if (horizon.urgency !== 'week') return horizon;
+  const [live] = await db
+    .select({ id: schema.lfgIntents.id })
+    .from(schema.lfgIntents)
+    .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+    .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(now)))
+    .limit(1);
+  return live ? horizon : null;
+}
+
+/**
  * The `createIntent` argument that matches a group's horizon.
  *
  * @param horizon - What {@link readGroupHorizon} just reported.
