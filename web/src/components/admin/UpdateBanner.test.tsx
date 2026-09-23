@@ -11,8 +11,8 @@
  *     version's key is set.
  *   - enabled: false (non-admin) keeps the MSW handler from being hit
  *     and the component renders nothing.
- *   - ROK-1393: commit-sha identifiers render as "build <sha>" with a
- *     "View changes" link; semver identifiers keep the v prefix.
+ *   - ROK-1475: identifiers are always release semvers — v prefix plus a
+ *     "View release notes" link (the sha/"View changes" path is gone).
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { screen, waitFor, fireEvent } from '@testing-library/react';
@@ -33,6 +33,10 @@ function mockStatus(overrides: Partial<UpdateStatusDto> = {}): UpdateStatusDto {
         updateAvailable: true,
         lastChecked: '2026-05-14T00:00:00Z',
         latestReleaseUrl: RELEASE_URL,
+        fixesAvailable: null,
+        runningCommitSha: null,
+        latestCommitSha: null,
+        fixesCompareUrl: null,
         ...overrides,
     };
 }
@@ -228,30 +232,7 @@ describe('UpdateBanner — sessionStorage dismissal (ROK-1242)', () => {
     });
 });
 
-describe('UpdateBanner — commit identifiers (ROK-1393)', () => {
-    const COMPARE_URL =
-        'https://github.com/sjdodge123/Raid-Ledger/compare/74b92a0...3ab490a';
-
-    it('renders short-sha identifiers as build labels instead of v-prefixed versions', async () => {
-        useUpdateStatusHandler(
-            mockStatus({
-                currentVersion: '74b92a0',
-                latestVersion: '3ab490a',
-                latestReleaseUrl: COMPARE_URL,
-            }),
-        );
-
-        renderWithProviders(<UpdateBanner enabled />);
-
-        await waitFor(() => {
-            expect(screen.getByText(/build 3ab490a/)).toBeInTheDocument();
-        });
-        expect(screen.getByText(/build 74b92a0/)).toBeInTheDocument();
-        expect(screen.queryByText(/v3ab490a/)).not.toBeInTheDocument();
-        const link = screen.getByRole('link', { name: /View changes/i });
-        expect(link).toHaveAttribute('href', COMPARE_URL);
-    });
-
+describe('UpdateBanner — release identifiers (ROK-1475)', () => {
     it('semver identifiers keep the v prefix and release-notes link', async () => {
         useUpdateStatusHandler(mockStatus());
 
