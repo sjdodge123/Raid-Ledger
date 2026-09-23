@@ -10,6 +10,19 @@ different and it leaves users confused." Canonical example: `/games` filters wit
 `FilterPanel`; the lineup's Common Ground panel is a bespoke card with none of it — same job, two designs,
 because nothing told the second author.
 
+## Keeping this doc current (STRICT)
+
+This doc is only as good as its last update. Any PR that adds or changes a colour token, a
+`web/src/components/ui` primitive, a shared component used on 2+ pages, or a layout/interaction pattern
+MUST, in the SAME PR:
+
+1. Update the relevant section and inventory row here (§2/§3/§4).
+2. Update `docs/design-system-tokens.md` for token changes.
+3. Add or update the example on `/dev/design-system` (`web/src/dev/design-system/`).
+4. State it in the PR body — see CLAUDE.md "Reference designs before coding" rule 2.
+
+Reviewers treat a missing update as a MINOR finding. See CLAUDE.md "Reference designs before coding" rule 4.
+
 ---
 
 ## 1. Before adding UI — checklist
@@ -47,6 +60,11 @@ because nothing told the second author.
 Declared in `web/src/index.css` (`@theme` block, line 32) as `--color-*`. Tailwind v4 generates the
 utility from the variable name: `--color-panel` → `bg-panel`, `text-panel`, `border-panel`. Borders have
 their own roles.
+
+**Contrast guards.** `web/src/styles/semantic-tokens.guard.test.ts` (on main) checks semantic token
+contrast; `raw-hue-light.guard.test.ts` (landing with PR #1318 — not yet on main) checks raw Tailwind
+hue contrast on the light families. Any colour token change MUST keep both green — a token edit that
+turns one red is not done, not "acceptable regression."
 
 | Token | Tailwind | Dark (default) | Light | Role |
 |---|---|---|---|---|
@@ -221,7 +239,8 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
 | `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive. Desktop: collapsible bordered panel with "Filters" + "Clear all". Mobile (<768px): `BottomSheet`. Trigger is a funnel icon with an emerald count badge. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `resultCount`, `hasActiveFilters`, `onClick` |
-| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
+| `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
+| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: height, cap and bottom edge come from `window.visualViewport` in px via `useVisibleViewport` (`bottom-sheet-viewport.ts`, exposed as `--sheet-vh`), so iPad/iOS Safari toolbars never hide the footer (ROK-1640/1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, resolved against the visible viewport), `initiallyExpanded`, `ariaLabel` |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
 | `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
@@ -256,6 +275,12 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `AvatarWithFallback.tsx`, `RoleIcon.tsx`, `journey-hero/`, `submit-bar/` | `components/shared/` | Avatars, role glyphs, the journey hero and the sticky submit bar |
 | `LineupEmptyState.tsx` | `components/lineups/` | The empty-state shape (see §4.5) |
 | `player-filters.tsx`, `pages/games/coop-filter-controls.tsx` | filter bodies | Reference implementations of `FilterPanel` children |
+
+### 3.3 Shared hooks
+
+| Hook | Path | Use when |
+|---|---|---|
+| `use-body-scroll-lock.ts` → a ref-counted body scroll lock **(landing with ROK-1640 PR #1314 — not yet on main)** | `web/src/hooks/` | Any modal/sheet that locks background scroll; ref-counted so nested/stacked sheets don't unlock each other early |
 
 Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105`; call `toast.success(...)`
 / `toast.error(...)` from `sonner` directly.
@@ -319,8 +344,32 @@ navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
 
+**Sheet layout rules** (ROK-1640 / ROK-1641):
+
+- **Size against the visible viewport.** Sheet heights are `dvh` with a `vh` fallback — `BottomSheet` converts
+  a `vh` `maxHeight` for you. Raw `vh` on iOS/iPadOS Safari excludes the toolbars, so a bottom-anchored
+  sheet opened with its last rows (the ⋯ menu's Rally / Lock) under the browser bar.
+- **An action footer is a pinned flex footer OUTSIDE the scroll body** — the body is `flex-1 min-h-0
+  overflow-y-auto`, the footer a `shrink-0` sibling (`phone-week-check-footer.tsx` `StepFooter`). Never
+  `sticky` inside the scroll body: that is what hid the game-time drawer's Save on an iPad.
+- **A sheet that edits data guards its close** with `useDirtyCloseGuard`
+  (`components/features/game-time/use-dirty-close-guard.ts`): ×, backdrop, swipe-down and Escape ask
+  "Discard your changes?" (`DiscardChangesConfirm`, a `Modal` over the sheet) while the draft is dirty.
+  Explicit Save / Skip stay unguarded.
+- `web/index.html` has no `viewport-fit=cover`, so `env(safe-area-inset-bottom)` resolves to 0 and the
+  sheets' safe-area padding is inert for now — keep it (it activates if the meta tag is ever added), but do
+  not rely on it to clear a home indicator.
+
 **Light / Dark** — the body is tokens; the scrim is a raw black alpha with no light override, so it dims
 identically in both. Do not invent a third — the two that exist already disagree (§6.11).
+
+**Sheet rules (ROK-1640 — not fully on main; PR #1314 lands the hook, `useDirtyCloseGuard` is not yet
+shipped anywhere):**
+- Size the sheet from the visible viewport, not `100vh` — mobile browser chrome eats real height.
+- A pinned footer (primary action) sits OUTSIDE the scrollable body, not inside it, so it never scrolls
+  out of reach.
+- A sheet with unsaved changes uses the dirty-close guard `useDirtyCloseGuard` to confirm before closing
+  on backdrop-tap/back-gesture instead of silently discarding input.
 
 ### 4.5 Empty states
 

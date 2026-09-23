@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { EquipmentItemDto } from '@raid-ledger/contract';
+import { useBodyScrollLock } from '../../../hooks/use-body-scroll-lock';
 
 const QUALITY_COLORS: Record<string, string> = {
     POOR: 'text-gray-500',
@@ -70,9 +71,11 @@ function useItemModalKeyboard(isOpen: boolean, onClose: () => void, items: Equip
     }, [onClose, onNavigate, currentIndex, items.length]);
 
     useEffect(() => {
-        if (isOpen) { document.addEventListener('keydown', handleKeyDown); document.body.style.overflow = 'hidden'; }
-        return () => { document.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = ''; };
+        if (!isOpen) return;
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, handleKeyDown]);
+    useBodyScrollLock(isOpen);
 }
 
 function ItemModalNav({ currentIndex, total, onNavigate, onClose }: { currentIndex: number; total: number; onNavigate: (i: number) => void; onClose: () => void }) {

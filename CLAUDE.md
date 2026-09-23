@@ -9,6 +9,7 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **Tech debt backlog:** `TECH-DEBT-BACKLOG.md` — append reviewer findings here, do NOT auto-file Linear `tech-debt:` stories. Operator triages and files manually. See file header for format.
 - **Design system:** `docs/design-system.md` (+ `docs/design-system-tokens.md`) — read before any UI change.
 - **Runbooks** (reference detail extracted from this file 2026-09-18): `docs/runbooks/local-ci-gate.md`, `docs/runbooks/local-dev-env.md`, `docs/runbooks/migrations-and-backups.md`, `docs/runbooks/discord-testing.md`, `docs/runbooks/fleet-test-plans.md`, `docs/runbooks/releasing.md`. Rules stay here; the runbooks hold the how.
+- **Lead sessions:** `/lead` (`.claude/skills/lead/SKILL.md`): boot sequence, role and working method for the top-level orchestrating session. Start any "drive the cycle" session with it instead of pasting `NEXT-LEAD-PROMPT.md`, which now carries state only. Sub-agents don't use it.
 - **Fleet:** `rl-infra/README.md` → "Agent MCP tool reference" (canonical per-tool detail); `.claude/skills/_shared/rl-infra-fleet.md` (legacy→remote mapping).
 
 ## Document pre-existing failures (STRICT — applies to ALL agents)
@@ -54,6 +55,7 @@ Before writing implementation code for any feature/fix that **adds, relocates, o
 1. **Reuse a primitive from the inventory, and verify it in both light and dark.** Don't build a parallel one because the existing file is inconvenient to import. "Works" means `default-dark` AND `default-light`; one family checked is not done.
 2. **A new pattern needs an explicit line in the PR description:** `New pattern: <what> — <why nothing in the inventory fits>`. Silent invention is the failure this stops (canonical case: `/games` uses the shared `filter-panel.tsx` while the lineup's `CommonGroundFilters.tsx` is a bespoke bar doing the same job with no funnel, no count badge, no "Clear all").
 3. **Never hardcode a colour.** Fifteen themes remap the tokens; a raw slate or hex is a bug in fourteen of them.
+4. **Keep the doc current.** Adding/changing a token, primitive, shared component or pattern updates `docs/design-system.md` (+ `docs/design-system-tokens.md` for tokens, + `/dev/design-system`) in the SAME PR — see that doc's "Keeping this doc current" section. Reviewers flag a miss as MINOR.
 
 **Check `planning-artifacts/specs/ROK-XXXX.md` for the story you are building — if it exists it is the APPROVED TARGET, not a starting point.** Uppercase, ID-only filename; never `docs/specs/`. Look up your own story id; do NOT browse that directory — most of its 200+ files are months old and a stale one reads as authoritative. Design artifact mirrors of approved claude.ai sheets: `planning-artifacts/design-*`. Both are gitignored, so they exist only in the local checkout — a spec that matters to another machine belongs in the Linear issue body too.
 
