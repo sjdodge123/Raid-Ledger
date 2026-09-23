@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /**
  * ROK-1661: the height the app shell (`Layout.tsx`) floors its min-height on.
@@ -52,11 +52,14 @@ function readShellHeight(): number {
     return Math.round(vv ? vv.height * vv.scale : window.innerHeight);
 }
 
-function isEditableFocused(): boolean {
-    const el = document.activeElement;
+function isEditable(el: EventTarget | null): boolean {
     if (!(el instanceof HTMLElement)) return false;
     if (el.isContentEditable || el instanceof HTMLTextAreaElement) return true;
     return el instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(el.type);
+}
+
+function isEditableFocused(): boolean {
+    return isEditable(document.activeElement);
 }
 
 function withRestHeight(prev: ShellFloor, width: number, height: number): ShellFloor['restHeights'] {
@@ -151,9 +154,45 @@ function subscribeToViewport(update: (final: boolean) => void): () => void {
     };
 }
 
+/**
+ * Closing the on-screen keyboard leaves iOS scrolled wherever it moved the
+ * focused field, which on a page no taller than the floor is the run-out below
+ * the footer. Once the visible height is back at the floor with nothing
+ * editable focused, such a page returns to the scroll saved when the field was
+ * focused. A taller page is left alone: there is real content where it is.
+ */
+function subscribeKeyboardScrollRestore(getFloor: () => number): () => void {
+    const vv = window.visualViewport;
+    if (!vv) return () => undefined;
+    let saved: number | null = null;
+    const atFloor = () => readShellHeight() >= getFloor() - 1;
+    const onFocusIn = (e: FocusEvent) => {
+        if (saved === null && isEditable(e.target)) saved = window.scrollY;
+    };
+    // Focus left with no shrink (a hardware keyboard): nothing to restore later.
+    const onFocusOut = () => { if (atFloor()) saved = null; };
+    const onResize = () => {
+        if (saved === null || isEditableFocused() || !atFloor()) return;
+        const y = saved;
+        saved = null;
+        if (document.documentElement.scrollHeight <= getFloor() + 1) window.scrollTo(window.scrollX, y);
+    };
+    document.addEventListener('focusin', onFocusIn);
+    document.addEventListener('focusout', onFocusOut);
+    vv.addEventListener('resize', onResize);
+    return () => {
+        document.removeEventListener('focusin', onFocusIn);
+        document.removeEventListener('focusout', onFocusOut);
+        vv.removeEventListener('resize', onResize);
+    };
+}
+
 /** The shell's min-height in CSS px, kept current on viewport resize and rotation. */
 export function useShellHeight(): number {
     const [floor, setFloor] = useState<ShellFloor>(() => nextShellFloor(EMPTY, true));
+    const floorRef = useRef(floor.height);
+    useEffect(() => { floorRef.current = floor.height; }, [floor.height]);
     useEffect(() => subscribeToViewport((final) => setFloor((prev) => nextShellFloor(prev, final))), []);
+    useEffect(() => subscribeKeyboardScrollRestore(() => floorRef.current), []);
     return floor.height;
 }
