@@ -109,9 +109,13 @@ forced white) and a data-driven inline alpha (`computeHeatmapBg`'s rgba).
 ### Filtering (§4.1)
 
 Panel surface and mobile sheet are tokens, so they follow the family; the light family
-adds the panel shadow above. The count badge does not move: `bg-emerald-500` +
-`text-white` (`filter-panel.tsx::FilterBadge`) is identical in both, which is intended —
-it is a solid accent, not a surface.
+adds the panel shadow above. The count badge does not move: `bg-success` + `text-white`
+(`filter-count-badge.tsx::FilterCountBadge`, ROK-1659 — shared by the desktop
+`FilterPanelTrigger` and the phone/tablet `FilterFab`) is identical in both, which is
+intended — a solid accent fill stays solid in both families (§2.2 D-6) even though, unlike
+the raw `bg-emerald-500` it replaced, it is now a declared token. The Filters FAB's own
+surface (`bg-surface border-edge-strong`) is tokens too and flips with the family like any
+other panel-level surface.
 
 ### Cards (§4.2)
 
