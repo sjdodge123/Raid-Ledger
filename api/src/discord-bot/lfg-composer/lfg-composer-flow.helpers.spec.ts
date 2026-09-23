@@ -197,13 +197,24 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
 });
 
 describe('submitComposerSearch (ROK-1658 — the list is always shown)', () => {
-  it('an exact title among several word matches is offered as one option', async () => {
-    const survivor = { id: 9, name: 'Deep Rock Galactic: Survivor' };
-    search.mockResolvedValue([DRG, survivor]);
+  // Step 3 table: "one confident match" is a search that returned ONE game.
+  // An exact title among several matches is the "several candidates" row.
+  const SURVIVOR = { id: 9, name: 'Deep Rock Galactic: Survivor' };
+
+  it('an exact title among several word matches lists every match, the exact title first', async () => {
+    search.mockResolvedValue([SURVIVOR, DRG]);
     const i = submit('deep rock galactic');
     await submitComposerSearch(deps(), i as never);
-    expect(edited(i).content).toBe('1 game matches `deep rock galactic`');
-    expect(selectValues(edited(i))).toEqual(['7']);
+    expect(edited(i).content).toBe('2 games match `deep rock galactic`');
+    expect(selectValues(edited(i))).toEqual(['7', '9']);
+  });
+
+  it('Back from urgency re-renders that same full list, the exact title first', async () => {
+    search.mockResolvedValue([SURVIVOR, DRG]);
+    const i = fake('lfgc:backc:deep rock galactic');
+    await backToComposerCandidates(deps(), i as never);
+    expect(edited(i).content).toBe('2 games match `deep rock galactic`');
+    expect(selectValues(edited(i))).toEqual(['7', '9']);
   });
 });
 

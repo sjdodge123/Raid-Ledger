@@ -16,18 +16,30 @@ const BG3: LfgComposerGame = { id: 4, name: "Baldur's Gate III" };
 describe('classifyComposerMatch', () => {
   it('(a) narrows a single word-filter hit to that one game', () => {
     const match = classifyComposerMatch('valheim', [VALHEIM]);
-    expect(match).toEqual({ kind: 'exact', game: VALHEIM });
+    expect(match).toEqual({ kind: 'single', game: VALHEIM });
   });
 
-  it('(a) prefers the exact title even when other rows rank alongside it', () => {
+  it('(b) an exact title among several rows lists them all, the exact title first (ROK-1658)', () => {
     const sequel: LfgComposerGame = { id: 9, name: 'Valheim 2' };
     const match = classifyComposerMatch('valheim', [sequel, VALHEIM]);
-    expect(match).toEqual({ kind: 'exact', game: VALHEIM });
+    expect(match).toEqual({ kind: 'candidates', games: [VALHEIM, sequel] });
   });
 
-  it('(a) matches an exact title through punctuation, as /lfg does', () => {
-    const match = classifyComposerMatch('baldurs gate iii', [BG3]);
-    expect(match).toEqual({ kind: 'exact', game: BG3 });
+  it('(b) matches an exact title through punctuation, as /lfg does, and leads with it', () => {
+    const match = classifyComposerMatch('baldurs gate iii', [VALORANT, BG3]);
+    expect(match).toEqual({ kind: 'candidates', games: [BG3, VALORANT] });
+  });
+
+  it('(b) keeps the exact title inside the 25-option cap even when it ranked last', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      id: i + 100,
+      name: `Valheim Mod ${String(i)}`,
+    }));
+    const match = classifyComposerMatch('valheim', [...many, VALHEIM]);
+    expect(match.kind).toBe('candidates');
+    const games = match.kind === 'candidates' ? match.games : [];
+    expect(games).toHaveLength(25);
+    expect(games[0]).toEqual(VALHEIM);
   });
 
   it('(b) offers several candidates rather than picking the top one', () => {
@@ -44,7 +56,7 @@ describe('classifyComposerMatch', () => {
   it('(c) NEVER auto-selects a lone trigram hit — 0.33 is a guess, not an answer', () => {
     const match = classifyComposerMatch('valhiem', [], [VALHEIM]);
     expect(match.kind).toBe('fuzzy');
-    expect(match.kind).not.toBe('exact');
+    expect(match.kind).not.toBe('single');
   });
 
   it('(c) keeps a near-miss neighbour visible instead of choosing between them', () => {

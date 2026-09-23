@@ -97,8 +97,10 @@ export async function openComposerModal(
  * Run the search and render whichever of the four AC2 outcomes it lands on.
  *
  * ROK-1658: every outcome except `none` renders the candidate select. A
- * confident match is a ONE-option select rather than a jump to the urgency
- * step, so the player sees the search ran and confirms the pick themselves.
+ * search that returned ONE game is a one-option select rather than a jump to
+ * the urgency step, so the player sees the search ran and confirms the pick
+ * themselves; an exact title among several matches lists them all, the exact
+ * title first (step-3 table, "several candidates").
  *
  * @param deps - Flow dependencies.
  * @param rawTerm - What was typed.
@@ -117,7 +119,7 @@ export async function renderComposerSearch(
     : await searchComposerGamesFuzzy(deps.db, term);
   const match = classifyComposerMatch(term, matches, fuzzy);
   if (match.kind === 'none') return buildNoMatchReply(term, clientUrl);
-  const games = match.kind === 'exact' ? [match.game] : match.games;
+  const games = match.kind === 'single' ? [match.game] : match.games;
   return buildCandidatesReply(term, games, match.kind === 'fuzzy', clientUrl);
 }
 
