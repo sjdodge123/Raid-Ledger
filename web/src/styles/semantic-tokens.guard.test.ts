@@ -92,6 +92,52 @@ const LIGHT_SURFACE = '#ffffff';
 /** WCAG 2.1 AA minimum for text below 18.66px/bold-14px. */
 const AA_SMALL_TEXT = 4.5;
 
+/** Parse `#rgb` / `#rrggbb` into 0–255 channels. */
+function toRgb(hex: string): [number, number, number] {
+    let digits = hex.replace('#', '');
+    if (digits.length === 3) digits = digits.split('').map((d) => d + d).join('');
+    return [0, 2, 4].map((i) => parseInt(digits.slice(i, i + 2), 16)) as [number, number, number];
+}
+
+/**
+ * Composite `fg` at `alpha` over an opaque `bg`, the way the browser paints a
+ * Tailwind `bg-x/NN` layer (Tailwind emits the colour with alpha; compositing is sRGB).
+ *
+ * @returns the opaque result as `#rrggbb`
+ */
+function composite(fg: string, bg: string, alpha: number): string {
+    const [f, b] = [toRgb(fg), toRgb(bg)];
+    const mixed = f.map((c, i) => Math.round(c * alpha + b[i] * (1 - alpha)));
+    return `#${mixed.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Every background a light semantic token is really read on (ROK-1586 fleet plan
+ * 2026-09-22-2005-3f02 step 2: "amber and red are hard to read on light"). Measuring
+ * only against `#fff` let danger ship at 4.41:1 on the panel and 3.79:1 on its own tint.
+ */
+function lightBackgrounds(token: string): Array<[string, string]> {
+    const shared = (name: string) => declaredValue(lightBlock, name) as string;
+    return [
+        ['--color-surface', shared('surface')],
+        ['--color-backdrop', shared('backdrop')],
+        ['--color-panel', shared('panel')],
+        ['JourneyHero card (bg-overlay/40 over backdrop)', composite(shared('overlay'), shared('backdrop'), 0.4)],
+        [`bg-${token}/10 tint over --color-panel`, composite(shared(token), shared('panel'), 0.1)],
+    ];
+}
+
+/**
+ * Roles measured on every real background. `success` is deliberately NOT here yet:
+ * its light value #047857 is 4.35:1 on its own /10 tint over the panel — a known gap
+ * reported to the Lead (2026-09-22), not silently fixed in this change.
+ */
+const SEMANTIC_ROLES = ['warning', 'danger'] as const;
+
+const TEXT_ON_BACKGROUND = SEMANTIC_ROLES.flatMap((token) =>
+    lightBackgrounds(token).map(([name, bg]) => [token, name, bg] as const),
+);
+
 describe('semantic colour tokens (ROK-1586)', () => {
     it('finds both token blocks in index.css', () => {
         expect(themeBlock, 'the @theme block was not found in index.css').not.toBe('');
@@ -131,5 +177,22 @@ describe('semantic colour tokens (ROK-1586)', () => {
             ratio,
             `--color-${token} light value ${value} is ${ratio}:1 on ${LIGHT_SURFACE} — small text (the 10px "Suggested" label, the hero badges) needs ${AA_SMALL_TEXT}:1`,
         ).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+
+    it.each(TEXT_ON_BACKGROUND)('light text-%s clears AA on %s', (token, name, bg) => {
+        const value = declaredValue(lightBlock, token) as string;
+        const ratio = contrastRatio(value, bg);
+        expect(
+            ratio,
+            `light --color-${token} ${value} as text is ${ratio}:1 on ${name} (${bg}) — needs ${AA_SMALL_TEXT}:1`,
+        ).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+
+    it.each(SEMANTIC_ROLES)('white text on a solid light bg-%s clears AA', (token) => {
+        const value = declaredValue(lightBlock, token) as string;
+        const ratio = contrastRatio('#ffffff', value);
+        expect(ratio, `white text on light bg-${token} ${value} is ${ratio}:1 — needs ${AA_SMALL_TEXT}:1`).toBeGreaterThanOrEqual(
+            AA_SMALL_TEXT,
+        );
     });
 });

@@ -59,19 +59,30 @@ export async function assertCallerMayVote(
  * direct `POST /vote` still mutated it. Same helper as the page and the
  * Discord embed, so all three agree on what "open" means.
  *
+ * `slotTimes` is opt-in. Vote and suggest share this guard (via
+ * `assertCallerMayVote`) and deliberately omit it: suggesting a new time is
+ * the one action that outlives "every time has passed" (see
+ * `isTimesPassedOnly`), and vote/rally refuse a passed slot per slot. A
+ * poll-wide action with no slot of its own (`/remind`) passes them, so it
+ * reads the page's full ROK-1607 rule.
+ *
  * @param match - The match row (status + linked event).
  * @param lineup - Its parent lineup's `status` + `phase_deadline`.
+ * @param slotTimes - Every slot's `proposed_time`; when given, a poll whose
+ *   every time has passed is refused too.
  * @throws BadRequestException when the poll is no longer open.
  */
 export function assertPollOpen(
   match: { status: string; linkedEventId?: number | null },
   lineup: { status?: string | null; phaseDeadline?: Date | null },
+  slotTimes?: ReadonlyArray<Date | string | null | undefined>,
 ): void {
   const pollStatus = pollStatusFromMatch({
     matchStatus: match.status,
     lineupStatus: lineup.status ?? null,
     phaseDeadline: lineup.phaseDeadline ?? null,
     linkedEventId: match.linkedEventId ?? null,
+    slotTimes,
   });
   if (pollStatus !== 'open') {
     throw new BadRequestException('This poll is no longer accepting votes');

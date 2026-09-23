@@ -92,6 +92,21 @@ _This file contains critical rules and patterns that AI agents must follow when 
 **Key files:** `Dockerfile.allinone`, `api/Dockerfile`, `api/scripts/docker-entrypoint.sh`, `nginx/monolith.conf.template`
 **Deployment:** Watchtower auto-pulls GHCR images daily at 5 AM on the Synology NAS.
 
+### Log files (prod allinone, `LOG_DIR=/data/logs`)
+
+The admin Logs page (`api/src/logs/`) lists and exports these. logrotate (`Dockerfile.allinone`: `daily`, `rotate 60`, `compress`, `delaycompress`, `copytruncate`, no `dateext`) empties each live file daily and keeps `<file>.1` (plain) plus `<file>.2.gz` … `<file>.60.gz`. The panel shows those generations too (ROK-1164); an export stores a `.gz` generation decompressed and scrubbed, under its name minus `.gz`. Exports are capped at 100 MB uncompressed: live files and `.1` always go in, older generations are added newest-first until the cap, and any left out are listed in the tar's `MANIFEST.txt`.
+
+| Service | Live file(s) | Written by |
+|---------|--------------|------------|
+| api | `api.log` | supervisor `[program:api]` tee of API stdout/stderr |
+| slow-queries | `slow-queries.log` | API slow-queries cron (digest of `pg_stat_statements`) |
+| nginx | `nginx-access.log`, `nginx-error.log` | `nginx/monolith.conf.template` server block; the main-context `error_log` in `/etc/nginx/nginx.conf` also points at `nginx-error.log` (ROK-1164). No `nginx.log` — the entrypoint removes an empty legacy one |
+| postgresql | `postgresql.log` | tee of postgres stderr at `log_min_messages=WARNING` (startup lines, warnings/errors, statements slower than 200 ms without bind values; checkpoints off) |
+| redis | `redis.log` | tee of redis-server output (`user=redis`, pre-created by the entrypoint, ROK-1036) |
+| supervisor | `supervisor-events.log` | `/app/supervisor-events.sh` eventlistener (PROCESS_STATE events) |
+
+Filenames the API will serve must match `log-files.helpers.ts::isLogFileName`: a known service prefix, `.log`, an optional rotation number and an optional `.gz`.
+
 ### Critical Don't-Miss Rules
 - **Constraint:** The Availability Domain uses `tsrange` for matchmaking. Do NOT use simple start/end timestamps.
 - **Constraint:** Discord Bot is a Module inside `api`, NOT a separate service.

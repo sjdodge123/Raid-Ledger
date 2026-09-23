@@ -5,6 +5,7 @@ import { formatHour } from '../game-time-grid.utils';
 import { computeHeatmapBg, computeHeatmapLabel } from '../grid-cell.utils';
 import { votedLabel, type SlotMark } from '../slot-marks.utils';
 import { eventHourRuns } from '../week/viewer-week-events';
+import { BUSY_EDGE_5 } from '../week/group-marks.classes';
 import { DayEventBlock, SlotBlock } from './GroupDayMarks';
 import {
     blockGeometry, groupCellBusyLabel, groupCellKey, groupCellShortLabel, suggestedBlock,
@@ -140,16 +141,6 @@ function HourLabel({ hour }: { hour: number }): JSX.Element {
 }
 
 /**
- * The purple marks a busy cell wears (ROK-1584, design §2) — a 5px left edge.
- *
- * `availableCount` already has these members subtracted (ROK-1570), so without
- * the edge an hour three of four members are signed up in reads "1 free" and
- * looks like a group that never filled in a week.
- */
-const BUSY_EDGE = 'before:absolute before:inset-y-0 before:left-0 before:w-[5px] before:bg-busy '
-    + 'before:content-[""]';
-
-/**
  * One hour of the group's day.
  *
  * The fill is `computeHeatmapBg`'s rgba — an inline style rather than a class
@@ -167,7 +158,7 @@ function GroupCell({ dayOfWeek, hour, cell, votes, onPick }: {
     const style = { background: computeHeatmapBg(cell) };
     const testId = `phone-group-cell-${dayOfWeek}-${hour}`;
     const busy = cell?.busy ?? 0;
-    const className = `relative border-t border-edge ${busy > 0 ? BUSY_EDGE : ''}`;
+    const className = `relative border-t border-edge ${busy > 0 ? BUSY_EDGE_5 : ''}`;
     const shared = {
         'data-testid': testId,
         'data-busy': busy > 0 ? String(busy) : undefined,

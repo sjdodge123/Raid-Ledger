@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { EventEmitter } from 'node:events';
+import { gzipSync } from 'node:zlib';
 
 function describeCreateScrubbedStream() {
   let service: LogsService;
@@ -127,3 +128,34 @@ function describeCreateScrubbedStream() {
 }
 describe('LogsService createScrubbedStream', () =>
   describeCreateScrubbedStream());
+
+describe('LogsService createScrubbedStream size cap (ROK-1164)', () => {
+  let tmpDir: string;
+  let service: LogsService;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'logs-cap-'));
+    service = new LogsService({
+      get: (key: string) => (key === 'LOG_DIR' ? tmpDir : undefined),
+    } as never);
+  });
+  afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+
+  it('stops a small .gz that inflates past 100 MB, with a truncation marker', async () => {
+    const MB = 1024 * 1024;
+    const line = 'y'.repeat(1023) + '\n';
+    const filepath = path.join(tmpDir, 'api.log.5.gz');
+    fs.writeFileSync(filepath, gzipSync(Buffer.from(line.repeat(110 * 1024))));
+
+    let bytes = 0;
+    let last = '';
+    for await (const chunk of service.createScrubbedStream(filepath)) {
+      bytes += (chunk as Buffer).length;
+      last = (chunk as Buffer).toString();
+    }
+
+    expect({ overCap: bytes > 100 * MB + 200, last: last.slice(-60) }).toEqual({
+      overCap: false,
+      last: expect.stringContaining('truncated'),
+    });
+  }, 30_000);
+});
