@@ -101,7 +101,7 @@ export class LfgComposerPinService {
 
   /**
    * ROK-1658 — the board was switched OFF: take the composer down now. That
-   * strips the intro post's buttons, or deletes the card in a legacy text
+   * strips the intro post's buttons AND deletes any card in a legacy text
    * binding. The ON branch is ignored here: {@link onBoardEnabled} handles it
    * once provisioning has created the intro post.
    *
@@ -132,18 +132,15 @@ export class LfgComposerPinService {
       const botUserId = this.clientService.getBotUser()?.id;
       if (!guild || !botUserId) return 'no-target';
       // ROK-1658: the composer is on exactly when the board is on.
-      const enabled = await getLfgBoardEnabled(this.settingsService);
+      if (!(await getLfgBoardEnabled(this.settingsService))) {
+        return await this.takeDown(guild, botUserId);
+      }
       const intro = await this.forumIntro(guild);
       if (intro) {
-        return enabled
-          ? await this.attachToIntro(intro, await this.payload(), botUserId)
-          : await this.clearIntro(intro, botUserId);
+        return await this.attachToIntro(intro, await this.payload(), botUserId);
       }
       const channel = await this.boundTextChannel(guild);
-      if (!channel) return 'no-target';
-      return enabled
-        ? await this.pinIn(channel, botUserId)
-        : await this.removeFrom(channel, botUserId);
+      return channel ? await this.pinIn(channel, botUserId) : 'no-target';
     } catch (err) {
       this.logger.warn(
         `Could not place the LFG composer card: ${describe(err)}.`,
@@ -169,6 +166,27 @@ export class LfgComposerPinService {
     });
     this.logger.log(`LFG composer card in ${channel.id}: ${outcome}.`);
     return outcome;
+  }
+
+  /**
+   * Board off (ROK-1658) — take down BOTH homes the composer can have. A
+   * stored intro id does not rule out a legacy text binding carrying a card
+   * pinned while the old composer switch was on, so neither check
+   * short-circuits the other.
+   */
+  private async takeDown(
+    guild: Guild,
+    botUserId: string,
+  ): Promise<ComposerReconcileOutcome> {
+    const intro = await this.forumIntro(guild);
+    const cleared = intro
+      ? await this.clearIntro(intro, botUserId)
+      : 'no-target';
+    const channel = await this.boundTextChannel(guild);
+    const removed = channel
+      ? await this.removeFrom(channel, botUserId)
+      : 'no-target';
+    return cleared === 'no-target' ? removed : cleared;
   }
 
   /** Board off (ROK-1658) — take down any card this bot left in the bound channel. */

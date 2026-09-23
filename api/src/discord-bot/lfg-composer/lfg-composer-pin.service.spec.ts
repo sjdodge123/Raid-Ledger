@@ -204,6 +204,49 @@ describe('LfgComposerPinService.reconcile — board switched off (ROK-1658)', ()
   });
 });
 
+describe('LfgComposerPinService.reconcile — board off, intro AND legacy text binding (review NIT)', () => {
+  const composerRow = {
+    components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
+  };
+
+  it('with an intro stored AND a legacy text binding, also deletes the text card', async () => {
+    const starter = {
+      author: { id: BOT },
+      components: [composerRow],
+      edit: jest.fn(() => Promise.resolve()),
+    };
+    const intro = {
+      id: 't1',
+      isThread: () => true,
+      fetchStarterMessage: () => Promise.resolve(starter),
+    };
+    const card = {
+      id: 'm1',
+      pinned: true,
+      author: { id: BOT },
+      components: [composerRow],
+      delete: jest.fn(() => Promise.resolve()),
+    };
+    const text = {
+      id: 'c1',
+      type: ChannelType.GuildText,
+      send: jest.fn(),
+      messages: {
+        fetchPins: () => Promise.resolve({ items: [{ message: card }] }),
+        fetch: () => Promise.resolve([card]),
+      },
+    };
+    const cfg = {
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'false',
+      [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+    };
+    await service({ t1: intro, c1: text }, cfg, 'c1').reconcile();
+    expect(starter.edit).toHaveBeenCalledWith({ components: [] });
+    expect(card.delete).toHaveBeenCalledTimes(1);
+    expect(text.send).not.toHaveBeenCalled();
+  });
+});
+
 describe('LfgComposerPinService — board toggle (ROK-1658)', () => {
   function spied() {
     const svc = service({}, ON, null);
