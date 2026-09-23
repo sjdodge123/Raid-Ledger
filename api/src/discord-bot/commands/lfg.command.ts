@@ -34,15 +34,14 @@ import {
   LFG_LIST_SENTINEL,
   LFG_UNLINKED_REPLY,
   LFG_URGENCY_CHOICES,
-  parseUrgencyChoice,
   buildJoinReply,
   buildListReply,
   buildUnknownGameReply,
   forumPostLink,
-  type LfgCreateOpts,
   type LfgPostLinks,
   type LfgReplyContext,
 } from './lfg.command.helpers';
+import { resolveLfgCommandUrgency } from './lfg-command-urgency.helpers';
 import { listLfmThreadsForGames } from '../lfg-board/lfg-board.db-helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
@@ -140,7 +139,10 @@ export class LfgCommand
         .addStringOption((opt) =>
           opt
             .setName('urgency')
-            .setDescription('How soon you want to play — defaults to this week')
+            // ROK-1656 — an open group's pace first, else tonight.
+            .setDescription(
+              'How soon you want to play — matches an open group, else tonight',
+            )
             .addChoices(...LFG_URGENCY_CHOICES),
         )
         .toJSON()
@@ -164,7 +166,7 @@ export class LfgCommand
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
     const typed = interaction.options.getString('game');
-    const opts = parseUrgencyChoice(interaction.options.getString('urgency'));
+    const urgency = interaction.options.getString('urgency');
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const caller = await this.resolveCaller(interaction.user.id);
     if (!caller) {
@@ -180,7 +182,7 @@ export class LfgCommand
       await this.replyWithList(interaction, caller.id, ctx);
       return;
     }
-    await this.replyWithJoin(interaction, caller.id, typed, ctx, opts);
+    await this.replyWithJoin(interaction, caller.id, typed, ctx, urgency);
   }
 
   /** Resolve the pick, then take the one write path or explain the miss. */
@@ -189,7 +191,7 @@ export class LfgCommand
     userId: number,
     typed: string,
     ctx: LfgReplyContext,
-    opts: LfgCreateOpts,
+    urgency: string | null,
   ): Promise<void> {
     const gameId = await this.resolveGameId(typed);
     if (gameId === null) {
@@ -202,6 +204,9 @@ export class LfgCommand
     // the write needs the zone. `ctx` already carries it (one
     // `getDiscordBotTimezone()` in `loadLfgReplyContext`); never add a second
     // settings lookup here.
+    // ROK-1656 — no `urgency:` joins an open group on its horizon (as the
+    // board `+1` does) and otherwise raises a tonight hand.
+    const opts = await resolveLfgCommandUrgency(this.db, gameId, urgency);
     const result = await this.lfgService.createIntent(userId, gameId, {
       ...opts,
       timezone: ctx.timezone,

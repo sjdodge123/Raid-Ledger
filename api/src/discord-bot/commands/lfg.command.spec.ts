@@ -5,6 +5,18 @@ import {
   LFG_LIST_SENTINEL,
   LFG_UNLINKED_REPLY,
 } from './lfg.command.helpers';
+import { readOpenGroupHorizon } from '../../lfg/lfg-group-horizon.helpers';
+
+// ROK-1656 — the open-group read is a real query the fake DB cannot answer;
+// it is pinned against Postgres in `lfg-now-spawn.integration.spec.ts`. Here
+// it defaults to "no open group" and individual cases override it.
+jest.mock('../../lfg/lfg-group-horizon.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-group-horizon.helpers'),
+  readOpenGroupHorizon: jest.fn().mockResolvedValue(null),
+}));
+const readOpen = readOpenGroupHorizon as jest.MockedFunction<
+  typeof readOpenGroupHorizon
+>;
 
 type Row = Record<string, unknown>;
 
@@ -428,7 +440,8 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       ['now:60', { urgency: 'now', ttlMinutes: 60 }],
       ['tonight', { urgency: 'tonight' }],
       ['week', { urgency: 'week' }],
-      [null, { urgency: 'week' }],
+      // ROK-1656 — no urgency and no open group: tonight, not this week.
+      [null, { urgency: 'tonight' }],
       // A stale registered command sending a value this build never offered
       // must keep working — a 400 would throw away a player's hand.
       ['nonsense', { urgency: 'week' }],
@@ -446,6 +459,31 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       // so the zone from the reply context has to reach the write.
       expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
         ...expected,
+        timezone: 'UTC',
+      });
+    });
+
+    // ROK-1656 AC2 — the bare command reads the group the way the board `+1`
+    // does, so a now group's joiner lands on `now` with the group's bucket.
+    it('no urgency on a game with an open now group inherits now + its TTL', async () => {
+      readOpen.mockResolvedValueOnce({
+        urgency: 'now',
+        nowExpiresAt: new Date(),
+        ttlMinutes: 60,
+      });
+      const lfgService = makeLfgService();
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        lfgService,
+      );
+      const { interaction } = urgentInteraction('42', null);
+
+      await command.handleInteraction(interaction);
+
+      expect(readOpen).toHaveBeenLastCalledWith(expect.anything(), 42);
+      expect(lfgService.createIntent).toHaveBeenCalledWith(7, 42, {
+        urgency: 'now',
+        ttlMinutes: 60,
         timezone: 'UTC',
       });
     });

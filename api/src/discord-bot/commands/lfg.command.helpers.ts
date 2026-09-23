@@ -97,9 +97,13 @@ export interface LfgCreateOpts {
 /**
  * Read an urgency choice into the create options.
  *
- * Unknown and absent both fall back to `week`, which is the contract's own
- * default: a stale registered command sending an old value must keep working
- * exactly as it did rather than 400ing a player's hand away.
+ * ROK-1656 — ABSENT means `tonight`: a player who names no urgency is taken to
+ * want to play today. The `/lfg` command only reaches this fallback when the
+ * game has no open group to inherit — see `resolveLfgCommandUrgency`.
+ *
+ * UNKNOWN still falls back to `week`, the contract's own default: a stale
+ * registered command sending an old value must keep working exactly as it did
+ * rather than 400ing a player's hand away.
  *
  * ROK-1616 — `now:60` is no longer OFFERED but is still ACCEPTED, and it still
  * means sixty minutes. **Do not "tidy" it into `tonight`**: the retired option
@@ -114,7 +118,7 @@ export function parseUrgencyChoice(raw: string | null): LfgCreateOpts {
   if (raw === 'now:30') return { urgency: 'now', ttlMinutes: 30 };
   // Retired from the picker, still honoured at its ORIGINAL 60-minute TTL.
   if (raw === 'now:60') return { urgency: 'now', ttlMinutes: 60 };
-  if (raw === 'tonight') return { urgency: 'tonight' };
+  if (raw === 'tonight' || raw === null) return { urgency: 'tonight' };
   return { urgency: 'week' };
 }
 

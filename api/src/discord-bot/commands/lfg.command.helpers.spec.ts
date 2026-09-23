@@ -388,7 +388,9 @@ describe('parseUrgencyChoice (ROK-1479, ROK-1616)', () => {
     ['now:60', { urgency: 'now', ttlMinutes: 60 }],
     ['tonight', { urgency: 'tonight' }],
     ['week', { urgency: 'week' }],
-    [null, { urgency: 'week' }],
+    // ROK-1656 — no urgency given means tonight, not this week.
+    [null, { urgency: 'tonight' }],
+    // A value this build never offered is still the contract's week default.
     ['now:15', { urgency: 'week' }],
   ])('reads %s as %o', (raw, expected) => {
     expect(parseUrgencyChoice(raw)).toEqual(expected);
