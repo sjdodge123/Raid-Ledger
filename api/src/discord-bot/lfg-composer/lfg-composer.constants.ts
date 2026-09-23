@@ -60,7 +60,8 @@ export const LFG_COMPOSER_MAX_CANDIDATES = 25;
 export const LFG_COMPOSER_COPY = {
   /** The card's only body text. No subtitle — operator ruling 2026-09-17. */
   CARD_TITLE: 'Looking for a group?',
-  POST_BUTTON: 'Post an LFG',
+  /** The leading `+` is the approved prototype's label (ROK-1658), not an emoji. */
+  POST_BUTTON: '+ Post an LFG',
   VIEW_GAMES_BUTTON: 'View games ↗',
   MODAL_TITLE: 'Post an LFG',
   MODAL_INPUT_LABEL: 'Game',

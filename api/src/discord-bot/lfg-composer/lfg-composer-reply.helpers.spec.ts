@@ -49,7 +49,7 @@ describe('buildComposerCard', () => {
     expect(row.components).toHaveLength(2);
     expect(row.components[0]).toMatchObject({
       style: ButtonStyle.Primary,
-      label: LFG_COMPOSER_COPY.POST_BUTTON,
+      label: '+ Post an LFG',
     });
     expect(row.components[1]).toMatchObject({
       style: ButtonStyle.Link,
