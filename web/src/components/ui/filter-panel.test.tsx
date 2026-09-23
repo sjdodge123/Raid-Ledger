@@ -165,3 +165,37 @@ describe('FilterPanel — desktop inline panel (ROK-1659)', () => {
         expect(onToggle).not.toHaveBeenCalled();
     });
 });
+
+describe('FilterPanel — collapsed panel leaves the tab order (ROK-1659)', () => {
+    it('is inert and aria-hidden while closed, and neither while open', () => {
+        mockViewportWidth(1280);
+        const panel = (isOpen: boolean) => (
+            <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen={isOpen} onToggle={vi.fn()}>
+                <button type="button">Hidden control</button>
+            </FilterPanel>
+        );
+        const { rerender } = renderWithProviders(panel(false));
+        expect(screen.getByTestId('filter-panel')).toHaveAttribute('inert');
+        expect(screen.queryByRole('button', { name: 'Hidden control' })).toBeNull();
+
+        rerender(panel(true));
+        expect(screen.getByTestId('filter-panel')).not.toHaveAttribute('inert');
+        expect(screen.getByRole('button', { name: 'Hidden control' })).toBeInTheDocument();
+    });
+});
+
+describe('FilterPanelTrigger — open state and count wording (ROK-1659)', () => {
+    it('switches from the panel fill to the overlay fill while open', () => {
+        const { rerender } = renderWithProviders(<FilterPanelTrigger activeCount={0} isOpen={false} onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveClass('bg-panel', 'text-muted');
+        rerender(<FilterPanelTrigger activeCount={0} isOpen onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveClass('bg-overlay', 'text-foreground');
+    });
+
+    it('uses a page-supplied description for the count', () => {
+        renderWithProviders(
+            <FilterPanelTrigger activeCount={3} onClick={vi.fn()} describeCount={(n) => `${n} games hidden`} />,
+        );
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveAccessibleDescription('3 games hidden');
+    });
+});

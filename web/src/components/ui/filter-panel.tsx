@@ -5,10 +5,10 @@
  * Pages normally render this through `FilterEntry` (filter-entry.tsx), which
  * pairs it with the right opener for the viewport.
  */
-import { useEffect, useId, type JSX, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from './bottom-sheet';
-import { FilterCountBadge } from './filter-count-badge';
+import { FilterCountBadge, type DescribeFilterCount } from './filter-count-badge';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 
@@ -18,14 +18,19 @@ export interface FilterPanelTriggerProps {
     /** Whether the panel is open — drives `aria-expanded`. */
     isOpen?: boolean;
     onClick: () => void;
+    /** Screen-reader wording for the count; defaults to "N active filters". */
+    describeCount?: DescribeFilterCount;
 }
 
 const TRIGGER_CLASS = 'relative inline-flex shrink-0 items-center justify-center w-11 h-11 rounded-lg '
-    + 'border border-edge text-muted hover:text-foreground hover:border-edge-strong transition-colors '
+    + 'border border-edge hover:text-foreground hover:border-edge-strong transition-colors '
     + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/50';
 
+/** Closed: `panel` fill, muted funnel. Open: `overlay` fill, foreground funnel. */
+const triggerStateClass = (isOpen?: boolean): string => (isOpen ? 'bg-overlay text-foreground' : 'bg-panel text-muted');
+
 /** 44px bordered funnel button with the active-filter count badge. */
-export function FilterPanelTrigger({ activeCount, isOpen, onClick }: FilterPanelTriggerProps): JSX.Element {
+export function FilterPanelTrigger({ activeCount, isOpen, onClick, describeCount }: FilterPanelTriggerProps): JSX.Element {
     const countId = useId();
     return (
         <button
@@ -35,10 +40,10 @@ export function FilterPanelTrigger({ activeCount, isOpen, onClick }: FilterPanel
             aria-expanded={isOpen}
             aria-describedby={activeCount > 0 ? countId : undefined}
             data-testid="filter-panel-trigger"
-            className={TRIGGER_CLASS}
+            className={`${TRIGGER_CLASS} ${triggerStateClass(isOpen)}`}
         >
             <FunnelIcon className="w-5 h-5" aria-hidden="true" />
-            <FilterCountBadge count={activeCount} id={countId} />
+            <FilterCountBadge count={activeCount} id={countId} describe={describeCount} offset="trigger" />
         </button>
     );
 }
@@ -53,23 +58,35 @@ export interface FilterPanelProps {
     children: ReactNode;
 }
 
-/** Closes the desktop inline panel on Escape (the BottomSheet handles its own). */
-function useEscapeToClose(active: boolean, onClose: () => void): void {
+/** The open funnel (only one filter entry per page); focus goes back to it on Escape. */
+const OPEN_TRIGGER_SELECTOR = '[data-testid="filter-panel-trigger"][aria-expanded="true"]';
+
+/**
+ * Closes the desktop inline panel on Escape (the BottomSheet handles its own)
+ * and, when focus was inside the panel, hands it back to the funnel — the
+ * collapsed panel is `inert`, so focus left in it would be lost.
+ */
+function useEscapeToClose(active: boolean, onClose: () => void, panelRef: RefObject<HTMLDivElement | null>): void {
     useEffect(() => {
         if (!active) return undefined;
         const handleKeyDown = (e: KeyboardEvent): void => {
-            if (e.key === 'Escape') onClose();
+            if (e.key !== 'Escape') return;
+            const focusInside = panelRef.current?.contains(document.activeElement) ?? false;
+            const trigger = document.querySelector<HTMLElement>(OPEN_TRIGGER_SELECTOR);
+            onClose();
+            if (focusInside) trigger?.focus();
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [active, onClose]);
+    }, [active, onClose, panelRef]);
 }
 
 /** Responsive filter panel: inline on desktop, BottomSheet below 1024px. */
 export function FilterPanel({ activeFilterCount, onClearAll, isOpen, onToggle, onClose, children }: FilterPanelProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const close = onClose ?? onToggle;
-    useEscapeToClose(isDesktop && isOpen, close);
+    const panelRef = useRef<HTMLDivElement>(null);
+    useEscapeToClose(isDesktop && isOpen, close, panelRef);
 
     if (!isDesktop) {
         return (
@@ -81,8 +98,25 @@ export function FilterPanel({ activeFilterCount, onClearAll, isOpen, onToggle, o
     }
 
     return (
+        <InlinePanel panelRef={panelRef} isOpen={isOpen} activeFilterCount={activeFilterCount} onClearAll={onClearAll}>
+            {children}
+        </InlinePanel>
+    );
+}
+
+/** The desktop inline card; a long body scrolls inside it. */
+function InlinePanel({ panelRef, isOpen, activeFilterCount, onClearAll, children }: {
+    panelRef: RefObject<HTMLDivElement | null>; isOpen: boolean;
+    activeFilterCount: number; onClearAll: () => void; children: ReactNode;
+}): JSX.Element {
+    return (
+        // Collapsed = `inert` + `aria-hidden`: out of the Tab order and the a11y tree, but
+        // still mounted so body effects (e.g. the ROK-1255 auto-seed) keep running.
         <div
+            ref={panelRef}
             data-testid="filter-panel"
+            inert={!isOpen}
+            aria-hidden={!isOpen || undefined}
             className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
         >
             {/* Bounded card: the header stays put and a long body scrolls instead of being clipped. */}

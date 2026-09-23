@@ -25,6 +25,7 @@
 import { useCallback, type JSX, type ReactNode } from 'react';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
+import type { DescribeFilterCount } from './filter-count-badge';
 import { FilterFab } from './filter-fab';
 import { FilterPanel, FilterPanelTrigger } from './filter-panel';
 
@@ -33,6 +34,8 @@ interface FilterEntryOpenState {
     activeCount: number;
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
+    /** Screen-reader wording for the badge count; defaults to "N active filters". */
+    describeCount?: DescribeFilterCount;
 }
 
 export interface FilterEntryProps extends FilterEntryOpenState {
@@ -48,7 +51,7 @@ export type FilterEntryTriggerProps = FilterEntryOpenState;
 
 /** Inline panel at 1024px and up; Filters FAB + BottomSheet below. */
 export function FilterEntry({
-    activeCount, isOpen, onOpenChange, onClearAll, children, stackAboveCreate = false,
+    activeCount, isOpen, onOpenChange, onClearAll, children, stackAboveCreate = false, describeCount,
 }: FilterEntryProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const toggle = useCallback(() => onOpenChange(!isOpen), [onOpenChange, isOpen]);
@@ -56,7 +59,8 @@ export function FilterEntry({
     return (
         <>
             {!isDesktop && (
-                <FilterFab activeCount={activeCount} isOpen={isOpen} onClick={toggle} stackAboveCreate={stackAboveCreate} />
+                <FilterFab activeCount={activeCount} isOpen={isOpen} onClick={toggle} stackAboveCreate={stackAboveCreate}
+                    describeCount={describeCount} />
             )}
             <FilterPanel activeFilterCount={activeCount} onClearAll={onClearAll} isOpen={isOpen} onToggle={toggle} onClose={close}>
                 {children}
@@ -66,8 +70,13 @@ export function FilterEntry({
 }
 
 /** The toolbar funnel — desktop only (1024px and up); renders nothing below, where the FAB opens filters. */
-export function FilterEntryTrigger({ activeCount, isOpen, onOpenChange }: FilterEntryTriggerProps): JSX.Element | null {
+export function FilterEntryTrigger({
+    activeCount, isOpen, onOpenChange, describeCount,
+}: FilterEntryTriggerProps): JSX.Element | null {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     if (!isDesktop) return null;
-    return <FilterPanelTrigger activeCount={activeCount} isOpen={isOpen} onClick={() => onOpenChange(!isOpen)} />;
+    return (
+        <FilterPanelTrigger activeCount={activeCount} isOpen={isOpen} onClick={() => onOpenChange(!isOpen)}
+            describeCount={describeCount} />
+    );
 }

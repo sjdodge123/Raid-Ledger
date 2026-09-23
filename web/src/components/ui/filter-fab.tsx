@@ -10,7 +10,7 @@
 import { useId, type JSX } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
-import { FilterCountBadge } from './filter-count-badge';
+import { FilterCountBadge, type DescribeFilterCount } from './filter-count-badge';
 import { useFilterFabBottom } from './fab-position';
 
 export interface FilterFabProps {
@@ -21,6 +21,8 @@ export interface FilterFabProps {
     onClick: () => void;
     /** Sit above the page's create FAB (72 → 140 / 16 → 84) instead of in its place. */
     stackAboveCreate?: boolean;
+    /** Screen-reader wording for the count; defaults to "N active filters". */
+    describeCount?: DescribeFilterCount;
 }
 
 const FAB_CLASS = 'fixed right-4 w-14 h-14 lg:hidden flex items-center justify-center rounded-full '
@@ -28,7 +30,7 @@ const FAB_CLASS = 'fixed right-4 w-14 h-14 lg:hidden flex items-center justify-c
     + 'transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/50';
 
 /** 56px round neutral button, bottom-right, `lg:hidden`, with the active-filter badge. */
-export function FilterFab({ activeCount, isOpen, onClick, stackAboveCreate = false }: FilterFabProps): JSX.Element {
+export function FilterFab({ activeCount, isOpen, onClick, stackAboveCreate = false, describeCount }: FilterFabProps): JSX.Element {
     const countId = useId();
     const bottom = useFilterFabBottom(stackAboveCreate);
     return (
@@ -43,7 +45,7 @@ export function FilterFab({ activeCount, isOpen, onClick, stackAboveCreate = fal
             style={{ zIndex: Z_INDEX.FAB, bottom }}
         >
             <FunnelIcon className="w-6 h-6" aria-hidden="true" />
-            <FilterCountBadge count={activeCount} id={countId} />
+            <FilterCountBadge count={activeCount} id={countId} describe={describeCount} />
         </button>
     );
 }
