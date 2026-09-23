@@ -239,10 +239,21 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
 | `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive. Desktop: collapsible bordered panel with "Filters" + "Clear all". Mobile (<768px): `BottomSheet`. Trigger is a funnel icon with an emerald count badge. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `resultCount`, `hasActiveFilters`, `onClick` |
+| `button.tsx` → `Button` (ROK-1646) | **The** button. Five variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), `destructive-soft` (`bg-danger/10 text-danger border-danger/30`) — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), forwarded ref, all `ButtonHTMLAttributes` |
+| `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
+| `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-14` so text clears a 44px button), `mono`, forwarded ref |
+| `select.tsx` → `Select` (ROK-1646) | The native `<select>` on the shared field frame: `appearance-none pr-9` + a `text-muted` chevron. | Any pick-one-from-a-list field (stays native — no custom listbox) | `Omit<SelectHTMLAttributes,'size'>` + `fieldSize`, `invalid`, `placeholder` (empty-value first option; pair with `value=""`), `wrapperClassName` (default `w-full`), forwarded ref |
+| `textarea.tsx` → `Textarea` (ROK-1646) | Multi-line field on the shared frame with an optional counter (`n/max`, `text-xs text-dim`, always visible, joined to `aria-describedby`; not live — an `sr-only` polite region says "N characters left" only in the last 10% of `maxLength`, at most 20). | Reasons, descriptions, notes, feedback | all `TextareaHTMLAttributes` + `invalid`, `fieldSize` `md`/`lg`/`sm`, `showCount` (needs `maxLength`), `resize` `'y'` (default) / `'none'`, forwarded ref |
+| `checkbox.tsx` → `Checkbox` (ROK-1646) | Native checkbox, `w-5 h-5 accent-success`, success focus ring. With `label` the whole `<label>` row is the 44px target and the name is the label text alone. | Any boolean in a form or a multi-select list. A single on/off setting is a `Switch`. | `label`, `description` (→ `aria-describedby`), `indeterminate` (sets the DOM property → mixed), `invalid`, all input attributes, forwarded ref. In a `Field`, omit `label` — context wires it |
+| `radio-group.tsx` → `RadioGroup` (ROK-1646) | Native radios sharing one `name` in a `<fieldset role="radiogroup">` named by its legend — the browser's Tab/arrow model. `list`: a 44px row per option. `segmented`: `sr-only` radios in a `bg-panel border-edge rounded-lg` track, ON = `bg-overlay text-foreground`, OFF = `text-muted`. | One choice from 2–6 options. `segmented` for short pill toggles (duration picker, import mode, scope) — never buttons with no radio semantics | `label`, `hideLabel`, `options: {value,label,description?,disabled?}[]`, `value`, `onChange(value)`, `appearance` `'list'` (default) / `'segmented'`, `name`, `disabled`, `className`, `invalid`, `error` (inline `role="alert"`), `aria-describedby` — merged with a surrounding `Field`; `aria-invalid` sits on the radiogroup; ref → the `<fieldset>` |
+| `slider.tsx` → `Slider` (ROK-1646) | Labelled native range, `appearance-none` so the thumb sizing applies: label left, a 44px (`h-11`) hit area over a 6px `bg-edge` track filled in `success` to the value, a 20px `bg-success` thumb, `font-mono` `<output aria-live="off">` readout right. Replaces the duplicated `SLIDER_CLS`. | Any bounded numeric filter/threshold — and every sibling in that filter family (§4.11 DON'T) | `label`, `hideLabel`, `value: number`, `onChange(number)`, `min`/`max`/`step`, `formatValue` (readout + `aria-valuetext`), `showValue` (default true), `wrapperClassName`, ref → the input. Renders its own label — don't wrap it in `Field` |
+| `search-input.tsx` → `SearchInput` (ROK-1646) | `Input` with `type="search"` (role `searchbox`), a decorative leading magnifier, and — while there is text — a 44px `Button ghost iconOnly` named "Clear search" that empties the box, refocuses it and fires `onSearch('')` at once. The browser's own cancel glyph is hidden. | Every search/filter text box — list pages, picker modals, toolbars. Replaces `ModalSearchInput` (migration: ROK-1647) | `value`, `onChange(string)`, `label` (→ `aria-label`; omit inside `Field`), `onSearch` (debounced, never on mount), `debounceMs` (default 300), `onClear`, plus `Input` props (`fieldSize`, `invalid`, …), forwarded ref |
+| `combobox.tsx` → `Combobox` (+ `use-combobox.ts`, `use-anchored-popup.ts`, `combobox-popup.tsx`) (ROK-1646) | **The** autocomplete, in-house WAI-ARIA 1.2: an `Input` (ref forwarded) with `role="combobox"` / `aria-expanded` / `aria-controls` (only while open) / `aria-activedescendant` (focus never leaves it) and a `role="listbox"` at `Z_INDEX.MODAL + 1`, portalled into the surrounding `[role="dialog"]` (so `aria-modal` doesn't hide it) or else `<body>`. Keys are ignored during IME composition; an external reset of `value` to `null` clears the text; one persistent `role="status"` region announces loading / empty / error. Keys: ↑/↓ open then move (wrapping), Home/End jump, Enter picks, Esc closes (a second Esc clears text + value), Tab commits the active option. Closes on an outside press; keeps the active row in view. | Type-to-pick from a long or async list (game search, realm). A short fixed list is a `Select` | `options`, `getKey`, `getLabel`, `value`, `onChange(option \| null)`, `label` (or `Field`, which also names the listbox), `inputValue` + `onInputChange` (controlled text; omit to let it own the text), `renderOption(option, { active, selected })`, `loading` + `loadingText`, `emptyText` (default "No results"), `errorText`, `placeholder`, `disabled`, `invalid`, `fieldSize`, `portalContainer` (overrides the portal target), `className` |
+| `form-classes.ts` → `FIELD_FRAME`, `FIELD_FRAME_BASE`, `FIELD_PAD`, `FOCUS_RING`, `DISABLED` (ROK-1646) | The class strings the form primitives share | Building the next form primitive (`Select`, `Textarea`, `SearchInput`…) — never re-type the frame | — |
 | `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
 | `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: height, cap and bottom edge come from `window.visualViewport` in px via `useVisibleViewport` (`bottom-sheet-viewport.ts`, exposed as `--sheet-vh`), so iPad/iOS Safari toolbars never hide the footer (ROK-1640/1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, resolved against the visible viewport), `initiallyExpanded`, `ariaLabel` |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
-| `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal (`ModalSearchInput` requires a `label`, rendered as `aria-label`) | Any searchable picker modal | see file |
+| `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal (`ModalSearchInput` requires a `label`, rendered as `aria-label`) | Any searchable picker modal — `ModalSearchInput` is being replaced by `SearchInput` (ROK-1647) | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
 | `nav-chip.tsx` → `NavChip`, `NAV_CHIP_CLASS` | Navigational link chip | Linking to a sibling lineup/page from a banner | `to`, `children`, `testId` |
 | `switch.tsx` → `Switch` | Accessible on/off switch: native `<button role="switch" aria-checked>`, Space/Enter toggle, `focus-visible` ring, disabled dims + blocks, `bg-success` on / `bg-dim` off (ROK-1612) | Any boolean setting that applies immediately (admin toggles, feature opt-ins). Not for form fields submitted later — use a checkbox | `checked`, `onChange(next)`, `label` (accessible name), `disabled`, `className`, `testId` |
@@ -429,22 +440,59 @@ the quest-log theme.
 
 ### 4.11 Forms, sliders, checkboxes
 
-**DO** — inputs are `min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base
-text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50`
-(`CommonGroundFilters.tsx::SearchBox` — the control styling is right even though its composition is the
-§4.1 DON'T). `ModalSearchInput` uses `focus:ring-success/80` (it used the undefined `ring-accent` until ROK-1645).
-`text-base` is deliberate: 16px stops iOS Safari zooming on focus. Sliders: `flex-1 h-11
-accent-emerald-500`, enlarged webkit thumbs, a `font-mono` readout right and a `font-medium` label left.
-Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part of the target.
+**DO** — build forms from the primitives: `Field` around every control, `Input` for text, `Button` for
+every action (§3.1). The frame they share lives in `components/ui/form-classes.ts`: `w-full min-h-[44px]
+bg-panel border border-edge rounded-lg px-3 py-2 text-base lg:text-sm text-foreground placeholder:text-dim`,
+a `focus-visible:ring-2 focus-visible:ring-success/80` ring, `disabled:opacity-50
+disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
 
-**DON'T** use a number input where the family around it uses sliders — the operator ruled on this
-(2026-08-20) so a filter group reads as one control family.
+- **Radius is `rounded-lg`** — the same as buttons and §2.5 (operator ruling, ROK-1646; the old `rounded-md`
+  field recipe is retired).
+- **Focus ring is the `success` token at /80**, `focus-visible` only. /80 is the lowest alpha that clears
+  WCAG 1.4.11's 3:1 on `bg-panel` in both families (4.20:1 dark, 3.51:1 light; /50 measured 2.48:1 and
+  2.09:1). Buttons add `ring-offset-2 ring-offset-surface`.
+- **`text-base` below `lg`** (16px stops iOS Safari zooming on focus), `lg:text-sm` above — the §4.18 split,
+  not `sm:`/`md:`. Every control is 44px below `lg`; the only compact size (`fieldSize="sm"`, `size="sm"`)
+  applies from `lg` up.
+- **Errors are inline** under the field (`Field error=…` → `role="alert" text-danger`, linked by
+  `aria-describedby`), never toast-only; a toast is for the result of an action (§4.8).
+- **`fieldSize`, not `size`**, on `Input` and `Textarea` — the native `size` attribute is a number.
+- **Loading buttons stay focusable**: `Button loading` is `aria-disabled`, not `disabled`, and ignores clicks —
+  never hand-roll `disabled={saving}` on top of it.
+- **`RadioGroup` validates like a field**: `error` / `invalid` put `aria-invalid` on the radiogroup and the
+  inline alert under it.
+- **`Select`** stays native (`appearance-none` + chevron); `placeholder` is an empty-value first option.
+  **`Textarea`** counters come from `showCount` + `maxLength` — don't hand-roll one (ReasonField, FeedbackDialog).
+- **Checkboxes and radios are native**, `w-5 h-5 accent-success`, inside a `<label>` so the text is part of the
+  44px target (`Checkbox`, `RadioGroup` list). A pill/segmented toggle is `RadioGroup appearance="segmented"` —
+  real radios, so it has `radiogroup` semantics and arrow keys; never a row of buttons with no state.
+- **Sliders are `Slider`**: `appearance-none` with a painted `bg-edge` track, `success` fill and 20px thumb in a
+  44px hit area, a `font-medium` label left and a `font-mono` readout right (`aria-live="off"`);
+  `formatValue` doubles as `aria-valuetext`.
+- **Search boxes are `SearchInput`**: always named (`label` or a `Field` with `hideLabel`), one 44px "Clear
+  search" button, `onSearch` for the debounced query — don't hand-roll a magnifier + `setTimeout`.
+- **Type-to-pick is `Combobox`** — never a bare `<ul>` of results under an input (the old game-search pickers
+  had no `role="combobox"` and no keyboard path). The popup is `bg-surface border border-edge rounded-lg
+  shadow-xl`, the active row `bg-overlay`, rows 44px below `lg`; async lookups pass `loading` / `emptyText` /
+  `errorText` (a status row, announced by one persistent `role="status"` region) instead of rendering their own
+  spinner. Inside a Modal or BottomSheet the popup portals into the dialog and the first Esc closes only the popup.
 
-**Light / Dark** — the frame flips; the focus ring and `disabled:opacity-50` are family-agnostic by
-design, but `disabled:bg-emerald-800` (12 uses) goes dark-on-white. Note the prevailing ring is the
-SOLID `focus:ring-emerald-500` (49 uses in `components/`); the `/50` variant is a 7-use minority. Native control chrome follows
-root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the ROOT, not in a scoped preview
-(`design-system-tokens.md` §3).
+**Guard:** `components/ui/form-primitives.guard.test.ts` freezes raw `<input>` / `<select>` / `<textarea>` /
+`<button>` outside `components/ui` and `dev` at `form-primitives.baseline.json`. The list only shrinks: a new
+file or a higher count fails; a migration that lowers a count fails until the baseline is lowered to match.
+
+**DON'T** hand-write an input or button class string, use a `bg-*-800` disabled fill, spell an error
+`text-red-400`, or put a number input where the family around it uses sliders — the operator ruled on
+that (2026-08-20) so a filter group reads as one control family. Don't paint a checkbox with `text-emerald-500`
+/ `focus:ring-*` (`@tailwindcss/forms` isn't installed — those do nothing) or an `accent-[#hex]`. `ModalSearchInput`'s `focus:ring-accent`
+resolves to nothing (§6.3); `SearchInput` replaces it. Don't add a headless combobox library — `Combobox` is
+the in-house one (operator ruling, ROK-1646).
+
+**Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
+solid `primary`/`destructive` fills are identical in both with the label forced white on light (§6.10).
+Native control chrome follows root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the
+ROOT, not in a scoped preview (`design-system-tokens.md` §3). Rendered: `/dev/design-system` → *Forms*
+(`web/src/dev/design-system/forms-section.tsx`).
 
 ### 4.12 Badges with counts
 
