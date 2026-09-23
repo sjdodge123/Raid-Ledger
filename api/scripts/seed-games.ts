@@ -29,7 +29,9 @@ async function bootstrap() {
 
   try {
     for (const gameData of GAMES_SEED) {
-      const { eventTypes, iconUrl: _iconUrl, ...game } = gameData;
+      // iconUrl is seed-only metadata with no games column; drop it here.
+      const { eventTypes, iconUrl, ...game } = gameData;
+      void iconUrl;
 
       // ROK-400 upsert, routed through the games name-dedup guard (ROK-1563).
       const { id: gameId, action } = await upsertSeedGame(db, game);
