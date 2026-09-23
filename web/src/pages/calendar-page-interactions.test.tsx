@@ -22,8 +22,13 @@ vi.mock('../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: mockRegistryGames, isLoading: false, error: null }),
 }));
 
+let mockIsDesktop = true;
+vi.mock('../hooks/use-media-query', () => ({ useMediaQuery: () => mockIsDesktop }));
+
 vi.mock('../components/calendar', () => ({
-    CalendarView: () => <div data-testid="calendar-view" />,
+    // ROK-1662: the page hands the Filters funnel + inline panel to CalendarView's toolbar slots.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    CalendarView: (props: any) => <div data-testid="calendar-view">{props.toolbarAction}{props.belowToolbar}</div>,
     MiniCalendar: () => <div data-testid="mini-calendar" />,
 }));
 
@@ -33,15 +38,6 @@ vi.mock('../components/calendar/calendar-mobile-toolbar', () => ({
 
 vi.mock('../components/calendar/calendar-mobile-nav', () => ({
     CalendarMobileNav: () => <div data-testid="mobile-nav" />,
-}));
-
-vi.mock('../components/ui/fab', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    FAB: (props: any) => (
-        <button data-testid="fab" onClick={props.onClick} aria-label={props.label}>
-            FAB
-        </button>
-    ),
 }));
 
 vi.mock('../components/ui/bottom-sheet', () => ({
@@ -89,9 +85,7 @@ function deliver(games: ReturnType<typeof makeGame>[]) {
 /** Click the desktop [Filter: …] chip to open the modal.
  * The mobile FAB also has aria-label "Filter by Game"; disambiguate via class. */
 function getChip(): HTMLElement {
-    const chip = document.querySelector('.calendar-filter-chip') as HTMLElement | null;
-    if (!chip) throw new Error('CalendarFilterChip not rendered');
-    return chip;
+    return screen.getByTestId('filter-panel-trigger');
 }
 
 function openModalViaChip() {
@@ -100,7 +94,7 @@ function openModalViaChip() {
 
 /** Return the currently-open modal dialog. */
 function getDialog() {
-    return screen.getByRole('dialog');
+    return screen.getByTestId('filter-panel');
 }
 
 // ---------------------------------------------------------------------------
@@ -109,6 +103,7 @@ function getDialog() {
 
 describe('CalendarPage — game toggle', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
@@ -173,12 +168,13 @@ describe('CalendarPage — game toggle', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
 
         // The chip now reflects the partial selection (5 of 6).
-        expect(getChip()).toHaveTextContent(/Filter: 5 games/);
+        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent(String(useGameFilterStore.getState().allKnownGames.length - 5));
     });
 });
 
 describe('CalendarPage — All / None buttons', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
@@ -247,6 +243,7 @@ describe('CalendarPage — All / None buttons', () => {
 
 describe('CalendarPage — filter persistence when view changes — part 1', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
@@ -298,6 +295,7 @@ describe('CalendarPage — filter persistence when view changes — part 1', () 
 
 describe('CalendarPage — filter persistence when view changes — part 2', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
@@ -365,6 +363,7 @@ describe('CalendarPage — filter persistence when view changes — part 2', () 
 
 describe('CalendarPage — filter persistence when view changes — part 3', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
@@ -390,6 +389,7 @@ describe('CalendarPage — filter persistence when view changes — part 3', () 
 
 describe('CalendarPage — FAB and BottomSheet', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
@@ -460,6 +460,7 @@ describe('CalendarPage — FAB and BottomSheet', () => {
 
 describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
