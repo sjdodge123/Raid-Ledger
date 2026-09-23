@@ -239,6 +239,11 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `button.tsx` → `Button` (ROK-1646) | **The** button. Five variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), `destructive-soft` (`bg-danger/10 text-danger border-danger/30`) — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `disabled`, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), forwarded ref, all `ButtonHTMLAttributes` |
 | `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
 | `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-12`), `mono`, forwarded ref |
+| `select.tsx` → `Select` (ROK-1646) | The native `<select>` on the shared field frame: `appearance-none pr-9` + a `text-muted` chevron. | Any pick-one-from-a-list field (stays native — no custom listbox) | `Omit<SelectHTMLAttributes,'size'>` + `fieldSize`, `invalid`, `placeholder` (empty-value first option; pair with `value=""`), `wrapperClassName` (default `w-full`), forwarded ref |
+| `textarea.tsx` → `Textarea` (ROK-1646) | Multi-line field on the shared frame with an optional live counter (`n/max`, `text-xs text-dim`, `aria-live="polite"`, joined to `aria-describedby`). | Reasons, descriptions, notes, feedback | all `TextareaHTMLAttributes` + `invalid`, `showCount` (needs `maxLength`), `resize` `'y'` (default) / `'none'`, forwarded ref |
+| `checkbox.tsx` → `Checkbox` (ROK-1646) | Native checkbox, `w-5 h-5 accent-success`, success focus ring. With `label` the whole `<label>` row is the 44px target and the name is the label text alone. | Any boolean in a form or a multi-select list. A single on/off setting is a `Switch`. | `label`, `description` (→ `aria-describedby`), `indeterminate` (sets the DOM property → mixed), `invalid`, all input attributes, forwarded ref. In a `Field`, omit `label` — context wires it |
+| `radio-group.tsx` → `RadioGroup` (ROK-1646) | Native radios sharing one `name` in a `<fieldset role="radiogroup">` named by its legend — the browser's Tab/arrow model. `list`: a 44px row per option. `segmented`: `sr-only` radios in a `bg-panel border-edge rounded-lg` track, ON = `bg-overlay text-foreground`, OFF = `text-muted`. | One choice from 2–6 options. `segmented` for short pill toggles (duration picker, import mode, scope) — never buttons with no radio semantics | `label`, `hideLabel`, `options: {value,label,description?,disabled?}[]`, `value`, `onChange(value)`, `appearance` `'list'` (default) / `'segmented'`, `name`, `disabled`, `className` |
+| `slider.tsx` → `Slider` (ROK-1646) | Labelled native range: label left, `h-11 accent-success` track with a 20px webkit thumb, `font-mono` `<output>` readout right. Replaces the duplicated `SLIDER_CLS`. | Any bounded numeric filter/threshold — and every sibling in that filter family (§4.11 DON'T) | `label`, `hideLabel`, `value: number`, `onChange(number)`, `min`/`max`/`step`, `formatValue` (readout + `aria-valuetext`), `showValue` (default true), `wrapperClassName`. Renders its own label — don't wrap it in `Field` |
 | `form-classes.ts` → `FIELD_FRAME`, `FIELD_FRAME_BASE`, `FIELD_PAD`, `FOCUS_RING`, `DISABLED` (ROK-1646) | The class strings the form primitives share | Building the next form primitive (`Select`, `Textarea`, `SearchInput`…) — never re-type the frame | — |
 | `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
 | `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
@@ -430,13 +435,18 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
 - **Errors are inline** under the field (`Field error=…` → `role="alert" text-danger`, linked by
   `aria-describedby`), never toast-only; a toast is for the result of an action (§4.8).
 - **`fieldSize`, not `size`**, on `Input` — the native `size` attribute is a number.
-- Sliders (until the `Slider` primitive lands): `flex-1 h-11 accent-emerald-500`, enlarged webkit thumbs,
-  a `font-mono` readout right and a `font-medium` label left. Checkboxes (until `Checkbox` lands): `w-5 h-5
-  accent-emerald-500` inside a `<label>` so the text is part of the target.
+- **`Select`** stays native (`appearance-none` + chevron); `placeholder` is an empty-value first option.
+  **`Textarea`** counters come from `showCount` + `maxLength` — don't hand-roll one (ReasonField, FeedbackDialog).
+- **Checkboxes and radios are native**, `w-5 h-5 accent-success`, inside a `<label>` so the text is part of the
+  44px target (`Checkbox`, `RadioGroup` list). A pill/segmented toggle is `RadioGroup appearance="segmented"` —
+  real radios, so it has `radiogroup` semantics and arrow keys; never a row of buttons with no state.
+- **Sliders are `Slider`**: `h-11 accent-success`, enlarged webkit thumb, a `font-medium` label left and a
+  `font-mono` readout right; `formatValue` doubles as `aria-valuetext`.
 
 **DON'T** hand-write an input or button class string, use a `bg-*-800` disabled fill, spell an error
 `text-red-400`, or put a number input where the family around it uses sliders — the operator ruled on
-that (2026-08-20) so a filter group reads as one control family. `ModalSearchInput`'s `focus:ring-accent`
+that (2026-08-20) so a filter group reads as one control family. Don't paint a checkbox with `text-emerald-500`
+/ `focus:ring-*` (`@tailwindcss/forms` isn't installed — those do nothing) or an `accent-[#hex]`. `ModalSearchInput`'s `focus:ring-accent`
 resolves to nothing (§6.3); `SearchInput` replaces it.
 
 **Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
