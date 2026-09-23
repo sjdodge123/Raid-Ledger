@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
+import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 
 interface ModalProps {
     isOpen: boolean;
@@ -27,15 +28,12 @@ function useModalEscape(isOpen: boolean, onClose: () => void) {
     );
 
     useEffect(() => {
-        if (isOpen) {
-            document.addEventListener('keydown', handleKeyDown);
-            document.body.style.overflow = 'hidden';
-        }
-        return () => {
-            document.removeEventListener('keydown', handleKeyDown);
-            document.body.style.overflow = '';
-        };
+        if (!isOpen) return;
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, handleKeyDown]);
+    // Ref-counted: a Modal stacked over an open sheet must not unlock the page on close (ROK-1640).
+    useBodyScrollLock(isOpen);
 }
 
 function ModalHeader({ titleId, title, onClose }: { titleId: string; title: string; onClose: () => void }) {

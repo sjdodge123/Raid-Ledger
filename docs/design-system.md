@@ -248,7 +248,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `combobox.tsx` → `Combobox` (+ `use-combobox.ts`, `use-anchored-popup.ts`, `combobox-popup.tsx`) (ROK-1646) | **The** autocomplete, in-house WAI-ARIA 1.2: an `Input` (ref forwarded) with `role="combobox"` / `aria-expanded` / `aria-controls` (only while open) / `aria-activedescendant` (focus never leaves it) and a `role="listbox"` at `Z_INDEX.MODAL + 1`, portalled into the surrounding `[role="dialog"]` (so `aria-modal` doesn't hide it) or else `<body>`. Keys are ignored during IME composition; an external reset of `value` to `null` clears the text; one persistent `role="status"` region announces loading / empty / error. Keys: ↑/↓ open then move (wrapping), Home/End jump, Enter picks, Esc closes (a second Esc clears text + value), Tab commits the active option. Closes on an outside press; keeps the active row in view. | Type-to-pick from a long or async list (game search, realm). A short fixed list is a `Select` | `options`, `getKey`, `getLabel`, `value`, `onChange(option \| null)`, `label` (or `Field`, which also names the listbox), `inputValue` + `onInputChange` (controlled text; omit to let it own the text), `renderOption(option, { active, selected })`, `loading` + `loadingText`, `emptyText` (default "No results"), `errorText`, `placeholder`, `disabled`, `invalid`, `fieldSize`, `portalContainer` (overrides the portal target), `className` |
 | `form-classes.ts` → `FIELD_FRAME`, `FIELD_FRAME_BASE`, `FIELD_PAD`, `FOCUS_RING`, `DISABLED` (ROK-1646) | The class strings the form primitives share | Building the next form primitive (`Select`, `Textarea`, `SearchInput`…) — never re-type the frame | — |
 | `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
-| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
+| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: height, cap and bottom edge come from `window.visualViewport` in px via `useVisibleViewport` (`bottom-sheet-viewport.ts`, exposed as `--sheet-vh`), so iPad/iOS Safari toolbars never hide the footer (ROK-1640/1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, resolved against the visible viewport), `initiallyExpanded`, `ariaLabel` |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
 | `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal — `ModalSearchInput` is being replaced by `SearchInput` (ROK-1647) | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
@@ -351,6 +351,22 @@ navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with 
 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
+
+**Sheet layout rules** (ROK-1640 / ROK-1641):
+
+- **Size against the visible viewport.** Sheet heights are `dvh` with a `vh` fallback — `BottomSheet` converts
+  a `vh` `maxHeight` for you. Raw `vh` on iOS/iPadOS Safari excludes the toolbars, so a bottom-anchored
+  sheet opened with its last rows (the ⋯ menu's Rally / Lock) under the browser bar.
+- **An action footer is a pinned flex footer OUTSIDE the scroll body** — the body is `flex-1 min-h-0
+  overflow-y-auto`, the footer a `shrink-0` sibling (`phone-week-check-footer.tsx` `StepFooter`). Never
+  `sticky` inside the scroll body: that is what hid the game-time drawer's Save on an iPad.
+- **A sheet that edits data guards its close** with `useDirtyCloseGuard`
+  (`components/features/game-time/use-dirty-close-guard.ts`): ×, backdrop, swipe-down and Escape ask
+  "Discard your changes?" (`DiscardChangesConfirm`, a `Modal` over the sheet) while the draft is dirty.
+  Explicit Save / Skip stay unguarded.
+- `web/index.html` has no `viewport-fit=cover`, so `env(safe-area-inset-bottom)` resolves to 0 and the
+  sheets' safe-area padding is inert for now — keep it (it activates if the meta tag is ever added), but do
+  not rely on it to clear a home indicator.
 
 **Light / Dark** — the body is tokens; the scrim is a raw black alpha with no light override, so it dims
 identically in both. Do not invent a third — the two that exist already disagree (§6.11).
