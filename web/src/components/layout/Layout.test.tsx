@@ -1,5 +1,5 @@
-import { render } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { act, render } from '@testing-library/react';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Layout } from './Layout';
 
@@ -63,4 +63,43 @@ describe('Regression: ROK-1341 — mobile themed background covers full scroll h
         expect(root).toHaveClass('bg-backdrop');
         expect(root).not.toHaveClass('min-h-screen');
     });
+});
+
+/**
+ * ROK-1661: on a real iPad `100dvh` resolves ~100 CSS px taller than the
+ * visible area (ROK-1640), so a short page (/calendar) pinned its footer below
+ * the fold. The shell's min-height must follow `visualViewport.height`, with
+ * `min-h-dvh` kept only as the first-paint fallback.
+ */
+class FakeVisualViewport extends EventTarget {
+    height = 950;
+    offsetTop = 0;
+}
+
+const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+
+function installVisualViewport(vv: FakeVisualViewport | undefined) {
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
+}
+
+describe('Regression: ROK-1661 — shell min-height follows the visible viewport', () => {
+    afterEach(() => {
+        if (originalVisualViewport) Object.defineProperty(window, 'visualViewport', originalVisualViewport);
+        else installVisualViewport(undefined);
+    });
+
+    it.each([['standard path', '/'], ['chromeless /p/* path', '/p/test-event']])(
+        '%s: min-height is visualViewport.height and tracks its resize',
+        (_label, path) => {
+            const vv = new FakeVisualViewport();
+            installVisualViewport(vv);
+            const { container } = renderLayout(path);
+            const root = container.firstElementChild as HTMLElement;
+            expect(root.style.minHeight).toBe('950px');
+            expect(root).toHaveClass('min-h-dvh');
+
+            act(() => { vv.height = 800; vv.dispatchEvent(new Event('resize')); });
+            expect(root.style.minHeight).toBe('800px');
+        },
+    );
 });
