@@ -139,7 +139,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   WeeklyDigestService_postDigest: {
     description:
-      'Posts the weekly community digest to its Discord channel. Ticks hourly; posts once per ISO week at the configured day + hour (community timezone) when enabled — ROK-1435.',
+      'Posts the weekly community digest to its Discord channel. Ticks hourly; posts once per ISO week at the configured day + hour (community timezone) when enabled.',
     category: 'Notifications',
   },
   SteamSyncProcessor_scheduledSync: {
