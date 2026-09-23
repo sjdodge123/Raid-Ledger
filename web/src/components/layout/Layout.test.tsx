@@ -1,3 +1,4 @@
+import { type ReactNode } from 'react';
 import { act, render } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -22,12 +23,10 @@ vi.mock('../../hooks/use-theme-sync', () => ({ useThemeSync: () => undefined }))
 vi.mock('../../hooks/use-plugins', () => ({ usePluginHydration: () => undefined }));
 vi.mock('../../hooks/use-media-query', () => ({ useMediaQuery: () => false }));
 
-function renderLayout(path = '/') {
+function renderLayout(path = '/', children: ReactNode = <p>scrolling content</p>) {
     return render(
         <MemoryRouter initialEntries={[path]}>
-            <Layout>
-                <p>scrolling content</p>
-            </Layout>
+            <Layout>{children}</Layout>
         </MemoryRouter>,
     );
 }
@@ -74,6 +73,7 @@ describe('Regression: ROK-1341 — mobile themed background covers full scroll h
 class FakeVisualViewport extends EventTarget {
     height = 950;
     offsetTop = 0;
+    scale = 1;
 }
 
 const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
@@ -82,10 +82,59 @@ function installVisualViewport(vv: FakeVisualViewport | undefined) {
     Object.defineProperty(window, 'visualViewport', { configurable: true, value: vv });
 }
 
+function setLayoutWidth(px: number) {
+    Object.defineProperty(document.documentElement, 'clientWidth', { configurable: true, value: px });
+}
+
+function resize(vv: FakeVisualViewport, height: number) {
+    act(() => { vv.height = height; vv.dispatchEvent(new Event('resize')); });
+}
+
 describe('Regression: ROK-1661 — shell min-height follows the visible viewport', () => {
     afterEach(() => {
         if (originalVisualViewport) Object.defineProperty(window, 'visualViewport', originalVisualViewport);
         else installVisualViewport(undefined);
+        delete (document.documentElement as { clientWidth?: number }).clientWidth;
+    });
+
+    it('pinch-zoom does not move the floor: 2x zoom (height 475, scale 2) keeps 950px', () => {
+        const vv = new FakeVisualViewport();
+        installVisualViewport(vv);
+        const { container } = renderLayout('/');
+        const root = container.firstElementChild as HTMLElement;
+        act(() => { vv.scale = 2; vv.height = 475; vv.dispatchEvent(new Event('resize')); });
+        expect(root.style.minHeight).toBe('950px');
+    });
+
+    it('holds the floor while the on-screen keyboard is up, and follows once focus leaves', () => {
+        const vv = new FakeVisualViewport();
+        installVisualViewport(vv);
+        const { container, getByRole } = renderLayout('/', <input aria-label="Search games" />);
+        const root = container.firstElementChild as HTMLElement;
+        act(() => { getByRole('textbox').focus(); });
+        resize(vv, 600);
+        expect(root.style.minHeight).toBe('950px');
+
+        act(() => { getByRole('textbox').blur(); });
+        resize(vv, 600);
+        expect(root.style.minHeight).toBe('600px');
+    });
+
+    it('a width change with an input focused is a rotation, not the keyboard, so the floor follows', () => {
+        const vv = new FakeVisualViewport();
+        installVisualViewport(vv);
+        setLayoutWidth(1024);
+        const { container, getByRole } = renderLayout('/', <input aria-label="Search games" />);
+        const root = container.firstElementChild as HTMLElement;
+        act(() => { getByRole('textbox').focus(); });
+        setLayoutWidth(768);
+        resize(vv, 600);
+        expect(root.style.minHeight).toBe('600px');
+    });
+
+    it('chromeless /p/* main is a flex column, so a public page fills it with flex-1', () => {
+        const { container } = renderLayout('/p/test-event');
+        expect(container.querySelector('main#main-content')).toHaveClass('flex-1', 'flex', 'flex-col');
     });
 
     it.each([['standard path', '/'], ['chromeless /p/* path', '/p/test-event']])(

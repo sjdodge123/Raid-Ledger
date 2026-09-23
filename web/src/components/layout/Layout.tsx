@@ -15,7 +15,7 @@ import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
-import { useVisibleHeight } from '../ui/bottom-sheet-viewport';
+import { useShellHeight } from './use-shell-height';
 
 /**
  * ROK-1067: routes under /p/* are public, chrome-less surfaces meant
@@ -36,13 +36,13 @@ interface LayoutProps {
  * ROK-1661: the page shell. `min-h-dvh` is only the first-paint / no-JS floor —
  * on a real iPad `100dvh` resolves ~100 CSS px taller than the visible area
  * (ROK-1640), which pushed a short page's footer below the fold. Once mounted
- * the floor is the VISIBLE viewport height (`visualViewport`), inline so it
- * wins over the class. Its own component so a height change re-renders only
- * this div, not the chrome passed in as children.
+ * the floor is the VISIBLE viewport height, zoom- and keyboard-invariant
+ * (`useShellHeight`), inline so it wins over the class. Its own component so a
+ * height change re-renders only this div, not the chrome passed in as children.
  */
 function ViewportShell({ children }: LayoutProps) {
-    const visibleHeight = useVisibleHeight();
-    const minHeight = visibleHeight > 0 ? `${visibleHeight}px` : undefined;
+    const shellHeight = useShellHeight();
+    const minHeight = shellHeight > 0 ? `${shellHeight}px` : undefined;
     return (
         <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip', minHeight }}>
             {children}
@@ -83,7 +83,7 @@ export function Layout({ children }: LayoutProps) {
     if (isChromelessPath(pathname)) {
         return (
             <ViewportShell>
-                <main id="main-content" className="flex-1">{children}</main>
+                <main id="main-content" className="flex-1 flex flex-col">{children}</main>
                 <LiveRegionProvider />
             </ViewportShell>
         );
