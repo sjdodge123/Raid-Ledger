@@ -62,6 +62,11 @@ export const LFG_BOARD_BINDING_PURPOSE = 'lfg-board';
  * on disable — the toggle endpoint itself never touches Discord.
  */
 export const LFG_BOARD_EVENTS = {
+  /**
+   * ROK-1658 — `LfgComposerPinService` also subscribes, and acts ONLY on the
+   * disable branch (it takes the composer buttons down). Its enable branch
+   * stays on {@link LFG_BOARD_EVENTS.ENABLED} so it never races provisioning.
+   */
   TOGGLED: 'lfg-board.toggled',
   /**
    * ROK-1523 — the board is on AND provisioned. `LfmEmbedService` subscribes
@@ -73,6 +78,8 @@ export const LFG_BOARD_EVENTS = {
    * {@link LfgBoardToggleListener.provision} would resolve the forum while the
    * toggle listener is still creating it — two boards, both marked. This is
    * emitted by that listener only once provisioning has finished.
+   * `LfgComposerPinService` subscribes for the same reason (ROK-1658): the
+   * composer buttons ride the intro post, which exists only after provision.
    *
    * The direction also matters: `LfmEmbedModule` imports `LfgBoardModule`, so
    * the board calling `LfmEmbedService` directly would be a module cycle. The
@@ -85,12 +92,6 @@ export const LFG_BOARD_EVENTS = {
    * sleeping out the trailing window.
    */
   FLUSH: 'lfg-board.flush',
-  /**
-   * ROK-1612 AC6 — the composer opt-in was flipped from the admin page.
-   * `LfgComposerPinService` reconciles on it, so ON pins the card now and OFF
-   * takes it down now, instead of waiting for the next bot reconnect.
-   */
-  COMPOSER_TOGGLED: 'lfg-board.composer-toggled',
 } as const;
 
 /** Payload of {@link LFG_BOARD_EVENTS.TOGGLED}. */

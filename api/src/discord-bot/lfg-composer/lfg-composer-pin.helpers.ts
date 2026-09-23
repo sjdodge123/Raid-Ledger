@@ -219,7 +219,7 @@ export async function ensurePinnedComposer(
 }
 
 /**
- * AC6 — the composer switched off: delete every card the bot left behind,
+ * The LFG board switched off (ROK-1658): delete every card the bot left behind,
  * pinned or not. Deleting a pinned message unpins it.
  *
  * @param deps - Channel and bot identity.

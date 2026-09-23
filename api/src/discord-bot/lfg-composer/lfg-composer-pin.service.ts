@@ -1,12 +1,17 @@
 /**
  * ROK-1612 AC1 — keeps the composer card pinned in "the LFG channel".
  *
+ * ROK-1658: there is no separate opt-in. The composer is on whenever the LFG
+ * board is on (`lfg_board_enabled`), and comes down when the board is turned
+ * off.
+ *
  * Operator ruling 2026-09-22 ("pin it"): the card is a real Discord pin, not a
  * delete-and-repost that chases the last message. So there is no debounce and
- * no race with the board's `flushAll`: this runs on two rare events — the bot
- * connecting, and the board being switched on — and each run EDITS the card it
- * already pinned. `ensurePinnedComposer` owns the idempotency; this file only
- * decides where the card goes.
+ * no race with the board's `flushAll`: this runs on three rare events — the bot
+ * connecting, the board being switched on (after provisioning) and the board
+ * being switched off — and each run EDITS the card it already pinned.
+ * `ensurePinnedComposer` owns the idempotency; this file only decides where
+ * the card goes.
  *
  * Where "the LFG channel" is:
  *
@@ -15,18 +20,18 @@
  *    post ("How this board works", `LfgBoardToggleListener`). A second pinned
  *    post would fail or unpin the intro, so the composer's buttons ride on that
  *    pinned post's starter message instead. Edited in place, never re-posted.
- *  - **A text channel bound with the `lfg-board` purpose.** The card is posted
- *    and pinned there (Manage Messages). A binding is how a guild opts in
- *    (AC6): no binding, no card.
+ *  - **A text channel bound with the `lfg-board` purpose** (a legacy row: new
+ *    `lfg-board` bindings are forum-only). The card is posted and pinned there
+ *    (Manage Messages), on whenever the board is on (ROK-1658).
  *
  * Runs are SERIALISED on one promise chain. The triggers (connect, board on,
- * composer toggle) can overlap, and two interleaved runs would each scan an
+ * board off) can overlap, and two interleaved runs would each scan an
  * empty channel and post a card apiece — or an OFF run would scan before an
  * ON run's post landed and leave the card up. One chain, not one per
  * channel: the target is resolved INSIDE the run from the current settings,
  * so each queued run acts on the state at its turn, never at its trigger.
  *
- * Nothing here throws: both triggers are `@OnEvent` handlers and a Discord
+ * Nothing here throws: every trigger is an `@OnEvent` handler and a Discord
  * refusal must be one log line, never a crash-loop (AC7).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
@@ -38,12 +43,14 @@ import { SettingsService } from '../../settings/settings.service';
 import {
   getLfgBoardEnabled,
   getLfgBoardIntroThreadId,
-  getLfgComposerEnabled,
 } from '../../settings/settings-lfg-board.helpers';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { findLfgBoardBindingChannelId } from '../lfg-board/lfg-board-channel.db-helpers';
-import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
+import {
+  LFG_BOARD_EVENTS,
+  type LfgBoardToggledPayload,
+} from '../lfg-board/lfg-board.constants';
 import { buildComposerCard, sameComponents } from './lfg-composer-card.helpers';
 import {
   ensurePinnedComposer,
@@ -92,9 +99,18 @@ export class LfgComposerPinService {
     await this.reconcile();
   }
 
-  /** AC6 — the admin toggle flipped: place or remove the card right away. */
-  @OnEvent(LFG_BOARD_EVENTS.COMPOSER_TOGGLED)
-  async onComposerToggled(): Promise<void> {
+  /**
+   * ROK-1658 — the board was switched OFF: take the composer down now. That
+   * strips the intro post's buttons, or deletes the card in a legacy text
+   * binding. The ON branch is ignored here: {@link onBoardEnabled} handles it
+   * once provisioning has created the intro post.
+   *
+   * Runs concurrently with the toggle listener's `retireOpenPosts`, which is
+   * safe: they touch different messages (retire never touches the intro).
+   */
+  @OnEvent(LFG_BOARD_EVENTS.TOGGLED)
+  async onBoardToggled(payload?: LfgBoardToggledPayload): Promise<void> {
+    if (payload?.enabled) return;
     await this.reconcile();
   }
 
@@ -115,7 +131,8 @@ export class LfgComposerPinService {
       const guild = this.clientService.getGuild();
       const botUserId = this.clientService.getBotUser()?.id;
       if (!guild || !botUserId) return 'no-target';
-      const enabled = await getLfgComposerEnabled(this.settingsService);
+      // ROK-1658: the composer is on exactly when the board is on.
+      const enabled = await getLfgBoardEnabled(this.settingsService);
       const intro = await this.forumIntro(guild);
       if (intro) {
         return enabled
@@ -154,7 +171,7 @@ export class LfgComposerPinService {
     return outcome;
   }
 
-  /** AC6 off — take down any card this bot left in the bound channel. */
+  /** Board off (ROK-1658) — take down any card this bot left in the bound channel. */
   private async removeFrom(
     channel: ComposerChannel,
     botUserId: string,
@@ -165,7 +182,7 @@ export class LfgComposerPinService {
     return 'removed';
   }
 
-  /** AC6 off on a forum board — strip the buttons, keep the intro copy. */
+  /** Board off (ROK-1658) on a forum board — strip the buttons, keep the intro copy. */
   private async clearIntro(
     thread: ThreadChannel,
     botUserId: string,
@@ -177,9 +194,12 @@ export class LfgComposerPinService {
     return 'intro-cleared';
   }
 
-  /** The board's pinned intro post, when the forum board is on and seeded. */
+  /**
+   * The board's pinned intro post, when one has been seeded. Found whether the
+   * board is on or off, so a disabled board's intro still has its buttons
+   * stripped (ROK-1658).
+   */
   private async forumIntro(guild: Guild): Promise<ThreadChannel | null> {
-    if (!(await getLfgBoardEnabled(this.settingsService))) return null;
     const introId = await getLfgBoardIntroThreadId(this.settingsService);
     if (!introId) return null;
     const channel = await guild.channels.fetch(introId).catch(() => null);

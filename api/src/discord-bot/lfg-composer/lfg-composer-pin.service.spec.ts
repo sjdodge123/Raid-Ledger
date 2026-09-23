@@ -1,5 +1,6 @@
 /**
  * ROK-1612 AC1 — where the pinned composer goes, and that it never throws.
+ * ROK-1658 — the composer has no opt-in of its own: it follows the board.
  */
 import { ChannelType } from 'discord.js';
 import { SETTING_KEYS } from '../../drizzle/schema';
@@ -12,8 +13,8 @@ import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
 import { buildComposerCard } from './lfg-composer-card.helpers';
 
 const BOT = 'bot-user';
-/** AC6 — the composer's opt-in, switched on. */
-const ON = { [SETTING_KEYS.LFG_COMPOSER_ENABLED]: 'true' };
+/** ROK-1658 — the LFG board switched on; the composer rides it. */
+const ON = { [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true' };
 
 function settings(values: Record<string, string>): SettingsService {
   return {
@@ -52,7 +53,7 @@ function service(
 }
 
 describe('LfgComposerPinService.reconcile', () => {
-  it('forum board: sets the composer buttons on the pinned intro post, in place', async () => {
+  it('board on with NO composer setting row puts the buttons on the intro, in place (ROK-1658 deploy case)', async () => {
     const starter = {
       author: { id: BOT },
       edit: jest.fn(() => Promise.resolve()),
@@ -67,7 +68,6 @@ describe('LfgComposerPinService.reconcile', () => {
       {
         [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
         [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
-        ...ON,
       },
       null,
     );
@@ -109,7 +109,7 @@ describe('LfgComposerPinService.reconcile', () => {
 });
 
 describe('LfgComposerPinService.reconcile — no target, no throw', () => {
-  it('no board and no binding: nothing is posted (AC6 opt-in)', async () => {
+  it('no board and no binding: nothing is posted', async () => {
     await expect(service({}, {}, null).reconcile()).resolves.toBe('no-target');
   });
 
@@ -125,12 +125,12 @@ describe('LfgComposerPinService.reconcile — no target, no throw', () => {
   });
 });
 
-describe('LfgComposerPinService.reconcile — AC6 opt-in off (the default)', () => {
+describe('LfgComposerPinService.reconcile — board off, legacy text binding', () => {
   const composerRow = {
     components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
   };
 
-  it('text binding: posts nothing and deletes a card left from before', async () => {
+  it('board off deletes a card left from before and posts nothing', async () => {
     const card = {
       id: 'm1',
       pinned: true,
@@ -155,7 +155,7 @@ describe('LfgComposerPinService.reconcile — AC6 opt-in off (the default)', () 
   });
 });
 
-describe('LfgComposerPinService.reconcile — AC6 off on a forum board', () => {
+describe('LfgComposerPinService.reconcile — board switched off (ROK-1658)', () => {
   const composerRow = {
     components: [{ customId: LFG_COMPOSER_IDS.OPEN }],
   };
@@ -172,7 +172,7 @@ describe('LfgComposerPinService.reconcile — AC6 off on a forum board', () => {
       fetchStarterMessage: () => Promise.resolve(starter),
     };
     const cfg = {
-      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'false',
       [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
     };
     await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
@@ -193,7 +193,7 @@ describe('LfgComposerPinService.reconcile — AC6 off on a forum board', () => {
       fetchStarterMessage: () => Promise.resolve(starter),
     };
     const cfg = {
-      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+      [SETTING_KEYS.LFG_BOARD_ENABLED]: 'false',
       [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
     };
     await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
@@ -203,25 +203,34 @@ describe('LfgComposerPinService.reconcile — AC6 off on a forum board', () => {
   });
 });
 
-describe('LfgComposerPinService — admin toggle (ROK-1612 AC6)', () => {
-  it('reconciles as soon as the opt-in is flipped, not on the next reconnect', async () => {
+describe('LfgComposerPinService — board toggle (ROK-1658)', () => {
+  function spied() {
     const svc = service({}, ON, null);
     const reconcile = jest
       .spyOn(svc, 'reconcile')
       .mockResolvedValue('no-target');
+    return { svc, reconcile };
+  }
 
-    await svc.onComposerToggled();
-
+  it('takes the composer down as soon as the board is switched off', async () => {
+    const { svc, reconcile } = spied();
+    await svc.onBoardToggled({ enabled: false });
     expect(reconcile).toHaveBeenCalledTimes(1);
   });
 
-  it('is subscribed to COMPOSER_TOGGLED', () => {
+  it('ignores the ON toggle: ENABLED owns it, after provisioning', async () => {
+    const { svc, reconcile } = spied();
+    await svc.onBoardToggled({ enabled: true });
+    expect(reconcile).not.toHaveBeenCalled();
+  });
+
+  it('is subscribed to the board TOGGLED event', () => {
     const events: unknown = Reflect.getMetadata(
       'EVENT_LISTENER_METADATA',
-      LfgComposerPinService.prototype.onComposerToggled,
+      LfgComposerPinService.prototype.onBoardToggled,
     );
     expect(events).toEqual([
-      expect.objectContaining({ event: LFG_BOARD_EVENTS.COMPOSER_TOGGLED }),
+      expect.objectContaining({ event: LFG_BOARD_EVENTS.TOGGLED }),
     ]);
   });
 });
@@ -290,7 +299,7 @@ describe('LfgComposerPinService.reconcile — serialised (review MAJOR)', () => 
     const svc = service({ c1: text }, cfg, 'c1');
     const on = svc.reconcile();
     await settle();
-    cfg[SETTING_KEYS.LFG_COMPOSER_ENABLED] = 'false';
+    cfg[SETTING_KEYS.LFG_BOARD_ENABLED] = 'false';
     const off = svc.reconcile();
     await settle();
     release();
@@ -315,7 +324,6 @@ describe('LfgComposerPinService.reconcile — intro already current (review NIT)
     const cfg = {
       [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
       [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
-      ...ON,
     };
     await expect(service({ t1: intro }, cfg, null).reconcile()).resolves.toBe(
       'intro-unchanged',

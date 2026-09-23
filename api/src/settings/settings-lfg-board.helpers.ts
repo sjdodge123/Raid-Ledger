@@ -20,24 +20,6 @@ export async function setLfgBoardEnabled(
   await svc.set(SETTING_KEYS.LFG_BOARD_ENABLED, enabled ? 'true' : 'false');
 }
 
-/**
- * ROK-1612 AC6 — the composer card's opt-in. Off by default: a guild that does
- * not want a bot card pinned in its board channel never gets one.
- */
-export async function getLfgComposerEnabled(
-  svc: SettingsCore,
-): Promise<boolean> {
-  return (await svc.get(SETTING_KEYS.LFG_COMPOSER_ENABLED)) === 'true';
-}
-
-/** Set the composer card's opt-in. */
-export async function setLfgComposerEnabled(
-  svc: SettingsCore,
-  enabled: boolean,
-): Promise<void> {
-  await svc.set(SETTING_KEYS.LFG_COMPOSER_ENABLED, enabled ? 'true' : 'false');
-}
-
 /** Id of the bot-created forum channel; null until one has been created (D3b). */
 export async function getLfgBoardChannelId(
   svc: SettingsCore,

@@ -17,9 +17,7 @@ import { SettingsService } from '../settings/settings.service';
 import {
   getLfgBoardChannelId,
   getLfgBoardEnabled,
-  getLfgComposerEnabled,
   setLfgBoardEnabled,
-  setLfgComposerEnabled,
 } from '../settings/settings-lfg-board.helpers';
 import { preflightLfgBoard } from './lfg-board/lfg-board-preflight.helpers';
 import {
@@ -28,9 +26,7 @@ import {
 } from './lfg-board/lfg-board.constants';
 import {
   LfgBoardSettingsSchema,
-  LfgComposerSettingsSchema,
   type LfgBoardSettingsResponse,
-  type LfgComposerSettings,
 } from '@raid-ledger/contract';
 import { handleValidationError } from './validation.util';
 
@@ -63,36 +59,11 @@ export class LfgBoardSettingsController {
    */
   @Get('lfg-board')
   async getSettings(): Promise<LfgBoardSettingsResponse> {
-    const [enabled, channelId, composerEnabled] = await Promise.all([
+    const [enabled, channelId] = await Promise.all([
       getLfgBoardEnabled(this.settingsService),
       getLfgBoardChannelId(this.settingsService),
-      getLfgComposerEnabled(this.settingsService),
     ]);
-    return { enabled, channelId, composerEnabled };
-  }
-
-  /**
-   * ROK-1612 AC6 — flip the pinned composer card's opt-in (default off).
-   *
-   * Persists, then hands the Discord side to `LfgComposerPinService` in the
-   * background: ON pins the card in the board channel now, OFF deletes it (or
-   * strips the forum intro's buttons) now — not on the next bot reconnect.
-   *
-   * @param body - `{ enabled: boolean }`, validated by the contract schema.
-   * @returns The persisted opt-in.
-   */
-  @Put('lfg-board/composer')
-  @HttpCode(HttpStatus.OK)
-  async setComposer(@Body() body: unknown): Promise<LfgComposerSettings> {
-    try {
-      const { enabled } = LfgComposerSettingsSchema.parse(body);
-      await setLfgComposerEnabled(this.settingsService, enabled);
-      this.runInBackground(LFG_BOARD_EVENTS.COMPOSER_TOGGLED, 'lfg-composer');
-      this.logger.log(`LFG composer card ${enabled ? 'enabled' : 'disabled'}`);
-      return { enabled };
-    } catch (error) {
-      handleValidationError(error);
-    }
+    return { enabled, channelId };
   }
 
   /**
