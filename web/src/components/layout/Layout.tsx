@@ -1,4 +1,4 @@
-import { type ReactNode, lazy, Suspense, useState, useCallback, useMemo, useRef } from 'react';
+import { type ReactNode, lazy, Suspense, useState, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -37,6 +37,22 @@ interface LayoutProps {
 }
 
 /**
+ * ROK-1661: a chromeless page has no footer and ends on `--color-backdrop`, so
+ * its root canvas must stay backdrop too, or iPad Safari shows a
+ * `--color-surface` strip past its end. Marks `<html data-chromeless>` while
+ * one renders (`index.css` keys the canvas colour on it); cleared on unmount
+ * and on leaving `/p/*`.
+ */
+function useChromelessCanvas(chromeless: boolean) {
+    useLayoutEffect(() => {
+        if (!chromeless) return;
+        const root = document.documentElement;
+        root.setAttribute('data-chromeless', '');
+        return () => root.removeAttribute('data-chromeless');
+    }, [chromeless]);
+}
+
+/**
  * ROK-1661: the page shell. `min-h-dvh` is only the first-paint / no-JS floor —
  * on a real iPad `100dvh` resolves ~100 CSS px taller than the visible area
  * (ROK-1640), which pushed a short page's footer below the fold. Once mounted
@@ -45,12 +61,15 @@ interface LayoutProps {
  * height change re-renders only this div, not the chrome passed in as children.
  * It is the ONLY element that paints `--color-backdrop`: the root canvas is
  * `--color-surface` and body is transparent (`index.css`), so whatever Safari
- * shows past the document's end reads as footer, not page background.
+ * shows past the document's end reads as footer, not page background. A
+ * chromeless shell has no footer, so there the canvas stays backdrop
+ * (`useChromelessCanvas`).
  * `?vpdebug=1` (remembered until `?vpdebug=0`, `dev/vpdebug-flag.ts`) shows the
  * DEMO_MODE-only viewport readout (`dev/ViewportReadout.tsx`), positioned inside
  * this shell just above the footer, so the shell is `relative` only while it shows.
  */
-function ViewportShell({ children }: LayoutProps) {
+function ViewportShell({ children, chromeless = false }: LayoutProps & { chromeless?: boolean }) {
+    useChromelessCanvas(chromeless);
     const shellHeight = useShellHeight();
     const { search } = useLocation();
     const showReadout = useMemo(() => resolveVpDebug(search), [search]);
@@ -100,7 +119,7 @@ export function Layout({ children }: LayoutProps) {
 
     if (isChromelessPath(pathname)) {
         return (
-            <ViewportShell>
+            <ViewportShell chromeless>
                 <main id="main-content" className="flex-1 flex flex-col">{children}</main>
                 <LiveRegionProvider />
             </ViewportShell>

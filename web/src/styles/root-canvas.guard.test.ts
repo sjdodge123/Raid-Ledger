@@ -11,7 +11,9 @@ import { stripComments } from './wcag-contrast';
  * body's blended over it (images are ignored). A strip of page background showed
  * there under the footer. The canvas must be the footer's --color-surface, and
  * no body rule may set a colour of its own, or it wins; the Layout shell is the
- * only painter of --color-backdrop.
+ * only painter of --color-backdrop. A chromeless /p/* page has no footer and
+ * ends on --color-backdrop, so its canvas (html[data-chromeless], set by
+ * Layout) stays backdrop.
  */
 
 const SRC_ROOT = resolve(__dirname, '..');
@@ -34,6 +36,11 @@ describe('Regression: ROK-1661 — the area past the document end reads as foote
     it('paints the root canvas (html) in --color-surface', () => {
         const htmlRules = rulesOf('index.css').filter((r) => r.selector === 'html');
         expect(htmlRules.some((r) => /background-color\s*:\s*var\(--color-surface\)/.test(r.body))).toBe(true);
+    });
+
+    it('keeps the canvas --color-backdrop on a chromeless /p/* page, which ends on backdrop with no footer', () => {
+        const rules = rulesOf('index.css').filter((r) => r.selector === 'html[data-chromeless]');
+        expect(rules.some((r) => /background-color\s*:\s*var\(--color-backdrop\)/.test(r.body))).toBe(true);
     });
 
     it('leaves every body rule without a background colour', () => {

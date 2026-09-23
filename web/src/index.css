@@ -621,6 +621,13 @@ html {
     background-color: var(--color-surface);
 }
 
+/* ROK-1661: a chromeless /p/* page has no footer and ends on --color-backdrop,
+   so there the canvas stays backdrop too, or the run-out shows a surface strip.
+   Layout.tsx sets the attribute while a chromeless page renders. */
+html[data-chromeless] {
+    background-color: var(--color-backdrop);
+}
+
 html:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
     color-scheme: light;
 }
@@ -639,7 +646,8 @@ html[data-scheme="underwater"] {
    one flat colour: html's background-color with body's blended over it
    (background images don't count). A body colour would win there, so body sets
    none and the area reads as --color-surface, flush with the footer. The Layout
-   shell (Layout.tsx) is the only element that paints --color-backdrop.
+   shell (Layout.tsx) is the only element that paints --color-backdrop (a
+   chromeless page's canvas aside, html[data-chromeless] above).
    No `min-height: 100vh` floor on body / #root either: iOS Safari's `vh` is the
    LARGE viewport, so that floor always made a short page scroll by the
    toolbar's height; the shell floors itself on the visible viewport instead. */
