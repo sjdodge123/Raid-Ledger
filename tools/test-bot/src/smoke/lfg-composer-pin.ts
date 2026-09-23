@@ -3,10 +3,14 @@
  * real Discord pin.
  *
  * On the FORUM surface Discord allows one pinned post per forum, and that slot
- * is the board's intro post. So the composer's `Post an LFG` button rides on
- * the pinned intro post's starter message (`LfgComposerPinService`). This
- * phase asserts both halves of "the operator can see it": the intro post is
- * PINNED, and its starter message carries the composer button.
+ * is meant for the board's intro post. So the composer's `Post an LFG` button
+ * rides on the intro post's starter message (`LfgComposerPinService`). This
+ * phase asserts that THIS env's bot's intro post carries the composer button.
+ *
+ * It does not assert the pin: the CI guild is shared, its forum's one pin slot
+ * belongs to whichever env's bot pinned first, and Discord refuses the rest
+ * (30047). The product logs that and still puts the buttons on its own intro,
+ * so a pin assertion here only measured which env got there first.
  *
  * Bots cannot press another bot's button, so the flow behind the button is
  * covered by the api unit tier; this asserts only that the card is there.
@@ -38,33 +42,36 @@ function customIds(message: Message): string[] {
   );
 }
 
-/** What the board's pinned intro post currently looks like. */
+/** What this env's intro post currently looks like. */
 interface IntroState {
-  /** The pinned intro post's id, or null when no intro post is pinned. */
-  pinnedIntroId: string | null;
+  /** This bot's intro post's id, or null when it owns none yet. */
+  introId: string | null;
+  /** Whether that post holds the forum's one pin — reported, not required. */
+  pinned: boolean;
   /** How many posts carry the intro title — the shared guild holds several. */
   introTitled: number;
-  /** Custom ids on the pinned intro's starter message. */
+  /** Custom ids on the intro's starter message. */
   ids: string[];
 }
 
 /**
- * Read the board's PINNED intro post. The CI guild is shared, so the forum
- * holds one "How this board works" per bot; only the pinned one is the board's
- * (see `pickBoardIntro`). The starter is force-fetched so a cached copy from
+ * Read THIS env's bot's intro post. The CI guild is shared, so the forum holds
+ * one "How this board works" per bot; ownership names ours (see
+ * `pickBoardIntro`). The starter is force-fetched so a cached copy from
  * before the composer's edit cannot mask it.
  */
 async function readIntro(run: Run): Promise<IntroState> {
   const threads = await readForumThreads(forumId(run));
   const intro = pickBoardIntro(threads, INTRO_TITLE);
   const introTitled = threads.filter((t) => t.name === INTRO_TITLE).length;
-  if (!intro) return { pinnedIntroId: null, introTitled, ids: [] };
+  if (!intro) return { introId: null, pinned: false, introTitled, ids: [] };
   const thread = await getGuild().channels.fetch(intro.id);
   const starter = thread?.isThread()
     ? await thread.fetchStarterMessage({ force: true }).catch(() => null)
     : null;
   return {
-    pinnedIntroId: intro.id,
+    introId: intro.id,
+    pinned: intro.pinned,
     introTitled,
     ids: starter ? customIds(starter) : [],
   };
@@ -72,7 +79,7 @@ async function readIntro(run: Run): Promise<IntroState> {
 
 function isComposerReady(state: IntroState): boolean {
   return (
-    state.pinnedIntroId !== null && state.ids.includes(COMPOSER_OPEN_CUSTOM_ID)
+    state.introId !== null && state.ids.includes(COMPOSER_OPEN_CUSTOM_ID)
   );
 }
 
@@ -102,7 +109,7 @@ export async function disableComposer(run: Run): Promise<void> {
 }
 
 /**
- * The board's pinned post carries the composer card's `Post an LFG` button.
+ * This env's intro post carries the composer card's `Post an LFG` button.
  *
  * @param run - The board run, after `enableBoard` + {@link enableComposer}.
  */
@@ -115,7 +122,7 @@ export async function assertComposerPinned(run: Run): Promise<void> {
   } catch {
     const last = await readIntro(run).catch(() => null);
     throw new Error(
-      "ROK-1612 AC1: the LFG board's pinned intro post must carry the " +
+      "ROK-1612 AC1: this env's LFG board intro post must carry the " +
         `composer button "${COMPOSER_OPEN_CUSTOM_ID}" within ` +
         `${String(COMPOSER_READY_MS)}ms of enabling the board; last seen ` +
         `${JSON.stringify(last)} in forum ${forumId(run)}`,
