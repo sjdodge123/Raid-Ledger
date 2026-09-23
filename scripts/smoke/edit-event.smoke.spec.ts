@@ -60,7 +60,7 @@ test.describe('Edit event form (desktop)', () => {
         expect(timeValue).toMatch(/^\d{2}:\d{2}$/);
 
         // Game field should be pre-filled
-        const gameInput = page.getByRole('textbox', { name: 'Game' });
+        const gameInput = page.getByRole('combobox', { name: 'Game', exact: true });
         await expect(gameInput).toBeVisible();
         const gameValue = await gameInput.inputValue();
         expect(gameValue.length).toBeGreaterThanOrEqual(0); // game may be unset in CI
@@ -161,7 +161,7 @@ test.describe('Edit event form (mobile)', () => {
         const timeValue = await timeInput.inputValue();
         expect(timeValue).toMatch(/^\d{2}:\d{2}$/);
 
-        const gameInput = page.getByRole('textbox', { name: 'Game' });
+        const gameInput = page.getByRole('combobox', { name: 'Game', exact: true });
         await expect(gameInput).toBeVisible();
         const gameValue = await gameInput.inputValue();
         expect(gameValue.length).toBeGreaterThanOrEqual(0); // game may be unset in CI

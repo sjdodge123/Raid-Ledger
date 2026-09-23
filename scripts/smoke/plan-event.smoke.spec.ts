@@ -57,7 +57,7 @@ test.describe('Plan event game selection', () => {
         await page.goto('/events/plan');
         await expect(page.getByRole('heading', { name: 'Plan Event', level: 1 })).toBeVisible({ timeout: 15_000 });
 
-        const gameInput = page.getByRole('textbox', { name: 'Game' });
+        const gameInput = page.getByRole('combobox', { name: 'Game', exact: true });
         await expect(gameInput).toBeVisible();
         await expect(gameInput).toHaveAttribute('placeholder', 'Search for a game...');
     });

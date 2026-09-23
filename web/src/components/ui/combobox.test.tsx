@@ -237,3 +237,37 @@ describe('Combobox — IME, external reset, portal target, live region', () => {
         expect(region).toHaveTextContent('Searching…');
     });
 });
+
+describe('Combobox — trailing, openOnFocus, testIds (ROK-1647)', () => {
+    it('renders `trailing` inside the field frame and keeps it interactive', async () => {
+        const onTrail = vi.fn();
+        const { container } = render(<Harness trailing={<button type="button" onClick={onTrail}>Trail</button>} />);
+        const trail = screen.getByRole('button', { name: 'Trail' });
+        expect(container.contains(trail), 'trailing must render inside the combobox wrapper').toBe(true);
+        expect(box().parentElement, 'trailing shares the input\'s adornment frame').toContainElement(trail);
+        await userEvent.click(trail);
+        expect(onTrail).toHaveBeenCalledOnce();
+    });
+
+    it('openOnFocus opens the listbox on focus without an active option', async () => {
+        render(<Harness openOnFocus />);
+        await userEvent.click(box());
+        expect(box(), 'focus alone must open the popup').toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getAllByRole('option')).toHaveLength(3);
+        expect(box(), 'no option is highlighted until the user moves').not.toHaveAttribute('aria-activedescendant');
+    });
+
+    it('stays closed on focus without openOnFocus', async () => {
+        render(<Harness />);
+        await userEvent.click(box());
+        expect(box()).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('testIds land on the input, the popup and every role="option" row', async () => {
+        render(<Harness testIds={{ input: 'in', popup: 'pop', option: 'opt' }} />);
+        expect(box()).toHaveAttribute('data-testid', 'in');
+        await userEvent.type(box(), '{ArrowDown}');
+        expect(screen.getByRole('listbox').parentElement).toHaveAttribute('data-testid', 'pop');
+        expect(screen.getByRole('option', { name: 'Diablo IV' }), 'the option testid must sit on the option row').toHaveAttribute('data-testid', 'opt');
+    });
+});

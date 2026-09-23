@@ -36,7 +36,9 @@ test.describe('Events list', () => {
 
         // Desktop tabs live inside a "hidden md:flex" container.
         // Scope to that container to avoid matching mobile toolbar buttons.
-        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel');
+        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel')
+            // The search box is also bg-panel (ROK-1647 SearchInput); pin the tab group by its buttons.
+            .filter({ has: page.getByRole('button', { name: 'Upcoming' }) });
         await expect(desktopTabs).toBeVisible({ timeout: 10_000 });
 
         const upcomingTab = desktopTabs.getByRole('button', { name: 'Upcoming' });
@@ -65,8 +67,14 @@ test.describe('Events list', () => {
         const searchInput = desktopFilterBar.locator('input[aria-label="Search events"]');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state.
-        await searchInput.fill('xyznonexistent');
+        // Search for a nonsense term — should show empty state. The filter bar
+        // can remount its input while the page settles (ROK-1647 diag: the node
+        // changed identity in 6/8 runs, the lifted value survived); a fill() that
+        // lands mid-remount types into a detached node, so retry until it sticks.
+        await expect(async () => {
+            await searchInput.fill('xyznonexistent');
+            await expect(searchInput).toHaveValue('xyznonexistent', { timeout: 1_000 });
+        }).toPass({ timeout: 10_000 });
         // Wait for the event cards to disappear (filtered out)
         await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
 
@@ -137,11 +145,16 @@ test.describe('Events list — mobile', () => {
         await page.goto('/events');
 
         // Mobile search input is inside the toolbar
-        const searchInput = page.getByRole('textbox', { name: 'Search events' });
+        const searchInput = page.getByRole('searchbox', { name: 'Search events' });
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state
-        await searchInput.fill('xyznonexistent');
+        // Search for a nonsense term — should show empty state. Retry the fill:
+        // the toolbar input can remount while the page settles (pre-existing,
+        // TECH-DEBT-BACKLOG 2026-09-23), and a fill() on the old node is lost.
+        await expect(async () => {
+            await searchInput.fill('xyznonexistent');
+            await expect(searchInput).toHaveValue('xyznonexistent', { timeout: 1_000 });
+        }).toPass({ timeout: 10_000 });
         // Wait for the mobile event cards to disappear (filtered out)
         await expect(page.locator('[data-testid="mobile-event-card"]').first()).not.toBeVisible({ timeout: 10_000 });
 
@@ -393,7 +406,9 @@ test.describe('Regression: ROK-784 — attendance dashboard light mode', () => {
 
         // Navigate to Past events to find a completed event
         await page.goto('/events');
-        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel');
+        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel')
+            // The search box is also bg-panel (ROK-1647 SearchInput); pin the tab group by its buttons.
+            .filter({ has: page.getByRole('button', { name: 'Upcoming' }) });
         await expect(desktopTabs).toBeVisible({ timeout: 10_000 });
         await desktopTabs.getByRole('button', { name: 'Past' }).click();
         await expect(page.getByRole('heading', { name: /Past Events/i })).toBeVisible({ timeout: 10_000 });

@@ -4,12 +4,13 @@ import { PlayerCard } from '../events/player-card';
 import { ROLE_SLOT_COLORS, formatRole } from '../../lib/role-colors';
 import { RoleIcon } from '../shared/RoleIcon';
 import { ModalPlayerRow } from './ModalPlayerRow';
+import { SearchInput } from '../ui/search-input';
 
 /** Search input for filtering unassigned players */
 export function SearchBar({ search, onSearch }: { search: string; onSearch: (v: string) => void }): JSX.Element {
     return (
         <div className="assignment-popup__search-wrapper">
-            <input type="text" value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search by name..." className="assignment-popup__search" autoFocus />
+            <SearchInput value={search} onChange={onSearch} placeholder="Search by name..." label="Search players by name" autoFocus />
         </div>
     );
 }
