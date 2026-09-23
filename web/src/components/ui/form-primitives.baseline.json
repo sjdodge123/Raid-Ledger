@@ -227,7 +227,6 @@
     "pages/admin/discord-overview-page.tsx": 2,
     "pages/admin/ephemeral-voice-section.tsx": 4,
     "pages/admin/general-panel.tsx": 2,
-    "pages/admin/lfg-board-section.tsx": 1,
     "pages/admin/logs-panel.tsx": 4,
     "pages/admin/plugins/PluginCard.tsx": 4,
     "pages/calendar/CalendarGameFilter.tsx": 5,
