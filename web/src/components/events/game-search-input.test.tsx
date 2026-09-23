@@ -19,9 +19,9 @@ const WOW = game(1, 'World of Warcraft');
 const WOWF = game(2, 'World of Warcraft: Forever');
 const HADES = game(3, 'Hades');
 
-function mockResults(games: IgdbGameDto[]): void {
+function mockResults(games: IgdbGameDto[], source = 'igdb'): void {
     vi.mocked(useGameSearch).mockImplementation((q: string) => ({
-        data: q.length >= 2 ? { data: games, meta: { source: 'igdb' } } : undefined,
+        data: q.length >= 2 ? { data: games, meta: { source } } : undefined,
         isLoading: false,
     }) as unknown as ReturnType<typeof useGameSearch>);
 }
@@ -83,9 +83,10 @@ describe('GameSearchInput — keyboard contract (ROK-1647)', () => {
 
     it('picking a different game replaces the selection (the label echo does not clear it)', async () => {
         const spy = vi.fn();
-        render(<Harness spy={spy} initial={WOW} />);
-        // Re-open on the current text and move to the other game without editing.
-        await userEvent.type(box(), '{ArrowDown}{ArrowDown}{Enter}');
+        render(<Harness spy={spy} initial={WOW} suggestions={[HADES, WOWF]} />);
+        // Focus offers the suggestions; move to the other game without editing.
+        await userEvent.click(box());
+        await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}');
         expect(spy, 'the picked game must not be cleared by the label write-back').toHaveBeenLastCalledWith(WOWF);
         expect(screen.getByText(WOWF.name, { selector: 'span.text-success' })).toBeInTheDocument();
     });
@@ -97,6 +98,9 @@ describe('GameSearchInput — keyboard contract (ROK-1647)', () => {
         expect(spy).toHaveBeenLastCalledWith(null);
     });
 
+});
+
+describe('GameSearchInput — behaviour (ROK-1647)', () => {
     it('shows "No games found" for an empty search', async () => {
         mockResults([]);
         render(<Harness spy={vi.fn()} />);
@@ -114,13 +118,51 @@ describe('GameSearchInput — keyboard contract (ROK-1647)', () => {
     });
 });
 
+describe('GameSearchInput — searches only after user input (ROK-1647 MAJOR-1)', () => {
+    const searchedWithEnabled = (): boolean => vi.mocked(useGameSearch).mock.calls.some(([, enabled]) => enabled === true);
+    const LOCAL_NOTE = 'Showing local results (external search unavailable)';
+
+    it('a prefilled game does not search on mount or show the local-results note', () => {
+        mockResults([WOW], 'local');
+        render(<Harness spy={vi.fn()} initial={WOW} />);
+        expect(searchedWithEnabled(), 'a prefilled value must not enable the game search on mount').toBe(false);
+        expect(screen.queryByText(LOCAL_NOTE), 'the note must not show while the popup is closed').not.toBeInTheDocument();
+    });
+
+    it('picking a game stops the search until the next edit', async () => {
+        mockResults([WOW, WOWF], 'local');
+        render(<Harness spy={vi.fn()} />);
+        await userEvent.type(box(), 'Wo');
+        expect(screen.getByText(LOCAL_NOTE)).toBeInTheDocument();
+        await userEvent.keyboard('{ArrowDown}{Enter}');
+        vi.mocked(useGameSearch).mockClear();
+        await userEvent.click(box());
+        expect(searchedWithEnabled(), 'after a pick the search must stay off until the user edits').toBe(false);
+        expect(screen.queryByText(LOCAL_NOTE), 'the note must not show after a pick closed the popup').not.toBeInTheDocument();
+        await userEvent.type(box(), 'x');
+        expect(searchedWithEnabled(), 'the next edit re-enables the search').toBe(true);
+    });
+
+    it('"Clear selection" clears the value, empties the text and refocuses the box', async () => {
+        const spy = vi.fn();
+        render(<Harness spy={spy} initial={HADES} />);
+        await userEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+        expect(spy).toHaveBeenLastCalledWith(null);
+        expect(box()).toHaveValue('');
+        expect(box()).toHaveFocus();
+        expect(screen.queryByRole('listbox'), 'clearing with no suggestions must not open an empty popup').not.toBeInTheDocument();
+    });
+});
+
 describe('PollGameSearch — keeps the smoke test ids', () => {
     it('exposes game-search-input / -results / game-option and picks by keyboard', async () => {
         const spy = vi.fn();
         render(<Harness spy={spy} poll />);
         await userEvent.type(screen.getByTestId('game-search-input'), 'Wo');
         expect(screen.getByTestId('game-search-results')).toBeInTheDocument();
-        expect(screen.getAllByTestId('game-option')).toHaveLength(2);
+        const options = screen.getAllByTestId('game-option');
+        expect(options).toHaveLength(2);
+        expect(options[0], 'game-option must sit on the role="option" row').toHaveAttribute('role', 'option');
         await userEvent.keyboard('{ArrowDown}{Enter}');
         expect(spy).toHaveBeenLastCalledWith(WOW);
     });

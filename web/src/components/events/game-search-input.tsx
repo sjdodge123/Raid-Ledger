@@ -3,13 +3,16 @@
  * the player filter and (via `PollGameSearch`) the scheduling poll.
  *
  * Built on the shared `Combobox` (ROK-1647): ↑/↓ move the highlight, Enter
- * picks, Esc closes. Searches via the debounced `useGameSearch` once the text
- * is 2+ characters; below that it offers `initialSuggestions` when given.
- * Editing the text away from the picked game's name clears the selection.
+ * picks, Esc closes. Searches via the debounced `useGameSearch` only once the
+ * user has typed 2+ characters since mount or the last pick/clear — a
+ * prefilled or just-picked game never fires a search on its own. Otherwise it
+ * offers `initialSuggestions` when given. Editing the text away from the
+ * picked game's name clears the selection.
  */
-import { useRef, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { IgdbGameDto } from '@raid-ledger/contract';
+import { Button } from '../ui/button';
 import { Combobox } from '../ui/combobox';
 import { useGameSearch } from '../../hooks/use-game-search';
 import { coverSrcSetProps } from '../../lib/igdb-image';
@@ -68,37 +71,45 @@ function LocalSourceWarning(): JSX.Element {
 
 function ClearButton({ onClear }: { onClear: () => void }): JSX.Element {
     return (
-        <button type="button" onClick={onClear} aria-label="Clear selection"
-            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-muted hover:text-foreground transition-colors">
+        <Button variant="ghost" iconOnly aria-label="Clear selection" onClick={onClear}>
             <XMarkIcon className="w-5 h-5" aria-hidden="true" />
-        </button>
+        </Button>
     );
 }
 
 function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGameDto | null) => void, initialSuggestions?: IgdbGameDto[]) {
     const [query, setQuery] = useState(value?.name ?? '');
+    // True once the user edits the text; false on mount and after a pick or
+    // clear, so a prefilled / picked name never searches by itself (ROK-1647).
+    const [engaged, setEngaged] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     // The Combobox writes the picked label back through onInputChange right
     // after onChange; remember it so that echo doesn't clear the new pick.
     const pickedLabel = useRef<string | null>(null);
-    const isQuery = query.length >= 2;
+    const searching = engaged && query.length >= 2;
     // Defensive read: prod always returns a useQuery result, but a bare
     // `vi.fn()` mock (per-row admin forms, ROK-1416) can resolve undefined.
-    const search = useGameSearch(query, isQuery);
+    const search = useGameSearch(query, searching);
     const hasSuggestions = !!initialSuggestions?.length;
-    const pick = (game: IgdbGameDto | null): void => { pickedLabel.current = game?.name ?? null; onChange(game); };
+    const pick = (game: IgdbGameDto | null): void => { pickedLabel.current = game?.name ?? null; setEngaged(false); onChange(game); };
     const type = (text: string): void => {
         const echo = pickedLabel.current === text;
         pickedLabel.current = null;
         setQuery(text);
-        if (!echo && value && text !== value.name) onChange(null);
+        if (echo) return;
+        setEngaged(true);
+        if (value && text !== value.name) onChange(null);
     };
-    const clear = (): void => { onChange(null); setQuery(''); inputRef.current?.focus(); };
+    // Removing the clear button (`trailing`) remounts the input, so refocus
+    // after that commit — a synchronous focus() would land on the old node.
+    const [refocus, setRefocus] = useState(false);
+    useEffect(() => { if (refocus) { setRefocus(false); inputRef.current?.focus(); } }, [refocus]);
+    const clear = (): void => { setEngaged(false); onChange(null); setQuery(''); setRefocus(true); };
     return {
-        query, inputRef, isQuery, hasSuggestions, pick, type, clear,
-        options: isQuery ? (search?.data?.data ?? []) : (initialSuggestions ?? []),
-        loading: isQuery && (search?.isLoading ?? false),
-        localSource: isQuery && search?.data?.meta?.source === 'local',
+        inputRef, searching, hasSuggestions, pick, type, clear, query,
+        options: searching ? (search?.data?.data ?? []) : (initialSuggestions ?? []),
+        loading: searching && (search?.isLoading ?? false),
+        localSource: searching && search?.data?.meta?.source === 'local',
     };
 }
 
@@ -113,14 +124,14 @@ export function GameSearchInput({ value, onChange, error, initialSuggestions, id
                 ref={inputRef} id={id} label="Game" autoFocus={autoFocus} placeholder="Search for a game..."
                 options={s.options} getKey={(g) => String(g.id)} getLabel={(g) => g.name}
                 value={value} onChange={s.pick} inputValue={s.query} onInputChange={s.type}
-                loading={s.loading} loadingText="Searching..." emptyText={s.isQuery ? 'No games found' : 'Type to search...'}
-                openOnFocus={s.isQuery || s.hasSuggestions} invalid={!!error}
-                testIds={{ input: testIds?.input, popup: testIds?.popup }}
+                loading={s.loading} loadingText="Searching..." emptyText={s.searching ? 'No games found' : 'Type to search...'}
+                openOnFocus={s.searching || s.hasSuggestions} invalid={!!error}
+                testIds={testIds}
                 trailing={value ? <ClearButton onClear={s.clear} /> : undefined}
                 renderOption={(g) => (
                     <>
                         <Cover game={g} w={40} h={48} />
-                        <span data-testid={testIds?.option} className="text-foreground font-medium truncate">{g.name}</span>
+                        <span className="text-foreground font-medium truncate">{g.name}</span>
                     </>
                 )}
             />
