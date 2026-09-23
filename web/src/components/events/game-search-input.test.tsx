@@ -120,6 +120,7 @@ describe('GameSearchInput — behaviour (ROK-1647)', () => {
 
 describe('GameSearchInput — searches only after user input (ROK-1647 MAJOR-1)', () => {
     const searchedWithEnabled = (): boolean => vi.mocked(useGameSearch).mock.calls.some(([, enabled]) => enabled === true);
+    const lastEnabled = (): boolean | undefined => vi.mocked(useGameSearch).mock.lastCall?.[1];
     const LOCAL_NOTE = 'Showing local results (external search unavailable)';
 
     it('a prefilled game does not search on mount or show the local-results note', () => {
@@ -135,12 +136,12 @@ describe('GameSearchInput — searches only after user input (ROK-1647 MAJOR-1)'
         await userEvent.type(box(), 'Wo');
         expect(screen.getByText(LOCAL_NOTE)).toBeInTheDocument();
         await userEvent.keyboard('{ArrowDown}{Enter}');
-        vi.mocked(useGameSearch).mockClear();
+        expect(lastEnabled(), 'after a pick the search must be switched off').toBe(false);
         await userEvent.click(box());
-        expect(searchedWithEnabled(), 'after a pick the search must stay off until the user edits').toBe(false);
+        expect(lastEnabled(), 'refocusing the picked game must not switch it back on').toBe(false);
         expect(screen.queryByText(LOCAL_NOTE), 'the note must not show after a pick closed the popup').not.toBeInTheDocument();
         await userEvent.type(box(), 'x');
-        expect(searchedWithEnabled(), 'the next edit re-enables the search').toBe(true);
+        expect(lastEnabled(), 'the next edit re-enables the search').toBe(true);
     });
 
     it('"Clear selection" clears the value, empties the text and refocuses the box', async () => {
