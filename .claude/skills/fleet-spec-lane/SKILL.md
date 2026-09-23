@@ -108,6 +108,13 @@ column** · per-lane file lists **with counted-line budgets** · ACs each tracea
 
 State the **tier and gate** explicitly. A migration or infra file escalates the gate; say so.
 
+## Design system
+
+If the story touches UI: cite the `docs/design-system.md` sections and inventory components (§3) the spec
+reuses, and list any new pattern explicitly (`New pattern: <what> — <why nothing in the inventory fits>`).
+A spec that invents UI without checking the inventory first ships the exact silent-divergence failure the
+doc exists to stop.
+
 ## Constraints every Raid-Ledger spec must carry
 
 - **`ts-jest` does not typecheck here.** Require `tsc --noEmit -p api/tsconfig.json` from the repo root
