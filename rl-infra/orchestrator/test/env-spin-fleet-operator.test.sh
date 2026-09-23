@@ -61,7 +61,8 @@ JSON
 
     FO_APP_EXISTS="false"
     FO_PG_EXISTS="false"
-    export FO_APP_EXISTS FO_PG_EXISTS
+    FO_APP_ENV=""
+    export FO_APP_EXISTS FO_PG_EXISTS FO_APP_ENV
 
     FO_STUB_DIR="$RL_STATE_DIR/stub-bin"
     mkdir -p "$FO_STUB_DIR"
@@ -70,6 +71,12 @@ JSON
 echo "$*" >> "$RL_STATE_DIR/docker-calls.log"
 case "$1" in
     inspect)
+        # ROK-1537: env-spin reads the reused container's env to report
+        # operator_admin on the idempotent path. FO_APP_ENV is that env.
+        if [[ "$*" == *".Config.Env"* ]]; then
+            [[ -n "${FO_APP_ENV:-}" ]] && printf '%s\n' "$FO_APP_ENV"
+            exit 0
+        fi
         target=""
         for a in "$@"; do
             case "$a" in
@@ -109,7 +116,7 @@ STUB
 
 fo_teardown() {
     unset RL_ENVS_FILE RL_CLAIMS_FILE RL_AUDIT_LOG RL_TRAEFIK_CONF_D RL_OPERATOR \
-          RL_ENV_SETTINGS_OVERLAY FO_STUB_DIR FO_APP_EXISTS FO_PG_EXISTS \
+          RL_ENV_SETTINGS_OVERLAY FO_STUB_DIR FO_APP_EXISTS FO_PG_EXISTS FO_APP_ENV \
           RL_OPERATOR_DISCORD_ID 2>/dev/null || true
     test_teardown
 }
@@ -124,6 +131,13 @@ run_spin() {
 # be satisfied by the variable appearing on some unrelated docker call.
 bootstrap_exec_line() {
     grep 'bootstrap-admin.js' "$RL_STATE_DIR/docker-calls.log" 2>/dev/null \
+        | tail -1 || true
+}
+
+# The app container's `docker run` line (never the PG one), so ROK-1537's
+# marker can't be satisfied by an unrelated call.
+app_run_line() {
+    grep -E '^run .*--name rl-env-[a-z0-9-]+-allinone' "$RL_STATE_DIR/docker-calls.log" 2>/dev/null \
         | tail -1 || true
 }
 
@@ -195,9 +209,69 @@ test_env_container_sets_demo_mode() {
     fo_teardown
 }
 
+# --- ROK-1537: first-login marker + id on the app container ------------------
+
+test_fresh_spin_sets_marker_and_id() {
+    CURRENT_TEST_NAME="ROK-1537: fresh spin passes the first-login marker and the operator id to the app"
+    fo_setup
+    export RL_OPERATOR_DISCORD_ID="$OPERATOR_DISCORD_ID"
+    run_spin fresh3
+    assert_exit_code "$FO_RC" "0" "fresh spin should succeed"
+    local line
+    line=$(app_run_line)
+    assert_contains "$line" "FLEET_FIRST_DISCORD_LOGIN_ADMIN=true" \
+        "the app container must carry the first-login marker the API gates on"
+    assert_contains "$line" "FLEET_ADMIN_DISCORD_ID=$OPERATOR_DISCORD_ID" \
+        "the app container must carry the configured id so the API skips first-login promotion"
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "configured" \
+        "an id on the VM reports operator_admin=configured"
+    fo_teardown
+}
+
+test_fresh_spin_unset_id_reports_first_login() {
+    CURRENT_TEST_NAME="ROK-1537: fresh spin without an id → marker set, id empty, operator_admin=first-login"
+    fo_setup
+    run_spin fresh4
+    assert_exit_code "$FO_RC" "0" "fresh spin should succeed"
+    local line
+    line=$(app_run_line)
+    assert_contains "$line" "FLEET_FIRST_DISCORD_LOGIN_ADMIN=true" \
+        "the marker is passed whether or not an id is configured"
+    assert_contains "$line" "FLEET_ADMIN_DISCORD_ID= " \
+        "the id flag is present but empty on an unconfigured VM"
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "first-login" \
+        "no id + marker reports operator_admin=first-login"
+    fo_teardown
+}
+
+test_idempotent_reports_from_container_env() {
+    CURRENT_TEST_NAME="ROK-1537: idempotent re-spin reads operator_admin from the reused container"
+    fo_setup
+    export FO_APP_EXISTS="true" FO_PG_EXISTS="true"
+    jq -n '[{slug: "old", slot: 1, created_at: "2026-09-03T00:00:00Z"}]' > "$RL_ENVS_FILE"
+    run_spin old
+    assert_eq "$(jq -r '.idempotent' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "true" \
+        "should take the idempotent path"
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "none" \
+        "a pre-ROK-1537 container (no marker) with no id must report none, not first-login"
+    assert_excludes "$(app_run_line)" "allinone" "the idempotent path must not re-run the app container"
+    export FO_APP_ENV=$'DEMO_MODE=true\nFLEET_FIRST_DISCORD_LOGIN_ADMIN=true'
+    run_spin old
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "first-login" \
+        "a reused container that carries the marker reports first-login"
+    export RL_OPERATOR_DISCORD_ID="$OPERATOR_DISCORD_ID"
+    run_spin old
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "configured" \
+        "a configured id wins on the idempotent path (bootstrap upserts it there too)"
+    fo_teardown
+}
+
 run_test "p6-fresh-threads-id" test_fresh_spin_threads_operator_id
 run_test "p6-idempotent-threads-id" test_idempotent_respin_threads_operator_id
 run_test "p6-unset-threads-empty" test_unset_operator_id_threads_empty
 run_test "p6-demo-mode-gate-present" test_env_container_sets_demo_mode
+run_test "1537-fresh-marker-and-id" test_fresh_spin_sets_marker_and_id
+run_test "1537-fresh-unset-first-login" test_fresh_spin_unset_id_reports_first_login
+run_test "1537-idempotent-reads-container" test_idempotent_reports_from_container_env
 
 print_test_summary
