@@ -17,6 +17,7 @@ import { SemanticTokensSection } from './semantic-tokens-section';
 import { HeroSection } from './hero-section';
 import { WeekStripSection } from './week-strip-section';
 import { GroupMarksSection } from './group-marks-section';
+import { FormsSection } from './forms-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
 import { DualFamily } from './dual-family';
@@ -26,6 +27,7 @@ const NAV = [
     { id: 'semantic', label: 'Semantic' },
     { id: 'accents', label: 'Accents' },
     { id: 'primitives', label: 'Primitives' },
+    { id: 'forms', label: 'Forms' },
     { id: 'overlays', label: 'Overlays' },
     { id: 'filtering', label: 'Filtering' },
     { id: 'hero', label: 'Hero' },
@@ -68,6 +70,7 @@ function Sections(): JSX.Element {
             <SemanticTokensSection />
             <AccentsSection />
             <PrimitivesSection />
+            <FormsSection />
             <OverlaysSection />
             <FilteringSection />
             <HeroSection />
