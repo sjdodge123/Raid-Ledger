@@ -6,6 +6,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { WantToPlayProvider } from '../../hooks/use-want-to-play-batch';
 import type { GameDetailDto } from '@raid-ledger/contract';
 import { UnifiedGameCard } from '../games/unified-game-card';
+import { SearchInput } from '../ui/search-input';
 
 /** Genre filter chips for narrowing discover results */
 const GENRE_CHIPS = [
@@ -68,25 +69,11 @@ function flattenDiscoverGames(
     return games;
 }
 
-function GameSearchInput({
-    value,
-    onChange,
-}: {
-    value: string;
-    onChange: (v: string) => void;
-}) {
+/** The grid filter — a search box, not a picker: the results are the card grid below. */
+function GameSearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
     return (
-        <div className="relative max-w-md mx-auto">
-            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-                type="text"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder="Search for a game..."
-                className="w-full pl-10 pr-4 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-            />
+        <div className="max-w-md mx-auto">
+            <SearchInput value={value} onChange={onChange} label="Search games" placeholder="Search for a game..." />
         </div>
     );
 }

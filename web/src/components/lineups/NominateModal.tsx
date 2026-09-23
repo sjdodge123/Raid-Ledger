@@ -4,6 +4,7 @@
  */
 import { type JSX, useState, useCallback, useEffect, useRef } from 'react';
 import { Modal } from '../ui/modal';
+import { SearchInput } from '../ui/search-input';
 import { useGameSearch } from '../../hooks/use-game-search';
 import { useNominateGame } from '../../hooks/use-lineups';
 import { extractSteamAppId } from '../../hooks/use-steam-paste';
@@ -37,18 +38,13 @@ interface NominateModalProps {
 /** Search-result row shape, incl. the ROK-1400 co-op capacity fields. */
 type SearchResultGame = { id: number; name: string; coverUrl?: string | null } & CoopCapacityFields;
 
-/** Search input for finding games. */
-function SearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
+/** Search input for finding games (the results list renders inline below it). */
+function GameQueryInput({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
     return (
-        <input
-            type="text"
-            aria-label="Search games"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Search by name or paste a Steam store URL"
-            className="w-full px-4 py-2.5 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 mb-3"
-            autoFocus
-        />
+        <div className="mb-3">
+            <SearchInput value={value} onChange={onChange} label="Search games"
+                placeholder="Search by name or paste a Steam store URL" autoFocus />
+        </div>
     );
 }
 
@@ -256,7 +252,7 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, part
                 />
             ) : (
                 <>
-                    <SearchInput value={query} onChange={setQuery} />
+                    <GameQueryInput value={query} onChange={setQuery} />
                     {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
                     {results.length > 0 && (
                         <SearchResults

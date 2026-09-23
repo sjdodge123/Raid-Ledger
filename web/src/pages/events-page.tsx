@@ -13,6 +13,7 @@ import { EventPlansList } from "../components/events/event-plans-list";
 import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentinel";
 import { PullToRefresh } from "../components/ui/pull-to-refresh";
 import { FAB } from "../components/ui/fab";
+import { SearchInput } from "../components/ui/search-input";
 import { SchedulingBanner } from "../components/events/SchedulingBanner";
 import { StandalonePollBanner } from "../components/scheduling/standalone-poll-banner";
 import { LfgSummaryBanner } from "../components/events/lfg-summary-banner";
@@ -183,12 +184,8 @@ function DesktopTabButtons({ activeTab, onTabChange }: { activeTab: EventsTab; o
 
 function DesktopSearchInput({ searchQuery, onSearchChange }: { searchQuery: string; onSearchChange: (q: string) => void }) {
   return (
-    <div className="relative flex-1 max-w-xs">
-      <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-      </svg>
-      <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} placeholder="Search events..." aria-label="Search events"
-        className="w-full pl-10 pr-4 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+    <div className="flex-1 max-w-xs">
+      <SearchInput value={searchQuery} onChange={onSearchChange} placeholder="Search events..." label="Search events" fieldSize="sm" />
     </div>
   );
 }

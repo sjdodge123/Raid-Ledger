@@ -324,7 +324,7 @@ test.describe('ROK-1005: Create flow regression — no content browser without e
         await expect(page.getByRole('heading', { name: 'Create Event', level: 1 })).toBeVisible({ timeout: 15_000 });
 
         // Search for WoW in the game input
-        const gameInput = page.getByRole('textbox', { name: 'Game' });
+        const gameInput = page.getByRole('combobox', { name: 'Game', exact: true });
         await gameInput.click();
         await gameInput.pressSequentially('World of Warcraft', { delay: 30 });
 

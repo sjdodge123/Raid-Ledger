@@ -1,4 +1,5 @@
-import { MagnifyingGlassIcon, FunnelIcon } from '@heroicons/react/24/outline';
+import { FunnelIcon } from '@heroicons/react/24/outline';
+import { SearchInput } from '../ui/search-input';
 import { MobilePageToolbar } from '../layout/mobile-page-toolbar';
 
 interface PlayersMobileToolbarProps {
@@ -15,16 +16,8 @@ export function PlayersMobileToolbar({ searchQuery, onSearchChange, hasActiveFil
     return (
         <MobilePageToolbar aria-label="Players search">
             <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-                    <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={(e) => onSearchChange(e.target.value)}
-                        placeholder="Search players..."
-                        aria-label="Search players"
-                        className="w-full pl-10 pr-4 py-2.5 bg-panel/50 border border-edge rounded-lg text-base lg:text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-success/80 focus:outline-none"
-                    />
+                <div className="flex-1">
+                    <SearchInput value={searchQuery} onChange={onSearchChange} placeholder="Search players..." label="Search players" />
                 </div>
                 {onFilterToggle && (
                     <MobileFilterButton hasActive={hasActiveFilters} onClick={onFilterToggle} />
