@@ -24,6 +24,9 @@ import { GamesFilterPanel } from "./games/games-filter-panel";
 import { useGamesFilterCount } from "./games/use-games-filters";
 import { applyCoopFilters, hasAnyCoopData, EMPTY_COOP_FILTERS, type CoopFilterState } from "./games/coop-filter.helpers";
 import { useCoopFilterState } from "./games/use-coop-filter-state";
+import { gamesResultCount, formatGamesCount } from "./games/games-result-count";
+import { useMediaQuery } from "../hooks/use-media-query";
+import { DESKTOP_MQ } from "../lib/breakpoints";
 import { useLibraryFilterParams } from "./games/use-library-filter-params";
 import { applyLibraryFilters, type LibraryFilterState } from "./games/library-filter.helpers";
 import { DiscoverContent, type PricingMap } from "./games-page-discover";
@@ -150,7 +153,7 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
   return (
     <LfgGroupsProvider>
       <WantToPlayProvider gameIds={tileGameIds}>
-        <DiscoverFilters state={state} data={data} />
+        <DiscoverFilters state={state} data={data} isLfgOnly={isLfgOnly} />
         {isLfgOnly ? (
           <LfgLookingGrid />
         ) : data.isSearching ? (
@@ -168,11 +171,12 @@ function DiscoverTab({ state, data }: { state: ReturnType<typeof useGamesPageSta
  * Search + the one filter entry (ROK-1659). The Filters FAB stays up while
  * searching — only the genre group turns off, since search skips genres.
  */
-function DiscoverFilters({ state, data }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData> }): JSX.Element {
-  const activeCount = useGamesFilterCount(data.effectiveCoopFilters);
+function DiscoverFilters({ state, data, isLfgOnly }: { state: ReturnType<typeof useGamesPageState>; data: ReturnType<typeof useGamesData>; isLfgOnly: boolean }): JSX.Element {
+  const activeCount = useGamesFilterCount(data.effectiveCoopFilters, data.isSearching);
+  const resultCount = gamesResultCount({ ...data, isLfgOnly });
   return (
     <>
-      <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden}>
+      <SearchBar searchQuery={state.searchQuery} onSearchChange={state.setSearchQuery} isHeaderHidden={state.isHeaderHidden} resultCount={resultCount}>
         <FilterEntryTrigger activeCount={activeCount} isOpen={state.filtersOpen} onOpenChange={state.setFiltersOpen} />
       </SearchBar>
       <div className={state.filtersOpen ? 'lg:-mt-2 lg:mb-6' : undefined}>
@@ -186,7 +190,7 @@ function DiscoverFilters({ state, data }: { state: ReturnType<typeof useGamesPag
 
 function GamesHeader({ activeTab }: { activeTab: GamesTab }): JSX.Element {
   return (
-    <div className="hidden md:block mb-6">
+    <div className="hidden lg:block mb-6">
       <h1 className="text-3xl font-bold text-foreground">Game Library</h1>
       <p className="text-muted mt-1">
         {activeTab === "manage" ? "Search, remove, and manage cached games" : "Discover games, see what your community is playing, and find live streams"}
@@ -195,6 +199,8 @@ function GamesHeader({ activeTab }: { activeTab: GamesTab }): JSX.Element {
   );
 }
 
+// Stays at `md:` (not `lg:`) on purpose: the phone Discover/Manage switch lives in
+// `MobilePageToolbar`, which is `md:hidden`, so this is the only Manage entry at 768–1023px.
 function AdminTabToggle({ canManage, activeTab, onTabChange }: { canManage: boolean; activeTab: GamesTab; onTabChange: (tab: GamesTab) => void }): JSX.Element | null {
   if (!canManage) return null;
   return (
@@ -209,17 +215,26 @@ function AdminTabToggle({ canManage, activeTab, onTabChange }: { canManage: bool
   );
 }
 
-function SearchBar({ searchQuery, onSearchChange, isHeaderHidden, children }: { searchQuery: string; onSearchChange: (q: string) => void; isHeaderHidden: boolean; children?: ReactNode }): JSX.Element {
+// Sticky below 1024px (phone + tablet, the FAB layout). Phones sit under the header (64) and the
+// Discover/Manage toolbar (~76) — 75 once the header scrolls away. At 768–1023 that toolbar is
+// hidden and the header never hides, so the bar sits right under the header (`md:top-16`).
+const SEARCH_BAR_CLASS = 'sticky z-10 bg-surface/95 backdrop-blur-sm pt-2 pb-4 -mx-1 px-1 mb-6 transition-[top] duration-300 ease-in-out md:top-16 '
+  + 'lg:static lg:z-auto lg:bg-transparent lg:backdrop-blur-none lg:pt-0 lg:pb-0 lg:mx-0 lg:px-0';
+
+function SearchBar({ searchQuery, onSearchChange, isHeaderHidden, resultCount, children }: { searchQuery: string; onSearchChange: (q: string) => void; isHeaderHidden: boolean; resultCount: number | null; children?: ReactNode }): JSX.Element {
+  const isDesktop = useMediaQuery(DESKTOP_MQ);
+  const hasCount = resultCount !== null;
   return (
-    <div className="sticky z-10 bg-surface/95 backdrop-blur-sm pt-2 pb-4 -mx-1 px-1 md:static md:z-auto md:bg-transparent md:backdrop-blur-none md:pt-0 md:pb-0 md:mx-0 md:px-0 mb-6"
-      style={{ top: isHeaderHidden ? 75 : 140, transition: 'top 300ms ease-in-out' }}>
+    <div className={`${SEARCH_BAR_CLASS} ${isHeaderHidden ? 'top-[75px]' : 'top-[140px]'}`}>
       <div className="flex items-center gap-3">
         <div className="flex-1 min-w-0">
           <SearchInput value={searchQuery} onChange={onSearchChange} maxLength={MAX_SEARCH_QUERY_LENGTH}
             placeholder="Search games..." label="Search games" />
         </div>
         {children}
+        {hasCount && isDesktop && <span data-testid="games-result-count" className="text-sm text-muted whitespace-nowrap">{formatGamesCount(resultCount)}</span>}
       </div>
+      {hasCount && !isDesktop && <p data-testid="games-result-count" className="mt-2 text-xs text-muted">{formatGamesCount(resultCount)}</p>}
     </div>
   );
 }

@@ -16,12 +16,14 @@ const FILTER_PARAMS = ['lfg', 'players', 'owners', 'genres'] as const;
  * Active filters for the badge: LFG, players, owners (1 each), one per selected
  * genre, plus the co-op predicates the page is actually applying (a dormant
  * page passes `EMPTY_COOP_FILTERS`, so a restored-but-hidden filter never counts).
+ * Genres do not count while searching: search skips them (the group is greyed
+ * out), so they are not filtering anything the user can see.
  */
-export function useGamesFilterCount(effectiveCoopFilters: CoopFilterState): number {
+export function useGamesFilterCount(effectiveCoopFilters: CoopFilterState, isSearching: boolean): number {
     const { isLfgOnly } = useLfgFilterParam();
     const { playersFilter, minOwners, selectedGenres } = useLibraryFilterParams();
     return (isLfgOnly ? 1 : 0) + (playersFilter !== null ? 1 : 0) + (minOwners !== null ? 1 : 0)
-        + selectedGenres.size + countActiveCoopFilters(effectiveCoopFilters);
+        + (isSearching ? 0 : selectedGenres.size) + countActiveCoopFilters(effectiveCoopFilters);
 }
 
 /** "Clear all": drops every filter param in ONE URL write (leaving `q`) and resets co-op. */
