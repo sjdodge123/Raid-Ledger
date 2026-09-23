@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AiSuggestionSchema } from '@raid-ledger/contract';
 
 export const LinkDiscordSchema = z.object({
   userId: z.number().int().positive(),
@@ -235,4 +236,21 @@ export const RevokeChannelPermsSchema = z.object({
 /** Body for `/admin/test/backup/simulate-corruption` (ROK-1160 D9). */
 export const SimulateBackupCorruptionSchema = z.object({
   mode: z.enum(['truncate', 'garbage']),
+});
+
+/**
+ * Body for `/admin/test/ai-suggestions/seed` (ROK-1110).
+ *
+ * Reuses the contract's `AiSuggestionSchema` verbatim so a fixture can
+ * never drift from the DTO the real LLM pipeline enriches and stores —
+ * a seeded payload is byte-identical in shape to a generated one.
+ */
+export const SeedAiSuggestionsSchema = z.object({
+  lineupId: z.number().int().positive(),
+  suggestions: z.array(AiSuggestionSchema).min(1).max(10),
+});
+
+/** Body for `/admin/test/ai-suggestions/clear` (ROK-1110). */
+export const ClearAiSuggestionsSchema = z.object({
+  lineupId: z.number().int().positive(),
 });
