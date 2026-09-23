@@ -26,6 +26,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
+import { VersionCheckService } from '../version/version-check.service';
 import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
 import { parseDemoBody } from './demo-test.utils';
 
@@ -54,7 +55,10 @@ const FIELD_KEYS: Array<[keyof SeedBody, SettingKey]> = [
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class DemoTestVersionController {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly versionCheck: VersionCheckService,
+  ) {}
 
   private async assertDemoMode(): Promise<void> {
     if (process.env.DEMO_MODE !== 'true') {
@@ -80,10 +84,25 @@ export class DemoTestVersionController {
       else await this.settings.set(key, String(value));
       seeded.push(key);
     }
+    if (parsed.fixesAvailable !== undefined) await this.stampFixesSha();
     await this.settings.set(
       SETTING_KEYS.VERSION_CHECK_LAST_RUN,
       new Date().toISOString(),
     );
     return { success: true, seeded };
+  }
+
+  /**
+   * GET /admin/update-status only reports the fixes count when it was computed
+   * for the running build, so stamp the seeded count with the running sha —
+   * the same short form VersionCheckService.storeBuildResult writes.
+   */
+  private async stampFixesSha(): Promise<void> {
+    const runningSha = this.versionCheck.getRunningCommitSha();
+    if (runningSha === null) {
+      await this.settings.delete(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA);
+    } else {
+      await this.settings.set(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA, runningSha);
+    }
   }
 }

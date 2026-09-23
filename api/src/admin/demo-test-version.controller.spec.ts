@@ -4,6 +4,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { DemoTestVersionController } from './demo-test-version.controller';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { VersionController } from '../version/version.controller';
 
 function makeSettings(demoMode = true) {
   return {
@@ -13,12 +14,40 @@ function makeSettings(demoMode = true) {
   };
 }
 
-function makeController(settings: ReturnType<typeof makeSettings>) {
+type Ctor = ConstructorParameters<typeof DemoTestVersionController>;
+
+const RUNNING_SHA = '74b92a0';
+
+function makeVersionCheck(runningSha: string | null = RUNNING_SHA) {
+  return {
+    getVersion: jest.fn().mockReturnValue('1.0.0'),
+    getRunningCommitSha: jest.fn().mockReturnValue(runningSha),
+  };
+}
+
+function makeController(settings: object, versionCheck = makeVersionCheck()) {
   return new DemoTestVersionController(
-    settings as unknown as ConstructorParameters<
-      typeof DemoTestVersionController
-    >[0],
+    settings as unknown as Ctor[0],
+    versionCheck as unknown as Ctor[1],
   );
+}
+
+/** Settings mock backed by a real map, so a seed can be read back. */
+function makeStoreSettings() {
+  const store = new Map<string, string>();
+  return {
+    store,
+    getDemoMode: jest.fn().mockResolvedValue(true),
+    get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+    set: jest.fn((key: string, value: string) => {
+      store.set(key, value);
+      return Promise.resolve();
+    }),
+    delete: jest.fn((key: string) => {
+      store.delete(key);
+      return Promise.resolve();
+    }),
+  };
 }
 
 describe('DemoTestVersionController — POST /admin/test/seed-update-status', () => {
@@ -86,5 +115,47 @@ describe('DemoTestVersionController — POST /admin/test/seed-update-status', ()
     await expect(
       makeController(settings).seedUpdateStatus({ fixesAvailable: 3 }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});
+
+describe('DemoTestVersionController — seeded fixes reach GET /admin/update-status', () => {
+  const originalDemoMode = process.env.DEMO_MODE;
+
+  beforeEach(() => {
+    process.env.DEMO_MODE = 'true';
+  });
+
+  afterEach(() => {
+    if (originalDemoMode === undefined) delete process.env.DEMO_MODE;
+    else process.env.DEMO_MODE = originalDemoMode;
+  });
+
+  it('a seeded fixes count is visible on GET /admin/update-status', async () => {
+    const settings = makeStoreSettings();
+    const versionCheck = makeVersionCheck();
+    await makeController(settings, versionCheck).seedUpdateStatus({
+      fixesAvailable: 3,
+    });
+
+    const status = await new VersionController(
+      versionCheck as unknown as ConstructorParameters<
+        typeof VersionController
+      >[0],
+      settings as unknown as ConstructorParameters<typeof VersionController>[1],
+    ).getUpdateStatus();
+
+    expect(status.fixesAvailable).toBe(3);
+    expect(settings.store.get(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA)).toBe(
+      RUNNING_SHA,
+    );
+  });
+
+  it('does not touch the computed-for sha when fixesAvailable is omitted', async () => {
+    const settings = makeStoreSettings();
+    settings.store.set(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA, 'old1234');
+    await makeController(settings).seedUpdateStatus({ updateAvailable: true });
+    expect(settings.store.get(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA)).toBe(
+      'old1234',
+    );
   });
 });
