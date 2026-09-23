@@ -278,6 +278,8 @@ Two optional entries in that file are worth setting now:
   Discord OAuth lands you as an admin instead of an ordinary member. Fleet-only
   by construction: bootstrap-admin refuses to promote unless the variable is set
   **and** `DEMO_MODE === 'true'`, and the production image sets neither.
+  A value that is not digits-only is ignored (env-spin warns once) and the
+  env falls back to promoting the first Discord login instead.
   **If you leave it unset (ROK-1537),** env-spin still passes
   `FLEET_FIRST_DISCORD_LOGIN_ADMIN=true` to the app container, and the **first
   real Discord login** on each fresh env is promoted to admin instead. That is

@@ -276,6 +276,52 @@ test_idempotent_reports_from_container_env() {
     fo_teardown
 }
 
+# --- Codex P2: a malformed id is treated as unset -----------------------------
+
+MALFORMED_DISCORD_ID="not-a-snowflake-42"
+
+test_malformed_id_falls_back_to_first_login() {
+    CURRENT_TEST_NAME="Codex P2: malformed RL_OPERATOR_DISCORD_ID → empty id, first-login, one warning"
+    fo_setup
+    export RL_OPERATOR_DISCORD_ID="$MALFORMED_DISCORD_ID"
+    local err_file="$RL_STATE_DIR/spin-stderr.log"
+    FO_OUT=$(bash "$ENV_SPIN_BIN" --slug badid1 2>"$err_file")
+    FO_RC=$?
+    assert_exit_code "$FO_RC" "0" "a malformed id must not fail the spin"
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "first-login" \
+        "a malformed id bootstrap-admin rejects must not report configured"
+    assert_contains "$(app_run_line)" "FLEET_ADMIN_DISCORD_ID= " \
+        "the app container gets an empty id so the API keeps first-login promotion on"
+    assert_excludes "$(cat "$RL_STATE_DIR/docker-calls.log" 2>/dev/null)" "$MALFORMED_DISCORD_ID" \
+        "the malformed value reaches no docker call"
+    local err
+    err=$(cat "$err_file" 2>/dev/null)
+    assert_eq "$(grep -c 'RL_OPERATOR_DISCORD_ID is not a Discord snowflake' "$err_file" 2>/dev/null)" "1" \
+        "exactly one stderr warning names the problem"
+    assert_excludes "$err" "$MALFORMED_DISCORD_ID" "the warning never echoes the value"
+    fo_teardown
+}
+
+test_malformed_id_idempotent_path() {
+    CURRENT_TEST_NAME="Codex P2: idempotent re-spin applies the snowflake rule to VM and container ids"
+    fo_setup
+    export FO_APP_EXISTS="true" FO_PG_EXISTS="true"
+    jq -n '[{slug: "oldbad", slot: 1, created_at: "2026-09-03T00:00:00Z"}]' > "$RL_ENVS_FILE"
+    export RL_OPERATOR_DISCORD_ID="$MALFORMED_DISCORD_ID"
+    export FO_APP_ENV=$'DEMO_MODE=true\nFLEET_FIRST_DISCORD_LOGIN_ADMIN=true\nFLEET_ADMIN_DISCORD_ID='
+    run_spin oldbad
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "first-login" \
+        "a malformed VM id is ignored on the idempotent path too"
+    assert_excludes "$(bootstrap_exec_line)" "$MALFORMED_DISCORD_ID" \
+        "the idempotent bootstrap exec never carries the malformed value"
+    unset RL_OPERATOR_DISCORD_ID
+    export FO_APP_ENV=$'DEMO_MODE=true\nFLEET_FIRST_DISCORD_LOGIN_ADMIN=true\nFLEET_ADMIN_DISCORD_ID=bad-id'
+    run_spin oldbad
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "none" \
+        "a container created with a malformed id has neither path (bootstrap rejects it, the API sees non-empty)"
+    fo_teardown
+}
+
 run_test "p6-fresh-threads-id" test_fresh_spin_threads_operator_id
 run_test "p6-idempotent-threads-id" test_idempotent_respin_threads_operator_id
 run_test "p6-unset-threads-empty" test_unset_operator_id_threads_empty
@@ -283,5 +329,7 @@ run_test "p6-demo-mode-gate-present" test_env_container_sets_demo_mode
 run_test "1537-fresh-marker-and-id" test_fresh_spin_sets_marker_and_id
 run_test "1537-fresh-unset-first-login" test_fresh_spin_unset_id_reports_first_login
 run_test "1537-idempotent-reads-container" test_idempotent_reports_from_container_env
+run_test "p2-malformed-fresh" test_malformed_id_falls_back_to_first_login
+run_test "p2-malformed-idempotent" test_malformed_id_idempotent_path
 
 print_test_summary

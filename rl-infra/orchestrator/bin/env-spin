@@ -99,19 +99,42 @@ trap _env_spin_trap_on_abort EXIT
 #   none        — neither. Only a pre-ROK-1537 container reached through the
 #                 idempotent path (it is never re-`docker run`) — destroy +
 #                 fresh spin to pick the marker up.
+# Same rule as api/scripts/bootstrap-admin.ts DISCORD_SNOWFLAKE — keep in step.
+ENV_SPIN_SNOWFLAKE_RE='^[0-9]{5,32}$'
+env_spin::is_discord_snowflake() {
+    [[ "$1" =~ $ENV_SPIN_SNOWFLAKE_RE ]]
+}
 env_spin::operator_admin_mode() {
     local marker_present="$1" container_id="${2:-}"
+    local container_valid=false
+    if [[ -n "$container_id" ]] && env_spin::is_discord_snowflake "$container_id"; then
+        container_valid=true
+    fi
     # configured: today's VM id (bootstrap-admin upserts it on every spin) OR
     # the id the reused container was created with (the API's runtime gate
-    # reads THAT, so first-login stays off for its lifetime).
-    if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" || -n "$container_id" ]]; then
+    # reads THAT, so first-login stays off for its lifetime). A malformed id
+    # never counts: bootstrap-admin refuses it.
+    if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" || "$container_valid" == "true" ]]; then
         echo configured
+    elif [[ -n "$container_id" ]]; then
+        # A container created (pre-fix) with a malformed id: bootstrap-admin
+        # rejected it, yet the API sees a non-empty id and keeps first-login off.
+        echo "env-spin: WARNING: the reused container's FLEET_ADMIN_DISCORD_ID is not a Discord snowflake, so no Discord login is admin; destroy + fresh spin to fix" >&2
+        echo none
     elif [[ "$marker_present" == "true" ]]; then
         echo first-login
     else
         echo none
     fi
 }
+# Codex P2: a malformed RL_OPERATOR_DISCORD_ID is treated as unset for every
+# consumer (app container, bootstrap-admin exec, operator_admin), so the
+# first-login promotion stays on instead of an env with no Discord admin
+# claiming `configured`. The value itself is never echoed.
+if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" ]] && ! env_spin::is_discord_snowflake "$RL_OPERATOR_DISCORD_ID"; then
+    echo "env-spin: WARNING: RL_OPERATOR_DISCORD_ID is not a Discord snowflake (digits only) — ignoring it; the first Discord login on this env is promoted to admin instead" >&2
+    RL_OPERATOR_DISCORD_ID=""
+fi
 # The idempotent path reuses a container created by an EARLIER env-spin, so
 # read the marker and the configured id from its actual env instead of
 # assuming today's `docker run` / today's VM setting.
