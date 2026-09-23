@@ -137,10 +137,13 @@ test.describe('AI suggestions blend into Common Ground', () => {
     // Take the blend target from the REAL Common Ground response so the
     // "chip on a CG-present card" case cannot silently degrade into a second
     // AI-only stub if the grid's contents change.
-    // NOTE: `CommonGroundQuerySchema` has no `lineupId` — this is a global
-    // ownership-overlap query, and the panel scopes it by filters alone.
-    // Passing one would be silently dropped, so don't imply it matters.
-    const cg = await apiGet(adminToken, '/lineups/common-ground?minOwners=2');
+    // Scope to THIS worker's lineup: without `lineupId` the server falls back
+    // to the newest public building lineup, which under parallel workers can
+    // be another worker's (Codex P2).
+    const cg = await apiGet(
+      adminToken,
+      `/lineups/common-ground?minOwners=2&lineupId=${lineupId}`,
+    );
     const rows: Array<{ gameId: number; gameName: string }> = cg?.data ?? [];
     test.skip(
       rows.length === 0,
