@@ -26,6 +26,8 @@ export interface ComboboxController<T> {
     setActive: (index: number) => void;
     select: (index: number) => void;
     close: () => void;
+    /** Open the popup without moving the highlight (`openOnFocus`). */
+    show: () => void;
     onInputChange: (text: string) => void;
     onKeyDown: (e: KeyEvent) => void;
 }
@@ -118,7 +120,7 @@ export function useCombobox<T>(p: ComboboxProps<T>): ComboboxController<T> {
     return {
         open, text, items, activeIndex, listboxId, status: statusOf(p, items.length),
         optionId: (i) => `${listboxId}-option-${i}`,
-        setActive, select, close,
+        setActive, select, close, show: () => setOpen(true),
         onInputChange: (s) => { setText(s); setOpen(true); setActive(-1); },
         onKeyDown: (e) => handleKey(c, e),
     };

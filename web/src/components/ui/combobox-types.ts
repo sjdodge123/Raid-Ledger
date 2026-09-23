@@ -46,6 +46,12 @@ export interface ComboboxProps<T> {
     portalContainer?: HTMLElement | null;
     /** Classes for the wrapper (default `w-full`). */
     className?: string;
+    /** Interactive slot inside the input's right edge (e.g. a 44px clear button). */
+    trailing?: ReactNode;
+    /** Open the listbox when the input gains focus (e.g. to offer suggestions before typing). */
+    openOnFocus?: boolean;
+    /** `data-testid` hooks for the input and the popup (smoke specs). */
+    testIds?: { input?: string; popup?: string };
 }
 
 export interface ComboboxStatus {

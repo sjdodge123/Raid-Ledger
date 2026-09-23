@@ -28,6 +28,8 @@ export interface ComboboxPopupProps<T> {
     render: (option: T, state: ComboboxOptionState) => ReactNode;
     onHover: (index: number) => void;
     onPick: (index: number) => void;
+    /** `data-testid` for the popup container. */
+    testId?: string;
     /** Portal target (default `document.body`). */
     portalContainer?: HTMLElement | null;
 }
@@ -64,7 +66,7 @@ export function ComboboxLiveRegion({ text }: { text: string }): JSX.Element {
 /** The portalled listbox. Rendered only while the combobox is expanded. */
 export function ComboboxPopup<T>({ popupRef, portalContainer, ...p }: ComboboxPopupProps<T>): JSX.Element {
     return createPortal(
-        <div ref={popupRef} className={POPUP} style={popupStyle(p.pos)} onMouseDown={(e) => e.preventDefault()}>
+        <div ref={popupRef} data-testid={p.testId} className={POPUP} style={popupStyle(p.pos)} onMouseDown={(e) => e.preventDefault()}>
             {p.status && <StatusRow status={p.status} />}
             <ul role="listbox" id={p.listboxId} aria-label={p.label} aria-labelledby={p.label ? undefined : p.labelledBy}>
                 {p.items.map((o, i) => {

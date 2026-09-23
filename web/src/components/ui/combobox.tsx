@@ -39,13 +39,14 @@ function ComboboxImpl<T>(p: ComboboxProps<T>, ref: ForwardedRef<HTMLInputElement
                 ref={ref} role="combobox" aria-label={p.label} aria-expanded={c.open} aria-controls={c.open ? c.listboxId : undefined}
                 aria-activedescendant={activeId} aria-autocomplete="list" autoComplete="off"
                 id={p.id} name={p.name} placeholder={p.placeholder} disabled={p.disabled} autoFocus={p.autoFocus}
-                invalid={p.invalid} fieldSize={p.fieldSize} value={c.text}
+                invalid={p.invalid} fieldSize={p.fieldSize} value={c.text} trailing={p.trailing} data-testid={p.testIds?.input}
+                onFocus={p.openOnFocus ? c.show : undefined}
                 onChange={(e) => c.onInputChange(e.target.value)} onKeyDown={c.onKeyDown} onBlur={c.close}
             />
             <ComboboxLiveRegion text={c.open ? (c.status?.text ?? '') : ''} />
             {c.open && (
                 <ComboboxPopup
-                    popupRef={popupRef} pos={pos} listboxId={c.listboxId} label={p.label} labelledBy={field?.labelId}
+                    popupRef={popupRef} testId={p.testIds?.popup} pos={pos} listboxId={c.listboxId} label={p.label} labelledBy={field?.labelId}
                     items={c.items} status={c.status} activeIndex={c.activeIndex} optionId={c.optionId}
                     isSelected={(o) => !!p.value && p.getKey(o) === p.getKey(p.value)} getKey={p.getKey} portalContainer={container}
                     render={p.renderOption ?? ((o) => <span className="truncate">{p.getLabel(o)}</span>)}
