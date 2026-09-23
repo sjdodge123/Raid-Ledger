@@ -114,7 +114,7 @@ function JobCardActions({ job, onViewHistory, onEditSchedule, onRun, onPause, on
         <div className="flex items-center gap-2 pt-2 border-t border-edge/30">
             <button onClick={onViewHistory} className={ACTION_BTN}>History</button>
             <button onClick={onEditSchedule} className={ACTION_BTN}>Schedule</button>
-            <button onClick={onRun} disabled={isRunning} className="px-3 py-1.5 text-xs font-medium text-accent hover:text-accent/80 bg-accent/10 hover:bg-accent/20 border border-accent/30 rounded-lg transition-colors disabled:opacity-50">
+            <button onClick={onRun} disabled={isRunning} className="px-3 py-1.5 text-xs font-medium text-success hover:text-success/80 bg-success/10 hover:bg-success/20 border border-success/30 rounded-lg transition-colors disabled:opacity-50">
                 {isRunning ? 'Running...' : 'Run Now'}
             </button>
             <div className="flex-1" />

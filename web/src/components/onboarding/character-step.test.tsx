@@ -410,5 +410,26 @@ describe('CharacterStep — part 6', () => {
             });
         });
     });
+});
 
+describe('CharacterStep — label wiring (ROK-1645)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    it('links every visible label to its control with htmlFor, not a duplicate aria-label (ROK-1645)', () => {
+        renderWithProviders(
+            <CharacterStep preselectedGame={baseGame} charIndex={0} />
+        );
+        const fields = [['Name', 'textbox'], ['Class', 'textbox'], ['Spec', 'textbox'], ['Realm/Server', 'textbox'], ['Role', 'combobox']] as const;
+        for (const [name, role] of fields) {
+            const control = screen.getByRole(role, { name });
+            expect(control).not.toHaveAttribute('aria-label');
+            const label = [...document.querySelectorAll('label')].find((l) => l.htmlFor === control.id);
+            expect(label?.textContent, `label[for] of ${name}`).toMatch(new RegExp(`^${name}`));
+        }
+    });
 });

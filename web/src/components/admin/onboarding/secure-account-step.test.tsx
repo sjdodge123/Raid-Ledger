@@ -67,6 +67,13 @@ describe('SecureAccountStep', () => {
             expect(screen.getByPlaceholderText(/re-enter new password/i)).toBeInTheDocument();
         });
 
+        it('names every password field by its visible label (ROK-1645)', () => {
+            renderWithProviders(<SecureAccountStep onNext={mockOnNext} onSkip={mockOnSkip} />);
+            expect(screen.getByLabelText('Current Password')).toHaveAttribute('placeholder', 'Enter current password');
+            expect(screen.getByLabelText('New Password')).toHaveAttribute('placeholder', 'At least 8 characters');
+            expect(screen.getByLabelText('Confirm New Password')).toHaveAttribute('placeholder', 'Re-enter new password');
+        });
+
         it('renders the Next button', () => {
             renderWithProviders(<SecureAccountStep onNext={mockOnNext} onSkip={mockOnSkip} />);
             expect(screen.getByRole('button', { name: /next/i })).toBeInTheDocument();

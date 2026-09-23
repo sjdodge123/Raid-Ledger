@@ -44,7 +44,7 @@ function CommunityNameSection({ communityName, onChange }: { communityName: stri
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Community Name</h3>
                 <p className="text-xs text-muted mt-1">Displayed on the login page, page title, and header. Max 60 characters.</p>
             </div>
-            <input type="text" maxLength={60} value={communityName} onChange={(e) => onChange(e.target.value)}
+            <input type="text" aria-label="Community name" maxLength={60} value={communityName} onChange={(e) => onChange(e.target.value)}
                 placeholder="e.g., Midnight Raiders, The Vanguard"
                 className="w-full sm:max-w-md px-4 py-2.5 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm" />
             <p className="text-xs text-dim">{communityName.length}/60</p>
@@ -84,7 +84,7 @@ function TimezoneSection({ timezone, onChange }: { timezone: string; onChange: (
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Default Timezone</h3>
                 <p className="text-xs text-muted mt-1">Used as the default for community-wide displays (e.g., event schedules). Individual users see times in their own browser timezone by default and can override it in their profile.</p>
             </div>
-            <select value={timezone} onChange={(e) => onChange(e.target.value)}
+            <select aria-label="Default timezone" value={timezone} onChange={(e) => onChange(e.target.value)}
                 className="w-full sm:max-w-md px-4 py-3 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors text-sm">
                 <option value={TIMEZONE_AUTO}>Auto -- detect from browser ({browserAbbr})</option>
                 {TIMEZONE_GROUPS.map((group) => (

@@ -70,8 +70,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     category: 'Maintenance',
   },
   LfgExpiryService_expireIntents: {
-    description:
-      'Marks past-expiry LFG intents as expired every hour at :15 (ROK-1451)',
+    description: 'Marks past-expiry LFG intents as expired every hour at :15',
     category: 'Maintenance',
   },
   NotificationService_cleanupExpiredNotifications: {
@@ -135,7 +134,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   RecruitmentReminderService_checkAndSendReminders: {
     description:
-      'DMs unsigned game followers and posts channel "spots still available" bumps every 15 minutes. Suppresses both paths for short-notice events (start - created < RECRUITMENT_SHORT_NOTICE_HOURS, default 12) — ROK-1240.',
+      'DMs unsigned game followers and posts channel "spots still available" bumps every 15 minutes. Suppresses both paths for events created less than RECRUITMENT_SHORT_NOTICE_HOURS (default 12) before they start.',
     category: 'Notifications',
   },
   WeeklyDigestService_postDigest: {
@@ -167,8 +166,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
     category: 'Maintenance',
   },
   RefreshTokenCleanupService_cleanupExpiredTokens: {
-    description:
-      'Deletes expired and revoked refresh-token rows daily at 3 AM (ROK-1353)',
+    description: 'Deletes expired and revoked refresh-token rows daily at 3 AM',
     category: 'Maintenance',
   },
   SchedulingThresholdService_checkThresholds: {
@@ -207,7 +205,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   TieExpiryService_expireTieHolds: {
     description:
-      'Archives community lineups whose tie hold ran out its week, undecided, daily at 05:40 UTC (ROK-1374)',
+      'Archives community lineups whose tie hold ran out its week, undecided, daily at 05:40 UTC',
     category: 'Maintenance',
   },
   LineupReminderService_checkTiebreakerReminders: {
@@ -257,12 +255,12 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   GuildReconciliationService_reconcileGuildMembers: {
     description:
-      'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC (ROK-1282)',
+      'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC',
     category: 'Maintenance',
   },
   EphemeralVoiceScheduler_scanCreateWindow: {
     description:
-      'Creates ephemeral voice channels for opted-in events entering their create-buffer window every 60 seconds (ROK-1352)',
+      'Creates ephemeral voice channels for opted-in events entering their create-buffer window every 60 seconds',
     category: 'Events',
   },
   EphemeralVoiceScheduler_scanNameReconcile: {
@@ -272,7 +270,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   EphemeralVoiceReaper_reapIdle: {
     description:
-      'Safety-net: deletes empty ephemeral voice channels whose event ended more than the idle window ago every 5 minutes (ROK-1352)',
+      'Safety-net: deletes empty ephemeral voice channels whose event ended more than the idle window ago every 5 minutes',
     category: 'Events',
   },
   ChannelPresenceEmbedService_reapStale: {
@@ -282,7 +280,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   SchedulingUnanimousService_sweep: {
     description:
-      "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes (ROK-1632)",
+      "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes",
     category: 'Notifications',
   },
   QuickPlayHealthService_checkQuickPlayHealth: {

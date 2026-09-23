@@ -1,4 +1,5 @@
 import type { FeedbackCategory } from '@raid-ledger/contract';
+import { useId } from 'react';
 
 const CATEGORIES: { value: FeedbackCategory; label: string; icon: string }[] = [
     { value: 'bug', label: 'Bug', icon: '\uD83D\uDC1B' },
@@ -47,7 +48,7 @@ export function FeedbackDialog({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
-            <div className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200" style={{ backgroundColor: 'var(--color-panel)', border: '1px solid var(--color-border)' }}>
+            <div className="relative w-full max-w-md rounded-2xl p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200" style={{ backgroundColor: 'var(--color-panel)', border: '1px solid var(--color-edge)' }}>
                 <DialogHeader onClose={onClose} />
                 {showSuccess ? <SuccessState /> : (
                     <FeedbackForm category={category} message={message} includeClientLogs={includeClientLogs}
@@ -63,8 +64,8 @@ export function FeedbackDialog({
 function SuccessState() {
     return (
         <div className="flex flex-col items-center gap-3 py-8">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ backgroundColor: 'color-mix(in srgb, var(--color-accent) 15%, transparent)' }}>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8" style={{ color: 'var(--color-accent)' }}>
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-8 w-8 text-success">
                     <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
                 </svg>
             </div>
@@ -93,14 +94,12 @@ function CategoryPicker({ category, onChange }: { category: FeedbackCategory; on
 }
 
 function MessageInput({ message, onChange }: { message: string; onChange: (m: string) => void }) {
+    const id = useId();
     return (
         <div className="mb-4">
-            <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--color-foreground)' }}>Message</label>
-            <textarea value={message} onChange={(e) => onChange(e.target.value)} placeholder="Tell us what's on your mind..." rows={4} maxLength={MAX_LENGTH}
-                className="w-full resize-none rounded-lg p-3 text-sm outline-none transition-colors placeholder:text-[var(--color-muted)]"
-                style={{ backgroundColor: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-foreground)' }}
-                onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)'; }}
-                onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)'; }}
+            <label htmlFor={id} className="mb-2 block text-sm font-medium" style={{ color: 'var(--color-foreground)' }}>Message</label>
+            <textarea id={id} value={message} onChange={(e) => onChange(e.target.value)} placeholder="Tell us what's on your mind..." rows={4} maxLength={MAX_LENGTH}
+                className="w-full resize-none bg-panel border border-edge rounded-lg px-3 py-2 text-base lg:text-sm text-foreground placeholder:text-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-success/80"
             />
             <div className="mt-1 flex justify-between text-xs" style={{ color: 'var(--color-muted)' }}>
                 <span>{message.length < MIN_LENGTH ? `${MIN_LENGTH - message.length} more characters needed` : '\u00A0'}</span>
@@ -120,7 +119,7 @@ function FeedbackForm({
             <MessageInput message={message} onChange={onMessageChange} />
             {category === 'bug' && (
                 <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm" style={{ color: 'var(--color-muted)' }}>
-                    <input type="checkbox" checked={includeClientLogs} onChange={(e) => onIncludeLogsChange(e.target.checked)} className="h-4 w-4 rounded accent-[var(--color-accent)]" />
+                    <input type="checkbox" checked={includeClientLogs} onChange={(e) => onIncludeLogsChange(e.target.checked)} className="h-4 w-4 rounded accent-emerald-500" />
                     Capture and send client logs
                 </label>
             )}
@@ -131,8 +130,7 @@ function FeedbackForm({
                 </p>
             )}
             <button onClick={onSubmit} disabled={message.length < MIN_LENGTH || isSubmitting}
-                className="w-full rounded-lg py-2.5 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                style={{ backgroundColor: 'var(--color-accent)' }}>
+                className="w-full rounded-lg py-2.5 text-sm font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-all disabled:cursor-not-allowed disabled:opacity-50">
                 {isSubmitting ? 'Sending...' : 'Send Feedback'}
             </button>
         </>

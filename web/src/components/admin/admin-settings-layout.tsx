@@ -2,6 +2,7 @@ import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin as isAdminCheck } from '../../hooks/use-auth';
 import { AdminSidebar } from './admin-sidebar';
 import { UpdateBanner } from './UpdateBanner';
+import { BuildFixesNotice } from './BuildFixesNotice';
 
 function LoadingSkeleton() {
     return (
@@ -48,6 +49,7 @@ export function AdminSettingsLayout() {
             <div className="mb-6 mt-4">
                 <h1 className="text-2xl font-bold text-foreground">Admin Settings</h1>
                 <p className="text-sm text-muted mt-0.5">Manage your community configuration</p>
+                <div className="mt-1"><BuildFixesNotice enabled={isAdminCheck(user)} /></div>
             </div>
             <div className="flex gap-6">
                 <aside className="hidden md:block w-56 flex-shrink-0">
