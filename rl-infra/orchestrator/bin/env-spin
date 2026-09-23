@@ -131,6 +131,11 @@ env_spin::operator_admin_mode() {
 # consumer (app container, bootstrap-admin exec, operator_admin), so the
 # first-login promotion stays on instead of an env with no Discord admin
 # claiming `configured`. The value itself is never echoed.
+# Trim surrounding whitespace (incl. a CRLF .env's \r) first, exactly as
+# bootstrap-admin's `.trim()` does, so a padded id stays `configured`.
+RL_OPERATOR_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}"
+RL_OPERATOR_DISCORD_ID="${RL_OPERATOR_DISCORD_ID#"${RL_OPERATOR_DISCORD_ID%%[![:space:]]*}"}"
+RL_OPERATOR_DISCORD_ID="${RL_OPERATOR_DISCORD_ID%"${RL_OPERATOR_DISCORD_ID##*[![:space:]]}"}"
 if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" ]] && ! env_spin::is_discord_snowflake "$RL_OPERATOR_DISCORD_ID"; then
     echo "env-spin: WARNING: RL_OPERATOR_DISCORD_ID is not a Discord snowflake (digits only) — ignoring it; the first Discord login on this env is promoted to admin instead" >&2
     RL_OPERATOR_DISCORD_ID=""

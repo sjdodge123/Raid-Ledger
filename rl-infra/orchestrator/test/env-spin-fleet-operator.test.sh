@@ -325,11 +325,27 @@ test_malformed_id_idempotent_path() {
 run_test "p6-fresh-threads-id" test_fresh_spin_threads_operator_id
 run_test "p6-idempotent-threads-id" test_idempotent_respin_threads_operator_id
 run_test "p6-unset-threads-empty" test_unset_operator_id_threads_empty
+# --- Codex P2 (round 2): a whitespace/CRLF-padded id is trimmed, not rejected --
+test_padded_id_is_trimmed() {
+    CURRENT_TEST_NAME="Codex P2: padded RL_OPERATOR_DISCORD_ID is trimmed like bootstrap-admin → configured"
+    fo_setup
+    export RL_OPERATOR_DISCORD_ID=$'  '"$OPERATOR_DISCORD_ID"$'\r'
+    FO_OUT=$(bash "$ENV_SPIN_BIN" --slug padid1 2>/dev/null)
+    FO_RC=$?
+    assert_exit_code "$FO_RC" "0" "a padded id must not fail the spin"
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "configured" \
+        "a padded valid id is still the configured operator"
+    assert_contains "$(app_run_line)" "FLEET_ADMIN_DISCORD_ID=$OPERATOR_DISCORD_ID " \
+        "the app container gets the trimmed id"
+    fo_teardown
+}
+
 run_test "p6-demo-mode-gate-present" test_env_container_sets_demo_mode
 run_test "1537-fresh-marker-and-id" test_fresh_spin_sets_marker_and_id
 run_test "1537-fresh-unset-first-login" test_fresh_spin_unset_id_reports_first_login
 run_test "1537-idempotent-reads-container" test_idempotent_reports_from_container_env
 run_test "p2-malformed-fresh" test_malformed_id_falls_back_to_first_login
 run_test "p2-malformed-idempotent" test_malformed_id_idempotent_path
+run_test "p2-padded-id-trimmed" test_padded_id_is_trimmed
 
 print_test_summary
