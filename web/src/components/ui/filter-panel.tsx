@@ -62,6 +62,20 @@ export interface FilterPanelProps {
 const OPEN_TRIGGER_SELECTOR = '[data-testid="filter-panel-trigger"][aria-expanded="true"]';
 
 /**
+ * An Escape another layer owns: already handled (`defaultPrevented`), pressed
+ * inside a dialog that is not this panel, or pressed while a modal dialog
+ * (Modal, a drawer, a sheet) is open on top of the page. That layer closes;
+ * the inline panel underneath must stay open.
+ */
+function isEscapeForAnotherLayer(e: KeyboardEvent, panel: HTMLElement | null): boolean {
+    if (e.defaultPrevented) return true;
+    const target = e.target instanceof Element ? e.target : null;
+    const targetDialog = target?.closest('[role="dialog"], [aria-modal="true"]');
+    if (targetDialog && !panel?.contains(targetDialog)) return true;
+    return document.querySelector('[aria-modal="true"]') !== null;
+}
+
+/**
  * Closes the desktop inline panel on Escape (the BottomSheet handles its own)
  * and, when focus was inside the panel, hands it back to the funnel — the
  * collapsed panel is `inert`, so focus left in it would be lost.
@@ -70,7 +84,7 @@ function useEscapeToClose(active: boolean, onClose: () => void, panelRef: RefObj
     useEffect(() => {
         if (!active) return undefined;
         const handleKeyDown = (e: KeyboardEvent): void => {
-            if (e.key !== 'Escape') return;
+            if (e.key !== 'Escape' || isEscapeForAnotherLayer(e, panelRef.current)) return;
             const focusInside = panelRef.current?.contains(document.activeElement) ?? false;
             const trigger = document.querySelector<HTMLElement>(OPEN_TRIGGER_SELECTOR);
             onClose();

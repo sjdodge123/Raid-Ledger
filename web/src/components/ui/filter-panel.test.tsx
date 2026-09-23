@@ -166,6 +166,44 @@ describe('FilterPanel — desktop inline panel (ROK-1659)', () => {
     });
 });
 
+describe('FilterPanel — Escape owned by another layer (ROK-1659)', () => {
+    const openPanel = (onClose: () => void) => (
+        <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen onToggle={vi.fn()} onClose={onClose}>
+            <div>content</div>
+        </FilterPanel>
+    );
+
+    it('stays open on an Escape pressed while a modal dialog is on top, and closes once it is gone', () => {
+        mockViewportWidth(1280);
+        const onClose = vi.fn();
+        const { rerender } = renderWithProviders(
+            <>
+                {openPanel(onClose)}
+                <div role="dialog" aria-modal="true"><button type="button">Drawer action</button></div>
+            </>,
+        );
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Drawer action' }), { key: 'Escape' });
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onClose).not.toHaveBeenCalled();
+
+        rerender(openPanel(onClose));
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('ignores an Escape another handler already consumed (defaultPrevented)', () => {
+        mockViewportWidth(1280);
+        const onClose = vi.fn();
+        renderWithProviders(openPanel(onClose));
+        const consumer = document.createElement('div');
+        consumer.addEventListener('keydown', (e) => e.preventDefault());
+        document.body.appendChild(consumer);
+        fireEvent.keyDown(consumer, { key: 'Escape' });
+        expect(onClose).not.toHaveBeenCalled();
+        consumer.remove();
+    });
+});
+
 describe('FilterPanel — collapsed panel leaves the tab order (ROK-1659)', () => {
     it('is inert and aria-hidden while closed, and neither while open', () => {
         mockViewportWidth(1280);
