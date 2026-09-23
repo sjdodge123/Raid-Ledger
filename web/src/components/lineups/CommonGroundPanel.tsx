@@ -13,7 +13,10 @@ import type {
     CommonGroundResponseDto,
 } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
-import { CommonGroundFilters } from './CommonGroundFilters';
+import { CommonGroundFilterEntry } from './CommonGroundFilters';
+import { commonGroundActiveFilterCount } from './common-ground-filter-count';
+import { SearchInput } from '../ui/search-input';
+import { FilterEntryTrigger } from '../ui/filter-entry';
 import { CommonGroundGameCard } from './CommonGroundGameCard';
 import { useCommonGroundState } from './use-common-ground-state';
 import { AiStatusBanner } from './AiStatusBanner';
@@ -151,6 +154,42 @@ function GameGrid(props: GameGridProps): JSX.Element {
     );
 }
 
+/** Search box + funnel on one row, the filter entry under it (ROK-1659). */
+function PanelFilters({ filters, setFilters, filtersRestored, coopDataAvailable, participantCount, search, setSearch }: {
+    filters: CommonGroundParams;
+    setFilters: (f: CommonGroundParams) => void;
+    filtersRestored: boolean;
+    coopDataAvailable: boolean;
+    participantCount: number;
+    search: string;
+    setSearch: (v: string) => void;
+}): JSX.Element {
+    const [open, setOpen] = useState(false);
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                    <SearchInput value={search} onChange={setSearch} label="Search games" placeholder="Search games..." />
+                </div>
+                <FilterEntryTrigger
+                    activeCount={commonGroundActiveFilterCount(filters, coopDataAvailable)}
+                    isOpen={open}
+                    onOpenChange={setOpen}
+                />
+            </div>
+            <CommonGroundFilterEntry
+                filters={filters}
+                onChange={setFilters}
+                participantCount={participantCount}
+                suppressAutoSeed={filtersRestored}
+                coopDataAvailable={coopDataAvailable}
+                isOpen={open}
+                onOpenChange={setOpen}
+            />
+        </div>
+    );
+}
+
 /** Content area — renders filters, loading/error states, and game grid. */
 function PanelContent({
     mergedData,
@@ -189,14 +228,14 @@ function PanelContent({
 }): JSX.Element {
     return (
         <>
-            <CommonGroundFilters
+            <PanelFilters
                 filters={filters}
-                onChange={setFilters}
-                search={search}
-                onSearchChange={setSearch}
-                participantCount={participantCount}
-                suppressAutoSeed={filtersRestored}
+                setFilters={setFilters}
+                filtersRestored={filtersRestored}
                 coopDataAvailable={coopDataAvailable}
+                participantCount={participantCount}
+                search={search}
+                setSearch={setSearch}
             />
             {isLoading && <LoadingSkeleton />}
             {isError && <ErrorState onRetry={refetch} />}
