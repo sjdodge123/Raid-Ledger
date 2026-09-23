@@ -8,12 +8,16 @@
 import { sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { mapApiGameToDbRow } from './igdb.mappers';
+import { keepSeedOwned } from '../games-lookup/seed-owned-games.helpers';
 
-/** Single-row upsert SET. COALESCE preserves existing twitch/steam ids when row is null. */
+/**
+ * Single-row upsert SET. COALESCE preserves existing twitch/steam ids when row
+ * is null; seed-owned rows keep their curated name + slug (ROK-1643).
+ */
 export function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
   return {
-    name: row.name,
-    slug: row.slug,
+    name: keepSeedOwned(schema.games.name, row.name),
+    slug: keepSeedOwned(schema.games.slug, row.slug),
     coverUrl: row.coverUrl,
     genres: row.genres,
     summary: row.summary,
@@ -37,8 +41,8 @@ export function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
 /** Batch upsert SET (ROK-1024). Mirrors `buildUpsertSet` using `excluded.<column>` per row. */
 export function buildBatchUpsertSet() {
   return {
-    name: sql`excluded.name`,
-    slug: sql`excluded.slug`,
+    name: keepSeedOwned(schema.games.name, sql`excluded.name`),
+    slug: keepSeedOwned(schema.games.slug, sql`excluded.slug`),
     coverUrl: sql`excluded.cover_url`,
     genres: sql`excluded.genres`,
     summary: sql`excluded.summary`,

@@ -14,6 +14,7 @@ import {
 } from '../src/igdb/igdb-name-dedup.helpers';
 import { normalizeForDedup } from '../src/igdb/igdb-search-dedup.helpers';
 import { withGameNameLock } from '../src/igdb/games-name-lock.helpers';
+import { keepSeedOwned } from '../src/games-lookup/seed-owned-games.helpers';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -97,10 +98,15 @@ export function mapGameToValues(game: GameSeed) {
 type GameValues = ReturnType<typeof mapGameToValues>;
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Column references for the excluded row in ON CONFLICT DO UPDATE. */
+/**
+ * Column references for the excluded row in ON CONFLICT DO UPDATE.
+ * ROK-1643: name/slug go through `keepSeedOwned` — this JSON is IGDB-sourced
+ * (75379 is "World of Warcraft Classic") and runs on every boot, so without
+ * the guard it renames the curated seed rows back each time.
+ */
 const excludedCol = {
-  name: sql`excluded.name`,
-  slug: sql`excluded.slug`,
+  name: keepSeedOwned(schema.games.name, sql`excluded.name`),
+  slug: keepSeedOwned(schema.games.slug, sql`excluded.slug`),
   coverUrl: sql`excluded.cover_url`,
   genres: sql`excluded.genres`,
   summary: sql`excluded.summary`,
