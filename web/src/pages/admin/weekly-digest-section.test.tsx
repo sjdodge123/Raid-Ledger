@@ -61,6 +61,19 @@ describe('WeeklyDigestSection (ROK-1435 L5) — render and saves', () => {
         expect(screen.getByRole('option', { name: '#general' })).toBeInTheDocument();
     });
 
+    it('describes the Day and Hour pickers with the timezone note', () => {
+        render(<WeeklyDigestSection />);
+        const note = 'Times are in the community timezone (America/Chicago).';
+        expect(picker('Digest day')).toHaveAccessibleDescription(note);
+        expect(picker('Digest hour')).toHaveAccessibleDescription(note);
+    });
+
+    it('sizes the channel select like the Day and Hour selects (md)', () => {
+        render(<WeeklyDigestSection />);
+        expect(picker('Channel')).toHaveClass('px-3', 'py-2');
+        expect(picker('Channel')).not.toHaveClass('px-4', 'py-3');
+    });
+
     it('the switch reports its state through aria-checked', () => {
         state.status.data = { ...SAVED, enabled: false };
         render(<WeeklyDigestSection />);

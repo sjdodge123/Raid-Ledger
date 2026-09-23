@@ -4,6 +4,7 @@
  * back to the default notification channel. Every control saves on change,
  * like the sibling LFG board and channel pickers.
  */
+import { useId } from 'react';
 import type { WeeklyDigestSettings } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
 import { ChannelSelector } from '../../components/admin/channel-selector';
@@ -54,23 +55,24 @@ function SlotPicker({ day, hour, timezone, disabled, onSave }: {
     day: number; hour: number; timezone: string; disabled: boolean;
     onSave: (patch: Partial<WeeklyDigestSettings>) => void;
 }) {
+    const noteId = useId();
     return (
         <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="Day">
-                    <Select aria-label="Digest day" value={day} disabled={disabled}
+                    <Select aria-label="Digest day" aria-describedby={noteId} value={day} disabled={disabled}
                         onChange={(e) => onSave({ day: Number(e.target.value) as WeeklyDigestSettings['day'] })}>
                         {DAYS.map((name, i) => <option key={name} value={i}>{name}</option>)}
                     </Select>
                 </Field>
                 <Field label="Hour">
-                    <Select aria-label="Digest hour" value={hour} disabled={disabled}
+                    <Select aria-label="Digest hour" aria-describedby={noteId} value={hour} disabled={disabled}
                         onChange={(e) => onSave({ hour: Number(e.target.value) })}>
                         {HOURS.map((h) => <option key={h} value={h}>{pad(h)}</option>)}
                     </Select>
                 </Field>
             </div>
-            <p className="text-xs text-secondary mt-1.5" data-testid="weekly-digest-timezone">
+            <p id={noteId} className="mt-1 text-xs text-muted" data-testid="weekly-digest-timezone">
                 Times are in the community timezone ({timezone}).
             </p>
         </div>
@@ -95,7 +97,7 @@ export function WeeklyDigestSection(): React.ReactElement {
                 <div className="mt-4 space-y-4">
                     <SlotPicker day={current.day} hour={current.hour} timezone={current.timezone}
                         disabled={inactive} onSave={(p) => { void save(p); }} />
-                    <ChannelSelector id="weeklyDigestChannel" label="Channel" channels={channels} framed={false}
+                    <ChannelSelector id="weeklyDigestChannel" label="Channel" channels={channels} framed={false} fieldSize="md"
                         value={current.channelId ?? ''} isPending={isPending} disabled={inactive} prefix="#"
                         clearLabel="Default notification channel"
                         hint="Falls back to the default notification channel when none is picked."

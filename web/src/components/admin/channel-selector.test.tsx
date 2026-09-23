@@ -28,6 +28,13 @@ describe('ChannelSelector', () => {
         expect(screen.getByRole('option', { name: '#general' })).toBeInTheDocument();
     });
 
+    it.each([
+        ['defaults to lg', {}, ['px-4', 'py-3']],
+        ['takes fieldSize md', { fieldSize: 'md' }, ['px-3', 'py-2']],
+    ] as const)('%s padding on the select', (_name, over, classes) => {
+        expect(renderSelector(over).select).toHaveClass(...classes);
+    });
+
     it('saves the picked channel', () => {
         const { select, props } = renderSelector();
         fireEvent.change(select, { target: { value: 'c2' } });

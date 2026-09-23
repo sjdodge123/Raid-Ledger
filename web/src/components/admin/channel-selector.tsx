@@ -6,10 +6,12 @@
  *
  * `clearLabel` makes the empty option selectable (it then calls `onChange('')`)
  * for settings that fall back to another channel when unset. `framed={false}`
- * drops the card chrome so the control can sit inside another section's card.
+ * drops the card chrome so the control can sit inside another section's card;
+ * pair it with `fieldSize="md"` to match that card's other selects.
  */
 import { Field } from '../ui/field';
 import { Select } from '../ui/select';
+import type { FieldSize } from '../ui/form-classes';
 
 export interface ChannelSelectorProps {
     id: string;
@@ -24,10 +26,12 @@ export interface ChannelSelectorProps {
     clearLabel?: string;
     disabled?: boolean;
     framed?: boolean;
+    /** Select padding; `lg` (the default) suits the framed card. */
+    fieldSize?: FieldSize;
 }
 
 export function ChannelSelector(props: ChannelSelectorProps) {
-    const { id, label, channels, value, isPending, prefix, hint, onChange, onError, clearLabel, disabled, framed = true } = props;
+    const { id, label, channels, value, isPending, prefix, hint, onChange, onError, clearLabel, disabled, framed = true, fieldSize = 'lg' } = props;
     const handleChange = async (next: string) => {
         if (!next && !clearLabel) return;
         try { await onChange(next); } catch { onError(); }
@@ -35,7 +39,7 @@ export function ChannelSelector(props: ChannelSelectorProps) {
     return (
         <Field id={id} label={label} hint={hint}
             className={framed ? 'bg-surface border border-edge-subtle rounded-xl p-6' : undefined}>
-            <Select fieldSize="lg" value={value} disabled={isPending || disabled}
+            <Select fieldSize={fieldSize} value={value} disabled={isPending || disabled}
                 onChange={(e) => { void handleChange(e.target.value); }}>
                 <option value="" disabled={!clearLabel}>{clearLabel ?? 'Select a channel...'}</option>
                 {channels.map((ch) => <option key={ch.id} value={ch.id}>{prefix}{ch.name}</option>)}
