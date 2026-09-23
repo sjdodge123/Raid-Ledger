@@ -275,7 +275,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   SchedulingUnanimousService_sweep: {
     description:
-      "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes (ROK-1632)",
+      "DMs a scheduling poll's creator when one proposed time holds a yes from every member, every 5 minutes",
     category: 'Notifications',
   },
   QuickPlayHealthService_checkQuickPlayHealth: {
