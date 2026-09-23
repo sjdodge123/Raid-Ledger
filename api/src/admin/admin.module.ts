@@ -16,6 +16,7 @@ import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.
 import { DemoTestSignupsController } from './demo-test-signups.controller';
 import { DemoTestGamesController } from './demo-test-games.controller';
 import { DemoTestLineupController } from './demo-test-lineup.controller';
+import { DemoTestAiSuggestionsController } from './demo-test-ai-suggestions.controller';
 import { DemoTestGraceController } from './demo-test-grace.controller';
 import { DemoTestVersionController } from './demo-test-version.controller';
 import { DemoTestResetController } from './demo-test-reset.controller';
@@ -101,6 +102,7 @@ import { LfgModule } from '../lfg/lfg.module';
     DemoTestSignupsController,
     DemoTestGamesController,
     DemoTestLineupController,
+    DemoTestAiSuggestionsController,
     DemoTestGraceController,
     DemoTestVersionController,
     DemoTestResetController,

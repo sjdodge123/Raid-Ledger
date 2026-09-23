@@ -29,6 +29,19 @@ vi.mock('fs/promises', () => ({
     },
 }));
 
+// getAdminToken's ROK-1466 fallback reads Playwright's storageState with
+// sync `fs`, which the fs/promises mocks above do not cover. Unmocked, it
+// reads the real AUTH_DIR (`/tmp/rl-playwright-auth` on a fleet runner) and
+// returns a live JWT whenever a Playwright run left a fresh admin.json there.
+const mockReadStorageState = vi.fn(
+    (..._args: unknown[]): string | null => null,
+);
+vi.mock('./storage-state', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./storage-state')>()),
+    readTokenFromStorageState: (...args: unknown[]) =>
+        mockReadStorageState(...args),
+}));
+
 const TOKEN_VALUE = 'jwt-from-disk-aaa.bbb.ccc';
 const FALLBACK_TOKEN = 'jwt-from-fallback-xxx.yyy.zzz';
 
@@ -46,6 +59,7 @@ describe('getAdminToken (ROK-1085)', () => {
     beforeEach(() => {
         vi.resetModules();
         mockReadFile.mockReset();
+        mockReadStorageState.mockReset().mockReturnValue(null);
         fetchSpy = vi.fn(async () =>
             new Response(JSON.stringify({ access_token: FALLBACK_TOKEN }), {
                 status: 200,

@@ -24,6 +24,7 @@ import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import { LfgBoardService } from './lfg-board.service';
 import { LfgBoardThreadMembersService } from './lfg-board-thread-members.service';
 import { LfgGameChainService } from './lfg-game-chain.service';
+import { LfgComposerPinService } from '../lfg-composer/lfg-composer-pin.service';
 
 @Module({
   imports: [DrizzleModule, SettingsModule, DiscordBotModule],
@@ -35,6 +36,8 @@ import { LfgGameChainService } from './lfg-game-chain.service';
     LfgGameChainService,
     // ROK-1541 — adds group members to the post's thread on join / post.
     LfgBoardThreadMembersService,
+    // ROK-1612 AC1 — keeps the LFG composer card pinned.
+    LfgComposerPinService,
   ],
   exports: [
     LfgBoardChannelService,

@@ -36,7 +36,21 @@ export const LfgBoardSettingsResponseSchema = z.object({
    * channel by name — a guild can hold several channels named `lfg`.
    */
   channelId: z.string().nullable().optional(),
+  /**
+   * ROK-1612 AC6 — whether the pinned LFG composer card is switched on
+   * (`lfg_composer_enabled`, default off). Present on GET only.
+   */
+  composerEnabled: z.boolean().optional(),
   warning: z.object({ missing: z.array(z.string()) }).optional(),
+});
+
+/**
+ * ROK-1612 AC6 — body AND response of
+ * `PUT /admin/settings/discord-bot/lfg-board/composer`, the pinned composer
+ * card's opt-in.
+ */
+export const LfgComposerSettingsSchema = z.object({
+  enabled: z.boolean(),
 });
 
 export type BotInviteInfo = z.infer<typeof BotInviteInfoSchema>;
@@ -44,3 +58,4 @@ export type LfgBoardSettings = z.infer<typeof LfgBoardSettingsSchema>;
 export type LfgBoardSettingsResponse = z.infer<
   typeof LfgBoardSettingsResponseSchema
 >;
+export type LfgComposerSettings = z.infer<typeof LfgComposerSettingsSchema>;
