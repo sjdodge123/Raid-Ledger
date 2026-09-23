@@ -116,7 +116,7 @@ function FilterToolbar({ data, allThemes, activeTheme, onThemeChange, aiOnly, on
             )}
             <div className="flex-1" />
             <select value={sortBy} onChange={(e) => onSortChange(e.target.value as SortOption)}
-                className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:outline-none focus:ring-2 focus:ring-success/50">
+                className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:outline-none focus:ring-2 focus:ring-success/80">
                 <option value="name">Sort: Name</option>
                 <option value="theme">Sort: Theme</option>
                 <option value="status">Sort: Status</option>

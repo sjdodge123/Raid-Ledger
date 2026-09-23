@@ -80,7 +80,7 @@ export function InstallSizeEntryModal(props: Props): JSX.Element {
                     step="0.1"
                     value={value}
                     onChange={(e) => setValue(e.target.value)}
-                    className="w-full rounded border border-edge bg-surface px-2 py-1 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-success/50"
+                    className="w-full rounded border border-edge bg-surface px-2 py-1 text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-success/80"
                 />
                 {error && <p className="text-sm text-amber-400">{error}</p>}
                 <button

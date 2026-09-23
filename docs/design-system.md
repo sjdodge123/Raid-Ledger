@@ -412,7 +412,7 @@ the quest-log theme.
 **DO** — inputs are `min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base
 text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50`
 (`CommonGroundFilters.tsx::SearchBox` — the control styling is right even though its composition is the
-§4.1 DON'T). `ModalSearchInput` uses `focus:ring-success/50` (it used the undefined `ring-accent` until ROK-1645).
+§4.1 DON'T). `ModalSearchInput` uses `focus:ring-success/80` (it used the undefined `ring-accent` until ROK-1645).
 `text-base` is deliberate: 16px stops iOS Safari zooming on focus. Sliders: `flex-1 h-11
 accent-emerald-500`, enlarged webkit thumbs, a `font-mono` readout right and a `font-medium` label left.
 Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part of the target.
@@ -645,7 +645,7 @@ them; do not fix them as scope creep.
 3. ~~**`--color-accent` is referenced but never defined**~~ — **Resolved by ROK-1645.** Every call site
    was replaced rather than the token declared (operator ruling 2026-09-22: "accent" means nothing distinct
    from `success`): solid fills are `bg-emerald-600 hover:bg-emerald-500 text-white` (forced-white list),
-   tints/text are `*-success`, focus rings `ring-success/50`. The same sweep removed the other undeclared
+   tints/text are `*-success`, focus rings `ring-success/80`. The same sweep removed the other undeclared
    utilities — `ring-primary`, `text-primary`, `bg-base`, `bg-bg`, `text-heading`, `bg-panel-hover`,
    `var(--color-border)`. `web/src/styles/undefined-tokens.guard.test.ts` now fails on any colour utility
    or `var(--color-*)` whose token is not declared in `index.css` `@theme` (78 hits before the fix).

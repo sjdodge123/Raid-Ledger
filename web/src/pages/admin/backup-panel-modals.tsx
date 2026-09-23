@@ -102,7 +102,7 @@ function ConfirmTextInput({ value, onChange, keyword, disabled }: {
         <div className="mt-4">
             <label className="block text-sm text-muted mb-1">Type <span className="font-mono text-foreground">{keyword}</span> to confirm</label>
             <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={keyword} autoFocus disabled={disabled}
-                className="w-full px-3 py-2 text-sm bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-success/50 focus:border-transparent" />
+                className="w-full px-3 py-2 text-sm bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent" />
         </div>
     );
 }

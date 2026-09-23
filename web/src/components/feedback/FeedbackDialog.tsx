@@ -99,7 +99,7 @@ function MessageInput({ message, onChange }: { message: string; onChange: (m: st
         <div className="mb-4">
             <label htmlFor={id} className="mb-2 block text-sm font-medium" style={{ color: 'var(--color-foreground)' }}>Message</label>
             <textarea id={id} value={message} onChange={(e) => onChange(e.target.value)} placeholder="Tell us what's on your mind..." rows={4} maxLength={MAX_LENGTH}
-                className="w-full resize-none bg-panel border border-edge rounded-lg px-3 py-2 text-base lg:text-sm text-foreground placeholder:text-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-success/50"
+                className="w-full resize-none bg-panel border border-edge rounded-lg px-3 py-2 text-base lg:text-sm text-foreground placeholder:text-muted transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-success/80"
             />
             <div className="mt-1 flex justify-between text-xs" style={{ color: 'var(--color-muted)' }}>
                 <span>{message.length < MIN_LENGTH ? `${MIN_LENGTH - message.length} more characters needed` : '\u00A0'}</span>
