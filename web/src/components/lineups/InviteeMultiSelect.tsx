@@ -137,7 +137,7 @@ export function InviteeMultiSelect({
     <div data-testid="invitee-multi-select" className="space-y-2">
       <label
         htmlFor="invitee-search"
-        className="block text-sm font-medium text-primary"
+        className="block text-sm font-medium text-foreground"
       >
         {modeLabel(mode)}
       </label>

@@ -82,7 +82,7 @@ function LogsHeader({ exporting, hasFiles, onExport }: { exporting: boolean; has
         <p className="text-sm text-muted mt-1">Browse and export persistent log files. Logs are rotated daily with 60-day retention.</p>
       </div>
       <button onClick={onExport} disabled={exporting || !hasFiles}
-        className="px-4 py-2 text-sm font-medium bg-accent/20 text-accent border border-accent/40 rounded-lg hover:bg-accent/30 transition-colors disabled:opacity-50 whitespace-nowrap">
+        className="px-4 py-2 text-sm font-medium bg-success/20 text-success border border-success/40 rounded-lg hover:bg-success/30 transition-colors disabled:opacity-50 whitespace-nowrap">
         {exporting ? 'Exporting...' : 'Export .tar.gz'}
       </button>
     </div>
@@ -95,7 +95,7 @@ function LogFilterPills({ filter, allCount, serviceCounts, onFilter }: {
   return (
     <div className="flex items-center gap-2 flex-wrap">
       <button onClick={() => onFilter('all')}
-        className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filter === 'all' ? 'bg-accent/20 text-accent border-accent/40' : 'bg-surface/50 text-muted border-edge hover:text-foreground'}`}>
+        className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${filter === 'all' ? 'bg-success/20 text-success border-success/40' : 'bg-surface/50 text-muted border-edge hover:text-foreground'}`}>
         All ({allCount})
       </button>
       {SERVICES.map((s) => (
@@ -156,7 +156,7 @@ function LogRow({ file, tz, isDownloading, onDownload }: {
       <td className="px-4 py-3 text-muted hidden md:table-cell">{formatSize(file.sizeBytes)}</td>
       <td className="px-4 py-3 text-right">
         <button onClick={onDownload} disabled={isDownloading}
-          className="px-3 py-1 text-xs font-medium text-accent bg-accent/10 border border-accent/30 rounded-lg hover:bg-accent/20 transition-colors disabled:opacity-50">
+          className="px-3 py-1 text-xs font-medium text-success bg-success/10 border border-success/30 rounded-lg hover:bg-success/20 transition-colors disabled:opacity-50">
           {isDownloading ? 'Downloading...' : 'Download'}
         </button>
       </td>

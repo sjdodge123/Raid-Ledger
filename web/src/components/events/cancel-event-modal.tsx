@@ -52,7 +52,7 @@ function ReasonInput({ reason, onChange }: { reason: string; onChange: (v: strin
             <label htmlFor="cancel-reason" className="block text-xs text-muted mb-1">Reason (optional)</label>
             <textarea id="cancel-reason" value={reason} onChange={(e) => onChange(e.target.value)}
                 maxLength={500} rows={3} placeholder="e.g. Not enough signups, scheduling conflict..."
-                className="w-full bg-panel border border-edge rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-primary resize-none" />
+                className="w-full bg-panel border border-edge rounded-lg px-3 py-2 text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-success/80 resize-none" />
             <p className="text-xs text-dim mt-1 text-right">{reason.length}/500</p>
         </div>
     );

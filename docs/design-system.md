@@ -242,7 +242,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
 | `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: height, cap and bottom edge come from `window.visualViewport` in px via `useVisibleViewport` (`bottom-sheet-viewport.ts`, exposed as `--sheet-vh`), so iPad/iOS Safari toolbars never hide the footer (ROK-1640/1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, resolved against the visible viewport), `initiallyExpanded`, `ariaLabel` |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
-| `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal | see file |
+| `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal (`ModalSearchInput` requires a `label`, rendered as `aria-label`) | Any searchable picker modal | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
 | `nav-chip.tsx` → `NavChip`, `NAV_CHIP_CLASS` | Navigational link chip | Linking to a sibling lineup/page from a banner | `to`, `children`, `testId` |
 | `switch.tsx` → `Switch` | Accessible on/off switch: native `<button role="switch" aria-checked>`, Space/Enter toggle, `focus-visible` ring, disabled dims + blocks, `bg-success` on / `bg-dim` off (ROK-1612) | Any boolean setting that applies immediately (admin toggles, feature opt-ins). Not for form fields submitted later — use a checkbox | `checked`, `onChange(next)`, `label` (accessible name), `disabled`, `className`, `testId` |
@@ -432,7 +432,7 @@ the quest-log theme.
 **DO** — inputs are `min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base
 text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50`
 (`CommonGroundFilters.tsx::SearchBox` — the control styling is right even though its composition is the
-§4.1 DON'T). `ModalSearchInput` instead uses `focus:ring-accent`, which resolves to nothing (§6.3).
+§4.1 DON'T). `ModalSearchInput` uses `focus:ring-success/80` (it used the undefined `ring-accent` until ROK-1645).
 `text-base` is deliberate: 16px stops iOS Safari zooming on focus. Sliders: `flex-1 h-11
 accent-emerald-500`, enlarged webkit thumbs, a `font-mono` readout right and a `font-medium` label left.
 Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part of the target.
@@ -662,20 +662,13 @@ them; do not fix them as scope creep.
    former carries the note (`:14-16`) that a fifth chip means extraction. *Suggested:* promote to
    `components/ui/filter-chip.tsx`.
 
-3. **`--color-accent` is referenced but never defined — dead styling in ~25 places across 12 files.** Grep
-   with `grep -rnE -- "--color-accent|(ring|text|bg|border)-accent" web/src`; a plain `grep -rn --
-   "--color-accent" web/src` finds only the 6 inline `var()` hits
-   (`components/feedback/FeedbackWidget.tsx:79`, `FeedbackDialog.tsx:66,67,102,123,135`) and misses the 19
-   utility-class ones: `ring-accent` (`components/ui/modal-helpers.tsx:8`) and `text-accent` /
-   `border-accent` / `bg-accent` / `bg-accent/20` in `components/profile/AvatarUploadZone.tsx`,
-   `pages/admin/backup-panel-modals.tsx`, `cron-jobs-panel.tsx`, `logs-panel.tsx`,
-   `backups-panel.tsx:93,114`, `pages/cron-jobs/CronJobModals.tsx:200,226`, `CronJobCard.tsx:117`,
-   `pages/profile/identity-sections.tsx:91,95`, `pages/user-profile/activity-modal.tsx:83`. No CSS file
-   declares it — `@theme` defines only the §2.1 roles and Tailwind v4 here is CSS-first with no
-   `tailwind.config.*` — so `bg-accent` generates no rule and the inline `var()` resolves empty. Most
-   visible symptom: `CronJobModals.tsx:226`, a white-on-transparent submit button. *Suggested:* declare
-   `--color-accent` in `@theme` (emerald, per §2.2) or replace every call site with an explicit hue, plus
-   a guard test so an undefined `--color-*` cannot ship again.
+3. ~~**`--color-accent` is referenced but never defined**~~ — **Resolved by ROK-1645.** Every call site
+   was replaced rather than the token declared (operator ruling 2026-09-22: "accent" means nothing distinct
+   from `success`): solid fills are `bg-emerald-600 hover:bg-emerald-500 text-white` (forced-white list),
+   tints/text are `*-success`, focus rings `ring-success/80`. The same sweep removed the other undeclared
+   utilities — `ring-primary`, `text-primary`, `bg-base`, `bg-bg`, `text-heading`, `bg-panel-hover`,
+   `var(--color-border)`. `web/src/styles/undefined-tokens.guard.test.ts` now fails on any colour utility
+   or `var(--color-*)` whose token is not declared in `index.css` `@theme` (78 hits before the fix).
 
 4. **Search input styling lives in three places** — `ModalSearchInput` (`components/ui/modal-helpers.tsx`:
    `bg-surface/50`, `rounded-lg`, `text-sm`), `CommonGroundFilters::SearchBox` (`bg-panel`, `rounded-md`,
@@ -695,7 +688,7 @@ them; do not fix them as scope creep.
    week strip and week-cell marks. **What remains:** every other call site still spells the meaning as a raw
    `emerald` / `amber` / `red` hue and still leans on the per-hue overrides (`index.css:681-759`) — the
    repo-wide sweep is a report-only backlog item (`TECH-DEBT-BACKLOG.md`, 2026-09-22), not a story. The
-   §6.3 `--color-accent` gap is a separate bug and is still open.
+   §6.3 `--color-accent` gap is resolved (ROK-1645).
 
 8. **Dark tokens are root-only; light tokens cascade.** Light schemes declare their values on
    *unqualified* `[data-scheme=...]` selectors (`index.css:106`, `:199`, `:251`, `:303`, `:355`), which

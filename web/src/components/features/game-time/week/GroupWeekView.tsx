@@ -62,7 +62,7 @@ function HeaderRow({ weekStart }: { weekStart: Date }): JSX.Element {
             {DAY_INDEXES.map((d) => (
                 <div key={d} data-testid={`group-week-header-${d}`}
                     className={`flex h-11 flex-col items-center justify-center border-b border-edge-subtle text-xs ${
-                        isToday(weekStart, d) ? 'text-accent' : 'text-muted'}`}>
+                        isToday(weekStart, d) ? 'text-success' : 'text-muted'}`}>
                     <b className={`text-[13px] ${isToday(weekStart, d) ? '' : 'text-foreground'}`}>{DAYS[d]}</b>
                     {dayHeaderDate(weekStart, d)}
                 </div>

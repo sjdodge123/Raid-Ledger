@@ -80,7 +80,7 @@ function ActivityModal({ entries, isOpen, onClose, search, setSearch, pricingMap
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Game Activity (${entries.length})`} maxWidth="max-w-2xl">
       <input type="text" placeholder="Search games..." value={search} onChange={(e) => setSearch(e.target.value)}
-        className="w-full px-3 py-2 mb-4 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent" />
+        className="w-full px-3 py-2 mb-4 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent" />
       <div className="flex flex-col gap-2">
         {filtered.map((entry) => (<ActivityEntryCard key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />))}
       </div>
