@@ -71,6 +71,7 @@ import {
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
+import { assertSpawnIndicatorLifecycle } from '../lfg-board-spawn-indicator-phase.js';
 import { assertThreadMembersFollowGroup } from '../lfg-board-thread-members-phase.js';
 import {
   assertSameStarter,
@@ -639,45 +640,73 @@ async function cleanup(run: Run): Promise<void> {
   }
 }
 
+/**
+ * A fresh idle game, the board enabled around it, `body` run, and the shared
+ * {@link cleanup} in `finally` — under the global surface lock.
+ */
+function onBoard(
+  ctx: TestContext,
+  lock: string,
+  body: (run: Run) => Promise<void>,
+): Promise<void> {
+  return withLfgSurface(lock, async () => {
+    const game = await pickIdleGame(ctx);
+    const run: Run = {
+      ctx,
+      game,
+      forumPreexisting: false,
+      preexistingThreads: new Set<string>(),
+      retiredThreadIds: [],
+    };
+    try {
+      await enableBoard(run);
+      await body(run);
+    } finally {
+      await cleanup(run);
+    }
+  });
+}
+
 const lfgBoardLifecycle: SmokeTest = {
   name: 'LFG board: every hand posts — one forum thread per group, edited in place through conversion',
   category: 'embed',
   run(ctx) {
-    return withLfgSurface("lfg-board", async () => {
-      const game = await pickIdleGame(ctx);
-      const run: Run = {
-        ctx,
-        game,
-        forumPreexisting: false,
-        preexistingThreads: new Set<string>(),
-        retiredThreadIds: [],
-      };
-      try {
-        await enableBoard(run);
-        await assertPostsOnFirstHand(run, 'T24');
-        await assertUpgradesOnSecondHand(run, 'T25');
-        await assertBoardIsBotWriteOnly(run);
-        await assertDowngradeOnWithdraw(run);
-        const closed = await assertClosesOnLastWithdraw(run);
-        await assertPostsOnFirstHand(run, 'T30 (fresh post)', closed);
-        await assertUpgradesOnSecondHand(run, 'T30 (fresh upgrade)');
-        // ROK-1523 — off retires the live post, on brings a fresh one back.
-        // Placed HERE, with the group at two live hands, because the phases
-        // after it need a live post and the ones before it build one.
-        await assertRetiresOnDisable(run);
-        // ROK-1541 — a join adds the joiner to the live post's thread, a
-        // withdraw removes them; leaves the group at two hands.
-        await assertThreadMembersFollowGroup(run);
-        await assertEditsOnThirdHand(run);
-        await assertMirrorsCompanionReply(run);
-        const poll = await createPollForGroup(run);
-        await assertConvertedThread(run, poll);
-        await assertExactlyOneThread(run);
-      } finally {
-        await cleanup(run);
-      }
+    return onBoard(ctx, "lfg-board", async (run) => {
+      await assertPostsOnFirstHand(run, 'T24');
+      await assertUpgradesOnSecondHand(run, 'T25');
+      await assertBoardIsBotWriteOnly(run);
+      await assertDowngradeOnWithdraw(run);
+      const closed = await assertClosesOnLastWithdraw(run);
+      await assertPostsOnFirstHand(run, 'T30 (fresh post)', closed);
+      await assertUpgradesOnSecondHand(run, 'T30 (fresh upgrade)');
+      // ROK-1523 — off retires the live post, on brings a fresh one back.
+      // Placed HERE, with the group at two live hands, because the phases
+      // after it need a live post and the ones before it build one.
+      await assertRetiresOnDisable(run);
+      // ROK-1541 — a join adds the joiner to the live post's thread, a
+      // withdraw removes them; leaves the group at two hands.
+      await assertThreadMembersFollowGroup(run);
+      await assertEditsOnThirdHand(run);
+      await assertMirrorsCompanionReply(run);
+      const poll = await createPollForGroup(run);
+      await assertConvertedThread(run, poll);
+      await assertExactlyOneThread(run);
     });
   },
 };
 
-export const lfgBoardTests: SmokeTest[] = [lfgBoardLifecycle];
+/**
+ * ROK-1619 AC1/AC3 — moved here from `lfm-playing.test.ts`, whose TEXT surface
+ * never carries a `+1` (see `lfg-board-spawn-indicator-phase.ts`). Runs AFTER
+ * the lifecycle test: its spawn leaves the game non-idle until the session is
+ * reaped, and {@link pickIdleGame} skips it for anyone after.
+ */
+const lfgBoardSpawnIndicator: SmokeTest = {
+  name: 'LFG board: the +1 that forms a now-group says so, and drops the mark once it has (ROK-1619)',
+  category: 'embed',
+  run(ctx) {
+    return onBoard(ctx, "lfg-board-indicator", assertSpawnIndicatorLifecycle);
+  },
+};
+
+export const lfgBoardTests: SmokeTest[] = [lfgBoardLifecycle, lfgBoardSpawnIndicator];
