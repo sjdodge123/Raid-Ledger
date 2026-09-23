@@ -132,6 +132,16 @@ describe('HeartedGamesModal — search filter', () => {
 describe('HeartedGamesModal — accessibility (ROK-1645)', () => {
     it('gives the search input an accessible name', () => {
         renderWithProviders(<HeartedGamesModal userId={1} isOpen onClose={vi.fn()} total={4} pricingMap={mockPricingMap} />);
-        expect(screen.getByRole('textbox', { name: 'Search hearted games' })).toBeInTheDocument();
+        expect(screen.getByRole('searchbox', { name: 'Search hearted games' })).toBeInTheDocument();
+    });
+
+    it('clears the search from the 44px "Clear search" button (ROK-1647)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<HeartedGamesModal userId={1} isOpen onClose={vi.fn()} total={4} pricingMap={mockPricingMap} />);
+        const box = screen.getByRole('searchbox', { name: 'Search hearted games' }) as HTMLInputElement;
+        await user.type(box, 'war');
+        await user.click(screen.getByRole('button', { name: 'Clear search' }));
+        expect(box.value).toBe('');
+        expect(box).toHaveFocus();
     });
 });

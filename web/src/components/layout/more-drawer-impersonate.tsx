@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { SearchInput } from '../ui/search-input';
 
 interface ImpersonateSectionProps {
     impersonateUsers: { id: number; username: string; avatar: string | null; discordId: string | null; customAvatarUrl: string | null }[] | undefined;
@@ -59,8 +60,8 @@ export function ImpersonateSection({ impersonateUsers, onImpersonate }: Imperson
             {showMenu && (
                 <div className="mt-2 rounded-lg bg-panel/50 overflow-hidden">
                     <div className="p-3">
-                        <input ref={searchRef} type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search users..."
-                            className="w-full px-3 py-2 text-base lg:text-sm bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-success/80" />
+                        <SearchInput ref={searchRef} value={search} onChange={setSearch} placeholder="Search users..."
+                            label="Search users to impersonate" />
                     </div>
                     <div className="max-h-48 overflow-y-auto"><ImpersonateList filtered={filtered} search={search} onSelect={handleSelect} /></div>
                 </div>

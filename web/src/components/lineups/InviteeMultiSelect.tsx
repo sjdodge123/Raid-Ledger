@@ -14,6 +14,7 @@
 import { useMemo, useState, type JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getPlayers } from '../../lib/api-client';
+import { SearchInput } from '../ui/search-input';
 
 interface GuildMember {
   id: number;
@@ -141,15 +142,13 @@ export function InviteeMultiSelect({
       >
         {modeLabel(mode)}
       </label>
-      <input
+      <SearchInput
         id="invitee-search"
         data-testid="invitee-search"
-        type="text"
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={setSearch}
         placeholder="Search members..."
-        aria-label="Search members"
-        className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-amber-500"
+        label="Search members"
       />
       <div className="max-h-48 overflow-y-auto border border-edge rounded-lg">
         {isLoading && (

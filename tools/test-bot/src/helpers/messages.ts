@@ -30,6 +30,11 @@ export interface SimpleComponent {
   type: string;
   customId: string | null;
   label: string | null;
+  /**
+   * The button's emoji: a Unicode emoji's character, or a custom emoji's name.
+   * Optional so hand-built fixtures stay valid; `toSimpleMessage` always sets it.
+   */
+  emoji?: string | null;
 }
 
 /** Convert a discord.js Message to a plain-object SimpleMessage. */
@@ -55,10 +60,11 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
     })),
     components: msg.components.flatMap((row) => {
       if (!('components' in row)) return [];
-      return (row.components as Array<{ type: { toString(): string }; customId: string | null; label?: string | null }>).map((c) => ({
+      return (row.components as Array<{ type: { toString(): string }; customId: string | null; label?: string | null; emoji?: { name?: string | null } | null }>).map((c) => ({
         type: c.type.toString(),
         customId: c.customId,
         label: c.label ?? null,
+        emoji: c.emoji?.name ?? null,
       }));
     }),
     timestamp: msg.createdAt,

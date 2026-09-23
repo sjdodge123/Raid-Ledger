@@ -61,3 +61,30 @@ export async function setLfgBoardIntroThreadId(
 ): Promise<void> {
   await svc.set(SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID, threadId);
 }
+
+/**
+ * ROK-1619: the admin-configured indicator emoji, raw; null when unset.
+ * Resolve it with `resolveNowIndicatorEmoji` — never render it directly.
+ *
+ * @param svc - Settings accessor.
+ * @returns The stored value, or null when unset or blank.
+ */
+export async function getLfgNowIndicatorEmoji(
+  svc: SettingsCore,
+): Promise<string | null> {
+  const value = (await svc.get(SETTING_KEYS.LFG_NOW_INDICATOR_EMOJI))?.trim();
+  return value ? value : null;
+}
+
+/**
+ * Store the indicator emoji; a blank value clears it back to the 🎉 default.
+ *
+ * @param svc - Settings accessor.
+ * @param emoji - Unicode or a custom emoji reference; '' clears.
+ */
+export async function setLfgNowIndicatorEmoji(
+  svc: SettingsCore,
+  emoji: string,
+): Promise<void> {
+  await svc.set(SETTING_KEYS.LFG_NOW_INDICATOR_EMOJI, emoji.trim());
+}

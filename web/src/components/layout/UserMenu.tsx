@@ -10,6 +10,7 @@ import { getAuthToken } from '../../hooks/use-auth';
 import type { UserRole } from '@raid-ledger/contract';
 import { RoleBadge } from '../ui/role-badge';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
+import { SearchInput } from '../ui/search-input';
 
 interface ImpersonateUser {
     id: number;
@@ -151,9 +152,8 @@ function ImpersonateDropdown({ users, search, onSearch, onSelect, searchRef }: {
     return (
         <div className="bg-panel/50">
             <div className="px-3 py-1.5">
-                <input ref={searchRef} type="text" value={search} onChange={(e) => onSearch(e.target.value)} placeholder="Search users..."
-                    className="w-full px-2.5 py-1 text-xs bg-surface/50 border border-edge rounded text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent"
-                    onClick={(e) => e.stopPropagation()} />
+                <SearchInput ref={searchRef} value={search} onChange={onSearch} placeholder="Search users..."
+                    label="Search users to impersonate" fieldSize="sm" onClick={(e) => e.stopPropagation()} />
             </div>
             <div className="max-h-48 overflow-y-auto">
                 {filtered.length > 0

@@ -30,6 +30,32 @@ export interface LfgJoinControlProps {
     className: string;
     /** Disables the button and the three choices while a write is in flight. */
     isBusy?: boolean;
+    /**
+     * ROK-1619 AC7: `pressWouldSpawnNow` from the group read — would THIS
+     * viewer's `Right now` pick form the group? Marks that pick, never the `+1`
+     * opener, which only asks when.
+     */
+    spawnsNow?: boolean;
+    /**
+     * The server-resolved indicator glyph (`spawnIndicatorEmoji`). The server
+     * always sends it with the flag (🎉 by default), so the web has no default.
+     */
+    spawnEmoji?: string;
+}
+
+/** The `+1` opener: toggles the urgency choice, never carries the indicator. */
+function JoinOpener({ className, isBusy, open, onToggle }: {
+    className: string;
+    isBusy?: boolean;
+    open: boolean;
+    onToggle: () => void;
+}): JSX.Element {
+    return (
+        <button type="button" data-testid="lfg-join-button" className={className}
+            disabled={isBusy} aria-expanded={open} onClick={onToggle}>
+            {LFG_COPY.join}
+        </button>
+    );
 }
 
 /**
@@ -39,12 +65,16 @@ export interface LfgJoinControlProps {
  * @param props.onJoin - Called once, with the pick, on the second click.
  * @param props.className - Button classes supplied by the calling surface.
  * @param props.isBusy - True while a join or withdraw is in flight.
+ * @param props.spawnsNow - True when the `Right now` pick would form the group.
+ * @param props.spawnEmoji - The indicator glyph to mark that pick with.
  */
 export function LfgJoinControl({
     label,
     onJoin,
     className,
     isBusy,
+    spawnsNow,
+    spawnEmoji,
 }: LfgJoinControlProps): JSX.Element {
     const [choosing, setChoosing] = useState(false);
     const pick = (chosen: LfgUrgencyPick): void => {
@@ -53,22 +83,11 @@ export function LfgJoinControl({
     };
     return (
         <div className="flex flex-wrap items-center gap-2">
-            <button
-                type="button"
-                data-testid="lfg-join-button"
-                className={className}
-                disabled={isBusy}
-                aria-expanded={choosing}
-                onClick={() => setChoosing((open) => !open)}
-            >
-                {LFG_COPY.join}
-            </button>
+            <JoinOpener className={className} isBusy={isBusy} open={choosing}
+                onToggle={() => setChoosing((open) => !open)} />
             {choosing ? (
-                <LfgUrgencyChoice
-                    label={label}
-                    disabled={isBusy}
-                    onPick={pick}
-                />
+                <LfgUrgencyChoice label={label} disabled={isBusy} onPick={pick}
+                    spawnGlyph={spawnsNow ? spawnEmoji : undefined} />
             ) : null}
         </div>
     );

@@ -35,7 +35,7 @@ test.describe('Create event form', () => {
         await expect(page.getByRole('heading', { name: 'Reminders' })).toBeVisible();
 
         // Key form fields
-        await expect(page.getByRole('textbox', { name: 'Game' })).toBeVisible();
+        await expect(page.getByRole('combobox', { name: 'Game', exact: true })).toBeVisible();
         await expect(page.getByRole('textbox', { name: 'Event Title' })).toBeVisible();
         await expect(page.getByRole('textbox', { name: 'Description' })).toBeVisible();
         await expect(page.getByRole('textbox', { name: 'Date' })).toBeVisible();
@@ -71,7 +71,7 @@ test.describe('Create event form', () => {
     test('game search populates dropdown with results', async ({ page }) => {
         await waitForForm(page);
 
-        const gameInput = page.getByRole('textbox', { name: 'Game' });
+        const gameInput = page.getByRole('combobox', { name: 'Game', exact: true });
         await gameInput.click();
         await gameInput.pressSequentially('World', { delay: 50 });
 

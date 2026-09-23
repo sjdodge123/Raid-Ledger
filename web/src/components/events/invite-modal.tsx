@@ -3,6 +3,7 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { Modal } from '../ui/modal';
+import { SearchInput } from '../ui/search-input';
 import { toast } from '../../lib/toast';
 import { copyWithToast } from '../../lib/clipboard';
 import {
@@ -237,10 +238,9 @@ function InviteModalBody({ eventId, onClose, s, displayMembers, getMemberStatus:
             <div className="space-y-4">
                 <ShareSection eventId={eventId} isSharing={s.isSharing} setIsSharing={s.setIsSharing} />
                 <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-secondary mb-2">Discord Server Members</label>
-                    <input type="text" value={s.searchQuery} onChange={(e) => s.handleSearchChange(e.target.value)}
-                        placeholder="Search members..."
-                        className="w-full px-3 py-2.5 rounded-lg border border-edge bg-panel text-foreground text-sm placeholder:text-muted focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/20" />
+                    <label htmlFor="invite-member-search" className="block text-xs font-semibold uppercase tracking-wide text-secondary mb-2">Discord Server Members</label>
+                    <SearchInput id="invite-member-search" value={s.searchQuery} onChange={s.handleSearchChange}
+                        placeholder="Search members..." label="Search Discord server members" />
                 </div>
                 <MemberList members={displayMembers} isLoadingMembers={s.isLoadingMembers}
                     isSearching={s.isSearching} searchQuery={s.searchQuery}

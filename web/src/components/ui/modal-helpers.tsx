@@ -1,13 +1,12 @@
 /**
  * Shared search input and empty state for modal dialogs (ROK-808).
  * Extracted from HeartedGamesModal, SteamLibraryModal, SteamWishlistModal.
+ * `ModalSearchInput` delegates to the shared `SearchInput` (ROK-1647).
  */
 import type { JSX } from 'react';
+import { SearchInput } from './search-input';
 
-const INPUT_CLS =
-    'w-full px-3 py-2 mb-4 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent';
-
-/** Reusable search input for modal lists. */
+/** Reusable search input for modal lists — a `SearchInput` (ROK-1647). */
 export function ModalSearchInput({
     value,
     onChange,
@@ -21,14 +20,9 @@ export function ModalSearchInput({
     placeholder?: string;
 }): JSX.Element {
     return (
-        <input
-            type="text"
-            aria-label={label}
-            placeholder={placeholder}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className={INPUT_CLS}
-        />
+        <div className="mb-4">
+            <SearchInput label={label} placeholder={placeholder} value={value} onChange={onChange} />
+        </div>
     );
 }
 

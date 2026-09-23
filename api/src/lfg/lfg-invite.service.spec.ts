@@ -38,6 +38,7 @@ import {
   lfgInviteRecipientLockKey,
 } from './lfg-invite.constants';
 
+import { LFG_NOW_SPAWN_THRESHOLD } from '../discord-bot/lfg-now/lfg-now.constants';
 jest.mock('./lfg-invite.helpers');
 jest.mock('./lfg-query.helpers');
 jest.mock('./lfg-suggestions.helpers');
@@ -101,6 +102,10 @@ function allClear() {
   mockedQuery.requireGame.mockResolvedValue(
     GAME as unknown as typeof schema.games.$inferSelect,
   );
+  mockedQuery.getGroupSummary.mockResolvedValue({
+    nowCount: 0,
+    playingNow: null,
+  } as never);
   mocked.holdsLiveIntent.mockImplementation((_db, userId) =>
     Promise.resolve(userId === INVITER),
   );
@@ -325,6 +330,34 @@ describe('LfgInviteService.invite — the DM payload (AC7)', () => {
     };
     expect(input.payload.urgency).toBe('now');
     expect(input.payload.nowExpiresAt).toBe(lapsesAt.toISOString());
+  });
+
+  it("ROK-1619 AC7: marks the payload spawnsNow when the recipient's Join would form the group", async () => {
+    mockedQuery.getGroupSummary.mockResolvedValue({
+      nowCount: LFG_NOW_SPAWN_THRESHOLD - 1,
+      playingNow: null,
+    } as never);
+
+    await service.invite(INVITER, GAME.id, RECIPIENT);
+
+    const input = create.mock.calls[0][0] as {
+      payload: Record<string, unknown>;
+    };
+    expect(input.payload.spawnsNow).toBe(true);
+  });
+
+  it('ROK-1619 AC7: no spawnsNow key once the group is already live', async () => {
+    mockedQuery.getGroupSummary.mockResolvedValue({
+      nowCount: LFG_NOW_SPAWN_THRESHOLD - 1,
+      playingNow: { eventId: 77 },
+    } as never);
+
+    await service.invite(INVITER, GAME.id, RECIPIENT);
+
+    const input = create.mock.calls[0][0] as {
+      payload: Record<string, unknown>;
+    };
+    expect(input.payload).not.toHaveProperty('spawnsNow');
   });
 
   it('walk 2: a group with no live now hand sends the week horizon and no expiry', async () => {

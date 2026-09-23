@@ -12,6 +12,7 @@ import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { BottomSheet } from "../components/ui/bottom-sheet";
 import { FAB } from "../components/ui/fab";
+import { SearchInput } from "../components/ui/search-input";
 import { LineupBanner } from "../components/lineups/LineupBanner";
 import { LfgGroupsProvider } from "../hooks/lfg-groups-provider";
 import { LfgHeartedPrompt } from "../components/lfg/lfg-hearted-prompt";
@@ -227,20 +228,8 @@ function SearchBar({ searchQuery, onSearchChange, isHeaderHidden }: { searchQuer
   return (
     <div className="sticky z-10 bg-surface/95 backdrop-blur-sm pt-2 pb-4 -mx-1 px-1 md:static md:z-auto md:bg-transparent md:backdrop-blur-none md:pt-0 md:pb-0 md:mx-0 md:px-0 mb-6"
       style={{ top: isHeaderHidden ? 75 : 140, transition: 'top 300ms ease-in-out' }}>
-      <div className="relative">
-        <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dim" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)} maxLength={MAX_SEARCH_QUERY_LENGTH} placeholder="Search games..." aria-label="Search games"
-          className="w-full pl-12 pr-4 py-3 bg-surface/50 border border-transparent md:border-edge rounded-xl text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all" />
-        {searchQuery && (
-          <button onClick={() => onSearchChange("")} className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-dim hover:text-foreground transition-colors" aria-label="Clear search">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        )}
-      </div>
+      <SearchInput value={searchQuery} onChange={onSearchChange} maxLength={MAX_SEARCH_QUERY_LENGTH}
+        placeholder="Search games..." label="Search games" />
     </div>
   );
 }

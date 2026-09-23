@@ -58,7 +58,8 @@ function JoinRow({ group, onJoin, isBusy, hasEvent }: Pick<LfgGroupTopProps, 'gr
     return (
         <div data-testid="lfg-join-row" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-surface p-4">
             {group.activeCount === 0 && !hasEvent && <p className="text-sm text-muted">{LFG_COPY.emptyState}</p>}
-            <LfgJoinControl label={group.gameName} onJoin={onJoin} className={LFG_SECONDARY_BTN} isBusy={isBusy} />
+            <LfgJoinControl label={group.gameName} onJoin={onJoin} className={LFG_SECONDARY_BTN} isBusy={isBusy}
+                spawnsNow={group.pressWouldSpawnNow === true} spawnEmoji={group.spawnIndicatorEmoji} />
         </div>
     );
 }
