@@ -2,9 +2,68 @@
  * Calendar smoke tests — month view, quick actions, events, and filters.
  * Desktop and mobile viewports.
  */
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiPost, getAdminToken } from './api-helpers';
-import { isMobile, isPhoneLayout } from './helpers';
+import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
+import { isDesktop, isMobile, isPhoneLayout } from './helpers';
+
+// ---------------------------------------------------------------------------
+// ROK-1662 — the game filter is the one Filters entry: the toolbar funnel +
+// inline panel at 1024px and up, the Filters FAB + bottom sheet below.
+// ---------------------------------------------------------------------------
+
+interface ConfiguredGame { id: number; slug: string; name: string }
+
+/**
+ * HARD precondition: the smoke seed configures games (scheduling-poll fixtures
+ * throw without one), and the Filters entry renders as soon as the registry
+ * reports a game — so a missing entry is a failure, never a skip.
+ */
+async function configuredGames(): Promise<ConfiguredGame[]> {
+    const body = (await apiGet(await getAdminToken(), '/games/configured')) as { data?: ConfiguredGame[] };
+    const games = body.data ?? [];
+    expect(games.length, 'GET /games/configured must return the seeded games').toBeGreaterThan(0);
+    return games;
+}
+
+/** The saved calendar filter back to "every game" (an empty saved list resolves to all). */
+async function resetSavedGameFilter(): Promise<void> {
+    await apiPatch(await getAdminToken(), '/users/me/preferences', { preferences: { calendarGameFilter: [] } });
+}
+
+const gamesHidden = (n: number): string => `${n} ${n === 1 ? 'game' : 'games'} hidden`;
+
+/** The filter body's "N of M selected" line → M (every game the filter knows). */
+async function knownGameCount(filters: Locator): Promise<number> {
+    const summary = filters.getByText(/^\d+ of \d+ selected$/);
+    await expect(summary).toBeVisible();
+    const match = /of (\d+) selected/.exec((await summary.textContent()) ?? '');
+    expect(match, 'selection summary reads "N of M selected"').not.toBeNull();
+    return Number(match?.[1]);
+}
+
+/** Desktop: the toolbar funnel, opened; returns the inline panel. */
+async function openFilterPanel(page: Page): Promise<Locator> {
+    const funnel = page.getByTestId('filter-panel-trigger');
+    await expect(funnel).toBeVisible({ timeout: 15_000 });
+    await expect(funnel).toHaveAccessibleName('Filters');
+    await funnel.click();
+    await expect(funnel).toHaveAttribute('aria-expanded', 'true');
+    const panel = page.getByTestId('filter-panel');
+    await expect(panel.getByRole('heading', { name: 'Filters' })).toBeVisible();
+    return panel;
+}
+
+/** Below 1024px: the Filters FAB, opened; returns the bottom sheet. */
+async function openFilterSheet(page: Page): Promise<Locator> {
+    const fab = page.getByTestId('filter-fab');
+    await expect(fab).toBeVisible({ timeout: 15_000 });
+    await expect(fab).toHaveAccessibleName('Filters');
+    await fab.click();
+    const sheet = page.getByRole('dialog', { name: 'Filters' });
+    await expect(sheet).toBeVisible({ timeout: 5_000 });
+    return sheet;
+}
 
 // ---------------------------------------------------------------------------
 // Desktop
@@ -38,47 +97,70 @@ test.describe('Calendar — desktop', () => {
         expect(count).toBeGreaterThan(0);
     });
 
-    test('game filter checkboxes are visible when games exist', async ({ page }) => {
+    test('toolbar funnel opens the Filters panel: search, None, a checkbox per game (ROK-1662)', async ({ page }) => {
+        const [game] = await configuredGames();
         await page.goto('/calendar');
-        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
+        const funnel = page.getByTestId('filter-panel-trigger');
+        await expect(funnel).toBeVisible({ timeout: 15_000 });
+        await expect(funnel).toHaveAttribute('aria-expanded', 'false');
+        // Desktop has no FAB and no retired "Filter by game" chip.
+        await expect(page.getByTestId('filter-fab')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /filter by game/i })).toHaveCount(0);
 
-        // Soft check: filter toggle may not exist without IGDB seed data (CI).
-        const filterToggle = page.locator('button').filter({ hasText: /filter/i }).first();
-        if (await filterToggle.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await filterToggle.click();
-            const checkboxes = page.getByRole('checkbox');
-            const checkboxCount = await checkboxes.count();
-            if (checkboxCount > 0) {
-                await expect(checkboxes.first()).toBeVisible();
-            }
+        const panel = await openFilterPanel(page);
+        await expect(panel.getByRole('searchbox', { name: 'Search games' })).toBeVisible();
+        await expect(panel.getByRole('button', { name: 'None' })).toBeVisible();
+        await expect(panel.getByRole('checkbox', { name: game.name, exact: true })).toBeVisible();
+        expect(await knownGameCount(panel)).toBeGreaterThanOrEqual(1);
+
+        // The funnel toggles the panel shut again.
+        await funnel.click();
+        await expect(funnel).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('unticking a game badges the funnel with the hidden count; Clear all resets it (ROK-1662)', async ({ page }) => {
+        const [game] = await configuredGames();
+        await resetSavedGameFilter();
+        try {
+            await page.goto('/calendar');
+            const funnel = page.getByTestId('filter-panel-trigger');
+            await expect(funnel).toBeVisible({ timeout: 15_000 });
+            const badge = funnel.getByTestId('filter-count-badge');
+            // Every game shown → no badge, no "Clear all".
+            await expect(badge).toHaveCount(0);
+
+            const panel = await openFilterPanel(page);
+            await expect(panel.getByRole('button', { name: 'Clear all' })).toHaveCount(0);
+            const row = panel.getByRole('checkbox', { name: game.name, exact: true });
+            await expect(row).toBeChecked();
+            await row.click();
+            await expect(row).not.toBeChecked();
+
+            await expect(badge).toHaveText('1');
+            await expect(funnel).toHaveAccessibleDescription(gamesHidden(1));
+
+            await panel.getByRole('button', { name: 'Clear all' }).click();
+            await expect(badge).toHaveCount(0);
+            await expect(row).toBeChecked();
+            await expect(panel.getByRole('button', { name: 'Clear all' })).toHaveCount(0);
+        } finally {
+            await resetSavedGameFilter();
         }
     });
 
-    test('filter chip opens dialog (ROK-1305)', async ({ page }) => {
+    test('Schedule view widened past 1024px still has the funnel + panel (ROK-1662)', async ({ page }) => {
+        await configuredGames();
+        // Phones open on Schedule; widening keeps it — the funnel must follow.
+        await page.setViewportSize({ width: 390, height: 844 });
         await page.goto('/calendar');
-        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('filter-fab')).toBeVisible({ timeout: 15_000 });
+        await page.setViewportSize({ width: 1280, height: 800 });
 
-        // ROK-1305: the prior sidebar's inline checkbox list + "Show all N games..."
-        // overflow button collapsed into a single chip in the desktop sidebar.
-        // Soft check: chip is hidden without IGDB seed data (CI may have none).
-        const chip = page.getByRole('button', { name: /filter by game/i }).first();
-        if (!(await chip.isVisible({ timeout: 3000 }).catch(() => false))) {
-            return;
-        }
-        await expect(chip).toContainText(/Filter:/);
-
-        await chip.click();
-        const dialog = page.getByRole('dialog', { name: /filter by game/i });
-        await expect(dialog).toBeVisible({ timeout: 5_000 });
-        // AC: dialog exposes Select all / Deselect all / search / game list.
-        // Modal items wrap visually-hidden <input type="checkbox"> in <label>,
-        // so the AX tree drops the input — target the .game-filter-item label.
-        await expect(dialog.getByRole('button', { name: 'All' })).toBeVisible();
-        await expect(dialog.getByRole('button', { name: 'None' })).toBeVisible();
-        await expect(dialog.getByRole('searchbox', { name: /search games/i })).toBeVisible();
-        const items = dialog.locator('.game-filter-item');
-        const count = await items.count();
-        expect(count).toBeGreaterThan(0);
+        // Still Schedule (no Month/Week/Day toolbar), and the FAB is gone at 1024px and up.
+        await expect(page.getByRole('group', { name: 'Calendar view' })).toHaveCount(0);
+        await expect(page.getByTestId('filter-fab')).toHaveCount(0);
+        const panel = await openFilterPanel(page);
+        await expect(panel.getByRole('searchbox', { name: 'Search games' })).toBeVisible();
     });
 });
 
@@ -124,40 +206,55 @@ test.describe('Calendar — mobile', () => {
         }
         await expect(eventItem).toBeVisible();
     });
+});
 
-    test('game filter opens dialog when games exist', async ({ page }) => {
+// ---------------------------------------------------------------------------
+// Below 1024px (phone + tablet): the Filters FAB
+// ---------------------------------------------------------------------------
+
+test.describe('Calendar — Filters FAB (phone + tablet)', () => {
+    test.beforeEach(({}, testInfo) => {
+        test.skip(isDesktop(testInfo), 'Below 1024px only — desktop uses the toolbar funnel');
+    });
+
+    test('Filters FAB opens the sheet with the game search and a row per game (ROK-1662)', async ({ page }) => {
+        const [game] = await configuredGames();
         await page.goto('/calendar');
-        // Wait for schedule view to load on mobile.
-        await expect(page.getByRole('button', { name: 'Schedule', exact: true })).toBeVisible({ timeout: 15_000 });
+        const sheet = await openFilterSheet(page);
+        // No toolbar funnel below 1024px, and the retired "Filter by game" button is gone.
+        await expect(page.getByTestId('filter-panel-trigger')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: /filter by game/i })).toHaveCount(0);
 
-        // Soft check: filter button may not exist without IGDB seed data (CI).
-        const filterBtn = page.getByRole('button', { name: /filter by game/i });
-        if (await filterBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await filterBtn.click();
-            // On mobile, the filter opens as a dialog with game buttons (not checkboxes).
-            const dialog = page.getByRole('dialog', { name: /filter by game/i });
-            await expect(dialog).toBeVisible({ timeout: 5_000 });
-            // The dialog should contain at least one game button.
-            const gameButtons = dialog.getByRole('button');
-            const buttonCount = await gameButtons.count();
-            expect(buttonCount).toBeGreaterThan(0);
-        }
+        const search = sheet.getByRole('searchbox', { name: 'Search games' });
+        await expect(search).toBeVisible();
+        await expect(sheet.getByRole('button', { name: 'None' })).toBeVisible();
+        expect(await knownGameCount(sheet)).toBeGreaterThanOrEqual(1);
+        const rows = sheet.locator('button[aria-pressed]');
+        const row = rows.filter({ hasText: game.name }).first();
+        await expect(row).toBeVisible();
+
+        // The search narrows the list — to nothing, then back to the game.
+        await search.fill('zz-no-such-game-rok-1662');
+        await expect(sheet.getByText('No games match your search.')).toBeVisible();
+        await expect(rows).toHaveCount(0);
+        await search.fill(game.name);
+        await expect(row).toBeVisible();
     });
 });
 
 // ---------------------------------------------------------------------------
-// Regression: ROK-1315 — calendar shows gameless events when filter chip active
+// Regression: ROK-1315 — calendar shows gameless events when the game filter is active
 // ---------------------------------------------------------------------------
 
-test.describe('Regression: ROK-1315 — calendar shows gameless events when filter chip active', () => {
+test.describe('Regression: ROK-1315 — calendar shows gameless events when the game filter is active', () => {
     test.beforeEach(({}, testInfo) => {
-        // The filter chip lives in the desktop sidebar. The mobile FAB / sheet
-        // flow opens the same modal but the chip element only renders on
-        // desktop, so scope this regression to the desktop project.
-        test.skip(isPhoneLayout(testInfo), 'Filter chip is desktop-only');
+        // Phones open on the Schedule list (no Week grid). Desktop drives the
+        // toolbar funnel; the tablet (Week grid at 768px+) drives the Filters FAB.
+        test.skip(isMobile(testInfo), 'Needs the Week grid (768px and up)');
     });
 
-    test('gameless event remains visible after the user opens the chip and clicks "None"', async ({ page, world }) => {
+    test('gameless event remains visible after the user picks "None"', async ({ page, world }, testInfo) => {
+        await configuredGames();
         const token = await getAdminToken();
 
         // Create a gameless event (no `gameId`) inside the visible week so it
@@ -176,11 +273,9 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when filt
             await page.goto('/calendar');
             await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
 
-            // Make sure the calendar covers the event's start. The week / month
-            // ranges already include "now + 2h", but the user's last viewPref
-            // (persisted in localStorage) could be Day — narrow to Week so the
-            // assertion is deterministic across stored prefs.
-            await page.getByRole('button', { name: 'Week' }).click();
+            // The user's last viewPref (persisted) could be Day — narrow to Week
+            // so the assertion is deterministic across stored prefs.
+            await page.getByRole('button', { name: 'Week', exact: true }).click();
 
             // The week starts on SUNDAY (`weekStartsOn: 0`). A run late on a
             // Saturday seeds "now + 2h" into next week's Sunday, which the
@@ -196,49 +291,39 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when filt
                 await page.getByRole('button', { name: /^Next week$/i }).click();
             }
 
-            // Calendar grid events render as <div class="week-event-block"> via
-            // WeekEventCard — they are NOT anchor links, so locate by the
-            // unique event title instead of an href selector. world.uid() makes
-            // the title globally unique across worker shards.
+            // Grid events render as <div class="week-event-block"> (WeekEventCard),
+            // not links — locate by the unique (world.uid) title.
             const eventCard = page.locator('.week-event-block').filter({ hasText: title }).first();
-
-            // Pre-condition: the gameless event renders at least once with the
-            // chip in its untouched default state. (The chip start state has a
-            // defined Set populated by `selectAll` once `allKnownGames` lands —
-            // this would have failed on the buggy predicate too, since the bug
-            // applies to ANY defined Set, not only the "None" state.)
             await expect(eventCard).toBeVisible({ timeout: 15_000 });
 
-            // Drive the chip into the defined-but-empty state (deselect all).
-            // The chip is gated by `allKnownGames.length > 0` — without IGDB
-            // seed data the chip never renders, in which case the broken
-            // predicate path can't be exercised end-to-end. Skip with a clear
-            // message in that case.
-            const chip = page.getByRole('button', { name: /filter by game/i }).first();
-            if (!(await chip.isVisible({ timeout: 3000 }).catch(() => false))) {
-                test.skip(true, 'Filter chip absent — IGDB seed data missing in this env.');
-                return;
+            // Drive the filter into the defined-but-empty state ("None").
+            const desktop = isDesktop(testInfo);
+            const filters = desktop ? await openFilterPanel(page) : await openFilterSheet(page);
+            await filters.getByRole('button', { name: 'None' }).click();
+            await expect(filters.getByText(/^0 of \d+ selected$/)).toBeVisible();
+            const total = await knownGameCount(filters);
+
+            // Close the filter so the grid is in the foreground.
+            const opener = page.getByTestId(desktop ? 'filter-panel-trigger' : 'filter-fab');
+            if (desktop) {
+                await opener.click();
+                await expect(opener).toHaveAttribute('aria-expanded', 'false');
+            } else {
+                await filters.getByRole('button', { name: 'Close', exact: true }).click();
+                await expect(filters).toBeHidden({ timeout: 5_000 });
             }
-            await chip.click();
-            const dialog = page.getByRole('dialog', { name: /filter by game/i });
-            await expect(dialog).toBeVisible({ timeout: 5_000 });
-            await dialog.getByRole('button', { name: 'None' }).click();
-            // Close the dialog so the calendar grid is in the foreground.
-            await page.keyboard.press('Escape');
-            await expect(dialog).not.toBeVisible({ timeout: 5_000 });
 
-            // The chip should now read "Filter: No games" — confirms the store
-            // has flipped into the defined-but-empty state that triggers the
-            // ROK-1315 bug pre-fix.
-            await expect(chip).toContainText(/Filter: No games/);
+            // The badge counts every game hidden — the store is in the
+            // defined-but-empty state that triggered the ROK-1315 bug pre-fix.
+            await expect(opener.getByTestId('filter-count-badge')).toHaveText(String(total));
+            await expect(opener).toHaveAccessibleDescription(gamesHidden(total));
 
-            // AC: gameless event is STILL rendered on the grid even though the
-            // filter chip is in a defined non-default state. Pre-fix this
-            // assertion fails because the predicate short-circuited on
-            // `event.game?.slug` being falsy.
+            // AC: the gameless event is STILL on the grid. Pre-fix the predicate
+            // short-circuited on `event.game?.slug` being falsy.
             await expect(eventCard).toBeVisible({ timeout: 5_000 });
         } finally {
             await apiDelete(token, `/events/${event.id}`);
+            await resetSavedGameFilter();
         }
     });
 });
