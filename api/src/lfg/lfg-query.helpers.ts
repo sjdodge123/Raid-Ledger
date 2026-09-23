@@ -154,8 +154,12 @@ export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
   };
 }
 
-/** Columns every group aggregate selects. */
-function groupColumns(viewerId: number) {
+/**
+ * Columns every group aggregate selects. A `null` viewer (a channel post with
+ * no reader, ROK-1435) makes `hasOwnIntent` a constant `false` rather than
+ * computing it against somebody's id.
+ */
+function groupColumns(viewerId: number | null) {
   return {
     gameId: schema.games.id,
     gameName: schema.games.name,
@@ -164,7 +168,10 @@ function groupColumns(viewerId: number) {
     viabilityThreshold: schema.games.cooptimusOnlineMax,
     activeCount: count(),
     soonestExpiresAt: min(schema.lfgIntents.expiresAt),
-    hasOwnIntent: sql<boolean>`bool_or(${schema.lfgIntents.userId} = ${viewerId})`,
+    hasOwnIntent:
+      viewerId === null
+        ? sql<boolean>`false`
+        : sql<boolean>`bool_or(${schema.lfgIntents.userId} = ${viewerId})`,
     // Aggregate FILTERs rather than a second query: both land in the same
     // GROUP BY the counts already use, so a now-count costs no extra scan.
     // `.mapWith` reuses the columns' own decoders, so these two agree with
@@ -191,20 +198,45 @@ export async function listActiveGroups(
   db: LfgDb,
   viewerId: number,
 ): Promise<LfgGroupSummaryDto[]> {
-  const rows = await db
-    .select(groupColumns(viewerId))
-    .from(schema.lfgIntents)
-    .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
-    .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
-    // The `?lfg=1` grid renders whatever this returns, so an admin-hidden or
-    // banned game with a live intent would walk straight back onto the
-    // Library. Every other game-listing query applies the shared filter
-    // (`igdb-discover-deals.helpers.ts` and siblings); this read was the gap.
-    .where(and(liveIntent(new Date()), VISIBILITY_FILTER()))
-    .groupBy(schema.games.id)
-    .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)))
-    .limit(LFG_LIST_LIMIT);
+  const rows = await queryActiveGroups(db, viewerId);
   return rows.map((r) => toGroupSummary(r));
+}
+
+/**
+ * Viewer-free twin of {@link listActiveGroups} for channel posts (ROK-1435
+ * weekly digest). Same query, same order, same limit — but no viewer id ever
+ * enters it, so there is no per-reader fact to strip afterwards (the
+ * ROK-1626 failure mode). Returns the raw aggregates; callers project only
+ * the viewer-independent fields they need.
+ *
+ * @param db - Drizzle handle.
+ */
+export function listActiveGroupsForChannel(
+  db: LfgDb,
+): Promise<LfgGroupAggregate[]> {
+  return queryActiveGroups(db, null);
+}
+
+/** The one definition of "the live group list", shared by both reads. */
+async function queryActiveGroups(
+  db: LfgDb,
+  viewerId: number | null,
+): Promise<LfgGroupAggregate[]> {
+  return (
+    db
+      .select(groupColumns(viewerId))
+      .from(schema.lfgIntents)
+      .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
+      .innerJoin(schema.games, eq(schema.games.id, schema.lfgIntents.gameId))
+      // The `?lfg=1` grid renders whatever this returns, so an admin-hidden or
+      // banned game with a live intent would walk straight back onto the
+      // Library. Every other game-listing query applies the shared filter
+      // (`igdb-discover-deals.helpers.ts` and siblings); this read was the gap.
+      .where(and(liveIntent(new Date()), VISIBILITY_FILTER()))
+      .groupBy(schema.games.id)
+      .orderBy(desc(count()), asc(min(schema.lfgIntents.expiresAt)))
+      .limit(LFG_LIST_LIMIT)
+  );
 }
 
 /**

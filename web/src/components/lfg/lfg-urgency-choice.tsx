@@ -73,6 +73,21 @@ const CHOICES: readonly Choice[] = [
 ];
 
 /**
+ * A choice's visible text. ROK-1619: when `spawnGlyph` is set, the `now` pick
+ * is the press that forms the group, so it reads `🎉 Right now · starts the
+ * group` — the words carry the meaning (AC6), the glyph is `aria-hidden`.
+ */
+function ChoiceLabel({ choice, spawnGlyph }: { choice: Choice; spawnGlyph?: string }): JSX.Element {
+    if (choice.key !== 'now' || !spawnGlyph) return <>{choice.label}</>;
+    return (
+        <>
+            <span aria-hidden="true" data-testid="lfg-spawn-indicator">{spawnGlyph}</span>{' '}
+            {choice.label} · {LFG_COPY.urgencyNowStartsGroup}
+        </>
+    );
+}
+
+/**
  * The "when do you want to play?" control.
  *
  * @param label - What is being chosen for (a game name), used to name the
@@ -80,15 +95,19 @@ const CHOICES: readonly Choice[] = [
  * @param disabled - True while a join is in flight; disables all three.
  * @param onPick - Receives a fresh pick object, safe for the caller to spread
  *   straight into the join mutation's variables.
+ * @param spawnGlyph - ROK-1619: set only when a `Right now` pick would form
+ *   the group; the server-resolved indicator emoji to mark it with.
  */
 export function LfgUrgencyChoice({
     label,
     disabled = false,
     onPick,
+    spawnGlyph,
 }: {
     label: string;
     disabled?: boolean;
     onPick: (pick: LfgUrgencyPick) => void;
+    spawnGlyph?: string;
 }): JSX.Element {
     return (
         <div
@@ -106,7 +125,7 @@ export function LfgUrgencyChoice({
                     onClick={() => onPick({ ...choice.pick })}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${choice.className}`}
                 >
-                    {choice.label}
+                    <ChoiceLabel choice={choice} spawnGlyph={spawnGlyph} />
                 </button>
             ))}
         </div>

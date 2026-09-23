@@ -17,6 +17,7 @@ import {
   setDefaultTimezone,
   getDiscordBotDefaultVoiceChannel,
   setDiscordBotDefaultVoiceChannel,
+  setWeeklyDigestSettings,
 } from './settings-discord.helpers';
 
 function createMockSettingsCore(): SettingsCore & {
@@ -38,7 +39,7 @@ function createMockSettingsCore(): SettingsCore & {
   };
 }
 
-describe('settings-discord.helpers', () => {
+describe('settings-discord.helpers — channel, setup and community name', () => {
   let svc: ReturnType<typeof createMockSettingsCore>;
 
   beforeEach(() => {
@@ -89,6 +90,14 @@ describe('settings-discord.helpers', () => {
       expect(result).toBe('Epic Raiders');
     });
   });
+});
+
+describe('settings-discord.helpers — timezones and voice channel', () => {
+  let svc: ReturnType<typeof createMockSettingsCore>;
+
+  beforeEach(() => {
+    svc = createMockSettingsCore();
+  });
 
   describe('getDiscordBotTimezone / setDiscordBotTimezone', () => {
     it('returns null when not set', async () => {
@@ -127,5 +136,70 @@ describe('settings-discord.helpers', () => {
       const result = await getDiscordBotDefaultVoiceChannel(svc);
       expect(result).toBe('987654321');
     });
+  });
+});
+
+describe('setWeeklyDigestSettings (ROK-1435)', () => {
+  const VALUE = {
+    enabled: true,
+    channelId: '123456789012345678',
+    day: 5,
+    hour: 18,
+  };
+
+  /** A SettingsCore whose writes resolve on the next tick, counting overlap. */
+  function trackingCore(failKey?: string) {
+    const written: string[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const write = (key: string) => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      return new Promise<void>((resolve, reject) =>
+        setImmediate(() => {
+          inFlight--;
+          if (key === failKey) return reject(new Error(`write ${key} failed`));
+          written.push(key);
+          resolve();
+        }),
+      );
+    };
+    const svc: SettingsCore = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn((key: string) => write(key)),
+      exists: jest.fn().mockResolvedValue(false),
+      delete: jest.fn((key: string) => write(`delete:${key}`)),
+    };
+    return { svc, written, maxInFlight: () => maxInFlight };
+  }
+
+  it('writes one key at a time, the enabled flag last', async () => {
+    const { svc, written, maxInFlight } = trackingCore();
+    await setWeeklyDigestSettings(svc, VALUE);
+    expect(maxInFlight()).toBe(1);
+    expect(written).toEqual([
+      SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID,
+      SETTING_KEYS.WEEKLY_DIGEST_DAY,
+      SETTING_KEYS.WEEKLY_DIGEST_HOUR,
+      SETTING_KEYS.WEEKLY_DIGEST_ENABLED,
+    ]);
+  });
+
+  it('stops at the first failed write, so a half-saved digest is never enabled', async () => {
+    const { svc, written } = trackingCore(SETTING_KEYS.WEEKLY_DIGEST_DAY);
+    await expect(setWeeklyDigestSettings(svc, VALUE)).rejects.toThrow(
+      `write ${SETTING_KEYS.WEEKLY_DIGEST_DAY} failed`,
+    );
+    expect(written).toEqual([SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID]);
+    expect(svc.set).not.toHaveBeenCalledWith(
+      SETTING_KEYS.WEEKLY_DIGEST_ENABLED,
+      expect.anything(),
+    );
+  });
+
+  it('deletes the channel key when channelId is null', async () => {
+    const { svc, written } = trackingCore();
+    await setWeeklyDigestSettings(svc, { ...VALUE, channelId: null });
+    expect(written[0]).toBe(`delete:${SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID}`);
   });
 });
