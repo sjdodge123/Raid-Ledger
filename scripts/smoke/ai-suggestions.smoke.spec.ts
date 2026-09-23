@@ -25,7 +25,9 @@
  *   - the AI-only stub is an invented game id offset per worker, so the two
  *     workers cannot pick the same catalogue row;
  *   - the nominate assertion polls THIS lineup's nominations only.
- * Nothing global (settings, plugin state, the games catalogue) is mutated.
+ * The one global write is enabling the `ai` plugin (install/activate, never
+ * deactivated — see `enableAiSurface`); settings and the games catalogue are
+ * untouched.
  *
  * ## Deviation from the story text
  * ROK-1110 asks for "hover the chip — tooltip surfaces the reasoning". That
@@ -47,7 +49,7 @@ import {
   pollForCondition,
 } from './api-helpers';
 import {
-  aiSurfaceAvailable,
+  enableAiSurface,
   buildSuggestion,
   clearAiSuggestions,
   seedAiSuggestions,
@@ -82,7 +84,7 @@ test.beforeAll(({}, testInfo) => {
 
 /** Open the lineup and wait for the Common Ground grid to have painted. */
 async function openLineup(page: Page, lineupId: number): Promise<void> {
-  await page.goto(`/lineups/${lineupId}`);
+  await page.goto(`/community-lineup/${lineupId}`);
   await expect(
     page.getByTestId('common-ground-tile').first(),
   ).toBeVisible({ timeout: 30_000 });
@@ -105,13 +107,12 @@ test.describe('AI suggestions blend into Common Ground', () => {
   test.beforeAll(async ({}, testInfo) => {
     adminToken = await getAdminToken();
 
-    // The whole surface is gated on the `ai` plugin + the admin toggle. On an
-    // env without the plugin there is nothing to assert; skipping is the
-    // correct outcome, not a failure (CLAUDE.md: skip cleanly).
-    test.skip(
-      !(await aiSurfaceAvailable(adminToken)),
-      'AI plugin inactive or ai_suggestions_enabled=false on this env',
-    );
+    // The whole surface is gated on the `ai` plugin + the admin toggle. CI
+    // boots with the plugin uninstalled, so enable it (no LLM needed — the
+    // seeded cache row serves the read). The only skip left is an explicit
+    // operator `ai_suggestions_enabled=false`, and its reason says so.
+    const skipReason = await enableAiSurface(adminToken);
+    test.skip(skipReason !== null, skipReason ?? '');
 
     await apiPost(adminToken, '/admin/test/reset-lineups', {
       titlePrefix: workerPrefix,
@@ -142,7 +143,7 @@ test.describe('AI suggestions blend into Common Ground', () => {
     const rows: Array<{ gameId: number; gameName: string }> = cg?.data ?? [];
     test.skip(
       rows.length === 0,
-      'Common Ground returned no games — env has no ownership overlap to blend into',
+      'SKIPPED — Common Ground returned no games (minOwners=2): this env has no seeded ownership overlap to blend into',
     );
     blendGameId = rows[0].gameId;
     blendGameName = rows[0].gameName;
