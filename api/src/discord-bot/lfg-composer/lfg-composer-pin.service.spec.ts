@@ -399,7 +399,7 @@ describe('LfgComposerPinService.reconcile — intro copy refresh (ROK-1658)', ()
       author: { id: BOT },
       content,
       components,
-      edit: jest.fn((_: unknown) => Promise.resolve()),
+      edit: jest.fn<Promise<void>, [unknown]>(() => Promise.resolve()),
     };
     const intro = {
       id: 't1',
