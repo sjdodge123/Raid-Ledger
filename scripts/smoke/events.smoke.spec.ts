@@ -137,7 +137,7 @@ test.describe('Events list — mobile', () => {
         await page.goto('/events');
 
         // Mobile search input is inside the toolbar
-        const searchInput = page.getByRole('textbox', { name: 'Search events' });
+        const searchInput = page.getByRole('searchbox', { name: 'Search events' });
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
         // Search for a nonsense term — should show empty state

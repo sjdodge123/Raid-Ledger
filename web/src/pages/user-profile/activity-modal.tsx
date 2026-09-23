@@ -4,6 +4,7 @@ import type { GameActivityEntryDto, ItadGamePricingDto } from "@raid-ledger/cont
 import { formatPlaytime } from "../../lib/activity-utils";
 import { GameRowPill } from "../../components/games/game-row-pill";
 import { Modal } from "../../components/ui/modal";
+import { SearchInput } from "../../components/ui/search-input";
 import type { PricingMap } from "../user-profile-page";
 
 const MOST_PLAYED_BADGE = (
@@ -79,8 +80,9 @@ function ActivityModal({ entries, isOpen, onClose, search, setSearch, pricingMap
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={`Game Activity (${entries.length})`} maxWidth="max-w-2xl">
-      <input type="text" placeholder="Search games..." value={search} onChange={(e) => setSearch(e.target.value)}
-        className="w-full px-3 py-2 mb-4 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent" />
+      <div className="mb-4">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search games..." label="Search game activity" />
+      </div>
       <div className="flex flex-col gap-2">
         {filtered.map((entry) => (<ActivityEntryCard key={entry.gameId} entry={entry} pricing={pricingMap.get(entry.gameId)} />))}
       </div>
