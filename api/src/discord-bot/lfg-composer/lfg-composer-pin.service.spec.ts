@@ -235,8 +235,7 @@ describe('LfgComposerPinService — board toggle (ROK-1658)', () => {
       const method = proto[name];
       if (typeof method !== 'function') return false;
       const events = Reflect.getMetadata('EVENT_LISTENER_METADATA', method) as
-        | { event: unknown }[]
-        | undefined;
+        { event: unknown }[] | undefined;
       return (events ?? []).some((e) => e.event === LFG_BOARD_EVENTS.TOGGLED);
     });
     expect(onToggled).toEqual(['onBoardToggled']);
