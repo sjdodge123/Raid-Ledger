@@ -30,18 +30,39 @@ import {
 import { normalizeComposerTerm } from './lfg-composer-state.helpers';
 
 /**
- * Mirror of the web's `MAX_SEARCH_QUERY_LENGTH`
- * (`web/src/pages/games/use-search-query-param.ts`): the /games page ignores a
- * `?q=` longer than this, so the link must never carry one.
+ * Discord's cap on a Link button's `url`. A longer one fails the WHOLE message
+ * (API error 50035), so a reply carrying it would never render. The /games
+ * page's own `?q=` cap (the web's `MAX_SEARCH_QUERY_LENGTH`, 100) needs no
+ * enforcement here: `normalizeComposerTerm` already stops a term at 64.
  */
-export const GAMES_PAGE_SEARCH_MAX = 100;
+export const DISCORD_LINK_URL_MAX = 512;
+
+/**
+ * `url?q=<term>`, shortened to fit Discord's link cap.
+ *
+ * `URLSearchParams` turns one 3-byte UTF-8 character into 9 URL characters,
+ * so 64 of them overflow the cap on an ordinary base. The term loses one code
+ * point at a time (never half a surrogate pair) until the URL fits; a base too
+ * long to fit even one links plain /games.
+ */
+function withSearchTerm(url: string, term: string): string {
+  const points = Array.from(term);
+  while (points.length > 0) {
+    const q = new URLSearchParams({ q: points.join('') }).toString();
+    const linked = `${url}?${q}`;
+    if (linked.length <= DISCORD_LINK_URL_MAX) return linked;
+    points.pop();
+  }
+  return url;
+}
 
 /**
  * The games page a `View games ↗` button opens, or null when unconfigured.
  *
  * With a searched term the link carries `?q=<term>` so /games opens with the
  * search box already filled (ROK-1658 operator note) — the term goes through
- * `URLSearchParams`, so spaces, `&`, `#` and unicode arrive intact.
+ * `URLSearchParams`, so spaces, `&`, `#` and unicode arrive intact, cut short
+ * only where the full term would push the URL past `DISCORD_LINK_URL_MAX`.
  *
  * @param clientUrl - Deployment client URL.
  * @param term - What the player searched; absent or blank links plain /games.
@@ -54,8 +75,7 @@ export function gamesPageUrl(
   const base = clientUrl?.trim();
   if (!base) return null;
   const url = `${base.replace(/\/+$/, '')}/games`;
-  const q = normalizeComposerTerm(term ?? '').slice(0, GAMES_PAGE_SEARCH_MAX);
-  return q ? `${url}?${new URLSearchParams({ q }).toString()}` : url;
+  return withSearchTerm(url, normalizeComposerTerm(term ?? ''));
 }
 
 /**

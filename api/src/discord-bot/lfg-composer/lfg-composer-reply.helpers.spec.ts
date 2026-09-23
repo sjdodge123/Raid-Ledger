@@ -9,7 +9,7 @@ import {
   LFG_COMPOSER_TERM_MAX,
 } from './lfg-composer.constants';
 import {
-  GAMES_PAGE_SEARCH_MAX,
+  DISCORD_LINK_URL_MAX,
   buildComposerCard,
   buildComposerModal,
   gamesPageUrl,
@@ -24,6 +24,11 @@ import { horizonOf, orderUrgencyChoices } from './lfg-composer-urgency.helpers';
 
 const CLIENT_URL = 'https://raid.example.net';
 const DRG = { id: 3, name: 'Deep Rock Galactic' };
+/**
+ * The web's `MAX_SEARCH_QUERY_LENGTH` (`web/src/pages/games/use-search-query-param.ts`):
+ * /games ignores a longer `?q=`, so the composer's term cap must stay under it.
+ */
+const WEB_SEARCH_QUERY_MAX = 100;
 
 /** The one text input inside a built modal, narrowed out of the union. */
 function modalInput(
@@ -241,7 +246,7 @@ describe('View games carries the searched term (ROK-1658 operator note)', () => 
     );
     const q = new URL(url ?? '').searchParams.get('q') ?? '';
     expect(q).toBe('x'.repeat(LFG_COMPOSER_TERM_MAX));
-    expect(q.length).toBeLessThanOrEqual(GAMES_PAGE_SEARCH_MAX);
+    expect(LFG_COMPOSER_TERM_MAX).toBeLessThanOrEqual(WEB_SEARCH_QUERY_MAX);
   });
 
   it('trims the term and links plain /games when it is blank', () => {
@@ -256,5 +261,42 @@ describe('View games carries the searched term (ROK-1658 operator note)', () => 
     const reply = buildCandidatesReply(TERM, [DRG], false, null);
     expect(linkUrl(reply.components)).toBeUndefined();
     expect(labels(reply)).not.toContain(LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON);
+  });
+});
+
+describe('View games stays inside Discord’s link cap', () => {
+  const PROD_URL = 'https://raid.gamernight.net';
+  /** Each of these is 3 UTF-8 bytes, so 9 URL characters once encoded. */
+  const WIDE_TERMS: Array<[string, string]> = [
+    ['CJK', '漢'.repeat(LFG_COMPOSER_TERM_MAX)],
+    ['euro sign', '€'.repeat(LFG_COMPOSER_TERM_MAX)],
+  ];
+
+  /** The link fits, still searches, and was cut by no more than it had to be. */
+  function expectShortenedLink(url: string | undefined, term: string): void {
+    expect(url?.length).toBeLessThanOrEqual(DISCORD_LINK_URL_MAX);
+    expect(url?.startsWith(`${PROD_URL}/games?q=`)).toBe(true);
+    const q = new URL(url ?? '').searchParams.get('q') ?? '';
+    expect(q.length).toBeGreaterThan(0);
+    expect(term.startsWith(q)).toBe(true);
+    expect((url ?? '').length + 9).toBeGreaterThan(DISCORD_LINK_URL_MAX);
+  }
+
+  it.each(WIDE_TERMS)('shortens the no-match link for a %s term', (_, term) => {
+    const url = linkUrl(buildNoMatchReply(term, PROD_URL).components);
+    expectShortenedLink(url, term);
+  });
+
+  it.each(WIDE_TERMS)('shortens the results link for a %s term', (_, term) => {
+    const reply = buildCandidatesReply(term, [DRG], false, PROD_URL);
+    expectShortenedLink(linkUrl(reply.components), term);
+  });
+
+  it('links plain /games when the base leaves no room for one character', () => {
+    // 500 characters: /games fits at 506, `?q=%E6%BC%A2` would make it 518.
+    const base = `https://raid.example.net/${'a'.repeat(475)}`;
+    expect(gamesPageUrl(base, '漢'.repeat(LFG_COMPOSER_TERM_MAX))).toBe(
+      `${base}/games`,
+    );
   });
 });
