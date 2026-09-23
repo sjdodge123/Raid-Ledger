@@ -47,6 +47,13 @@ describe('DesignSystemPage', () => {
         expect(screen.getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
     });
 
+});
+
+describe('DesignSystemPage — Forms section', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
     it('the Forms section mounts the real primitives, wired through Field', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
@@ -98,130 +105,150 @@ describe('DesignSystemPage', () => {
             expect(screen.getByTestId(`swatch-live-${token}`)).toBeInTheDocument();
         }
     });
+});
 
-    describe('scheme switcher', () => {
-        it('offers every registered scheme and starts on the viewer’s current one', () => {
-            demoMode(true);
-            renderWithProviders(<DesignSystemPage />);
-            const select = screen.getByRole('combobox', { name: /scheme/i }) as HTMLSelectElement;
-            expect(select.options).toHaveLength(THEME_REGISTRY.length);
-            expect(THEME_REGISTRY.map((t) => t.id)).toContain(select.value);
-        });
-
-        it('writes data-scheme (and data-variant for quest-log) onto <html>', () => {
-            demoMode(true);
-            renderWithProviders(<DesignSystemPage />);
-            const select = screen.getByRole('combobox', { name: /scheme/i });
-
-            fireEvent.change(select, { target: { value: 'sky' } });
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('sky');
-            expect(document.documentElement.hasAttribute('data-variant')).toBe(false);
-
-            // quest-log is the one scheme applied through data-variant, not data-scheme.
-            fireEvent.change(select, { target: { value: 'quest-log' } });
-            expect(document.documentElement.getAttribute('data-variant')).toBe('quest-log');
-
-            fireEvent.change(select, { target: { value: 'ember' } });
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
-            expect(document.documentElement.hasAttribute('data-variant')).toBe(false);
-        });
+describe('DesignSystemPage — scheme switcher', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
     });
 
-    describe('side-by-side toggle', () => {
-        it('is off by default — one copy of each section, no family columns', () => {
-            demoMode(true);
-            renderWithProviders(<DesignSystemPage />);
-            expect(screen.queryByTestId('ds-family-dark')).not.toBeInTheDocument();
-            expect(screen.getAllByRole('heading', { name: 'Tokens', level: 2 })).toHaveLength(1);
-        });
+    it('offers every registered scheme and starts on the viewer’s current one', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const select = screen.getByRole('combobox', { name: /scheme/i }) as HTMLSelectElement;
+        expect(select.options).toHaveLength(THEME_REGISTRY.length);
+        expect(THEME_REGISTRY.map((t) => t.id)).toContain(select.value);
+    });
 
-        it('renders both families with the sections duplicated', () => {
-            demoMode(true);
-            renderWithProviders(<DesignSystemPage />);
-            fireEvent.click(screen.getByRole('button', { name: /side by side/i }));
+    it('writes data-scheme (and data-variant for quest-log) onto <html>', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const select = screen.getByRole('combobox', { name: /scheme/i });
 
-            const dark = screen.getByTestId('ds-family-dark');
-            const light = screen.getByTestId('ds-family-light');
-            // Light is genuinely scoped; dark shows the root, which is pinned below.
-            expect(light).toHaveAttribute('data-scheme', 'light');
-            expect(dark).not.toHaveAttribute('data-scheme');
-            expect(dark.contains(light)).toBe(false);
+        fireEvent.change(select, { target: { value: 'sky' } });
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('sky');
+        expect(document.documentElement.hasAttribute('data-variant')).toBe(false);
 
-            for (const heading of ['Tokens', 'Accent hues', 'Pattern — filtering', 'Semantic colour tokens', 'Pattern — week strip']) {
-                expect(within(dark).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
-                expect(within(light).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
-            }
-            // The DO / DON'T pair is inside both columns, not only the dark one.
-            expect(within(dark).getByTestId('ds-filter-dont')).toBeInTheDocument();
-            expect(within(light).getByTestId('ds-filter-dont')).toBeInTheDocument();
-        });
+        // quest-log is the one scheme applied through data-variant, not data-scheme.
+        fireEvent.change(select, { target: { value: 'quest-log' } });
+        expect(document.documentElement.getAttribute('data-variant')).toBe('quest-log');
 
-        it('pins the root to default-dark while on, and restores the scheme when off', () => {
-            demoMode(true);
-            renderWithProviders(<DesignSystemPage />);
-            const select = screen.getByRole('combobox', { name: /scheme/i });
-            fireEvent.change(select, { target: { value: 'sky' } });
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('sky');
+        fireEvent.change(select, { target: { value: 'ember' } });
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
+        expect(document.documentElement.hasAttribute('data-variant')).toBe(false);
+    });
+});
 
-            const toggle = screen.getByRole('button', { name: /side by side/i });
-            fireEvent.click(toggle);
-            expect(toggle).toHaveAttribute('aria-pressed', 'true');
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
-            expect(screen.getByTestId('ds-side-by-side-note')).toBeInTheDocument();
+describe('DesignSystemPage — side-by-side toggle', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
 
-            fireEvent.click(toggle);
-            expect(toggle).toHaveAttribute('aria-pressed', 'false');
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('sky');
-            expect(screen.queryByTestId('ds-family-light')).not.toBeInTheDocument();
-        });
+    it('is off by default — one copy of each section, no family columns', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        expect(screen.queryByTestId('ds-family-dark')).not.toBeInTheDocument();
+        expect(screen.getAllByRole('heading', { name: 'Tokens', level: 2 })).toHaveLength(1);
+    });
 
-        it('keeps a scheme picked WHILE the comparison is up (no stale restore)', () => {
-            demoMode(true);
-            renderWithProviders(<DesignSystemPage />);
-            const select = screen.getByRole('combobox', { name: /scheme/i });
-            fireEvent.change(select, { target: { value: 'sky' } });
+    it('renders both families with the sections duplicated', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        fireEvent.click(screen.getByRole('button', { name: /side by side/i }));
 
-            const toggle = screen.getByRole('button', { name: /side by side/i });
-            fireEvent.click(toggle);
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+        const dark = screen.getByTestId('ds-family-dark');
+        const light = screen.getByTestId('ds-family-light');
+        // Light is genuinely scoped; dark shows the root, which is pinned below.
+        expect(light).toHaveAttribute('data-scheme', 'light');
+        expect(dark).not.toHaveAttribute('data-scheme');
+        expect(dark.contains(light)).toBe(false);
 
-            // The viewer changes their mind with the comparison still on.
-            fireEvent.change(select, { target: { value: 'ember' } });
-            fireEvent.click(toggle);
-            // Their later choice wins — it is NOT reverted to the pre-toggle 'sky'.
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
-        });
+        for (const heading of ['Tokens', 'Accent hues', 'Pattern — filtering', 'Semantic colour tokens', 'Pattern — week strip']) {
+            expect(within(dark).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
+            expect(within(light).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
+        }
+        // The DO / DON'T pair is inside both columns, not only the dark one.
+        expect(within(dark).getByTestId('ds-filter-dont')).toBeInTheDocument();
+        expect(within(light).getByTestId('ds-filter-dont')).toBeInTheDocument();
+    });
 
-        it('leaves a light viewer’s hidden dark-theme preference untouched', () => {
-            demoMode(true);
-            // A viewer resolved to a LIGHT scheme who also holds a custom dark theme.
-            useThemeStore.getState().setDarkTheme('ember');
-            useThemeStore.getState().setLightTheme('sky');
-            useThemeStore.getState().setMode('light');
-            expect(useThemeStore.getState().darkTheme).toBe('ember');
+    it('pins the root to default-dark while on, and restores the scheme when off', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const select = screen.getByRole('combobox', { name: /scheme/i });
+        fireEvent.change(select, { target: { value: 'sky' } });
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('sky');
 
-            const { unmount } = renderWithProviders(<DesignSystemPage />);
-            fireEvent.click(screen.getByRole('button', { name: /side by side/i }));
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+        const toggle = screen.getByRole('button', { name: /side by side/i });
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+        expect(screen.getByTestId('ds-side-by-side-note')).toBeInTheDocument();
 
-            unmount();
-            // Pinning writes setDarkTheme('default-dark'); the cleanup must put
-            // the viewer's own dark theme back, not just the resolved light one.
-            expect(useThemeStore.getState().darkTheme).toBe('ember');
-            expect(useThemeStore.getState().lightTheme).toBe('sky');
-            expect(useThemeStore.getState().themeMode).toBe('light');
-        });
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('sky');
+        expect(screen.queryByTestId('ds-family-light')).not.toBeInTheDocument();
+    });
+});
 
-        it('restores the viewer’s scheme on unmount', () => {
-            demoMode(true);
-            const { unmount } = renderWithProviders(<DesignSystemPage />);
-            fireEvent.change(screen.getByRole('combobox', { name: /scheme/i }), { target: { value: 'ember' } });
-            fireEvent.click(screen.getByRole('button', { name: /side by side/i }));
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+describe('DesignSystemPage — side-by-side toggle: restore', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
 
-            unmount();
-            expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
-        });
+    it('keeps a scheme picked WHILE the comparison is up (no stale restore)', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const select = screen.getByRole('combobox', { name: /scheme/i });
+        fireEvent.change(select, { target: { value: 'sky' } });
+
+        const toggle = screen.getByRole('button', { name: /side by side/i });
+        fireEvent.click(toggle);
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+
+        // The viewer changes their mind with the comparison still on.
+        fireEvent.change(select, { target: { value: 'ember' } });
+        fireEvent.click(toggle);
+        // Their later choice wins — it is NOT reverted to the pre-toggle 'sky'.
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
+    });
+
+    it('leaves a light viewer’s hidden dark-theme preference untouched', () => {
+        demoMode(true);
+        // A viewer resolved to a LIGHT scheme who also holds a custom dark theme.
+        useThemeStore.getState().setDarkTheme('ember');
+        useThemeStore.getState().setLightTheme('sky');
+        useThemeStore.getState().setMode('light');
+        expect(useThemeStore.getState().darkTheme).toBe('ember');
+
+        const { unmount } = renderWithProviders(<DesignSystemPage />);
+        fireEvent.click(screen.getByRole('button', { name: /side by side/i }));
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+
+        unmount();
+        // Pinning writes setDarkTheme('default-dark'); the cleanup must put
+        // the viewer's own dark theme back, not just the resolved light one.
+        expect(useThemeStore.getState().darkTheme).toBe('ember');
+        expect(useThemeStore.getState().lightTheme).toBe('sky');
+        expect(useThemeStore.getState().themeMode).toBe('light');
+    });
+
+    it('restores the viewer’s scheme on unmount', () => {
+        demoMode(true);
+        const { unmount } = renderWithProviders(<DesignSystemPage />);
+        fireEvent.change(screen.getByRole('combobox', { name: /scheme/i }), { target: { value: 'ember' } });
+        fireEvent.click(screen.getByRole('button', { name: /side by side/i }));
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('dark');
+
+        unmount();
+        expect(document.documentElement.getAttribute('data-scheme')).toBe('ember');
+    });
+});
+
+describe('DesignSystemPage — accents and gating', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
     });
 
     it('documents each accent hue with its dark shade and its light shade', () => {
