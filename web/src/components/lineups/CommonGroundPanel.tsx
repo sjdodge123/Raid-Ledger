@@ -154,8 +154,7 @@ function GameGrid(props: GameGridProps): JSX.Element {
     );
 }
 
-/** Search box + funnel on one row, the filter entry under it (ROK-1659). */
-function PanelFilters({ filters, setFilters, filtersRestored, coopDataAvailable, participantCount, search, setSearch }: {
+interface PanelFiltersProps {
     filters: CommonGroundParams;
     setFilters: (f: CommonGroundParams) => void;
     filtersRestored: boolean;
@@ -163,19 +162,19 @@ function PanelFilters({ filters, setFilters, filtersRestored, coopDataAvailable,
     participantCount: number;
     search: string;
     setSearch: (v: string) => void;
-}): JSX.Element {
+}
+
+/** Search box + funnel on one row, the filter entry under it (ROK-1659). */
+function PanelFilters({ filters, setFilters, filtersRestored, coopDataAvailable, participantCount, search, setSearch }: PanelFiltersProps): JSX.Element {
     const [open, setOpen] = useState(false);
+    const activeCount = commonGroundActiveFilterCount(filters, coopDataAvailable);
     return (
         <div className="space-y-2">
             <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
                     <SearchInput value={search} onChange={setSearch} label="Search games" placeholder="Search games..." />
                 </div>
-                <FilterEntryTrigger
-                    activeCount={commonGroundActiveFilterCount(filters, coopDataAvailable)}
-                    isOpen={open}
-                    onOpenChange={setOpen}
-                />
+                <FilterEntryTrigger activeCount={activeCount} isOpen={open} onOpenChange={setOpen} />
             </div>
             <CommonGroundFilterEntry
                 filters={filters}
