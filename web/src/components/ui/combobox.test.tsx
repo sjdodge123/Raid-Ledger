@@ -6,7 +6,7 @@
  */
 import { useState, type JSX } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Combobox, type ComboboxProps } from './combobox';
 import { Field } from './field';
@@ -36,7 +36,7 @@ describe('Combobox — ARIA wiring', () => {
         render(<Harness />);
         expect(box()).toHaveAttribute('aria-expanded', 'false');
         expect(box()).toHaveAttribute('aria-autocomplete', 'list');
-        expect(box()).toHaveAttribute('aria-controls');
+        expect(box(), 'aria-controls must not point at a listbox that is not rendered').not.toHaveAttribute('aria-controls');
         expect(box()).not.toHaveAttribute('aria-activedescendant');
         expect(box()).toHaveClass('text-base', 'focus-visible:ring-success/80');
     });
@@ -188,5 +188,52 @@ describe('Combobox — mouse, outside click, async', () => {
         await userEvent.type(box(), '{ArrowDown}');
         expect(screen.getByTestId('row-1')).toHaveTextContent('Diablo IV *');
         expect(screen.getByTestId('row-1').closest('[role="option"]')).toHaveAttribute('aria-selected', 'false');
+    });
+});
+
+describe('Combobox — IME, external reset, portal target, live region', () => {
+    it('ignores Enter and arrows while an IME composition is in progress', async () => {
+        const spy = vi.fn();
+        render(<Harness spy={spy} />);
+        await userEvent.type(box(), '{ArrowDown}');
+        const first = activeId();
+        fireEvent.keyDown(box(), { key: 'ArrowDown', isComposing: true });
+        expect(activeId(), 'a composing ArrowDown moved the active option').toBe(first);
+        fireEvent.keyDown(box(), { key: 'Enter', keyCode: 229 });
+        expect(spy, 'Enter confirming an IME candidate also selected an option').not.toHaveBeenCalled();
+        expect(box()).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('an external reset of value to null clears the stale label', () => {
+        const props = { label: 'Game', options: GAMES, getKey: (g: Game) => g.id, getLabel: (g: Game) => g.name, onChange: () => undefined };
+        const { rerender } = render(<Combobox<Game> {...props} value={GAMES[1]} />);
+        expect(box()).toHaveValue('Destiny 2');
+        rerender(<Combobox<Game> {...props} value={null} />);
+        expect(box(), 'the input kept the label of a value that was reset to null').toHaveValue('');
+    });
+
+    it('inside a Modal the listbox portals into the dialog (aria-modal hides everything else)', async () => {
+        render(<Modal isOpen onClose={() => undefined} title="Add character"><Harness /></Modal>);
+        await userEvent.type(box(), '{ArrowDown}');
+        expect(screen.getByRole('listbox').closest('[role="dialog"]'), 'listbox rendered outside the aria-modal dialog').not.toBeNull();
+    });
+
+    it('portalContainer overrides the portal target', async () => {
+        const target = document.createElement('div');
+        document.body.appendChild(target);
+        render(<Harness portalContainer={target} />);
+        await userEvent.type(box(), '{ArrowDown}');
+        expect(target.contains(screen.getByRole('listbox')), 'listbox not rendered into portalContainer').toBe(true);
+        target.remove();
+    });
+
+    it('keeps ONE persistent role="status" live region, mounted while closed, text updated', async () => {
+        render(<Harness loading loadingText="Searching…" />);
+        const region = screen.getByRole('status');
+        expect(region).toHaveTextContent('');
+        await userEvent.type(box(), 'd');
+        expect(screen.getAllByRole('status')).toHaveLength(1);
+        expect(screen.getByRole('status'), 'the live region was remounted instead of updated').toBe(region);
+        expect(region).toHaveTextContent('Searching…');
     });
 });

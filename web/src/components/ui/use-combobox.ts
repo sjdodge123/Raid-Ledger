@@ -7,7 +7,8 @@
  * Escape closes an open popup; on a closed one it clears the text and the
  * value. Tab commits the active option (focus still moves on) or just closes.
  * Escape is stopped only when it did something, so a surrounding Modal or
- * BottomSheet closes on the NEXT press, not this one.
+ * BottomSheet closes on the NEXT press, not this one. Every key is ignored
+ * while an IME composition is in progress (Enter confirms the candidate).
  */
 import { useId, useState, type KeyboardEvent } from 'react';
 import type { ComboboxProps, ComboboxStatus } from './combobox-types';
@@ -36,7 +37,7 @@ function useComboboxText<T>(p: ComboboxProps<T>): [string, (s: string) => void] 
     const [seenKey, setSeenKey] = useState(key);
     if (key !== seenKey) {
         setSeenKey(key);
-        if (p.value && p.inputValue === undefined) setOwn(p.getLabel(p.value));
+        if (p.inputValue === undefined) setOwn(p.value ? p.getLabel(p.value) : '');
     }
     const setText = (s: string): void => {
         if (p.inputValue === undefined) setOwn(s);
@@ -82,6 +83,7 @@ function escape(c: Internals, e: KeyEvent): void {
 }
 
 function handleKey(c: Internals, e: KeyEvent): void {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return; // an IME is confirming a candidate
     const jump = (i: number): void => { if (c.open && c.n > 0) { e.preventDefault(); c.setActive(i); } };
     const commit = c.open && c.activeIndex >= 0;
     switch (e.key) {

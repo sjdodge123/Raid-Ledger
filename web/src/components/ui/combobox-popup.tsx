@@ -1,8 +1,10 @@
 /**
- * The Combobox popup (ROK-1646): portalled to `<body>` above Modal and
- * BottomSheet (`Z_INDEX.MODAL + 1`), `bg-surface border-edge rounded-lg`, the
+ * The Combobox popup (ROK-1646): portalled to `portalContainer` (the
+ * surrounding dialog, else `<body>`) above Modal and BottomSheet (`Z_INDEX.MODAL + 1`), `bg-surface border-edge rounded-lg`, the
  * active row on `bg-overlay`, rows 44px below `lg`. A press inside it is
  * `preventDefault`ed so focus — and `aria-activedescendant` — stay on the input.
+ * The visible status row is `aria-hidden`: the announcement comes from the ONE
+ * persistent {@link ComboboxLiveRegion}, which is mounted even while closed.
  */
 import type { CSSProperties, JSX, ReactNode, RefObject } from 'react';
 import { createPortal } from 'react-dom';
@@ -26,6 +28,8 @@ export interface ComboboxPopupProps<T> {
     render: (option: T, state: ComboboxOptionState) => ReactNode;
     onHover: (index: number) => void;
     onPick: (index: number) => void;
+    /** Portal target (default `document.body`). */
+    portalContainer?: HTMLElement | null;
 }
 
 const POPUP = 'fixed max-h-64 overflow-y-auto bg-surface border border-edge rounded-lg shadow-xl py-1';
@@ -49,11 +53,16 @@ function popupStyle(pos: PopupPosition | null): CSSProperties {
 
 function StatusRow({ status }: { status: ComboboxStatus }): JSX.Element {
     const tone = status.tone === 'danger' ? 'text-danger' : 'text-muted';
-    return <div role="status" className={`px-3 py-3 text-sm ${tone}`}>{status.text}</div>;
+    return <div aria-hidden="true" className={`px-3 py-3 text-sm ${tone}`}>{status.text}</div>;
+}
+
+/** The one live region: always mounted, only its text changes, so every update is announced. */
+export function ComboboxLiveRegion({ text }: { text: string }): JSX.Element {
+    return <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">{text}</div>;
 }
 
 /** The portalled listbox. Rendered only while the combobox is expanded. */
-export function ComboboxPopup<T>({ popupRef, ...p }: ComboboxPopupProps<T>): JSX.Element {
+export function ComboboxPopup<T>({ popupRef, portalContainer, ...p }: ComboboxPopupProps<T>): JSX.Element {
     return createPortal(
         <div ref={popupRef} className={POPUP} style={popupStyle(p.pos)} onMouseDown={(e) => e.preventDefault()}>
             {p.status && <StatusRow status={p.status} />}
@@ -70,6 +79,6 @@ export function ComboboxPopup<T>({ popupRef, ...p }: ComboboxPopupProps<T>): JSX
                 })}
             </ul>
         </div>,
-        document.body,
+        portalContainer ?? document.body,
     );
 }

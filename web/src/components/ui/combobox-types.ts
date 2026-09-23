@@ -39,6 +39,11 @@ export interface ComboboxProps<T> {
     invalid?: boolean;
     autoFocus?: boolean;
     fieldSize?: FieldSize;
+    /**
+     * Where the listbox portals. Default: the surrounding `[role="dialog"]`
+     * (Modal / BottomSheet — `aria-modal` hides anything outside it), else `<body>`.
+     */
+    portalContainer?: HTMLElement | null;
     /** Classes for the wrapper (default `w-full`). */
     className?: string;
 }
