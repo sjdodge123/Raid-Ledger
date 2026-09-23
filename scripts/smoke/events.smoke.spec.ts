@@ -148,8 +148,13 @@ test.describe('Events list — mobile', () => {
         const searchInput = page.getByRole('searchbox', { name: 'Search events' });
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state
-        await searchInput.fill('xyznonexistent');
+        // Search for a nonsense term — should show empty state. Retry the fill:
+        // the toolbar input can remount while the page settles (pre-existing,
+        // TECH-DEBT-BACKLOG 2026-09-23), and a fill() on the old node is lost.
+        await expect(async () => {
+            await searchInput.fill('xyznonexistent');
+            await expect(searchInput).toHaveValue('xyznonexistent', { timeout: 1_000 });
+        }).toPass({ timeout: 10_000 });
         // Wait for the mobile event cards to disappear (filtered out)
         await expect(page.locator('[data-testid="mobile-event-card"]').first()).not.toBeVisible({ timeout: 10_000 });
 
