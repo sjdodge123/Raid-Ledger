@@ -40,6 +40,7 @@ import {
   forumPostLink,
   type LfgPostLinks,
   type LfgReplyContext,
+  type LfgJoinReplyInput,
 } from './lfg.command.helpers';
 import {
   horizonReplyLine,
@@ -210,27 +211,40 @@ export class LfgCommand
     // ROK-1656 — no `urgency:` joins an open group on its horizon (as the
     // board `+1` does) and otherwise raises a tonight hand.
     const opts = await resolveLfgCommandUrgency(this.db, gameId, urgency);
-    const result = await this.lfgService.createIntent(userId, gameId, {
-      ...opts,
-      timezone: ctx.timezone,
-    });
-    const group = result.body.group;
-    const memberNames =
-      group.activeCount >= 2 ? await this.rosterNames(userId, gameId) : [];
-    const postLink = await this.postLink(gameId);
+    const request = { ...opts, timezone: ctx.timezone };
+    const result = await this.lfgService.createIntent(userId, gameId, request);
     this.logger.debug(
       `Discord user ${interaction.user.id} raised a hand for game ${gameId}`,
     );
     const horizonLine =
       urgency === null ? horizonReplyLine(opts.urgency) : null;
-    const input = {
+    const input = await this.joinReplyInput(
+      userId,
+      gameId,
+      result,
+      horizonLine,
+    );
+    await interaction.editReply({ embeds: [buildJoinReply(input, ctx)] });
+  }
+
+  /** Everything the join reply renders beyond the write result itself. */
+  private async joinReplyInput(
+    userId: number,
+    gameId: number,
+    result: Awaited<ReturnType<LfgService['createIntent']>>,
+    horizonLine: string | null,
+  ): Promise<LfgJoinReplyInput> {
+    const group = result.body.group;
+    const memberNames =
+      group.activeCount >= 2 ? await this.rosterNames(userId, gameId) : [];
+    const postLink = await this.postLink(gameId);
+    return {
       group,
       created: result.created,
       memberNames,
       postLink,
       horizonLine,
     };
-    await interaction.editReply({ embeds: [buildJoinReply(input, ctx)] });
   }
 
   /** The caller's own groups, with a withdraw button each. */

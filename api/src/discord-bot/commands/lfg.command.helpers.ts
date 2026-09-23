@@ -302,7 +302,7 @@ export function buildJoinReply(
   input: LfgJoinReplyInput,
   ctx: LfgReplyContext,
 ): ChannelEmbed {
-  const { group, created, memberNames } = input;
+  const { group } = input;
   // Alone is alone whether this hand is new or a repeat: a solo repeat must
   // not read "1 looking" beside "Nobody yet".
   const first = group.activeCount <= 1;
@@ -323,16 +323,18 @@ export function buildJoinReply(
   );
   applyExpiryFooter(embed, group, ctx);
   return embed;
+}
 
-  function joinBody(_: LfgJoinReplyInput, isFirst: boolean): string {
-    if (isFirst) {
-      return `Nobody else is looking for **${group.gameName}** yet — I'll post when someone else is in.`;
-    }
-    const roster = formatRoster(memberNames) || 'Nobody yet';
-    if (!created)
-      return `You're already in — ${group.activeCount} looking\n${roster}`;
-    return `That's ${group.activeCount} now — here's the group:\n${roster}`;
+/** The join reply's body: first-hand notice, repeat notice, or the roster. */
+function joinBody(input: LfgJoinReplyInput, isFirst: boolean): string {
+  const { group, created, memberNames } = input;
+  if (isFirst) {
+    return `Nobody else is looking for **${group.gameName}** yet — I'll post when someone else is in.`;
   }
+  const roster = formatRoster(memberNames) || 'Nobody yet';
+  if (!created)
+    return `You're already in — ${group.activeCount} looking\n${roster}`;
+  return `That's ${group.activeCount} now — here's the group:\n${roster}`;
 }
 
 /** Free-typed text that matched no game. */
