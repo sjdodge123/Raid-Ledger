@@ -152,6 +152,8 @@ export interface LfgJoinReplyInput {
   memberNames: string[];
   /** ROK-1471 D8 — link to the group's forum post; omitted when it has none. */
   postLink?: string | null;
+  /** ROK-1656 — names the horizon a bare `/lfg` chose; absent otherwise. */
+  horizonLine?: string | null;
 }
 
 /** ROK-1471 D8 — game id -> the masked link to that group's forum post. */
@@ -314,6 +316,7 @@ export function buildJoinReply(
       // ROK-1479 D9 — the urgency line leads, and carries the only clock a
       // now-group gets: the footer below cannot render `<t:…>` at all.
       nowLine(group),
+      input.horizonLine ?? null,
       joinBody(input, first),
       linkLine(ctx.clientUrl, group.gameSlug, input.postLink),
     ),

@@ -14,6 +14,11 @@ jest.mock('../../lfg/lfg-group-horizon.helpers', () => ({
   ...jest.requireActual<object>('../../lfg/lfg-group-horizon.helpers'),
   readOpenGroupHorizon: jest.fn().mockResolvedValue(null),
 }));
+// ROK-1656 — likewise the playing-now read: default "no session".
+jest.mock('../../lfg/lfg-playing.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-playing.helpers'),
+  findOpenLfgNowEventId: jest.fn().mockResolvedValue(null),
+}));
 const readOpen = readOpenGroupHorizon as jest.MockedFunction<
   typeof readOpenGroupHorizon
 >;
@@ -486,6 +491,25 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
         ttlMinutes: 60,
         timezone: 'UTC',
       });
+    });
+
+    // ROK-1656 — the player never picked the horizon, so the reply names it.
+    it.each([
+      [null, '**When:** Tonight'],
+      ['tonight', null],
+    ])('urgency %s -> reply horizon line %s', async (choice, line) => {
+      const command = build(
+        [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+        makeLfgService(),
+      );
+      const { interaction, editReply } = urgentInteraction('42', choice);
+      await command.handleInteraction(interaction);
+      const payload = editReply.mock.calls[0][0] as {
+        embeds: Array<{ toJSON: () => { description?: string } }>;
+      };
+      const description = payload.embeds[0].toJSON().description ?? '';
+      if (line) expect(description).toContain(line);
+      else expect(description).not.toContain('**When:**');
     });
   });
 });

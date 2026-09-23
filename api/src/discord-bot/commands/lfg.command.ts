@@ -41,7 +41,10 @@ import {
   type LfgPostLinks,
   type LfgReplyContext,
 } from './lfg.command.helpers';
-import { resolveLfgCommandUrgency } from './lfg-command-urgency.helpers';
+import {
+  horizonReplyLine,
+  resolveLfgCommandUrgency,
+} from './lfg-command-urgency.helpers';
 import { listLfmThreadsForGames } from '../lfg-board/lfg-board.db-helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
@@ -218,7 +221,15 @@ export class LfgCommand
     this.logger.debug(
       `Discord user ${interaction.user.id} raised a hand for game ${gameId}`,
     );
-    const input = { group, created: result.created, memberNames, postLink };
+    const horizonLine =
+      urgency === null ? horizonReplyLine(opts.urgency) : null;
+    const input = {
+      group,
+      created: result.created,
+      memberNames,
+      postLink,
+      horizonLine,
+    };
     await interaction.editReply({ embeds: [buildJoinReply(input, ctx)] });
   }
 
