@@ -5,11 +5,13 @@
  * response can therefore never land after a newer one, and the cache ends on
  * the server's answer to the LAST request sent.
  *
- * `send` must never reject (the caller handles its own errors / toasts).
+ * `send` must never reject (the caller handles its own errors / toasts); it
+ * resolves `false` when the save failed, so an identical later payload is
+ * re-sent instead of being mistaken for one the server already has.
  */
 import { useRef } from 'react';
 
-export function useSerializedSave<T extends object>(send: (payload: T) => Promise<void>) {
+export function useSerializedSave<T extends object>(send: (payload: T) => Promise<boolean>) {
     const latest = useRef<T | null>(null); // newest merged payload, sent or queued
     const lastSent = useRef<string | null>(null); // JSON of the payload last sent
     const inFlight = useRef<Promise<void> | null>(null);
@@ -22,7 +24,9 @@ export function useSerializedSave<T extends object>(send: (payload: T) => Promis
         const json = JSON.stringify(payload);
         if (!payload || json === lastSent.current) { settle(); return Promise.resolve(); } // nothing new
         lastSent.current = json;
-        const p = send(payload).finally(() => {
+        const p = send(payload).then((ok) => {
+            if (!ok && lastSent.current === json) lastSent.current = null; // failed: nothing is "sent"
+        }).finally(() => {
             if (inFlight.current === p) inFlight.current = null;
             if (latest.current === payload) settle(); // else a newer edit is queued behind us
         });

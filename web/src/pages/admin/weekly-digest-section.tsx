@@ -32,8 +32,8 @@ function useDigestForm() {
     const { status, channels, update } = useWeeklyDigestSettings();
     const current = status.data;
     const enqueue = useSerializedSave<WeeklyDigestSettings>((payload) => update.mutateAsync(payload)
-        .then(() => { toast.success('Weekly digest settings saved'); })
-        .catch(() => { toast.error('Failed to update weekly digest settings'); }));
+        .then(() => { toast.success('Weekly digest settings saved'); return true; })
+        .catch(() => { toast.error('Failed to update weekly digest settings'); return false; }));
     const save = (patch: Partial<WeeklyDigestSettings>): Promise<void> => {
         if (!current) return Promise.resolve();
         const { enabled, channelId, day, hour } = current;

@@ -106,6 +106,22 @@ describe('WeeklyDigestSection (ROK-1435 L5) — saves run one at a time (Codex P
         expect(state.update.mutateAsync).toHaveBeenLastCalledWith({ ...BASE, day: 5, hour: 18 });
     });
 
+    it('a failed save is retried when a later edit lands back on the same payload (Codex P2)', async () => {
+        let rejectFirst: (e: Error) => void = () => undefined;
+        state.update.mutateAsync = vi.fn()
+            .mockImplementationOnce(() => new Promise((_, rej) => { rejectFirst = rej; }))
+            .mockImplementation(() => Promise.resolve(SAVED));
+        render(<WeeklyDigestSection />);
+        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
+        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '3' } });
+        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
+        rejectFirst(new Error('boom'));
+        await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
+        expect(state.update.mutateAsync, 'the failed day=5 save must be re-sent, not treated as already saved')
+            .toHaveBeenCalledTimes(2);
+        expect(state.update.mutateAsync).toHaveBeenLastCalledWith({ ...BASE, day: 5 });
+    });
+
 });
 
 describe('WeeklyDigestSection (ROK-1435 L5) — channel', () => {
