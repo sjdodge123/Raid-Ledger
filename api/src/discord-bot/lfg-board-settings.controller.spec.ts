@@ -149,13 +149,21 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     const off = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
-    expect(off.body).toEqual({ enabled: false, channelId: null });
+    expect(off.body).toEqual({
+      enabled: false,
+      channelId: null,
+      composerEnabled: false,
+    });
 
     await put(true);
     const on = await supertest(http()).get(
       '/admin/settings/discord-bot/lfg-board',
     );
-    expect(on.body).toEqual({ enabled: true, channelId: null });
+    expect(on.body).toEqual({
+      enabled: true,
+      channelId: null,
+      composerEnabled: false,
+    });
   });
 
   // The reason the field exists (ROK-1471 D-smoke): a caller must be able to
@@ -170,7 +178,11 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     );
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ enabled: true, channelId: '999888777' });
+    expect(res.body).toEqual({
+      enabled: true,
+      channelId: '999888777',
+      composerEnabled: false,
+    });
   });
   // ROK-1523 final review — a disable on a busy board retires posts one at a
   // time against Discord's thread bucket, which can outlast nginx's 60s. The

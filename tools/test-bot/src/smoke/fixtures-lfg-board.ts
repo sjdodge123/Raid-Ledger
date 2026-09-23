@@ -12,6 +12,7 @@
  * and would silently assert against the wrong channel rather than fail.
  */
 import {
+  ChannelFlags,
   ChannelType,
   type ForumChannel,
   type Message,
@@ -35,6 +36,10 @@ export interface ForumThreadSnapshot {
   id: string;
   name: string;
   archived: boolean;
+  /** Pinned to the top of the forum — Discord allows one per forum. */
+  pinned: boolean;
+  /** The post's creator — the bot that seeded it. Null when Discord omits it. */
+  ownerId: string | null;
   /** Applied tag NAMES (discord.js exposes ids; resolved via the parent). */
   appliedTagNames: string[];
   /** The post body. Null when it has been deleted out from under the thread. */
@@ -60,6 +65,22 @@ export function setLfgBoardEnabled(
   return api.put<LfgBoardSettings>("/admin/settings/discord-bot/lfg-board", {
     enabled,
   });
+}
+
+/**
+ * ROK-1612 AC6 — flip the pinned composer card's opt-in (default OFF).
+ *
+ * The PUT reconciles the card right away, but that is a few Discord
+ * round-trips — poll the intro post, don't assume.
+ */
+export function setLfgComposerEnabled(
+  api: ApiClient,
+  enabled: boolean,
+): Promise<{ enabled: boolean }> {
+  return api.put<{ enabled: boolean }>(
+    "/admin/settings/discord-bot/lfg-board/composer",
+    { enabled },
+  );
 }
 
 /**
@@ -143,6 +164,8 @@ async function snapshot(
     id: thread.id,
     name: thread.name,
     archived: thread.archived === true,
+    pinned: thread.flags.has(ChannelFlags.Pinned),
+    ownerId: thread.ownerId ?? null,
     appliedTagNames: tagNamesFor(forum, thread),
     starterMessage,
   };

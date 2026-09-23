@@ -101,6 +101,7 @@ import { PlayingCommand } from './commands/playing.command';
 import { LfgCommand } from './commands/lfg.command';
 import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
 import { LfgJoinListener } from './listeners/lfg-join.listener';
+import { LfgComposerListener } from './lfg-composer/lfg-composer.listener';
 import { LfgInviteDeclineListener } from './listeners/lfg-invite-decline.listener';
 import { LfgModule } from '../lfg/lfg.module';
 import { LfgNowStartController } from './lfg-now/lfg-now-start.controller';
@@ -211,6 +212,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     LfgCommand,
     LfgWithdrawListener,
     LfgJoinListener,
+    LfgComposerListener,
     LfgInviteDeclineListener,
   ],
   exports: [

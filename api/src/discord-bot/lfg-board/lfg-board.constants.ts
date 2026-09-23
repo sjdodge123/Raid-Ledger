@@ -85,6 +85,12 @@ export const LFG_BOARD_EVENTS = {
    * sleeping out the trailing window.
    */
   FLUSH: 'lfg-board.flush',
+  /**
+   * ROK-1612 AC6 — the composer opt-in was flipped from the admin page.
+   * `LfgComposerPinService` reconciles on it, so ON pins the card now and OFF
+   * takes it down now, instead of waiting for the next bot reconnect.
+   */
+  COMPOSER_TOGGLED: 'lfg-board.composer-toggled',
 } as const;
 
 /** Payload of {@link LFG_BOARD_EVENTS.TOGGLED}. */
