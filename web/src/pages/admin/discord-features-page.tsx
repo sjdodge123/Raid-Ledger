@@ -4,6 +4,7 @@ import { usePluginStore } from '../../stores/plugin-store';
 import { toast } from '../../lib/toast';
 import { EphemeralVoiceSection } from './ephemeral-voice-section';
 import { LfgBoardSection } from './lfg-board-section';
+import { WeeklyDigestSection } from './weekly-digest-section';
 
 export function DiscordFeaturesPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -50,6 +51,7 @@ function DiscordFeaturesContent() {
                     <QuickPlayToggle checked={adHocEventsStatus.data?.enabled ?? false} isPending={updateAdHocEvents.isPending} onToggle={handleToggle} />
                     <EphemeralVoiceSection />
                     <LfgBoardSection />
+                    <WeeklyDigestSection />
                 </>
             ) : (
                 <BotNotConnectedWarning />

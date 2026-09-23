@@ -196,3 +196,47 @@ export async function setEphemeralVoiceIdleMinutes(
 ): Promise<void> {
   await svc.set(SETTING_KEYS.EPHEMERAL_VOICE_IDLE_MINUTES, String(minutes));
 }
+
+/** ROK-1435: the weekly digest's four settings, as stored (unset ⇒ null). */
+export interface WeeklyDigestStored {
+  enabled: string | null;
+  channelId: string | null;
+  day: string | null;
+  hour: string | null;
+}
+
+/** Read the weekly digest settings raw; callers apply the defaults. */
+export async function getWeeklyDigestSettings(
+  svc: SettingsCore,
+): Promise<WeeklyDigestStored> {
+  const [enabled, channelId, day, hour] = await Promise.all([
+    svc.get(SETTING_KEYS.WEEKLY_DIGEST_ENABLED),
+    svc.get(SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID),
+    svc.get(SETTING_KEYS.WEEKLY_DIGEST_DAY),
+    svc.get(SETTING_KEYS.WEEKLY_DIGEST_HOUR),
+  ]);
+  return { enabled, channelId, day, hour };
+}
+
+/**
+ * Persist the weekly digest settings. A null `channelId` DELETES the key so
+ * the digest falls back to the bot's default channel.
+ *
+ * SettingsService has no transaction (each `set` encrypts, upserts and
+ * refreshes the cache on its own), so the writes run one at a time and stop
+ * at the first failure, with `enabled` LAST: a partial save never switches a
+ * half-configured digest on.
+ */
+export async function setWeeklyDigestSettings(
+  svc: SettingsCore,
+  v: { enabled: boolean; channelId: string | null; day: number; hour: number },
+): Promise<void> {
+  if (v.channelId) {
+    await svc.set(SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID, v.channelId);
+  } else {
+    await svc.delete(SETTING_KEYS.WEEKLY_DIGEST_CHANNEL_ID);
+  }
+  await svc.set(SETTING_KEYS.WEEKLY_DIGEST_DAY, String(v.day));
+  await svc.set(SETTING_KEYS.WEEKLY_DIGEST_HOUR, String(v.hour));
+  await svc.set(SETTING_KEYS.WEEKLY_DIGEST_ENABLED, String(v.enabled));
+}
