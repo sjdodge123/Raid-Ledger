@@ -19,29 +19,6 @@ describe('classifyComposerMatch', () => {
     expect(match).toEqual({ kind: 'single', game: VALHEIM });
   });
 
-  it('(b) an exact title among several rows lists them all, the exact title first (ROK-1658)', () => {
-    const sequel: LfgComposerGame = { id: 9, name: 'Valheim 2' };
-    const match = classifyComposerMatch('valheim', [sequel, VALHEIM]);
-    expect(match).toEqual({ kind: 'candidates', games: [VALHEIM, sequel] });
-  });
-
-  it('(b) matches an exact title through punctuation, as /lfg does, and leads with it', () => {
-    const match = classifyComposerMatch('baldurs gate iii', [VALORANT, BG3]);
-    expect(match).toEqual({ kind: 'candidates', games: [BG3, VALORANT] });
-  });
-
-  it('(b) keeps the exact title inside the 25-option cap even when it ranked last', () => {
-    const many = Array.from({ length: 30 }, (_, i) => ({
-      id: i + 100,
-      name: `Valheim Mod ${String(i)}`,
-    }));
-    const match = classifyComposerMatch('valheim', [...many, VALHEIM]);
-    expect(match.kind).toBe('candidates');
-    const games = match.kind === 'candidates' ? match.games : [];
-    expect(games).toHaveLength(25);
-    expect(games[0]).toEqual(VALHEIM);
-  });
-
   it('(b) offers several candidates rather than picking the top one', () => {
     const match = classifyComposerMatch('rock', [DRG, VALORANT, VALHEIM]);
     expect(match.kind).toBe('candidates');
@@ -88,6 +65,31 @@ describe('classifyComposerMatch', () => {
     const blank: LfgComposerGame = { id: 7, name: '!!!' };
     const match = classifyComposerMatch('', [blank, VALORANT]);
     expect(match.kind).toBe('candidates');
+  });
+});
+
+describe('classifyComposerMatch — an exact title among several (ROK-1658)', () => {
+  it('(b) an exact title among several rows lists them all, the exact title first (ROK-1658)', () => {
+    const sequel: LfgComposerGame = { id: 9, name: 'Valheim 2' };
+    const match = classifyComposerMatch('valheim', [sequel, VALHEIM]);
+    expect(match).toEqual({ kind: 'candidates', games: [VALHEIM, sequel] });
+  });
+
+  it('(b) matches an exact title through punctuation, as /lfg does, and leads with it', () => {
+    const match = classifyComposerMatch('baldurs gate iii', [VALORANT, BG3]);
+    expect(match).toEqual({ kind: 'candidates', games: [BG3, VALORANT] });
+  });
+
+  it('(b) keeps the exact title inside the 25-option cap even when it ranked last', () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({
+      id: i + 100,
+      name: `Valheim Mod ${String(i)}`,
+    }));
+    const match = classifyComposerMatch('valheim', [...many, VALHEIM]);
+    expect(match.kind).toBe('candidates');
+    const games = match.kind === 'candidates' ? match.games : [];
+    expect(games).toHaveLength(25);
+    expect(games[0]).toEqual(VALHEIM);
   });
 });
 

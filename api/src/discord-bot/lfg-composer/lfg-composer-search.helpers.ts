@@ -85,10 +85,7 @@ export function classifyComposerMatch(
  * The exact-title row (if any) moved to the front; the rest keep their rank.
  * Runs BEFORE the cap, so an exact title ranked 26th is never cut.
  */
-function exactFirst(
-  games: LfgComposerGame[],
-  term: string,
-): LfgComposerGame[] {
+function exactFirst(games: LfgComposerGame[], term: string): LfgComposerGame[] {
   const exact = exactHit(games, term);
   return exact ? [exact, ...games.filter((g) => g !== exact)] : games;
 }
