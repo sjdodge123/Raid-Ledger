@@ -407,7 +407,8 @@ describe('NominatingComposite — funnel filter standard (ROK-1659)', () => {
     it('phone: the Filters FAB opens the filters; no toolbar funnel', async () => {
         mockViewportWidth(390);
         renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
-        const fab = await screen.findByTestId('filter-fab');
+        await screen.findByTestId('nominating-hero-toolbar');
+        const fab = screen.getByTestId('filter-fab');
         expect(screen.queryByTestId('filter-panel-trigger')).not.toBeInTheDocument();
         await userEvent.click(fab);
         expect(fab).toHaveAttribute('aria-expanded', 'true');
