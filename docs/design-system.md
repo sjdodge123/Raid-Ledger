@@ -336,8 +336,11 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
   FAB's own bottom offset plus the 56px FAB height and the 12px gap (`useFilterFabBottom(stackAboveCreate)`);
   the create FAB keeps the emerald fill, the Filters FAB stays neutral, and the page's bottom padding
   clears both (§3.1 `fab.tsx`).
-- When a predicate drops NULL-data rows, disclose it in a hint line (`CoopFilterHint`) rather than
-  silently emptying the grid.
+- When a predicate drops NULL-data rows, disclose it in a hint line inside the panel rather than
+  silently emptying the grid — `/games` shows `coop-filter-hint` under the Co-op group
+  (`pages/games/games-filter-panel.tsx`) and `LibraryFilterHint` / `library-filter-hint` under the
+  Players and Owners fields (defined in `pages/games/games-filter-fields.tsx`, mounted by
+  `games-filter-panel.tsx`).
 
 On the standard: `/games` (retired the `LfgFilterChip` / `LibraryFilterChips` / `DesktopGenrePills` chip
 rows and the genre-only sheet — the Filters FAB opens the full panel instead), Common Ground (retired the
@@ -371,11 +374,13 @@ white titles stay legible over the *image*; anything on the art needs `.badge-ov
 **DO** — the chip geometry is fixed: `inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full
 text-sm font-medium transition-colors`, ON = `bg-amber-500/10 border border-amber-500/30 text-amber-300
 hover:bg-amber-500/20`, OFF = `bg-panel border border-edge text-secondary hover:bg-overlay`. Rendered as
-`<button type="button">` with `aria-pressed`. See `web/src/pages/games/library-filter-chips.tsx` and
-`lfg-filter-chip.tsx`.
+`<button type="button">` with `aria-pressed`. No product page renders this toggle chip any more: ROK-1659
+retired its only adopters, the `/games` chip rows (`library-filter-chips.tsx`, `lfg-filter-chip.tsx`,
+both deleted). The geometry survives only in the `/dev/design-system` gallery
+(`web/src/dev/design-system/primitives-section.tsx`, `scheme-controls.tsx`).
 
-**DON'T** write a fourth copy of those class strings. Both files carry an explicit note that a **fifth**
-chip means promoting them to a shared module — if you are that fifth chip, do the promotion. For
+**DON'T** copy those class strings out of the gallery. The next product surface that needs a toggle chip
+promotes them to a shared module (`components/ui/filter-chip.tsx`) and adopts that instead. For
 navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with a pill className. And
 don't press a chip row into service as a page's filter set (ROK-1659) — chips are for toggles and
 navigation only; filtering is §4.1's funnel standard.
@@ -747,10 +752,11 @@ them; do not fix them as scope creep.
    restore/suppress (ROK-1400) and co-op dormancy moved across unchanged. The badge counts co-op only —
    min owners 2 and auto-seeded players are defaults and don't count.
 
-2. **Chip class strings duplicated across two files** — `pages/games/library-filter-chips.tsx` and
-   `pages/games/lfg-filter-chip.tsx` carry byte-identical `BASE_CLS` / `ON_CLS` / `OFF_CLS`; only the
-   former carries the note (`:14-16`) that a fifth chip means extraction. *Suggested:* promote to
-   `components/ui/filter-chip.tsx`.
+2. ~~**Chip class strings duplicated across two files**~~ (`pages/games/library-filter-chips.tsx` vs
+   `pages/games/lfg-filter-chip.tsx`) — **Resolved by ROK-1659:** both files were deleted when `/games`
+   retired its chip rows for the Filters entry (§4.1), so no product page carries the duplicated
+   `BASE_CLS` / `ON_CLS` / `OFF_CLS` any more. The geometry lives on only in the `/dev/design-system`
+   gallery (§4.3); a future product adopter promotes it to `components/ui/filter-chip.tsx`.
 
 3. ~~**`--color-accent` is referenced but never defined**~~ — **Resolved by ROK-1645.** Every call site
    was replaced rather than the token declared (operator ruling 2026-09-22: "accent" means nothing distinct
