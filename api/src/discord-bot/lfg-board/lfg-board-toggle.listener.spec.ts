@@ -626,34 +626,28 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
   });
 });
 
-describe('LFG_BOARD_INTRO_BODY (ROK-1493 D11 / AC4)', () => {
-  it('tells members they cannot post, and where the way in is', () => {
-    // The forum is locked from ROK-1493 on, so the first thing a member does
-    // — try to start a post — now fails silently. The intro has to say why,
-    // and name both entry points, or the board reads as broken.
-    expect(LFG_BOARD_INTRO_BODY).toContain(
-      '**You cannot post here yourself.** New posts are made by Raid Ledger ' +
-        'only — `/lfg` or the site is the way in. Replies inside a post stay ' +
-        'open, so a group can talk once it exists.',
-    );
+describe('LFG_BOARD_INTRO_BODY (ROK-1658 concise intro)', () => {
+  it('is the operator-approved short copy, line for line', () => {
+    // Operator ask 2026-09-23: "reduce the amount of reading". Pinned line
+    // for line so a later edit is a deliberate copy change, not drift.
+    expect(LFG_BOARD_INTRO_BODY.split('\n')).toEqual([
+      '**Each post is a group looking for players for one game.**',
+      '',
+      '**Start one**: press **Post an LFG** below, or use `/lfg` or the Raid Ledger site.',
+      "**Join one**: press **+1 · I'm in** on a post. It's interest, not a commitment.",
+      '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next 14 days).',
+      '**Changed your mind?** Run `/lfg` and press **Withdraw**.',
+      '',
+      "Posts close when the group becomes an event or everyone's hand expires.",
+    ]);
   });
 
-  it('keeps every paragraph the board already explained', () => {
-    // D11 inserts a paragraph; it edits and deletes nothing.
-    expect(LFG_BOARD_INTRO_BODY).toContain('**This is the LFG board.**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**Why a post appears.**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**Changed your mind?**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**How posts end.**');
+  it('no longer tells members they cannot post (the composer lets them)', () => {
+    expect(LFG_BOARD_INTRO_BODY).not.toContain('cannot post');
+    expect(LFG_BOARD_INTRO_BODY).toContain('**Post an LFG**');
   });
 
-  it('states the one-hand rule, and no longer the old quiet-first-hand rule (ROK-1505 AC6)', () => {
-    // ROK-1505 posts every active hand. The positive half pins the new rule;
-    // the negative half stops a future tidy-up from re-importing the old
-    // "second person" sentence next to it.
-    expect(LFG_BOARD_INTRO_BODY).toContain(
-      'A post appears as soon as one person raises a hand',
-    );
-    expect(LFG_BOARD_INTRO_BODY).toContain('upgrades to looking-for-more');
+  it('does not re-import the old quiet-first-hand rule (ROK-1505 AC6)', () => {
     expect(LFG_BOARD_INTRO_BODY).not.toContain('stays quiet');
     expect(LFG_BOARD_INTRO_BODY).not.toContain(
       'only created once a **second**',

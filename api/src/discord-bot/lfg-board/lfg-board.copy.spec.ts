@@ -16,10 +16,11 @@ function stripComments(source: string): string {
 }
 
 describe('LFG board intro copy (ROK-1616 AC5)', () => {
-  it('names all three horizons', () => {
-    expect(LFG_BOARD_INTRO_BODY).toContain('**Right now**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**Tonight**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**This week**');
+  it('names all three horizons, each with how long it lasts', () => {
+    expect(LFG_BOARD_INTRO_BODY).toContain(
+      '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · ' +
+        'This week (next 14 days).',
+    );
   });
 
   it('explains that Tonight survives a night running past midnight', () => {
@@ -27,9 +28,12 @@ describe('LFG board intro copy (ROK-1616 AC5)', () => {
   });
 
   it('no longer offers a 30 vs 60 minute choice', () => {
-    expect(stripComments(LFG_BOARD_INTRO_BODY)).not.toMatch(
-      /30 min|1 hour|60 min/,
-    );
+    // ROK-1658: "30 min" now appears exactly once, as Right now's lifetime —
+    // never as one side of the retired 30/60 split.
+    const body = stripComments(LFG_BOARD_INTRO_BODY);
+    expect(body).not.toMatch(/1 hour|60 min|30 or 60|30\/60/);
+    expect(body.match(/30 min/g)).toEqual(['30 min']);
+    expect(body).toContain('Right now (drops after 30 min)');
   });
 
   it("still fits inside Discord's 2000-character message cap", () => {

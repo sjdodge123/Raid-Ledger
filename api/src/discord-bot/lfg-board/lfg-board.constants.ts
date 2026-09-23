@@ -112,28 +112,27 @@ export const DISCORD_THREAD_NAME_MAX = 100;
 export const LFG_BOARD_INTRO_TITLE = 'How this board works';
 
 /**
- * Body of the intro thread. Plain text — no embed, so it renders in search and
- * the operator can edit it from Discord. Answers the four questions the board
- * raises on sight — what a post is, why one appeared (ROK-1505: every active
- * hand is posted; one hand opens it, the second upgrades it), why the member
- * cannot start one (ROK-1493 D11: the forum is locked to the bot), what the
- * button does, and how to get out again. Kept well inside Discord's 2000-char
- * cap.
+ * Body of the intro thread. Plain text — no embed, so it renders in search.
+ * Kept short on purpose (operator ask 2026-09-23, ROK-1658: "reduce the amount
+ * of reading"): one line each for what a post is, how to start one (the
+ * composer's `Post an LFG` button pinned on this post, `/lfg`, or the site),
+ * how `+1` works (interest, not a commitment), the three horizons and how long
+ * each lasts, how to withdraw, and how posts end. The old "you cannot post
+ * here yourself" line is gone — the composer now lets a member start one.
+ *
+ * `LfgComposerPinService` rewrites an older intro to this text when it sets
+ * the composer buttons, so boards seeded before this copy pick it up.
+ * Well inside Discord's 2000-char cap.
  */
 export const LFG_BOARD_INTRO_BODY = [
-  '**This is the LFG board.** Every post below is one group of players looking for more people for a single game.',
+  '**Each post is a group looking for players for one game.**',
   '',
-  '**Why a post appears.** Raise your hand for a game — on the Raid Ledger site, or with `/lfg`. A post appears as soon as one person raises a hand, tagged **LOOKING** so the room is easy to find. When a second person joins the same game, that post upgrades to looking-for-more — one post per game, edited in place as hands come and go.',
+  '**Start one**: press **Post an LFG** below, or use `/lfg` or the Raid Ledger site.',
+  "**Join one**: press **+1 · I'm in** on a post. It's interest, not a commitment.",
+  '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next 14 days).',
+  '**Changed your mind?** Run `/lfg` and press **Withdraw**.',
   '',
-  '**You cannot post here yourself.** New posts are made by Raid Ledger only — `/lfg` or the site is the way in. Replies inside a post stay open, so a group can talk once it exists.',
-  '',
-  "**`+1 · I'm in`** adds you to that group. It is interest, not a commitment — pressing it books no time and schedules nothing.",
-  '',
-  '**Right now, tonight, or this week?** Every hand carries one of three horizons. **Right now** means you are free this minute — that hand drops on its own after half an hour. **Tonight** means later today; it stays up until 4 AM, so a session that runs past midnight keeps its hands raised. **This week** means you are up for it some time in the next 14 days. You pick when you raise your hand (the site asks; `/lfg` has a **when** option), and `+1` asks the same question. A post with someone playing right now shows 🔥 and the time they are around until.',
-  '',
-  '**Changed your mind?** Run `/lfg`. It lists every game you currently have a hand up for, each with a **Withdraw** button.',
-  '',
-  '**How posts end.** When the group turns into a scheduled event — or when everyone loses interest and it expires — the post is retagged, closed and archived. It stays readable; it just stops updating.',
+  "Posts close when the group becomes an event or everyone's hand expires.",
 ].join('\n');
 
 /**
