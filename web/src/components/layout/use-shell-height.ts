@@ -62,11 +62,16 @@ function nextShellFloor(prev: ShellFloor, final: boolean): ShellFloor {
 
 /**
  * Wait after a viewport event before the last re-read. iOS fires `resize` (and
- * `orientationchange`) BEFORE a rotated viewport settles and nothing fires once
+ * `orientationchange`) BEFORE a rotated viewport settles and no event fires once
  * it has, so a height read at event time can stick (ROK-1661 iPad plan: after a
  * landscape→portrait turn the shell kept a floor ~80 px short of the screen).
+ * The layout-viewport sentinel (`observeLayoutViewport`) usually reports the
+ * settle itself; these timed reads are the fallback.
  */
 export const SHELL_SETTLE_MS = 150;
+
+/** A second, later timed re-read, for a rotation still settling at SHELL_SETTLE_MS. */
+export const SHELL_LATE_SETTLE_MS = 500;
 
 type Listener = [EventTarget | null | undefined, string];
 
@@ -80,23 +85,50 @@ function viewportListeners(): Listener[] {
 }
 
 /**
+ * Watches a hidden `position: fixed; inset: 0` element, which is exactly the
+ * layout viewport, so `onChange` runs whenever the layout viewport itself
+ * resizes — including the settle of a rotation, which no event reports.
+ */
+function observeLayoutViewport(onChange: () => void): () => void {
+    if (typeof ResizeObserver === 'undefined') return () => undefined;
+    const sentinel = document.createElement('div');
+    sentinel.setAttribute('aria-hidden', 'true');
+    sentinel.setAttribute('data-shell-viewport-sentinel', '');
+    sentinel.style.cssText = 'position:fixed;inset:0;pointer-events:none;visibility:hidden';
+    document.body.appendChild(sentinel);
+    const observer = new ResizeObserver(() => onChange());
+    observer.observe(sentinel);
+    return () => {
+        observer.disconnect();
+        sentinel.remove();
+    };
+}
+
+/**
  * Calls `update(false)` on every viewport change and again one frame later,
- * then `update(true)` SHELL_SETTLE_MS after the last change (and once on mount).
+ * then `update(true)` SHELL_SETTLE_MS and SHELL_LATE_SETTLE_MS after the last
+ * change (and once on mount). A change is a viewport event or a resize of the
+ * layout-viewport sentinel.
  */
 function subscribeToViewport(update: (final: boolean) => void): () => void {
     let frame = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const cancelPending = () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+    let timers: ReturnType<typeof setTimeout>[] = [];
+    const cancelPending = () => {
+        cancelAnimationFrame(frame);
+        for (const timer of timers) clearTimeout(timer);
+    };
     const onChange = () => {
         update(false);
         cancelPending();
         frame = requestAnimationFrame(() => update(false));
-        timer = setTimeout(() => update(true), SHELL_SETTLE_MS);
+        timers = [SHELL_SETTLE_MS, SHELL_LATE_SETTLE_MS].map((ms) => setTimeout(() => update(true), ms));
     };
     const listeners = viewportListeners();
     update(true);
     for (const [target, type] of listeners) target?.addEventListener(type, onChange);
+    const stopObserving = observeLayoutViewport(onChange);
     return () => {
+        stopObserving();
         cancelPending();
         for (const [target, type] of listeners) target?.removeEventListener(type, onChange);
     };
