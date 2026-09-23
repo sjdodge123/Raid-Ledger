@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useCallback, useRef } from 'react';
+import { type ReactNode, lazy, Suspense, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -16,6 +16,9 @@ import { usePluginHydration } from '../../hooks/use-plugins';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useShellHeight } from './use-shell-height';
+
+/** ROK-1661 diagnostic; checks DEMO_MODE itself. Lazy, so it costs nothing without `?vpdebug=1`. */
+const ViewportReadout = lazy(() => import('../../dev/ViewportReadout').then((m) => ({ default: m.ViewportReadout })));
 
 /**
  * ROK-1067: routes under /p/* are public, chrome-less surfaces meant
@@ -39,13 +42,20 @@ interface LayoutProps {
  * the floor is the VISIBLE viewport height, zoom- and keyboard-invariant
  * (`useShellHeight`), inline so it wins over the class. Its own component so a
  * height change re-renders only this div, not the chrome passed in as children.
+ * `?vpdebug=1` overlays the DEMO_MODE-only viewport readout (`dev/ViewportReadout.tsx`).
  */
 function ViewportShell({ children }: LayoutProps) {
     const shellHeight = useShellHeight();
+    const showReadout = new URLSearchParams(useLocation().search).get('vpdebug') === '1';
     const minHeight = shellHeight > 0 ? `${shellHeight}px` : undefined;
     return (
         <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip', minHeight }}>
             {children}
+            {showReadout && (
+                <Suspense fallback={null}>
+                    <ViewportReadout shellHeight={shellHeight} />
+                </Suspense>
+            )}
         </div>
     );
 }
