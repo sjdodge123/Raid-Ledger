@@ -95,6 +95,31 @@ describe('runDeployChain — sync guard (via build primitive)', () => {
     expect(res.synced_head).toBe(HEAD);
   });
 
+  // ROK-1537 AC4: the deploy result tells the agent who lands as admin.
+  it.each([
+    ['configured', /RL_OPERATOR_DISCORD_ID is admin from its first Discord login/],
+    ['first-login', /FIRST real Discord login on this env becomes admin/],
+    ['none', /destroy \+ fresh spin/],
+  ] as const)('passes operator_admin=%s through to the deploy result and message', async (mode, note) => {
+    buildImageExecute.mockResolvedValue({ ok: true, task_id: 't1', expected_head: HEAD, synced_head: HEAD });
+    executeWait.mockResolvedValue({ ok: true, mcp_runtime_status: 'succeeded', steps: [] });
+    envSpinExecute.mockResolvedValue({ ok: true, url: 'https://slot-2.gamernight.net', admin_email: 'admin@local', operator_admin: mode });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain({ slug: 'rok-test', worktree_path: '/wt', skip_sync: true }, ctx);
+    expect(res.operator_admin).toBe(mode);
+    expect(res.message).toMatch(note);
+  });
+
+  it('omits the operator-admin note when an older VM env-spin sends no operator_admin', async () => {
+    buildImageExecute.mockResolvedValue({ ok: true, task_id: 't1', expected_head: HEAD, synced_head: HEAD });
+    executeWait.mockResolvedValue({ ok: true, mcp_runtime_status: 'succeeded', steps: [] });
+    envSpinExecute.mockResolvedValue({ ok: true, url: 'https://slot-2.gamernight.net', admin_email: 'admin@local' });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain({ slug: 'rok-test', worktree_path: '/wt', skip_sync: true }, ctx);
+    expect(res.operator_admin).toBeUndefined();
+    expect(res.message).not.toMatch(/Operator admin:/);
+  });
+
   // A3-B P4: the chain runs in the detached laptop runner, whose only sink is
   // the 0600 task JSON. It must opt IN so the password reaches that file —
   // otherwise rl_task_status({include_credentials:true}) has nothing to return.

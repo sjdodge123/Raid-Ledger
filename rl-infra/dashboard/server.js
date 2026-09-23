@@ -1323,6 +1323,23 @@ const handleTaskLog = async (taskId, req, res) => {
   }
 };
 
+// ROK-1537 AC4 — VM configuration gaps that change what the operator sees on
+// a freshly spun env. The dashboard shares /srv/rl-infra/.env (env_file), so
+// the orchestrator's RL_OPERATOR_DISCORD_ID is readable here. Reported
+// separately from warning_count: it is a standing config choice, not a fleet
+// flake signal, and agents key flake triage off warning_count.
+const collectConfigWarnings = (env = process.env) => {
+  const warnings = [];
+  if (!String(env.RL_OPERATOR_DISCORD_ID || '').trim()) {
+    warnings.push({
+      kind: 'operator_discord_id_unset',
+      value: 'RL_OPERATOR_DISCORD_ID',
+      hint: 'RL_OPERATOR_DISCORD_ID is unset in /srv/rl-infra/.env, so a fresh env promotes the FIRST real Discord login to admin (operator_admin: first-login). Set it to your Discord user id to be admin from your first login regardless of who signs in first; existing envs need a destroy + fresh spin.',
+    });
+  }
+  return warnings;
+};
+
 // ----- ROK-1331 M7: GET /api/fleet-health --------------------------------
 //
 // Aggregate fleet-health snapshot for agent monitors. One cheap read covers
@@ -1683,6 +1700,7 @@ const handleFleetHealth = async (req, res) => {
     const stale_slots = stale_heartbeat_slots.length;
     const audit_error_total = recent_audit_errors.reduce((acc, c) => acc + c.count, 0);
     const warning_count = stale_slots + stuck_queue_entries + audit_error_total + runner_warnings.length;
+    const config_warnings = collectConfigWarnings();
     sendJson(res, 200, {
       generated_at: new Date(nowMs).toISOString(),
       stale_heartbeat_slots,
@@ -1691,12 +1709,14 @@ const handleFleetHealth = async (req, res) => {
       recent_audit_errors,
       perf_summary,
       held_slots_with_failed_validate_ci,
+      config_warnings,
       summary: {
         ok: warning_count === 0,
         warning_count,
         stale_slots,
         stuck_queue_entries,
         held_slots_with_failed_validate_ci: held_slots_with_failed_validate_ci.length,
+        config_warnings: config_warnings.length,
       },
     });
   } catch (err) {
