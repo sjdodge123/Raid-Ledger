@@ -13,6 +13,7 @@ import { LFG_COMPOSER_IDS } from './lfg-composer.constants';
 import {
   LFG_BOARD_EVENTS,
   LFG_BOARD_INTRO_BODY,
+  LFG_BOARD_INTRO_TITLE,
 } from '../lfg-board/lfg-board.constants';
 import { buildComposerCard } from './lfg-composer-card.helpers';
 
@@ -477,6 +478,90 @@ describe('LfgComposerPinService.reconcile — board off, take-down isolation (re
     expect(card.delete).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(
       'Could not take the LFG composer down from the intro post: Unknown Message.',
+    );
+  });
+});
+
+const LEGACY_TITLE = 'How this board works';
+const ON_WITH_INTRO = {
+  [SETTING_KEYS.LFG_BOARD_ENABLED]: 'true',
+  [SETTING_KEYS.LFG_BOARD_INTRO_THREAD_ID]: 't1',
+};
+
+interface TitledIntro {
+  id: string;
+  name: string;
+  ownerId: string;
+  isThread: () => boolean;
+  fetchStarterMessage: () => Promise<unknown>;
+  setName: jest.Mock<Promise<unknown>, [string, string?]>;
+}
+
+/** A bot-authored intro whose `setName` really renames it, like Discord. */
+function titledIntro(name: string, ownerId = BOT, setNameRejects = false) {
+  const starter = {
+    author: { id: BOT },
+    content: LFG_BOARD_INTRO_BODY,
+    components: buildComposerCard('https://raid.example')
+      .components as unknown[],
+    edit: jest.fn(() => Promise.resolve()),
+  };
+  const intro: TitledIntro = {
+    id: 't1',
+    name,
+    ownerId,
+    isThread: () => true,
+    fetchStarterMessage: () => Promise.resolve(starter),
+    setName: jest.fn((next: string) => {
+      if (setNameRejects) return Promise.reject(new Error('Missing Access'));
+      intro.name = next;
+      return Promise.resolve(intro);
+    }),
+  };
+  return { starter, intro };
+}
+
+describe('LfgComposerPinService.reconcile — legacy intro title (ROK-1658)', () => {
+  const LEGACY = LEGACY_TITLE;
+  const cfg = ON_WITH_INTRO;
+
+  it('renames a legacy-titled intro once, in place (same thread id)', async () => {
+    const { intro } = titledIntro(LEGACY);
+    const svc = service({ t1: intro }, cfg, null);
+    await svc.reconcile();
+    await svc.reconcile();
+    expect(intro.setName).toHaveBeenCalledTimes(1);
+    expect(intro.setName).toHaveBeenCalledWith(
+      LFG_BOARD_INTRO_TITLE,
+      expect.any(String),
+    );
+    expect(intro.name).toBe(LFG_BOARD_INTRO_TITLE);
+    expect(intro.id).toBe('t1');
+  });
+
+  it('never renames an intro already carrying the current title', async () => {
+    const { intro } = titledIntro(LFG_BOARD_INTRO_TITLE);
+    await service({ t1: intro }, cfg, null).reconcile();
+    expect(intro.setName).not.toHaveBeenCalled();
+  });
+
+  it('never renames a legacy-titled thread the bot does not own', async () => {
+    const { intro } = titledIntro(LEGACY, 'member-7');
+    await service({ t1: intro }, cfg, null).reconcile();
+    expect(intro.setName).not.toHaveBeenCalled();
+  });
+
+  it('a refused rename logs and still sets the buttons + copy', async () => {
+    const { starter, intro } = titledIntro(LEGACY, BOT, true);
+    starter.components = [];
+    const svc = service({ t1: intro }, cfg, null);
+    const warn = jest
+      .spyOn((svc as unknown as { logger: Logger }).logger, 'warn')
+      .mockImplementation(() => undefined);
+    await expect(svc.reconcile()).resolves.toBe('intro-edited');
+    expect(starter.edit).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Could not rename the LFG board intro post t1'),
     );
   });
 });

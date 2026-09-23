@@ -44,7 +44,7 @@ interface FakeThread {
  * A forum post as the intro rediscovery reads it (D6).
  *
  * @param over.id - Snowflake; the scan prefers the lowest when none is pinned.
- * @param over.name - Thread title; only `LFG_BOARD_INTRO_TITLE` may be adopted.
+ * @param over.name - Thread title; only an intro title (current or legacy) may be adopted.
  * @param over.ownerId - Starter; only the app's own user id may be adopted.
  * @param over.pinned - Whether the post already carries `ChannelFlags.Pinned`.
  */
@@ -518,6 +518,16 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
 
     expect(h.create).toHaveBeenCalledTimes(1);
     expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
+  });
+
+  it('adopts a LEGACY-titled intro of its own; no second intro (ROK-1658)', async () => {
+    const legacy = fakeThread({ id: 'intro-7', name: 'How this board works' });
+    const h = harness({ active: [legacy] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-7');
   });
 
   it('refuses one of the bot\u2019s own posts with a different title', async () => {
