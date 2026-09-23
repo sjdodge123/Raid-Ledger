@@ -3,8 +3,9 @@
  * `FilterEntry` (`web/src/components/ui/filter-entry.tsx`).
  *
  * LEFT  (desktop, ≥1024px):      the real `FilterEntryTrigger` (toolbar funnel)
- *                                + the inline panel `FilterEntry` renders, as
- *                                they render at this page's own (desktop) width.
+ *                                + the inline panel `FilterEntry` renders —
+ *                                mounted only at ≥1024px (below, the real entry
+ *                                would float its fixed FAB over the gallery).
  * RIGHT (phone/tablet, <1024px): a static replica of the Filters FAB
  *                                (`FilterFab`, `filter-fab.tsx`) — the real
  *                                component is `fixed` + `lg:hidden`, so at this
@@ -23,6 +24,8 @@ import { useState, type JSX } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { FilterEntry, FilterEntryTrigger } from '../../components/ui/filter-entry';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
+import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { Section, DoBlock, SideBySide } from './design-system-bits';
 
 const SLIDER_CLS = 'flex-1 h-11 accent-emerald-500';
@@ -82,12 +85,29 @@ function DemoFilterControls(): JSX.Element {
     );
 }
 
-/** Desktop (≥1024px): the real FilterEntry — toolbar trigger + inline panel. */
+/**
+ * Desktop (≥1024px): the real FilterEntry — toolbar trigger + inline panel.
+ * Below 1024px the real entry would mount its `fixed` FilterFab over the whole
+ * gallery (and swap the panel for a sheet), so only a note renders there.
+ */
 function DesktopFiltering(): JSX.Element {
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
+    return (
+        <div data-testid="ds-filter-do">
+            {isDesktop ? <LiveDesktopEntry /> : (
+                <p className="text-xs text-muted">The live desktop entry renders at 1024px and up. Widen the window to try it.</p>
+            )}
+            <Notes items={DESKTOP_NOTES} />
+        </div>
+    );
+}
+
+/** The live toolbar funnel + inline panel (mounted only at ≥1024px, see `DesktopFiltering`). */
+function LiveDesktopEntry(): JSX.Element {
     const [isOpen, setIsOpen] = useState(true);
     const [activeCount, setActiveCount] = useState(2);
     return (
-        <div data-testid="ds-filter-do">
+        <>
             <div className="flex items-center gap-3 mb-2">
                 <FilterEntryTrigger activeCount={activeCount} isOpen={isOpen} onOpenChange={setIsOpen} />
                 <p className="text-xs text-muted">Showing games with co-op data</p>
@@ -95,8 +115,7 @@ function DesktopFiltering(): JSX.Element {
             <FilterEntry activeCount={activeCount} isOpen={isOpen} onOpenChange={setIsOpen} onClearAll={() => setActiveCount(0)}>
                 <DemoFilterControls />
             </FilterEntry>
-            <Notes items={DESKTOP_NOTES} />
-        </div>
+        </>
     );
 }
 

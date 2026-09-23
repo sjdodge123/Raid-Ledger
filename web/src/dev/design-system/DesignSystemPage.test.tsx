@@ -11,6 +11,21 @@ import { THEME_REGISTRY } from '../../stores/theme-registry';
 import { useThemeStore } from '../../stores/theme-store';
 import { GROUP_FILL, GROUP_GRADIENT } from '../../components/features/game-time/phone/week-strip.fills';
 
+/** Answers `min-width` / `max-width` queries as a viewport `width` px wide (others false); returns the restore. */
+function withViewportWidth(width: number): () => void {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => {
+        const min = /min-width:\s*(\d+)px/.exec(query);
+        const max = /max-width:\s*(\d+)px/.exec(query);
+        const matches = Boolean(min || max) && (!min || width >= Number(min[1])) && (!max || width <= Number(max[1]));
+        return {
+            matches, media: query, onchange: null, addListener: () => {}, removeListener: () => {},
+            addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+        };
+    }) as unknown as typeof window.matchMedia;
+    return () => { window.matchMedia = original; };
+}
+
 const mockUseSystemStatus = vi.fn();
 vi.mock('../../hooks/use-system-status', () => ({
     useSystemStatus: () => mockUseSystemStatus(),
@@ -91,11 +106,28 @@ describe('DesignSystemPage — Forms section', () => {
 
     it('shows the filtering DO and DON\'T side by side', () => {
         demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
-        expect(screen.getByTestId('ds-filter-do')).toBeInTheDocument();
-        expect(screen.getByTestId('ds-filter-dont')).toBeInTheDocument();
-        // The canonical panel owns "Clear all"; the bespoke copy has no such control.
-        expect(screen.getByRole('button', { name: /clear all/i })).toBeInTheDocument();
+        const restore = withViewportWidth(1280);
+        try {
+            renderWithProviders(<DesignSystemPage />);
+            expect(screen.getByTestId('ds-filter-do')).toBeInTheDocument();
+            expect(screen.getByTestId('ds-filter-dont')).toBeInTheDocument();
+            // The canonical panel owns "Clear all" — inline, in the desktop demo itself.
+            expect(within(screen.getByTestId('ds-filter-do')).getByRole('button', { name: /clear all/i })).toBeInTheDocument();
+        } finally {
+            restore();
+        }
+    });
+
+    it('mounts no real (fixed) Filters FAB below 1024px — the live desktop demo is gated to ≥1024px', () => {
+        demoMode(true);
+        const restore = withViewportWidth(800);
+        try {
+            renderWithProviders(<DesignSystemPage />);
+            expect(screen.queryByTestId('filter-fab')).toBeNull();
+            expect(screen.getByTestId('ds-filter-do')).toHaveTextContent(/renders at 1024px and up/);
+        } finally {
+            restore();
+        }
     });
 
     it('renders token swatches for the surface roles', () => {
