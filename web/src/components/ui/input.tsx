@@ -29,7 +29,7 @@ function inputClass(p: Pick<InputProps, 'fieldSize' | 'leading' | 'trailing' | '
         FIELD_FRAME_BASE,
         FIELD_PAD[p.fieldSize ?? 'md'],
         p.leading ? 'pl-10' : '',
-        p.trailing ? 'pr-12' : '',
+        p.trailing ? 'pr-14' : '',
         p.mono ? 'font-mono' : '',
         p.className ?? '',
     ].filter(Boolean).join(' ');

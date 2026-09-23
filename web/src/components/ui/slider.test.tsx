@@ -2,7 +2,7 @@
  * ROK-1646 — Slider (spike ROK-1644 §4.8, promotes SLIDER_CLS): a native
  * range input with a label, a font-mono value readout and a 44px track.
  */
-import { useState, type JSX } from 'react';
+import { createRef, useState, type JSX } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Slider } from './slider';
@@ -57,5 +57,25 @@ describe('Slider', () => {
         const range = screen.getByRole('slider', { name: 'Locked' });
         expect(range).toBeDisabled();
         expect(range).toHaveClass('disabled:opacity-50');
+    });
+});
+
+describe('Slider — review fixes', () => {
+    it('is appearance-none so the 20px thumb sizing applies, with a painted track and fill', () => {
+        render(<Slider label="Owners" value={5} min={0} max={10} onChange={() => undefined} />);
+        const range = screen.getByRole('slider', { name: 'Owners' });
+        expect(range, 'without appearance-none webkit ignores the thumb size').toHaveClass('appearance-none', '[&::-webkit-slider-thumb]:appearance-none');
+        expect(range.style.getPropertyValue('--slider-fill')).toBe('50%');
+    });
+
+    it('the readout is not a live region (aria-valuetext already speaks the value)', () => {
+        render(<Slider label="Owners" value={5} onChange={() => undefined} />);
+        expect(screen.getByTestId('slider-value'), '<output> is implicitly live and double-announces').toHaveAttribute('aria-live', 'off');
+    });
+
+    it('forwards its ref to the range input', () => {
+        const ref = createRef<HTMLInputElement>();
+        render(<Slider ref={ref} label="Owners" value={5} onChange={() => undefined} />);
+        expect(ref.current).toBe(screen.getByRole('slider', { name: 'Owners' }));
     });
 });

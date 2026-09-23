@@ -6,7 +6,9 @@
  *   those exact class names (design-system.md §2.2).
  * - `type` defaults to "button", so a button inside a `<form>` never submits it
  *   by accident.
- * - `loading` sets `aria-busy` + `disabled`, hides the label with `invisible`
+ * - `loading` sets `aria-busy` + `aria-disabled` — NOT native `disabled`, so a
+ *   focused button keeps focus — and swallows clicks (a double click fires
+ *   `onClick` once; a loading submit button never submits). It hides the label with `invisible`
  *   (so the width never collapses) and overlays a small inline spinner. The
  *   full-page `LoadingSpinner` is a route fallback and is the wrong size here.
  * - Icon-only buttons must carry an `aria-label` — the type rejects one without.
@@ -73,15 +75,17 @@ function buttonClass(p: Pick<ButtonProps, 'variant' | 'size' | 'fullWidth' | 'ic
 /** The shared button. See the file header for the contract. */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(props, ref) {
     const { variant, size, loading = false, loadingLabel, fullWidth, iconOnly, className,
-        type = 'button', disabled, children, ...rest } = props;
+        type = 'button', disabled, children, onClick, ...rest } = props;
     return (
         <button
             ref={ref}
             type={type}
-            disabled={disabled || loading}
+            disabled={disabled}
             aria-busy={loading || undefined}
+            aria-disabled={loading || undefined}
             className={buttonClass({ variant, size, fullWidth, iconOnly, className })}
             {...rest}
+            onClick={(e) => { if (loading) e.preventDefault(); else onClick?.(e); }}
         >
             <span data-button-label aria-hidden={loading || undefined} className={`inline-flex items-center gap-2 ${loading ? 'invisible' : ''}`}>
                 {children}

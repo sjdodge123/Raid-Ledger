@@ -3,7 +3,8 @@
  * contract every migrated call site will lean on: the type default that stops
  * accidental form submits, the five variants, the loading contract and the ref.
  */
-import { createRef } from 'react';
+import { createRef, useState, type JSX } from 'react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from './button';
@@ -70,12 +71,13 @@ describe('Button — states, naming and ref', () => {
         expect(onClick).not.toHaveBeenCalled();
     });
 
-    it('loading sets aria-busy, disables, and keeps the label width (label invisible, spinner overlaid)', () => {
+    it('loading sets aria-busy + aria-disabled (NOT native disabled, so focus stays) and keeps the label width', () => {
         const onClick = vi.fn();
         render(<Button loading onClick={onClick}>Save</Button>);
         const btn = screen.getByRole('button', { name: 'Save' });
         expect(btn).toHaveAttribute('aria-busy', 'true');
-        expect(btn).toBeDisabled();
+        expect(btn).toHaveAttribute('aria-disabled', 'true');
+        expect(btn, 'native disabled drops focus from a loading button').not.toHaveAttribute('disabled');
         expect(screen.getByTestId('button-spinner')).toBeInTheDocument();
         expect(screen.getByText('Save', { selector: '[data-button-label]' })).toHaveClass('invisible');
         fireEvent.click(btn);
@@ -107,5 +109,30 @@ describe('Button — states, naming and ref', () => {
     it('merges a className override after the variant classes', () => {
         render(<Button className="brand-x">X</Button>);
         expect(screen.getByRole('button', { name: 'X' })).toHaveClass('brand-x', 'bg-emerald-600');
+    });
+});
+
+describe('Button — loading keeps focus and swallows repeat clicks', () => {
+    function Saver({ onSave }: { onSave: () => void }): JSX.Element {
+        const [busy, setBusy] = useState(false);
+        return <Button loading={busy} onClick={() => { onSave(); setBusy(true); }}>Save</Button>;
+    }
+
+    it('a double click while loading calls onClick once and the button keeps focus', async () => {
+        const onSave = vi.fn();
+        render(<Saver onSave={onSave} />);
+        const btn = screen.getByRole('button', { name: 'Save' });
+        await userEvent.dblClick(btn);
+        expect(onSave, 'the second click of a double click fired while loading').toHaveBeenCalledTimes(1);
+        expect(btn).toHaveAttribute('aria-disabled', 'true');
+        expect(btn).not.toHaveAttribute('disabled');
+        expect(btn).toHaveFocus();
+    });
+
+    it('a loading type="submit" button does not submit its form', () => {
+        const onSubmit = vi.fn((e: { preventDefault: () => void }) => e.preventDefault());
+        render(<form onSubmit={onSubmit}><Button type="submit" loading>Save</Button></form>);
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(onSubmit, 'a loading submit button still submitted the form').not.toHaveBeenCalled();
     });
 });

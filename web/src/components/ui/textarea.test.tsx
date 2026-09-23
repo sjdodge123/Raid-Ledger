@@ -50,7 +50,7 @@ describe('Textarea — counter', () => {
         render(<Textarea aria-label="Notes" showCount maxLength={20} defaultValue="ab" />);
         const count = screen.getByTestId('textarea-count');
         expect(count).toHaveTextContent('2/20');
-        expect(count).toHaveAttribute('aria-live', 'polite');
+        expect(count, 'the always-visible counter must not announce every keystroke').not.toHaveAttribute('aria-live');
         expect(count).toHaveClass('text-xs', 'text-dim');
         await userEvent.type(screen.getByRole('textbox', { name: 'Notes' }), 'cde');
         expect(count).toHaveTextContent('5/20');
@@ -71,5 +71,22 @@ describe('Textarea — counter', () => {
         render(<Field label="Reason" hint="Optional."><Textarea showCount maxLength={10} defaultValue="abc" /></Field>);
         const box = screen.getByRole('textbox', { name: 'Reason' });
         expect(box).toHaveAccessibleDescription('3/10 Optional.');
+    });
+});
+
+describe('Textarea — near-limit announcement and size', () => {
+    it('announces only near the limit; the visible count always renders', async () => {
+        render(<Textarea aria-label="Notes" showCount maxLength={100} defaultValue={'a'.repeat(80)} />);
+        const live = screen.getByTestId('textarea-count-live');
+        expect(live).toHaveAttribute('aria-live', 'polite');
+        expect(live, 'announced while far from the limit').toHaveTextContent(/^$/);
+        expect(screen.getByTestId('textarea-count')).toHaveTextContent('80/100');
+        await userEvent.type(screen.getByRole('textbox', { name: 'Notes' }), 'b'.repeat(12));
+        expect(live).toHaveTextContent('8 characters left');
+    });
+
+    it('fieldSize swaps the padding like Input', () => {
+        render(<Textarea aria-label="Notes" fieldSize="sm" />);
+        expect(screen.getByRole('textbox', { name: 'Notes' })).toHaveClass('lg:py-1', 'lg:px-2');
     });
 });

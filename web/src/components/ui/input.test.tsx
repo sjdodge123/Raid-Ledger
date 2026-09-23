@@ -62,7 +62,7 @@ describe('Input — adornments and ref', () => {
     it('trailing renders an interactive slot and pads the text before it', async () => {
         render(<Input aria-label="N" trailing={<button type="button">Show</button>} />);
         expect(screen.getByRole('button', { name: 'Show' })).toBeInTheDocument();
-        expect(screen.getByRole('textbox', { name: 'N' })).toHaveClass('pr-12');
+        expect(screen.getByRole('textbox', { name: 'N' })).toHaveClass('pr-14');
     });
 
     it('forwards its ref to the <input>', () => {
