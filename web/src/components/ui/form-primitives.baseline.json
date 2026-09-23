@@ -219,7 +219,6 @@
     "pages/admin/backups-panel.tsx": 5,
     "pages/admin/branding-panel.tsx": 9,
     "pages/admin/cron-jobs-panel.tsx": 3,
-    "pages/admin/discord-channels-page.tsx": 1,
     "pages/admin/discord-connection-page.tsx": 1,
     "pages/admin/discord-features-page.tsx": 1,
     "pages/admin/discord-overview-page.tsx": 2,

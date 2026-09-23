@@ -1,4 +1,4 @@
-import { type ReactNode, useState, useCallback, useRef } from 'react';
+import { type ReactNode, lazy, Suspense, useState, useCallback, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Header } from './Header';
 import { Footer } from './Footer';
@@ -15,6 +15,10 @@ import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
+import { useShellHeight } from './use-shell-height';
+
+/** ROK-1661 diagnostic; checks DEMO_MODE itself. Lazy, so it costs nothing without `?vpdebug=1`. */
+const ViewportReadout = lazy(() => import('../../dev/ViewportReadout').then((m) => ({ default: m.ViewportReadout })));
 
 /**
  * ROK-1067: routes under /p/* are public, chrome-less surfaces meant
@@ -29,6 +33,31 @@ function isChromelessPath(pathname: string): boolean {
 
 interface LayoutProps {
     children: ReactNode;
+}
+
+/**
+ * ROK-1661: the page shell. `min-h-dvh` is only the first-paint / no-JS floor —
+ * on a real iPad `100dvh` resolves ~100 CSS px taller than the visible area
+ * (ROK-1640), which pushed a short page's footer below the fold. Once mounted
+ * the floor is the VISIBLE viewport height, zoom- and keyboard-invariant
+ * (`useShellHeight`), inline so it wins over the class. Its own component so a
+ * height change re-renders only this div, not the chrome passed in as children.
+ * `?vpdebug=1` overlays the DEMO_MODE-only viewport readout (`dev/ViewportReadout.tsx`).
+ */
+function ViewportShell({ children }: LayoutProps) {
+    const shellHeight = useShellHeight();
+    const showReadout = new URLSearchParams(useLocation().search).get('vpdebug') === '1';
+    const minHeight = shellHeight > 0 ? `${shellHeight}px` : undefined;
+    return (
+        <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip', minHeight }}>
+            {children}
+            {showReadout && (
+                <Suspense fallback={null}>
+                    <ViewportReadout shellHeight={shellHeight} />
+                </Suspense>
+            )}
+        </div>
+    );
 }
 
 /**
@@ -63,15 +92,15 @@ export function Layout({ children }: LayoutProps) {
 
     if (isChromelessPath(pathname)) {
         return (
-            <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
-                <main id="main-content" className="flex-1">{children}</main>
+            <ViewportShell>
+                <main id="main-content" className="flex-1 flex flex-col">{children}</main>
                 <LiveRegionProvider />
-            </div>
+            </ViewportShell>
         );
     }
 
     return (
-        <div className="min-h-dvh flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
+        <ViewportShell>
             <CurrentUserAvatarSync />
             {showAmbientEffects && <SpaceEffects />}
             {showAmbientEffects && <UnderwaterAmbience />}
@@ -84,6 +113,6 @@ export function Layout({ children }: LayoutProps) {
             <MoreDrawer isOpen={moreDrawerOpen} onClose={closeMoreDrawer} onFeedbackClick={handleFeedbackClick} />
             <FeedbackWidget onRegisterOpen={registerFeedbackOpen} />
             <LiveRegionProvider />
-        </div>
+        </ViewportShell>
     );
 }

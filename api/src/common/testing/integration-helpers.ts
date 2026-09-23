@@ -206,8 +206,11 @@ async function obliterateAllQueues(): Promise<void> {
  * `sched-poll-` (ROK-1632) covers the match/slot-keyed scheduling-poll claims
  * (`sched-poll-unanimous:M:S`, `sched-poll-rally:…`, `sched-poll-nudge:…`) —
  * permanent keys, so a recycled match id would inherit a spent claim.
+ * `weekly-digest:` (ROK-1435) covers the ISO-week claim
+ * (`weekly-digest:2026-W39`): the DB row goes with the truncate, but a Redis
+ * copy left behind makes the next test's first post read as a duplicate.
  */
-const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
+export const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'jwt_block:',
   'lineup-',
   'event-',
@@ -219,6 +222,7 @@ const MOCK_REDIS_TEARDOWN_PREFIXES: readonly string[] = [
   'game-alert',
   'cooptimus:',
   'igdb:search:itad:',
+  'weekly-digest:',
 ];
 
 /**

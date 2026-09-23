@@ -85,9 +85,15 @@ function DecisionBlock({ gameName, coverUrl }: DecisionBlockProps) {
     );
 }
 
+/**
+ * ROK-1661: every state renders a `flex-1` panel, not its own `<main>` with a
+ * `min-h-dvh` floor. The chromeless Layout already supplies `<main>` as a flex
+ * column floored on the VISIBLE viewport; a nested `100dvh` floor made the page
+ * scroll ~100px on iPad Safari and centred these panels below the fold.
+ */
 function NotFoundPanel() {
     return (
-        <main className="min-h-dvh flex items-center justify-center px-4 bg-backdrop text-foreground">
+        <div className="flex-1 flex items-center justify-center px-4 bg-backdrop text-foreground">
             <div className="max-w-lg w-full text-center">
                 <h1 className="text-2xl font-display font-bold mb-3">
                     This lineup is no longer available
@@ -98,15 +104,15 @@ function NotFoundPanel() {
                 </p>
                 <Footer />
             </div>
-        </main>
+        </div>
     );
 }
 
 function ErrorPanel() {
     return (
-        <main
+        <div
             data-testid="public-lineup-error"
-            className="min-h-dvh flex items-center justify-center px-4 bg-backdrop text-foreground"
+            className="flex-1 flex items-center justify-center px-4 bg-backdrop text-foreground"
         >
             <div className="max-w-lg w-full text-center">
                 <h1 className="text-2xl font-display font-bold mb-3">
@@ -125,15 +131,15 @@ function ErrorPanel() {
                 </button>
                 <Footer />
             </div>
-        </main>
+        </div>
     );
 }
 
 function LoadingPanel() {
     return (
-        <main className="min-h-dvh flex items-center justify-center px-4 bg-backdrop text-foreground">
+        <div className="flex-1 flex items-center justify-center px-4 bg-backdrop text-foreground">
             <p className="text-muted">Loading…</p>
-        </main>
+        </div>
     );
 }
 
@@ -147,7 +153,7 @@ export function PublicLineupPage(): JSX.Element {
     if (!data) return <NotFoundPanel />;
 
     return (
-        <main className="min-h-dvh px-4 py-8 bg-backdrop text-foreground">
+        <div className="flex-1 px-4 py-8 bg-backdrop text-foreground">
             <article className="max-w-2xl mx-auto">
                 <header className="mb-4">
                     <div className="flex items-center gap-3 flex-wrap mb-3">
@@ -173,6 +179,6 @@ export function PublicLineupPage(): JSX.Element {
                 )}
                 <Footer />
             </article>
-        </main>
+        </div>
     );
 }

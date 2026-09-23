@@ -16,6 +16,7 @@ import { LfgAffinityDmService } from './lfg-affinity-dm.service';
 import { LineupLfgBridgeService } from './lineup-lfg-bridge.service';
 import { LiveNoShowService } from './live-noshow.service';
 import { RecruitmentReminderService } from './recruitment-reminder.service';
+import { WeeklyDigestService } from './weekly-digest.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SchedulingThresholdService } from './scheduling-threshold.service';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
@@ -51,6 +52,7 @@ import { SettingsModule } from '../settings/settings.module';
     LineupLfgBridgeService,
     LiveNoShowService,
     RecruitmentReminderService,
+    WeeklyDigestService,
     NotificationDedupService,
     SchedulingThresholdService,
   ],
@@ -63,6 +65,7 @@ import { SettingsModule } from '../settings/settings.module';
     LfgAffinityDmService,
     LineupLfgBridgeService,
     RecruitmentReminderService,
+    WeeklyDigestService,
   ],
 })
 export class NotificationModule {}

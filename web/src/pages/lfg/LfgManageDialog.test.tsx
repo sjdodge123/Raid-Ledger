@@ -1,12 +1,16 @@
 /** ROK-1573 (approved H2) — ⋯ Manage: urgency choice + Withdraw danger row. */
 import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { LfgUrgency } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgManageDialog } from './LfgManageDialog';
 
-function setup(ownUrgency: LfgUrgency | null = 'week', isWithdrawing = false) {
+function setup(
+    ownUrgency: LfgUrgency | null = 'week',
+    isWithdrawing = false,
+    spawn: { spawnsNow?: boolean; spawnEmoji?: string } = {},
+) {
     const onPickUrgency = vi.fn();
     const onWithdraw = vi.fn();
     const onClose = vi.fn();
@@ -19,6 +23,7 @@ function setup(ownUrgency: LfgUrgency | null = 'week', isWithdrawing = false) {
             onWithdraw={onWithdraw}
             isWithdrawing={isWithdrawing}
             onClose={onClose}
+            {...spawn}
         />,
     );
     return { onPickUrgency, onWithdraw, onClose };
@@ -51,6 +56,18 @@ describe('LfgManageDialog', () => {
     it('disables Withdraw while withdrawing', () => {
         setup('week', true);
         expect(screen.getByTestId('lfg-manage-withdraw')).toBeDisabled();
+    });
+
+    it('marks the Right now pick with the spawn glyph when it would form the group (ROK-1619 AC7)', () => {
+        setup('week', false, { spawnsNow: true, spawnEmoji: '🎉' });
+        const now = screen.getByTestId('lfg-urgency-now');
+        expect(within(now).getByTestId('lfg-spawn-indicator')).toHaveTextContent('🎉');
+    });
+
+    it('shows no spawn glyph when the pick would not form the group (ROK-1619 AC7)', () => {
+        setup('week', false, { spawnsNow: false, spawnEmoji: '🎉' });
+        expect(screen.getByTestId('lfg-urgency-now')).toBeInTheDocument();
+        expect(screen.queryByTestId('lfg-spawn-indicator')).not.toBeInTheDocument();
     });
 
     it('offers no Withdraw when the viewer holds no intent', () => {
