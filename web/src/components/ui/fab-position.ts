@@ -21,6 +21,14 @@
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 
+/**
+ * The Filters FAB's face: size, shape, neutral tone, focus ring. `FilterFab`
+ * adds its fixed position; the /dev gallery's static replica reuses it as-is.
+ */
+export const FILTER_FAB_FACE_CLASS = 'w-14 h-14 flex items-center justify-center rounded-full bg-surface border '
+    + 'border-edge-strong shadow-lg text-foreground hover:bg-panel active:scale-95 transition-all duration-200 '
+    + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/50';
+
 /** A FAB is `w-14 h-14`. */
 export const FAB_SIZE_PX = 56;
 /** Vertical gap between two stacked FABs. */

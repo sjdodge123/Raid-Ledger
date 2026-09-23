@@ -12,18 +12,23 @@
  *                                page's desktop width it renders nothing and
  *                                would float over the whole gallery besides
  *                                (the same reason `overlays-section.tsx`'s FAB
- *                                example is a static replica). Its
- *                                `BottomSheet` on tap IS the real component.
+ *                                example is a static replica). Only the
+ *                                position is replicated: the face class
+ *                                (`FILTER_FAB_FACE_CLASS`, `fab-position.ts`),
+ *                                the count badge (`FilterCountBadge`) and the
+ *                                `BottomSheet` on tap are the real ones.
  *
  * Before ROK-1659 this page compared the shared primitive against the lineup's
  * bespoke `CommonGroundFilters.tsx` bar (divergence #1, docs/design-system.md
  * §6). That divergence is resolved: Common Ground now uses this same
  * primitive, so both sides here are DO.
  */
-import { useState, type JSX } from 'react';
+import { useId, useState, type JSX } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { FilterEntry, FilterEntryTrigger } from '../../components/ui/filter-entry';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
+import { FilterCountBadge } from '../../components/ui/filter-count-badge';
+import { FILTER_FAB_FACE_CLASS } from '../../components/ui/fab-position';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { Section, DoBlock, SideBySide } from './design-system-bits';
@@ -122,21 +127,21 @@ function LiveDesktopEntry(): JSX.Element {
 /** Phone + tablet (<1024px): a static replica of FilterFab — see the file header. */
 function PhoneFiltering(): JSX.Element {
     const [isOpen, setIsOpen] = useState(false);
+    const countId = useId();
     const activeCount = 2;
     return (
-        <div data-testid="ds-filter-dont" className="relative min-h-[140px]">
+        <div data-testid="ds-filter-phone" className="relative min-h-[140px]">
             <p className="text-xs text-muted mb-3">Showing games with co-op data</p>
             <button
                 type="button"
                 onClick={() => setIsOpen(true)}
                 aria-label="Filters"
                 aria-expanded={isOpen}
-                className="relative inline-flex items-center justify-center w-14 h-14 rounded-full bg-surface border border-edge-strong shadow-lg text-foreground"
+                aria-describedby={countId}
+                className={`relative ${FILTER_FAB_FACE_CLASS}`}
             >
-                <FunnelIcon className="w-6 h-6" />
-                <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-5 h-5 px-1 text-xs font-bold text-white bg-success rounded-full">
-                    {activeCount}
-                </span>
+                <FunnelIcon className="w-6 h-6" aria-hidden="true" />
+                <FilterCountBadge count={activeCount} id={countId} />
             </button>
             <BottomSheet isOpen={isOpen} onClose={() => setIsOpen(false)} title="Filters">
                 <DemoFilterControls />

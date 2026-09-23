@@ -316,10 +316,12 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
   `components/lineups/CommonGroundFilters.tsx`, `pages/calendar/CalendarFilterEntry.tsx`.
   `pages/players-page.tsx:84-90` wires the lower-level `FilterPanelTrigger` / `FilterPanel` pair directly
   instead of `FilterEntry` (not yet migrated to the shared entry point).
-  Escape-to-close is built into `FilterPanel` itself (`useEscapeToClose`, `filter-panel.tsx:61-82`) — not
-  a per-page affordance. It closes the desktop panel and, when focus was inside it, returns focus to the
-  open funnel (`[data-testid="filter-panel-trigger"][aria-expanded="true"]`), because the collapsed panel
-  is `inert`. Every `FilterPanel` consumer gets this for free, including `players-page.tsx`.
+  Escape-to-close is built into `FilterPanel` itself (`useEscapeToClose` + `isEscapeForAnotherLayer` in
+  `filter-panel.tsx`) — not a per-page affordance. It closes the desktop panel and, when focus was inside
+  it, returns focus to the open funnel (`[data-testid="filter-panel-trigger"][aria-expanded="true"]`),
+  because the collapsed panel is `inert`. A non-empty search field inside the panel keeps the first
+  Escape (the browser clears it); the next one closes. "Clear all" unmounts itself at 0, so it hands focus
+  to the panel's "Filters" title (desktop) or the sheet's Close button first (`ClearAllButton`). Every `FilterPanel` consumer gets this for free, including `players-page.tsx`.
   Below 1024px the same rule holds for the sheet: a closed `BottomSheet` only slides off-screen, so
   `FilterPanel` wraps the sheet body in `inert` + `aria-hidden` while closed (children stay mounted, so
   body effects such as the ROK-1255 auto-seed still run). Tests that drive sheet controls open the FAB first.
@@ -399,9 +401,10 @@ navigation only; filtering is §4.1's funnel standard.
 
 ### 4.4 Modal vs bottom sheet
 
-**DO** — pick by viewport, not by taste: `useMediaQuery('(min-width: 768px)')` → `Modal` on desktop,
-`BottomSheet` below. `FilterPanel` already does this internally; copy its branch
-(`filter-panel.tsx:50-59`) when you need the same split elsewhere.
+**DO** — pick by viewport, not by taste: `useMediaQuery(DESKTOP_MQ)` (1024px, §4.18) →
+`Modal` / inline at 1024px and up, `BottomSheet` below. `FilterPanel` splits at `DESKTOP_MQ` (1024)
+internally; copy its `if (!isDesktop)` branch in `FilterPanel` (`filter-panel.tsx`) when you need the
+same split elsewhere.
 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
@@ -694,7 +697,7 @@ ship `CHECK_HOURS` (hour 17 first) instead, so the desktop group week view start
 **DO** — the phone/desktop split is **1024px (`lg`), not 768px (`md`)**: iPads in portrait (768–834px)
 and the iPad mini in landscape get the phone layouts (sheets, drawers, one-day module, Manage sheet). In JS
 import `DESKTOP_MQ` / `PHONE_MQ` from `web/src/lib/breakpoints.ts:14-18` and pass to `useMediaQuery`
-(e.g. `SchedulingToolbar.tsx:50`, `filter-panel.tsx:51`); in CSS use `lg:` on the same component so the
+(e.g. `SchedulingToolbar.tsx:50`, `FilterPanel` in `filter-panel.tsx`); in CSS use `lg:` on the same component so the
 two halves agree (the toolbar's `lg:sticky`, `SchedulingToolbar.tsx:54`). Known drift: `Layout.tsx:48`
 hand-writes `'(min-width: 1024px)'` — right value, wrong spelling; switch it to `DESKTOP_MQ` when next touched.
 

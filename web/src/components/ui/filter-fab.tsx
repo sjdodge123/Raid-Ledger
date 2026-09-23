@@ -17,7 +17,7 @@ import { FunnelIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { FilterCountBadge } from './filter-count-badge';
 import type { DescribeFilterCount } from './filter-count-badge.helpers';
-import { useFilterFabBottom } from './fab-position';
+import { FILTER_FAB_FACE_CLASS, useFilterFabBottom } from './fab-position';
 
 export interface FilterFabProps {
     /** Active filters (values differing from the page defaults). Badge hidden at 0. */
@@ -31,9 +31,7 @@ export interface FilterFabProps {
     describeCount?: DescribeFilterCount;
 }
 
-const FAB_CLASS = 'fixed right-4 md:right-5 w-14 h-14 lg:hidden flex items-center justify-center rounded-full '
-    + 'bg-surface border border-edge-strong shadow-lg text-foreground hover:bg-panel active:scale-95 '
-    + 'transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/50';
+const FAB_CLASS = `fixed right-4 md:right-5 lg:hidden ${FILTER_FAB_FACE_CLASS}`;
 
 /** 56px round neutral button, bottom-right, `lg:hidden`, with the active-filter badge. */
 export function FilterFab({ activeCount, isOpen, onClick, stackAboveCreate = false, describeCount }: FilterFabProps): JSX.Element {

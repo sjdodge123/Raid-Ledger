@@ -104,13 +104,27 @@ describe('DesignSystemPage — Forms section', () => {
         expect(within(screen.getByRole('listbox', { name: 'Game' })).getAllByRole('option').length).toBeGreaterThan(1);
     });
 
-    it('shows the filtering DO and DON\'T side by side', () => {
+    it('renders token swatches for the surface roles', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        for (const token of ['--color-backdrop', '--color-surface', '--color-panel', '--color-foreground', '--color-edge']) {
+            expect(screen.getByTestId(`swatch-live-${token}`)).toBeInTheDocument();
+        }
+    });
+});
+
+describe('DesignSystemPage — Filtering section', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('shows the desktop and phone filtering demos side by side', () => {
         demoMode(true);
         const restore = withViewportWidth(1280);
         try {
             renderWithProviders(<DesignSystemPage />);
             expect(screen.getByTestId('ds-filter-do')).toBeInTheDocument();
-            expect(screen.getByTestId('ds-filter-dont')).toBeInTheDocument();
+            expect(screen.getByTestId('ds-filter-phone')).toBeInTheDocument();
             // The canonical panel owns "Clear all" — inline, in the desktop demo itself.
             expect(within(screen.getByTestId('ds-filter-do')).getByRole('button', { name: /clear all/i })).toBeInTheDocument();
         } finally {
@@ -127,14 +141,6 @@ describe('DesignSystemPage — Forms section', () => {
             expect(screen.getByTestId('ds-filter-do')).toHaveTextContent(/renders at 1024px and up/);
         } finally {
             restore();
-        }
-    });
-
-    it('renders token swatches for the surface roles', () => {
-        demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
-        for (const token of ['--color-backdrop', '--color-surface', '--color-panel', '--color-foreground', '--color-edge']) {
-            expect(screen.getByTestId(`swatch-live-${token}`)).toBeInTheDocument();
         }
     });
 });
@@ -200,8 +206,8 @@ describe('DesignSystemPage — side-by-side toggle', () => {
             expect(within(light).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
         }
         // The DO / DON'T pair is inside both columns, not only the dark one.
-        expect(within(dark).getByTestId('ds-filter-dont')).toBeInTheDocument();
-        expect(within(light).getByTestId('ds-filter-dont')).toBeInTheDocument();
+        expect(within(dark).getByTestId('ds-filter-phone')).toBeInTheDocument();
+        expect(within(light).getByTestId('ds-filter-phone')).toBeInTheDocument();
     });
 
     it('pins the root to default-dark while on, and restores the scheme when off', () => {
