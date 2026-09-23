@@ -236,6 +236,10 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
 | `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive. Desktop: collapsible bordered panel with "Filters" + "Clear all". Mobile (<768px): `BottomSheet`. Trigger is a funnel icon with an emerald count badge. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `resultCount`, `hasActiveFilters`, `onClick` |
+| `button.tsx` → `Button` (ROK-1646) | **The** button. Five variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), `destructive-soft` (`bg-danger/10 text-danger border-danger/30`) — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `disabled`, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), forwarded ref, all `ButtonHTMLAttributes` |
+| `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
+| `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-12`), `mono`, forwarded ref |
+| `form-classes.ts` → `FIELD_FRAME`, `FIELD_FRAME_BASE`, `FIELD_PAD`, `FOCUS_RING`, `DISABLED` (ROK-1646) | The class strings the form primitives share | Building the next form primitive (`Select`, `Textarea`, `SearchInput`…) — never re-type the frame | — |
 | `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
 | `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
@@ -409,22 +413,37 @@ the quest-log theme.
 
 ### 4.11 Forms, sliders, checkboxes
 
-**DO** — inputs are `min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base
-text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50`
-(`CommonGroundFilters.tsx::SearchBox` — the control styling is right even though its composition is the
-§4.1 DON'T). `ModalSearchInput` instead uses `focus:ring-accent`, which resolves to nothing (§6.3).
-`text-base` is deliberate: 16px stops iOS Safari zooming on focus. Sliders: `flex-1 h-11
-accent-emerald-500`, enlarged webkit thumbs, a `font-mono` readout right and a `font-medium` label left.
-Checkboxes: `w-5 h-5 accent-emerald-500` inside a `<label>` so the text is part of the target.
+**DO** — build forms from the primitives: `Field` around every control, `Input` for text, `Button` for
+every action (§3.1). The frame they share lives in `components/ui/form-classes.ts`: `w-full min-h-[44px]
+bg-panel border border-edge rounded-lg px-3 py-2 text-base lg:text-sm text-foreground placeholder:text-dim`,
+a `focus-visible:ring-2 focus-visible:ring-success/80` ring, `disabled:opacity-50
+disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
 
-**DON'T** use a number input where the family around it uses sliders — the operator ruled on this
-(2026-08-20) so a filter group reads as one control family.
+- **Radius is `rounded-lg`** — the same as buttons and §2.5 (operator ruling, ROK-1646; the old `rounded-md`
+  field recipe is retired).
+- **Focus ring is the `success` token at /80**, `focus-visible` only. /80 is the lowest alpha that clears
+  WCAG 1.4.11's 3:1 on `bg-panel` in both families (4.20:1 dark, 3.51:1 light; /50 measured 2.48:1 and
+  2.09:1). Buttons add `ring-offset-2 ring-offset-surface`.
+- **`text-base` below `lg`** (16px stops iOS Safari zooming on focus), `lg:text-sm` above — the §4.18 split,
+  not `sm:`/`md:`. Every control is 44px below `lg`; the only compact size (`fieldSize="sm"`, `size="sm"`)
+  applies from `lg` up.
+- **Errors are inline** under the field (`Field error=…` → `role="alert" text-danger`, linked by
+  `aria-describedby`), never toast-only; a toast is for the result of an action (§4.8).
+- **`fieldSize`, not `size`**, on `Input` — the native `size` attribute is a number.
+- Sliders (until the `Slider` primitive lands): `flex-1 h-11 accent-emerald-500`, enlarged webkit thumbs,
+  a `font-mono` readout right and a `font-medium` label left. Checkboxes (until `Checkbox` lands): `w-5 h-5
+  accent-emerald-500` inside a `<label>` so the text is part of the target.
 
-**Light / Dark** — the frame flips; the focus ring and `disabled:opacity-50` are family-agnostic by
-design, but `disabled:bg-emerald-800` (12 uses) goes dark-on-white. Note the prevailing ring is the
-SOLID `focus:ring-emerald-500` (49 uses in `components/`); the `/50` variant is a 7-use minority. Native control chrome follows
-root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the ROOT, not in a scoped preview
-(`design-system-tokens.md` §3).
+**DON'T** hand-write an input or button class string, use a `bg-*-800` disabled fill, spell an error
+`text-red-400`, or put a number input where the family around it uses sliders — the operator ruled on
+that (2026-08-20) so a filter group reads as one control family. `ModalSearchInput`'s `focus:ring-accent`
+resolves to nothing (§6.3); `SearchInput` replaces it.
+
+**Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
+solid `primary`/`destructive` fills are identical in both with the label forced white on light (§6.10).
+Native control chrome follows root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the
+ROOT, not in a scoped preview (`design-system-tokens.md` §3). Rendered: `/dev/design-system` → *Forms*
+(`web/src/dev/design-system/forms-section.tsx`).
 
 ### 4.12 Badges with counts
 
