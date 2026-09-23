@@ -15,7 +15,7 @@ const RUN_ON_VM_TIMEOUT_MS = 15_000;
 
 export const TOOL_NAME = 'rl_fleet_health';
 export const TOOL_DESC =
-  "Snapshot of fleet-wide health signals — stale-heartbeat slots, queue-stuck waiters, recent audit-log error categories (permission_denied / exit_255 / oom / socket_hang_up / inotify_missing / dubious_ownership / illegal_instruction), per-runner warnings, plus a 15-minute perf_summary (last_validate_ci, p50_validate_step_ms, claims_held_minutes, pkill_survivors_last_release, gc_sweep_last_cycle_ms). Cheap, read-only, no flock. Returns the same shape the dashboard's /api/fleet-health endpoint produces. Use after a flake to discriminate 'known fleet-bug-class' (e.g. spike in socket_hang_up counts) vs 'new failure'. severity_threshold is reserved for future filtering — v1 returns everything.";
+  "Snapshot of fleet-wide health signals — stale-heartbeat slots, queue-stuck waiters, recent audit-log error categories (permission_denied / exit_255 / oom / socket_hang_up / inotify_missing / dubious_ownership / illegal_instruction), per-runner warnings, config_warnings (e.g. operator_discord_id_unset: RL_OPERATOR_DISCORD_ID missing on the VM, so fleet envs promote the first Discord login instead), plus a 15-minute perf_summary (last_validate_ci, p50_validate_step_ms, claims_held_minutes, pkill_survivors_last_release, gc_sweep_last_cycle_ms). Cheap, read-only, no flock. Returns the same shape the dashboard's /api/fleet-health endpoint produces. Use after a flake to discriminate 'known fleet-bug-class' (e.g. spike in socket_hang_up counts) vs 'new failure'. severity_threshold is reserved for future filtering — v1 returns everything.";
 
 export interface FleetHealthParams {
   severity_threshold?: 'warn' | 'error';
@@ -70,12 +70,18 @@ export interface FleetHealthResult {
     branch: string | null;
     last_exit_code: number;
   }>;
+  /**
+   * ROK-1537 AC4: VM configuration gaps (e.g. `operator_discord_id_unset`).
+   * Not counted in summary.warning_count — they are standing config, not flakes.
+   */
+  config_warnings?: Array<{ kind: string; value: string; hint: string }>;
   summary?: {
     ok: boolean;
     warning_count: number;
     stale_slots: number;
     stuck_queue_entries: number;
     held_slots_with_failed_validate_ci: number;
+    config_warnings?: number;
   };
   error?: string;
   status?: number;

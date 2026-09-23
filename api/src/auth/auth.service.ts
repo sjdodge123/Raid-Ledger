@@ -10,6 +10,7 @@ import {
   assertKickCooldownOrClear,
 } from './auth-status.helpers';
 import type { UserRole } from '@raid-ledger/contract';
+import { promoteFirstDiscordLogin } from './fleet-first-login-admin.helpers';
 
 /** Event name emitted after Discord OAuth login/link (ROK-292). */
 export const AUTH_EVENTS = {
@@ -48,12 +49,15 @@ export class AuthService {
       await assertKickCooldownOrClear(this.db, unlinked);
     }
     if (unlinked && unlinked.discordId?.startsWith('unlinked:')) {
-      return this.relinkUnlinkedAccount(
+      const relinked = await this.relinkUnlinkedAccount(
         unlinked.id,
         discordId,
         username,
         avatar,
       );
+      return relinked
+        ? promoteFirstDiscordLogin(this.db, relinked, discordId)
+        : relinked;
     }
 
     const user = await this.usersService.createOrUpdate({
@@ -62,7 +66,8 @@ export class AuthService {
       avatar: avatar || undefined,
     });
     this.emitDiscordLogin(user.id, discordId);
-    return user;
+    // ROK-1537: fleet-only first-login admin; a no-op outside a fleet env.
+    return promoteFirstDiscordLogin(this.db, user, discordId);
   }
 
   private async relinkUnlinkedAccount(
