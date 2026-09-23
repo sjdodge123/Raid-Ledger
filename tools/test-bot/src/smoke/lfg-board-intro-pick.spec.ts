@@ -118,5 +118,14 @@ test('no bot id and nothing pinned → null, never a bare title match', () => {
   assert.equal(pickBoardIntro([intro('7', false, OTHER_BOT)], TITLE, null), null);
 });
 
+test('an archived-only intro of ours is not the live intro (Codex P2)', () => {
+  const posts = [{ ...intro('1547346943645061250'), archived: true }];
+  assert.equal(
+    pickBoardIntro(posts, TITLE, THIS_BOT),
+    null,
+    'an archived intro must never be picked; the product adopts active posts only',
+  );
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

@@ -45,18 +45,15 @@ function olderFirst(a: IntroCandidate, b: IntroCandidate): number {
   return a.id.length - b.id.length || a.id.localeCompare(b.id);
 }
 
-/** Pinned, then active, then oldest — the product's adopt order. */
+/** Pinned, then oldest — the product's adopt order among active posts. */
 function preferred(a: IntroCandidate, b: IntroCandidate): number {
-  return (
-    Number(b.pinned) - Number(a.pinned) ||
-    Number(a.archived === true) - Number(b.archived === true) ||
-    olderFirst(a, b)
-  );
+  return Number(b.pinned) - Number(a.pinned) || olderFirst(a, b);
 }
 
 /**
- * This env's intro post: titled `title` and created by this env's bot,
- * preferring the pinned one, then an active one, then the oldest.
+ * This env's intro post: titled `title`, created by this env's bot and ACTIVE
+ * (the product only adopts from `fetchActive()`, so an archived post is never
+ * the live intro), preferring the pinned one, then the oldest.
  *
  * @param threads - Every post in the forum, in any order.
  * @param title - The intro post's title.
@@ -68,7 +65,7 @@ export function pickBoardIntro<T extends IntroCandidate>(
   title: string,
   botUserId: string | null = getApiBotUserId(),
 ): T | null {
-  const titled = threads.filter((t) => t.name === title);
+  const titled = threads.filter((t) => t.name === title && t.archived !== true);
   if (botUserId === null) return titled.find((t) => t.pinned) ?? null;
   const mine = titled.filter((t) => t.ownerId === botUserId);
   return [...mine].sort(preferred)[0] ?? null;
