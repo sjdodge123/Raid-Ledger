@@ -415,11 +415,11 @@
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__role-badge--dps {
     background: rgba(220, 38, 38, 0.12);
-    color: #dc2626;
+    color: #b91c1c;
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__reassign-btn {
-    color: #b45309;
+    color: var(--color-warning);
     background: rgba(245, 158, 11, 0.1);
     border-color: rgba(245, 158, 11, 0.3);
 }
@@ -430,7 +430,7 @@
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__remove-event-btn {
-    color: #dc2626;
+    color: var(--color-danger);
     background: rgba(239, 68, 68, 0.06);
     border-color: rgba(239, 68, 68, 0.2);
 }
@@ -461,11 +461,11 @@
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__section-title--pug {
-    color: #d97706;
+    color: var(--color-warning);
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__add-pug-btn {
-    color: #b45309;
+    color: var(--color-warning);
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.08));
     border-color: rgba(217, 119, 6, 0.35);
 }

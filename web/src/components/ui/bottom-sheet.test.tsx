@@ -3,6 +3,13 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { BottomSheet } from './bottom-sheet';
 
+/** The visible viewport (`visualViewport`, via `bottom-sheet-viewport`); tests set it here. */
+const viewport = vi.hoisted(() => ({ height: 0, offsetTop: 0 }));
+vi.mock('./bottom-sheet-viewport', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./bottom-sheet-viewport')>();
+    return { ...actual, useVisibleViewport: () => ({ height: viewport.height, offsetTop: viewport.offsetTop }) };
+});
+
 describe('BottomSheet — part 1', () => {
     beforeEach(() => {
         // Reset document.body.style.overflow before each test
@@ -427,4 +434,81 @@ describe('BottomSheet — part 6', () => {
         expect(await axe(container)).toHaveNoViolations();
     });
 
+});
+
+/**
+ * ROK-1640/ROK-1641 — a sheet must be fully visible on open. On a real iPad
+ * (Safari toolbar at the TOP) a `100dvh` overlay layer still reached ~100 CSS
+ * px below the screen, hiding the time card's Rally/Lock and the game-time
+ * drawer's Save footer. The layer and the cap now come from `visualViewport`
+ * in px; the sheet clears the bottom safe-area inset, and its body is a flex
+ * scroller instead of a `calc(max - 80px)` box.
+ */
+describe('BottomSheet — ROK-1640/ROK-1641 visible-viewport sizing', () => {
+    beforeEach(() => { viewport.height = 1000; viewport.offsetTop = 0; });
+    afterEach(() => { viewport.height = 0; viewport.offsetTop = 0; document.body.style.overflow = ''; });
+
+    const renderShort = (props: Partial<React.ComponentProps<typeof BottomSheet>> = {}) => render(
+        <BottomSheet isOpen onClose={() => {}} ariaLabel="Time actions" {...props}>
+            <button type="button">Lock this time</button>
+            <button type="button">Rally</button>
+        </BottomSheet>,
+    );
+
+    it('caps the collapsed sheet at 60% of the visible height, in px', () => {
+        renderShort();
+        expect(screen.getByRole('dialog').style.maxHeight).toBe('600px');
+    });
+
+    it('converts a caller-supplied vh cap against the visible height', () => {
+        renderShort({ maxHeight: '85vh' });
+        expect(screen.getByRole('dialog').style.maxHeight).toBe('850px');
+    });
+
+    it.each(['400px', '50%'])('passes a non-vh cap (%s) through unchanged', (cap) => {
+        renderShort({ maxHeight: cap });
+        expect(screen.getByRole('dialog').style.maxHeight).toBe(cap);
+    });
+
+    it('pins the overlay layer to the visible viewport so the sheet bottom is the screen bottom', () => {
+        viewport.height = 1106; viewport.offsetTop = 24;
+        renderShort();
+        const layer = screen.getByRole('dialog').parentElement!;
+        expect(layer.style.height).toBe('1106px');
+        expect(layer.style.top).toBe('24px');
+        expect(layer.style.getPropertyValue('--sheet-vh')).toBe('11.06px');
+        expect(layer.style.bottom).toBe('auto');
+    });
+
+    it('falls back to the vh cap and the inset-0 layer when the visible height is unknown', () => {
+        viewport.height = 0;
+        renderShort();
+        const dialog = screen.getByRole('dialog');
+        expect(dialog.style.maxHeight).toBe('60vh');
+        expect(dialog.parentElement!.style.height).toBe('');
+    });
+
+    it('pads the sheet by the bottom safe-area inset', () => {
+        renderShort();
+        expect(screen.getByRole('dialog').className).toContain('pb-[env(safe-area-inset-bottom)]');
+    });
+
+    it('sizes a short sheet to its content: the body is a shrinkable scroller with no magic-offset cap', () => {
+        renderShort();
+        const body = screen.getByRole('button', { name: 'Rally' }).parentElement!;
+        expect(screen.getByRole('dialog').className).toContain('flex-col');
+        expect(body.style.maxHeight).toBe('');
+        expect(body.className).toContain('min-h-0');
+        expect(body.className).toContain('overflow-y-auto');
+    });
+
+    it('still expands to 95% of the visible height when the handle is dragged up', () => {
+        renderShort();
+        const dialog = screen.getByRole('dialog');
+        const handle = dialog.querySelector('.cursor-grab')!;
+        fireEvent.touchStart(handle, { touches: [{ clientX: 0, clientY: 300 }] });
+        fireEvent.touchMove(handle, { touches: [{ clientX: 0, clientY: 200 }] });
+        fireEvent.touchEnd(handle);
+        expect(dialog.style.maxHeight).toBe('950px');
+    });
 });

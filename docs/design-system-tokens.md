@@ -26,34 +26,34 @@ shared light block (`:114-123`) only; contrast on `#ffffff` is recomputed by
 
 | You write | Dark paints | Light paints | Anchor |
 |---|---|---|---|
-| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#047857` emerald-700, 5.48:1 | `:58` / `:118` |
-| `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#b45309` amber-700, 5.02:1 | `:60` / `:120` |
-| `bg-danger` / `text-danger` / `bg-danger/50` … | `#ef4444` red-500 | `#dc2626` red-600, 4.83:1 | `:62` / `:122` |
+| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#047857` emerald-700, 5.48:1 | `:58` / `:120` |
+| `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:60` / `:122` |
+| `bg-danger` / `text-danger` / `bg-danger/50` … | `#ef4444` red-500 | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint) | `:62` / `:124` |
 | `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:114` |
 | `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:115` |
 
 `bg-X/N` on a token compiles to `color-mix(in oklab, var(--color-X) N%, transparent)`, so
 it is correct at any alpha in both families.
 
-**Raw hues.** You write ONE class. `:681-693` (text; `/60-/80` alphas `:696-702`, hovers
-`:705-710`), `:713-735` (fills; hovers `:737-745`), `:747-759` (borders) rewrite it under
+**Raw hues.** You write ONE class. `:688-705` (text; `/60-/80` alphas `:709-715`, hovers
+`:718-723`), `:713-735` (fills; hovers `:737-745`), `:747-759` (borders) rewrite it under
 `:is([data-scheme="light"], [data-scheme="quest-log"], [data-scheme="sky"],
 [data-scheme="dawn"], [data-scheme="holy"], [data-scheme="celestial"])`. Contrast figures
-are the ones `index.css` records beside each rule.
+are the ones `index.css` records beside each rule; "worst" is the lowest across all six light
+schemes' surface, panel and `-500/10` tint (celestial binds).
 
 | You write | Dark paints | Light paints | Anchor |
 |---|---|---|---|
-| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#059669` emerald-600, 3.77:1 — sub-AA → use `text-success` | `:687-688` |
-| `text-emerald-500` | `#10b981` | `#047857` emerald-700, 5.48:1 | `:689` |
-| `text-red-400` | `#f87171` | `#dc2626` red-600, 4.6:1 | `:681` |
-| `text-amber-400` | `#fbbf24` | `#d97706` amber-600, 3.19:1 — sub-AA → use `text-warning` | `:682` |
-| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#ca8a04` / `#a16207` | `:683-684` |
-| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#16a34a` / `#15803d` | `:685-686` |
-| `text-purple-400` | `#c084fc` | `#7c3aed` violet-600, 5.2:1 | `:690` |
-| `text-indigo-400` | `#818cf8` | `#4f46e5` indigo-600, 5.9:1 | `:691` |
-| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#0891b2` cyan-600, 4.5:1 | `:692-693` |
-| `text-amber-300` | `#fcd34d` | **`#fcd34d` — no override, ≈1.4:1 on white** → use `text-warning` | design-system.md §6.9 |
-| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | **unchanged, ≈2.5:1 on white** | design-system.md §6.9 |
+| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#065f46` emerald-800, worst 5.27:1 (celestial tint) | `:696-697` |
+| `text-emerald-500` | `#10b981` | `#065f46` emerald-800 (`#047857` is 3.76:1 on the celestial tint) | `:698` |
+| `text-red-400` / `-300` | `#f87171` / `#fca5a5` | `#991b1b` red-800, worst 5.52:1 | `:688-689` |
+| `text-amber-400` / `-300` | `#fbbf24` / `#fcd34d` | `#92400e` amber-800 = warning, worst 5.0:1 | `:690-691` |
+| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#854d0e` yellow-800, worst 4.89:1 | `:692-693` |
+| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#166534` green-800, worst 4.97:1 | `:694-695` |
+| `text-purple-400` | `#c084fc` | `#6d28d9` violet-700, worst 4.73:1 | `:699` |
+| `text-indigo-400` / `-300` | `#818cf8` / `#a5b4fc` | `#4338ca` indigo-700, worst 5.25:1 | `:700-701` |
+| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:702-703` |
+| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:704-705` |
 | `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:713-735` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:747-759` |

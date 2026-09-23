@@ -1,6 +1,6 @@
 /**
  * The phone drawer's away view (ROK-1585 drawer A): the stacked `AwayPanel`
- * scrolls, and the sticky footer carries ONLY the add button — no "Save my
+ * scrolls, and the pinned footer carries ONLY the add button — no "Save my
  * week", no Skip. Adding keeps the viewer on the away view.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -36,10 +36,12 @@ describe('PhoneAwayView', () => {
         expect(panel.parentElement!.className).toContain('min-h-0');
     });
 
-    it('pins ONLY the add button in the sticky footer', () => {
+    it('pins ONLY the add button in a shrink-0 footer outside the scroll body (ROK-1640)', () => {
         render(<PhoneAwayView />);
         const footer = screen.getByTestId('phone-away-footer');
-        expect(footer.className).toContain('sticky');
+        expect(footer.className).not.toMatch(/\bsticky\b/);
+        expect(footer.className).toContain('shrink-0');
+        expect(footer.previousElementSibling!.className).toContain('overflow-y-auto');
         expect(within(footer).getAllByRole('button')).toHaveLength(1);
         expect(within(footer).getByTestId('absence-submit')).toBeInTheDocument();
         expect(screen.getAllByTestId('absence-submit')).toHaveLength(1);

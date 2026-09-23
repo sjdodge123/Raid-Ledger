@@ -114,6 +114,14 @@ RUN addgroup -g 1001 -S app && \
 RUN sed -i 's/^[[:space:]]*#*[[:space:]]*user[[:space:]]\+[a-zA-Z0-9_-]\+;/user app;/' /etc/nginx/nginx.conf && \
     grep -q '^user app;' /etc/nginx/nginx.conf || echo 'user app;' >> /etc/nginx/nginx.conf
 
+# ROK-1164: send the main-context (master process) error log to the same file
+# the server block uses, so master-level errors land in /data/logs instead of
+# the stock /var/log/nginx path. Rewrites any uncommented top-level
+# `error_log ...;` line; appends if absent. The master runs as root, so it can
+# open the file whatever its owner. Same idempotent shape as the `user` fix.
+RUN sed -i 's|^error_log[[:space:]].*;|error_log /data/logs/nginx-error.log warn;|' /etc/nginx/nginx.conf && \
+    grep -q '^error_log /data/logs/nginx-error.log warn;' /etc/nginx/nginx.conf || echo 'error_log /data/logs/nginx-error.log warn;' >> /etc/nginx/nginx.conf
+
 WORKDIR /app
 
 # ==================
@@ -223,7 +231,8 @@ pidfile=/run/supervisord.pid
 
 [program:postgres]
 # ROK-1156: pg_stat_statements is preloaded so the extension can capture per-query stats; log_min_duration_statement surfaces any statement slower than 200ms in postgresql.log.
-command=/bin/bash -c '/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /data/postgresql -c log_min_messages=FATAL -c shared_preload_libraries=pg_stat_statements -c log_min_duration_statement=200ms -c pg_stat_statements.track=all 2>&1 | tee -a /data/logs/postgresql.log'
+# ROK-1164: log_min_messages=WARNING (was FATAL, which also dropped the LOG-level slow-statement lines, since LOG ranks above ERROR). log_checkpoints=off keeps the periodic checkpoint LOG lines out; log_parameter_max_length=0 keeps bind values (user data) out of the slow-statement lines.
+command=/bin/bash -c '/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /data/postgresql -c log_min_messages=WARNING -c log_checkpoints=off -c log_parameter_max_length=0 -c shared_preload_libraries=pg_stat_statements -c log_min_duration_statement=200ms -c pg_stat_statements.track=all 2>&1 | tee -a /data/logs/postgresql.log'
 autostart=true
 autorestart=true
 priority=10
@@ -248,7 +257,10 @@ stopwaitsecs=5
 stopsignal=TERM
 
 [program:nginx]
-command=/bin/bash -c '/usr/sbin/nginx -g "daemon off;" 2>&1 | tee -a /data/logs/nginx.log'
+# ROK-1164: no nginx.log tee. nginx writes its own files (nginx-access.log,
+# nginx-error.log); stdout/stderr only ever carried pre-config startup errors,
+# which still reach `docker logs` via stdout_logfile below.
+command=/usr/sbin/nginx -g "daemon off;"
 autostart=true
 autorestart=true
 priority=30
@@ -514,10 +526,14 @@ chown app:app /data/.jwt_secret
 # already wrote it (pre-ROK-1036 upgrade after ROK-1035 already ran).
 [ -e /data/.jwt_secret_migrated ] && chown app:app /data/.jwt_secret_migrated || true
 
-# Log files for supervisor's tee pipelines. Flip api.log + nginx.log to `app`
-# so the unprivileged tee can append.
-touch /data/logs/api.log /data/logs/nginx.log
-chown app:app /data/logs/api.log /data/logs/nginx.log
+# Log file for the api program's tee pipeline. Flip api.log to `app` so the
+# unprivileged tee can append.
+touch /data/logs/api.log
+chown app:app /data/logs/api.log
+# ROK-1164: nginx.log is no longer written (nginx logs to nginx-access.log /
+# nginx-error.log). Remove the empty placeholder earlier images left behind;
+# keep it if it holds anything.
+[ -s /data/logs/nginx.log ] || rm -f /data/logs/nginx.log
 
 # Restore log ownership for the postgres/redis programs after the recursive
 # chown swept their files to `app`. Touch-and-chown so existing files survive

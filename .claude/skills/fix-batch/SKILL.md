@@ -58,6 +58,7 @@ Step 4: Ship      → Single PR, auto-merge, Linear → Done, cleanup
 
 7. **Test gap analysis** — reviewer identifies untested changes; lead adds missing tests before proceeding
 8. **Regression tests** — every Bug fix includes a regression test (Playwright or unit/integration)
+9. **Design-doc check** — a story that adds/changes a token, primitive, shared component or pattern rides its `docs/design-system.md` (+ tokens doc + `/dev/design-system`) update in this same PR before Ship.
 
 **Env-lock rule:** the env lock (`mcp__mcp-env__env_lock_acquire`) is held only for Track A (Playwright + Chrome MCP). Lead releases the lock immediately after the Chrome MCP summary is written. Reviewers (Track B), push, PR creation, and auto-merge do NOT need the env.
 

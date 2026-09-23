@@ -14,7 +14,10 @@
  *     reminder crons can never cover)
  *   - private lineups: audience limited to invitees ∪ creator
  *   - state guards: cross-lineup matchId 404 (ROK-1306), non-schedulable
- *     match 400, scheduling-disabled lineup 404, unauthenticated 401
+ *     match 400, EXPIRED poll 400 with nothing queued (deadline passed or
+ *     lineup archived while the match stays `scheduling`),
+ *     scheduling-disabled lineup 404, unauthenticated 401, and a poll whose
+ *     every time has passed 400 (the page's ROK-1607 `closed`)
  */
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
@@ -368,6 +371,73 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
 
     const res = await postRemind(creator.token, lineupId, matchId);
     expect(res.status).toBe(400);
+  });
+
+  it.each([
+    ['deadline', { phaseDeadline: new Date('2000-01-01T00:00:00Z') }],
+    ['archived', { status: 'archived' as const }],
+  ])(
+    '400s an EXPIRED poll (%s) and queues no DM — match still `scheduling`',
+    async (tag, expiry) => {
+      const creator = await createUser(`exp-creator-${tag}`);
+      const nonVoter = await createUser(`exp-nonvoter-${tag}`);
+      const { lineupId, matchId } = await seedPoll({ creatorId: creator.id });
+      await addMember(matchId, nonVoter.id);
+      await testApp.db
+        .update(schema.communityLineups)
+        .set(expiry)
+        .where(eq(schema.communityLineups.id, lineupId));
+
+      const res = await postRemind(creator.token, lineupId, matchId);
+      expect(res.status).toBe(400);
+      expect(String(res.body.message)).toMatch(/no longer accepting votes/i);
+      expect(await remindNotifsFor(nonVoter.id)).toHaveLength(0);
+      // The refusal must not arm the 1h cooldown key either.
+      const armed = await testApp.db
+        .select()
+        .from(schema.notificationDedup)
+        .where(
+          eq(
+            schema.notificationDedup.dedupKey,
+            `lineup-sched-manual-remind-cooldown:${matchId}`,
+          ),
+        );
+      expect(armed).toHaveLength(0);
+    },
+  );
+
+  it('400s a poll whose every time has passed (ROK-1607 page rule), no DM, no cooldown', async () => {
+    // Deadline-less and `decided`: only the slot times make this poll closed,
+    // so the old guard (lineup + match metadata only) called it open and DMed.
+    const creator = await createUser('past-creator');
+    const nonVoter = await createUser('past-nonvoter');
+    const { lineupId, matchId, slotId } = await seedPoll({
+      creatorId: creator.id,
+    });
+    await addMember(matchId, nonVoter.id);
+    await testApp.db
+      .update(schema.communityLineupScheduleSlots)
+      .set({ proposedTime: new Date('2000-01-01T19:00:00.000Z') })
+      .where(eq(schema.communityLineupScheduleSlots.id, slotId));
+    const page = await testApp.request
+      .get(`/lineups/${lineupId}/schedule/${matchId}`)
+      .set('Authorization', `Bearer ${creator.token}`);
+    expect(page.body.pollStatus).toBe('closed');
+
+    const res = await postRemind(creator.token, lineupId, matchId);
+    expect(res.status).toBe(400);
+    expect(String(res.body.message)).toMatch(/no longer accepting votes/i);
+    expect(await remindNotifsFor(nonVoter.id)).toHaveLength(0);
+    const armed = await testApp.db
+      .select()
+      .from(schema.notificationDedup)
+      .where(
+        eq(
+          schema.notificationDedup.dedupKey,
+          `lineup-sched-manual-remind-cooldown:${matchId}`,
+        ),
+      );
+    expect(armed).toHaveLength(0);
   });
 
   it('404s when the lineup opted out of the scheduling phase', async () => {

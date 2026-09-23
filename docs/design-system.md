@@ -10,6 +10,19 @@ different and it leaves users confused." Canonical example: `/games` filters wit
 `FilterPanel`; the lineup's Common Ground panel is a bespoke card with none of it — same job, two designs,
 because nothing told the second author.
 
+## Keeping this doc current (STRICT)
+
+This doc is only as good as its last update. Any PR that adds or changes a colour token, a
+`web/src/components/ui` primitive, a shared component used on 2+ pages, or a layout/interaction pattern
+MUST, in the SAME PR:
+
+1. Update the relevant section and inventory row here (§2/§3/§4).
+2. Update `docs/design-system-tokens.md` for token changes.
+3. Add or update the example on `/dev/design-system` (`web/src/dev/design-system/`).
+4. State it in the PR body — see CLAUDE.md "Reference designs before coding" rule 2.
+
+Reviewers treat a missing update as a MINOR finding. See CLAUDE.md "Reference designs before coding" rule 4.
+
 ---
 
 ## 1. Before adding UI — checklist
@@ -48,6 +61,11 @@ Declared in `web/src/index.css` (`@theme` block, line 32) as `--color-*`. Tailwi
 utility from the variable name: `--color-panel` → `bg-panel`, `text-panel`, `border-panel`. Borders have
 their own roles.
 
+**Contrast guards.** `web/src/styles/semantic-tokens.guard.test.ts` (on main) checks semantic token
+contrast; `raw-hue-light.guard.test.ts` (landing with PR #1318 — not yet on main) checks raw Tailwind
+hue contrast on the light families. Any colour token change MUST keep both green — a token edit that
+turns one red is not done, not "acceptable regression."
+
 | Token | Tailwind | Dark (default) | Light | Role |
 |---|---|---|---|---|
 | `--color-backdrop` | `bg-backdrop` | `#020617` | `#f8fafc` | Page background, behind everything |
@@ -65,15 +83,16 @@ their own roles.
 | `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
 | `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#047857` | Free / confirmed / "on" / primary state (ROK-1586) |
-| `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#b45309` | Partial agreement, needs attention, admin (ROK-1586) |
-| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#dc2626` | Conflict, destructive, "few free" (ROK-1586) |
+| `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#92400e` | Partial agreement, needs attention, admin (ROK-1586) |
+| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586) |
 
-**The accent rows** (`@theme` `index.css:50-62`, shared light block `:114-123`) are declared in those two
+**The accent rows** (`@theme` `index.css:50-62`, shared light block `:114-125`) are declared in those two
 blocks only — see checklist item 7. The dark values are the Tailwind shades they replaced
-(emerald-500 / amber-500 / red-500). The light success and warning values are one shade darker than the
-`-600` the old `.text-*-400` overrides use, because `-600` fails WCAG AA for small text on `#ffffff`:
-success `#047857` is 5.48:1, warning `#b45309` 5.02:1, danger `#dc2626` 4.83:1
-(`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1, and pins the
+(emerald-500 / amber-500 / red-500). The light values are darker than the `-600` the old
+`.text-*-400` overrides use, because `-600` fails WCAG AA for small text: on `#ffffff`
+success `#047857` is 5.48:1, warning `#92400e` (amber-800) 7.09:1, danger `#b91c1c` (red-700) 6.47:1
+(`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1 — for warning and
+danger also on the panel, the JourneyHero card and their own `/10` tint over the panel — and pins the
 two-block declaration of success/warning/danger/busy). The opacity modifier works at any alpha
 (`bg-success/10`, `border-warning/30`, `bg-danger/50`) — Tailwind compiles it to
 `color-mix(in oklab, var(--color-X) N%, transparent)`, so there is no per-alpha light rule to forget. A
@@ -135,12 +154,15 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 `border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for buttons only.
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
-text `-400` → `-600`/`-700` (`:681-693`), tinted fills → a `-100` wash (`:713-735`), borders → a `-300`
-(`:747-759`); solid fills are identical in both with the label forced white on light (`:780-787`), and
-`.badge-overlay` (`:767-779`) opts cover-art badges out. Two shades have no override and are unreadable on
-light — `text-amber-300` (≈1.4:1, the chip-ON label) and `text-blue-400` (≈2.5:1); see §6.9. Note that
-`text-emerald-400` → `#059669` (3.77:1) and `text-amber-400` → `#d97706` (3.19:1) are themselves below AA
-for small text on white — prefer `text-success` / `text-warning` for new semantic text.
+text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
+(`:759-773`); solid fills are identical in both with the label forced white on light (`:795-801`), and
+`.badge-overlay` (`:774-794`) opts cover-art badges out. Every text repaint — and its `/60`–`/80` opacity variants
+and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
+that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
+the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity
+variants carry the AA alpha floor (red `.9`, amber `.95`). `web/src/styles/raw-hue-light.guard.test.ts` parses each
+light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Still prefer
+`text-success` / `text-warning` / `text-danger` for new semantic text.
 
 > **Full shade-pair table:** `docs/design-system-tokens.md` §1 — or `/dev/design-system`
 > → *Accent hues*, where every row paints in the class it documents and the "Side by
@@ -217,7 +239,8 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
 | `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive. Desktop: collapsible bordered panel with "Filters" + "Clear all". Mobile (<768px): `BottomSheet`. Trigger is a funnel icon with an emerald count badge. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `resultCount`, `hasActiveFilters`, `onClick` |
-| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
+| `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
+| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: height, cap and bottom edge come from `window.visualViewport` in px via `useVisibleViewport` (`bottom-sheet-viewport.ts`, exposed as `--sheet-vh`), so iPad/iOS Safari toolbars never hide the footer (ROK-1640/1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, resolved against the visible viewport), `initiallyExpanded`, `ariaLabel` |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
 | `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
@@ -253,6 +276,12 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `AvatarWithFallback.tsx`, `RoleIcon.tsx`, `journey-hero/`, `submit-bar/` | `components/shared/` | Avatars, role glyphs, the journey hero and the sticky submit bar |
 | `LineupEmptyState.tsx` | `components/lineups/` | The empty-state shape (see §4.5) |
 | `player-filters.tsx`, `pages/games/coop-filter-controls.tsx` | filter bodies | Reference implementations of `FilterPanel` children |
+
+### 3.3 Shared hooks
+
+| Hook | Path | Use when |
+|---|---|---|
+| `use-body-scroll-lock.ts` → a ref-counted body scroll lock **(landing with ROK-1640 PR #1314 — not yet on main)** | `web/src/hooks/` | Any modal/sheet that locks background scroll; ref-counted so nested/stacked sheets don't unlock each other early |
 
 Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105`; call `toast.success(...)`
 / `toast.error(...)` from `sonner` directly.
@@ -316,8 +345,32 @@ navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
 
+**Sheet layout rules** (ROK-1640 / ROK-1641):
+
+- **Size against the visible viewport.** Sheet heights are `dvh` with a `vh` fallback — `BottomSheet` converts
+  a `vh` `maxHeight` for you. Raw `vh` on iOS/iPadOS Safari excludes the toolbars, so a bottom-anchored
+  sheet opened with its last rows (the ⋯ menu's Rally / Lock) under the browser bar.
+- **An action footer is a pinned flex footer OUTSIDE the scroll body** — the body is `flex-1 min-h-0
+  overflow-y-auto`, the footer a `shrink-0` sibling (`phone-week-check-footer.tsx` `StepFooter`). Never
+  `sticky` inside the scroll body: that is what hid the game-time drawer's Save on an iPad.
+- **A sheet that edits data guards its close** with `useDirtyCloseGuard`
+  (`components/features/game-time/use-dirty-close-guard.ts`): ×, backdrop, swipe-down and Escape ask
+  "Discard your changes?" (`DiscardChangesConfirm`, a `Modal` over the sheet) while the draft is dirty.
+  Explicit Save / Skip stay unguarded.
+- `web/index.html` has no `viewport-fit=cover`, so `env(safe-area-inset-bottom)` resolves to 0 and the
+  sheets' safe-area padding is inert for now — keep it (it activates if the meta tag is ever added), but do
+  not rely on it to clear a home indicator.
+
 **Light / Dark** — the body is tokens; the scrim is a raw black alpha with no light override, so it dims
 identically in both. Do not invent a third — the two that exist already disagree (§6.11).
+
+**Sheet rules (ROK-1640 — not fully on main; PR #1314 lands the hook, `useDirtyCloseGuard` is not yet
+shipped anywhere):**
+- Size the sheet from the visible viewport, not `100vh` — mobile browser chrome eats real height.
+- A pinned footer (primary action) sits OUTSIDE the scrollable body, not inside it, so it never scrolls
+  out of reach.
+- A sheet with unsaved changes uses the dirty-close guard `useDirtyCloseGuard` to confirm before closing
+  on backdrop-tap/back-gesture instead of silently discarding input.
 
 ### 4.5 Empty states
 
@@ -656,11 +709,10 @@ them; do not fix them as scope creep.
    (including `html { --gt-* }` at `:96`) — so it needs a full Playwright pass plus a visual check in
    `default-dark` and `default-light`.
 
-9. **Two accent shades have no light-family override** — `text-amber-300` (`#fcd34d`, ≈1.4:1 on the light
-   wash, and it is the §4.3 chip-ON label, so every chip's ON state is unreadable in all six light themes)
-   and `text-blue-400` / `-300` (≈2.5:1). Only `hover:text-amber-300` is remapped (`:706`). *Suggested:*
-   add the two missing overrides beside the others at `:681-693`; until then use `text-warning` (5.02:1 on
-   light) — `text-amber-400` maps to `#d97706`, only 3.19:1.
+9. ~~**Two accent shades have no light-family override**~~ — **fixed (ROK-1586):** `text-amber-300`,
+   `text-red-300`, `text-indigo-300` and `text-blue-300`/`-400` are now repainted beside the others at
+   `:688-705`, and every repaint is measured on the surface, panel and its own `/10` tint by
+   `raw-hue-light.guard.test.ts`.
 
 10. **Solid accent fills are identical in both families** — `bg-emerald-600` buttons and the
     `bg-emerald-500` count badge do not move, label forced white on light (`:780-787`). Recorded because
