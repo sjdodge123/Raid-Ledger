@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { WeeklyDigestService } from './weekly-digest.service';
 import {
@@ -194,6 +195,27 @@ describe('WeeklyDigestService — dedup claim and release', () => {
     const { service, dedup } = setup();
     await service.postDigest(MONDAY_0905Z);
     expect(dedup.releaseKey).not.toHaveBeenCalled();
+  });
+});
+
+describe('WeeklyDigestService — a failed release after a failed send', () => {
+  it('rethrows the send error, not the release error, and logs the release failure', async () => {
+    const logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const { service, dedup, client } = setup();
+    client.sendEmbed.mockRejectedValue(new Error('Missing Access'));
+    dedup.releaseKey.mockRejectedValue(new Error('Redis down'));
+    try {
+      await expect(service.postDigest(MONDAY_0905Z)).rejects.toThrow(
+        'Missing Access',
+      );
+      expect(logError).toHaveBeenCalledWith(
+        expect.stringContaining('Redis down'),
+      );
+    } finally {
+      logError.mockRestore();
+    }
   });
 });
 

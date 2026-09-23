@@ -127,7 +127,14 @@ export class WeeklyDigestService {
       this.logger.log(`Weekly digest ${dedupKey} posted to ${channelId}`);
       return message.id;
     } catch (error) {
-      await this.dedupService.releaseKey(dedupKey);
+      // A failed release must not replace the send error the caller needs.
+      await this.dedupService
+        .releaseKey(dedupKey)
+        .catch((releaseError) =>
+          this.logger.error(
+            `Weekly digest ${dedupKey}: releasing the claim failed: ${releaseError instanceof Error ? releaseError.message : String(releaseError)}`,
+          ),
+        );
       throw error;
     }
   }
