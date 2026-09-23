@@ -47,6 +47,11 @@ describe('UserRow — badges', () => {
         expect(screen.queryByText('Kicked')).not.toBeInTheDocument();
     });
 
+    it('names the role select after the user (ROK-1645)', () => {
+        renderRow(makeUser(), makeHandlers());
+        expect(screen.getByRole('combobox', { name: /^Role for / })).toBeInTheDocument();
+    });
+
     it('renders a Kicked badge when kickedAt is set', () => {
         renderRow(makeUser({ kickedAt: '2026-07-01T00:00:00Z' }), makeHandlers());
         expect(screen.getByText('Kicked')).toBeInTheDocument();

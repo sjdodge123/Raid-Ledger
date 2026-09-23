@@ -59,7 +59,7 @@ function AttachmentLink({
                 href={attachment.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-xs text-primary underline underline-offset-2"
+                className="text-xs text-success underline underline-offset-2"
             >
                 {attachment.name}
             </a>

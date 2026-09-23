@@ -2,21 +2,21 @@
     display: inline-flex;
     align-items: center;
     gap: 0.375rem;
-    color: var(--color-text-secondary, #a1a1aa);
+    color: var(--color-secondary);
     text-decoration: none;
     transition: color 0.15s ease;
     font-weight: 500;
 }
 
 .user-link:hover {
-    color: var(--color-primary, #8b5cf6);
+    color: var(--color-success);
     text-decoration: underline;
     text-decoration-thickness: 1px;
     text-underline-offset: 2px;
 }
 
 .user-link:focus-visible {
-    outline: 2px solid var(--color-primary, #8b5cf6);
+    outline: 2px solid var(--color-success);
     outline-offset: 2px;
     border-radius: 4px;
 }
