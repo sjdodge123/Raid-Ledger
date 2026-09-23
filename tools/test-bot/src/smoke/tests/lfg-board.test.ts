@@ -236,8 +236,10 @@ async function enableBoard(run: Run): Promise<void> {
   // which is what stops it satisfying T24's negative assertion.
   await pollForThread(
     run,
-    (t) => t.name === INTRO_TITLE,
-    `AC16 step 1: enabling the board must seed one intro post titled ` +
+    // Pinned, not title alone: the shared CI forum holds one same-titled intro
+    // per bot, so a title match passes whether or not THIS env seeded one.
+    (t) => t.pinned && t.name === INTRO_TITLE,
+    `AC16 step 1: enabling the board must seed a PINNED intro post titled ` +
       `"${INTRO_TITLE}" in forum ${run.forumChannelId}, and none appeared`,
     BOARD_READY_MS,
   );
