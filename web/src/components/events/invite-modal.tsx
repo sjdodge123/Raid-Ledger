@@ -152,8 +152,8 @@ function PugInviteSection({ eventId, isSubmitting, setIsSubmitting, generatedInv
 function InviteLinkDisplay({ url }: { url: string }) {
     return (
         <div className="mt-2 flex items-center gap-2 p-2 rounded-lg bg-surface border border-edge">
-            <input type="text" readOnly value={url}
-                className="flex-1 bg-transparent text-xs text-foreground border-none outline-none"
+            <input type="text" readOnly value={url} aria-label="Invite link"
+                className="flex-1 bg-transparent text-xs text-foreground border-none rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-success/50"
                 onClick={(e) => (e.target as HTMLInputElement).select()} />
             <button type="button" onClick={() => { void copyWithToast(url, { success: 'Copied!', error: 'Failed to copy link' }); }}
                 className="shrink-0 text-xs text-dim hover:text-foreground transition-colors" title="Copy invite link">

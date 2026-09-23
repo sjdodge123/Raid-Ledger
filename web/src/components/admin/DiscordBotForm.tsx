@@ -31,7 +31,7 @@ function EnableToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () =>
         <div className="flex items-center justify-between">
             <label htmlFor="botEnabled" className="text-sm font-medium text-secondary">Enable Bot</label>
             <button type="button" role="switch" id="botEnabled" aria-checked={enabled} onClick={onToggle}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? 'bg-emerald-500' : 'bg-gray-600'}`}>
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-success/50 ${enabled ? 'bg-emerald-500' : 'bg-gray-600'}`}>
                 <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
         </div>

@@ -11,7 +11,7 @@ import { activePick } from './away-panel.helpers';
 import { AwayRangeChips } from './AwayRangeChips';
 import type { AbsenceSectionCtl } from './use-absence-section';
 
-const INPUT_CLS = 'min-h-[44px] w-full min-w-0 rounded-lg border border-edge-strong bg-surface px-3 text-sm text-foreground focus:border-emerald-500 focus:outline-none';
+const INPUT_CLS = 'min-h-[44px] w-full min-w-0 rounded-lg border border-edge-strong bg-surface px-3 text-base lg:text-sm text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-success/50';
 const LABEL_CLS = 'text-xs font-medium text-muted';
 const SUBMIT_CLS = ANSWER_PRIMARY.replace('text-left', 'text-center');
 

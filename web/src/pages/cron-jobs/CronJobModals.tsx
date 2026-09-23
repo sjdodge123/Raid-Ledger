@@ -47,7 +47,7 @@ function ExecutionHistoryHeader({ job, onClose }: { job: CronJobDto; onClose: ()
                 <h3 className="text-lg font-semibold text-foreground">Execution History</h3>
                 <p className="text-sm text-muted mt-0.5">{job.description || job.name}</p>
             </div>
-            <button onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">&#10005;</button>
+            <button type="button" aria-label="Close" onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">&#10005;</button>
         </div>
     );
 }

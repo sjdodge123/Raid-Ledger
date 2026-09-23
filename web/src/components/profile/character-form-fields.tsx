@@ -41,7 +41,7 @@ function SyncableInput({ label, value, onChange, placeholder, maxLength, isArmor
                 {label} {required && <span className="text-red-400">*</span>}
                 {isArmorySynced && <LockClosedIcon className="w-3.5 h-3.5 inline ml-1 text-muted" />}
             </label>
-            <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+            <input type="text" aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder} maxLength={maxLength} disabled={isArmorySynced}
                 title={isArmorySynced ? ARMORY_TITLE : undefined}
                 className={`${INPUT_BASE} ${isArmorySynced ? 'opacity-60 cursor-not-allowed' : ''}`} />
@@ -53,7 +53,7 @@ function RoleSelect({ value, onChange }: { value: string; onChange: (v: Characte
     return (
         <div>
             <label className="block text-sm font-medium text-secondary mb-1">Role</label>
-            <select value={value} onChange={(e) => onChange(e.target.value as CharacterRole | '')}
+            <select aria-label="Role" value={value} onChange={(e) => onChange(e.target.value as CharacterRole | '')}
                 className={INPUT_BASE}>
                 <option value="">Select role...</option>
                 <option value="tank">Tank</option>

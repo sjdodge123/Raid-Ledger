@@ -1,3 +1,4 @@
+import { useId } from 'react';
 /**
  * MinVoteThresholdSlider — minimum-votes notification slider (ROK-1015).
  * Extracted from create-poll-modal.tsx (ROK-1206).
@@ -19,10 +20,11 @@ export function MinVoteThresholdSlider({
   max: number;
   onChange: (v: number) => void;
 }) {
+  const id = useId();
   return (
     <div data-testid="min-vote-threshold-slider">
       <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-secondary">
+        <label htmlFor={id} className="text-sm font-medium text-secondary">
           Minimum Votes
         </label>
         <span className="text-sm text-muted tabular-nums">
@@ -30,6 +32,7 @@ export function MinVoteThresholdSlider({
         </span>
       </div>
       <input
+        id={id}
         type="range"
         min={1}
         max={max}

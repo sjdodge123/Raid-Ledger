@@ -46,12 +46,12 @@ function SearchAndGenreFilter({ searchQuery, onSearchChange, genreOptions, selec
                 <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
                 <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)}
                     placeholder="Search events..." aria-label="Search events"
-                    className="w-full pl-10 pr-4 py-2.5 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                    className="w-full pl-10 pr-4 py-2.5 bg-panel/50 border border-edge rounded-lg text-base lg:text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
             </div>
             {genreOptions && genreOptions.length > 0 && onGenreChange && (
                 <select value={selectedGenre ?? ''} onChange={(e) => onGenreChange(e.target.value)}
                     aria-label="Filter by genre"
-                    className="max-w-[8rem] truncate px-3 py-2.5 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    className="max-w-[8rem] truncate px-3 py-2.5 bg-panel/50 border border-edge rounded-lg text-base lg:text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     <option value="">All Games</option>
                     {genreOptions.map((opt) => <option key={opt.key} value={opt.key}>{opt.label}</option>)}
                 </select>
