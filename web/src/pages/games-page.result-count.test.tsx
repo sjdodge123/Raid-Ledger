@@ -5,10 +5,14 @@
  *   LFG view and while loading;
  * - the filter badge does not count genres while a search is active (search
  *   skips genres, and the group is greyed out);
- * - the page header and the sticky search bar switch at 1024px, not 768px.
+ * - the badge counts only what narrows the view: LFG on counts alone;
+ * - the sticky search bar switches at 1024px, but the "Game Library" h1 still
+ *   shows from 768px, so tablets keep a page heading;
+ * - the open Filters sheet (paused LFG state) passes axe.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GamesPage } from './games-page';
@@ -150,12 +154,31 @@ describe('GamesPage — ROK-1659: the badge skips genres while searching', () =>
     });
 });
 
+describe('GamesPage — ROK-1659: LFG on counts alone on the badge', () => {
+    it('does not count the players/owners/genres filters the LFG view pauses', () => {
+        renderPage('/games?lfg=1&players=4&owners=2&genres=rpg');
+        expect(screen.getByRole('button', { name: /^filters$/i })).toHaveAccessibleDescription('1 active filter');
+    });
+});
+
+describe('GamesPage — ROK-1659: the open Filters sheet is accessible', () => {
+    it('has no axe violations with LFG on and the paused, disabled groups showing', async () => {
+        isDesktopViewport = false;
+        renderPage('/games?lfg=1&players=4');
+        fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
+        // heading-order is off: the sheet's <h3> title is the BottomSheet primitive's markup (unchanged
+        // here) and a modal dialog is its own heading context. Every other rule runs on the controls.
+        const results = await axe(screen.getByRole('dialog'), { rules: { 'heading-order': { enabled: false } } });
+        expect(results).toHaveNoViolations();
+    });
+});
+
 describe('GamesPage — ROK-1659: tablets (768–1023px) get the phone layout', () => {
-    it('shows the page header and un-sticks the search bar only from 1024px (lg:), not 768px (md:)', () => {
+    it('keeps the page h1 from 768px (md:) but un-sticks the search bar only from 1024px (lg:)', () => {
         renderPage('/games');
-        const header = screen.getByRole('heading', { name: 'Game Library' }).parentElement;
-        expect(header).toHaveClass('hidden', 'lg:block');
-        expect(header).not.toHaveClass('md:block');
+        const header = screen.getByRole('heading', { level: 1, name: 'Game Library' }).parentElement;
+        expect(header).toHaveClass('hidden', 'md:block');
+        expect(header).not.toHaveClass('lg:block');
         const searchBar = screen.getByLabelText('Search games').closest('.sticky');
         expect(searchBar).toHaveClass('lg:static', 'md:top-16');
         expect(searchBar).not.toHaveClass('md:static');

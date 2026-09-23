@@ -156,7 +156,8 @@ function openFilters() {
     fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
 }
 
-describe('GamesPage — ROK-1659: the Filters FAB + sheet (below 1024px)', () => {
+/** Phone/tablet viewport + default data, shared by the two FAB + sheet suites below. */
+function setUpPhoneViewportSuite(): void {
     beforeEach(() => {
         vi.clearAllMocks();
         isDesktopViewport = false;
@@ -167,6 +168,10 @@ describe('GamesPage — ROK-1659: the Filters FAB + sheet (below 1024px)', () =>
     afterEach(() => {
         isDesktopViewport = true;
     });
+}
+
+describe('GamesPage — ROK-1659: the Filters FAB + sheet (below 1024px) — opener and genre group', () => {
+    setUpPhoneViewportSuite();
 
     it('renders exactly one Filters opener — the FAB — and neither the genre FAB nor the toolbar funnel', () => {
         renderPage();
@@ -203,6 +208,11 @@ describe('GamesPage — ROK-1659: the Filters FAB + sheet (below 1024px)', () =>
         expect(within(sheet).getByTestId('genre-filter-group')).toBeEnabled();
         expect(within(sheet).queryByTestId('genre-search-hint')).not.toBeInTheDocument();
     });
+
+});
+
+describe('GamesPage — ROK-1659: the Filters FAB + sheet (below 1024px) — contents, badge and Clear all', () => {
+    setUpPhoneViewportSuite();
 
     it('opens the whole set in the "Filters" sheet: LFG switch, players, owners and all 11 genres', () => {
         renderPage();

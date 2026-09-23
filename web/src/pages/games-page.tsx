@@ -190,7 +190,7 @@ function DiscoverFilters({ state, data, isLfgOnly }: { state: ReturnType<typeof 
 
 function GamesHeader({ activeTab }: { activeTab: GamesTab }): JSX.Element {
   return (
-    <div className="hidden lg:block mb-6">
+    <div className="hidden md:block mb-6">
       <h1 className="text-3xl font-bold text-foreground">Game Library</h1>
       <p className="text-muted mt-1">
         {activeTab === "manage" ? "Search, remove, and manage cached games" : "Discover games, see what your community is playing, and find live streams"}
