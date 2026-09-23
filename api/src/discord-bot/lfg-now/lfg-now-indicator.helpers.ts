@@ -28,22 +28,17 @@
  * `viewerHoldsNowHand` and get the strict per-viewer answer AC1 describes. One
  * predicate, one optional refinement — not two implementations.
  */
+import { isLfgNowIndicatorEmoji } from '@raid-ledger/contract';
 import { LFG_NOW_SPAWN_THRESHOLD } from './lfg-now.constants';
 
 /**
- * The custom emoji the operator asked for, by NAME.
+ * The default indicator emoji: 🎉 (operator ruling 2026-09-22, replacing ☀️).
  *
- * Never an id: an id hardcoded here is wrong in every guild but one. No asset
- * ships with it either — `:praise_sun:` is Dark Souls fan art and committing it
- * the way `rl_tank` ships is a licensing call for the operator, not something
- * to do quietly (story note, deferred). A guild that happens to own an emoji of
- * this name gets it; every other deployment gets the Unicode sun below, which
- * is the behaviour AC5 asks for.
+ * Used whenever no emoji is configured (`lfg_now_indicator_emoji` unset) or
+ * the configured custom emoji is not usable here. Unicode, so it renders in
+ * every guild, every DM and on the web.
  */
-export const LFG_NOW_INDICATOR_EMOJI_NAME = 'praise_sun';
-
-/** The always-available fallback: ☀️. Renders in every guild, premium or not. */
-export const LFG_NOW_INDICATOR_UNICODE = '☀️';
+export const LFG_NOW_INDICATOR_UNICODE = '🎉';
 
 /**
  * AC6 — the meaning must survive someone who does not recognise the emoji.
@@ -111,30 +106,6 @@ export interface GuildEmojiLike {
   available?: boolean | null;
 }
 
-/**
- * AC5 — resolve the indicator emoji, degrading to Unicode, never to a raw
- * `<:name:id>` string.
- *
- * Returning COMPONENT data rather than a formatted string is what makes that
- * structural: `ButtonBuilder.setEmoji` takes `{ id?, name }`, so there is no
- * code path here that can emit `<:praise_sun:123>` as visible button text —
- * the bug this AC is about. Mirrors `DiscordEmojiService.getRoleEmojiComponent`
- * deliberately; it is not reused directly because that service's cache is keyed
- * to the role/class assets it uploads, and this emoji is neither.
- *
- * @param custom - A guild emoji found by name, or null/undefined when the guild
- *   has none, the client is not ready, or it is unavailable at this boost tier.
- * @returns Always a usable emoji component.
- */
-export function resolveNowIndicatorEmoji(
-  custom?: GuildEmojiLike | null,
-): LfgNowIndicatorEmoji {
-  if (custom && custom.name && custom.available !== false) {
-    return { id: custom.id, name: custom.name };
-  }
-  return { name: LFG_NOW_INDICATOR_UNICODE };
-}
-
 /** A guild's emoji collection, structurally — no discord.js import needed. */
 export interface EmojiCacheLike {
   find(
@@ -142,18 +113,87 @@ export interface EmojiCacheLike {
   ): GuildEmojiLike | undefined;
 }
 
+/** `<:name:id>`, `<a:name:id>`, `:name:` or a bare `name` — a CUSTOM emoji. */
+const CUSTOM_EMOJI_RE = /^(?:<a?:(\w{2,32}):(\d{5,25})>|:?(\w{2,32}):?)$/;
+
 /**
- * Find the operator's `:praise_sun:` in a guild, by name.
+ * THE indicator-emoji resolver (AC5, ROK-1619 emoji setting) — the one
+ * function the board card, the invite DM's Join button and the web group read
+ * all go through.
  *
- * @param cache - `guild.emojis.cache`, or null when there is no ready guild.
- * @returns The emoji, or null — which {@link resolveNowIndicatorEmoji} turns
- *   into the Unicode sun.
+ * - unset / blank → 🎉 ({@link LFG_NOW_INDICATOR_UNICODE});
+ * - a single Unicode emoji → used as is; any other text → 🎉;
+ * - a custom emoji (`<:name:id>`, `:name:` or `name`) → looked up in the
+ *   guild's cache by id, then by name, and used only when discord.js does not
+ *   report it unavailable; otherwise 🎉. With no cache (a DM, the web, a
+ *   client that is not ready) a custom emoji cannot be verified, so it is 🎉.
+ *
+ * Returning COMPONENT data rather than a formatted string keeps AC5
+ * structural: `ButtonBuilder.setEmoji` takes `{ id?, name }`, so no path here
+ * can surface a raw `<:name:id>` as visible text.
+ *
+ * @param configured - The admin setting's raw value, or null when unset.
+ * @param cache - `guild.emojis.cache`, or null when there is no usable guild.
+ * @returns Always a usable emoji component.
  */
-export function findIndicatorEmoji(
+export function resolveNowIndicatorEmoji(
+  configured: string | null | undefined,
+  cache?: EmojiCacheLike | null,
+): LfgNowIndicatorEmoji {
+  const value = configured?.trim() ?? '';
+  if (!value) return { name: LFG_NOW_INDICATOR_UNICODE };
+  const custom = CUSTOM_EMOJI_RE.exec(value);
+  if (!custom) {
+    // Defence in depth: a value stored before the contract validated it would
+    // otherwise go to Discord as `{ name }` and fail the whole message.
+    return {
+      name: isLfgNowIndicatorEmoji(value) ? value : LFG_NOW_INDICATOR_UNICODE,
+    };
+  }
+  const found = findCustomEmoji(cache, custom[2], custom[1] ?? custom[3]);
+  if (found && found.name && found.available !== false) {
+    return { id: found.id, name: found.name };
+  }
+  return { name: LFG_NOW_INDICATOR_UNICODE };
+}
+
+/** Look a custom emoji up by id first (exact), then by name. */
+function findCustomEmoji(
   cache: EmojiCacheLike | null | undefined,
+  id: string | undefined,
+  name: string,
 ): GuildEmojiLike | null {
   if (!cache) return null;
-  return (
-    cache.find((emoji) => emoji.name === LFG_NOW_INDICATOR_EMOJI_NAME) ?? null
-  );
+  if (id) return cache.find((emoji) => emoji.id === id) ?? null;
+  return cache.find((emoji) => emoji.name === name) ?? null;
+}
+
+/** The slice of a group read (`LfgGroupSummaryDto`) the predicate needs. */
+export interface LfgGroupReadLike {
+  nowCount: number;
+  playingNow: { eventId: number } | null;
+}
+
+/**
+ * {@link pressWouldSpawnNow} for surfaces that hold a group READ rather than
+ * a board render state — the web group page and the invite DM (AC7).
+ *
+ * An adapter, not a second predicate: a group with no live session is the
+ * board's `open` state, and the session's event id is `playingEventId`. The
+ * decision itself stays in {@link pressWouldSpawnNow}.
+ *
+ * @param group - The group read (live now-hands + the live session, if any).
+ * @param viewerHoldsNowHand - Whether THIS viewer already holds a now-hand.
+ * @returns True only when the viewer's new now-hand would form the group.
+ */
+export function groupReadPressWouldSpawnNow(
+  group: LfgGroupReadLike,
+  viewerHoldsNowHand: boolean,
+): boolean {
+  return pressWouldSpawnNow({
+    state: group.playingNow ? 'playing' : 'open',
+    nowCount: group.nowCount,
+    playingEventId: group.playingNow?.eventId ?? null,
+    viewerHoldsNowHand,
+  });
 }

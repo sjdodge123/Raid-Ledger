@@ -24,6 +24,7 @@ import type { LfmGroupView } from '../lfm/lfm-embed.helpers';
 import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { LfgBoardService } from './lfg-board.service';
+import { SettingsService } from '../../settings/settings.service';
 import {
   LFG_BOARD_EDIT_DEBOUNCE_MS,
   LFG_JOIN_BUTTON_LABEL,
@@ -138,6 +139,7 @@ beforeEach(async () => {
       LfgBoardService,
       { provide: DiscordBotClientService, useValue: clientService },
       { provide: LfgBoardChannelService, useValue: channelService },
+      { provide: SettingsService, useValue: { get: jest.fn(() => null) } },
     ],
   }).compile();
   service = module.get(LfgBoardService);

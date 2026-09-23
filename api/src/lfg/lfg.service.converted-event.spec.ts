@@ -6,6 +6,7 @@
  * through verbatim (and does not attach it to the summary DTO).
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SettingsService } from '../settings/settings.service';
 import { Test } from '@nestjs/testing';
 import { LfgService } from './lfg.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -42,6 +43,7 @@ async function buildService(converted: unknown): Promise<LfgService> {
       LfgService,
       { provide: DrizzleAsyncProvider, useValue: {} },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
+      { provide: SettingsService, useValue: { get: jest.fn(() => null) } },
     ],
   }).compile();
   return module.get(LfgService);

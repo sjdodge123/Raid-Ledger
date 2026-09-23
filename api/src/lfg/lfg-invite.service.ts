@@ -36,11 +36,13 @@ import type { CreateNotificationInput } from '../notifications/notification.type
 import { buildLfgInviteUrl } from '../notifications/lfg-affinity-dm.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getClientUrl } from '../settings/settings-bot.helpers';
+import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
 import {
   readGroupHorizon,
   type LfgGroupHorizon,
 } from './lfg-group-horizon.helpers';
-import { requireGame, type LfgDb } from './lfg-query.helpers';
+import { groupReadPressWouldSpawnNow } from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
+import { getGroupSummary, requireGame, type LfgDb } from './lfg-query.helpers';
 import { reasonsForUser } from './lfg-suggestions.helpers';
 import {
   LFG_INVITE_GROUP_CAP,
@@ -112,6 +114,15 @@ export interface LfgPlayerInvitePayload {
   urgency: LfgUrgency;
   /** ISO instant the group's longest live `now` hand lapses; absent on week. */
   nowExpiresAt?: string;
+  /**
+   * ROK-1619 AC7: at send time, the recipient's Join would cross the spawn
+   * threshold and start the session — the DM's Join wears the indicator.
+   * Absent means no. A send-time snapshot: a DM is never re-rendered, so a
+   * stale mark degrades to AC4's graceful attach, never to an error.
+   */
+  spawnsNow?: boolean;
+  /** The admin indicator-emoji setting at send time, raw; only with spawnsNow. */
+  spawnEmoji?: string;
 }
 
 /** D5: recipient lock FIRST, then game — the order every caller must keep. */
@@ -290,6 +301,26 @@ export class LfgInviteService {
     return inviter?.displayName ?? inviter?.username ?? 'A player';
   }
 
+  /**
+   * ROK-1619 AC7: would the recipient's Join form the group? The recipient
+   * holds no live hand (`in_group` refuses the send otherwise), so their press
+   * is always a NEW hand — `viewerHoldsNowHand` is false.
+   *
+   * Computed at SEND time, per recipient: simultaneous invites to the same
+   * one-short group can each show "starts the group". Only the first press
+   * spawns it; the rest attach to that session without error (the spawn guard
+   * runs under the group lock), so the extra marks are harmless.
+   */
+  private async spawnsNowField(
+    game: typeof schema.games.$inferSelect,
+    recipientUserId: number,
+  ): Promise<{ spawnsNow?: true; spawnEmoji?: string }> {
+    const group = await getGroupSummary(this.db, game, recipientUserId);
+    if (!groupReadPressWouldSpawnNow(group, false)) return {};
+    const emoji = await getLfgNowIndicatorEmoji(this.settings);
+    return emoji ? { spawnsNow: true, spawnEmoji: emoji } : { spawnsNow: true };
+  }
+
   /** The payload the DM renders from: reasons, link, Steam playtime (AC6/AC7). */
   private async buildPayload(
     game: typeof schema.games.$inferSelect,
@@ -321,6 +352,7 @@ export class LfgInviteService {
       ...(horizon.nowExpiresAt
         ? { nowExpiresAt: horizon.nowExpiresAt.toISOString() }
         : {}),
+      ...(await this.spawnsNowField(game, recipientUserId)),
     };
   }
 

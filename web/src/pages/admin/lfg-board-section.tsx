@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { useLfgBoardSettings } from '../../hooks/admin/use-lfg-board-settings';
+import { LfgIndicatorEmojiField } from './lfg-indicator-emoji-field';
 import { Switch } from '../../components/ui/switch';
 
 const BOT_CONNECTION_PATH = '/admin/settings/discord/connection';
@@ -63,7 +64,10 @@ function useLfgBoardToggle() {
         );
     };
 
-    return { enabled: status.data?.enabled ?? false, isPending: update.isPending, missing, handleToggle };
+    return {
+        enabled: status.data?.enabled ?? false, emoji: status.data?.nowIndicatorEmoji,
+        isPending: update.isPending, missing, handleToggle,
+    };
 }
 
 /** ROK-1612 AC6 — the pinned composer card's opt-in, on the same card. */
@@ -89,7 +93,7 @@ function ComposerToggle() {
 
 /** Toggle card for the LFG forum board. */
 export function LfgBoardSection(): React.ReactElement {
-    const { enabled, isPending, missing, handleToggle } = useLfgBoardToggle();
+    const { enabled, emoji, isPending, missing, handleToggle } = useLfgBoardToggle();
 
     return (
         <div className="bg-surface rounded-xl border border-edge p-6">
@@ -102,6 +106,7 @@ export function LfgBoardSection(): React.ReactElement {
                     disabled={isPending} onChange={handleToggle} />
             </div>
             {missing.length > 0 && <MissingPermissionWarning missing={missing} />}
+            <LfgIndicatorEmojiField key={emoji ?? ''} current={emoji} />
             <ComposerToggle />
         </div>
     );

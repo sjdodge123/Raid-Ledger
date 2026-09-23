@@ -77,6 +77,8 @@ export const LFG_COPY = {
      * wanted to make while hearting a game.
      */
     urgencyNow: 'Right now',
+    /** ROK-1619 AC6: the words that carry the spawn mark; the emoji only reinforces. */
+    urgencyNowStartsGroup: 'starts the group',
     /**
      * ROK-1616 — later today. Expires at 04:00 local the NEXT day, so a hand
      * raised at teatime survives a session that runs past midnight. It took
