@@ -38,7 +38,8 @@
  * — and additionally pins the "no tooltip on the chip" decision so a future
  * change has to be deliberate.
  */
-import { test, expect, type Page } from './base';
+import type { Page } from '@playwright/test';
+import { test, expect } from './base';
 import {
   apiGet,
   apiPost,
