@@ -11,13 +11,14 @@
  * Bots cannot press another bot's button, so the flow behind the button is
  * covered by the api unit tier; this asserts only that the card is there.
  */
-import { ChannelFlags, type Message } from "discord.js";
+import { type Message } from "discord.js";
 import { getGuild } from "../client.js";
 import { pollForCondition } from "../helpers/polling.js";
 import {
   readForumThreads,
   setLfgComposerEnabled,
 } from "./fixtures-lfg-board.js";
+import { pickBoardIntro } from "./lfg-board-intro-pick.js";
 import { forumId, INTRO_TITLE, type Run } from "./lfg-board-shared.js";
 
 /** `LFG_COMPOSER_IDS.OPEN` — the card's `Post an LFG` custom id. */
@@ -37,25 +38,42 @@ function customIds(message: Message): string[] {
   );
 }
 
-/** What the intro post currently looks like, or null while it is not ready. */
-async function readIntro(
-  run: Run,
-): Promise<{ pinned: boolean; ids: string[] } | null> {
-  const intro = (await readForumThreads(forumId(run))).find(
-    (t) => t.name === INTRO_TITLE,
-  );
-  if (!intro) return null;
+/** What the board's pinned intro post currently looks like. */
+interface IntroState {
+  /** The pinned intro post's id, or null when no intro post is pinned. */
+  pinnedIntroId: string | null;
+  /** How many posts carry the intro title — the shared guild holds several. */
+  introTitled: number;
+  /** Custom ids on the pinned intro's starter message. */
+  ids: string[];
+}
+
+/**
+ * Read the board's PINNED intro post. The CI guild is shared, so the forum
+ * holds one "How this board works" per bot; only the pinned one is the board's
+ * (see `pickBoardIntro`). The starter is force-fetched so a cached copy from
+ * before the composer's edit cannot mask it.
+ */
+async function readIntro(run: Run): Promise<IntroState> {
+  const threads = await readForumThreads(forumId(run));
+  const intro = pickBoardIntro(threads, INTRO_TITLE);
+  const introTitled = threads.filter((t) => t.name === INTRO_TITLE).length;
+  if (!intro) return { pinnedIntroId: null, introTitled, ids: [] };
   const thread = await getGuild().channels.fetch(intro.id);
-  if (!thread?.isThread()) return null;
-  const starter = await thread.fetchStarterMessage().catch(() => null);
-  if (!starter) return null;
-  const state = {
-    pinned: thread.flags.has(ChannelFlags.Pinned),
-    ids: customIds(starter),
-  };
-  return state.pinned && state.ids.includes(COMPOSER_OPEN_CUSTOM_ID)
-    ? state
+  const starter = thread?.isThread()
+    ? await thread.fetchStarterMessage({ force: true }).catch(() => null)
     : null;
+  return {
+    pinnedIntroId: intro.id,
+    introTitled,
+    ids: starter ? customIds(starter) : [],
+  };
+}
+
+function isComposerReady(state: IntroState): boolean {
+  return (
+    state.pinnedIntroId !== null && state.ids.includes(COMPOSER_OPEN_CUSTOM_ID)
+  );
 }
 
 /**
@@ -90,7 +108,10 @@ export async function disableComposer(run: Run): Promise<void> {
  */
 export async function assertComposerPinned(run: Run): Promise<void> {
   try {
-    await pollForCondition(() => readIntro(run), COMPOSER_READY_MS);
+    await pollForCondition(async () => {
+      const state = await readIntro(run);
+      return isComposerReady(state) ? state : null;
+    }, COMPOSER_READY_MS);
   } catch {
     const last = await readIntro(run).catch(() => null);
     throw new Error(

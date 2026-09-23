@@ -12,6 +12,7 @@
  * and would silently assert against the wrong channel rather than fail.
  */
 import {
+  ChannelFlags,
   ChannelType,
   type ForumChannel,
   type Message,
@@ -35,6 +36,8 @@ export interface ForumThreadSnapshot {
   id: string;
   name: string;
   archived: boolean;
+  /** Pinned to the top of the forum — Discord allows one per forum. */
+  pinned: boolean;
   /** Applied tag NAMES (discord.js exposes ids; resolved via the parent). */
   appliedTagNames: string[];
   /** The post body. Null when it has been deleted out from under the thread. */
@@ -159,6 +162,7 @@ async function snapshot(
     id: thread.id,
     name: thread.name,
     archived: thread.archived === true,
+    pinned: thread.flags.has(ChannelFlags.Pinned),
     appliedTagNames: tagNamesFor(forum, thread),
     starterMessage,
   };
