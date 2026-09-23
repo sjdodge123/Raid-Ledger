@@ -40,10 +40,21 @@ describe('DesignSystemPage', () => {
         'Pattern — journey hero',
         'Pattern — week strip',
         'Pattern — group marks and legend',
+        'Forms — Button, Field, Input',
     ])('renders the "%s" section heading', (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
         expect(screen.getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
+    });
+
+    it('the Forms section mounts the real primitives, wired through Field', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        const invalid = within(forms).getByRole('textbox', { name: 'Event name' });
+        expect(invalid).toHaveAttribute('aria-invalid', 'true');
+        expect(invalid).toHaveAccessibleDescription('Give the event a name.');
+        expect(within(forms).getByRole('button', { name: 'Saving…' })).toHaveAttribute('aria-busy', 'true');
     });
 
     it('shows the filtering DO and DON\'T side by side', () => {
