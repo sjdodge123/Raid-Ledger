@@ -38,7 +38,7 @@ const TITLE = 'Find a better time';
  * frame's footer row.
  */
 const PHONE_BODY =
-    'flex h-[calc(95dvh-200px)] min-h-0 flex-col gap-3 ' +
+    'flex h-[calc(var(--sheet-vh,1dvh)_*_95_-_200px)] min-h-0 flex-col gap-3 ' +
     '[&>*:first-child]:min-h-0 [&>*:first-child]:flex-1 [&>*:last-child]:flex-none';
 
 export interface SchedulingBetterTimeSheetProps {
