@@ -7,7 +7,7 @@
  * questions and sends the viewer OUT to the profile editor: the week itself is
  * on screen, one day at a time, with the answers wrapped around it —
  * "Same as last week" (one tap, confirm-only), "I'm away" (a row that swaps the
- * drawer to the away view) and a sticky footer carrying "Save my week" / "Skip".
+ * drawer to the away view) and a pinned footer carrying "Save my week" / "Skip".
  *
  * The DESKTOP modal keeps the four-answer body (`GameTimeCheckBody`); it has
  * the room for the full grid on the profile page and is out of this story.
@@ -47,6 +47,7 @@ import { CHECK_HOURS, toTemplateSlots, usePhoneWeekDraft } from './phone-week-ch
 import { SameAsLastWeek, StepFooter } from './phone-week-check-footer';
 import { AwayEntry, PhoneAwayView } from './PhoneAwayView';
 import { useAwaySummary, useAwayView } from './use-away-view';
+import { useReportSheetDirty } from '../sheet-dirty-context';
 
 /** Stable empty week — a new array each render would reset the draft. */
 const NO_SLOTS: GameTimeSlot[] = [];
@@ -116,6 +117,8 @@ function useWeekEditorState(hours: number[], isCheck: boolean, slotHeight?: numb
     const { data } = useGameTime();
     const templateSlots = useMemo(() => toTemplateSlots(data?.slots ?? NO_SLOTS), [data?.slots]);
     const draft = usePhoneWeekDraft(templateSlots);
+    // ROK-1640: the drawer asks before a close throws this draft away.
+    useReportSheetDirty(draft.dirty);
     // The window the day slot can actually show (ROK-1579 frame 3). A range
     // that fits — the check's seven evening hours — comes back untouched.
     const hourWindow = useProfileWindow(hours, draft.slots, slotHeight);
@@ -135,11 +138,25 @@ function WeekAnswers({ showSame, nextLabel, onAway, entryRef }: {
     );
 }
 
+/** The check's one question line (the profile has none). */
+function WeekPrompt({ ageDays, hasSlots }: { ageDays?: number | null; hasSlots: boolean }): JSX.Element {
+    return (
+        <p data-testid="phone-week-prompt" className="text-sm text-foreground">
+            {gameTimeCheckPrompt(ageDays, hasSlots)}
+        </p>
+    );
+}
+
 type WeekViewProps = PhoneWeekCheckStepProps & {
     hidden: boolean; onAway: () => void; entryRef: RefObject<HTMLButtonElement | null>;
 };
 
-/** The week: prompt, editor, answers, sticky Save — kept mounted while away. */
+/**
+ * The week: prompt, editor and answers in a scroll body, then the Save footer
+ * OUTSIDE it (ROK-1640) — a `shrink-0` flex footer is pinned to the drawer's
+ * bottom edge whatever the body holds; a `sticky` one inside a scrolling body
+ * only stuck within that body and fell below the fold. Kept mounted while away.
+ */
 function WeekView({
     ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims, slotHeight, hidden, onAway, entryRef,
 }: WeekViewProps): JSX.Element {
@@ -147,27 +164,25 @@ function WeekView({
     const { draft, hourWindow, presets } = useWeekEditorState(hours, isCheck, slotHeight);
     const { awayDays, nextLabel } = useAwaySummary();
     return (
-        <div data-testid="phone-week-view" hidden={hidden} className={hidden ? 'hidden' : 'flex h-full min-h-0 flex-col gap-2'}>
-            {isCheck && (
-                <p data-testid="phone-week-prompt" className="text-sm text-foreground">
-                    {gameTimeCheckPrompt(ageDays, hasSlots)}
-                </p>
-            )}
-            {/* `min-h-0` keeps this slot's height DEFINITE inside the sheet's
-                fixed box, so the day grid scrolls instead of growing the column
-                (ROK-1579). The day's own floor lives on the day slot
-                (`min-h-[132px]` in PhoneWeekEditorCore). */}
-            <div className="min-h-0 flex-1">
-                <PhoneWeekEditorCore
-                    slots={draft.slots} onChange={draft.setDraft} hours={hourWindow.hours}
-                    initialDay={new Date().getDay()} dims={dims} awayDays={awayDays}
-                    inspectorPlacement="flow"
-                    daySlotRef={hourWindow.slotRef} presets={presets}
-                    gridHeader={<PhoneWindowToggle direction="earlier" band={hourWindow.earlier} />}
-                    gridFooter={<PhoneWindowToggle direction="later" band={hourWindow.later} />}
-                />
+        <div data-testid="phone-week-view" hidden={hidden} className={hidden ? 'hidden' : 'flex h-full min-h-0 flex-col'}>
+            <div data-testid="phone-week-body" className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-2">
+                {isCheck && <WeekPrompt ageDays={ageDays} hasSlots={hasSlots} />}
+                {/* `min-h-0` keeps this slot's height DEFINITE inside the sheet's
+                    fixed box, so the day grid scrolls instead of growing the column
+                    (ROK-1579). The day's own floor lives on the day slot
+                    (`min-h-[132px]` in PhoneWeekEditorCore). */}
+                <div className="min-h-0 flex-1">
+                    <PhoneWeekEditorCore
+                        slots={draft.slots} onChange={draft.setDraft} hours={hourWindow.hours}
+                        initialDay={new Date().getDay()} dims={dims} awayDays={awayDays}
+                        inspectorPlacement="flow"
+                        daySlotRef={hourWindow.slotRef} presets={presets}
+                        gridHeader={<PhoneWindowToggle direction="earlier" band={hourWindow.earlier} />}
+                        gridFooter={<PhoneWindowToggle direction="later" band={hourWindow.later} />}
+                    />
+                </div>
+                <WeekAnswers showSame={isCheck && hasSlots} nextLabel={nextLabel} onAway={onAway} entryRef={entryRef} />
             </div>
-            <WeekAnswers showSame={isCheck && hasSlots} nextLabel={nextLabel} onAway={onAway} entryRef={entryRef} />
             <StepFooter slots={draft.slots} dirty={draft.dirty} onSkip={isCheck ? onSkip : undefined} />
         </div>
     );
