@@ -2,6 +2,7 @@
  * ROK-1659 — FilterEntry: the one filter entry point. Toolbar funnel + inline
  * panel at 1024px and up; Filters FAB + BottomSheet below (phones AND tablets).
  */
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -77,6 +78,52 @@ describe('FilterEntry — desktop (1024px and up)', () => {
         expect(screen.getByRole('button', { name: 'Filters' })).toHaveAccessibleDescription('3 active filters');
         rerender(<FilterEntryTrigger activeCount={0} isOpen={false} onOpenChange={onOpenChange} />);
         expect(screen.queryByTestId('filter-count-badge')).not.toBeInTheDocument();
+    });
+});
+
+describe('FilterEntry — desktop Escape and focus (ROK-1659)', () => {
+    beforeEach(() => mockViewportWidth(1280));
+
+    function renderOpen(children: ReactNode) {
+        const onOpenChange = vi.fn();
+        renderWithProviders(
+            <>
+                <FilterEntryTrigger activeCount={0} isOpen onOpenChange={onOpenChange} />
+                <FilterEntry activeCount={0} isOpen onOpenChange={onOpenChange} onClearAll={vi.fn()}>{children}</FilterEntry>
+                <button type="button">Outside</button>
+            </>,
+        );
+        return onOpenChange;
+    }
+
+    it('hands focus back to the funnel when Escape is pressed inside the panel', () => {
+        const onOpenChange = renderOpen(<button type="button">Inside</button>);
+        const inside = screen.getByRole('button', { name: 'Inside' });
+        inside.focus();
+        fireEvent.keyDown(inside, { key: 'Escape' });
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+        expect(screen.getByTestId('filter-panel-trigger')).toHaveFocus();
+    });
+
+    it('leaves focus alone when Escape is pressed outside the panel', () => {
+        const onOpenChange = renderOpen(<button type="button">Inside</button>);
+        const outside = screen.getByRole('button', { name: 'Outside' });
+        outside.focus();
+        fireEvent.keyDown(outside, { key: 'Escape' });
+        expect(onOpenChange).toHaveBeenCalledWith(false);
+        expect(outside).toHaveFocus();
+    });
+
+    it('lets a non-empty search field take the first Escape (it clears), and closes on the next', () => {
+        const onOpenChange = renderOpen(<input type="search" aria-label="Search games" defaultValue="war" />);
+        const search = screen.getByRole('searchbox', { name: 'Search games' });
+        search.focus();
+        fireEvent.keyDown(search, { key: 'Escape' });
+        expect(onOpenChange).not.toHaveBeenCalled();
+
+        fireEvent.change(search, { target: { value: '' } });
+        fireEvent.keyDown(search, { key: 'Escape' });
+        expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 });
 

@@ -3,6 +3,7 @@
  * Verifies trigger button, active-filter badge, inline/collapsible behavior,
  * the inner scroll region, Escape-to-close and clear all.
  */
+import { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -259,5 +260,38 @@ describe('FilterPanelTrigger — open state and count wording (ROK-1659)', () =>
             <FilterPanelTrigger activeCount={3} onClick={vi.fn()} describeCount={(n) => `${n} games hidden`} />,
         );
         expect(screen.getByRole('button', { name: 'Filters' })).toHaveAccessibleDescription('3 games hidden');
+    });
+});
+
+describe('FilterPanel — "Clear all" keeps focus (ROK-1659)', () => {
+    // Clearing takes the count to 0, which unmounts the button that had focus.
+    function ClearAllHarness() {
+        const [count, setCount] = useState(2);
+        return (
+            <FilterPanel activeFilterCount={count} onClearAll={() => setCount(0)} isOpen onToggle={vi.fn()}>
+                <input type="checkbox" aria-label="Option" />
+            </FilterPanel>
+        );
+    }
+
+    function clickClearAll(): void {
+        const clear = screen.getByRole('button', { name: 'Clear all' });
+        clear.focus();
+        fireEvent.click(clear);
+        expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
+    }
+
+    it('moves focus to the "Filters" title on the desktop panel', () => {
+        mockViewportWidth(1280);
+        renderWithProviders(<ClearAllHarness />);
+        clickClearAll();
+        expect(screen.getByRole('heading', { name: 'Filters' })).toHaveFocus();
+    });
+
+    it('moves focus to the sheet\'s Close button below 1024px', () => {
+        mockViewportWidth(390);
+        renderWithProviders(<ClearAllHarness />);
+        clickClearAll();
+        expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     });
 });

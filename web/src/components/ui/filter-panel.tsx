@@ -66,11 +66,14 @@ const OPEN_TRIGGER_SELECTOR = '[data-testid="filter-panel-trigger"][aria-expande
  * An Escape another layer owns: already handled (`defaultPrevented`), pressed
  * inside a dialog that is not this panel, or pressed while a modal dialog
  * (Modal, a drawer, a sheet) is open on top of the page. That layer closes;
- * the inline panel underneath must stay open.
+ * the inline panel underneath must stay open. A non-empty search field owns
+ * its Escape too: the browser clears it natively, so the first press clears
+ * the query and only the next one closes the panel.
  */
 function isEscapeForAnotherLayer(e: KeyboardEvent, panel: HTMLElement | null): boolean {
     if (e.defaultPrevented) return true;
     const target = e.target instanceof Element ? e.target : null;
+    if (target instanceof HTMLInputElement && target.type === 'search' && target.value !== '') return true;
     const targetDialog = target?.closest('[role="dialog"], [aria-modal="true"]');
     if (targetDialog && !panel?.contains(targetDialog)) return true;
     return document.querySelector('[aria-modal="true"]') !== null;
@@ -101,15 +104,19 @@ export function FilterPanel({ activeFilterCount, onClearAll, isOpen, onToggle, o
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const close = onClose ?? onToggle;
     const panelRef = useRef<HTMLDivElement>(null);
+    const sheetBodyRef = useRef<HTMLDivElement>(null);
     useEscapeToClose(isDesktop && isOpen, close, panelRef);
 
     if (!isDesktop) {
+        // "Clear all" unmounts itself at 0; hand focus to the sheet's Close button so it isn't dropped.
+        const focusSheetClose = (): void => sheetBodyRef.current?.closest('[role="dialog"]')
+            ?.querySelector<HTMLElement>('button[aria-label="Close"]')?.focus();
         return (
             <BottomSheet isOpen={isOpen} onClose={close} title="Filters">
                 {/* A closed sheet only slides off-screen, so its body is `inert` + `aria-hidden` like the
                     collapsed inline panel — still mounted for the ROK-1255 auto-seed. */}
-                <div inert={!isOpen} aria-hidden={!isOpen || undefined}>
-                    <MobileClearRow activeFilterCount={activeFilterCount} onClearAll={onClearAll} />
+                <div ref={sheetBodyRef} inert={!isOpen} aria-hidden={!isOpen || undefined}>
+                    <MobileClearRow activeFilterCount={activeFilterCount} onClearAll={onClearAll} focusAfterClear={focusSheetClose} />
                     {children}
                 </div>
             </BottomSheet>
@@ -150,37 +157,42 @@ function InlinePanel({ panelRef, isOpen, activeFilterCount, onClearAll, children
 }
 
 /** "Clear all" button row for mobile BottomSheet (title provided by BottomSheet itself). */
-function MobileClearRow({ activeFilterCount, onClearAll }: {
+function MobileClearRow({ activeFilterCount, onClearAll, focusAfterClear }: {
     activeFilterCount: number;
     onClearAll: () => void;
+    focusAfterClear: () => void;
 }): JSX.Element | null {
     if (activeFilterCount === 0) return null;
     return (
         <div className="flex justify-end mb-4">
-            <ClearAllButton onClearAll={onClearAll} />
+            <ClearAllButton onClearAll={onClearAll} focusAfterClear={focusAfterClear} />
         </div>
     );
 }
 
-/** Title row with "Filters" and optional "Clear all" button. */
+/** Title row with "Filters" and optional "Clear all" button; the title takes focus after a clear. */
 function FilterPanelHeader({ activeFilterCount, onClearAll }: {
     activeFilterCount: number;
     onClearAll: () => void;
 }): JSX.Element {
+    const titleRef = useRef<HTMLHeadingElement>(null);
     return (
         <div className="flex shrink-0 items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-foreground">Filters</h3>
-            {activeFilterCount > 0 && <ClearAllButton onClearAll={onClearAll} />}
+            <h3 ref={titleRef} tabIndex={-1} className="text-sm font-semibold text-foreground focus:outline-none">Filters</h3>
+            {activeFilterCount > 0 && <ClearAllButton onClearAll={onClearAll} focusAfterClear={() => titleRef.current?.focus()} />}
         </div>
     );
 }
 
-/** Shared "Clear all" button. */
-function ClearAllButton({ onClearAll }: { onClearAll: () => void }): JSX.Element {
+/**
+ * Shared "Clear all" button. Clearing takes the count to 0, which unmounts this
+ * button, so focus moves to a target that stays (`focusAfterClear`) first.
+ */
+function ClearAllButton({ onClearAll, focusAfterClear }: { onClearAll: () => void; focusAfterClear: () => void }): JSX.Element {
     return (
         <button
             type="button"
-            onClick={onClearAll}
+            onClick={() => { onClearAll(); focusAfterClear(); }}
             aria-label="Clear all"
             className="text-sm text-muted hover:text-foreground transition-colors"
         >
