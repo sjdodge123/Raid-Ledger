@@ -244,11 +244,13 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `checkbox.tsx` → `Checkbox` (ROK-1646) | Native checkbox, `w-5 h-5 accent-success`, success focus ring. With `label` the whole `<label>` row is the 44px target and the name is the label text alone. | Any boolean in a form or a multi-select list. A single on/off setting is a `Switch`. | `label`, `description` (→ `aria-describedby`), `indeterminate` (sets the DOM property → mixed), `invalid`, all input attributes, forwarded ref. In a `Field`, omit `label` — context wires it |
 | `radio-group.tsx` → `RadioGroup` (ROK-1646) | Native radios sharing one `name` in a `<fieldset role="radiogroup">` named by its legend — the browser's Tab/arrow model. `list`: a 44px row per option. `segmented`: `sr-only` radios in a `bg-panel border-edge rounded-lg` track, ON = `bg-overlay text-foreground`, OFF = `text-muted`. | One choice from 2–6 options. `segmented` for short pill toggles (duration picker, import mode, scope) — never buttons with no radio semantics | `label`, `hideLabel`, `options: {value,label,description?,disabled?}[]`, `value`, `onChange(value)`, `appearance` `'list'` (default) / `'segmented'`, `name`, `disabled`, `className` |
 | `slider.tsx` → `Slider` (ROK-1646) | Labelled native range: label left, `h-11 accent-success` track with a 20px webkit thumb, `font-mono` `<output>` readout right. Replaces the duplicated `SLIDER_CLS`. | Any bounded numeric filter/threshold — and every sibling in that filter family (§4.11 DON'T) | `label`, `hideLabel`, `value: number`, `onChange(number)`, `min`/`max`/`step`, `formatValue` (readout + `aria-valuetext`), `showValue` (default true), `wrapperClassName`. Renders its own label — don't wrap it in `Field` |
+| `search-input.tsx` → `SearchInput` (ROK-1646) | `Input` with `type="search"` (role `searchbox`), a decorative leading magnifier, and — while there is text — a 44px `Button ghost iconOnly` named "Clear search" that empties the box, refocuses it and fires `onSearch('')` at once. The browser's own cancel glyph is hidden. | Every search/filter text box — list pages, picker modals, toolbars. Replaces `ModalSearchInput` (migration: ROK-1647) | `value`, `onChange(string)`, `label` (→ `aria-label`; omit inside `Field`), `onSearch` (debounced, never on mount), `debounceMs` (default 300), `onClear`, plus `Input` props (`fieldSize`, `invalid`, …), forwarded ref |
+| `combobox.tsx` → `Combobox` (+ `use-combobox.ts`, `use-anchored-popup.ts`, `combobox-popup.tsx`) (ROK-1646) | **The** autocomplete, in-house WAI-ARIA 1.2: an `Input` with `role="combobox"` / `aria-expanded` / `aria-controls` / `aria-activedescendant` (focus never leaves it) and a `role="listbox"` portalled to `<body>` at `Z_INDEX.MODAL + 1`, so Modal and BottomSheet can't clip it. Keys: ↑/↓ open then move (wrapping), Home/End jump, Enter picks, Esc closes (a second Esc clears text + value), Tab commits the active option. Closes on an outside press; keeps the active row in view. | Type-to-pick from a long or async list (game search, realm). A short fixed list is a `Select` | `options`, `getKey`, `getLabel`, `value`, `onChange(option \| null)`, `label` (or `Field`, which also names the listbox), `inputValue` + `onInputChange` (controlled text; omit to let it own the text), `renderOption(option, { active, selected })`, `loading` + `loadingText`, `emptyText` (default "No results"), `errorText`, `placeholder`, `disabled`, `invalid`, `fieldSize`, `className` |
 | `form-classes.ts` → `FIELD_FRAME`, `FIELD_FRAME_BASE`, `FIELD_PAD`, `FOCUS_RING`, `DISABLED` (ROK-1646) | The class strings the form primitives share | Building the next form primitive (`Select`, `Textarea`, `SearchInput`…) — never re-type the frame | — |
 | `switch.tsx` → `Switch` **(landing with ROK-1612 — not yet on main, do not treat as shipped)** | Toggle primitive for a single on/off setting | Any boolean setting that isn't a checkbox in a form list | see file once merged |
 | `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`) |
 | `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
-| `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal | see file |
+| `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal | Any searchable picker modal — `ModalSearchInput` is being replaced by `SearchInput` (ROK-1647) | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
 | `nav-chip.tsx` → `NavChip`, `NAV_CHIP_CLASS` | Navigational link chip | Linking to a sibling lineup/page from a banner | `to`, `children`, `testId` |
 | `new-badge.tsx` → `NewBadge` | "New" marker | Freshly added items | `visible` |
@@ -442,12 +444,20 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   real radios, so it has `radiogroup` semantics and arrow keys; never a row of buttons with no state.
 - **Sliders are `Slider`**: `h-11 accent-success`, enlarged webkit thumb, a `font-medium` label left and a
   `font-mono` readout right; `formatValue` doubles as `aria-valuetext`.
+- **Search boxes are `SearchInput`**: always named (`label` or a `Field` with `hideLabel`), one 44px "Clear
+  search" button, `onSearch` for the debounced query — don't hand-roll a magnifier + `setTimeout`.
+- **Type-to-pick is `Combobox`** — never a bare `<ul>` of results under an input (the old game-search pickers
+  had no `role="combobox"` and no keyboard path). The popup is `bg-surface border border-edge rounded-lg
+  shadow-xl`, the active row `bg-overlay`, rows 44px below `lg`; async lookups pass `loading` / `emptyText` /
+  `errorText` (a `role="status"` row) instead of rendering their own spinner. Inside a Modal or BottomSheet the
+  first Esc closes only the popup.
 
 **DON'T** hand-write an input or button class string, use a `bg-*-800` disabled fill, spell an error
 `text-red-400`, or put a number input where the family around it uses sliders — the operator ruled on
 that (2026-08-20) so a filter group reads as one control family. Don't paint a checkbox with `text-emerald-500`
 / `focus:ring-*` (`@tailwindcss/forms` isn't installed — those do nothing) or an `accent-[#hex]`. `ModalSearchInput`'s `focus:ring-accent`
-resolves to nothing (§6.3); `SearchInput` replaces it.
+resolves to nothing (§6.3); `SearchInput` replaces it. Don't add a headless combobox library — `Combobox` is
+the in-house one (operator ruling, ROK-1646).
 
 **Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
 solid `primary`/`destructive` fills are identical in both with the label forced white on light (§6.10).
