@@ -149,4 +149,3 @@ export function parseGoCustomId(customId: string): LfgComposerGoState | null {
     term: termParts.join(':'),
   };
 }
-

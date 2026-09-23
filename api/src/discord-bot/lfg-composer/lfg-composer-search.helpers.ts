@@ -82,4 +82,3 @@ export function classifyComposerMatch(
 function capCandidates(games: LfgComposerGame[]): LfgComposerGame[] {
   return games.slice(0, LFG_COMPOSER_MAX_CANDIDATES);
 }
-

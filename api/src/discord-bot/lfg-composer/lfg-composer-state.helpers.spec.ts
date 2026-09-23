@@ -99,7 +99,7 @@ describe('normalizeComposerTerm', () => {
 });
 
 describe('buildBackToCandidatesCustomId (ROK-1658)', () => {
-  it('always points the urgency step\'s Back at the select', () => {
+  it("always points the urgency step's Back at the select", () => {
     expect(buildBackToCandidatesCustomId('deep rok')).toBe(
       'lfgc:backc:deep rok',
     );

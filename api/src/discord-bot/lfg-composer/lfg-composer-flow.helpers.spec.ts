@@ -160,15 +160,6 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
     expect(fuzzy).not.toHaveBeenCalled();
   });
 
-  it('an exact title among several word matches is offered as one option', async () => {
-    const survivor = { id: 9, name: 'Deep Rock Galactic: Survivor' };
-    search.mockResolvedValue([DRG, survivor]);
-    const i = submit('deep rock galactic');
-    await submitComposerSearch(deps(), i as never);
-    expect(edited(i).content).toBe('1 game matches `deep rock galactic`');
-    expect(selectValues(edited(i))).toEqual(['7']);
-  });
-
   it('several candidates render a select and never auto-select', async () => {
     search.mockResolvedValue([DRG, VALHEIM]);
     const i = submit('a');
@@ -202,6 +193,17 @@ describe('submitComposerSearch (the four AC2 outcomes)', () => {
     await submitComposerSearch(deps(), i as never);
     expect(i.deferUpdate).toHaveBeenCalled();
     expect(i.deferReply).not.toHaveBeenCalled();
+  });
+});
+
+describe('submitComposerSearch (ROK-1658 — the list is always shown)', () => {
+  it('an exact title among several word matches is offered as one option', async () => {
+    const survivor = { id: 9, name: 'Deep Rock Galactic: Survivor' };
+    search.mockResolvedValue([DRG, survivor]);
+    const i = submit('deep rock galactic');
+    await submitComposerSearch(deps(), i as never);
+    expect(edited(i).content).toBe('1 game matches `deep rock galactic`');
+    expect(selectValues(edited(i))).toEqual(['7']);
   });
 });
 
