@@ -40,6 +40,8 @@ Step 4: Ship      → Auto-merge, Linear → Done, team + worktree cleanup
 
 **Env-lock discipline:** Step 2b acquires the lock for the deploy. Hold through Playwright (3g) + Chrome MCP (3g.5). Release immediately after the Chrome MCP summary is written — push, PR creation, and auto-merge do NOT need the env. Re-acquire ONLY if a post-review fix requires re-verifying against the deployed app.
 
+**Design-doc check (Step 3/close-out):** a story that adds/changes a token, primitive, shared component or pattern rides its `docs/design-system.md` (+ tokens doc + `/dev/design-system`) update in the same PR — reviewer teammates check this before Ship.
+
 ---
 
 ## Branch Strategy (Single PR)

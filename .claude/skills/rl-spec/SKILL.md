@@ -10,3 +10,7 @@ Run `/devedup-rl:spec` with the user's request. **In your prompt to the subagent
 The path override is critical: the `/build` skill discovers specs at `planning-artifacts/specs/ROK-XXX.md` (see `.claude/skills/build/SKILL.md:9` and step-1-setup.md:105). Writing to `docs/specs/` makes `/build` treat the story as "requirements not gathered" and regenerate a spec from scratch, losing every design decision made during `/rl-spec`.
 
 The plugin runs `context: fork`, so the override must be embedded in the prompt you pass — it cannot be applied after the fact from this skill's frame.
+
+**Design system:** if the story touches UI, also embed: cite the `docs/design-system.md` sections and
+components the spec reuses, and list any new pattern explicitly (`New pattern: <what> — <why nothing in
+the inventory fits>`).
