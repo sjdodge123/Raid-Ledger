@@ -67,8 +67,14 @@ test.describe('Events list', () => {
         const searchInput = desktopFilterBar.locator('input[aria-label="Search events"]');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state.
-        await searchInput.fill('xyznonexistent');
+        // Search for a nonsense term — should show empty state. The filter bar
+        // can remount its input while the page settles (ROK-1647 diag: the node
+        // changed identity in 6/8 runs, the lifted value survived); a fill() that
+        // lands mid-remount types into a detached node, so retry until it sticks.
+        await expect(async () => {
+            await searchInput.fill('xyznonexistent');
+            await expect(searchInput).toHaveValue('xyznonexistent', { timeout: 1_000 });
+        }).toPass({ timeout: 10_000 });
         // Wait for the event cards to disappear (filtered out)
         await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
 
