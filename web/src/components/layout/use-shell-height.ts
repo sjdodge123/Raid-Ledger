@@ -15,12 +15,22 @@ import { useEffect, useState } from 'react';
  *   (no `interactive-widget` in index.html), shrink only the visual viewport.
  *   While an editable element has focus and the layout width is unchanged, a
  *   shrink is the keyboard, so the floor holds. A width change (rotation) is a
- *   new viewport and is taken as-is.
+ *   new viewport and is taken as-is, as is every read until it settles.
+ *
+ * Scrolling past the end is NOT this floor's job: iPad Safari lets any page
+ * scroll to the bottom of its larger layout viewport, so no min-height can keep
+ * the footer on screen at rest AND leave nothing below it at the end of that
+ * scroll. `Footer.tsx` paints that run-out instead (`FOOTER_RUNOUT_SHADOW`).
  */
 
-type ShellFloor = { height: number; width: number };
+/**
+ * `settling` is true from a read that saw the layout width change (rotation)
+ * until the final settle read: through that window every read is taken as-is,
+ * so a field focused across a rotation cannot pin a mid-rotation height.
+ */
+type ShellFloor = { height: number; width: number; settling: boolean };
 
-const EMPTY: ShellFloor = { height: 0, width: 0 };
+const EMPTY: ShellFloor = { height: 0, width: 0, settling: false };
 
 const NON_TEXT_INPUTS = new Set([
     'button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit',
@@ -39,26 +49,62 @@ function isEditableFocused(): boolean {
     return el instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(el.type);
 }
 
-function nextShellFloor(prev: ShellFloor): ShellFloor {
-    const next = { height: readShellHeight(), width: document.documentElement.clientWidth };
-    const keyboardShrink = next.height < prev.height && next.width === prev.width && isEditableFocused();
+function nextShellFloor(prev: ShellFloor, final: boolean): ShellFloor {
+    const height = readShellHeight();
+    const width = document.documentElement.clientWidth;
+    const widthChanged = width !== prev.width;
+    const keyboardShrink = height < prev.height && !widthChanged && !prev.settling && isEditableFocused();
     if (keyboardShrink) return prev;
-    return next.height === prev.height && next.width === prev.width ? prev : next;
+    const settling = (widthChanged || prev.settling) && !final;
+    const same = height === prev.height && !widthChanged && settling === prev.settling;
+    return same ? prev : { height, width, settling };
 }
 
-/** The shell's min-height in CSS px, kept current on viewport resize. */
+/**
+ * Wait after a viewport event before the last re-read. iOS fires `resize` (and
+ * `orientationchange`) BEFORE a rotated viewport settles and nothing fires once
+ * it has, so a height read at event time can stick (ROK-1661 iPad plan: after a
+ * landscape→portrait turn the shell kept a floor ~80 px short of the screen).
+ */
+export const SHELL_SETTLE_MS = 150;
+
+type Listener = [EventTarget | null | undefined, string];
+
+function viewportListeners(): Listener[] {
+    return [
+        [window.visualViewport, 'resize'],
+        [window, 'resize'],
+        [window, 'orientationchange'],
+        [typeof screen === 'undefined' ? undefined : screen.orientation, 'change'],
+    ];
+}
+
+/**
+ * Calls `update(false)` on every viewport change and again one frame later,
+ * then `update(true)` SHELL_SETTLE_MS after the last change (and once on mount).
+ */
+function subscribeToViewport(update: (final: boolean) => void): () => void {
+    let frame = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cancelPending = () => { cancelAnimationFrame(frame); clearTimeout(timer); };
+    const onChange = () => {
+        update(false);
+        cancelPending();
+        frame = requestAnimationFrame(() => update(false));
+        timer = setTimeout(() => update(true), SHELL_SETTLE_MS);
+    };
+    const listeners = viewportListeners();
+    update(true);
+    for (const [target, type] of listeners) target?.addEventListener(type, onChange);
+    return () => {
+        cancelPending();
+        for (const [target, type] of listeners) target?.removeEventListener(type, onChange);
+    };
+}
+
+/** The shell's min-height in CSS px, kept current on viewport resize and rotation. */
 export function useShellHeight(): number {
-    const [floor, setFloor] = useState<ShellFloor>(() => nextShellFloor(EMPTY));
-    useEffect(() => {
-        const update = () => setFloor(nextShellFloor);
-        update();
-        const vv = window.visualViewport;
-        vv?.addEventListener('resize', update);
-        window.addEventListener('resize', update);
-        return () => {
-            vv?.removeEventListener('resize', update);
-            window.removeEventListener('resize', update);
-        };
-    }, []);
+    const [floor, setFloor] = useState<ShellFloor>(() => nextShellFloor(EMPTY, true));
+    useEffect(() => subscribeToViewport((final) => setFloor((prev) => nextShellFloor(prev, final))), []);
     return floor.height;
 }

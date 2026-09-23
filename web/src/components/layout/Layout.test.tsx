@@ -3,6 +3,7 @@ import { act, render } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Layout } from './Layout';
+import { SHELL_SETTLE_MS } from './use-shell-height';
 
 // Layout pulls in a large tree of chrome (header/footer/nav/banners/effects)
 // plus several hooks. None of that is relevant to this assertion, which is
@@ -151,4 +152,64 @@ describe('Regression: ROK-1661 — shell min-height follows the visible viewport
             expect(root.style.minHeight).toBe('800px');
         },
     );
+});
+
+/**
+ * ROK-1661 iPad plan 2026-09-23-1846-507b, steps 3 and 6: iOS fires `resize`
+ * and `orientationchange` BEFORE a rotated viewport settles, and nothing fires
+ * once it has. The shell read the height only at event time, so after a
+ * landscape→portrait turn it kept a floor ~80 px short of the portrait screen.
+ */
+describe('Regression: ROK-1661 — shell floor re-reads the viewport after a rotation settles', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+        if (originalVisualViewport) Object.defineProperty(window, 'visualViewport', originalVisualViewport);
+        else installVisualViewport(undefined);
+        delete (document.documentElement as { clientWidth?: number }).clientWidth;
+    });
+
+    function renderLandscape(children?: ReactNode) {
+        vi.useFakeTimers();
+        const vv = new FakeVisualViewport();
+        vv.height = 688;
+        installVisualViewport(vv);
+        setLayoutWidth(1180);
+        const view = renderLayout('/', children);
+        return { vv, view, root: view.container.firstElementChild as HTMLElement };
+    }
+
+    const settle = () => act(() => { vi.advanceTimersByTime(SHELL_SETTLE_MS + 50); });
+
+    it('landscape→portrait: resize fires mid-rotation, the floor still lands on the settled portrait height', () => {
+        const { vv, root } = renderLandscape();
+        setLayoutWidth(820);
+        resize(vv, 966);
+        vv.height = 1048;
+        settle();
+        expect(root.style.minHeight).toBe('1048px');
+    });
+
+    it('an orientationchange with no resize after it still moves the floor', () => {
+        const { vv, root } = renderLandscape();
+        setLayoutWidth(820);
+        vv.height = 1048;
+        act(() => { window.dispatchEvent(new Event('orientationchange')); });
+        settle();
+        expect(root.style.minHeight).toBe('1048px');
+    });
+
+    it('rotation with a field focused: a second resize before it settles is the new viewport, not the keyboard', () => {
+        const { vv, root, view } = renderLandscape(<input aria-label="Search games" />);
+        setLayoutWidth(820);
+        resize(vv, 1048);
+        act(() => { view.getByRole('textbox').focus(); });
+        setLayoutWidth(1180);
+        resize(vv, 1048);
+        resize(vv, 688);
+        expect(root.style.minHeight).toBe('688px');
+
+        settle();
+        resize(vv, 400);
+        expect(root.style.minHeight).toBe('688px');
+    });
 });
