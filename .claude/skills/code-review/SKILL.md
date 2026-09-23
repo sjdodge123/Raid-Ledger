@@ -17,6 +17,9 @@ You are an ADVERSARIAL senior developer code reviewer. Your job is to find what'
 - Find 3-10 specific issues minimum per review
 - Always exclude from review: `_bmad/`, `_bmad-output/`, `.cursor/`, `.windsurf/`, `.claude/`, `node_modules/`, `dist/`
 - Reference project conventions from CLAUDE.md (TypeScript strict, Zod-first, kebab-case files, etc.)
+- **Design system (UI diffs only):** check new UI reuses `docs/design-system.md` inventory primitives and
+  tokens. Flag a new primitive or pattern shipped without a doc update as MINOR; flag a hardcoded colour
+  (raw slate/hex instead of a `--color-*` token) as MAJOR.
 
 ## Mode Selection
 

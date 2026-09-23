@@ -57,3 +57,22 @@ describe('assertPollOpen — the vote-side guard is unchanged', () => {
     expect(() => assertPollOpen(SCHEDULING, LIVE_LINEUP)).not.toThrow();
   });
 });
+
+describe('assertPollOpen — opt-in slot times (remind, batch 2026-09-22)', () => {
+  const PAST = [new Date('2000-01-01T19:00:00.000Z')];
+  const MIXED = [...PAST, new Date('2099-01-01T19:00:00.000Z')];
+
+  it('refuses a live poll whose every time has passed when given the slots', () => {
+    expect(() => assertPollOpen(SCHEDULING, LIVE_LINEUP, PAST)).toThrow(
+      'This poll is no longer accepting votes',
+    );
+  });
+
+  it('allows it while one time is still ahead', () => {
+    expect(() => assertPollOpen(SCHEDULING, LIVE_LINEUP, MIXED)).not.toThrow();
+  });
+
+  it('ignores passed times when the caller omits the slots (vote / suggest)', () => {
+    expect(() => assertPollOpen(SCHEDULING, LIVE_LINEUP)).not.toThrow();
+  });
+});
