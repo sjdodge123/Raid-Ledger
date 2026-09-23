@@ -106,6 +106,8 @@ export function LfgGroupOverlays(props: LfgGroupOverlaysProps): JSX.Element {
                 onWithdraw={() => actions.withdraw(onClose)}
                 isWithdrawing={actions.isWithdrawing}
                 onClose={onClose}
+                spawnsNow={group.pressWouldSpawnNow === true}
+                spawnEmoji={group.spawnIndicatorEmoji}
             />
             <LfgParticipantsList isOpen={kind === 'participants'} members={group.members} onClose={onClose} />
         </>
