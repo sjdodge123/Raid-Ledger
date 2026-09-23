@@ -58,7 +58,7 @@ export function CopyableInput({ value, onCopied }: { value: string; onCopied: st
     return (
         <div className="relative cursor-pointer group" onClick={copyValue}>
             <input type="text" value={value} readOnly onKeyDown={handleKeyDown}
-                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground cursor-pointer select-all focus:outline-none group-hover:border-dim transition-all text-sm" />
+                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground cursor-pointer select-all focus:outline-none focus-visible:ring-2 focus-visible:ring-success/80 group-hover:border-dim transition-all text-sm" />
             <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted group-hover:text-foreground transition-colors">{CopyIcon}</div>
         </div>
     );

@@ -29,7 +29,7 @@ export function HeartedGamesModal({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={`Interested In (${total})`} maxWidth="max-w-2xl">
-      <ModalSearchInput value={search} onChange={setSearch} />
+      <ModalSearchInput label="Search hearted games" value={search} onChange={setSearch} />
       <ModalListBody isEmpty={filtered.length === 0}>
         {filtered.map((g) => <HeartedGameCard key={g.id} game={g} pricing={pricingMap.get(g.id)} />)}
       </ModalListBody>

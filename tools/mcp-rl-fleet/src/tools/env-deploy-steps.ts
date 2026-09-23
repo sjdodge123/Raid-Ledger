@@ -7,6 +7,7 @@
 import * as claim from './claim.js';
 import * as buildImage from './env-build-image.js';
 import * as envSpin from './env-spin.js';
+import { describeOperatorAdmin, type OperatorAdminMode } from './operator-admin.js';
 import * as envSync from './env-sync.js';
 import * as task from './task.js';
 import { runCloneCore } from './env-clone-prod.js';
@@ -32,6 +33,8 @@ export interface DeployChainResult {
    *  JSON and withheld again at every MCP read boundary (local-task.ts). */
   admin_password?: string | null;
   slot?: number | null;
+  /** ROK-1537 AC4: passed through from env-spin — who lands as admin. */
+  operator_admin?: OperatorAdminMode;
   expected_head?: string | null;
   synced_head?: string | null;
   error?: string;
@@ -238,6 +241,7 @@ export async function runDeployChain(
     slot_url: sp.slot_url ?? null,
     admin_email: sp.admin_email,
     admin_password: sp.admin_password ?? null,
+    operator_admin: sp.operator_admin,
     expected_head: expectedHead,
     synced_head: syncedHead,
   };
@@ -247,8 +251,9 @@ export async function runDeployChain(
   if (cloneFailed) {
     return { ...base, ok: false, failed_step: 'clone_prod', error: 'clone_prod_failed', message: `FAILED: clone_prod did not succeed (${cloneFailureDetail ?? 'unknown'}). Container up at ${sp.url} with synced settings but prod data NOT loaded.` };
   }
+  const operatorAdminNote = sp.operator_admin ? ` ${describeOperatorAdmin(sp.operator_admin)}` : '';
   const settingsSource = syncedSettings
     ? `${overlayApplied > 0 ? 'laptop sync + slot identity/bundle overlay' : 'laptop sync'}`
     : 'VM settings bundle overlay (laptop DB unavailable)';
-  return { ...base, ok: true, message: `Settings: ${settingsSource}. Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.` };
+  return { ...base, ok: true, message: `Settings: ${settingsSource}. Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
 }

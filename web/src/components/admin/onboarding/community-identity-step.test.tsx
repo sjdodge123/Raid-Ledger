@@ -76,6 +76,14 @@ describe('CommunityIdentityStep', () => {
             );
             expect(screen.getByRole('combobox')).toBeInTheDocument();
         });
+
+        it('gives the name input and timezone select accessible names (ROK-1645)', () => {
+            renderWithProviders(
+                <CommunityIdentityStep onNext={mockOnNext} onBack={mockOnBack} onSkip={mockOnSkip} />
+            );
+            expect(screen.getByRole('textbox', { name: 'Community name' })).toBeInTheDocument();
+            expect(screen.getByRole('combobox', { name: 'Default timezone' })).toBeInTheDocument();
+        });
     });
 
     describe('Input width (full-width on mobile, max-width on desktop)', () => {

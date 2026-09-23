@@ -1331,6 +1331,13 @@
       "when": 1789824152522,
       "tag": "0190_sticky_crusher_hogan",
       "breakpoints": true
+    },
+    {
+      "idx": 191,
+      "version": "7",
+      "when": 1790134827981,
+      "tag": "0191_restore_seed_owned_game_names",
+      "breakpoints": true
     }
   ]
 }

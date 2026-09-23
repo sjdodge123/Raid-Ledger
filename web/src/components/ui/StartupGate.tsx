@@ -21,7 +21,7 @@ function FadingOverlay({ onTransitionEnd }: { onTransitionEnd: () => void }) {
 function WaitingScreen({ isSlow, onRetry }: { isSlow: boolean; onRetry: () => void }) {
     return (
         <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-surface">
-            <h1 className="text-2xl font-bold text-heading mb-6">Raid Ledger</h1>
+            <h1 className="text-2xl font-bold text-foreground mb-6">Raid Ledger</h1>
             <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin mb-4" />
             <p className="text-sm text-muted">
                 {isSlow ? 'Taking longer than usual...' : 'Starting up...'}

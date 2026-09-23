@@ -95,6 +95,16 @@ describe('rl_fleet_health — wire shape', () => {
     expect(result.summary).toEqual(fleetWithFindings.summary);
   });
 
+  // ROK-1537 AC4: the VM-side operator_discord_id_unset warning reaches the agent.
+  it('passes config_warnings through untouched', async () => {
+    const warning = { kind: 'operator_discord_id_unset', value: 'RL_OPERATOR_DISCORD_ID', hint: 'first real Discord login is promoted' };
+    nextStdout = `${JSON.stringify({ ...CLEAN_FLEET, config_warnings: [warning], summary: { ...CLEAN_FLEET.summary, config_warnings: 1 } })}\nRL_STATUS:200`;
+    const { execute } = await import('../fleet-health.js');
+    const result = await execute({});
+    expect(result.config_warnings).toEqual([warning]);
+    expect(result.summary?.config_warnings).toBe(1);
+  });
+
   it('returns an error envelope on non-200 status', async () => {
     nextStdout = '<html>500</html>\nRL_STATUS:500';
     const { execute } = await import('../fleet-health.js');

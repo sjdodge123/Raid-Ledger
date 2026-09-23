@@ -25,7 +25,7 @@ export function StillWaitingPanel({
       data-testid="still-waiting-panel"
       className="mt-4 p-4 rounded-lg border border-sky-500/30 bg-sky-500/5"
     >
-      <h2 className="text-sm font-semibold text-primary mb-2">
+      <h2 className="text-sm font-semibold text-foreground mb-2">
         Still waiting on {voters.length}{' '}
         {voters.length === 1 ? 'voter' : 'voters'}
       </h2>
@@ -41,7 +41,7 @@ export function StillWaitingPanel({
         {voters.map((v) => (
           <li
             key={v.id}
-            className="px-2 py-1 rounded-md bg-sky-500/10 text-primary"
+            className="px-2 py-1 rounded-md bg-sky-500/10 text-foreground"
           >
             {v.displayName}
           </li>

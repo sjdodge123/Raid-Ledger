@@ -72,7 +72,7 @@ describe('SchedulingBetterTimeSheet layout (ROK-1580)', () => {
 
     it('gives the phone body a definite height and a column layout', () => {
         const classes = renderBody(false).className.split(/\s+/);
-        expect(classes).toContain('h-[calc(95dvh-200px)]');
+        expect(classes).toContain('h-[calc(var(--sheet-vh,1dvh)_*_95_-_200px)]');
         expect(classes).toContain('min-h-0');
         expect(classes).toContain('flex-col');
         // The module takes the slack; the suggest form keeps its own height.

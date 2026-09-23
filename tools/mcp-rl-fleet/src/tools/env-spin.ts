@@ -1,10 +1,11 @@
 // rl_env_spin — bring up a per-test env (allinone + sibling Postgres).
 import { runRl, parseJsonFromStdout } from '../exec.js';
 import { redactAdminPassword } from '../credentials.js';
+import type { OperatorAdminMode } from './operator-admin.js';
 
 export const TOOL_NAME = 'rl_env_spin';
 export const TOOL_DESCRIPTION =
-  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it points at the slot-stable hostname (https://slot-N.{RL_PUBLIC_DOMAIN}) which routes to the same env AND supports Discord OAuth (registered redirect URI). The per-slug `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN}) is kept in the response for backward compat but should NOT be sent to testers — Discord login won't work on it. Also returns: `internal_url` (LAN fallback http://{slug}.rl.lan) and `admin_email`. The admin password is NOT returned by default (A3-B P4): you get `admin_password_available: true|false` instead, so the credential does not enter your context as a side effect of deploying. You rarely need the value — rl_validate_ci({against_env_slug}) re-seeds and threads it into the runner itself, and testers log in via Discord OAuth. If you genuinely must POST {email, password} to {url}/api/auth/local yourself, re-call with `include_credentials: true`; this call is idempotent, so re-calling is cheap. `admin_password_available: false` means the bootstrap-admin exec failed — read `bootstrap_warnings`. Slug must match [a-z0-9-]+.";
+  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it points at the slot-stable hostname (https://slot-N.{RL_PUBLIC_DOMAIN}) which routes to the same env AND supports Discord OAuth (registered redirect URI). The per-slug `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN}) is kept in the response for backward compat but should NOT be sent to testers — Discord login won't work on it. Also returns: `internal_url` (LAN fallback http://{slug}.rl.lan) and `admin_email`. The admin password is NOT returned by default (A3-B P4): you get `admin_password_available: true|false` instead, so the credential does not enter your context as a side effect of deploying. You rarely need the value — rl_validate_ci({against_env_slug}) re-seeds and threads it into the runner itself, and testers log in via Discord OAuth. If you genuinely must POST {email, password} to {url}/api/auth/local yourself, re-call with `include_credentials: true`; this call is idempotent, so re-calling is cheap. `admin_password_available: false` means the bootstrap-admin exec failed — read `bootstrap_warnings`. `operator_admin` ('configured' | 'first-login' | 'none') says who lands as admin via Discord login — tell the operator before he signs in. Slug must match [a-z0-9-]+.";
 
 export interface EnvSpinResult {
   ok: boolean;
@@ -87,6 +88,16 @@ export interface EnvSpinResult {
    * topology changes (e.g. per-env callback URIs) can decouple the two.
    */
   slot_oauth_available?: boolean;
+  /**
+   * ROK-1537 AC4: which identity lands as admin on this env.
+   *   configured  — RL_OPERATOR_DISCORD_ID is set on the VM; that Discord id
+   *                 is admin from its first login.
+   *   first-login — no id configured; the first real Discord login is promoted.
+   *   none        — neither (a pre-ROK-1537 container reused by an idempotent
+   *                 re-spin) — destroy + fresh spin to pick the marker up.
+   * Absent when the VM's env-spin predates ROK-1537.
+   */
+  operator_admin?: OperatorAdminMode;
   error?: string;
   message?: string;
   /**

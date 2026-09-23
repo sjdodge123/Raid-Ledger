@@ -45,12 +45,20 @@ const stubPgRestore = (dir, tocEntries) => {
   return dir;
 };
 
-/** Runs the drill against `dumpFile`, returning the exit code + report path. */
-const runDrill = ({ dumpFile, pathPrefix }) => {
+/** Any folder with a drizzle journal satisfies the drill's arg check. */
+const CHECKOUT_MIGRATIONS = path.join(REPO_ROOT, 'api', 'src', 'drizzle', 'migrations');
+
+/**
+ * Runs the drill against `dumpFile`, returning the exit code + report path.
+ * `migrationsDir: null` omits the (required) `--migrations-dir` flag.
+ */
+const runDrill = ({ dumpFile, pathPrefix, migrationsDir = CHECKOUT_MIGRATIONS }) => {
   const reportPath = path.join(path.dirname(dumpFile), 'restore-drill-report.json');
   const env = { ...process.env };
   if (pathPrefix) env.PATH = `${pathPrefix}:${env.PATH}`;
-  const res = spawnSync('bash', [DRILL, '--dump-file', dumpFile, '--report', reportPath], {
+  const args = [DRILL, '--dump-file', dumpFile, '--report', reportPath];
+  if (migrationsDir !== null) args.push('--migrations-dir', migrationsDir);
+  const res = spawnSync('bash', args, {
     cwd: REPO_ROOT,
     env,
     encoding: 'utf8',
@@ -236,6 +244,34 @@ test('an infra failure after A1 still emits a failed report naming the reached t
     RestoreDrillReportSchema.safeParse(report).success,
     'the catch-all report must satisfy the contract too',
   );
+});
+
+/**
+ * D4: the journal check compares against the IMAGE's migrations, and this
+ * checkout is usually ahead of prod — a silent default would fail every run
+ * from main. The flag is required; omitting it, or pointing it at a folder
+ * with no drizzle journal, is a harness/arg error (exit 2, no report).
+ */
+test('the drill refuses to run without --migrations-dir (exit 2, usage error)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-drill-mdir-'));
+  const dump = makeCorruptDump(tmp, Buffer.from('never read'));
+
+  const res = runDrill({ dumpFile: dump, migrationsDir: null });
+
+  assert.equal(res.status, 2, `expected exit 2, got ${res.status} (stderr: ${res.stderr})`);
+  assert.match(res.stderr, /--migrations-dir is required/);
+  assert.match(res.stderr, /docker cp/, 'the usage error must say how to get the image migrations');
+  assert.ok(!fs.existsSync(res.reportPath), 'an arg error must not emit a report');
+});
+
+test('the drill refuses a --migrations-dir with no drizzle journal (exit 2)', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'rl-drill-mdir-bad-'));
+  const dump = makeCorruptDump(tmp, Buffer.from('never read'));
+
+  const res = runDrill({ dumpFile: dump, migrationsDir: tmp });
+
+  assert.equal(res.status, 2, `expected exit 2, got ${res.status} (stderr: ${res.stderr})`);
+  assert.match(res.stderr, /no meta\/_journal\.json/);
 });
 
 /** The drill is shell, so its syntax + lint gate is a test like any other. */

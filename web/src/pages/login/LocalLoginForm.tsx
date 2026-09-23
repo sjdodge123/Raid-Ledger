@@ -77,7 +77,7 @@ export function LocalLoginForm({ onSubmit, isLoading, error }: LocalLoginFormPro
             <PasswordField value={password} onChange={setPassword} />
             {error && (
                 <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <p className="text-sm text-red-400">{error}</p>
+                    <p role="alert" className="text-sm text-red-400">{error}</p>
                 </div>
             )}
             <SubmitButton isLoading={isLoading} />
