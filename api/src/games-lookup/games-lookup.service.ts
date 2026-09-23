@@ -10,6 +10,7 @@ import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 import { mapDbRowToDetail } from '../igdb/igdb.mappers';
 import type { ItadGame } from '../itad/itad.constants';
+import { keepSeedOwned } from './seed-owned-games.helpers';
 
 /**
  * ROK-1295 — resolve a free-text game name to a hydrated GameDetailDto.
@@ -174,9 +175,14 @@ export class GamesLookupService {
     id: number,
     hit: GameDetailDto,
   ): Promise<void> {
+    // ROK-1643: a seed-owned row keeps its curated name + slug.
     await tx
       .update(schema.games)
-      .set(buildIgdbRowValues(hit))
+      .set({
+        ...buildIgdbRowValues(hit),
+        name: keepSeedOwned(schema.games.name, hit.name),
+        slug: keepSeedOwned(schema.games.slug, hit.slug),
+      })
       .where(eq(schema.games.id, id));
   }
 
