@@ -30,8 +30,13 @@
  * the script is side-effect-free: it guards its auto-run behind
  * `require.main === module`.
  */
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import * as realSchema from '../drizzle/schema';
-import { bootstrapAdmin } from '../../scripts/bootstrap-admin';
+import {
+  bootstrapAdmin,
+  linkedAdminScope,
+} from '../../scripts/bootstrap-admin';
 
 jest.mock('bcrypt', () => ({
   hash: () => Promise.resolve('GENERATED_HASH'),
@@ -51,6 +56,8 @@ const dbState: {
 } = { linkedUserRows: [], existingCredRows: [] };
 
 const capturedInserts: InsertRecord[] = [];
+/** WHERE clauses of every `users` select, rendered to their bound params. */
+const capturedUserSelectParams: unknown[][] = [];
 
 function makeSelectChain(table: unknown) {
   const rows =
@@ -59,7 +66,12 @@ function makeSelectChain(table: unknown) {
       : dbState.existingCredRows;
   const chain = {
     from: () => chain,
-    where: () => chain,
+    where: (cond: SQL) => {
+      if (table === realSchema.users) {
+        capturedUserSelectParams.push(new PgDialect().sqlToQuery(cond).params);
+      }
+      return chain;
+    },
     limit: () => Promise.resolve(rows),
   };
   return chain;
@@ -125,6 +137,8 @@ function resetHarness() {
   dbState.linkedUserRows = [{ id: 42 }];
   dbState.existingCredRows = [{ userId: 42, passwordHash: 'SEEDED_HASH' }];
   capturedInserts.length = 0;
+  capturedUserSelectParams.length = 0;
+  delete process.env.FLEET_FIRST_DISCORD_LOGIN_ADMIN;
   delete process.env.RESET_PASSWORD;
   delete process.env.ADMIN_PASSWORD;
   delete process.env.DEMO_MODE;
@@ -230,5 +244,73 @@ describe('A3-B P6 — the promotion cannot fire outside a fleet env', () => {
     await bootstrapAdmin();
 
     expect(usersWriteSummary()).toBe('<none>');
+  });
+});
+
+/**
+ * ROK-1537 review MAJOR 1: with first-login admin on, the Discord-linked admin
+ * may be whoever reached the slot URL first. A re-seed (idempotent re-spin,
+ * `rl_validate_ci` against the env) must never bind admin@local — the identity
+ * fleet tests run as — to that account.
+ */
+describe('ROK-1537 — admin@local binds only to the configured fleet operator', () => {
+  beforeEach(resetHarness);
+  afterEach(() => jest.restoreAllMocks());
+
+  function credentialBinds(): string {
+    const binds = capturedInserts
+      .filter((record) => record.table === realSchema.localCredentials)
+      .map((record) => String(record.values.userId));
+    return binds.length > 0 ? binds.join(',') : '<none>';
+  }
+
+  it('first-login mode, no configured id → a Discord admin (id 42) is NOT bound on re-seed', async () => {
+    process.env.DEMO_MODE = 'true';
+    process.env.FLEET_FIRST_DISCORD_LOGIN_ADMIN = 'true';
+    process.env.RESET_PASSWORD = 'true';
+    process.env.ADMIN_PASSWORD = 'fixed-fleet-password';
+    dbState.existingCredRows = [{ userId: 7, passwordHash: 'SEEDED_HASH' }];
+
+    await bootstrapAdmin();
+
+    expect(credentialBinds()).toBe('<none>');
+  });
+
+  it('configured id → the linked-admin lookup is scoped to exactly that discord_id', async () => {
+    process.env.DEMO_MODE = 'true';
+    process.env.FLEET_FIRST_DISCORD_LOGIN_ADMIN = 'true';
+    process.env.FLEET_ADMIN_DISCORD_ID = OPERATOR_DISCORD_ID;
+
+    await bootstrapAdmin();
+
+    expect(capturedUserSelectParams).toEqual([
+      expect.arrayContaining([OPERATOR_DISCORD_ID]),
+    ]);
+  });
+
+  it.each([
+    ['prod (no DEMO_MODE)', {}, 'any'],
+    ['demo, no fleet vars', { DEMO_MODE: 'true' }, 'any'],
+    [
+      'fleet first-login, no id',
+      { DEMO_MODE: 'true', FLEET_FIRST_DISCORD_LOGIN_ADMIN: 'true' },
+      'none',
+    ],
+    [
+      'fleet, configured id',
+      { DEMO_MODE: 'true', FLEET_ADMIN_DISCORD_ID: OPERATOR_DISCORD_ID },
+      'only',
+    ],
+    [
+      'fleet first-login, junk id',
+      {
+        DEMO_MODE: 'true',
+        FLEET_FIRST_DISCORD_LOGIN_ADMIN: 'true',
+        FLEET_ADMIN_DISCORD_ID: 'local:admin@local',
+      },
+      'none',
+    ],
+  ])('linkedAdminScope: %s → %s', (_label, env, expected) => {
+    expect(linkedAdminScope(env).kind).toBe(expected);
   });
 });
