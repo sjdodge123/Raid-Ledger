@@ -28,6 +28,10 @@ vi.mock('../../lib/toast', () => ({
     },
 }));
 
+/** Controls by role + accessible name — the Switch and the Field/Select primitives (ROK-1646). */
+const toggle = () => screen.getByRole('switch', { name: 'Enable weekly digest' });
+const picker = (name: string) => screen.getByRole('combobox', { name });
+
 function resetState() {
     vi.clearAllMocks();
     state.status = { data: { ...SAVED }, isError: false };
@@ -40,27 +44,44 @@ describe('WeeklyDigestSection (ROK-1435 L5) — render and saves', () => {
 
     it('renders the stored settings and names the community timezone', () => {
         render(<WeeklyDigestSection />);
-        expect(screen.getByLabelText('Enable weekly digest')).toBeChecked();
-        expect(screen.getByLabelText('Digest day')).toHaveValue('1');
-        expect(screen.getByLabelText('Digest hour')).toHaveValue('9');
-        expect(screen.getByLabelText('Channel')).toHaveValue('');
+        expect(toggle()).toBeChecked();
+        expect(picker('Digest day')).toHaveValue('1');
+        expect(picker('Digest hour')).toHaveValue('9');
+        expect(picker('Channel')).toHaveValue('');
         expect(screen.getByTestId('weekly-digest-timezone')).toHaveTextContent('America/Chicago');
+    });
+
+    it('keeps the visible Day / Hour labels and wires the channel hint as its description', () => {
+        render(<WeeklyDigestSection />);
+        expect(screen.getByText('Day', { selector: 'label' })).toBeInTheDocument();
+        expect(screen.getByText('Hour', { selector: 'label' })).toBeInTheDocument();
+        expect(picker('Channel')).toHaveAccessibleDescription(
+            'Falls back to the default notification channel when none is picked.');
+        expect(screen.getByRole('option', { name: 'Default notification channel' })).toBeEnabled();
+        expect(screen.getByRole('option', { name: '#general' })).toBeInTheDocument();
+    });
+
+    it('the switch reports its state through aria-checked', () => {
+        state.status.data = { ...SAVED, enabled: false };
+        render(<WeeklyDigestSection />);
+        expect(toggle()).toHaveAttribute('aria-checked', 'false');
+        expect(toggle()).not.toBeChecked();
     });
 
     it('toggling off PUTs the full settings object with enabled=false and toasts', async () => {
         render(<WeeklyDigestSection />);
-        fireEvent.click(screen.getByLabelText('Enable weekly digest'));
+        fireEvent.click(toggle());
         expect(state.update.mutateAsync).toHaveBeenCalledWith({ ...BASE, enabled: false });
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Weekly digest settings saved'));
     });
 
     it('saves the picked day, hour and channel', async () => {
         render(<WeeklyDigestSection />);
-        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
+        fireEvent.change(picker('Digest day'), { target: { value: '5' } });
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
-        fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '18' } });
+        fireEvent.change(picker('Digest hour'), { target: { value: '18' } });
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(2));
-        fireEvent.change(screen.getByLabelText('Channel'), { target: { value: 'c2' } });
+        fireEvent.change(picker('Channel'), { target: { value: 'c2' } });
         expect(state.update.mutateAsync).toHaveBeenNthCalledWith(1, { ...BASE, day: 5 });
         expect(state.update.mutateAsync).toHaveBeenNthCalledWith(2, { ...BASE, hour: 18 });
         expect(state.update.mutateAsync).toHaveBeenNthCalledWith(3, { ...BASE, channelId: 'c2' });
@@ -78,9 +99,9 @@ describe('WeeklyDigestSection (ROK-1435 L5) — saves run one at a time (Codex P
             .mockImplementationOnce(() => first)
             .mockImplementation(() => Promise.resolve(SAVED));
         render(<WeeklyDigestSection />);
-        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
-        fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '18' } });
-        fireEvent.change(screen.getByLabelText('Channel'), { target: { value: 'c2' } });
+        fireEvent.change(picker('Digest day'), { target: { value: '5' } });
+        fireEvent.change(picker('Digest hour'), { target: { value: '18' } });
+        fireEvent.change(picker('Channel'), { target: { value: 'c2' } });
         expect(state.update.mutateAsync, 'no second PUT while the first is in flight').toHaveBeenCalledTimes(1);
         resolveFirst({ ...SAVED, day: 5 });
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(2));
@@ -96,8 +117,8 @@ describe('WeeklyDigestSection (ROK-1435 L5) — saves run one at a time (Codex P
             .mockImplementationOnce(() => { order.push('send day'); return new Promise((_, rej) => { rejectFirst = rej; }); })
             .mockImplementation(() => { order.push('send hour'); return Promise.resolve(SAVED); });
         render(<WeeklyDigestSection />);
-        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
-        fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '18' } });
+        fireEvent.change(picker('Digest day'), { target: { value: '5' } });
+        fireEvent.change(picker('Digest hour'), { target: { value: '18' } });
         order.push('day settles');
         rejectFirst(new Error('boom'));
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
@@ -112,9 +133,9 @@ describe('WeeklyDigestSection (ROK-1435 L5) — saves run one at a time (Codex P
             .mockImplementationOnce(() => new Promise((_, rej) => { rejectFirst = rej; }))
             .mockImplementation(() => Promise.resolve(SAVED));
         render(<WeeklyDigestSection />);
-        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
-        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '3' } });
-        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
+        fireEvent.change(picker('Digest day'), { target: { value: '5' } });
+        fireEvent.change(picker('Digest day'), { target: { value: '3' } });
+        fireEvent.change(picker('Digest day'), { target: { value: '5' } });
         rejectFirst(new Error('boom'));
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
         expect(state.update.mutateAsync, 'the failed day=5 save must be re-sent, not treated as already saved')
@@ -130,7 +151,7 @@ describe('WeeklyDigestSection (ROK-1435 L5) — channel', () => {
     it('picking the default-channel option clears the dedicated channel (null)', () => {
         state.status.data = { ...SAVED, channelId: 'c1' };
         render(<WeeklyDigestSection />);
-        fireEvent.change(screen.getByLabelText('Channel'), { target: { value: '' } });
+        fireEvent.change(picker('Channel'), { target: { value: '' } });
         expect(state.update.mutateAsync).toHaveBeenCalledWith({ ...BASE, channelId: null });
     });
 
@@ -142,24 +163,24 @@ describe('WeeklyDigestSection (ROK-1435 L5) — locks and errors', () => {
     it('disables day, hour and channel while the digest is off, but not the toggle', () => {
         state.status.data = { ...SAVED, enabled: false };
         render(<WeeklyDigestSection />);
-        expect(screen.getByLabelText('Enable weekly digest')).toBeEnabled();
-        expect(screen.getByLabelText('Digest day')).toBeDisabled();
-        expect(screen.getByLabelText('Digest hour')).toBeDisabled();
-        expect(screen.getByLabelText('Channel')).toBeDisabled();
+        expect(toggle()).toBeEnabled();
+        expect(picker('Digest day')).toBeDisabled();
+        expect(picker('Digest hour')).toBeDisabled();
+        expect(picker('Channel')).toBeDisabled();
     });
 
     it('locks every control while a save is pending', () => {
         state.update.isPending = true;
         render(<WeeklyDigestSection />);
-        expect(screen.getByLabelText('Enable weekly digest')).toBeDisabled();
-        expect(screen.getByLabelText('Digest day')).toBeDisabled();
-        expect(screen.getByLabelText('Channel')).toBeDisabled();
+        expect(toggle()).toBeDisabled();
+        expect(picker('Digest day')).toBeDisabled();
+        expect(picker('Channel')).toBeDisabled();
     });
 
     it('toasts an error when the save fails', async () => {
         state.update.mutateAsync = vi.fn(() => Promise.reject(new Error('boom')));
         render(<WeeklyDigestSection />);
-        fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '3' } });
+        fireEvent.change(picker('Digest hour'), { target: { value: '3' } });
         await waitFor(() => expect(toastError).toHaveBeenCalledWith('Failed to update weekly digest settings'));
         expect(toastSuccess).not.toHaveBeenCalled();
     });
@@ -168,7 +189,7 @@ describe('WeeklyDigestSection (ROK-1435 L5) — locks and errors', () => {
         state.status = { data: undefined, isError: true };
         render(<WeeklyDigestSection />);
         expect(screen.getByRole('alert')).toHaveTextContent("Couldn't load the weekly digest settings");
-        expect(screen.queryByLabelText('Digest day')).toBeNull();
-        expect(screen.getByLabelText('Enable weekly digest')).toBeDisabled();
+        expect(screen.queryByRole('combobox', { name: 'Digest day' })).toBeNull();
+        expect(toggle()).toBeDisabled();
     });
 });

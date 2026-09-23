@@ -7,20 +7,14 @@
 import type { WeeklyDigestSettings } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
 import { ChannelSelector } from '../../components/admin/channel-selector';
+import { Field } from '../../components/ui/field';
+import { Select } from '../../components/ui/select';
+import { Switch } from '../../components/ui/switch';
 import { useWeeklyDigestSettings } from '../../hooks/admin/use-weekly-digest-settings';
 import { useSerializedSave } from './use-serialized-save';
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
-const SELECT_CLASS =
-    'w-full min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground ' +
-    'focus:outline-none focus:ring-2 focus:ring-success/50 disabled:opacity-50';
-// TODO(ROK-1612 Switch): swap this hand-rolled track for the shared
-// `components/ui/switch.tsx` once ROK-1612 lands. Token classes only, so every
-// theme repaints it (success fill, surface knob).
-const TOGGLE_TRACK =
-    "w-11 h-6 bg-dim rounded-full peer peer-checked:bg-success peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-success/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-surface after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full";
-
 const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
 /**
@@ -51,11 +45,7 @@ function Header({ checked, disabled, onToggle }: { checked: boolean; disabled: b
                     Once a week the bot posts a recap: what the community played, events run, deals and open LFG groups.
                 </p>
             </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" aria-label="Enable weekly digest" checked={checked}
-                    onChange={(e) => onToggle(e.target.checked)} disabled={disabled} className="sr-only peer" />
-                <div className={TOGGLE_TRACK} />
-            </label>
+            <Switch label="Enable weekly digest" checked={checked} onChange={onToggle} disabled={disabled} />
         </div>
     );
 }
@@ -67,18 +57,18 @@ function SlotPicker({ day, hour, timezone, disabled, onSave }: {
     return (
         <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <label className="block text-sm font-medium text-secondary">Day
-                    <select aria-label="Digest day" value={day} disabled={disabled} className={`${SELECT_CLASS} mt-1.5`}
+                <Field label="Day">
+                    <Select aria-label="Digest day" value={day} disabled={disabled}
                         onChange={(e) => onSave({ day: Number(e.target.value) as WeeklyDigestSettings['day'] })}>
                         {DAYS.map((name, i) => <option key={name} value={i}>{name}</option>)}
-                    </select>
-                </label>
-                <label className="block text-sm font-medium text-secondary">Hour
-                    <select aria-label="Digest hour" value={hour} disabled={disabled} className={`${SELECT_CLASS} mt-1.5`}
+                    </Select>
+                </Field>
+                <Field label="Hour">
+                    <Select aria-label="Digest hour" value={hour} disabled={disabled}
                         onChange={(e) => onSave({ hour: Number(e.target.value) })}>
                         {HOURS.map((h) => <option key={h} value={h}>{pad(h)}</option>)}
-                    </select>
-                </label>
+                    </Select>
+                </Field>
             </div>
             <p className="text-xs text-secondary mt-1.5" data-testid="weekly-digest-timezone">
                 Times are in the community timezone ({timezone}).
