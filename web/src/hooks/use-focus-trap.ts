@@ -41,6 +41,20 @@ function handleTabTrap(e: KeyboardEvent, container: HTMLElement): void {
     }
 }
 
+/**
+ * Move focus into the container on activation — unless it is already inside
+ * (an autoFocus input, or someone who typed within the first frame): moving
+ * it would blur that field, and a Combobox closes its popup on blur (ROK-1647).
+ */
+function focusInitial(container: HTMLElement, initialFocusRef?: React.RefObject<HTMLElement | null>): void {
+    if (container.contains(document.activeElement)) return;
+    if (initialFocusRef?.current) {
+        initialFocusRef.current.focus();
+        return;
+    }
+    getFocusableElements(container)[0]?.focus();
+}
+
 export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
     active: boolean,
     initialFocusRef?: React.RefObject<HTMLElement | null>,
@@ -59,16 +73,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
         document.addEventListener('keydown', handleKeyDown);
 
         const timer = requestAnimationFrame(() => {
-            if (!containerRef.current) return;
-            // Focus already inside (an autoFocus input, or someone who typed
-            // within the first frame): moving it would blur that field — and a
-            // Combobox closes its popup on blur (ROK-1647).
-            if (containerRef.current.contains(document.activeElement)) return;
-            if (initialFocusRef?.current) {
-                initialFocusRef.current.focus();
-                return;
-            }
-            getFocusableElements(containerRef.current)[0]?.focus();
+            if (containerRef.current) focusInitial(containerRef.current, initialFocusRef);
         });
 
         return () => {
