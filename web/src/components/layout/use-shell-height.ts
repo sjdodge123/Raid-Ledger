@@ -15,7 +15,10 @@ import { useEffect, useState } from 'react';
  *   (no `interactive-widget` in index.html), shrink only the visual viewport.
  *   While an editable element has focus and the layout width is unchanged, a
  *   shrink is the keyboard, so the floor holds. A width change (rotation) is a
- *   new viewport and is taken as-is, as is every read until it settles.
+ *   new viewport and is taken as-is, as is every read until it settles, except
+ *   that with an editable focused it never drops below the last height read at
+ *   that width with nothing focused: a turn made with the keyboard up must not
+ *   floor on the keyboard-shrunk height.
  *
  * Scrolling past the end is NOT this floor's job: iPad Safari lets any page
  * scroll to the bottom of its larger layout viewport, so no min-height can keep
@@ -25,12 +28,19 @@ import { useEffect, useState } from 'react';
 
 /**
  * `settling` is true from a read that saw the layout width change (rotation)
- * until the final settle read: through that window every read is taken as-is,
- * so a field focused across a rotation cannot pin a mid-rotation height.
+ * until the final settle read: through that window every read is taken as-is
+ * (floored by `restHeights` while editing), so a field focused across a
+ * rotation cannot pin a mid-rotation height. `restHeights` is the last height
+ * read at each layout width with no editable focused.
  */
-type ShellFloor = { height: number; width: number; settling: boolean };
+type ShellFloor = {
+    height: number;
+    width: number;
+    settling: boolean;
+    restHeights: Readonly<Record<number, number>>;
+};
 
-const EMPTY: ShellFloor = { height: 0, width: 0, settling: false };
+const EMPTY: ShellFloor = { height: 0, width: 0, settling: false, restHeights: {} };
 
 const NON_TEXT_INPUTS = new Set([
     'button', 'checkbox', 'color', 'file', 'hidden', 'image', 'radio', 'range', 'reset', 'submit',
@@ -49,15 +59,22 @@ function isEditableFocused(): boolean {
     return el instanceof HTMLInputElement && !NON_TEXT_INPUTS.has(el.type);
 }
 
+function withRestHeight(prev: ShellFloor, width: number, height: number): ShellFloor['restHeights'] {
+    return prev.restHeights[width] === height ? prev.restHeights : { ...prev.restHeights, [width]: height };
+}
+
 function nextShellFloor(prev: ShellFloor, final: boolean): ShellFloor {
-    const height = readShellHeight();
+    const read = readShellHeight();
     const width = document.documentElement.clientWidth;
-    const widthChanged = width !== prev.width;
-    const keyboardShrink = height < prev.height && !widthChanged && !prev.settling && isEditableFocused();
-    if (keyboardShrink) return prev;
-    const settling = (widthChanged || prev.settling) && !final;
-    const same = height === prev.height && !widthChanged && settling === prev.settling;
-    return same ? prev : { height, width, settling };
+    const editing = isEditableFocused();
+    const rotating = width !== prev.width || prev.settling;
+    if (editing && !rotating && read < prev.height) return prev; // the keyboard
+    const height = editing && rotating ? Math.max(read, prev.restHeights[width] ?? 0) : read;
+    const restHeights = editing ? prev.restHeights : withRestHeight(prev, width, read);
+    const settling = rotating && !final;
+    const same = height === prev.height && width === prev.width && settling === prev.settling
+        && restHeights === prev.restHeights;
+    return same ? prev : { height, width, settling, restHeights };
 }
 
 /**
