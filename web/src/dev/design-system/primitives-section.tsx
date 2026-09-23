@@ -107,7 +107,7 @@ function InputStates(): JSX.Element {
                     <span className="font-medium">Co-op for our group size</span>
                 </label>
             </StateFrame>
-            <StateFrame label="ModalSearchInput" note="Third search-input geometry in the codebase — see docs/design-system.md §6.4.">
+            <StateFrame label="ModalSearchInput" note="Delegates to SearchInput (ROK-1647) — new code uses SearchInput directly.">
                 <ModalSearchInput label="Search games" value="" onChange={() => undefined} />
             </StateFrame>
         </>
