@@ -351,12 +351,20 @@ const embedChromePerState: SmokeTest = {
       assertFooterIs(posted, community);
       await cancelEvent(ctx.api, ev.id);
       await awaitProcessing(ctx.api);
+      // ROK-1620: scope the probe to THIS event's card. CI runs with an empty
+      // channel pool, so every card shares one channel — and a prior run's
+      // `■ POLL CANCELLED` scheduling-poll card (chrome `done`, slate) also
+      // contains "CANCELLED". The unscoped probe matched that ghost and
+      // asserted ITS colour: `Expected #ef4444, got #64748b` on every main
+      // run since the poll card grew terminal states (#1246).
+      const isThisCancelledCard = (e: (typeof msg.embeds)[number]): boolean =>
+        !!e.title?.includes(ev.title) && !!e.author?.includes('\u2715 CANCELLED');
       const cancelled = await waitForEmbedUpdate(
         ch.channelId,
-        (m) => m.embeds.some((e) => !!e.author?.includes('CANCELLED')),
+        (m) => m.embeds.some(isThisCancelledCard),
         ctx.config.timeoutMs,
       );
-      const card = cancelled.embeds.find((e) => e.author?.includes('CANCELLED'))!;
+      const card = cancelled.embeds.find(isThisCancelledCard)!;
       assertEmbedColor(card, CANCELLED_RED);
       assertAuthorMatches(card, /\u2715 CANCELLED/);
       assertFooterIs(card, community);

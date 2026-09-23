@@ -50,7 +50,7 @@ export function SteamLibraryModal({
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={`Steam Library (${total})`} maxWidth="max-w-2xl">
-      <ModalSearchInput value={search} onChange={setSearch} />
+      <ModalSearchInput label="Search Steam library" value={search} onChange={setSearch} />
       <ModalListBody isEmpty={filtered.length === 0}>
         {filtered.map((e) => <SteamLibraryModalItem key={e.gameId} entry={e} pricing={pricingMap.get(e.gameId)} />)}
       </ModalListBody>

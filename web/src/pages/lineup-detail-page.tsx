@@ -64,7 +64,7 @@ function LineupInviteesSection({
       }`}
     >
       <div className="flex items-center justify-between mb-1">
-        <h2 className="text-sm font-semibold text-primary">
+        <h2 className="text-sm font-semibold text-foreground">
           {isPrivate ? 'Invitees' : 'Invited members'} ({invitees.length})
         </h2>
         {canManage && (

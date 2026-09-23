@@ -30,7 +30,7 @@ function ProgressOverlay({ uploadProgress }: { uploadProgress: number }) {
                 <circle cx="40" cy="40" r="36" fill="rgba(0,0,0,0.5)" stroke="none" />
                 <circle cx="40" cy="40" r="36" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="round"
                     strokeDasharray={`${circumference}`} strokeDashoffset={`${circumference * (1 - uploadProgress / 100)}`}
-                    className="text-accent transition-all duration-200" />
+                    className="text-success transition-all duration-200" />
             </svg>
             <span className="absolute text-xs font-bold text-white">{uploadProgress}%</span>
         </div>
@@ -100,7 +100,7 @@ export function AvatarUploadZone({ onFileSelected, isUploading, uploadProgress, 
     return (
         <div className="space-y-3">
             <label className="text-sm font-medium text-muted">Upload Custom Avatar</label>
-            <div className={`relative rounded-xl border-2 border-dashed transition-colors p-4 flex flex-col items-center gap-3 cursor-pointer ${dragOver ? 'border-accent bg-accent/5' : 'border-edge hover:border-muted'}`}
+            <div className={`relative rounded-xl border-2 border-dashed transition-colors p-4 flex flex-col items-center gap-3 cursor-pointer ${dragOver ? 'border-success bg-success/5' : 'border-edge hover:border-muted'}`}
                 onClick={() => inputRef.current?.click()} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
                 <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={handleChange} />
                 <AvatarPreview displayUrl={displayUrl} isUploading={isUploading} uploadProgress={uploadProgress} />

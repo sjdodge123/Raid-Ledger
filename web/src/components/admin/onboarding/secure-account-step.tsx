@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { useOnboarding } from '../../../hooks/use-onboarding';
 import { useDiscordLink } from '../../../hooks/use-discord-link';
@@ -78,10 +78,11 @@ function StrengthBar({ strength }: { strength: { score: number; label: string; c
 function PasswordInput({ label, type, value, onChange, placeholder, borderClass }: {
     label: string; type: string; value: string; onChange: (v: string) => void; placeholder: string; borderClass?: string;
 }) {
+    const id = useId();
     return (
         <div>
-            <label className="block text-xs font-medium text-muted mb-1">{label}</label>
-            <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+            <label htmlFor={id} className="block text-xs font-medium text-muted mb-1">{label}</label>
+            <input id={id} type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
                 className={`w-full sm:max-w-md px-4 py-2.5 min-h-[44px] bg-surface/50 ${borderClass ?? 'border border-edge'} rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm`} />
         </div>
     );

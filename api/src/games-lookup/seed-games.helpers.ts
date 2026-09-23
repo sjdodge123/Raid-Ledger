@@ -69,9 +69,10 @@ export async function upsertSeedGame(
       .where(eq(games.slug, game.slug))
       .limit(1);
     if (bySlug) {
+      // ROK-1643: the seed owns this row's name — re-assert it every boot.
       await tx
         .update(games)
-        .set(buildSeedGameUpdateSet(game))
+        .set({ ...buildSeedGameUpdateSet(game), name: game.name })
         .where(eq(games.id, bySlug.id));
       return { id: bySlug.id, action: 'updated' };
     }

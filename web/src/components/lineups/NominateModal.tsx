@@ -42,6 +42,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
     return (
         <input
             type="text"
+            aria-label="Search games"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Search by name or paste a Steam store URL"
@@ -121,6 +122,7 @@ function PreviewCard({ game, note, onNoteChange, onSubmit, onBack, isPending }: 
                 <div className="flex-1 min-w-0">
                     <h3 className="text-base font-semibold text-foreground mb-2">{game.name}</h3>
                     <textarea
+                        aria-label={`Nomination note for ${game.name}`}
                         value={note}
                         onChange={(e) => onNoteChange(e.target.value)}
                         placeholder="Why this game? (optional)"
