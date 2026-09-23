@@ -20,7 +20,7 @@ export interface DiscordTextProps {
 
 /** Anchor styling + the hardening every outbound link carries. */
 const LINK_CLASS =
-    'text-foreground underline underline-offset-2 hover:no-underline';
+    'text-success underline underline-offset-2 hover:no-underline';
 
 /** A resolved mention — always a chip of text, never a link (D8). */
 function renderMention(token: Token, key: number): JSX.Element {
