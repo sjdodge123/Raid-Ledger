@@ -476,6 +476,58 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
       resolveLfgCommandUrgency(testApp.db, game.id, 'week'),
     ).resolves.toEqual({ urgency: 'week' });
   });
+
+  // Review MAJOR, Lead ruling option A. The spawn converted both hands, so no
+  // live group remains while the session plays. MUTATION: drop the
+  // `findOpenLfgNowEventId` branch from `resolveLfgCommandUrgency` and this
+  // fails on `toEqual` — received `{ urgency: 'tonight' }`.
+  it('raises NOW, on the default bucket, while a spawned session is playing', async () => {
+    const { game } = await spawnPair('Helldivers');
+    const [c] = await members('gamma');
+    const request = await resolveLfgCommandUrgency(testApp.db, game.id, null);
+    expect(request).toEqual({ urgency: 'now', ttlMinutes: 30 });
+    const res = await postIntent(c.token, game.id, request).expect(201);
+    expect(res.body).toMatchObject({ urgency: 'now', ttlMinutes: 30 });
+  });
+
+  // The caller's OWN lone hand is the open group: a re-run re-asserts it.
+  it('counts the caller own lone now hand, and re-running keeps it now', async () => {
+    const [a] = await members('alpha');
+    const game = await createGame(testApp, 'PEAK');
+    await postNow(a.token, game.id).expect(201);
+    const request = await resolveLfgCommandUrgency(testApp.db, game.id, null);
+    expect(request).toEqual({ urgency: 'now', ttlMinutes: 60 });
+    const res = await postIntent(a.token, game.id, request);
+    expect(res.body).toMatchObject({ urgency: 'now', ttlMinutes: 60 });
+  });
+
+  // MUTATION: drop `eligibleUser()` from `liveIntent` and both fail with
+  // received `{ urgency: 'week' }` where tonight was expected.
+  it.each(['bannedAt', 'deactivatedAt'] as const)(
+    'ignores a hand whose holder has %s set',
+    async (column) => {
+      const [a] = await members('alpha');
+      const game = await createGame(testApp, 'Valheim');
+      await postWeek(a.token, game.id).expect(201);
+      await testApp.db
+        .update(schema.users)
+        .set({ [column]: new Date() })
+        .where(eq(schema.users.id, a.userId));
+      await expect(
+        resolveLfgCommandUrgency(testApp.db, game.id, null),
+      ).resolves.toEqual({ urgency: 'tonight' });
+    },
+  );
+
+  it('a mixed now + tonight group resolves to now', async () => {
+    const [a, b] = await members('alpha', 'beta');
+    const game = await createGame(testApp, 'PEAK');
+    await postIntent(a.token, game.id, { urgency: 'tonight' }).expect(201);
+    await postNow(b.token, game.id).expect(201);
+    await expect(
+      resolveLfgCommandUrgency(testApp.db, game.id, null),
+    ).resolves.toEqual({ urgency: 'now', ttlMinutes: 60 });
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
