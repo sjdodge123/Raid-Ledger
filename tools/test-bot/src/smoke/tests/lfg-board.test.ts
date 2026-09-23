@@ -76,6 +76,7 @@ import {
   enableComposer,
 } from '../lfg-composer-pin.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
+import { pickBoardIntro } from '../lfg-board-intro-pick.js';
 import { assertThreadMembersFollowGroup } from '../lfg-board-thread-members-phase.js';
 import {
   assertSameStarter,
@@ -236,11 +237,12 @@ async function enableBoard(run: Run): Promise<void> {
   // which is what stops it satisfying T24's negative assertion.
   await pollForThread(
     run,
-    // Pinned, not title alone: the shared CI forum holds one same-titled intro
-    // per bot, so a title match passes whether or not THIS env seeded one.
-    (t) => t.pinned && t.name === INTRO_TITLE,
+    // Pinned AND this env's bot's post, not title alone: the shared CI forum
+    // holds one same-titled intro per bot (one of them pinned), so anything
+    // less passes whether or not THIS env seeded one.
+    (t) => pickBoardIntro([t], INTRO_TITLE) !== null,
     `AC16 step 1: enabling the board must seed a PINNED intro post titled ` +
-      `"${INTRO_TITLE}" in forum ${run.forumChannelId}, and none appeared`,
+      `"${INTRO_TITLE}", owned by this env's bot, in forum ${run.forumChannelId}, and none appeared`,
     BOARD_READY_MS,
   );
   run.preexistingThreads = new Set(

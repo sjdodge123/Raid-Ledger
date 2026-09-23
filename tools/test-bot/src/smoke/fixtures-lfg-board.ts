@@ -38,6 +38,8 @@ export interface ForumThreadSnapshot {
   archived: boolean;
   /** Pinned to the top of the forum — Discord allows one per forum. */
   pinned: boolean;
+  /** The post's creator — the bot that seeded it. Null when Discord omits it. */
+  ownerId: string | null;
   /** Applied tag NAMES (discord.js exposes ids; resolved via the parent). */
   appliedTagNames: string[];
   /** The post body. Null when it has been deleted out from under the thread. */
@@ -163,6 +165,7 @@ async function snapshot(
     name: thread.name,
     archived: thread.archived === true,
     pinned: thread.flags.has(ChannelFlags.Pinned),
+    ownerId: thread.ownerId ?? null,
     appliedTagNames: tagNamesFor(forum, thread),
     starterMessage,
   };

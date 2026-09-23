@@ -29,7 +29,14 @@ function test(name: string, fn: () => void): void {
 }
 
 const TITLE = 'How this board works';
-const intro = (id: string, pinned = false) => ({ id, name: TITLE, pinned });
+const THIS_BOT = '1400000000000000001';
+const OTHER_BOT = '1400000000000000002';
+const intro = (id: string, pinned = false, ownerId: string | null = THIS_BOT) => ({
+  id,
+  name: TITLE,
+  pinned,
+  ownerId,
+});
 
 const SHARED_FORUM = [
   intro('1551157129061339177'),
@@ -52,8 +59,32 @@ test('no pinned intro → null, so the poll keeps waiting', () => {
 });
 
 test('a pinned post with another title is not the intro', () => {
-  const posts = [{ id: '9', name: 'Raid tonight', pinned: true }, intro('1')];
+  const posts = [
+    { id: '9', name: 'Raid tonight', pinned: true, ownerId: THIS_BOT },
+    intro('1'),
+  ];
   assert.equal(pickBoardIntro(posts, TITLE), null);
+});
+
+// Codex P2 — the shared forum's pinned intro can be ANOTHER bot's, left there
+// before this env seeded its own; picking it would false-pass or false-fail.
+test("another bot's pinned intro is not this env's intro", () => {
+  const posts = [intro('7', false), intro('8', true, OTHER_BOT)];
+  assert.equal(
+    pickBoardIntro(posts, TITLE, THIS_BOT),
+    null,
+    "a pinned intro owned by another bot must not be picked",
+  );
+});
+
+test("this env's bot's pinned intro is picked when a bot id is set", () => {
+  const posts = [intro('8', true, OTHER_BOT), intro('9', true, THIS_BOT)];
+  assert.equal(pickBoardIntro(posts, TITLE, THIS_BOT)?.id, '9');
+});
+
+test('no bot id → ownership unchecked (fail-open, like bot-author)', () => {
+  const posts = [intro('8', true, OTHER_BOT)];
+  assert.equal(pickBoardIntro(posts, TITLE, null)?.id, '8');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
