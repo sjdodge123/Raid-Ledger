@@ -76,3 +76,21 @@ export function useLfgBoardSettings(): LfgBoardSettingsHook {
 
     return { status, update, updateComposer };
 }
+
+/**
+ * ROK-1619: writes the LFG indicator emoji (blank clears it back to 🎉). The
+ * current value rides on the board GET (`nowIndicatorEmoji`), so a save
+ * invalidates that query.
+ */
+export function useLfgIndicatorEmoji(): UseMutationResult<
+    { nowIndicatorEmoji: string | null }, Error, { emoji: string }
+> {
+    const queryClient = useQueryClient();
+    return useMutation<{ nowIndicatorEmoji: string | null }, Error, { emoji: string }>({
+        mutationFn: (data) =>
+            adminFetch('/admin/settings/discord-bot/lfg-board/indicator-emoji', {
+                method: 'PUT', body: JSON.stringify(data),
+            }, 'Failed to update the LFG indicator emoji'),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: [...LFG_BOARD_KEY] }),
+    });
+}

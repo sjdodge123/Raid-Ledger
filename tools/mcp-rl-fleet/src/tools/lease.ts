@@ -33,7 +33,7 @@ export async function executeStatus(p: LeaseStatusParams = {}) {
 // ----- rl_claim_wait -----
 export const WAIT_TOOL = 'rl_claim_wait';
 export const WAIT_DESC =
-  "Long-poll: block until this agent's queued claim is granted OR until the timeout expires (default 600s). Implemented via inotifywait on the lease-queue dir on the VM (push-like UX). On grant: returns the same shape as rl_claim ({slot, agent_id, branch, hostnames, expires_at, inherited_envs?, ...}). On timeout: returns the last-seen queued response with wait_timed_out:true + waited_seconds. Returns {ok:false, error:'inotifywait_not_installed'} if the runner image is missing inotify-tools. If you enqueued via rl_claim({slot:N}), pass the same slot here so the wait stays pinned to that slot. The CLI wraps this — agents can also spawn `rl claim-wait --timeout N` via Bash to get the harness's auto-background + task-notification on wake (mirrors rl test-plan wait).";
+  "Long-poll: block until this agent's queued claim is granted OR until the timeout expires (default 600s). Implemented via inotifywait on the lease-queue dir on the VM (push-like UX). On grant: returns the same shape as rl_claim ({slot, agent_id, branch, hostnames, expires_at, inherited_envs?, ...}). On timeout: returns the last-seen queued response with wait_timed_out:true + waited_seconds. Returns {ok:false, error:'inotifywait_not_installed'} if the runner image is missing inotify-tools. If you enqueued via rl_claim({slot:N}), pass the same slot here so the wait stays pinned to that slot. The CLI wraps this — agents can also spawn `rl claim-wait --timeout N` via Bash to get the harness's auto-background + task-notification on wake.";
 
 export interface ClaimWaitParams {
   timeout_seconds?: number;

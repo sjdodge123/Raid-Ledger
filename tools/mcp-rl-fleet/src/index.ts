@@ -321,9 +321,19 @@ registerTool(testPlan.CREATE_TOOL, testPlan.CREATE_DESC, testPlanCreateSchema, a
   jsonResult(await testPlan.executeCreate(p as Parameters<typeof testPlan.executeCreate>[0])),
 );
 
+// ROK-1657 — include_comments is valid only with plan_id (the executors
+// return include_comments_requires_plan_id otherwise). Default false: the
+// read carries comment metadata only, never bodies.
+const includeCommentsSchema = z
+  .boolean()
+  .optional()
+  .describe(
+    'Default false (safe: no comment bodies). true = plain-text tester comments, plan_id only; disposable sub-agent lanes only, never an orchestrating/Lead session.',
+  );
 const testPlanStatusSchema: Shape = {
   slug: slugSchema,
   plan_id: planIdSchema.optional(),
+  include_comments: includeCommentsSchema,
 };
 registerTool(testPlan.STATUS_TOOL, testPlan.STATUS_DESC, testPlanStatusSchema, async (p) =>
   jsonResult(await testPlan.executeStatus(p as Parameters<typeof testPlan.executeStatus>[0])),
@@ -333,6 +343,7 @@ const testPlanWaitSchema: Shape = {
   slug: slugSchema,
   plan_id: planIdSchema.optional(),
   timeout_seconds: z.number().int().min(5).max(3600).optional(),
+  include_comments: includeCommentsSchema,
 };
 registerTool(testPlan.WAIT_TOOL, testPlan.WAIT_DESC, testPlanWaitSchema, async (p) =>
   jsonResult(await testPlan.executeWait(p as Parameters<typeof testPlan.executeWait>[0])),

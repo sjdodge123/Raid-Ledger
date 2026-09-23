@@ -152,6 +152,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     expect(off.body).toEqual({
       enabled: false,
       channelId: null,
+      nowIndicatorEmoji: null,
       composerEnabled: false,
     });
 
@@ -162,6 +163,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     expect(on.body).toEqual({
       enabled: true,
       channelId: null,
+      nowIndicatorEmoji: null,
       composerEnabled: false,
     });
   });
@@ -181,6 +183,7 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     expect(res.body).toEqual({
       enabled: true,
       channelId: '999888777',
+      nowIndicatorEmoji: null,
       composerEnabled: false,
     });
   });
@@ -212,5 +215,61 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     expect(Sentry.captureException).toHaveBeenCalledWith(boom, {
       tags: { context: 'lfg-board-toggle' },
     });
+  });
+
+  // ROK-1619 — the indicator emoji setting, stored raw, blank clears to 🎉.
+  it('stores the indicator emoji and reports it on GET; blank clears it', async () => {
+    const put = await supertest(http())
+      .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+      .send({ emoji: ' :praise_sun: ' })
+      .expect(200);
+    expect(put.body).toEqual({ nowIndicatorEmoji: ':praise_sun:' });
+    const got = await supertest(http())
+      .get('/admin/settings/discord-bot/lfg-board')
+      .expect(200);
+    expect(got.body.nowIndicatorEmoji).toBe(':praise_sun:');
+
+    const cleared = await supertest(http())
+      .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+      .send({ emoji: '' })
+      .expect(200);
+    expect(cleared.body).toEqual({ nowIndicatorEmoji: null });
+  });
+
+  // Review fix: anything that is not an emoji would be sent to Discord as a
+  // Unicode `{ name }` and make it reject the whole board post and invite DM.
+  it.each(['hello world', 'a', 'hello', '<@&123456789>', '🎉 party', '🎉🎉'])(
+    'rejects %j as an indicator emoji with a 400 that says why',
+    async (emoji) => {
+      const res = await supertest(http())
+        .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+        .send({ emoji })
+        .expect(400);
+      expect(JSON.stringify(res.body)).toContain('single emoji');
+    },
+  );
+
+  it.each([
+    '🎉',
+    '☀️',
+    '👍🏽',
+    '👨‍👩‍👧‍👦',
+    '🇺🇸',
+    '<:praise_sun:123456789>',
+    '<a:dance:123456789>',
+    ':praise_sun:',
+  ])('accepts %j as an indicator emoji', async (emoji) => {
+    const res = await supertest(http())
+      .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+      .send({ emoji })
+      .expect(200);
+    expect(res.body).toEqual({ nowIndicatorEmoji: emoji });
+  });
+
+  it('rejects an indicator emoji that is not a string', async () => {
+    await supertest(http())
+      .put('/admin/settings/discord-bot/lfg-board/indicator-emoji')
+      .send({ emoji: 42 })
+      .expect(400);
   });
 });

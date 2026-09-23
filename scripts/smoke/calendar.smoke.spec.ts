@@ -75,7 +75,7 @@ test.describe('Calendar — desktop', () => {
         // so the AX tree drops the input — target the .game-filter-item label.
         await expect(dialog.getByRole('button', { name: 'All' })).toBeVisible();
         await expect(dialog.getByRole('button', { name: 'None' })).toBeVisible();
-        await expect(dialog.getByRole('textbox', { name: /search games/i })).toBeVisible();
+        await expect(dialog.getByRole('searchbox', { name: /search games/i })).toBeVisible();
         const items = dialog.locator('.game-filter-item');
         const count = await items.count();
         expect(count).toBeGreaterThan(0);

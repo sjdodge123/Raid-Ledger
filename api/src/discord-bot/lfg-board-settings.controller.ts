@@ -18,8 +18,10 @@ import {
   getLfgBoardChannelId,
   getLfgBoardEnabled,
   getLfgComposerEnabled,
+  getLfgNowIndicatorEmoji,
   setLfgBoardEnabled,
   setLfgComposerEnabled,
+  setLfgNowIndicatorEmoji,
 } from '../settings/settings-lfg-board.helpers';
 import { preflightLfgBoard } from './lfg-board/lfg-board-preflight.helpers';
 import {
@@ -29,6 +31,7 @@ import {
 import {
   LfgBoardSettingsSchema,
   LfgComposerSettingsSchema,
+  LfgNowIndicatorEmojiSchema,
   type LfgBoardSettingsResponse,
   type LfgComposerSettings,
 } from '@raid-ledger/contract';
@@ -63,12 +66,36 @@ export class LfgBoardSettingsController {
    */
   @Get('lfg-board')
   async getSettings(): Promise<LfgBoardSettingsResponse> {
-    const [enabled, channelId, composerEnabled] = await Promise.all([
-      getLfgBoardEnabled(this.settingsService),
-      getLfgBoardChannelId(this.settingsService),
-      getLfgComposerEnabled(this.settingsService),
-    ]);
-    return { enabled, channelId, composerEnabled };
+    const [enabled, channelId, nowIndicatorEmoji, composerEnabled] =
+      await Promise.all([
+        getLfgBoardEnabled(this.settingsService),
+        getLfgBoardChannelId(this.settingsService),
+        getLfgNowIndicatorEmoji(this.settingsService),
+        getLfgComposerEnabled(this.settingsService),
+      ]);
+    return { enabled, channelId, nowIndicatorEmoji, composerEnabled };
+  }
+
+  /**
+   * ROK-1619 — set the emoji that marks the press forming the group. Stored
+   * raw; every surface resolves it through `resolveNowIndicatorEmoji`, which
+   * degrades an unusable one to 🎉. A blank value clears it back to 🎉.
+   *
+   * @param body - `{ emoji: string }`, validated by the contract schema.
+   * @returns The stored value, or null when cleared.
+   */
+  @Put('lfg-board/indicator-emoji')
+  @HttpCode(HttpStatus.OK)
+  async setIndicatorEmoji(
+    @Body() body: unknown,
+  ): Promise<{ nowIndicatorEmoji: string | null }> {
+    try {
+      const { emoji } = LfgNowIndicatorEmojiSchema.parse(body);
+      await setLfgNowIndicatorEmoji(this.settingsService, emoji);
+      return { nowIndicatorEmoji: emoji || null };
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   /**

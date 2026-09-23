@@ -23,6 +23,7 @@ import {
   type PersonalizedField,
 } from '../discord-bot/embeds/embed-personalized.helpers';
 import { lfgViewGroupButton } from '../discord-bot/embeds/lfg-view-group-button.helpers';
+import { resolveNowIndicatorEmoji } from '../discord-bot/lfg-now/lfg-now-indicator.helpers';
 
 /**
  * Re-exported from its shared home so the ephemeral Join reply and this card
@@ -39,6 +40,13 @@ export const LFG_INVITE_DECLINE_LABEL = 'Not interested';
 
 /** The DM's own Join button (walk feedback) — never the board's `+1`. */
 export const LFG_INVITE_JOIN_LABEL = 'Join the group';
+
+/**
+ * ROK-1619 AC7/AC6 — the Join label when THIS press would form the group. The
+ * words carry the meaning; the sun emoji is reinforcement. Well inside
+ * Discord's 80-character button-label cap.
+ */
+export const LFG_INVITE_JOIN_SPAWN_LABEL = 'Join · starts the group';
 
 /** Says what accepting actually DOES — the DM never explained it (walk 1). */
 export const LFG_PLAYER_INVITE_JOIN_EXPLAINER =
@@ -214,10 +222,11 @@ export function buildLfgPlayerInviteRow(
   if (!Number.isInteger(gameId) || gameId <= 0) return undefined;
   const url = typeof payload?.url === 'string' ? payload.url : null;
   const buttons = [
-    new ButtonBuilder()
-      .setCustomId(`${LFG_BUTTON_IDS.INVITE_JOIN}:${gameId}`)
-      .setLabel(LFG_INVITE_JOIN_LABEL)
-      .setStyle(ButtonStyle.Success),
+    buildInviteJoinButton(
+      gameId,
+      payload?.spawnsNow === true,
+      typeof payload?.spawnEmoji === 'string' ? payload.spawnEmoji : null,
+    ),
   ];
   // A Link button without a URL is a Discord API error, so the View button is
   // present only when the payload actually carries the group link.
@@ -229,4 +238,28 @@ export function buildLfgPlayerInviteRow(
       .setStyle(ButtonStyle.Secondary),
   );
   return new ActionRowBuilder<ButtonBuilder>().addComponents(...buttons);
+}
+
+/**
+ * The DM's Join button, marked when the press would form the group (AC7).
+ *
+ * `spawnsNow` was decided server-side at send time by the shared
+ * `pressWouldSpawnNow` predicate; this only renders it. The emoji is the admin
+ * setting captured at send time, through the shared resolver with NO guild
+ * cache: a DM cannot verify a custom emoji, so a custom one degrades to 🎉 and
+ * component data never surfaces a raw `<:name:id>` string (AC5).
+ * The custom id is untouched — the mark changes how the press reads, never
+ * what it writes.
+ */
+function buildInviteJoinButton(
+  gameId: number,
+  spawnsNow: boolean,
+  configuredEmoji: string | null,
+): ButtonBuilder {
+  const join = new ButtonBuilder()
+    .setCustomId(`${LFG_BUTTON_IDS.INVITE_JOIN}:${gameId}`)
+    .setLabel(spawnsNow ? LFG_INVITE_JOIN_SPAWN_LABEL : LFG_INVITE_JOIN_LABEL)
+    .setStyle(ButtonStyle.Success);
+  if (spawnsNow) join.setEmoji(resolveNowIndicatorEmoji(configuredEmoji));
+  return join;
 }
