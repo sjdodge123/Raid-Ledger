@@ -4,6 +4,7 @@
  * back to the default notification channel. Every control saves on change,
  * like the sibling LFG board and channel pickers.
  */
+import { useRef } from 'react';
 import type { WeeklyDigestSettings } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
 import { ChannelSelector } from '../../components/admin/channel-selector';
@@ -22,18 +23,26 @@ const TOGGLE_TRACK =
 
 const pad = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
-/** Query + mutation wiring: every change PUTs the full settings object. */
+/**
+ * Query + mutation wiring: every change PUTs the full settings object. A save
+ * builds on the newest pending payload, not the (possibly stale) query snapshot,
+ * so a second edit made before the first settles never drops the first (Codex P2).
+ */
 function useDigestForm() {
     const { status, channels, update } = useWeeklyDigestSettings();
     const current = status.data;
+    const pending = useRef<WeeklyDigestSettings | null>(null);
     const save = (patch: Partial<WeeklyDigestSettings>): Promise<void> => {
         if (!current) return Promise.resolve();
-        const base: WeeklyDigestSettings = {
+        const base: WeeklyDigestSettings = pending.current ?? {
             enabled: current.enabled, channelId: current.channelId, day: current.day, hour: current.hour,
         };
-        return update.mutateAsync({ ...base, ...patch })
+        const next = { ...base, ...patch };
+        pending.current = next;
+        return update.mutateAsync(next)
             .then(() => { toast.success('Weekly digest settings saved'); })
-            .catch(() => { toast.error('Failed to update weekly digest settings'); });
+            .catch(() => { toast.error('Failed to update weekly digest settings'); })
+            .finally(() => { if (pending.current === next) pending.current = null; });
     };
     return { status, current, channels: channels.data ?? [], isPending: update.isPending, save };
 }

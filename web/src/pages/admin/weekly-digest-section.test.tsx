@@ -54,14 +54,31 @@ describe('WeeklyDigestSection (ROK-1435 L5) — render and saves', () => {
         await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Weekly digest settings saved'));
     });
 
-    it('saves the picked day, hour and channel', () => {
+    it('saves the picked day, hour and channel', async () => {
         render(<WeeklyDigestSection />);
         fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
+        await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1));
         fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '18' } });
+        await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(2));
         fireEvent.change(screen.getByLabelText('Channel'), { target: { value: 'c2' } });
         expect(state.update.mutateAsync).toHaveBeenNthCalledWith(1, { ...BASE, day: 5 });
         expect(state.update.mutateAsync).toHaveBeenNthCalledWith(2, { ...BASE, hour: 18 });
         expect(state.update.mutateAsync).toHaveBeenNthCalledWith(3, { ...BASE, channelId: 'c2' });
+    });
+
+    it('a second edit made before the first save settles keeps the first edit (Codex P2)', async () => {
+        let resolveFirst: (v: WeeklyDigestSettingsResponse) => void = () => undefined;
+        const first = new Promise<WeeklyDigestSettingsResponse>((r) => { resolveFirst = r; });
+        state.update.mutateAsync = vi.fn()
+            .mockImplementationOnce(() => first)
+            .mockImplementation(() => Promise.resolve(SAVED));
+        render(<WeeklyDigestSection />);
+        fireEvent.change(screen.getByLabelText('Digest day'), { target: { value: '5' } });
+        fireEvent.change(screen.getByLabelText('Digest hour'), { target: { value: '18' } });
+        expect(state.update.mutateAsync).toHaveBeenNthCalledWith(1, { ...BASE, day: 5 });
+        expect(state.update.mutateAsync).toHaveBeenNthCalledWith(2, { ...BASE, day: 5, hour: 18 });
+        resolveFirst({ ...SAVED, day: 5 });
+        await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(2));
     });
 
     it('picking the default-channel option clears the dedicated channel (null)', () => {
