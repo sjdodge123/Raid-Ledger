@@ -6,6 +6,7 @@
  * Fixture mirrors the shared CI guild's board forum as read on 2026-09-23:
  * five "How this board works" posts, one per bot, only one of them pinned,
  * listed newest first — so a title-only pick lands on another env's post.
+ * ROK-1658 renamed the intro, so the pick takes the current AND legacy titles.
  *
  * Run: npx tsx src/smoke/lfg-board-intro-pick.spec.ts
  */
@@ -28,15 +29,20 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-const TITLE = 'How this board works';
+/** ROK-1658 — the pre-rename title every intro in the fixture still carries. */
+const LEGACY = 'How this board works';
+/** `INTRO_TITLE` after ROK-1658 (U+2795, U+00B7). */
+const CURRENT = '➕ Post an LFG here · How this board works';
+/** `INTRO_TITLES` — what every caller passes. */
+const TITLE = [CURRENT, LEGACY];
 const THIS_BOT = '1400000000000000001';
 const OTHER_BOT = '1400000000000000002';
-const intro = (id: string, pinned = false, ownerId: string | null = THIS_BOT) => ({
-  id,
-  name: TITLE,
-  pinned,
-  ownerId,
-});
+const intro = (
+  id: string,
+  pinned = false,
+  ownerId: string | null = THIS_BOT,
+  name = LEGACY,
+) => ({ id, name, pinned, ownerId });
 
 const SHARED_FORUM = [
   intro('1551157129061339177'),
@@ -125,6 +131,26 @@ test('an archived-only intro of ours is not the live intro (Codex P2)', () => {
     null,
     'an archived intro must never be picked; the product adopts active posts only',
   );
+});
+
+// ROK-1658 — the forum holds the current title AND legacy ones at once.
+test('an intro of ours under the CURRENT title is picked', () => {
+  const posts = [intro('8', true, OTHER_BOT), intro('9', false, THIS_BOT, CURRENT)];
+  assert.equal(pickBoardIntro(posts, TITLE, THIS_BOT)?.id, '9');
+});
+
+test('a legacy-titled intro of ours is still picked (adopted, then renamed)', () => {
+  const posts = [intro('8', false, OTHER_BOT, CURRENT), intro('9', false, THIS_BOT, LEGACY)];
+  assert.equal(
+    pickBoardIntro(posts, TITLE, THIS_BOT)?.id,
+    '9',
+    "this bot's legacy-titled intro must be picked, not another bot's current-titled one",
+  );
+});
+
+test('a title outside the list is not an intro, even ours and pinned', () => {
+  const posts = [intro('9', true, THIS_BOT, 'How this board works (old)')];
+  assert.equal(pickBoardIntro(posts, TITLE, THIS_BOT), null);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

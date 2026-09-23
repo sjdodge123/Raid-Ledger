@@ -22,7 +22,14 @@ import {
   LFG_COMPOSER_TERM_MAX,
 } from './lfg-composer.constants';
 
-/** Where `Back` returns to from the urgency step. */
+/**
+ * Which step the urgency buttons were rendered from.
+ *
+ * New renders always carry `'candidates'` (ROK-1658: the list is always shown).
+ * `'search'` and its `s` flag in the go id are kept ONLY so an urgency button
+ * rendered before ROK-1658 — still sitting in someone's ephemeral — still posts
+ * instead of answering with the stale reply.
+ */
 export type LfgComposerOrigin = 'candidates' | 'search';
 
 /** A pressed urgency button, fully resolved. */
@@ -73,14 +80,13 @@ export function buildBackCustomId(term: string): string {
 }
 
 /**
- * The urgency step's `Back` (AC9): the candidate select when the game came from
- * one, otherwise the prefilled search modal.
+ * `lfgc:backc:<term>` — the urgency step's `Back`, which re-renders the select.
+ *
+ * The urgency step is only ever reached from the candidate select now, so its
+ * Back always returns there. ROK-1658 supersedes AC9's "reopen the modal when
+ * the match was unambiguous": an unambiguous match is a one-option select.
  */
-export function buildBackCustomIdFor(
-  origin: LfgComposerOrigin,
-  term: string,
-): string {
-  if (origin === 'search') return buildBackCustomId(term);
+export function buildBackToCandidatesCustomId(term: string): string {
   return `${LFG_COMPOSER_IDS.BACK_TO_CANDIDATES}:${normalizeComposerTerm(term)}`;
 }
 
@@ -89,7 +95,11 @@ export function buildPickCustomId(term: string): string {
   return `${LFG_COMPOSER_IDS.PICK}:${normalizeComposerTerm(term)}`;
 }
 
-/** `lfgc:go:<urgencyKey>:<gameId>:<origin>:<term>`. */
+/**
+ * `lfgc:go:<urgencyKey>:<gameId>:<origin>:<term>`. The origin flag is `c` on
+ * every new render; `s` survives only for pre-ROK-1658 buttons (see
+ * {@link LfgComposerOrigin}).
+ */
 export function buildGoCustomId(state: LfgComposerGoState): string {
   const origin = state.origin === 'candidates' ? 'c' : 's';
   const parts = [
@@ -138,11 +148,4 @@ export function parseGoCustomId(customId: string): LfgComposerGoState | null {
     origin: originFlag === 'c' ? 'candidates' : 'search',
     term: termParts.join(':'),
   };
-}
-
-/** Which step `Back` lands on, given where the press came from (AC9). */
-export function backTargetFor(
-  origin: LfgComposerOrigin,
-): 'candidates' | 'modal' {
-  return origin === 'candidates' ? 'candidates' : 'modal';
 }

@@ -14,8 +14,20 @@ import { readForumThreads, type ForumThreadSnapshot } from './fixtures-lfg-board
 import type { SimpleEmbed } from '../helpers/messages.js';
 import type { TestContext } from './types.js';
 
-/** `LFG_BOARD_INTRO_TITLE` — the pinned explainer, never a group thread. */
-export const INTRO_TITLE = 'How this board works';
+/**
+ * `LFG_BOARD_INTRO_TITLE` — the pinned explainer, never a group thread.
+ * ROK-1658: it advertises the composer's `Post an LFG` button inside it.
+ * U+2795 HEAVY PLUS SIGN, U+00B7 MIDDLE DOT, as the API constant spells it.
+ */
+export const INTRO_TITLE = '➕ Post an LFG here · How this board works';
+/**
+ * `LFG_BOARD_INTRO_LEGACY_TITLES` — the pre-ROK-1658 title. The shared CI
+ * forum holds other envs' (and prod's) intros under it, and the product
+ * adopts a legacy-titled intro of its own before renaming it.
+ */
+export const INTRO_LEGACY_TITLES: readonly string[] = ['How this board works'];
+/** Every title an intro post can carry — current first. */
+export const INTRO_TITLES: readonly string[] = [INTRO_TITLE, ...INTRO_LEGACY_TITLES];
 /** `LFG_JOIN_BUTTON_LABEL`. U+00B7 MIDDLE DOT, as the API constant spells it. */
 export const JOIN_LABEL = "+1 · I'm in";
 /** `LFG_OPEN_GROUP_LABEL`. U+2197 NORTH EAST ARROW. */
@@ -188,7 +200,7 @@ export function isGroupThread(run: Run, t: ForumThreadSnapshot): boolean {
   if (run.preexistingThreads.has(t.id)) return false;
   // Named rather than inferred: the intro post is created by the same enable
   // that provisions the forum, so a slow seed can land AFTER the snapshot.
-  if (t.name === INTRO_TITLE) return false;
+  if (INTRO_TITLES.includes(t.name)) return false;
   // Identity does not rest on the embed alone — a post whose embed is wrong is
   // exactly the defect T24/T25 exist to catch, and it must still be FOUND.
   if (t.name.startsWith(threadNamePrefix(run.game.name))) return true;

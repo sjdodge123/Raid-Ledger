@@ -29,23 +29,69 @@ import {
 } from './lfg-composer.constants';
 import { normalizeComposerTerm } from './lfg-composer-state.helpers';
 
-/** The games page a `View games ↗` button opens, or null when unconfigured. */
-export function gamesPageUrl(clientUrl?: string | null): string | null {
+/**
+ * Discord's cap on a Link button's `url`. A longer one fails the WHOLE message
+ * (API error 50035), so a reply carrying it would never render. The /games
+ * page's own `?q=` cap (the web's `MAX_SEARCH_QUERY_LENGTH`, 100) needs no
+ * enforcement here: `normalizeComposerTerm` already stops a term at 64.
+ */
+export const DISCORD_LINK_URL_MAX = 512;
+
+/**
+ * `url?q=<term>`, shortened to fit Discord's link cap.
+ *
+ * `URLSearchParams` turns one 3-byte UTF-8 character into 9 URL characters,
+ * so 64 of them overflow the cap on an ordinary base. The term loses one code
+ * point at a time (never half a surrogate pair) until the URL fits; a base too
+ * long to fit even one links plain /games.
+ */
+function withSearchTerm(url: string, term: string): string {
+  const points = Array.from(term);
+  while (points.length > 0) {
+    const q = new URLSearchParams({ q: points.join('') }).toString();
+    const linked = `${url}?${q}`;
+    if (linked.length <= DISCORD_LINK_URL_MAX) return linked;
+    points.pop();
+  }
+  return url;
+}
+
+/**
+ * The games page a `View games ↗` button opens, or null when unconfigured.
+ *
+ * With a searched term the link carries `?q=<term>` so /games opens with the
+ * search box already filled (ROK-1658 operator note) — the term goes through
+ * `URLSearchParams`, so spaces, `&`, `#` and unicode arrive intact, cut short
+ * only where the full term would push the URL past `DISCORD_LINK_URL_MAX`.
+ *
+ * @param clientUrl - Deployment client URL.
+ * @param term - What the player searched; absent or blank links plain /games.
+ * @returns The URL, or null when the deployment has no web URL.
+ */
+export function gamesPageUrl(
+  clientUrl?: string | null,
+  term?: string | null,
+): string | null {
   const base = clientUrl?.trim();
-  return base ? `${base.replace(/\/+$/, '')}/games` : null;
+  if (!base) return null;
+  const url = `${base.replace(/\/+$/, '')}/games`;
+  return withSearchTerm(url, normalizeComposerTerm(term ?? ''));
 }
 
 /**
  * The `View games ↗` link button, or null when the deployment has no web URL.
  *
  * @param clientUrl - Deployment client URL.
+ * @param term - The searched term, carried into the link as `?q=`; the pinned
+ *   card passes none (nothing has been searched yet).
  * @returns The button, or null — callers spread the result so an unconfigured
  *   instance simply renders one fewer control.
  */
 export function buildViewGamesButton(
   clientUrl?: string | null,
+  term?: string | null,
 ): ButtonBuilder | null {
-  const url = gamesPageUrl(clientUrl);
+  const url = gamesPageUrl(clientUrl, term);
   if (!url) return null;
   return new ButtonBuilder()
     .setStyle(ButtonStyle.Link)

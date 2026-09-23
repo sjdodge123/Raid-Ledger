@@ -11,6 +11,10 @@ import {
   setLfgBoardEnabled,
 } from './fixtures-lfg-board.js';
 import {
+  assertComposerCleared,
+  assertComposerPinned,
+} from './lfg-composer-pin.js';
+import {
   assertAuthor,
   assertSameStarter,
   assertTag,
@@ -88,8 +92,12 @@ export async function assertRetiresOnDisable(run: Run): Promise<void> {
   assertTag(archived, 'CLOSED', 'ROK-1523 (retired tag stays neutral)');
   run.preexistingThreads.add(retired.id);
   run.retiredThreadIds.push(retired.id);
+  // ROK-1658 — the composer rides the board: off takes its button down...
+  await assertComposerCleared(run);
 
   await assertRepostsOnEnable(run, retired.id);
+  // ...and on puts it back, with no composer setting of its own.
+  await assertComposerPinned(run);
 }
 
 /** The farewell copy: says what happened to the BOARD, never "cancelled". */

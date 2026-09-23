@@ -77,7 +77,8 @@ export interface UrgencyRowInputs {
  * earlier point creates no intent (AC3).
  *
  * @param inputs - Game, typed term, where Back goes, and the vocabulary.
- * @returns One action row, soonest horizon first and primary.
+ * @returns One action row, soonest first; every horizon is Primary, as the
+ *   approved ROK-1658 prototype draws them, and only the soonest carries ⚡.
  */
 export function buildUrgencyRow(
   inputs: UrgencyRowInputs,
@@ -93,7 +94,7 @@ export function buildUrgencyRow(
           term: inputs.term,
         }),
       )
-      .setStyle(index === 0 ? ButtonStyle.Primary : ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
       .setLabel(choice.name);
     if (index === 0) button.setEmoji(SOONEST_EMOJI);
     return button;

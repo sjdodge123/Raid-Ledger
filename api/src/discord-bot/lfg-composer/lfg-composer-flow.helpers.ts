@@ -70,7 +70,7 @@ function refusalFor(caller: LfgCaller | null): string | null {
 }
 
 /**
- * `Post an LFG`, `Back` to search and `Try again` — open the (prefilled) modal.
+ * `Post an LFG` and `← Back` from results — open the (prefilled) modal.
  *
  * @param deps - Flow dependencies.
  * @param interaction - The pressed button.
@@ -96,6 +96,12 @@ export async function openComposerModal(
 /**
  * Run the search and render whichever of the four AC2 outcomes it lands on.
  *
+ * ROK-1658: every outcome except `none` renders the candidate select. A
+ * search that returned ONE game is a one-option select rather than a jump to
+ * the urgency step, so the player sees the search ran and confirms the pick
+ * themselves; an exact title among several matches lists them all, the exact
+ * title first (step-3 table, "several candidates").
+ *
  * @param deps - Flow dependencies.
  * @param rawTerm - What was typed.
  * @returns The ephemeral reply for that outcome.
@@ -113,28 +119,14 @@ export async function renderComposerSearch(
     : await searchComposerGamesFuzzy(deps.db, term);
   const match = classifyComposerMatch(term, matches, fuzzy);
   if (match.kind === 'none') return buildNoMatchReply(term, clientUrl);
-  if (match.kind === 'exact') {
-    const choices = LFG_URGENCY_CHOICES;
-    return buildUrgencyReply({
-      game: match.game,
-      term,
-      origin: 'search',
-      choices,
-      clientUrl,
-    });
-  }
-  return buildCandidatesReply(
-    term,
-    match.games,
-    match.kind === 'fuzzy',
-    clientUrl,
-  );
+  const games = match.kind === 'single' ? [match.game] : match.games;
+  return buildCandidatesReply(term, games, match.kind === 'fuzzy', clientUrl);
 }
 
 /**
  * The modal's submit. Opened from the pinned card it answers with a NEW
  * ephemeral; opened from an ephemeral step's button it replaces that step in
- * place, so Back/Try again never stack a trail of stale replies.
+ * place, so Back never stacks a trail of stale replies.
  */
 export async function submitComposerSearch(
   deps: ComposerFlowDeps,
@@ -149,7 +141,11 @@ export async function submitComposerSearch(
   await interaction.editReply(await renderComposerSearch(deps, term));
 }
 
-/** AC9 — `Back` from the urgency step re-renders the candidate select. */
+/**
+ * AC9 — `Back` from the urgency step re-renders the candidate select. Since
+ * ROK-1658 the urgency step is only reached from a select, so there always is
+ * one to return to — a single confident match re-renders as one option.
+ */
 export async function backToComposerCandidates(
   deps: ComposerFlowDeps,
   interaction: ButtonInteraction,
@@ -201,8 +197,10 @@ async function replyStale(interaction: ButtonInteraction): Promise<void> {
 
 /**
  * The one irreversible press. Re-checks AC5 (a card can outlive a ban), then
- * writes through `createIntent` and replaces the step with the `+1` button's
- * own confirmation — no Back, because there is nothing left to go back to.
+ * writes through `createIntent`. A new group card posts to the board, so the
+ * ephemeral closes (prototype step 5). A repeat press posts nothing new, so it
+ * keeps the `+1` button's "You're already in" confirmation instead of
+ * vanishing silently.
  */
 export async function goComposer(
   deps: ComposerFlowDeps,
@@ -224,6 +222,10 @@ export async function goComposer(
     ...parseUrgencyChoice(value),
     timezone,
   });
+  if (result.created) {
+    await interaction.deleteReply();
+    return;
+  }
   const clientUrl = await deps.settingsService.getClientUrl();
   await interaction.editReply(buildLfgJoinConfirmation(result, clientUrl));
 }
