@@ -4,8 +4,8 @@
 import { LFG_URGENCY_CHOICES } from '../commands/lfg.command.helpers';
 import { LFG_COMPOSER_TERM_MAX } from './lfg-composer.constants';
 import {
-  backTargetFor,
   buildBackCustomId,
+  buildBackToCandidatesCustomId,
   buildGoCustomId,
   buildPickCustomId,
   normalizeComposerTerm,
@@ -51,6 +51,7 @@ describe('custom id round-trip', () => {
   });
 
   it('keeps a term that itself contains a colon intact', () => {
+    // origin 'search' is only minted by pre-ROK-1658 buttons; it must still parse.
     const id = buildGoCustomId({
       urgencyKey: 'week',
       gameId: 7,
@@ -97,12 +98,15 @@ describe('normalizeComposerTerm', () => {
   });
 });
 
-describe('backTargetFor', () => {
-  it('returns to the candidate select when there was one', () => {
-    expect(backTargetFor('candidates')).toBe('candidates');
+describe('buildBackToCandidatesCustomId (ROK-1658)', () => {
+  it('always points the urgency step\'s Back at the select', () => {
+    expect(buildBackToCandidatesCustomId('deep rok')).toBe(
+      'lfgc:backc:deep rok',
+    );
   });
 
-  it('reopens the prefilled modal when the match was unambiguous', () => {
-    expect(backTargetFor('search')).toBe('modal');
+  it('truncates the carried term to what a custom id can hold', () => {
+    const id = buildBackToCandidatesCustomId('z'.repeat(200));
+    expect(id).toBe(`lfgc:backc:${'z'.repeat(LFG_COMPOSER_TERM_MAX)}`);
   });
 });

@@ -132,16 +132,23 @@ describe('buildUrgencyReply', () => {
     expect(row.components).toHaveLength(LFG_URGENCY_CHOICES.length);
   });
 
-  it('still goes back — the urgency press is the only irreversible step', () => {
-    const reply = buildUrgencyReply({
-      game: DRG,
-      term: 'deep rock',
-      origin: 'search',
-      choices: LFG_URGENCY_CHOICES,
-      clientUrl: CLIENT_URL,
-    });
-    expect(labels(reply)).toContain(LFG_COMPOSER_COPY.BACK_BUTTON);
-  });
+  it.each(['search', 'candidates'] as const)(
+    'still goes back, always to the select (origin %s, ROK-1658)',
+    (origin) => {
+      const reply = buildUrgencyReply({
+        game: DRG,
+        term: 'deep rock',
+        origin,
+        choices: LFG_URGENCY_CHOICES,
+        clientUrl: CLIENT_URL,
+      });
+      expect(labels(reply)).toContain(LFG_COMPOSER_COPY.BACK_BUTTON);
+      const tail = reply.components[1].toJSON().components[0];
+      expect('custom_id' in tail ? tail.custom_id : undefined).toBe(
+        'lfgc:backc:deep rock',
+      );
+    },
+  );
 });
 
 describe('orderUrgencyChoices', () => {

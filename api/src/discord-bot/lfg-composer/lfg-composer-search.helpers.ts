@@ -6,8 +6,13 @@
  * real 151-row library on 2026-09-17, `valhiem` returns `Valheim` at 0.33 AND
  * `Valorant` at 0.21 — a single-row fuzzy result is a coincidence of the
  * threshold, not a confident answer, so even one trigram hit is still offered
- * rather than chosen. The only short-circuit is an EXACT normalized title
- * match, which is the same test `/lfg`'s `resolveGameId` already makes.
+ * with the "Did you mean" heading rather than as a match.
+ *
+ * The classifier still NARROWS a confident result to one game (`kind:
+ * 'exact'`): an EXACT normalized title match — the same test `/lfg`'s
+ * `resolveGameId` makes — or a lone word-filter hit. Since ROK-1658 nothing
+ * skips the list on that: the flow renders it as a one-option select, so the
+ * player always sees the search ran and confirms the pick.
  *
  * The classification is pure so all four outcomes are unit-testable without a
  * database; the two queries live in `lfg-composer-search.db-helpers`.
@@ -78,9 +83,3 @@ function capCandidates(games: LfgComposerGame[]): LfgComposerGame[] {
   return games.slice(0, LFG_COMPOSER_MAX_CANDIDATES);
 }
 
-/** True when the outcome renders a candidate select rather than a decision. */
-export function isCandidateOutcome(
-  match: LfgComposerMatch,
-): match is Extract<LfgComposerMatch, { kind: 'candidates' | 'fuzzy' }> {
-  return match.kind === 'candidates' || match.kind === 'fuzzy';
-}

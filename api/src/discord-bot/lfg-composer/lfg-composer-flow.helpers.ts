@@ -96,6 +96,10 @@ export async function openComposerModal(
 /**
  * Run the search and render whichever of the four AC2 outcomes it lands on.
  *
+ * ROK-1658: every outcome except `none` renders the candidate select. A
+ * confident match is a ONE-option select rather than a jump to the urgency
+ * step, so the player sees the search ran and confirms the pick themselves.
+ *
  * @param deps - Flow dependencies.
  * @param rawTerm - What was typed.
  * @returns The ephemeral reply for that outcome.
@@ -113,22 +117,8 @@ export async function renderComposerSearch(
     : await searchComposerGamesFuzzy(deps.db, term);
   const match = classifyComposerMatch(term, matches, fuzzy);
   if (match.kind === 'none') return buildNoMatchReply(term, clientUrl);
-  if (match.kind === 'exact') {
-    const choices = LFG_URGENCY_CHOICES;
-    return buildUrgencyReply({
-      game: match.game,
-      term,
-      origin: 'search',
-      choices,
-      clientUrl,
-    });
-  }
-  return buildCandidatesReply(
-    term,
-    match.games,
-    match.kind === 'fuzzy',
-    clientUrl,
-  );
+  const games = match.kind === 'exact' ? [match.game] : match.games;
+  return buildCandidatesReply(term, games, match.kind === 'fuzzy', clientUrl);
 }
 
 /**
@@ -149,7 +139,11 @@ export async function submitComposerSearch(
   await interaction.editReply(await renderComposerSearch(deps, term));
 }
 
-/** AC9 — `Back` from the urgency step re-renders the candidate select. */
+/**
+ * AC9 — `Back` from the urgency step re-renders the candidate select. Since
+ * ROK-1658 the urgency step is only reached from a select, so there always is
+ * one to return to — a single confident match re-renders as one option.
+ */
 export async function backToComposerCandidates(
   deps: ComposerFlowDeps,
   interaction: ButtonInteraction,

@@ -4,7 +4,6 @@
  */
 import {
   classifyComposerMatch,
-  isCandidateOutcome,
   normalizeForCompare,
   type LfgComposerGame,
 } from './lfg-composer-search.helpers';
@@ -15,7 +14,7 @@ const DRG: LfgComposerGame = { id: 3, name: 'Deep Rock Galactic' };
 const BG3: LfgComposerGame = { id: 4, name: "Baldur's Gate III" };
 
 describe('classifyComposerMatch', () => {
-  it('(a) resolves a single word-filter hit straight to the urgency step', () => {
+  it('(a) narrows a single word-filter hit to that one game', () => {
     const match = classifyComposerMatch('valheim', [VALHEIM]);
     expect(match).toEqual({ kind: 'exact', game: VALHEIM });
   });
@@ -77,15 +76,6 @@ describe('classifyComposerMatch', () => {
     const blank: LfgComposerGame = { id: 7, name: '!!!' };
     const match = classifyComposerMatch('', [blank, VALORANT]);
     expect(match.kind).toBe('candidates');
-  });
-});
-
-describe('isCandidateOutcome', () => {
-  it('is true for both select-rendering outcomes and false for the decisions', () => {
-    expect(isCandidateOutcome({ kind: 'candidates', games: [DRG] })).toBe(true);
-    expect(isCandidateOutcome({ kind: 'fuzzy', games: [DRG] })).toBe(true);
-    expect(isCandidateOutcome({ kind: 'exact', game: DRG })).toBe(false);
-    expect(isCandidateOutcome({ kind: 'none' })).toBe(false);
   });
 });
 

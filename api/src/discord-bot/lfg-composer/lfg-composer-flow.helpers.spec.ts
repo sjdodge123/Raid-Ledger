@@ -77,6 +77,18 @@ function ids(body: { components: { toJSON(): unknown }[] }): string[] {
   );
 }
 
+/** The option values of the (first) select in an edited reply. */
+function selectValues(body: { components: { toJSON(): unknown }[] }): string[] {
+  const rows = body.components.map(
+    (row) =>
+      row.toJSON() as { components: { options?: { value: string }[] }[] },
+  );
+  const select = rows
+    .flatMap((row) => row.components)
+    .find((c) => Array.isArray(c.options));
+  return (select?.options ?? []).map((o) => o.value);
+}
+
 interface EditedBody {
   content?: string;
   components: { toJSON(): unknown }[];
@@ -126,18 +138,35 @@ function submit(term: string, ephemeralParent = false) {
 }
 
 describe('submitComposerSearch (the four AC2 outcomes)', () => {
-  it('one confident match goes straight to the urgency step', async () => {
+  it('one confident match still shows the list — a one-option select (ROK-1658)', async () => {
     search.mockResolvedValue([DRG]);
     const i = submit('deep rock galactic');
     await submitComposerSearch(deps(), i as never);
     expect(i.deferReply).toHaveBeenCalledWith({
       flags: MessageFlags.Ephemeral,
     });
-    expect(edited(i).content).toBe(
+    const body = edited(i);
+    expect(body.content).not.toBe(
       'When do you want to play Deep Rock Galactic?',
     );
-    expect(ids(edited(i))).toContain('lfgc:back:deep rock galactic');
+    expect(body.content).toBe('1 game matches `deep rock galactic`');
+    expect(ids(body)).toEqual(
+      expect.arrayContaining([
+        'lfgc:pick:deep rock galactic',
+        'lfgc:back:deep rock galactic',
+      ]),
+    );
+    expect(selectValues(body)).toEqual(['7']);
     expect(fuzzy).not.toHaveBeenCalled();
+  });
+
+  it('an exact title among several word matches is offered as one option', async () => {
+    const survivor = { id: 9, name: 'Deep Rock Galactic: Survivor' };
+    search.mockResolvedValue([DRG, survivor]);
+    const i = submit('deep rock galactic');
+    await submitComposerSearch(deps(), i as never);
+    expect(edited(i).content).toBe('1 game matches `deep rock galactic`');
+    expect(selectValues(edited(i))).toEqual(['7']);
   });
 
   it('several candidates render a select and never auto-select', async () => {
@@ -190,6 +219,14 @@ describe('pick + back (AC9)', () => {
     const i = fake('lfgc:pick:deep', { values: ['7'] });
     await pickComposerGame(deps(), i as never);
     expect(ids(edited(i))).toEqual(['lfgc:back:deep']);
+  });
+
+  it('Back from urgency after a single-match pick returns to the one-option select', async () => {
+    search.mockResolvedValue([DRG]);
+    const i = fake('lfgc:backc:deep rock galactic');
+    await backToComposerCandidates(deps(), i as never);
+    expect(edited(i).content).toBe('1 game matches `deep rock galactic`');
+    expect(ids(edited(i))).toContain('lfgc:pick:deep rock galactic');
   });
 
   it('Back to candidates re-renders the select with the term intact', async () => {

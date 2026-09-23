@@ -6,6 +6,10 @@
  * dismissed modal and nothing to press. `Back` is a BUTTON, never a modal
  * submit response, because `ModalSubmitInteraction` has no `showModal` — the
  * constraint the whole flow is shaped around.
+ *
+ * Where Back goes (AC9, as amended by ROK-1658): from the candidate select and
+ * the dead end it reopens the modal prefilled; from the urgency step it always
+ * returns to the select, because the select is now the only way in.
  */
 import {
   ActionRowBuilder,
@@ -23,7 +27,7 @@ import {
 } from './lfg-composer.constants';
 import {
   buildBackCustomId,
-  buildBackCustomIdFor,
+  buildBackToCandidatesCustomId,
   buildPickCustomId,
   normalizeComposerTerm,
   type LfgComposerOrigin,
@@ -111,7 +115,11 @@ function toSelectOption(game: LfgComposerGame): StringSelectMenuOptionBuilder {
     .setValue(String(game.id));
 }
 
-/** Everything the urgency reply needs, already resolved by the caller. */
+/**
+ * Everything the urgency reply needs, already resolved by the caller. `origin`
+ * is encoded into the go id only (see `LfgComposerOrigin`); it no longer picks
+ * where Back goes.
+ */
 export interface UrgencyReplyInputs {
   game: LfgComposerGame;
   term: string;
@@ -123,7 +131,7 @@ export interface UrgencyReplyInputs {
 /**
  * Step 4 — names the game, offers the horizons, and still goes back.
  *
- * @param inputs - Game, term, back-origin, vocabulary and client URL.
+ * @param inputs - Game, term, origin, vocabulary and client URL.
  * @returns The ephemeral reply.
  */
 export function buildUrgencyReply(
@@ -142,7 +150,7 @@ export function buildUrgencyReply(
         inputs.term,
         inputs.clientUrl,
         LFG_COMPOSER_COPY.BACK_BUTTON,
-        buildBackCustomIdFor(inputs.origin, inputs.term),
+        buildBackToCandidatesCustomId(inputs.term),
       ),
     ],
   };
