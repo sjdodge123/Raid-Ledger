@@ -255,14 +255,16 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
     expect(body).toContain('+1');
     expect(body).toContain('/lfg');
     expect(body.toLowerCase()).toContain('withdraw');
-    expect(body.toLowerCase()).toContain('second');
-    expect(body.toLowerCase()).toContain('archive');
+    // ROK-1658 concise copy: posts "close" (was: retagged + archived).
+    expect(body).toContain('Posts close');
+    expect(body).toBe(LFG_BOARD_INTRO_BODY);
     // ROK-1479/1616 — the three horizons are explained where members read the
     // rules, in the same words every other surface uses.
     expect(body).toContain('This week');
     expect(body).toContain('Right now');
     expect(body).toContain('Tonight');
-    expect(body).not.toMatch(/30 min|1 hour/);
+    // "30 min" is Right now's lifetime; the retired 60-minute option is gone.
+    expect(body).not.toMatch(/1 hour|60 min/);
   });
 
   it('pins the intro post, and still persists the id when pinning is denied', async () => {
