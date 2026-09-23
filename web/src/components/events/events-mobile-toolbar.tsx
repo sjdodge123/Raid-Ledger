@@ -1,4 +1,4 @@
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { SearchInput } from '../ui/search-input';
 import { MobilePageToolbar } from '../layout/mobile-page-toolbar';
 import type { GenreOption } from '../../pages/events/genre-filter-helpers';
 
@@ -42,11 +42,8 @@ function SearchAndGenreFilter({ searchQuery, onSearchChange, genreOptions, selec
 }) {
     return (
         <div className="flex gap-2">
-            <div className="relative flex-1 min-w-0">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-                <input type="text" value={searchQuery} onChange={(e) => onSearchChange(e.target.value)}
-                    placeholder="Search events..." aria-label="Search events"
-                    className="w-full pl-10 pr-4 py-2.5 bg-panel/50 border border-edge rounded-lg text-base lg:text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-success/80 focus:outline-none" />
+            <div className="flex-1 min-w-0">
+                <SearchInput value={searchQuery} onChange={onSearchChange} placeholder="Search events..." label="Search events" />
             </div>
             {genreOptions && genreOptions.length > 0 && onGenreChange && (
                 <select value={selectedGenre ?? ''} onChange={(e) => onGenreChange(e.target.value)}

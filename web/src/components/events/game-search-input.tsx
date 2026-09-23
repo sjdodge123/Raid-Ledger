@@ -1,8 +1,27 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
+/**
+ * Game search — create / edit / plan event, Add Character, admin bindings,
+ * the player filter and (via `PollGameSearch`) the scheduling poll.
+ *
+ * Built on the shared `Combobox` (ROK-1647): ↑/↓ move the highlight, Enter
+ * picks, Esc closes. Searches via the debounced `useGameSearch` only once the
+ * user has typed 2+ characters since mount or the last pick/clear — a
+ * prefilled or just-picked game never fires a search on its own. Otherwise it
+ * offers `initialSuggestions` when given. Editing the text away from the
+ * picked game's name clears the selection.
+ */
+import { useEffect, useRef, useState, type JSX } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { IgdbGameDto } from '@raid-ledger/contract';
+import { Button } from '../ui/button';
+import { Combobox } from '../ui/combobox';
 import { useGameSearch } from '../../hooks/use-game-search';
 import { coverSrcSetProps } from '../../lib/igdb-image';
+
+export interface GameSearchTestIds {
+    input?: string;
+    popup?: string;
+    option?: string;
+}
 
 interface GameSearchInputProps {
     value: IgdbGameDto | null;
@@ -18,198 +37,107 @@ interface GameSearchInputProps {
     id?: string;
     /** ROK-1416: focus the input on mount (the inert-binding "Fix →" repair target). */
     autoFocus?: boolean;
+    /** Smoke-test hooks (the scheduling poll's `game-search-*` ids). */
+    testIds?: GameSearchTestIds;
 }
 
-function measureDropdownPos(el: HTMLDivElement) {
-    const rect = el.getBoundingClientRect();
-    return { top: rect.bottom + 8, left: rect.left, width: rect.width };
+function Cover({ game, w, h }: { game: IgdbGameDto; w: number; h: number }): JSX.Element {
+    if (!game.coverUrl) {
+        return <div aria-hidden="true" style={{ width: w, height: h }} className="shrink-0 bg-overlay rounded flex items-center justify-center text-dim">🎮</div>;
+    }
+    return (
+        <img src={game.coverUrl} alt="" className="shrink-0 object-cover rounded bg-overlay" style={{ width: w, height: h }}
+            width={w} height={h} loading="lazy" decoding="async" {...coverSrcSetProps(game.coverUrl, `${w}px`)}
+            onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+    );
 }
 
-function useDropdownPosition(containerRef: React.RefObject<HTMLDivElement | null>, isOpen: boolean) {
-    const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
-
-    const updateDropdownPos = useCallback(() => {
-        const el = containerRef.current;
-        if (el) setDropdownPos(measureDropdownPos(el));
-    }, [containerRef]);
-
-    useEffect(() => {
-        if (!isOpen) return;
-        updateDropdownPos();
-        window.addEventListener('scroll', updateDropdownPos, true);
-        window.addEventListener('resize', updateDropdownPos);
-        return () => {
-            window.removeEventListener('scroll', updateDropdownPos, true);
-            window.removeEventListener('resize', updateDropdownPos);
-        };
-    }, [isOpen, updateDropdownPos]);
-
-    return { dropdownPos };
-}
-
-function SelectedGameBadge({ value }: { value: IgdbGameDto }) {
+function SelectedGameBadge({ value }: { value: IgdbGameDto }): JSX.Element {
     return (
         <div className="mt-2 flex items-center gap-2">
-            {value.coverUrl && (
-                <img src={value.coverUrl} alt={value.name}
-                    className="w-8 h-10 object-cover rounded bg-overlay"
-                    width={32} height={40} loading="lazy" decoding="async"
-                    {...coverSrcSetProps(value.coverUrl, '32px')}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            )}
-            <span className="text-emerald-400 text-sm font-medium">{value.name}</span>
+            {value.coverUrl && <Cover game={value} w={32} h={40} />}
+            <span className="text-success text-sm font-medium">{value.name}</span>
         </div>
     );
 }
 
-function GameOptionItem({ game, isSelected, onSelect }: { game: IgdbGameDto; isSelected: boolean; onSelect: () => void }) {
+function LocalSourceWarning(): JSX.Element {
     return (
-        <li role="option" aria-selected={isSelected} onClick={onSelect}
-            className="flex items-center gap-3 px-4 py-3 hover:bg-panel cursor-pointer transition-colors">
-            {game.coverUrl ? (
-                <img src={game.coverUrl} alt={game.name} className="w-10 h-12 object-cover rounded bg-overlay"
-                    width={40} height={48} loading="lazy" decoding="async"
-                    {...coverSrcSetProps(game.coverUrl, '40px')}
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-            ) : (
-                <div className="w-10 h-12 bg-overlay rounded flex items-center justify-center text-dim">🎮</div>
-            )}
-            <span className="text-foreground font-medium">{game.name}</span>
-        </li>
-    );
-}
-
-function LocalSourceWarning() {
-    return (
-        <div className="px-4 py-2 bg-yellow-900/30 border-b border-edge text-yellow-500 text-xs font-medium flex items-center gap-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+        <p className="mt-2 text-warning text-xs font-medium">
             Showing local results (external search unavailable)
-        </div>
+        </p>
     );
 }
 
-function GameDropdownContent({ query, isLoading, displayGames, source, value, onSelect }: {
-    query: string; isLoading: boolean; displayGames: IgdbGameDto[];
-    source: string | undefined; value: IgdbGameDto | null; onSelect: (g: IgdbGameDto) => void;
-}) {
-    if (isLoading && query.length >= 2) {
-        return <div className="p-4 text-center text-muted">Searching...</div>;
-    }
-    if (displayGames.length === 0) {
-        return <div className="p-4 text-center text-muted">{query.length >= 2 ? 'No games found' : 'Type to search...'}</div>;
-    }
+function ClearButton({ onClear }: { onClear: () => void }): JSX.Element {
     return (
-        <>
-            {source === 'local' && query.length >= 2 && <LocalSourceWarning />}
-            <ul role="listbox">
-                {displayGames.map((game) => (
-                    <GameOptionItem key={game.id} game={game} isSelected={value?.id === game.id} onSelect={() => onSelect(game)} />
-                ))}
-            </ul>
-        </>
+        <Button variant="ghost" iconOnly aria-label="Clear selection" onClick={onClear}>
+            <XMarkIcon className="w-5 h-5" aria-hidden="true" />
+        </Button>
     );
 }
 
-function useOutsideClick(containerRef: React.RefObject<HTMLDivElement | null>, isOpen: boolean, onClose: () => void) {
-    useEffect(() => {
-        if (!isOpen) return;
-        function handleClickOutside(event: MouseEvent) {
-            const target = event.target as Node;
-            if (containerRef.current && !containerRef.current.contains(target) &&
-                !(target instanceof Element && target.closest('[data-game-dropdown]'))) {
-                onClose();
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isOpen, containerRef, onClose]);
-}
-
-function GameDropdownPortal({ dropdownPos, query, isLoading, displayGames, source, value, onSelect }: {
-    dropdownPos: { top: number; left: number; width: number };
-    query: string; isLoading: boolean; displayGames: IgdbGameDto[];
-    source: string | undefined; value: IgdbGameDto | null; onSelect: (g: IgdbGameDto) => void;
-}) {
-    return createPortal(
-        <div data-game-dropdown className="fixed z-[9999] bg-surface border border-edge rounded-lg shadow-xl max-h-64 overflow-y-auto"
-            style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}>
-            <GameDropdownContent query={query} isLoading={isLoading} displayGames={displayGames}
-                source={source} value={value} onSelect={onSelect} />
-        </div>,
-        document.body,
-    );
-}
-
-/**
- * Game search input with autocomplete dropdown.
- * Searches IGDB via backend API with debouncing.
- */
 function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGameDto | null) => void, initialSuggestions?: IgdbGameDto[]) {
     const [query, setQuery] = useState(value?.name ?? '');
-    const [isOpen, setIsOpen] = useState(false);
-    const containerRef = useRef<HTMLDivElement>(null);
+    // True once the user edits the text; false on mount and after a pick or
+    // clear, so a prefilled / picked name never searches by itself (ROK-1647).
+    const [engaged, setEngaged] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
+    // The Combobox writes the picked label back through onInputChange right
+    // after onChange; remember it so that echo doesn't clear the new pick.
+    const pickedLabel = useRef<string | null>(null);
+    const searching = engaged && query.length >= 2;
     // Defensive read: prod always returns a useQuery result, but a bare
     // `vi.fn()` mock (per-row admin forms, ROK-1416) can resolve undefined.
-    const search = useGameSearch(query, isOpen);
-    const searchResult = search?.data;
-    const isLoading = search?.isLoading ?? false;
-    const { dropdownPos } = useDropdownPosition(containerRef, isOpen);
-    const closeDropdown = useCallback(() => setIsOpen(false), []);
-    useOutsideClick(containerRef, isOpen, closeDropdown);
-    const handleSelect = (game: IgdbGameDto) => { onChange(game); setQuery(game.name); setIsOpen(false); };
-    const handleClear = () => { onChange(null); setQuery(''); setIsOpen(false); inputRef.current?.focus(); };
-    const hasInitialSuggestions = !!(initialSuggestions && initialSuggestions.length > 0);
-    const showDropdown = isOpen && (query.length >= 2 || (hasInitialSuggestions && query.length < 2));
-    const displayGames = query.length >= 2 ? (searchResult?.data ?? []) : (initialSuggestions ?? []);
-    return { query, setQuery, isOpen, setIsOpen, containerRef, inputRef, isLoading, source: searchResult?.meta?.source, dropdownPos, handleSelect, handleClear, hasInitialSuggestions, showDropdown, displayGames };
+    const search = useGameSearch(query, searching);
+    const hasSuggestions = !!initialSuggestions?.length;
+    const pick = (game: IgdbGameDto | null): void => { pickedLabel.current = game?.name ?? null; setEngaged(false); onChange(game); };
+    const type = (text: string): void => {
+        const echo = pickedLabel.current === text;
+        pickedLabel.current = null;
+        setQuery(text);
+        if (echo) return;
+        setEngaged(true);
+        if (value && text !== value.name) onChange(null);
+    };
+    // Removing the clear button (`trailing`) remounts the input, so refocus
+    // after that commit — a synchronous focus() would land on the old node.
+    const refocus = useRef(false);
+    useEffect(() => { if (refocus.current) { refocus.current = false; inputRef.current?.focus(); } });
+    const clear = (): void => { setEngaged(false); onChange(null); setQuery(''); refocus.current = true; };
+    return {
+        inputRef, searching, hasSuggestions, pick, type, clear, query,
+        options: searching ? (search?.data?.data ?? []) : (initialSuggestions ?? []),
+        loading: searching && (search?.isLoading ?? false),
+        localSource: searching && search?.data?.meta?.source === 'local',
+    };
 }
 
-export function GameSearchInput({ value, onChange, error, initialSuggestions, id = 'game-search', autoFocus }: GameSearchInputProps) {
-    const { containerRef, inputRef, ...s } = useGameSearchState(value, onChange, initialSuggestions);
-    return (
-        <div className="relative" ref={containerRef}>
-            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-2">Game</label>
-            <SearchInputField inputRef={inputRef} id={id} autoFocus={autoFocus} query={s.query} value={value} isLoading={s.isLoading}
-                error={error}
-                onInputChange={(e) => { s.setQuery(e.target.value); s.setIsOpen(true); if (value && e.target.value !== value.name) onChange(null); }}
-                onFocus={() => (s.query.length >= 2 || s.hasInitialSuggestions) && s.setIsOpen(true)}
-                onClear={s.handleClear} />
-            {value && <SelectedGameBadge value={value} />}
-            {s.showDropdown && s.dropdownPos && <GameDropdownPortal dropdownPos={s.dropdownPos} query={s.query}
-                isLoading={s.isLoading} displayGames={s.displayGames} source={s.source} value={value} onSelect={s.handleSelect} />}
-            {error && <p className="mt-1 text-sm text-red-400">{error}</p>}
-        </div>
-    );
-}
-
-function SearchInputField({ inputRef, id, autoFocus, query, value, isLoading, error, onInputChange, onFocus, onClear }: {
-    inputRef: React.RefObject<HTMLInputElement | null>; id: string; autoFocus?: boolean; query: string; value: IgdbGameDto | null;
-    isLoading: boolean; error?: string;
-    onInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void; onFocus: () => void; onClear: () => void;
-}) {
+/** Game search combobox with the "Game" label, selected badge and clear button. */
+export function GameSearchInput({ value, onChange, error, initialSuggestions, id = 'game-search', autoFocus, testIds }: GameSearchInputProps): JSX.Element {
+    const { inputRef, ...s } = useGameSearchState(value, onChange, initialSuggestions);
     return (
         <div className="relative">
+            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-2">Game</label>
             {/* autoFocus (ROK-1416): the input receives focus when the form opens as the inert-binding repair target. */}
-            <input ref={inputRef} id={id} autoFocus={autoFocus} type="text" value={query}
-                onChange={onInputChange} onFocus={onFocus} placeholder="Search for a game..."
-                className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${error ? 'border-red-500' : value ? 'border-emerald-500' : 'border-edge'}`} />
-            {value && (
-                <button type="button" onClick={onClear}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-muted hover:text-foreground transition-colors"
-                    aria-label="Clear selection">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            )}
-            {isLoading && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                    <div className="w-5 h-5 border-2 border-dim border-t-emerald-500 rounded-full animate-spin" />
-                </div>
-            )}
+            <Combobox<IgdbGameDto>
+                ref={inputRef} id={id} label="Game" autoFocus={autoFocus} placeholder="Search for a game..."
+                options={s.options} getKey={(g) => String(g.id)} getLabel={(g) => g.name}
+                value={value} onChange={s.pick} inputValue={s.query} onInputChange={s.type}
+                loading={s.loading} loadingText="Searching..." emptyText={s.searching ? 'No games found' : 'Type to search...'}
+                openOnFocus={s.searching || s.hasSuggestions} invalid={!!error}
+                testIds={testIds}
+                trailing={value ? <ClearButton onClear={s.clear} /> : undefined}
+                renderOption={(g) => (
+                    <>
+                        <Cover game={g} w={40} h={48} />
+                        <span className="text-foreground font-medium truncate">{g.name}</span>
+                    </>
+                )}
+            />
+            {s.localSource && <LocalSourceWarning />}
+            {value && <SelectedGameBadge value={value} />}
+            {error && <p className="mt-1 text-sm text-danger">{error}</p>}
         </div>
     );
 }

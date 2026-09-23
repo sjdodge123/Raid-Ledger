@@ -2,6 +2,7 @@ import type { JSX } from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { Modal } from '../../components/ui/modal';
+import { SearchInput } from '../../components/ui/search-input';
 import { getGameColors } from '../../constants/game-colors';
 import type { GameInfo } from '../../stores/game-filter-store';
 import { sortGamesWithLikedFirst, type GameWithLiked } from './game-filter-helpers';
@@ -67,9 +68,10 @@ export function CalendarGameFilterModal({
         <Modal isOpen={isOpen} onClose={() => { onClose(); setFilterSearch(''); }} title="Filter by Game" maxWidth="max-w-sm" initialFocusRef={searchInputRef}>
             <FilterActions count={selectedGames.size} total={allKnownGames.length}
                 onSelectAll={selectAllGames} onDeselectAll={deselectAllGames} />
-            <input type="text" value={filterSearch} onChange={(e) => setFilterSearch(e.target.value)} placeholder="Search games..."
-                className="w-full px-3 py-2 mb-3 rounded-lg bg-panel border border-edge text-base lg:text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent transition-colors"
-                ref={searchInputRef} />
+            <div className="mb-3">
+                <SearchInput ref={searchInputRef} value={filterSearch} onChange={setFilterSearch}
+                    placeholder="Search games..." label="Search games" />
+            </div>
             <div className="game-filter-list" style={{ maxHeight: '320px', overflowY: 'auto' }}>
                 <SectionedGameList games={filteredGames} selectedGames={selectedGames}
                     toggleGame={toggleGame} renderItem={ModalGameItem} />
