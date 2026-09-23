@@ -21,9 +21,10 @@ import { useEffect, useRef, useState } from 'react';
  *   floor on the keyboard-shrunk height.
  *
  * Scrolling past the end is NOT this floor's job: iPad Safari lets any page
- * scroll to the bottom of its larger layout viewport, so no min-height can keep
- * the footer on screen at rest AND leave nothing below it at the end of that
- * scroll. `Footer.tsx` paints that run-out instead (`FOOTER_RUNOUT_SHADOW`).
+ * scroll or pan past the document's end, so no min-height can keep the footer
+ * on screen at rest AND leave nothing below it at the end of that scroll. That
+ * run-out shows the root canvas colour, which `index.css` sets to the footer's
+ * `--color-surface` (html) with body left transparent.
  */
 
 /**

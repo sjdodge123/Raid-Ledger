@@ -42,6 +42,9 @@ interface LayoutProps {
  * the floor is the VISIBLE viewport height, zoom- and keyboard-invariant
  * (`useShellHeight`), inline so it wins over the class. Its own component so a
  * height change re-renders only this div, not the chrome passed in as children.
+ * It is the ONLY element that paints `--color-backdrop`: the root canvas is
+ * `--color-surface` and body is transparent (`index.css`), so whatever Safari
+ * shows past the document's end reads as footer, not page background.
  * `?vpdebug=1` overlays the DEMO_MODE-only viewport readout (`dev/ViewportReadout.tsx`).
  */
 function ViewportShell({ children }: LayoutProps) {
