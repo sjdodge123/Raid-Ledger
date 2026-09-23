@@ -45,7 +45,7 @@ function ComboboxImpl<T>(p: ComboboxProps<T>, ref: ForwardedRef<HTMLInputElement
             <ComboboxLiveRegion text={c.open ? (c.status?.text ?? '') : ''} />
             {c.open && (
                 <ComboboxPopup
-                    popupRef={popupRef} testId={p.testIds?.popup} pos={pos} listboxId={c.listboxId} label={p.label} labelledBy={field?.labelId}
+                    popupRef={popupRef} testId={p.testIds?.popup} optionTestId={p.testIds?.option} pos={pos} listboxId={c.listboxId} label={p.label} labelledBy={field?.labelId}
                     items={c.items} status={c.status} activeIndex={c.activeIndex} optionId={c.optionId}
                     isSelected={(o) => !!p.value && p.getKey(o) === p.getKey(p.value)} getKey={p.getKey} portalContainer={container}
                     render={p.renderOption ?? ((o) => <span className="truncate">{p.getLabel(o)}</span>)}

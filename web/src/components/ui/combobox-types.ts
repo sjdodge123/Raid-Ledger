@@ -50,8 +50,8 @@ export interface ComboboxProps<T> {
     trailing?: ReactNode;
     /** Open the listbox when the input gains focus (e.g. to offer suggestions before typing). */
     openOnFocus?: boolean;
-    /** `data-testid` hooks for the input and the popup (smoke specs). */
-    testIds?: { input?: string; popup?: string };
+    /** `data-testid` hooks for the input, the popup and every `role="option"` row (smoke specs). */
+    testIds?: { input?: string; popup?: string; option?: string };
 }
 
 export interface ComboboxStatus {

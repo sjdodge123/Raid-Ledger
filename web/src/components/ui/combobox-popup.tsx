@@ -30,6 +30,8 @@ export interface ComboboxPopupProps<T> {
     onPick: (index: number) => void;
     /** `data-testid` for the popup container. */
     testId?: string;
+    /** `data-testid` for every `role="option"` row. */
+    optionTestId?: string;
     /** Portal target (default `document.body`). */
     portalContainer?: HTMLElement | null;
 }
@@ -72,7 +74,7 @@ export function ComboboxPopup<T>({ popupRef, portalContainer, ...p }: ComboboxPo
                 {p.items.map((o, i) => {
                     const state = { active: i === p.activeIndex, selected: p.isSelected(o) };
                     return (
-                        <li key={p.getKey(o)} id={p.optionId(i)} role="option" aria-selected={state.selected}
+                        <li key={p.getKey(o)} id={p.optionId(i)} role="option" aria-selected={state.selected} data-testid={p.optionTestId}
                             className={optionClass(state.active, state.selected)}
                             onMouseMove={() => { if (!state.active) p.onHover(i); }} onClick={() => p.onPick(i)}>
                             {p.render(o, state)}
