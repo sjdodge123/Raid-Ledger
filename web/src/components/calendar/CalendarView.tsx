@@ -221,6 +221,21 @@ function useCalendarInteractions(
     return { handleSelectEvent, eventPropGetter, wrappers };
 }
 
+/**
+ * ROK-1662: Schedule view has no month/week/day toolbar, but a page that was loaded
+ * phone-width (Schedule is the phone default) and then widened past 1024px must still
+ * reach its filters — so the funnel sits in its own right-aligned row with the panel
+ * under it. Both slots render nothing below 1024px (the page's Filters FAB takes over).
+ */
+function ScheduleFilterSlots({ toolbarAction, belowToolbar }: { toolbarAction?: ReactNode; belowToolbar?: ReactNode }) {
+    return (
+        <>
+            <div className="flex justify-end mb-3 empty:hidden">{toolbarAction}</div>
+            {belowToolbar}
+        </>
+    );
+}
+
 export function CalendarView({
     className = '', currentDate: controlledDate, onDateChange, selectedGames,
     gameTimeSlots, calendarView, onCalendarViewChange, toolbarAction, belowToolbar,
@@ -234,6 +249,7 @@ export function CalendarView({
     if (s.isScheduleView) {
         return (
             <div className={`min-w-0 ${className}`}>
+                <ScheduleFilterSlots toolbarAction={toolbarAction} belowToolbar={belowToolbar} />
                 {s.isLoading && <div className="flex items-center justify-center py-16 gap-2 text-muted"><div className="loading-spinner" /><span>Loading events...</span></div>}
                 {!s.isLoading && <ScheduleView events={s.calendarEvents} currentDate={s.currentDate} onDateChange={s.setCurrentDate} onSelectEvent={handleSelectEvent} eventOverlapsGameTime={eventOverlapsGameTime} isFetching={s.isFetching} />}
             </div>
