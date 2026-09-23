@@ -21,32 +21,6 @@ import {
   installCspReportBodyParser,
 } from './main.helpers';
 
-function installAutoClientUrlDetection(app: NestExpressApplication): void {
-  app.use(
-    (
-      req: { headers: Record<string, string | string[] | undefined> },
-      _res: unknown,
-      next: () => void,
-    ) => {
-      if (!process.env.CLIENT_URL) {
-        const host = req.headers.host as string | undefined;
-        if (
-          host &&
-          !host.startsWith('localhost') &&
-          !host.startsWith('127.0.0.1')
-        ) {
-          const proto =
-            ((req.headers['x-forwarded-proto'] as string) || 'http')
-              .split(',')[0]
-              .trim() || 'http';
-          process.env.CLIENT_URL = `${proto}://${host}`;
-        }
-      }
-      next();
-    },
-  );
-}
-
 function configureStaticAssets(
   app: NestExpressApplication,
   isProduction: boolean,
@@ -93,10 +67,12 @@ async function bootstrap() {
   app.enableCors({
     origin: buildCorsOriginFn(isProduction, corsOrigin, isAutoOrigin),
     credentials: true,
+    // ROK-1164: the web reads a log download's server-chosen filename.
+    exposedHeaders: ['Content-Disposition'],
   });
   if (isProduction) app.getHttpAdapter().getInstance().set('trust proxy', 1);
-  if (isAutoOrigin && !process.env.CLIENT_URL)
-    installAutoClientUrlDetection(app);
+  // ROK-1627: CLIENT_URL is seeded from trusted configuration by
+  // ClientUrlSeederService — never from a request header.
   configureStaticAssets(app, isProduction);
   app.useGlobalFilters(
     new SentryExceptionFilter(),

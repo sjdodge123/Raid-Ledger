@@ -7,7 +7,13 @@ export interface SchedulingPollSlot {
   /** ROK-1548: the tie-break of last resort in the shared comparator. */
   id: number;
   proposedTime: string;
+  /** YES votes only (ROK-1617) — what the card renders as "N votes". */
   voteCount: number;
+  /**
+   * ROK-1617: NO votes. Optional so a fixture predating the stance column
+   * still type-checks and orders exactly as it did before.
+   */
+  noCount?: number;
   voterNames: string[];
 }
 

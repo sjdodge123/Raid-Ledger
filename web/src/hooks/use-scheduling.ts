@@ -9,8 +9,12 @@ import type {
   SchedulingBannerDto,
   OtherPollsResponseDto,
   AggregateGameTimeResponse,
+  RallyNonVotersResponseDto,
   RemindVotersResponseDto,
+  ScheduleVoteStance,
+  ScheduleVoteSource,
 } from '@raid-ledger/contract';
+import { summariseRally } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
 import {
   getSchedulePoll,
@@ -23,6 +27,7 @@ import {
   getOtherPolls,
   cancelSchedulePoll,
   remindVoters,
+  rallyNonVoters,
   addPollMembers,
 } from '../lib/api-client';
 import { PARTICIPANTS_KEY } from './use-lineups';
@@ -55,6 +60,19 @@ export interface SchedulePollQueryOptions {
 /** One entry of a slot's voter list — the viewer's own, when we patch it in. */
 export type SchedulingVoter = ScheduleSlotWithVotesDto['votes'][number];
 
+/** Variables for suggesting a slot (ROK-965; `source` ROK-1550). */
+export interface SuggestSlotVars {
+  lineupId: number;
+  matchId: number;
+  proposedTime: string;
+  /**
+   * ROK-1550: where the visit that produced the suggestion came from. The
+   * server auto-votes for the new slot, so this is that vote's provenance.
+   * Omitted — every non-poll-page caller — it is an ordinary web suggestion.
+   */
+  source?: ScheduleVoteSource;
+}
+
 /** Variables for the one-tap vote toggle (ROK-1544). */
 export interface ToggleScheduleVoteVars {
   lineupId: number;
@@ -66,11 +84,32 @@ export interface ToggleScheduleVoteVars {
    * anonymous caller) the vote list is left to the refetch.
    */
   viewer?: SchedulingVoter;
+  /** ROK-1617: which answer was pressed. Defaults to `'yes'`. */
+  stance?: ScheduleVoteStance;
+  /**
+   * ROK-1550: where the visit the vote was cast in came from. Supplied by the
+   * poll surface (`useVoteSource`); omitted it is an ordinary web vote. The
+   * optimistic patch ignores it — it changes nothing the viewer can see.
+   */
+  source?: ScheduleVoteSource;
 }
 
-/** Toggle a slotId within the myVotedSlotIds array. */
-function toggleSlotId(ids: number[], slotId: number): number[] {
-  return ids.includes(slotId) ? ids.filter((id) => id !== slotId) : [...ids, slotId];
+/** Add or drop a slotId in one of the viewer's stance lists. */
+function setSlotId(ids: number[], slotId: number, present: boolean): number[] {
+  const without = ids.filter((id) => id !== slotId);
+  return present ? [...without, slotId] : without;
+}
+
+/**
+ * The stance the tap lands on (ROK-1617), mirroring the server's
+ * `resolveStanceAction`: pressing the answer already on record clears it,
+ * pressing the other one replaces it.
+ */
+function nextStance(
+  current: ScheduleVoteStance | null,
+  pressed: ScheduleVoteStance,
+): ScheduleVoteStance | null {
+  return current === pressed ? null : pressed;
 }
 
 /**
@@ -85,13 +124,20 @@ function patchSlotVotes(
   slots: ScheduleSlotWithVotesDto[],
   slotId: number,
   viewer: SchedulingVoter | undefined,
-  nowVoted: boolean,
+  landed: ScheduleVoteStance | null,
 ): ScheduleSlotWithVotesDto[] {
   if (!viewer) return slots;
   return slots.map((slot) => {
     if (slot.id !== slotId) return slot;
-    const others = slot.votes.filter((v) => v.userId !== viewer.userId);
-    return { ...slot, votes: nowVoted ? [...others, viewer] : others };
+    // The viewer holds at most ONE row per slot, so they are removed from both
+    // lists before being put back on the side they landed on.
+    const yes = slot.votes.filter((v) => v.userId !== viewer.userId);
+    const no = (slot.noVotes ?? []).filter((v) => v.userId !== viewer.userId);
+    return {
+      ...slot,
+      votes: landed === 'yes' ? [...yes, viewer] : yes,
+      noVotes: landed === 'no' ? [...no, viewer] : no,
+    };
   });
 }
 
@@ -99,16 +145,22 @@ function patchSlotVotes(
 async function optimisticToggle(
   qc: QueryClient, vars: ToggleScheduleVoteVars,
 ): Promise<{ prev: SchedulePollPageResponseDto | undefined }> {
-  const { lineupId, matchId, slotId, viewer } = vars;
+  const { lineupId, matchId, slotId, viewer, stance = 'yes' } = vars;
   const key = [...SCHEDULE_KEY, 'poll', lineupId, matchId];
   await qc.cancelQueries({ queryKey: key });
   const prev = qc.getQueryData<SchedulePollPageResponseDto>(key);
   if (prev) {
-    const nowVoted = !prev.myVotedSlotIds.includes(slotId);
+    const current: ScheduleVoteStance | null = prev.myVotedSlotIds.includes(slotId)
+      ? 'yes'
+      : (prev.myNoSlotIds ?? []).includes(slotId)
+        ? 'no'
+        : null;
+    const landed = nextStance(current, stance);
     qc.setQueryData(key, {
       ...prev,
-      myVotedSlotIds: toggleSlotId(prev.myVotedSlotIds, slotId),
-      slots: patchSlotVotes(prev.slots, slotId, viewer, nowVoted),
+      myVotedSlotIds: setSlotId(prev.myVotedSlotIds, slotId, landed === 'yes'),
+      myNoSlotIds: setSlotId(prev.myNoSlotIds ?? [], slotId, landed === 'no'),
+      slots: patchSlotVotes(prev.slots, slotId, viewer, landed),
     });
   }
   return { prev };
@@ -145,11 +197,18 @@ export function useSchedulePoll(lineupId: number, matchId: number, opts?: Schedu
   });
 }
 
-/** Hook for suggesting a new time slot. */
+/**
+ * Hook for suggesting a new time slot.
+ *
+ * ROK-1550: `source` is optional and defaults to a web suggestion, so the LFG
+ * "find a time" caller — which is never a poll-card arrival — stays unchanged.
+ * The poll page supplies its captured visit source, because the server
+ * auto-votes for the suggested slot.
+ */
 export function useSuggestSlot() {
   const qc = useQueryClient();
-  return useMutation<{ id: number }, Error, { lineupId: number; matchId: number; proposedTime: string }>({
-    mutationFn: ({ lineupId, matchId, proposedTime }) => suggestSlot(lineupId, matchId, proposedTime),
+  return useMutation<{ id: number }, Error, SuggestSlotVars>({
+    mutationFn: ({ lineupId, matchId, proposedTime, source }) => suggestSlot(lineupId, matchId, proposedTime, source),
     onSuccess: (_res, { lineupId, matchId }) => { invalidatePollViews(qc, lineupId, matchId); },
     onError: (err) => { toast.error(err.message || 'Failed to suggest time'); },
   });
@@ -159,9 +218,15 @@ export function useSuggestSlot() {
 export function useToggleScheduleVote() {
   const qc = useQueryClient();
   type Ctx = { prev: SchedulePollPageResponseDto | undefined };
-  return useMutation<{ voted: boolean }, Error, ToggleScheduleVoteVars, Ctx>({
+  return useMutation<
+    { voted: boolean; stance: ScheduleVoteStance | null },
+    Error,
+    ToggleScheduleVoteVars,
+    Ctx
+  >({
     mutationKey: [...SCHEDULE_VOTE_MUTATION_KEY],
-    mutationFn: ({ lineupId, matchId, slotId }) => toggleScheduleVote(lineupId, matchId, slotId),
+    mutationFn: ({ lineupId, matchId, slotId, stance, source }) =>
+      toggleScheduleVote(lineupId, matchId, slotId, stance, source),
     onMutate: (vars) => optimisticToggle(qc, vars),
     onError: (err, { lineupId, matchId }, ctx) => {
       // ROK-1544: the tap is the whole action, so a failed write has to be
@@ -257,6 +322,39 @@ export function useRemindVoters() {
       toast.success(`Reminded ${reminded} voter${reminded === 1 ? '' : 's'} (${skipped} skipped)`);
     },
     onError: (err) => { toast.error(err.message || 'Failed to send reminders'); },
+  });
+}
+
+/** Variables for {@link useRallyNonVoters}. */
+export interface RallyNonVotersVars {
+  lineupId: number;
+  matchId: number;
+  /** ROK-1635: the time being rallied. Omitted = the server's leading slot. */
+  slotId?: number;
+}
+
+/**
+ * Hook for the leader card's "Rally" nudge (ROK-1618, creator/operator).
+ *
+ * The success copy is `summariseRally` from `@raid-ledger/contract` — the SAME
+ * string table the API's unit spec pins, so the web never re-words it. Any
+ * failure (the 6h cooldown's 429, a plain member's 403, a closed poll's 400)
+ * surfaces the server's own `message` verbatim.
+ */
+export function useRallyNonVoters() {
+  const qc = useQueryClient();
+  return useMutation<RallyNonVotersResponseDto, Error, RallyNonVotersVars>({
+    mutationFn: ({ lineupId, matchId, slotId }) =>
+      rallyNonVoters(lineupId, matchId, slotId),
+    onSuccess: ({ pending, nudged, skipped }, { lineupId, matchId }) => {
+      // The nudge does not change the poll, but the pending count the row's
+      // subline reads does drift while the sheet is open — refresh it.
+      invalidatePollViews(qc, lineupId, matchId);
+      toast.success(summariseRally(pending, nudged, skipped));
+    },
+    onError: (err) => {
+      toast.error(err.message || 'Failed to rally voters');
+    },
   });
 }
 

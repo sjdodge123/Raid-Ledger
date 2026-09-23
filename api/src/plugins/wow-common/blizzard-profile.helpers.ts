@@ -4,6 +4,7 @@
  */
 import { NotFoundException } from '@nestjs/common';
 import type { BlizzardCharacterProfile } from './blizzard.constants';
+import { blizzardUpstreamError } from './blizzard-upstream-error';
 import {
   buildCharacterParams,
   fetchCharacterMedia,
@@ -26,7 +27,7 @@ export interface RawBlizzardProfile {
   realm: { name: string };
 }
 
-/** Throw appropriate error for failed profile fetch. */
+/** Throw an HttpException for a failed profile fetch (404 → 404, else 502). */
 export function throwProfileError(
   status: number,
   text: string,
@@ -40,7 +41,11 @@ export function throwProfileError(
     throw new NotFoundException(
       `Character "${name}" not found on ${realm} (${region.toUpperCase()}). Check the spelling and realm.`,
     );
-  throw new Error(`Blizzard API error (${status}). Please try again later.`);
+  throw blizzardUpstreamError(
+    status,
+    'characters',
+    `Blizzard API error (${status}). Please try again later.`,
+  );
 }
 
 /** Build the Blizzard profile URL (retail only — null prefix means retail). */

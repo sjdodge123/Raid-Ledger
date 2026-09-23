@@ -1682,7 +1682,7 @@
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--dps {
-    color: #dc2626;
+    color: #b91c1c;
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--flex {
@@ -1694,7 +1694,7 @@
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-leave-btn {
-    color: #dc2626;
+    color: var(--color-danger);
 }
 
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-login-link {

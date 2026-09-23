@@ -14,6 +14,7 @@ import { CurrentUserAvatarSync } from '../shared/CurrentUserAvatarSync';
 import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
 import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 /**
  * ROK-1067: routes under /p/* are public, chrome-less surfaces meant
@@ -45,7 +46,7 @@ function useFeedbackRef() {
 }
 
 function useAmbientEffects() {
-    const isDesktop = useMediaQuery('(min-width: 1024px)');
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
     const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
     return isDesktop && prefersMotion;
 }

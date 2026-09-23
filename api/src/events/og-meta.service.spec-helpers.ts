@@ -36,7 +36,11 @@ export function makeValidInvite(
 
 export interface OgMetaMocks {
   inviteService: { resolveInvite: jest.Mock };
-  settingsService: { getClientUrl: jest.Mock; getDefaultTimezone: jest.Mock };
+  settingsService: {
+    getClientUrl: jest.Mock;
+    getTrustedClientUrl: jest.Mock;
+    getDefaultTimezone: jest.Mock;
+  };
 }
 
 /** Set up the test module and return service + mocks. */
@@ -48,6 +52,9 @@ export async function setupOgMetaTestModule(): Promise<{
     inviteService: { resolveInvite: jest.fn() },
     settingsService: {
       getClientUrl: jest.fn().mockResolvedValue('https://raid.example.com'),
+      getTrustedClientUrl: jest
+        .fn()
+        .mockResolvedValue('https://raid.example.com'),
       getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
     },
   };

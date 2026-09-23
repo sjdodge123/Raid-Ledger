@@ -85,6 +85,17 @@ function makePendingPoll(
   };
 }
 
+/** Flatten a Drizzle `sql` template back into the text it will send. */
+function sqlTextOf(query: unknown): string {
+  const chunks = (query as { queryChunks?: unknown[] }).queryChunks ?? [];
+  return chunks
+    .map((chunk) => {
+      const value = (chunk as { value?: unknown }).value;
+      return Array.isArray(value) ? value.join('') : '';
+    })
+    .join('');
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -265,19 +276,153 @@ describe('SchedulingThresholdService', () => {
       await service.checkThresholds();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
+  });
 
-    it('notification failure does not prevent thresholdNotifiedAt from being set', async () => {
+  // -----------------------------------------------------------------------
+  // ROK-1632 AC2: the stamp is a receipt for an ACCEPTED send.
+  // Stamping after a throw burns the only chance to notify the creator —
+  // the poll is filtered out of every later sweep and the DM is lost.
+  // -----------------------------------------------------------------------
+  describe('stamp only after an accepted send (ROK-1632 AC2)', () => {
+    it('does NOT stamp thresholdNotifiedAt when create() throws', async () => {
       const poll = makePendingPoll();
       mockDb.execute.mockResolvedValueOnce([poll]).mockResolvedValueOnce([]);
       mockNotificationService.create.mockRejectedValueOnce(
         new Error('Discord DM failed'),
       );
 
-      // Should not throw — cron is fire-and-forget
+      // Still must not throw — cron is fire-and-forget.
       await expect(service.checkThresholds()).resolves.not.toThrow();
 
-      // thresholdNotifiedAt should still be stamped (second execute call)
-      expect(mockDb.execute).toHaveBeenCalledTimes(2);
+      const updates = mockDb.execute.mock.calls.filter((call) =>
+        /UPDATE community_lineup_matches/.test(sqlTextOf(call[0])),
+      );
+      expect(updates).toHaveLength(0);
+    });
+
+    it('stamps thresholdNotifiedAt once create() resolves', async () => {
+      const poll = makePendingPoll({ matchId: 77 });
+      mockDb.execute.mockResolvedValueOnce([poll]).mockResolvedValueOnce([]);
+
+      await service.checkThresholds();
+
+      const updates = mockDb.execute.mock.calls.filter((call) =>
+        /UPDATE community_lineup_matches/.test(sqlTextOf(call[0])),
+      );
+      expect(updates).toHaveLength(1);
+      expect(sqlTextOf(updates[0][0])).toMatch(
+        /threshold_notified_at = NOW\(\)/,
+      );
+    });
+
+    it('stamps when create() resolves null (recipient prefs suppressed it)', async () => {
+      // NotificationService.create returns null — not a throw — when the
+      // creator disabled the category. That is a decided outcome, so it must
+      // stamp; otherwise the cron re-queries this poll every 5 minutes forever.
+      const poll = makePendingPoll();
+      mockDb.execute.mockResolvedValueOnce([poll]).mockResolvedValueOnce([]);
+      mockNotificationService.create.mockResolvedValueOnce(null);
+
+      await service.checkThresholds();
+
+      const updates = mockDb.execute.mock.calls.filter((call) =>
+        /UPDATE community_lineup_matches/.test(sqlTextOf(call[0])),
+      );
+      expect(updates).toHaveLength(1);
+    });
+
+    it('keeps processing later polls after one send throws', async () => {
+      const failing = makePendingPoll({ matchId: 10, creatorId: 100 });
+      const ok = makePendingPoll({ matchId: 20, creatorId: 200 });
+      mockDb.execute.mockResolvedValueOnce([failing, ok]);
+      mockNotificationService.create.mockRejectedValueOnce(
+        new Error('Discord DM failed'),
+      );
+
+      await service.checkThresholds();
+
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
+      const updates = mockDb.execute.mock.calls.filter((call) =>
+        /UPDATE community_lineup_matches/.test(sqlTextOf(call[0])),
+      );
+      expect(updates).toHaveLength(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // ROK-1617: a `no` answer must not push a poll over its threshold
+  // -----------------------------------------------------------------------
+  describe('anti-votes (ROK-1617)', () => {
+    /**
+     * The voter count is computed in SQL, so a row fixture cannot prove the
+     * rule (the fixture IS the count). Assert the query the service actually
+     * issues: ONE yes-only count, used both for the message and for the
+     * `>= min_vote_threshold` comparison. With 1 yes + 3 no and a threshold
+     * of 3 the guard is what keeps the poll ineligible; drop it and the three
+     * rejections alone would fire the DM.
+     */
+    it('counts YES answers only, once, for both the message and the gate', async () => {
+      await service.checkThresholds();
+
+      const text = sqlTextOf(mockDb.execute.mock.calls[0][0]);
+      expect(text).toContain("v.stance = 'yes'");
+      expect(text.match(/COUNT\(DISTINCT/g) ?? []).toHaveLength(1);
+      expect(text).toMatch(/>=\s*eff\.min_votes/);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // ROK-1632 AC1: a NULL min_vote_threshold means "every current member".
+  // Only the standalone-poll path writes that column, so lineup-born polls
+  // carry NULL and the old `IS NOT NULL` gate made their DM impossible.
+  // The count is computed in SQL, so the query text IS the behaviour here.
+  // -----------------------------------------------------------------------
+  describe('NULL threshold = all current members (ROK-1632 AC1)', () => {
+    function eligibilitySql(): string {
+      return sqlTextOf(mockDb.execute.mock.calls[0][0]);
+    }
+
+    it('no longer excludes matches whose min_vote_threshold is NULL', async () => {
+      await service.checkThresholds();
+
+      expect(eligibilitySql()).not.toMatch(/min_vote_threshold IS NOT NULL/);
+    });
+
+    it('falls back to the live member count and requires it to be > 0', async () => {
+      await service.checkThresholds();
+
+      const text = eligibilitySql();
+      expect(text).toMatch(/COALESCE\(\s*m\.min_vote_threshold/);
+      expect(text).toMatch(/FROM community_lineup_match_members/);
+      expect(text).toMatch(/eff\.min_votes\s*>\s*0/);
+    });
+
+    it('selects the EFFECTIVE threshold as "minVoteThreshold"', async () => {
+      // buildThresholdNotification renders "N of M" from this column, so the
+      // gate and the message must read the same effective value.
+      await service.checkThresholds();
+
+      expect(eligibilitySql()).toMatch(
+        /eff\.min_votes::int AS "minVoteThreshold"/,
+      );
+    });
+
+    it('passes the effective threshold through to the rendered message', async () => {
+      // 3 of 3 members voted on a lineup-born poll: the row the query returns
+      // already carries the resolved count, so the DM reads "3 of 3".
+      const poll = makePendingPoll({
+        minVoteThreshold: 3,
+        uniqueVoterCount: 3,
+        gameName: 'Deep Rock Galactic',
+      });
+      mockDb.execute.mockResolvedValueOnce([poll]);
+
+      await service.checkThresholds();
+
+      const callArg = mockNotificationService.create.mock.calls[0][0];
+      expect(callArg.message).toBe(
+        '3 of 3 members have voted on your Deep Rock Galactic poll',
+      );
     });
   });
 
@@ -285,9 +430,10 @@ describe('SchedulingThresholdService', () => {
   // Edge cases
   // -----------------------------------------------------------------------
   describe('edge cases', () => {
-    it('skips polls with null minVoteThreshold (legacy)', async () => {
-      // The query itself should filter these out, but verify the service
-      // does not crash if a null-threshold poll sneaks through
+    it('sends nothing when the query returns no eligible polls', async () => {
+      // ROK-1632: a NULL min_vote_threshold is no longer a skip reason (the
+      // member count stands in). A memberless match still yields no row,
+      // because the effective threshold would be 0.
       mockDb.execute.mockResolvedValueOnce([]);
 
       await service.checkThresholds();

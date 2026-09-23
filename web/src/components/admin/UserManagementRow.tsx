@@ -198,7 +198,7 @@ function RowActions({ user, target, state, isCurrentUser, isAdmin, isDisabled, o
     if (isAdmin) return <span className="text-xs text-dim px-3 py-1.5">Protected</span>;
     return (
         <>
-            <select value={user.role} disabled={isDisabled}
+            <select aria-label={`Role for ${user.username}`} value={user.role} disabled={isDisabled}
                 onChange={(e) => onRoleChange(user.id, user.username, e.target.value as Exclude<UserRole, 'admin'>)}
                 className="text-sm bg-surface border border-edge rounded-lg px-3 py-1.5 text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors">
                 <option value="member">Member</option>

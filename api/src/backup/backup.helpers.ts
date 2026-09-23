@@ -21,21 +21,30 @@ function excludeTableDataFlags(tables?: readonly string[]): string[] {
  * Build pg_dump args for custom format.
  *
  * ROK-1413: `--exclude-schema=drizzle` keeps migration metadata
- * (`drizzle.__drizzle_migrations`) OUT of every dump. That schema is code, not
- * data — including it re-imports another branch's applied-hash rows on restore,
- * causing cross-branch drift + silently-skipped migrations. Exported so the arg
- * list is unit-assertable without spawning pg_dump.
+ * (`drizzle.__drizzle_migrations`) out of DEV dumps. On a dev box that schema is
+ * branch state, not data — restoring another branch's applied-hash rows causes
+ * cross-branch drift + silently-skipped migrations.
+ *
+ * ROK-1160 D4 (operator ruling 2026-09-22, option b): PROD dumps KEEP the
+ * journal (`keepJournal: true`, passed by `runPgDumpDirect` — the production
+ * path, since `BackupService` only leaves `dbContainer` empty in production).
+ * A prod restore must carry the journal that matches its `public` schema;
+ * without it `reconcile-migrations.mjs` replays from `0000` and dies on
+ * `0003` (`42804`). Dev safety does not depend on this flag: every restore
+ * path (`pgRestoreArgs`, `deploy_dev.sh`) still excludes `drizzle` on the way
+ * back in. Exported so the arg list is unit-assertable without spawning pg_dump.
  */
 export function pgDumpArgs(
   outputPath: string,
   dbUrl: string,
   excludeTableData?: readonly string[],
+  opts: { keepJournal?: boolean } = {},
 ): string[] {
   return [
     '--format=custom',
     '--no-owner',
     '--no-privileges',
-    '--exclude-schema=drizzle',
+    ...(opts.keepJournal ? [] : ['--exclude-schema=drizzle']),
     `--file=${outputPath}`,
     ...excludeTableDataFlags(excludeTableData),
     dbUrl,
@@ -45,9 +54,9 @@ export function pgDumpArgs(
 /**
  * Build pg_restore args.
  *
- * ROK-1413: `--exclude-schema=drizzle` is applied on restore too — existing
- * dumps (local `api/backups/daily/` + the prod NAS) already contain the drizzle
- * schema, so the exclusion must hold independent of the dump-side flag. The
+ * ROK-1413: `--exclude-schema=drizzle` is applied on restore too — prod dumps
+ * carry the drizzle schema (ROK-1160 D4, see `pgDumpArgs`) and older local
+ * dumps may too, so the exclusion must hold independent of the dump-side flag. The
  * live DB's `drizzle.__drizzle_migrations` hashes are preserved across the
  * restore instead of being replaced by the backup's (the foreign-hash-import
  * incident class this fix closes). CAVEAT — cross-version restores: restoring
@@ -72,7 +81,7 @@ export function pgRestoreArgs(dbUrl: string, inputPath: string): string[] {
   ];
 }
 
-/** Run pg_dump directly (production). */
+/** Run pg_dump directly (production) — keeps the migration journal (D4). */
 export async function runPgDumpDirect(
   outputPath: string,
   dbUrl: string,
@@ -80,7 +89,7 @@ export async function runPgDumpDirect(
 ): Promise<void> {
   await execFileAsync(
     'pg_dump',
-    pgDumpArgs(outputPath, dbUrl, excludeTableData),
+    pgDumpArgs(outputPath, dbUrl, excludeTableData, { keepJournal: true }),
   );
 }
 

@@ -18,6 +18,7 @@ import { DemoTestGamesController } from './demo-test-games.controller';
 import { DemoTestLineupController } from './demo-test-lineup.controller';
 import { DemoTestAiSuggestionsController } from './demo-test-ai-suggestions.controller';
 import { DemoTestGraceController } from './demo-test-grace.controller';
+import { DemoTestVersionController } from './demo-test-version.controller';
 import { DemoTestResetController } from './demo-test-reset.controller';
 import { DemoTestFixtureUserController } from './demo-test-fixture-user.controller';
 import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
@@ -34,6 +35,9 @@ import { SettingsModule } from '../settings/settings.module';
 // its post-write self-check. BackupModule imports CronJobModule + SettingsModule
 // only — no path back to AdminModule — so a plain import is correct here.
 import { BackupModule } from '../backup/backup.module';
+// ROK-1475: DemoTestVersionController stamps the running sha on seeded fixes.
+// VersionModule imports only Settings + CronJob modules — no cycle.
+import { VersionModule } from '../version/version.module';
 import { AuthModule } from '../auth/auth.module';
 import { IgdbModule } from '../igdb/igdb.module';
 import { DemoDataService } from './demo-data.service';
@@ -58,6 +62,7 @@ import { LfgModule } from '../lfg/lfg.module';
   imports: [
     SettingsModule,
     BackupModule,
+    VersionModule,
     CooptimusModule,
     AuthModule,
     IgdbModule,
@@ -98,6 +103,7 @@ import { LfgModule } from '../lfg/lfg.module';
     DemoTestLineupController,
     DemoTestAiSuggestionsController,
     DemoTestGraceController,
+    DemoTestVersionController,
     DemoTestResetController,
     DemoTestFixtureUserController,
     DemoTestStandalonePollController,

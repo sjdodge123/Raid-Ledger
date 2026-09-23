@@ -340,25 +340,41 @@ export async function isGroupParticipant(
   return row !== undefined;
 }
 
-/** What one hourly sweep touched. */
+/** One game the sweep touched, and who lapsed on it. */
+export interface LfgExpiredGroup {
+  /** The game the expired rows belonged to. */
+  gameId: number;
+  /**
+   * The users whose intent on that game just expired, de-duplicated and in
+   * first-seen order (ROK-1605). The board removes exactly these users from
+   * the group's forum thread when they are no longer in the live roster.
+   */
+  userIds: number[];
+}
+
+/** What one sweep touched. */
 export interface LfgExpirySweep {
   /** Rows flipped to `expired` — what the sweep logs. */
   count: number;
   /** The DISTINCT games those rows belonged to — what the sweep emits for. */
-  gameIds: number[];
+  groups: LfgExpiredGroup[];
 }
 
 /**
- * Hourly sweep: flip past-expiry rows to `expired`. Bookkeeping only — reads
- * already filter on `expires_at`.
+ * Sweep: flip past-expiry rows to `expired`. Bookkeeping only — reads already
+ * filter on `expires_at`.
  *
  * Reports the games as well as the count because this sweep is the ONLY thing
  * that knows a group died of old age (ROK-1454 D2), and it used to throw that
  * away. De-duplicated by game so a 40-row sweep across 3 games costs three
  * downstream edits rather than forty (E10). Insertion order is preserved.
  *
+ * Each game also carries WHO expired on it (ROK-1605): without the names a
+ * consumer can only re-render the group, so a member who quietly lapsed stayed
+ * in the board post's forum thread forever.
+ *
  * @param db - Drizzle handle.
- * @returns How many rows expired, and which distinct games they belonged to.
+ * @returns How many rows expired, and the distinct games with their users.
  */
 export async function expireStaleIntents(db: LfgDb): Promise<LfgExpirySweep> {
   const rows = await db
@@ -373,9 +389,28 @@ export async function expireStaleIntents(db: LfgDb): Promise<LfgExpirySweep> {
     .returning({
       id: schema.lfgIntents.id,
       gameId: schema.lfgIntents.gameId,
+      userId: schema.lfgIntents.userId,
     });
-  return {
-    count: rows.length,
-    gameIds: [...new Set(rows.map((row) => row.gameId))],
-  };
+  return { count: rows.length, groups: groupExpiredUsers(rows) };
+}
+
+/**
+ * Fold swept rows into one entry per distinct game, users de-duplicated.
+ *
+ * @param rows - The swept rows, in the order the UPDATE returned them.
+ * @returns One entry per game, both games and users in first-seen order.
+ */
+function groupExpiredUsers(
+  rows: readonly { gameId: number; userId: number }[],
+): LfgExpiredGroup[] {
+  const byGame = new Map<number, Set<number>>();
+  for (const row of rows) {
+    const users = byGame.get(row.gameId) ?? new Set<number>();
+    users.add(row.userId);
+    byGame.set(row.gameId, users);
+  }
+  return [...byGame].map(([gameId, users]) => ({
+    gameId,
+    userIds: [...users],
+  }));
 }

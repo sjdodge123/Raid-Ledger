@@ -4,12 +4,15 @@
  * Split out of `SchedulingPollNudgeService` so both files stay well inside
  * the 300-line / 30-line caps.
  */
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import type { NotificationService } from '../../notifications/notification.service';
+import type { NotificationDedupService } from '../../notifications/notification-dedup.service';
 import {
   POLL_NUDGE_DEADLINE_HANDOFF_HOURS,
   POLL_NUDGE_MIN_MEMBER_AGE_HOURS,
+  POLL_NUDGE_TTL_SECONDS,
 } from '../lineup-notification.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -53,7 +56,7 @@ interface NudgePollRow {
  * (see `findPendingMemberIds`), not per-poll, because the deadline services
  * only cover zero-vote members.
  */
-const NUDGEABLE_POLLS_QUERY = sql`
+const nudgeablePollsQuery = (matchFilter: SQL): SQL => sql`
   SELECT cl.id AS "lineupId",
          clm.id AS "matchId",
          COALESCE(g.name, 'your game') AS "gameName",
@@ -73,7 +76,20 @@ const NUDGEABLE_POLLS_QUERY = sql`
     AND clm.status = 'scheduling'
     AND cl.include_scheduling_phase IS NOT FALSE
     AND (cl.phase_deadline IS NULL OR cl.phase_deadline > NOW())
+    ${matchFilter}
 `;
+
+/** Normalise one raw row; `db.execute` hands booleans back untyped. */
+function toNudgePoll(row: NudgePollRow): NudgePoll {
+  return {
+    lineupId: row.lineupId,
+    matchId: row.matchId,
+    gameName: row.gameName,
+    hasFutureSlots: row.hasFutureSlots === true,
+    hadSlots: row.hadSlots === true,
+    inDeadlineHandoff: row.inDeadlineHandoff === true,
+  };
+}
 
 /**
  * Fetch the polls eligible for nudging this tick.
@@ -83,16 +99,32 @@ const NUDGEABLE_POLLS_QUERY = sql`
  */
 export async function findNudgeablePolls(db: Db): Promise<NudgePoll[]> {
   const rows = (await db.execute(
-    NUDGEABLE_POLLS_QUERY,
+    nudgeablePollsQuery(sql``),
   )) as unknown as NudgePollRow[];
-  return rows.map((r) => ({
-    lineupId: r.lineupId,
-    matchId: r.matchId,
-    gameName: r.gameName,
-    hasFutureSlots: r.hasFutureSlots === true,
-    hadSlots: r.hadSlots === true,
-    inDeadlineHandoff: r.inDeadlineHandoff === true,
-  }));
+  return rows.map(toNudgePoll);
+}
+
+/**
+ * The same eligibility check as {@link findNudgeablePolls}, narrowed to one
+ * match — the organiser "Rally" nudge's entry point (ROK-1618, D6).
+ *
+ * Sharing the SQL is the point: the three copy variants key off
+ * `hasFutureSlots` / `hadSlots`, which only this query computes, and a rally
+ * that reached a poll the cron considers ineligible (cancelled lineup,
+ * scheduling phase off, deadline passed) would deep-link to a dead page.
+ *
+ * @param db - Drizzle database handle
+ * @param matchId - Match the organiser is rallying
+ * @returns The poll, or `null` when it is not (or no longer) nudgeable
+ */
+export async function loadNudgePollById(
+  db: Db,
+  matchId: number,
+): Promise<NudgePoll | null> {
+  const rows = (await db.execute(
+    nudgeablePollsQuery(sql`AND clm.id = ${matchId}`),
+  )) as unknown as NudgePollRow[];
+  return rows.length > 0 ? toNudgePoll(rows[0]) : null;
 }
 
 /**
@@ -183,4 +215,86 @@ export function buildNudgeCopy(poll: NudgePoll): {
       `All proposed days for ${poll.gameName} have passed — ` +
       'suggest a new time so the group can pick one.',
   };
+}
+
+/** Collaborators one poll-nudge DM needs. Structural, so the cron service and
+ * the rally service can each pass their own injected instances. */
+export interface PollNudgeDeps {
+  notificationService: Pick<NotificationService, 'create'>;
+  dedupService: Pick<NotificationDedupService, 'checkAndMarkSent'>;
+}
+
+/**
+ * The 24h per-member dedup key for one recurring poll nudge.
+ *
+ * Owned by the cron alone. The organiser rally used to share it, but now
+ * claims its own `sched-poll-rally:{matchId}:{slotId}:{userId}` on the 6h
+ * rally TTL, so neither action can spend the other's budget.
+ *
+ * @param matchId - Match the nudge is about
+ * @param userId - Recipient
+ * @returns The dedup key, `sched-poll-nudge:{matchId}:{userId}`
+ */
+export function pollNudgeKey(matchId: number, userId: number): string {
+  return `sched-poll-nudge:${matchId}:${userId}`;
+}
+
+/** Outcome of one attempted poll-nudge DM. */
+export interface PollNudgeResult {
+  /**
+   * False when the shared 24h key was already marked for this (match, user).
+   * True means this call owns the window — the key is burnt either way, which
+   * is the cron's pre-existing behaviour.
+   */
+  dispatched: boolean;
+  /** True only when a notification row was created (preferences allowed it). */
+  created: boolean;
+}
+
+/**
+ * Send one poll-nudge DM unless this (match, user) pair was already nudged
+ * inside the current 24h window.
+ *
+ * The cron's send path only. The organiser "Rally" asks a different question
+ * (does the LEADING time work?) with a different audience and its own 6h key,
+ * so it has its own `sendRallyDm` in `scheduling-rally.helpers.ts`; keeping
+ * that split is what lets the cron's 24h budget mean what it says.
+ * Dispatch failures propagate and fail the poll for this tick.
+ *
+ * @param deps - Notification + dedup collaborators
+ * @param poll - Eligible poll supplying the copy and the payload
+ * @param userId - Recipient
+ * @returns Whether the window was claimed and whether a row was created
+ */
+export async function sendPollNudge(
+  deps: PollNudgeDeps,
+  poll: NudgePoll,
+  userId: number,
+): Promise<PollNudgeResult> {
+  const key = pollNudgeKey(poll.matchId, userId);
+  const alreadySent = await deps.dedupService.checkAndMarkSent(
+    key,
+    POLL_NUDGE_TTL_SECONDS,
+  );
+  if (alreadySent) return { dispatched: false, created: false };
+
+  const { title, message } = buildNudgeCopy(poll);
+  const created = await deps.notificationService.create({
+    userId,
+    type: 'community_lineup',
+    title,
+    message,
+    payload: {
+      // Own 5-min rate-limit bucket, distinct from the deadline reminder.
+      subtype: 'scheduling_poll_nudge',
+      // Per-poll rate bucket: a user pending in N polls gets N DMs (each a
+      // different deep link) instead of 1 DM + N-1 silently dropped — dedup
+      // is marked pre-dispatch, so a dropped DM is lost for the whole window.
+      reminderWindow: `poll-${poll.matchId}`,
+      lineupId: poll.lineupId,
+      matchId: poll.matchId,
+      gameName: poll.gameName,
+    },
+  });
+  return { dispatched: true, created: created !== null };
 }

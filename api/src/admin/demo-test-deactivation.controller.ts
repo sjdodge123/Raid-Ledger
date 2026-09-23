@@ -70,11 +70,15 @@ export class DemoTestDeactivationController {
     const snowflake = `9${Date.now()}${Math.floor(Math.random() * 1000)
       .toString()
       .padStart(3, '0')}`;
+    // ROK-1633: `users.username` is not unique, and the three Playwright
+    // projects seed in the same millisecond — two members then share a name
+    // and the moderation smoke's `.first()` row can be the OTHER project's
+    // (already kicked) member. Reuse the snowflake: it carries a random tail.
     const [user] = await this.db
       .insert(schema.users)
       .values({
         discordId: snowflake,
-        username: `non-guild-${Date.now()}`,
+        username: `non-guild-${snowflake}`,
         role: 'member',
       })
       .returning({ id: schema.users.id });

@@ -33,6 +33,33 @@ let cachedKeySecret: string | null = null;
 /**
  * Derives a 32-byte AES key from a secret string using scrypt.
  * Pure function — no caching, no side effects.
+ *
+ * ROK-1366 — JWT_SECRET ONLY. DO NOT REUSE FOR PASSWORD HASHING.
+ *
+ * The salt is derived deterministically from the secret itself
+ * (`secret.slice(0, 32).padEnd(32, '0')`), which defeats the point of a salt:
+ * it is per-secret, not per-value, and a short JWT_SECRET is padded with
+ * literal '0' characters rather than entropy. That is tolerable here and
+ * ONLY here, because the input is a single high-entropy process secret used
+ * to wrap `app_settings` values — there is no rainbow-table or
+ * cross-user-collision surface. Applied to user passwords it would be a real
+ * vulnerability.
+ *
+ * The derivation is also LOAD-BEARING FOR STORED DATA. Every encrypted
+ * `app_settings` value in every deployment was sealed with the key this
+ * function returns; changing the salt, the KDF or its parameters makes all of
+ * them undecryptable, with no error until a settings read fails at runtime.
+ * `encryption.util.spec.ts` pins a golden vector so that change cannot land
+ * silently.
+ *
+ * Moving to a stored random salt (`app_settings.encryption_salt`) is the real
+ * fix and is deliberately NOT done here. It requires, as one shipped unit:
+ *   1. a migration that generates and stores the 32-byte salt,
+ *   2. a re-encrypt pass over every encrypted row keyed off the OLD
+ *      derivation, run before any reader uses the new one
+ *      (see `reencrypt-settings.integration.spec.ts`),
+ *   3. a rollback path that can re-seal with the old derivation, and
+ *   4. a verified backup taken first — step 2 is not idempotent.
  */
 export function deriveKey(secret: string): Buffer {
   const salt = Buffer.from(

@@ -149,7 +149,9 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
       matchId: MATCH_ID,
       lineupId: LINEUP_ID,
       status: 'open',
-      pollUrl: `${CLIENT_URL}/community-lineup/${LINEUP_ID}/schedule/${MATCH_ID}`,
+      // ROK-1550: `buildPollUrl` tags every Discord card link so the vote it
+      // produces is attributable. Asserted exactly, not loosened to a prefix.
+      pollUrl: `${CLIENT_URL}/community-lineup/${LINEUP_ID}/schedule/${MATCH_ID}?src=discord`,
     });
   });
 

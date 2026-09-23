@@ -48,7 +48,11 @@ import { SchedulingAvailability } from './SchedulingAvailability';
 import { SchedulingSlotList } from './SchedulingSlotList';
 import { useSchedulingGameTimeCheck } from './SchedulingGameTimeCheck';
 import { SchedulingLeaderCard } from './SchedulingLeaderCard';
-import { deriveSchedulingLeader } from './scheduling-leader';
+
+import { SchedulingLeaderVoteControls } from './SchedulingLeaderVoteControls';
+import { useSchedulingCardLeader } from './use-scheduling-card-leader';
+import { useLeaderFocusRescue } from './use-leader-focus-rescue';
+import { useSchedulingTimeMenus } from './use-scheduling-time-menus';
 import { formatSlotTime } from './scheduling-slot-time';
 import { useSchedulingAnnouncer } from './use-scheduling-announcer';
 import { SchedulingAnnouncer } from './SchedulingAnnouncer';
@@ -60,6 +64,7 @@ import {
 import { SchedulingTerminalBanner } from './SchedulingTerminalBanner';
 import { resolvePollStatus } from './scheduling-poll-status';
 import { useLockDeepLink } from './use-lock-deep-link';
+import { useVoteSource } from './use-vote-source';
 import { SchedulingCatchUpLine } from './SchedulingCatchUpLine';
 import { SchedulingPendingVoters } from './SchedulingPendingVoters';
 import { deriveCatchUp, formatDeadlineLabel } from './scheduling-catch-up';
@@ -81,6 +86,9 @@ export function SchedulingComposite(
   const pollStatus = resolvePollStatus(poll);
   const readOnly = pollStatus !== 'open';
   const suggest = useSuggestSlot();
+  // ROK-1550: the poll's own visit source — the ladder's votes and this
+  // surface's suggestions must be attributed to the same arrival.
+  const voteSource = useVoteSource();
   const { data: matches } = useLineupMatches(
     poll.isStandalone ? undefined : lineupId,
   );
@@ -113,7 +121,17 @@ export function SchedulingComposite(
     ...resolvePollCreator(poll.match, me),
   });
 
-  const leader = deriveSchedulingLeader(poll.slots);
+  /**
+   * ROK-1635 (AC1): ONE derivation for the card, the announcer and the row
+   * the ladder must not repeat — same memo, so a vote that moves the lead
+   * moves the card and the list in a single commit (§4.4).
+   */
+  const { leader, leaderSlotId } = useSchedulingCardLeader(poll, readOnly);
+  /**
+   * ROK-1635 (§4.6): the swap unmounts a row, so a keyboard user standing on
+   * it would be dropped onto `<body>`. Focus follows the time instead.
+   */
+  useLeaderFocusRescue(leaderSlotId);
   /** Null unless the viewer joined after voting had already started. */
   const catchUp = readOnly ? null : deriveCatchUp(poll.match.members, me);
   /** ROK-1546 (AC2): polite announcements for the viewer's vote + the leader. */
@@ -131,6 +149,21 @@ export function SchedulingComposite(
     me,
     lock: expiredLock.active ? { requestLock: expiredLock.request } : lock,
     announcer,
+  });
+  /**
+   * ROK-1635 (AC3, §3.4): ONE builder for every time card's ⋯ menu, owning
+   * the single per-poll rally cooldown — so one rally disables Rally on the
+   * card AND on every row, which is what the server's 6h key enforces.
+   */
+  const menus = useSchedulingTimeMenus({
+    poll,
+    lineupId,
+    matchId,
+    readOnly,
+    viewerId: me,
+    canManage: ladder.canLock,
+    leaderSlot: leader?.slot ?? null,
+    onLock: (slot) => void ladder.onLock(slot),
   });
   const check = useSchedulingGameTimeCheck();
   const canVote = ladder.canVote;
@@ -153,11 +186,13 @@ export function SchedulingComposite(
     // rejected slot.
     if (!canSuggest) return;
     suggest.mutate(
-      { lineupId, matchId, proposedTime },
+      // ROK-1550: the server auto-votes for the slot, so the suggestion
+      // carries this visit's source or that vote lands as a web vote.
+      { lineupId, matchId, proposedTime, source: voteSource },
       {
         // ROK-1546 (AC2): the auto-vote is a vote — say so, on success only.
         onSuccess: () =>
-          announcer.announceVote(formatSlotTime(proposedTime).label, true),
+          announcer.announceVote(formatSlotTime(proposedTime).label, 'yes'),
       },
     );
     setBetterTimeOpen(false);
@@ -174,11 +209,6 @@ export function SchedulingComposite(
         matchId={matchId}
         readOnly={readOnly}
         uniqueVoterCount={poll.uniqueVoterCount}
-        canLock={ladder.canLock && leader !== null && !readOnly}
-        leadingTimeLabel={
-          leader ? formatSlotTime(leader.slot.proposedTime).label : ''
-        }
-        onLockLeader={() => leader && lock.requestLock(leader.slot)}
       />
       <SchedulingTerminalBanner
         pollStatus={pollStatus}
@@ -208,13 +238,44 @@ export function SchedulingComposite(
       )}
       <SchedulingLeaderCard
         slots={poll.slots}
+        /* ROK-1635 (AC1): the card names the hoisted leader rather than
+           deriving a second one that could disagree with the hidden row. */
+        leader={leader}
         memberCount={poll.match.members.length}
         phaseDeadline={poll.phaseDeadline}
         readOnly={readOnly}
+        /* ROK-1617 follow-up: a locked-in poll names the time it locked —
+           lock-in ignores the leader floor (ruling D-Q3), so the floor must
+           not turn a decided poll into "No time works for the group yet." */
+        lockedInTime={poll.lockedInTime ?? null}
+        /* ROK-1617 follow-up (operator): vote / "doesn't work" on the lead
+           time itself — the SAME ladder binding the rows use. */
+        voteControls={
+          <SchedulingLeaderVoteControls
+            ladder={ladder}
+            slot={leader?.slot ?? null}
+          />
+        }
+        /* ROK-1635 (AC3): the card renders the SAME menu component every row
+           does — only `testIdPrefix` and the surrounding styling differ. Null
+           while no time leads: there is nothing to lock or rally. */
+        menu={menus.leaderMenu}
       />
       {/* ROK-1574: the phone check's step 2 IS this ladder, same binding —
           so the page copy hides while the sheet is up (one ladder in the DOM). */}
-      {!check.sheetVisible && <SchedulingSlotList {...ladder} />}
+      {/* ROK-1635 (AC1): the leading time is on the card above, so the ladder
+          lists every OTHER time. Per OQ-4 the phone game-time sheet's copy of
+          this ladder keeps every row — that sheet has no leader card. */}
+      {!check.sheetVisible && (
+        <SchedulingSlotList
+          {...ladder}
+          excludeSlotId={leaderSlotId}
+          /* Codex P3: the "only time proposed" copy points at the "Find a
+             better time" trigger below, which this same flag gates. */
+          canSuggest={canSuggest}
+          renderSlotMenu={menus.renderSlotMenu}
+        />
+      )}
       {check.shell}
       {!readOnly && <SchedulingPendingVoters members={poll.match.members} />}
       {canSuggest && (

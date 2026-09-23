@@ -15,6 +15,7 @@ import {
 import {
   getDiscordBotConfig as _getDiscordBotConfig,
   getClientUrl as _getClientUrl,
+  getTrustedClientUrl as _getTrustedClientUrl,
   getAutoExtendIncrement,
   getAutoExtendMaxOverage,
   getAutoExtendMinVoice,
@@ -24,6 +25,7 @@ import {
   getBranding as _getBranding,
   clearBranding as _clearBranding,
   setDiscordOAuthKeys,
+  clearDiscordOAuth,
   setIgdbKeys,
   setBlizzardKeys,
   setDiscordBotKeys,
@@ -201,6 +203,9 @@ export class SettingsService
     this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, config);
   }
 
+  /** Clear Discord OAuth and tell listeners, exactly as a set does. */
+  clearDiscordOAuthConfig = () => clearDiscordOAuth(this, this.eventEmitter);
+
   async isDiscordConfigured(): Promise<boolean> {
     return bothExist(
       this,
@@ -335,6 +340,8 @@ export class SettingsService
   setDefaultTimezone = (tz: string) => _setDefaultTimezone(this, tz);
   /** Get the client URL with fallback chain. */
   getClientUrl = () => _getClientUrl(this);
+  /** Get the client URL from configuration only, or null (ROK-1627). */
+  getTrustedClientUrl = () => _getTrustedClientUrl(this);
   // Discord default/ephemeral voice delegations live on EphemeralVoiceSettingsBase.
 
   // ─── ROK-1352: Ephemeral voice channels ──────────────────────

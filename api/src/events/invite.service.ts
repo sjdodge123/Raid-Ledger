@@ -23,6 +23,7 @@ import {
   assertSlotClaimable,
   findClaimEventOrThrow,
   checkNotAlreadySignedUp,
+  buildPostClaimDm,
 } from './invite.helpers';
 import {
   findEventByShareCode,
@@ -50,6 +51,13 @@ export class InviteService {
     private readonly settingsService: SettingsService,
   ) {}
 
+  /**
+   * Resolve an invite code for the public landing page.
+   *
+   * ROK-1631: this path is unauthenticated, so it must not create a Discord
+   * server invite. The server invite is minted on the authenticated claim
+   * paths instead, and returned in the claim response.
+   */
   async resolveInvite(code: string): Promise<InviteCodeResolveResponseDto> {
     const slot = await findSlotByCode(this.db, code);
     if (!slot) return this.resolveShareInvite(code);
@@ -81,7 +89,6 @@ export class InviteService {
       event,
       slot?.createdBy ?? event.creatorId,
     );
-    const discordServerInviteUrl = await this.tryGenerateServerInvite(event.id);
     const communityName = await this.tryGetCommunityName();
     return {
       valid: true,
@@ -100,7 +107,6 @@ export class InviteService {
               'pending' | 'invited' | 'accepted' | 'claimed',
           }
         : undefined,
-      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
       communityName: communityName ?? undefined,
     };
   }
@@ -155,7 +161,10 @@ export class InviteService {
       event.id,
     );
     this.sendPostClaimDM(userId, event.title, event.id).catch(() => {});
-    const discordServerInviteUrl = await this.tryGenerateServerInvite(event.id);
+    const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      userId,
+      event.id,
+    );
     return {
       type: user.discordId ? ('signup' as const) : ('claimed' as const),
       eventId: event.id,
@@ -182,6 +191,7 @@ export class InviteService {
       slot.eventId,
     );
     const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      userId,
       slot.eventId,
     );
     this.sendPostClaimDM(userId, event.title, slot.eventId).catch(() => {});
@@ -201,14 +211,7 @@ export class InviteService {
     code: string,
   ) {
     await this.createSignupForClaim(slot.eventId, userId, role, characterId);
-    await this.db
-      .update(schema.pugSlots)
-      .set({
-        claimedByUserId: userId,
-        status: 'claimed',
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.pugSlots.id, slot.id));
+    await this.markSlotClaimed(slot.id, userId);
     this.logger.log(
       'Invite %s claimed by user %d (PUG slot + signup) for event %d',
       code,
@@ -216,7 +219,29 @@ export class InviteService {
       slot.eventId,
     );
     this.sendPostClaimDM(userId, event.title, slot.eventId).catch(() => {});
-    return { type: 'claimed' as const, eventId: slot.eventId };
+    // ROK-1631: the resolve response no longer carries a server invite, so
+    // this path mints its own rather than relying on the landing page's copy.
+    const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      userId,
+      slot.eventId,
+    );
+    return {
+      type: 'claimed' as const,
+      eventId: slot.eventId,
+      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+    };
+  }
+
+  /** Mark a PUG slot as claimed by the given user. */
+  private async markSlotClaimed(slotId: string, userId: number): Promise<void> {
+    await this.db
+      .update(schema.pugSlots)
+      .set({
+        claimedByUserId: userId,
+        status: 'claimed',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.pugSlots.id, slotId));
   }
 
   private async createSignupForClaim(
@@ -265,11 +290,8 @@ export class InviteService {
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (!user?.discordId) return;
-    const clientUrl = await this.settingsService.getClientUrl();
-    const message = [
-      `You have joined **${eventTitle}**!`,
-      `View the event: ${clientUrl}/events/${eventId}`,
-    ].join('\n');
+    const clientUrl = await this.settingsService.getTrustedClientUrl();
+    const message = buildPostClaimDm(eventTitle, eventId, clientUrl);
     await this.discordClient.sendDirectMessage(user.discordId, message);
     this.logger.log(
       'Sent post-claim DM to user %d for event %d',
@@ -279,11 +301,12 @@ export class InviteService {
   }
 
   private async tryGenerateServerInvite(
+    userId: number,
     eventId: number,
   ): Promise<string | null> {
     if (!this.pugInviteService) return null;
     try {
-      return await this.pugInviteService.generateServerInvite(eventId);
+      return await this.pugInviteService.serverInviteFor(userId, eventId);
     } catch (err) {
       this.logger.warn(
         'Failed to generate server invite for claim response: %s',

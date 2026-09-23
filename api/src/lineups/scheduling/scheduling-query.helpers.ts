@@ -4,6 +4,10 @@
  */
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  ScheduleVoteSource,
+  ScheduleVoteStance,
+} from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -13,6 +17,16 @@ export interface ScheduleVoteRow {
   id: number;
   slotId: number;
   userId: number;
+  /**
+   * ROK-1617: the vote's polarity.
+   *
+   * Optional because the ABSENCE of a stance means `'yes'` — that is what the
+   * column default encodes and what every pre-stance row already meant. The
+   * live query always selects it; callers that build a row without one (and
+   * every fixture that predates the column) read as yes, which is correct
+   * rather than merely convenient.
+   */
+  stance?: ScheduleVoteStance;
   displayName: string;
   avatar: string | null;
   discordId: string | null;
@@ -78,6 +92,7 @@ export function findScheduleVotes(
       id: schema.communityLineupScheduleVotes.id,
       slotId: schema.communityLineupScheduleVotes.slotId,
       userId: schema.communityLineupScheduleVotes.userId,
+      stance: schema.communityLineupScheduleVotes.stance,
       displayName:
         sql<string>`COALESCE(${schema.users.displayName}, ${schema.users.username})`.as(
           'display_name',
@@ -114,17 +129,68 @@ export function insertScheduleSlot(
  * (slotId, userId) pair never throw a unique-constraint error.
  * Returns the inserted row when new, or an empty array when the vote
  * already existed.
+ *
+ * ROK-1617: carries the stance. DO NOTHING (not DO UPDATE) is deliberate —
+ * the empty return is how `toggleVote` learns this tap hit an existing row and
+ * must decide between changing the stance and clearing it.
+ *
+ * ROK-1550: carries the provenance. The default is `'web'` so every other
+ * caller (and every fixture) keeps writing the truthful value without naming
+ * it.
  */
-export function insertScheduleVote(db: Db, slotId: number, userId: number) {
+export function insertScheduleVote(
+  db: Db,
+  slotId: number,
+  userId: number,
+  stance: ScheduleVoteStance = 'yes',
+  source: ScheduleVoteSource = 'web',
+) {
   return db
     .insert(schema.communityLineupScheduleVotes)
-    .values({ slotId, userId })
+    .values({ slotId, userId, stance, source })
     .onConflictDoNothing({
       target: [
         schema.communityLineupScheduleVotes.slotId,
         schema.communityLineupScheduleVotes.userId,
       ],
     })
+    .returning();
+}
+
+/**
+ * Flip an existing vote's stance (ROK-1617 AC2).
+ *
+ * An UPDATE, never a second INSERT — `uq_schedule_vote_user` already
+ * guarantees one row per (slot, user), and re-inserting would violate it.
+ *
+ * ROK-1550: the source is overwritten too, not preserved. A row describes the
+ * action behind its CURRENT answer, so a member who voted from the web and
+ * later flipped from a Discord link counts as a Discord-initiated answer —
+ * keeping the original would credit the wrong surface for the live stance.
+ *
+ * @param db - Drizzle handle (the caller's transaction).
+ * @param slotId - Slot being re-answered.
+ * @param userId - The member changing their mind.
+ * @param stance - The stance to store.
+ * @param source - Where the flip was initiated.
+ * @returns The updated rows.
+ */
+export function updateScheduleVoteStance(
+  db: Db,
+  slotId: number,
+  userId: number,
+  stance: ScheduleVoteStance,
+  source: ScheduleVoteSource = 'web',
+) {
+  return db
+    .update(schema.communityLineupScheduleVotes)
+    .set({ stance, source })
+    .where(
+      and(
+        eq(schema.communityLineupScheduleVotes.slotId, slotId),
+        eq(schema.communityLineupScheduleVotes.userId, userId),
+      ),
+    )
     .returning();
 }
 
@@ -140,10 +206,13 @@ export function deleteScheduleVote(db: Db, slotId: number, userId: number) {
     );
 }
 
-/** Find a specific vote by slot and user. */
+/** Find a specific vote by slot and user, with its ROK-1617 stance. */
 export function findVoteBySlotAndUser(db: Db, slotId: number, userId: number) {
   return db
-    .select({ id: schema.communityLineupScheduleVotes.id })
+    .select({
+      id: schema.communityLineupScheduleVotes.id,
+      stance: schema.communityLineupScheduleVotes.stance,
+    })
     .from(schema.communityLineupScheduleVotes)
     .where(
       and(

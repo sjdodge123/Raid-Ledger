@@ -10,6 +10,7 @@ import {
 function TimezoneSelect({ value, onChange, browserAbbr }: { value: string; onChange: (v: string) => void; browserAbbr: string }) {
     return (
         <select
+            aria-label="Timezone"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"

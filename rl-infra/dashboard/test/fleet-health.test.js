@@ -45,7 +45,7 @@ const waitForListening = async (port, deadline = Date.now() + 5000) => {
   throw new Error(`server did not become reachable on :${port} within 5s`);
 };
 
-const startServer = async (stateDir) => {
+const startServer = async (stateDir, extraEnv = {}) => {
   const port = await pickFreePort();
   const child = spawn(process.execPath, [SERVER_PATH], {
     env: {
@@ -55,6 +55,9 @@ const startServer = async (stateDir) => {
       PUBLIC_DIR,
       RL_AGENT_TOKEN: 'test-token-not-used',
       NODE_ENV: 'test',
+      // ROK-1537: pin the operator id per test — never inherit the laptop's.
+      RL_OPERATOR_DISCORD_ID: '',
+      ...extraEnv,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -92,12 +95,12 @@ test.after(async () => {
   if (ctx?.dir) await rm(ctx.dir, { recursive: true, force: true });
 });
 
-const boot = async (claims = [], envs = [], lease_queues = {}, audit_lines = []) => {
+const boot = async (claims = [], envs = [], lease_queues = {}, audit_lines = [], extraEnv = {}) => {
   if (ctx.srv) await ctx.srv.kill();
   if (ctx.dir) await rm(ctx.dir, { recursive: true, force: true });
   ctx.dir = await mkdtemp(join(tmpdir(), 'rl-dash-m7-'));
   await writeState(ctx.dir, claims, envs, lease_queues, audit_lines);
-  ctx.srv = await startServer(ctx.dir);
+  ctx.srv = await startServer(ctx.dir, extraEnv);
   return ctx;
 };
 
@@ -298,4 +301,23 @@ test('AC-M7-fh-9: clean fleet returns summary.ok=true', async () => {
   assert.equal(body.summary.stale_slots, 0);
   assert.equal(body.summary.stuck_queue_entries, 0);
   assert.equal(body.summary.ok, true);
+});
+
+// ROK-1537 AC4: an unset RL_OPERATOR_DISCORD_ID is a visible config warning,
+// kept out of warning_count (flake triage keys off it).
+test('ROK-1537: unset RL_OPERATOR_DISCORD_ID emits operator_discord_id_unset', async () => {
+  await boot([], [], {}, [], { RL_OPERATOR_DISCORD_ID: '' });
+  const body = await (await fetch(`${ctx.srv.base}/api/fleet-health`)).json();
+  assert.deepEqual(body.config_warnings.map((w) => w.kind), ['operator_discord_id_unset'],
+    `expected one operator_discord_id_unset warning, got ${JSON.stringify(body.config_warnings)}`);
+  assert.match(body.config_warnings[0].hint, /first real Discord login|FIRST real Discord login/);
+  assert.equal(body.summary.config_warnings, 1);
+  assert.equal(body.summary.warning_count, 0, 'config warnings must not inflate warning_count');
+});
+
+test('ROK-1537: a configured RL_OPERATOR_DISCORD_ID emits no config warning', async () => {
+  await boot([], [], {}, [], { RL_OPERATOR_DISCORD_ID: '111222333444555666' });
+  const body = await (await fetch(`${ctx.srv.base}/api/fleet-health`)).json();
+  assert.deepEqual(body.config_warnings, [], `expected none, got ${JSON.stringify(body.config_warnings)}`);
+  assert.equal(body.summary.config_warnings, 0);
 });

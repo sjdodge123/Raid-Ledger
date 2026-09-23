@@ -121,8 +121,8 @@ describe('GroupWeekView — marks', () => {
     it('rings the picked cell and swaps the corner label to "Suggested"', () => {
         renderView({ picked: { dayOfWeek: WED, hour: 20 } });
         expect(cell(WED, 20)).toHaveAttribute('data-picked', 'true');
-        expect(cell(WED, 20).className).toContain('ring-emerald-500');
-        expect(within(cell(WED, 20)).getByText('Suggested')).toHaveClass('text-emerald-500');
+        expect(cell(WED, 20).className).toContain('ring-success');
+        expect(within(cell(WED, 20)).getByText('Suggested')).toHaveClass('text-success');
         expect(within(cell(WED, 20)).queryByText('2 voted')).toBeNull();
         expect(cell(WED, 20).getAttribute('aria-label')).toContain('2 voted');
     });
@@ -150,7 +150,7 @@ describe('GroupWeekView — marks', () => {
             );
             expect(cell(WED, 20).className).toMatch(/outline-slot/);
             expect(cell(WED, 19).className).not.toMatch(/border-dashed/);
-            expect(cell(1, 17).className).toMatch(/ring-emerald-500/);
+            expect(cell(1, 17).className).toMatch(/ring-success/);
             expect(screen.getByTestId('group-week-grid').innerHTML).not.toMatch(/#[0-9a-f]{6}/i);
             unmount();
         }

@@ -278,6 +278,18 @@ Two optional entries in that file are worth setting now:
   Discord OAuth lands you as an admin instead of an ordinary member. Fleet-only
   by construction: bootstrap-admin refuses to promote unless the variable is set
   **and** `DEMO_MODE === 'true'`, and the production image sets neither.
+  A value that is not digits-only is ignored (env-spin warns once) and the
+  env falls back to promoting the first Discord login instead.
+  **If you leave it unset (ROK-1537),** env-spin still passes
+  `FLEET_FIRST_DISCORD_LOGIN_ADMIN=true` to the app container, and the **first
+  real Discord login** on each fresh env is promoted to admin instead. That is
+  usually you, but anyone who signs in first wins. With it set, your id is admin
+  from your first login and the first-login promotion is off.
+  `rl_env_spin` / `rl_env_deploy` report which case applies as `operator_admin`
+  (`configured` / `first-login` / `none`), and `rl_fleet_health` flags the unset
+  variable under `config_warnings`. **Existing envs pick either behaviour up
+  only after `rl env destroy` + a fresh spin**, because a re-spin reuses the
+  running container.
 - `RL_DISCORD_TEST_GUILD_ID=<test guild id>` — lets `env-destroy` **and the
   gc-sweeper's reap paths** sweep leaked `⏰` voice channels; see the slot-bot
   section (§ per-slot Discord apps) below.

@@ -116,7 +116,7 @@ function FilterToolbar({ data, allThemes, activeTheme, onThemeChange, aiOnly, on
             )}
             <div className="flex-1" />
             <select value={sortBy} onChange={(e) => onSortChange(e.target.value as SortOption)}
-                className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:ring-1 focus:ring-accent/50">
+                className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:outline-none focus:ring-2 focus:ring-success/80">
                 <option value="name">Sort: Name</option>
                 <option value="theme">Sort: Theme</option>
                 <option value="status">Sort: Status</option>
@@ -130,7 +130,7 @@ function FilterThemeButtons({ data, allThemes, activeTheme, onThemeChange }: {
 }) {
     return (
         <div className="flex items-center gap-2 flex-wrap">
-            <ThemeButton label={`All (${data.length})`} isActive={activeTheme === null} activeClass="bg-accent/20 text-accent border-accent/40" onClick={() => onThemeChange(null)} />
+            <ThemeButton label={`All (${data.length})`} isActive={activeTheme === null} activeClass="bg-success/20 text-success border-success/40" onClick={() => onThemeChange(null)} />
             {allThemes.map((theme) => (
                 <ThemeButton key={theme} label={`${theme} (${data.filter((j: CronJobDto) => j.category === theme).length})`}
                     isActive={activeTheme === theme} activeClass={THEME_COLORS[theme] || THEME_COLORS['Other']}

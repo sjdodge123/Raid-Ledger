@@ -26,6 +26,16 @@ export function useLogs(service?: LogService) {
   return { logs };
 }
 
+/**
+ * The filename the server chose in `Content-Disposition` (ROK-1164: a `.gz`
+ * rotated generation is served decompressed under its name minus `.gz`).
+ * The server owns that rule; this only reads it back.
+ */
+export function filenameFromDisposition(header: string | null): string | null {
+  const match = header ? /filename="([^"]+)"/.exec(header) : null;
+  return match ? match[1] : null;
+}
+
 export async function downloadLogFile(filename: string): Promise<void> {
   const response = await fetch(
     `${API_BASE_URL}/admin/logs/${encodeURIComponent(filename)}`,
@@ -37,7 +47,9 @@ export async function downloadLogFile(filename: string): Promise<void> {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = filename;
+  a.download =
+    filenameFromDisposition(response.headers.get('Content-Disposition')) ??
+    filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -1,0 +1,2 @@
+ALTER TABLE "community_lineup_schedule_votes" ADD COLUMN "source" text DEFAULT 'web' NOT NULL;--> statement-breakpoint
+ALTER TABLE "community_lineup_schedule_votes" ADD CONSTRAINT "cl_schedule_votes_source_check" CHECK ("community_lineup_schedule_votes"."source" IN ('web', 'discord'));

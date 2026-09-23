@@ -12,6 +12,7 @@ import { toast } from '../../lib/toast';
 import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
 import { CoopFitHints } from './CoopFitHints';
 import type { CoopCapacityFields } from './coop-fit';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 export interface SelectedGame {
     id: number;
@@ -41,6 +42,7 @@ function SearchInput({ value, onChange }: { value: string; onChange: (v: string)
     return (
         <input
             type="text"
+            aria-label="Search games"
             value={value}
             onChange={(e) => onChange(e.target.value)}
             placeholder="Search by name or paste a Steam store URL"
@@ -63,7 +65,9 @@ function SearchResultItem({ game, onSelect, participantCount }: {
             className="flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-panel transition-colors text-left"
         >
             {game.coverUrl ? (
-                <img src={game.coverUrl} alt={game.name} className="w-8 h-10 object-cover rounded" />
+                <img src={game.coverUrl} alt={game.name} className="w-8 h-10 object-cover rounded"
+                    width={32} height={40} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(game.coverUrl, '32px')} />
             ) : (
                 <div className="w-8 h-10 bg-panel rounded flex items-center justify-center text-dim text-xs">?</div>
             )}
@@ -109,13 +113,16 @@ function PreviewCard({ game, note, onNoteChange, onSubmit, onBack, isPending }: 
             </button>
             <div className="flex gap-4 items-start">
                 {game.coverUrl ? (
-                    <img src={game.coverUrl} alt={game.name} className="w-24 h-32 object-cover rounded-lg" />
+                    <img src={game.coverUrl} alt={game.name} className="w-24 h-32 object-cover rounded-lg"
+                        width={96} height={128} loading="lazy" decoding="async"
+                        {...coverSrcSetProps(game.coverUrl, '96px')} />
                 ) : (
                     <div className="w-24 h-32 bg-panel rounded-lg flex items-center justify-center text-dim">No art</div>
                 )}
                 <div className="flex-1 min-w-0">
                     <h3 className="text-base font-semibold text-foreground mb-2">{game.name}</h3>
                     <textarea
+                        aria-label={`Nomination note for ${game.name}`}
                         value={note}
                         onChange={(e) => onNoteChange(e.target.value)}
                         placeholder="Why this game? (optional)"

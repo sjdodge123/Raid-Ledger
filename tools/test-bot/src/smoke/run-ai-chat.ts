@@ -47,6 +47,8 @@ async function main(): Promise<void> {
     games: [],
     demoUserIds: [],
     dmRecipientUserId,
+    // The AI-chat cases never run /bind or /unbind; no operator is set up here.
+    operatorDiscordId: '',
   };
 
   console.log(`\n=== Running ${aiChatTests.length} AI Chat Tests ===\n`);

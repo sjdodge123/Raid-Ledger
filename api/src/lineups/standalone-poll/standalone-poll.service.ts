@@ -13,7 +13,6 @@ import {
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
-import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
@@ -41,13 +40,13 @@ import {
   findScheduleVotes,
 } from '../scheduling/scheduling-query.helpers';
 import { autoSignupSlotVoters } from '../scheduling/scheduling-auto-signup.helpers';
-import { insertPollInterests } from '../scheduling/scheduling-auto-heart.helpers';
 import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import {
-  splitVotersBySlot,
+  splitYesVotersBySlot,
   notifyPollVoters,
+  heartPollGameForVoters,
 } from './standalone-poll-voter.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
@@ -164,7 +163,9 @@ export class StandalonePollService {
       this.db,
       slots.map((s) => s.id),
     );
-    const { selectedVoters, otherVoters } = splitVotersBySlot(
+    // ROK-1617: yes-votes only on both sides of the split — see
+    // `splitYesVotersBySlot` for what an anti-voter deliberately does NOT get.
+    const { selectedVoters, otherVoters } = splitYesVotersBySlot(
       slots,
       allVoters,
       startTime,
@@ -175,26 +176,9 @@ export class StandalonePollService {
       voters: selectedVoters,
       signupsService: this.signupsService,
     });
-    const [match] = await this.db
-      .select({
-        gameId: schema.communityLineupMatches.gameId,
-        gameName: schema.games.name,
-      })
-      .from(schema.communityLineupMatches)
-      .innerJoin(
-        schema.games,
-        eq(schema.games.id, schema.communityLineupMatches.gameId),
-      )
-      .where(eq(schema.communityLineupMatches.id, matchId))
-      .limit(1);
-    if (match?.gameId) {
-      const allVoterIds = [...new Set(allVoters.map((v) => v.userId))];
-      await insertPollInterests({
-        db: this.db,
-        gameId: match.gameId,
-        voterUserIds: allVoterIds,
-      });
-    }
+    // Hearts the game for the yes-voters (ROK-1617 item E) and hands back the
+    // name the DMs below announce.
+    const gameName = await heartPollGameForVoters(this.db, matchId, allVoters);
     if (startTime) {
       await notifyPollVoters(
         {
@@ -206,7 +190,7 @@ export class StandalonePollService {
         otherVoters,
         startTime,
         eventId,
-        match?.gameName ?? 'Game Night',
+        gameName ?? 'Game Night',
       );
     }
   }

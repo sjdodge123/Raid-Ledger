@@ -9,28 +9,28 @@
     },
     "mcp-env": {
       "type": "stdio",
-      "command": "npx",
+      "command": "sh",
       "args": [
-        "tsx",
-        "tools/mcp-env/src/index.ts"
+        "scripts/mcp-launch.sh",
+        "mcp-env"
       ],
       "env": {}
     },
     "mcp-discord": {
       "type": "stdio",
-      "command": "npx",
+      "command": "sh",
       "args": [
-        "tsx",
-        "tools/mcp-discord/src/index.ts"
+        "scripts/mcp-launch.sh",
+        "mcp-discord"
       ],
       "env": {}
     },
     "mcp-rl-fleet": {
       "type": "stdio",
-      "command": "npx",
+      "command": "sh",
       "args": [
-        "tsx",
-        "tools/mcp-rl-fleet/src/index.ts"
+        "scripts/mcp-launch.sh",
+        "mcp-rl-fleet"
       ],
       "env": {}
     }

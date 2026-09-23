@@ -8,6 +8,7 @@ import type { LfgOverlapWindowDto } from '@raid-ledger/contract';
 export type LfgOverlay =
     | { kind: 'none' }
     | { kind: 'poll' }
+    | { kind: 'startnow' }
     | { kind: 'manage' }
     | { kind: 'participants' }
     | { kind: 'lockin'; window: LfgOverlapWindowDto };
@@ -19,7 +20,7 @@ export function useLfgOverlay() {
     const [overlay, setOverlay] = useState<LfgOverlay>(CLOSED);
     return {
         overlay,
-        open: (kind: 'poll' | 'manage' | 'participants') => setOverlay({ kind }),
+        open: (kind: 'poll' | 'startnow' | 'manage' | 'participants') => setOverlay({ kind }),
         openLockIn: (window: LfgOverlapWindowDto) => setOverlay({ kind: 'lockin', window }),
         close: () => setOverlay(CLOSED),
     };

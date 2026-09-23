@@ -317,6 +317,46 @@ WHERE f.first_vote IS NOT NULL AND mm.created_at > f.first_vote;
 2. a UTM-style param counted in `activity_log`.
 **Recommend (1) as part of phase 1** so the phase-2 Discord-voting work has a baseline to beat. Flag to the Lead: until that column exists, any "Discord vs web" number is a guess.
 
+### Vote source (ROK-1550) — the column now exists
+
+Option (1) shipped: `community_lineup_schedule_votes.source` (`text NOT NULL
+DEFAULT 'web'`, CHECK `('web','discord')`), set from the `?src=discord` param
+`buildPollUrl` appends to every Discord poll-card link. The query below answers
+the question this section had to leave open — **share of votes initiated from a
+Discord click, per ISO week**:
+
+```sql
+-- ROK-1550. Read-only. Discord-initiated share of schedule votes, per week.
+SELECT date_trunc('week', v.created_at)::date            AS iso_week,
+       count(*)                                          AS votes,
+       count(*) FILTER (WHERE v.source = 'discord')      AS from_discord,
+       round(100.0 * count(*) FILTER (WHERE v.source = 'discord')
+             / nullif(count(*), 0), 1)                   AS discord_pct
+FROM community_lineup_schedule_votes v
+GROUP BY 1
+ORDER BY 1 DESC;
+```
+
+**What it measures:** a vote *cast on the web* by someone who got there through
+a Discord card link. Votes are still not castable inside Discord (F-17), so
+this is the click-through proxy the section above asked for, not a Discord-
+native vote count — it is exactly the evidence phase 4 needs to decide whether
+the card earns its upkeep.
+
+**What it does NOT measure, and three caveats that will bite a careless read:**
+
+- **Only weeks after the deploy are meaningful.** Every pre-migration row took
+  the `'web'` default, so the backfill is definitional rather than observed —
+  historical weeks will read 0% Discord whether or not anyone clicked a card.
+  Filter to `v.created_at > '<deploy date>'` before quoting a trend.
+- **A stance flip overwrites the source.** The row describes the action behind
+  its *current* answer, so a web vote later flipped from a Discord link counts
+  as Discord (and vice versa). This is the share of *live answers* by origin,
+  not a log of every click ever made.
+- **A cleared vote leaves nothing.** Un-voting is a DELETE, so a member who
+  arrived from Discord, voted, and changed their mind to "not answered" is
+  invisible here. The denominator is standing votes, not attempts.
+
 ---
 
 ## Principles

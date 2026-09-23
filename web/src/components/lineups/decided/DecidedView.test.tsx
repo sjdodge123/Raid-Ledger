@@ -162,8 +162,9 @@ describe('DecidedView — JourneyHero (AC1)', () => {
     expect(region).toBeInTheDocument();
 
     // AC1: the hero's wrapper must use the action-tone border class.
-    // (The component's BORDER_CLS maps action → 'border-emerald-500/30 bg-panel/70'.)
-    expect(region.className).toMatch(/border-emerald-500\/30/);
+    // (ROK-1586: BORDER_CLS maps action → 'border-success/30 bg-panel/70' — the
+    // semantic token replaced the raw `emerald-500` hue.)
+    expect(region.className).toMatch(/border-success\/30/);
   });
 
   it('hero is positioned above all match sections', () => {

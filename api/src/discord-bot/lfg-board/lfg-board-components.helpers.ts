@@ -13,6 +13,10 @@
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
+import {
+  LFG_NOW_SPAWN_BUTTON_LABEL,
+  type LfgNowIndicatorEmoji,
+} from '../lfg-now/lfg-now-indicator.helpers';
 import type { LfmRenderState } from '../lfm/lfm-embed.helpers';
 import {
   LFG_JOIN_BUTTON_LABEL,
@@ -29,6 +33,21 @@ export interface LfgPostComponentInputs {
   clientUrl?: string;
   /** Where the group's message sits in the lifecycle. */
   state: LfmRenderState;
+  /**
+   * ROK-1619 — does the next `+1` cross `LFG_NOW_SPAWN_THRESHOLD`?
+   *
+   * Decided by `pressWouldSpawnNow` and passed IN, because this module is a
+   * pure builder with no database: the count it would need lives on the view
+   * the caller already read. Absent is the ROK-1471 button, byte for byte.
+   */
+  spawnsNow?: boolean;
+  /**
+   * The emoji to mark that press with, already resolved to component data by
+   * `resolveNowIndicatorEmoji`. A `{ id, name }` custom emoji or a `{ name }`
+   * Unicode one — never a `<:name:id>` string, which Discord would render as
+   * literal text on the button (AC5).
+   */
+  spawnEmoji?: LfgNowIndicatorEmoji;
 }
 
 /**
@@ -49,7 +68,14 @@ export function buildLfgPostComponents(
   const join = new ButtonBuilder()
     .setCustomId(`${LFG_BUTTON_IDS.JOIN}:${String(inputs.gameId)}`)
     .setStyle(ButtonStyle.Primary)
-    .setLabel(LFG_JOIN_BUTTON_LABEL);
+    .setLabel(
+      inputs.spawnsNow ? LFG_NOW_SPAWN_BUTTON_LABEL : LFG_JOIN_BUTTON_LABEL,
+    );
+  // AC6: the LABEL above already carries the meaning; the emoji is
+  // reinforcement, so a viewer who does not recognise `:praise_sun:` still
+  // knows what the press does. The custom id is untouched — the mark changes
+  // how the press READS, never what it writes.
+  if (inputs.spawnsNow && inputs.spawnEmoji) join.setEmoji(inputs.spawnEmoji);
   const buttons = [join];
   // Discord REJECTS a Link button with an empty URL, so an unconfigured
   // deployment loses the link rather than the whole post.

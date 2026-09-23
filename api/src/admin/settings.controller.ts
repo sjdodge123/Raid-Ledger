@@ -106,11 +106,7 @@ export class AdminSettingsController {
   @Post('oauth/clear')
   @HttpCode(HttpStatus.OK)
   async clearOAuthConfig(): Promise<{ success: boolean; message: string }> {
-    await Promise.all([
-      this.settingsService.delete(SETTING_KEYS.DISCORD_CLIENT_ID),
-      this.settingsService.delete(SETTING_KEYS.DISCORD_CLIENT_SECRET),
-      this.settingsService.delete(SETTING_KEYS.DISCORD_CALLBACK_URL),
-    ]);
+    await this.settingsService.clearDiscordOAuthConfig();
     this.logger.log('Discord OAuth configuration cleared via admin UI');
     return { success: true, message: 'Discord OAuth configuration cleared.' };
   }
@@ -294,7 +290,7 @@ export class AdminSettingsController {
       configured: false,
       deprecated: true,
       message:
-        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
+        'GitHub PAT integration has been replaced by Sentry error tracking.',
     };
   }
   /** @deprecated ROK-306 */
@@ -304,7 +300,7 @@ export class AdminSettingsController {
     return {
       success: false,
       message:
-        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306). No configuration needed.',
+        'GitHub PAT integration has been replaced by Sentry error tracking. No configuration needed.',
     };
   }
   /** @deprecated ROK-306 */
@@ -314,7 +310,7 @@ export class AdminSettingsController {
     return {
       success: false,
       message:
-        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
+        'GitHub PAT integration has been replaced by Sentry error tracking.',
     };
   }
   /** @deprecated ROK-306 */

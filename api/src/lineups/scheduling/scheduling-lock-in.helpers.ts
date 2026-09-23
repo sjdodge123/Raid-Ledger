@@ -27,6 +27,12 @@ import {
   findScheduleVotes,
 } from './scheduling-query.helpers';
 import { assertPollLockable } from './scheduling-guard.helpers';
+import {
+  stanceTallyFor,
+  tallyStancesBySlot,
+  yesVotesOnly,
+} from './scheduling-stance.helpers';
+import type { StanceVoteRef } from './scheduling-stance.helpers';
 
 /** Slot fields the leader search needs. */
 export interface LockInSlotRef {
@@ -40,10 +46,13 @@ export interface LockInSlotRef {
   proposedTime: Date | string;
 }
 
-/** A vote row, reduced to the only field the leader search needs. */
-export interface LockInVoteRef {
-  slotId: number;
-}
+/**
+ * A vote row, reduced to the fields the leader search needs.
+ *
+ * ROK-1617: the stance rides along. Without it a `no` on a slot counted as a
+ * vote FOR that slot and could lock in the time its voters just rejected.
+ */
+export type LockInVoteRef = StanceVoteRef;
 
 /** The caller of a lock-in. */
 export interface LockInCaller {
@@ -76,18 +85,17 @@ export function findLeadingLockableSlot(
   votes: LockInVoteRef[],
   now: Date = new Date(),
 ): number | null {
-  const counts = new Map<number, number>();
-  for (const vote of votes) {
-    counts.set(vote.slotId, (counts.get(vote.slotId) ?? 0) + 1);
-  }
+  const tallies = tallyStancesBySlot(votes);
   const candidates = slots
     .map((s) => ({ id: s.id, at: new Date(s.proposedTime) }))
     .filter((s) => !Number.isNaN(s.at.getTime()) && s.at > now)
     .map((s) => ({
       id: s.id,
       proposedTime: s.at.toISOString(),
-      voteCount: counts.get(s.id) ?? 0,
+      ...stanceTallyFor(tallies, s.id),
     }))
+    // At least one YES: a slot carrying only `no`s is not lockable, however
+    // its net score compares (ROK-1617).
     .filter((s) => s.voteCount > 0);
   const [leader] = sortSchedulingSlots(candidates);
   return leader?.id ?? null;
@@ -105,19 +113,27 @@ export function isPollOrganiser(
 /**
  * Refuse a post-deadline lock-in by anyone but the organiser (AC3).
  *
- * Before the deadline the gate is unchanged — any member who voted may lock a
- * time in. After it, finishing the poll is an organiser decision: an ordinary
- * member sees the expired state and no action.
+ * Batch 2026-09-22: this now gates an OPEN poll too. The page only ever offered
+ * the lock to the organiser (web `canBypassThreshold` ≡ this predicate), but
+ * the POST let any member who had voted lock a time in. An ordinary member
+ * sees no lock action on either an open or an expired poll.
  *
+ * @param lineup - The poll's lineup (its `createdBy`), when it was found.
+ * @param caller - The authenticated caller.
+ * @param pollStatus - The poll's resolved status; picks the refusal copy
+ *   (`open` → the open-poll message, anything else → the expired-poll one).
  * @throws ForbiddenException when the caller is not the organiser.
  */
 export function assertCallerMayLockIn(
   lineup: LockInLineupRef | undefined,
   caller: LockInCaller,
+  pollStatus: SchedulingPollStatus = 'closed',
 ): void {
   if (isPollOrganiser(lineup, caller)) return;
   throw new ForbiddenException(
-    'Only an organiser can schedule a time from an expired poll',
+    pollStatus === 'open'
+      ? 'Only the poll creator or an operator can lock in a time'
+      : 'Only an organiser can schedule a time from an expired poll',
   );
 }
 
@@ -206,8 +222,8 @@ export function resolveLockInPageState(input: {
  * Gate a lock-in: the whole guard cluster, in the order the service needs it.
  *
  * A slot that has already passed is refused whatever the poll's state. An
- * OPEN poll keeps the pre-existing "you must have voted" gate (unchanged
- * behaviour, any member). An EXPIRED one is an organiser decision (AC3).
+ * OPEN poll additionally keeps the "you must have voted" gate. Either way the
+ * caller must be the organiser — the page's predicate (AC3, batch 2026-09-22).
  *
  * @param db - Drizzle database handle.
  * @param match - The match row being locked in.
@@ -218,8 +234,8 @@ export function resolveLockInPageState(input: {
  * @throws NotFoundException when the slot belongs to another match.
  * @throws BadRequestException when the poll is finished, the time passed, or
  *   an expired poll's slot has no votes.
- * @throws ForbiddenException when a non-organiser finishes an expired poll,
- *   or an open poll's caller has not voted.
+ * @throws ForbiddenException when a non-organiser locks in (open or expired),
+ *   or an open poll's organiser has not voted.
  */
 export async function assertMayLockInSlot(
   db: PostgresJsDatabase<typeof schema>,
@@ -234,11 +250,13 @@ export async function assertMayLockInSlot(
   const [lineup] = await findLineupPollMeta(db, match.lineupId);
   const pollStatus = assertPollLockable(match, lineup);
   assertSlotIsFuture(slot.proposedTime);
+  // Open or expired, locking in is the organiser's call — the same
+  // `isPollOrganiser` predicate the page's lock affordance is built on.
+  assertCallerMayLockIn(lineup, caller, pollStatus);
   if (pollStatus === 'open') {
     await assertUserHasVoted(db, matchId, caller.id);
     return;
   }
-  assertCallerMayLockIn(lineup, caller);
   await assertSlotHasVoters(db, slot.id);
 }
 
@@ -264,7 +282,11 @@ export async function assertSlotHasVoters(
   db: PostgresJsDatabase<typeof schema>,
   slotId: number,
 ): Promise<void> {
-  const votes = await findScheduleVotes(db, [slotId]);
+  // ROK-1617: a `no` row is a vote row, so a raw length check let an organiser
+  // lock in a time every respondent rejected — under an error message that
+  // says "Nobody voted for that time". Match the `voteCount > 0` floor
+  // `findLeadingLockableSlot` applies on the READ path.
+  const votes = yesVotesOnly(await findScheduleVotes(db, [slotId]));
   if (votes.length === 0) {
     throw new BadRequestException(
       'Nobody voted for that time — voting has closed, so start a new poll instead',

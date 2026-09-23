@@ -79,7 +79,7 @@ function InviteeRow({
       data-testid={`invitee-row-${invitee.id}`}
       className="inline-flex items-center gap-2 px-2 py-1 rounded border border-edge bg-panel text-sm"
     >
-      <span className="text-primary">{invitee.displayName}</span>
+      <span className="text-foreground">{invitee.displayName}</span>
       {invitee.steamLinked && (
         <span
           title="Steam account linked"

@@ -8,7 +8,7 @@
  */
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { sortSchedulingSlots } from '@raid-ledger/contract';
+import { leadsAtAll, sortSchedulingSlots } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
 import { POLL_EXPIRY_WARN_HOURS } from '../lineup-notification.constants';
@@ -16,6 +16,11 @@ import {
   findScheduleSlots,
   findScheduleVotes,
 } from './scheduling-query.helpers';
+import {
+  stanceTallyFor,
+  tallyStancesBySlot,
+} from './scheduling-stance.helpers';
+import type { StanceVoteRef } from './scheduling-stance.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -168,31 +173,97 @@ export function isInWarnWindow(
 }
 
 /**
- * The leading slot among FUTURE slots that have at least one vote, ordered by
- * the shared `sortSchedulingSlots` rule (votes desc, earliest time, id).
+ * The leading slot among FUTURE slots that clear the shared leader floor
+ * (`leadsAtAll` — more yes than no), ordered by `sortSchedulingSlots`.
  *
  * @param slots - Every slot of the match
  * @param votes - Every vote on those slots
  * @param now - Reference instant separating future from past slots
- * @returns The leader, or null when no future slot has a vote
+ * @returns The leader, or null when no future slot clears the floor
  */
 export function pickLeadingFutureSlot(
   slots: ReadonlyArray<{ id: number; proposedTime: Date }>,
-  votes: ReadonlyArray<{ slotId: number }>,
+  votes: readonly StanceVoteRef[],
   now: Date,
 ): LeadingSlot | null {
-  const counts = new Map<number, number>();
-  for (const v of votes) counts.set(v.slotId, (counts.get(v.slotId) ?? 0) + 1);
+  const tallies = tallyStancesBySlot(votes);
   const voted = slots
     .filter((s) => s.proposedTime.getTime() > now.getTime())
-    .map((s) => ({ ...s, voteCount: counts.get(s.id) ?? 0 }))
-    .filter((s) => s.voteCount > 0);
+    .map((s) => ({ ...s, ...stanceTallyFor(tallies, s.id) }))
+    // ROK-1617 item D: more yes than no. The ONE shared floor, so the DM,
+    // Rally and the web card can never crown different times.
+    .filter((s) => leadsAtAll(s));
   const [leader] = sortSchedulingSlots(voted);
   if (!leader) return null;
   return {
     slotId: leader.id,
     proposedTime: leader.proposedTime.toISOString(),
     voteCount: leader.voteCount,
+  };
+}
+
+/**
+ * Whether anybody answered a slot that has NOT yet passed.
+ *
+ * The same future window `pickLeadingFutureSlot` applies, and for the same
+ * reason: the warning DM talks about times the group can still pick. Reading
+ * every vote row instead told the creator of a poll whose times had all passed
+ * (five yes votes, all on dead slots) that "no time worked for the group yet".
+ * A stance of either kind counts — a `no` is still an answer.
+ *
+ * @param slots - Every slot of the match
+ * @param votes - Every vote on those slots
+ * @param now - Reference instant separating future from past slots
+ * @returns True when at least one future slot carries a vote row
+ */
+export function hasFutureAnswer(
+  slots: ReadonlyArray<{ id: number; proposedTime: Date }>,
+  votes: readonly StanceVoteRef[],
+  now: Date,
+): boolean {
+  const futureSlotIds = new Set(
+    slots
+      .filter((s) => s.proposedTime.getTime() > now.getTime())
+      .map((s) => s.id),
+  );
+  return votes.some((v) => futureSlotIds.has(v.slotId));
+}
+
+/**
+ * The leader plus whether ANYBODY answered the poll (ROK-1617 item D).
+ *
+ * The two facts come from one load because the warning DM needs both: no
+ * leader + at least one answer is "no time worked"; no leader + no answers is
+ * a poll nobody opened, which stays silent (ruling D-Q2).
+ */
+export interface PollLeaderOutcome {
+  leader: LeadingSlot | null;
+  /** At least one vote row of either stance exists on a FUTURE slot. */
+  answered: boolean;
+}
+
+/**
+ * Load a match's slots + votes, pick the leading future slot and report
+ * whether the poll has any answer at all.
+ *
+ * @param db - Drizzle database handle
+ * @param matchId - The poll's match id
+ * @param now - Reference instant (defaults to the wall clock)
+ * @returns The leader (or null) and the poll's answered flag
+ */
+export async function findPollLeaderOutcome(
+  db: Db,
+  matchId: number,
+  now: Date = new Date(),
+): Promise<PollLeaderOutcome> {
+  const slots = await findScheduleSlots(db, matchId);
+  const votes = await findScheduleVotes(
+    db,
+    slots.map((s) => s.id),
+  );
+  return {
+    leader: pickLeadingFutureSlot(slots, votes, now),
+    answered: hasFutureAnswer(slots, votes, now),
   };
 }
 
@@ -208,12 +279,7 @@ export async function findLeadingFutureSlot(
   matchId: number,
   now: Date = new Date(),
 ): Promise<LeadingSlot | null> {
-  const slots = await findScheduleSlots(db, matchId);
-  const votes = await findScheduleVotes(
-    db,
-    slots.map((s) => s.id),
-  );
-  return pickLeadingFutureSlot(slots, votes, now);
+  return (await findPollLeaderOutcome(db, matchId, now)).leader;
 }
 
 /**
@@ -266,5 +332,28 @@ export function buildExpiryWarnCopy(
       `Nobody has locked in a time and the poll closes <t:${unix(deadline)}:R>. ` +
       `The leading time is <t:${unix(leadingIso)}:f>.`,
     lockLabel: formatLockLabel(leadingIso, timeZone),
+  };
+}
+
+/**
+ * Title and message for the warning DM when NO time clears the leader floor
+ * (ROK-1617 item D, operator: "No time worked").
+ *
+ * There is no `lockLabel` on purpose: with no leading slot the DM must not
+ * offer a Lock button (the payload carries no `slotId` to lock).
+ *
+ * @param gameName - The poll's game
+ * @param deadline - The poll's `phase_deadline`
+ * @returns Copy without a button label
+ */
+export function buildNoLeaderWarnCopy(
+  gameName: string,
+  deadline: Date,
+): Omit<ExpiryWarnCopy, 'lockLabel'> {
+  return {
+    title: `Your ${gameName} poll closes soon`,
+    message:
+      `No time worked for the group yet and the poll closes ` +
+      `<t:${unix(deadline)}:R>. Suggest a new time or start a new poll.`,
   };
 }

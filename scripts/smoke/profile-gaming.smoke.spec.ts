@@ -7,6 +7,55 @@ import { test, expect } from './base';
 import { isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
+// ROK-1636: Armory import gating in the Add Character modal.
+//
+// Blizzard has no WoW: Forever profile API yet, so picking that game disables
+// the "Import from Armory" tab (aria-disabled + a described-by note) and keeps
+// the Manual form. A supported variant (retail World of Warcraft) is the control. Both
+// games come from `api/scripts/seed-games.ts`, which CI seeds.
+// ---------------------------------------------------------------------------
+
+const WOW_FOREVER = 'World of Warcraft: Forever';
+// Retail, not Classic Era: IGDB enrichment renames the seeded 'World of Warcraft Classic Era'
+// back to 'World of Warcraft Classic' on envs with IGDB keys (ROK-1643); retail's name is stable.
+const WOW_SUPPORTED = 'World of Warcraft';
+const ARMORY_UNAVAILABLE_NOTE = "Armory import isn't available for WoW Forever yet — add the character manually.";
+
+/** Open the Add Character modal and pick `gameName` in its Game search. Returns the dialog. */
+async function openAddCharacterForGame(page: Page, gameName: string) {
+    await page.goto('/profile/gaming/characters');
+    await page.getByRole('button', { name: 'Add Character' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Add Character' });
+    await expect(dialog).toBeVisible({ timeout: 15_000 });
+    await dialog.getByRole('textbox', { name: 'Game', exact: true }).fill(gameName);
+    // The results dropdown is portalled to <body>, outside the dialog.
+    const option = page.getByRole('option').filter({ has: page.getByText(gameName, { exact: true }) });
+    await expect(option, `the seeded "${gameName}" should be in the game search results`).toBeVisible({ timeout: 15_000 });
+    await option.click();
+    return dialog;
+}
+
+async function expectForeverArmoryDisabled(page: Page) {
+    const dialog = await openAddCharacterForGame(page, WOW_FOREVER);
+    const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
+    await expect(armoryTab, 'Armory tab should be disabled for WoW Forever').toHaveAttribute('aria-disabled', 'true');
+    await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toBeVisible();
+    await expect(armoryTab, 'the note should describe the disabled tab').toHaveAccessibleDescription(ARMORY_UNAVAILABLE_NOTE);
+    // Manual stays the active tab: its form (name field + submit) is rendered.
+    await expect(dialog.getByRole('button', { name: 'Manual', exact: true })).toBeVisible();
+    await expect(dialog.getByPlaceholder('Character name')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Add Character' })).toBeVisible();
+}
+
+async function expectSupportedArmoryEnabled(page: Page) {
+    const dialog = await openAddCharacterForGame(page, WOW_SUPPORTED);
+    const armoryTab = dialog.getByRole('button', { name: 'Import from Armory' });
+    await expect(armoryTab).toBeVisible();
+    await expect(armoryTab, 'Armory tab should stay enabled for a supported variant').not.toHaveAttribute('aria-disabled', 'true');
+    await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toHaveCount(0);
+}
+
+// ---------------------------------------------------------------------------
 // Characters panel — desktop
 // ---------------------------------------------------------------------------
 
@@ -41,6 +90,15 @@ test.describe('Profile gaming — Characters (desktop)', () => {
             await expect(page.getByText(/\d+ characters?/).first()).toBeVisible();
         }
     });
+    test('WoW Forever disables Armory import and keeps Manual (ROK-1636)', async ({ page }) => {
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
+        await expectForeverArmoryDisabled(page);
+    });
+
+    test('a supported WoW variant keeps Armory import enabled (ROK-1636 control)', async ({ page }) => {
+        test.skip(isPhoneLayout(test.info()), 'Desktop-only test — sidebar layout');
+        await expectSupportedArmoryEnabled(page);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -63,6 +121,16 @@ test.describe('Profile gaming — Characters (mobile)', () => {
             const count = await characterLinks.count();
             expect(count).toBeGreaterThan(0);
         }
+    });
+
+    test('WoW Forever disables Armory import and keeps Manual (ROK-1636)', async ({ page }) => {
+        test.skip(!isMobile(test.info()), 'Mobile-only test');
+        await expectForeverArmoryDisabled(page);
+    });
+
+    test('a supported WoW variant keeps Armory import enabled (ROK-1636 control)', async ({ page }) => {
+        test.skip(!isMobile(test.info()), 'Mobile-only test');
+        await expectSupportedArmoryEnabled(page);
     });
 });
 

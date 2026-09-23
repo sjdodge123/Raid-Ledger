@@ -34,14 +34,17 @@ export class DiscordUserController {
    * Used by the FTE "Join Discord" step.
    */
   @Get('server-invite')
-  async getServerInvite(): Promise<ServerInviteResponseDto> {
+  async getServerInvite(
+    @Req() req: { user: { id: number } },
+  ): Promise<ServerInviteResponseDto> {
     if (!this.discordBotClientService.isConnected()) {
       return { url: null, guildName: null };
     }
 
     const guildInfo = this.discordBotClientService.getGuildInfo();
-    // Use eventId=0 since this is not tied to a specific event
-    const url = await this.pugInviteService.generateServerInvite(0);
+    // eventId=0 — this invite is not tied to a specific event. ROK-1631: a
+    // repeat request reuses the caller's link instead of minting another.
+    const url = await this.pugInviteService.serverInviteFor(req.user.id, 0);
 
     return {
       url,

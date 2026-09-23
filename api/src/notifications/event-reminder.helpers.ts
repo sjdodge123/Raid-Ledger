@@ -6,6 +6,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
+import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/scheduling-availability-busy.helpers';
 
 /** Character info for a user. */
 export interface UserCharacter {
@@ -15,7 +16,12 @@ export interface UserCharacter {
   gameId: number;
 }
 
-/** Fetch signups grouped by event. */
+/**
+ * Fetch the players still coming, grouped by event. Rows for `declined`,
+ * `roached_out` and `departed` persist, so the status filter is what keeps
+ * people who said they're not coming out of the reminder DMs (ROK-1637).
+ * Hosts are added separately by the caller and are not filtered here.
+ */
 export async function fetchSignupsByEvent(
   db: PostgresJsDatabase<typeof schema>,
   eventIds: number[],
@@ -26,7 +32,12 @@ export async function fetchSignupsByEvent(
       userId: schema.eventSignups.userId,
     })
     .from(schema.eventSignups)
-    .where(inArray(schema.eventSignups.eventId, eventIds));
+    .where(
+      and(
+        inArray(schema.eventSignups.eventId, eventIds),
+        inArray(schema.eventSignups.status, [...ACTIVE_SIGNUP_STATUSES]),
+      ),
+    );
   const map = new Map<number, number[]>();
   for (const signup of signups) {
     if (signup.userId === null) continue;

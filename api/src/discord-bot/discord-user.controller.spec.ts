@@ -24,7 +24,7 @@ beforeEach(async () => {
       {
         provide: PugInviteService,
         useValue: {
-          generateServerInvite: jest
+          serverInviteFor: jest
             .fn()
             .mockResolvedValue('https://discord.gg/abc123'),
         },
@@ -43,9 +43,12 @@ afterEach(() => {
 
 // ── GET /discord/server-invite ─────────────────────────────────
 
+/** The JWT strategy puts the numeric user id on `req.user.id`. */
+const makeInviteReq = (id = 7) => ({ user: { id } });
+
 describe('DiscordUserController — getServerInvite', () => {
   it('should return invite URL and guild name when bot is connected', async () => {
-    const result = await controller.getServerInvite();
+    const result = await controller.getServerInvite(makeInviteReq());
 
     expect(result).toEqual({
       url: 'https://discord.gg/abc123',
@@ -53,37 +56,45 @@ describe('DiscordUserController — getServerInvite', () => {
     });
   });
 
-  it('should call generateServerInvite with eventId=0', async () => {
-    await controller.getServerInvite();
+  it("should ask for the caller's invite with eventId=0", async () => {
+    await controller.getServerInvite(makeInviteReq(7));
 
-    expect(pugInviteService.generateServerInvite).toHaveBeenCalledWith(0);
+    expect(pugInviteService.serverInviteFor).toHaveBeenCalledWith(7, 0);
+  });
+
+  it('should key the invite to each caller (ROK-1631)', async () => {
+    await controller.getServerInvite(makeInviteReq(7));
+    await controller.getServerInvite(makeInviteReq(9));
+
+    expect(pugInviteService.serverInviteFor).toHaveBeenNthCalledWith(1, 7, 0);
+    expect(pugInviteService.serverInviteFor).toHaveBeenNthCalledWith(2, 9, 0);
   });
 
   it('should return null url and guildName when bot is not connected', async () => {
     clientService.isConnected.mockReturnValue(false);
 
-    const result = await controller.getServerInvite();
+    const result = await controller.getServerInvite(makeInviteReq());
 
     expect(result).toEqual({ url: null, guildName: null });
-    expect(pugInviteService.generateServerInvite).not.toHaveBeenCalled();
+    expect(pugInviteService.serverInviteFor).not.toHaveBeenCalled();
   });
 
   it('should return null guildName when getGuildInfo returns null', async () => {
     clientService.getGuildInfo.mockReturnValue(null);
-    pugInviteService.generateServerInvite.mockResolvedValue(
+    pugInviteService.serverInviteFor.mockResolvedValue(
       'https://discord.gg/abc123',
     );
 
-    const result = await controller.getServerInvite();
+    const result = await controller.getServerInvite(makeInviteReq());
 
     expect(result.guildName).toBeNull();
     expect(result.url).toBe('https://discord.gg/abc123');
   });
 
-  it('should return null url when generateServerInvite returns null', async () => {
-    pugInviteService.generateServerInvite.mockResolvedValue(null);
+  it('should return null url when no invite could be minted', async () => {
+    pugInviteService.serverInviteFor.mockResolvedValue(null);
 
-    const result = await controller.getServerInvite();
+    const result = await controller.getServerInvite(makeInviteReq());
 
     expect(result.url).toBeNull();
     expect(result.guildName).toBe('Test Guild');
@@ -92,7 +103,7 @@ describe('DiscordUserController — getServerInvite', () => {
   it('should not call getGuildInfo when bot is not connected', async () => {
     clientService.isConnected.mockReturnValue(false);
 
-    await controller.getServerInvite();
+    await controller.getServerInvite(makeInviteReq());
 
     expect(clientService.getGuildInfo).not.toHaveBeenCalled();
   });

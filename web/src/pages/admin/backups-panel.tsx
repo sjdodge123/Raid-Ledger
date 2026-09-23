@@ -90,7 +90,7 @@ function BackupHeader({ onCreateBackup, isCreating }: { onCreateBackup: () => vo
                 <p className="text-sm text-muted mt-1">Manage database backups. Daily backups run automatically at 2 AM with 30-day retention.</p>
             </div>
             <button onClick={onCreateBackup} disabled={isCreating}
-                className="px-4 py-2 text-sm font-medium bg-accent/20 text-accent border border-accent/40 rounded-lg hover:bg-accent/30 transition-colors disabled:opacity-50 whitespace-nowrap">
+                className="px-4 py-2 text-sm font-medium bg-success/20 text-success border border-success/40 rounded-lg hover:bg-success/30 transition-colors disabled:opacity-50 whitespace-nowrap">
                 {isCreating ? 'Creating...' : 'Create Backup'}
             </button>
         </div>
@@ -111,7 +111,7 @@ function FilterPills({ filter, setFilter, allBackups, dailyCount, migrationCount
             {pills.map((p) => (
                 <button key={p.key} onClick={() => setFilter(filter === p.key && p.key !== 'all' ? 'all' : p.key)}
                     className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                        filter === p.key ? (p.badge ?? 'bg-accent/20 text-accent border-accent/40') : 'bg-surface/50 text-muted border-edge hover:text-foreground'
+                        filter === p.key ? (p.badge ?? 'bg-success/20 text-success border-success/40') : 'bg-surface/50 text-muted border-edge hover:text-foreground'
                     }`}>
                     {p.label} ({p.count})
                 </button>

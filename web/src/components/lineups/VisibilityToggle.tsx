@@ -17,7 +17,7 @@ export function VisibilityToggle({
 }: VisibilityToggleProps): JSX.Element {
   return (
     <fieldset className="space-y-2">
-      <legend className="text-sm font-medium text-primary">Visibility</legend>
+      <legend className="text-sm font-medium text-foreground">Visibility</legend>
       <div
         role="radiogroup"
         aria-label="Lineup visibility"
