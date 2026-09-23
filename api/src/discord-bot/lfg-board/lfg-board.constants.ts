@@ -108,8 +108,32 @@ export const LFG_OPEN_GROUP_LABEL = 'Open group ↗';
 /** Discord's hard cap on a thread name. Truncation target for `threadNameFor`. */
 export const DISCORD_THREAD_NAME_MAX = 100;
 
-/** Title of the pinned thread that explains the board (posted once on enable). */
-export const LFG_BOARD_INTRO_TITLE = 'How this board works';
+/**
+ * Title of the pinned thread that explains the board (posted once on enable).
+ *
+ * ROK-1658 (operator 2026-09-23): the title leads with the composer, so a
+ * member scanning the forum knows the `Post an LFG` button lives inside this
+ * post. U+2795 HEAVY PLUS SIGN, U+00B7 MIDDLE DOT. Well under Discord's
+ * 100-char thread-name cap ({@link DISCORD_THREAD_NAME_MAX}).
+ *
+ * The title is also half of the intro's IDENTITY (`isOwnIntro`), so changing
+ * it again means moving the old value into {@link LFG_BOARD_INTRO_LEGACY_TITLES}.
+ */
+export const LFG_BOARD_INTRO_TITLE =
+  '➕ Post an LFG here · How this board works';
+
+/**
+ * Titles the intro thread carried before {@link LFG_BOARD_INTRO_TITLE}.
+ *
+ * Renamed by ROK-1658. Live boards (prod included) still carry the old title,
+ * so the intro rediscovery keeps recognising it (bot-owned only) — otherwise a
+ * board whose stored id was lost would seed a SECOND intro next to its own.
+ * `LfgComposerPinService` renames a legacy-titled intro to the current title
+ * once, in place, keeping its thread id.
+ */
+export const LFG_BOARD_INTRO_LEGACY_TITLES: readonly string[] = [
+  'How this board works',
+];
 
 /**
  * Body of the intro thread. Plain text — no embed, so it renders in search.

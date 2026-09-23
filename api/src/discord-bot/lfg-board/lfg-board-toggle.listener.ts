@@ -217,7 +217,7 @@ export class LfgBoardToggleListener {
    *
    * The settings keys are excluded from sanitised backups on purpose (D7), so
    * after a restore the id is gone while the forum and its pinned intro are
-   * still in Discord. Seeding here pins a second "How this board works" to a
+   * still in Discord. Seeding here pins a second intro (any intro title) to a
    * public forum on every enable. Reached ONLY when no id is stored: an
    * unreadable stored id never gets here.
    *

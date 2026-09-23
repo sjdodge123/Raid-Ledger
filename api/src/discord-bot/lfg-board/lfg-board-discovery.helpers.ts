@@ -5,7 +5,10 @@
  * listener owns the API calls and the persistence, this file owns the choice.
  */
 import { ChannelFlags } from 'discord.js';
-import { LFG_BOARD_INTRO_TITLE } from './lfg-board.constants';
+import {
+  LFG_BOARD_INTRO_LEGACY_TITLES,
+  LFG_BOARD_INTRO_TITLE,
+} from './lfg-board.constants';
 
 /**
  * The parts of a forum post the D6 rediscovery reads.
@@ -23,17 +26,38 @@ export interface IntroCandidate {
 }
 
 /**
+ * Whether a title is one the intro used before ROK-1658 renamed it.
+ *
+ * @param name - A thread title.
+ */
+export function isLegacyIntroTitle(name: string): boolean {
+  return LFG_BOARD_INTRO_LEGACY_TITLES.includes(name);
+}
+
+/**
+ * Whether a title names the board's intro — the current title or a legacy one
+ * (ROK-1658), so a board seeded under the old title adopts its own intro
+ * instead of seeding a second one.
+ *
+ * @param name - A thread title.
+ */
+export function isIntroTitle(name: string): boolean {
+  return name === LFG_BOARD_INTRO_TITLE || isLegacyIntroTitle(name);
+}
+
+/**
  * Whether a forum post is the board's OWN intro.
  *
  * The author half is not belt-and-braces: a guild that existed before the
- * forum was locked can hold a member's post titled "How this board works",
- * and adopting it would hand a member the pinned post the bot then edits.
+ * forum was locked can hold a member's post under an intro title, and
+ * adopting it would hand a member the pinned post the bot then edits. That
+ * holds for the legacy titles too.
  *
  * @param thread - A candidate forum post.
  * @param botUserId - The app's own Discord user id.
  */
 export function isOwnIntro(thread: IntroCandidate, botUserId: string): boolean {
-  return thread.name === LFG_BOARD_INTRO_TITLE && thread.ownerId === botUserId;
+  return isIntroTitle(thread.name) && thread.ownerId === botUserId;
 }
 
 /** Whether a forum post already sits pinned at the top of its forum. */

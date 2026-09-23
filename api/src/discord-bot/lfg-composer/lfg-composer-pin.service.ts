@@ -17,7 +17,7 @@
  *
  *  - **Forum board (the default surface).** A forum holds no plain messages
  *    and Discord allows ONE pinned post per forum — already the board's intro
- *    post ("How this board works", `LfgBoardToggleListener`). A second pinned
+ *    post (`LFG_BOARD_INTRO_TITLE`, `LfgBoardToggleListener`). A second pinned
  *    post would fail or unpin the intro, so the composer's buttons ride on that
  *    pinned post's starter message instead. Edited in place, never re-posted.
  *  - **A text channel bound with the `lfg-board` purpose** (a legacy row: new
@@ -47,9 +47,11 @@ import {
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { findLfgBoardBindingChannelId } from '../lfg-board/lfg-board-channel.db-helpers';
+import { isLegacyIntroTitle } from '../lfg-board/lfg-board-discovery.helpers';
 import {
   LFG_BOARD_EVENTS,
   LFG_BOARD_INTRO_BODY,
+  LFG_BOARD_INTRO_TITLE,
   type LfgBoardToggledPayload,
 } from '../lfg-board/lfg-board.constants';
 import { buildComposerCard, sameComponents } from './lfg-composer-card.helpers';
@@ -274,6 +276,7 @@ export class LfgComposerPinService {
   ): Promise<ComposerReconcileOutcome> {
     const starter = await thread.fetchStarterMessage();
     if (!starter || starter.author.id !== botUserId) return 'no-target';
+    await this.renameLegacyIntro(thread, botUserId);
     const copyCurrent = starter.content === LFG_BOARD_INTRO_BODY;
     if (copyCurrent && sameComponents(starter.components, payload.components)) {
       return 'intro-unchanged';
@@ -284,5 +287,37 @@ export class LfgComposerPinService {
     });
     this.logger.log(`LFG composer buttons set on the intro post ${thread.id}.`);
     return 'intro-edited';
+  }
+
+  /**
+   * ROK-1658 — give an intro seeded under a legacy title ("How this board
+   * works") the current {@link LFG_BOARD_INTRO_TITLE}, which advertises the
+   * `Post an LFG` button inside it. Renamed in place (same thread id), so the
+   * stored id and the pin survive.
+   *
+   * Once: only a bot-owned thread still carrying a LEGACY title is renamed, so
+   * every later pass finds the current title and does nothing — and a thread
+   * someone renamed by hand to anything else is left alone. Advisory: a
+   * refusal is one log line and never blocks the buttons/body edit.
+   */
+  private async renameLegacyIntro(
+    thread: ThreadChannel,
+    botUserId: string,
+  ): Promise<void> {
+    if (thread.ownerId !== botUserId || !isLegacyIntroTitle(thread.name)) {
+      return;
+    }
+    try {
+      await thread.setName(
+        LFG_BOARD_INTRO_TITLE,
+        'Raid Ledger LFG board intro title (ROK-1658)',
+      );
+      this.logger.log(`LFG board intro post ${thread.id} renamed.`);
+    } catch (err) {
+      this.logger.warn(
+        `Could not rename the LFG board intro post ${thread.id}: ` +
+          `${describe(err)}. Its buttons and copy are still set.`,
+      );
+    }
   }
 }
