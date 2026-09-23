@@ -198,3 +198,44 @@ describe('GamesPage — B2: the empty state names the filter that emptied it', (
         expect(screen.queryByTestId('library-filters-empty')).toBeNull();
     });
 });
+
+// ROK-1659: the URL writes the retired library-filter-chips.test.tsx covered,
+// now driven through the Filters sheet's Owners checkbox and Players radios.
+describe('GamesPage — library filter URL writes from the Filters sheet', () => {
+    it('Owners checkbox writes owners=2 alongside the other params, then clears it', () => {
+        renderPage('/games?players=4&genres=rpg');
+        const sheet = openFiltersSheet();
+        const owners = within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' });
+
+        fireEvent.click(owners);
+        const on = new URLSearchParams(screen.getByTestId('url-probe').textContent ?? '');
+        expect(on.get('owners')).toBe('2');
+        expect(on.get('players')).toBe('4');
+        expect(on.get('genres')).toBe('rpg');
+
+        fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' }));
+        const off = new URLSearchParams(screen.getByTestId('url-probe').textContent ?? '');
+        expect(off.has('owners')).toBe(false);
+        expect(off.get('players')).toBe('4');
+    });
+
+    it('"Any" drops the players param', () => {
+        renderPage('/games?players=4&owners=2');
+        const sheet = openFiltersSheet();
+
+        fireEvent.click(within(sheet).getByRole('radio', { name: 'Any' }));
+        const params = new URLSearchParams(screen.getByTestId('url-probe').textContent ?? '');
+        expect(params.has('players')).toBe(false);
+        expect(params.get('owners')).toBe('2');
+    });
+
+    it('dims a paused group once — the legend only, never a second opacity over the controls', () => {
+        renderPage('/games?lfg=1&owners=2');
+        const sheet = openFiltersSheet();
+        const owners = within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' });
+
+        expect(owners).toBeDisabled();
+        expect(owners.closest('fieldset')).not.toHaveClass('opacity-50');
+        expect(within(sheet).getByRole('radiogroup', { name: 'Players' }).parentElement).not.toHaveClass('opacity-50');
+    });
+});

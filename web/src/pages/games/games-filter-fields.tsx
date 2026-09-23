@@ -28,13 +28,17 @@ const PLAYER_OPTIONS = [
     ...PLAYER_COUNT_PRESETS.map((p) => ({ value: p.key as string, label: p.label as string })),
 ];
 
-/** A native fieldset: `disabled` greys the group AND disables every control inside it. */
+/**
+ * A native fieldset: `disabled` disables every control inside it. The primitives dim
+ * themselves (form-classes DISABLED), so only the legend is dimmed here — never the
+ * whole group, which would stack a second opacity on the controls.
+ */
 export function FilterFieldGroup({ legend, disabled = false, testId, children }: {
     legend: string; disabled?: boolean; testId?: string; children: ReactNode;
 }): JSX.Element {
     return (
-        <fieldset disabled={disabled} data-testid={testId} className={`min-w-0 ${disabled ? 'opacity-50' : ''}`}>
-            <legend className={LEGEND}>{legend}</legend>
+        <fieldset disabled={disabled} data-testid={testId} className="min-w-0">
+            <legend className={`${LEGEND} ${disabled ? 'opacity-50' : ''}`.trim()}>{legend}</legend>
             {children}
         </fieldset>
     );
@@ -56,13 +60,12 @@ export function LfgField({ isLfgOnly, onToggle }: { isLfgOnly: boolean; onToggle
 /** The 2 / 3 / 4 / 5+ presets as a segmented radio group; "Any" drops `players`. */
 export function PlayersField({ filters, disabled }: { filters: LibraryFilterParams; disabled: boolean }): JSX.Element {
     return (
-        <div className={disabled ? 'opacity-50' : undefined}>
-            <RadioGroup
-                label="Players" appearance="segmented" options={PLAYER_OPTIONS} disabled={disabled}
-                value={filters.playersFilter ?? ANY_PLAYERS}
-                onChange={(v) => filters.setPlayersFilter(v === ANY_PLAYERS ? null : v)}
-            />
-        </div>
+        // No wrapper opacity: the segments dim themselves while disabled.
+        <RadioGroup
+            label="Players" appearance="segmented" options={PLAYER_OPTIONS} disabled={disabled}
+            value={filters.playersFilter ?? ANY_PLAYERS}
+            onChange={(v) => filters.setPlayersFilter(v === ANY_PLAYERS ? null : v)}
+        />
     );
 }
 
