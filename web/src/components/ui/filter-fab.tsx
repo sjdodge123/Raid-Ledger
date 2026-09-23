@@ -10,7 +10,8 @@
 import { useId, type JSX } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
-import { FilterCountBadge, type DescribeFilterCount } from './filter-count-badge';
+import { FilterCountBadge } from './filter-count-badge';
+import type { DescribeFilterCount } from './filter-count-badge.helpers';
 import { useFilterFabBottom } from './fab-position';
 
 export interface FilterFabProps {

@@ -25,7 +25,7 @@
 import { useCallback, type JSX, type ReactNode } from 'react';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
-import type { DescribeFilterCount } from './filter-count-badge';
+import type { DescribeFilterCount } from './filter-count-badge.helpers';
 import { FilterFab } from './filter-fab';
 import { FilterPanel, FilterPanelTrigger } from './filter-panel';
 

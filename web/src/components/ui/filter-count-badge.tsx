@@ -9,12 +9,7 @@
  * the count is re-exposed through `aria-describedby` → the `sr-only` span here.
  */
 import type { JSX } from 'react';
-
-/** Screen-reader wording for the count, e.g. the calendar's `n => `${n} games hidden``. */
-export type DescribeFilterCount = (count: number) => string;
-
-export const describeActiveFilters: DescribeFilterCount = (count) =>
-    `${count} active ${count === 1 ? 'filter' : 'filters'}`;
+import { describeActiveFilters, type DescribeFilterCount } from './filter-count-badge.helpers';
 
 interface FilterCountBadgeProps {
     count: number;

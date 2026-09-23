@@ -8,7 +8,8 @@
 import { useEffect, useId, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from './bottom-sheet';
-import { FilterCountBadge, type DescribeFilterCount } from './filter-count-badge';
+import { FilterCountBadge } from './filter-count-badge';
+import type { DescribeFilterCount } from './filter-count-badge.helpers';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 
