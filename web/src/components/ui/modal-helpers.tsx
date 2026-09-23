@@ -5,7 +5,7 @@
 import type { JSX } from 'react';
 
 const INPUT_CLS =
-    'w-full px-3 py-2 mb-4 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent';
+    'w-full px-3 py-2 mb-4 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-success/50 focus:border-transparent';
 
 /** Reusable search input for modal lists. */
 export function ModalSearchInput({

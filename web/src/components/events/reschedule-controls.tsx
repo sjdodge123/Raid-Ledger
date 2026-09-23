@@ -40,11 +40,11 @@ export function CustomDurationInputs({ durationMinutes, setDurationMinutes }: { 
         <div className="flex items-center gap-2 mt-1.5">
             <input type="number" min={0} max={23} value={Math.floor(durationMinutes / 60)}
                 onChange={(e) => setDurationMinutes(Number(e.target.value) * 60 + (durationMinutes % 60))}
-                className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary" />
+                className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-2 focus:ring-success/50" />
             <span className="text-xs text-muted">hr</span>
             <input type="number" min={0} max={59} step={15} value={durationMinutes % 60}
                 onChange={(e) => setDurationMinutes(Math.floor(durationMinutes / 60) * 60 + Number(e.target.value))}
-                className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary" />
+                className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-2 focus:ring-success/50" />
             <span className="text-xs text-muted">min</span>
         </div>
     );
@@ -56,7 +56,7 @@ export function StartTimeInput({ newStartTime, onStartChange }: { newStartTime: 
             <label htmlFor="reschedule-start" className="block text-xs text-muted mb-1">New start</label>
             <input id="reschedule-start" type="datetime-local" value={newStartTime ?? ''}
                 onChange={(e) => onStartChange(e.target.value)}
-                className="w-full bg-panel border border-edge rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary" />
+                className="w-full bg-panel border border-edge rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-success/50" />
         </div>
     );
 }
