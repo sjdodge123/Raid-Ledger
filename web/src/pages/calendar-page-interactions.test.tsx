@@ -375,6 +375,8 @@ describe('CalendarPage — Filters FAB and BottomSheet (below 1024px)', () => {
     it('bottom sheet lists every game as a pressed tap row', () => {
         render_page();
         deliver(SIX_GAMES());
+        // A closed sheet's body is inert + aria-hidden (ROK-1659), so open it first.
+        fireEvent.click(screen.getByTestId('filter-fab'));
 
         const sheet = screen.getByTestId('bottom-sheet');
         for (const name of ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Foxtrot']) {
@@ -385,6 +387,7 @@ describe('CalendarPage — Filters FAB and BottomSheet (below 1024px)', () => {
     it('bottom sheet shows count of selected vs total games; FAB badge = games hidden', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
+        fireEvent.click(screen.getByTestId('filter-fab'));
 
         const sheet = screen.getByTestId('bottom-sheet');
         expect(sheet).toHaveTextContent(/3 of 3 selected/i);

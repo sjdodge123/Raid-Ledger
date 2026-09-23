@@ -222,6 +222,30 @@ describe('FilterPanel — collapsed panel leaves the tab order (ROK-1659)', () =
     });
 });
 
+describe('FilterPanel — closed sheet leaves the tab order (ROK-1659)', () => {
+    // Phone and tablet both take the BottomSheet path; a closed sheet is only
+    // translated off-screen, so without `inert` its controls stay tabbable.
+    it.each([390, 800])('keeps the closed sheet body mounted but inert and aria-hidden at %ipx', (width) => {
+        mockViewportWidth(width);
+        const panel = (isOpen: boolean) => (
+            <FilterPanel activeFilterCount={1} onClearAll={vi.fn()} isOpen={isOpen} onToggle={vi.fn()}>
+                <input type="checkbox" aria-label="Sheet option" />
+            </FilterPanel>
+        );
+        const { rerender } = renderWithProviders(panel(false));
+        // Out of the a11y tree and the Tab order, "Clear all" included ...
+        expect(screen.queryByRole('checkbox')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
+        // ... but still mounted, so body effects keep running.
+        expect(screen.getByLabelText('Sheet option').closest('[inert]')).not.toBeNull();
+
+        rerender(panel(true));
+        expect(screen.getByLabelText('Sheet option').closest('[inert]')).toBeNull();
+        expect(screen.getByRole('checkbox', { name: 'Sheet option' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Clear all' })).toBeInTheDocument();
+    });
+});
+
 describe('FilterPanelTrigger — open state and count wording (ROK-1659)', () => {
     it('switches from the panel fill to the overlay fill while open', () => {
         const { rerender } = renderWithProviders(<FilterPanelTrigger activeCount={0} isOpen={false} onClick={vi.fn()} />);

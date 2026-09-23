@@ -106,8 +106,12 @@ export function FilterPanel({ activeFilterCount, onClearAll, isOpen, onToggle, o
     if (!isDesktop) {
         return (
             <BottomSheet isOpen={isOpen} onClose={close} title="Filters">
-                <MobileClearRow activeFilterCount={activeFilterCount} onClearAll={onClearAll} />
-                {children}
+                {/* A closed sheet only slides off-screen, so its body is `inert` + `aria-hidden` like the
+                    collapsed inline panel — still mounted for the ROK-1255 auto-seed. */}
+                <div inert={!isOpen} aria-hidden={!isOpen || undefined}>
+                    <MobileClearRow activeFilterCount={activeFilterCount} onClearAll={onClearAll} />
+                    {children}
+                </div>
             </BottomSheet>
         );
     }

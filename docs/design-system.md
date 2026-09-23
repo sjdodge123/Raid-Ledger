@@ -320,6 +320,9 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
   a per-page affordance. It closes the desktop panel and, when focus was inside it, returns focus to the
   open funnel (`[data-testid="filter-panel-trigger"][aria-expanded="true"]`), because the collapsed panel
   is `inert`. Every `FilterPanel` consumer gets this for free, including `players-page.tsx`.
+  Below 1024px the same rule holds for the sheet: a closed `BottomSheet` only slides off-screen, so
+  `FilterPanel` wraps the sheet body in `inert` + `aria-hidden` while closed (children stay mounted, so
+  body effects such as the ROK-1255 auto-seed still run). Tests that drive sheet controls open the FAB first.
 - **Phone + tablet (<1024px)** — no toolbar trigger. A floating **Filters FAB** (56px round, `right-4`,
   `lg:hidden` — above the bottom tab bar: `bottom: 72px` (`FAB_BOTTOM_ABOVE_TAB_BAR`) while it shows,
   `bottom: 16px` (`FAB_BOTTOM_NO_TAB_BAR`) once it hides or at 768px and up where there is no tab bar —
