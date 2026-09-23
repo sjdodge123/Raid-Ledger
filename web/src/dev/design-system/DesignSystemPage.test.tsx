@@ -40,7 +40,7 @@ describe('DesignSystemPage', () => {
         'Pattern — journey hero',
         'Pattern — week strip',
         'Pattern — group marks and legend',
-        'Forms — Button, Field, Input',
+        'Forms — the form primitives',
     ])('renders the "%s" section heading', (heading) => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
@@ -55,6 +55,18 @@ describe('DesignSystemPage', () => {
         expect(invalid).toHaveAttribute('aria-invalid', 'true');
         expect(invalid).toHaveAccessibleDescription('Give the event a name.');
         expect(within(forms).getByRole('button', { name: 'Saving…' })).toHaveAttribute('aria-busy', 'true');
+    });
+
+    it('the Forms section mounts the slice-B controls (select, counter, checkbox, radios, slider)', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        expect(within(forms).getByRole('combobox', { name: 'Timezone' })).toHaveAccessibleDescription('Pick a timezone.');
+        expect(within(forms).getByRole('textbox', { name: 'Reason' })).toHaveAccessibleDescription(/\/200/);
+        expect(within(forms).getByRole('checkbox', { name: 'Select all' })).toBePartiallyChecked();
+        expect(within(forms).getByRole('radiogroup', { name: 'Duration' })).toBeInTheDocument();
+        expect(within(forms).getByRole('radio', { name: '2h' })).toBeChecked();
+        expect(within(forms).getByRole('slider', { name: 'Min owners' })).toHaveValue('3');
     });
 
     it('shows the filtering DO and DON\'T side by side', () => {
