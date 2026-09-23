@@ -12,14 +12,18 @@ export function ModalSearchInput({
     value,
     onChange,
     placeholder = 'Search games...',
+    label,
 }: {
     value: string;
+    /** Accessible name — the input has no visible label. */
+    label: string;
     onChange: (value: string) => void;
     placeholder?: string;
 }): JSX.Element {
     return (
         <input
             type="text"
+            aria-label={label}
             placeholder={placeholder}
             value={value}
             onChange={(e) => onChange(e.target.value)}

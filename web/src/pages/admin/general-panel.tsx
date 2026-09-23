@@ -62,7 +62,7 @@ export function GeneralPanel() {
 
 function TimezoneSelect({ timezone, isPending, onChange }: { timezone: string; isPending: boolean; onChange: (v: string) => void }) {
     return (
-        <select value={timezone} onChange={(e) => onChange(e.target.value)} disabled={isPending}
+        <select aria-label="Default timezone" value={timezone} onChange={(e) => onChange(e.target.value)} disabled={isPending}
             className="w-full sm:max-w-md px-4 py-3 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors text-sm disabled:opacity-50">
             <option value="">Not set (UTC fallback)</option>
             {TIMEZONE_GROUPS.map((group) => (
