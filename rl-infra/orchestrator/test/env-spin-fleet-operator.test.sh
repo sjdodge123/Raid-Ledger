@@ -259,6 +259,16 @@ test_idempotent_reports_from_container_env() {
     run_spin old
     assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "first-login" \
         "a reused container that carries the marker reports first-login"
+    # Review MINOR: the id the container was CREATED with keeps the API's
+    # first-login gate off even after the VM setting is removed.
+    export FO_APP_ENV=$'DEMO_MODE=true\nFLEET_FIRST_DISCORD_LOGIN_ADMIN=true\nFLEET_ADMIN_DISCORD_ID=987654321098765432'
+    run_spin old
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "configured" \
+        "a reused container created with an id reports configured though the VM id is now unset"
+    export FO_APP_ENV=$'DEMO_MODE=true\nFLEET_FIRST_DISCORD_LOGIN_ADMIN=true\nFLEET_ADMIN_DISCORD_ID='
+    run_spin old
+    assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "first-login" \
+        "an empty id in the container env is not configured"
     export RL_OPERATOR_DISCORD_ID="$OPERATOR_DISCORD_ID"
     run_spin old
     assert_eq "$(jq -r '.operator_admin' <<<"$FO_OUT" 2>/dev/null || echo parse_err)" "configured" \

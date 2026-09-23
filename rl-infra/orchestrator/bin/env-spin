@@ -100,8 +100,11 @@ trap _env_spin_trap_on_abort EXIT
 #                 idempotent path (it is never re-`docker run`) — destroy +
 #                 fresh spin to pick the marker up.
 env_spin::operator_admin_mode() {
-    local marker_present="$1"
-    if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" ]]; then
+    local marker_present="$1" container_id="${2:-}"
+    # configured: today's VM id (bootstrap-admin upserts it on every spin) OR
+    # the id the reused container was created with (the API's runtime gate
+    # reads THAT, so first-login stays off for its lifetime).
+    if [[ -n "${RL_OPERATOR_DISCORD_ID:-}" || -n "$container_id" ]]; then
         echo configured
     elif [[ "$marker_present" == "true" ]]; then
         echo first-login
@@ -110,10 +113,14 @@ env_spin::operator_admin_mode() {
     fi
 }
 # The idempotent path reuses a container created by an EARLIER env-spin, so
-# read the marker from its actual env instead of assuming today's `docker run`.
+# read the marker and the configured id from its actual env instead of
+# assuming today's `docker run` / today's VM setting.
+env_spin::container_env_value() {
+    docker inspect "$APP_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+        | sed -n "s/^$1=//p" | head -n 1 || true
+}
 env_spin::container_has_first_login_marker() {
-    if docker inspect "$APP_CONTAINER" --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
-        | grep -qx 'FLEET_FIRST_DISCORD_LOGIN_ADMIN=true'; then
+    if [[ "$(env_spin::container_env_value FLEET_FIRST_DISCORD_LOGIN_ADMIN)" == "true" ]]; then
         echo true
     else
         echo false
@@ -545,7 +552,9 @@ EOF
     env_spin::restart_for_overlay
     LAST_PHASE="idempotent_overlay_done"
 
-    IDEM_OPERATOR_ADMIN=$(env_spin::operator_admin_mode "$(env_spin::container_has_first_login_marker)")
+    IDEM_OPERATOR_ADMIN=$(env_spin::operator_admin_mode \
+        "$(env_spin::container_has_first_login_marker)" \
+        "$(env_spin::container_env_value FLEET_ADMIN_DISCORD_ID)")
     jq -nc --arg slug "$SLUG" --arg url "$IDEM_PRIMARY" \
         --arg internal_url "http://${SLUG}.rl.lan" \
         --arg public_url "$IDEM_PUBLIC" \
