@@ -56,6 +56,7 @@ describe('LfgComposerPinService.reconcile', () => {
   it('board on with NO composer setting row puts the buttons on the intro, in place (ROK-1658 deploy case)', async () => {
     const starter = {
       author: { id: BOT },
+      components: [],
       edit: jest.fn(() => Promise.resolve()),
     };
     const intro = {
@@ -225,13 +226,20 @@ describe('LfgComposerPinService — board toggle (ROK-1658)', () => {
   });
 
   it('is subscribed to the board TOGGLED event', () => {
-    const events: unknown = Reflect.getMetadata(
-      'EVENT_LISTENER_METADATA',
-      LfgComposerPinService.prototype.onBoardToggled,
-    );
-    expect(events).toEqual([
-      expect.objectContaining({ event: LFG_BOARD_EVENTS.TOGGLED }),
-    ]);
+    // Scanned by method, so a missing subscription reads as `[]`, not a throw.
+    const proto = LfgComposerPinService.prototype as unknown as Record<
+      string,
+      unknown
+    >;
+    const onToggled = Object.getOwnPropertyNames(proto).filter((name) => {
+      const method = proto[name];
+      if (typeof method !== 'function') return false;
+      const events = Reflect.getMetadata('EVENT_LISTENER_METADATA', method) as
+        | { event: unknown }[]
+        | undefined;
+      return (events ?? []).some((e) => e.event === LFG_BOARD_EVENTS.TOGGLED);
+    });
+    expect(onToggled).toEqual(['onBoardToggled']);
   });
 });
 
