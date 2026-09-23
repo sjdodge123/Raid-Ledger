@@ -47,7 +47,7 @@ function ExecutionHistoryHeader({ job, onClose }: { job: CronJobDto; onClose: ()
                 <h3 className="text-lg font-semibold text-foreground">Execution History</h3>
                 <p className="text-sm text-muted mt-0.5">{job.description || job.name}</p>
             </div>
-            <button onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">&#10005;</button>
+            <button type="button" aria-label="Close" onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">&#10005;</button>
         </div>
     );
 }
@@ -197,7 +197,7 @@ function IntervalSelector({ selectedExpression, onExpressionChange, isCustomExpr
         <div>
             <label className="block text-sm font-medium text-foreground mb-2">Interval</label>
             <select value={selectedExpression} onChange={(e) => onExpressionChange(e.target.value)}
-                className="w-full px-3 py-2 bg-surface border border-edge rounded-lg text-foreground text-sm focus:ring-2 focus:ring-accent/50 focus:border-accent">
+                className="w-full px-3 py-2 bg-surface border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent">
                 {isCustomExpression && <option value={jobExpression}>{getCronLabel(jobExpression)}</option>}
                 {INTERVAL_PRESETS.map((preset) => (<option key={preset.value} value={preset.value}>{preset.label}</option>))}
             </select>
@@ -223,7 +223,7 @@ function ScheduleActions({ onClose, onSave, isSaving, disabled }: {
             <button onClick={onClose}
                 className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors">Cancel</button>
             <button onClick={onSave} disabled={isSaving || disabled}
-                className="px-4 py-2 text-sm font-medium bg-accent hover:bg-accent/80 rounded-lg text-white transition-colors disabled:opacity-50">
+                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition-colors disabled:opacity-50">
                 {isSaving ? 'Saving...' : 'Save'}
             </button>
         </div>

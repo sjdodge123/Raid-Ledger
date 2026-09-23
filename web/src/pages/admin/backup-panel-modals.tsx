@@ -102,7 +102,7 @@ function ConfirmTextInput({ value, onChange, keyword, disabled }: {
         <div className="mt-4">
             <label className="block text-sm text-muted mb-1">Type <span className="font-mono text-foreground">{keyword}</span> to confirm</label>
             <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={keyword} autoFocus disabled={disabled}
-                className="w-full px-3 py-2 text-sm bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:ring-1 focus:ring-accent/50 focus:border-accent/50" />
+                className="w-full px-3 py-2 text-sm bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent" />
         </div>
     );
 }
@@ -127,12 +127,12 @@ function ResetResultView({ result, copied, onCopy }: { result: { password: strin
                     <span className="text-sm text-muted">Password</span>
                     <div className="flex items-center gap-2">
                         <span className="font-mono text-sm text-foreground">{result.password}</span>
-                        <button onClick={onCopy} className="text-xs text-accent hover:text-accent/80">{copied ? 'Copied!' : 'Copy'}</button>
+                        <button onClick={onCopy} className="text-xs text-success hover:text-success/80">{copied ? 'Copied!' : 'Copy'}</button>
                     </div>
                 </div>
             </div>
             <div className="flex justify-end mt-6">
-                <button onClick={handleGoToLogin} className="px-4 py-2 text-sm font-medium bg-accent/20 text-accent border border-accent/40 rounded-lg hover:bg-accent/30 transition-colors">Go to Login</button>
+                <button onClick={handleGoToLogin} className="px-4 py-2 text-sm font-medium bg-success/10 text-success border border-success/40 rounded-lg hover:bg-success/20 transition-colors">Go to Login</button>
             </div>
         </ModalOverlay>
     );

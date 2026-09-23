@@ -27,7 +27,7 @@ export function DiscardChangesConfirm({ isOpen, onKeep, onDiscard }: DiscardChan
                 <div className="mt-4 flex justify-end gap-2">
                     <button
                         ref={keepRef} type="button" data-testid="discard-changes-keep" onClick={onKeep}
-                        className={`${BUTTON} border border-edge text-foreground hover:bg-panel-hover`}
+                        className={`${BUTTON} border border-edge text-foreground hover:bg-panel`}
                     >
                         Keep editing
                     </button>

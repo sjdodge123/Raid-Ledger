@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import type { CharacterRole } from '@raid-ledger/contract';
 import { LockClosedIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 
@@ -35,13 +36,14 @@ function ArmorySyncBanner() {
 function SyncableInput({ label, value, onChange, placeholder, maxLength, isArmorySynced, required }: {
     label: string; value: string; onChange: (v: string) => void; placeholder: string; maxLength: number; isArmorySynced: boolean; required?: boolean;
 }) {
+    const id = useId();
     return (
         <div>
-            <label className="block text-sm font-medium text-secondary mb-1">
-                {label} {required && <span className="text-red-400">*</span>}
+            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-1">
+                {label} {required && <span aria-hidden="true" className="text-red-400">*</span>}
                 {isArmorySynced && <LockClosedIcon className="w-3.5 h-3.5 inline ml-1 text-muted" />}
             </label>
-            <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+            <input id={id} type="text" value={value} onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder} maxLength={maxLength} disabled={isArmorySynced}
                 title={isArmorySynced ? ARMORY_TITLE : undefined}
                 className={`${INPUT_BASE} ${isArmorySynced ? 'opacity-60 cursor-not-allowed' : ''}`} />
@@ -50,10 +52,11 @@ function SyncableInput({ label, value, onChange, placeholder, maxLength, isArmor
 }
 
 function RoleSelect({ value, onChange }: { value: string; onChange: (v: CharacterRole | '') => void }) {
+    const id = useId();
     return (
         <div>
-            <label className="block text-sm font-medium text-secondary mb-1">Role</label>
-            <select value={value} onChange={(e) => onChange(e.target.value as CharacterRole | '')}
+            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-1">Role</label>
+            <select id={id} value={value} onChange={(e) => onChange(e.target.value as CharacterRole | '')}
                 className={INPUT_BASE}>
                 <option value="">Select role...</option>
                 <option value="tank">Tank</option>

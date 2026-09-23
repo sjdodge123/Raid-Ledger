@@ -128,3 +128,10 @@ describe('HeartedGamesModal — search filter', () => {
         expect(screen.queryByText('Best Price')).not.toBeInTheDocument();
     });
 });
+
+describe('HeartedGamesModal — accessibility (ROK-1645)', () => {
+    it('gives the search input an accessible name', () => {
+        renderWithProviders(<HeartedGamesModal userId={1} isOpen onClose={vi.fn()} total={4} pricingMap={mockPricingMap} />);
+        expect(screen.getByRole('textbox', { name: 'Search hearted games' })).toBeInTheDocument();
+    });
+});
