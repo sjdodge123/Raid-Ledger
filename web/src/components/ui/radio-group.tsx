@@ -13,9 +13,14 @@
  *   carries the focus ring through `has-[:focus-visible]`. Descriptions are
  *   not shown in a segment — keep segment labels short.
  * - Controlled only: `value` + `onChange(value)`.
+ * - Validation like the other controls: `invalid`, `error` (an inline
+ *   `role="alert"` under the group, linked by `aria-describedby`) and
+ *   `aria-describedby`, merged with a surrounding `Field`'s wiring. `aria-invalid`
+ *   sits on the `radiogroup`. The ref is forwarded to the `<fieldset>`.
  */
-import { useId, type JSX, type ReactNode } from 'react';
+import { forwardRef, useId, type ForwardedRef, type JSX, type ReactNode, type Ref } from 'react';
 import { DISABLED, FOCUS_RING } from './form-classes';
+import { useFieldControlProps } from './field-context';
 
 export interface RadioOption<V extends string> {
     value: V;
@@ -35,6 +40,10 @@ export interface RadioGroupProps<V extends string> {
     name?: string;
     disabled?: boolean;
     className?: string;
+    invalid?: boolean;
+    /** Inline error under the group; also marks it invalid. */
+    error?: string;
+    'aria-describedby'?: string;
 }
 
 interface OptionProps<V extends string> {
@@ -83,16 +92,25 @@ function SegmentOption<V extends string>({ option, name, checked, disabled, onCh
     );
 }
 
-/** A labelled group of native radios. See the file header for the contract. */
-export function RadioGroup<V extends string>(p: RadioGroupProps<V>): JSX.Element {
+/** Group-level a11y: own + Field `aria-describedby` / `aria-invalid` / `aria-required`, plus the error id. */
+function useGroupA11y<V extends string>(p: RadioGroupProps<V>, errorId: string) {
+    const a = useFieldControlProps({
+        invalid: p.invalid || !!p.error,
+        'aria-describedby': [p['aria-describedby'] ?? '', p.error ? errorId : ''].filter(Boolean).join(' ') || undefined,
+    });
+    return { 'aria-describedby': a['aria-describedby'], 'aria-invalid': a['aria-invalid'], 'aria-required': a['aria-required'] };
+}
+
+function RadioGroupImpl<V extends string>(p: RadioGroupProps<V>, ref: ForwardedRef<HTMLFieldSetElement>): JSX.Element {
     const base = useId();
     const name = p.name ?? `${base}-radio`;
     const segmented = p.appearance === 'segmented';
     const Option = segmented ? SegmentOption : ListOption;
+    const a11y = useGroupA11y(p, `${base}-error`);
     const legendCls = p.hideLabel ? 'sr-only' : 'mb-1.5 text-sm font-medium text-secondary';
     const listCls = segmented ? 'flex gap-1 p-1 bg-panel border border-edge rounded-lg' : 'flex flex-col';
     return (
-        <fieldset role="radiogroup" aria-labelledby={`${base}-legend`} className={p.className}>
+        <fieldset ref={ref} role="radiogroup" aria-labelledby={`${base}-legend`} {...a11y} className={p.className}>
             <legend id={`${base}-legend`} className={legendCls}>{p.label}</legend>
             <div className={listCls}>
                 {p.options.map((o, i) => (
@@ -102,6 +120,12 @@ export function RadioGroup<V extends string>(p: RadioGroupProps<V>): JSX.Element
                     />
                 ))}
             </div>
+            {p.error && <p id={`${base}-error`} role="alert" className="mt-1 text-sm text-danger">{p.error}</p>}
         </fieldset>
     );
 }
+
+/** A labelled group of native radios (ref → the fieldset). See the file header for the contract. */
+export const RadioGroup = forwardRef(RadioGroupImpl) as <V extends string>(
+    p: RadioGroupProps<V> & { ref?: Ref<HTMLFieldSetElement> },
+) => JSX.Element;

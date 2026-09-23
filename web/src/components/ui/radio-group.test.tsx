@@ -2,11 +2,12 @@
  * ROK-1646 — RadioGroup (spike ROK-1644 §4.5): native radios in a labelled
  * radiogroup, list and segmented appearances, native arrow-key movement.
  */
-import { useState, type JSX } from 'react';
+import { createRef, useState, type JSX } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { RadioGroup, type RadioGroupProps } from './radio-group';
+import { Field } from './field';
 
 const OPTIONS = [
     { value: '1h', label: '1 hour' },
@@ -83,5 +84,43 @@ describe('RadioGroup — interaction', () => {
         render(<Harness hideLabel />);
         expect(screen.getByRole('radiogroup', { name: 'Duration' })).toBeInTheDocument();
         expect(screen.getByText('Duration')).toHaveClass('sr-only');
+    });
+});
+
+describe('RadioGroup — segmented keyboard', () => {
+    it('ArrowDown / ArrowLeft move and select, and the ON segment follows the checked radio', async () => {
+        const spy = vi.fn();
+        render(<Harness appearance="segmented" onSpy={spy} />);
+        await userEvent.tab();
+        await userEvent.keyboard('{ArrowDown}');
+        expect(spy).toHaveBeenLastCalledWith('2h');
+        expect(screen.getByRole('radio', { name: '2 hours' })).toBeChecked();
+        await userEvent.keyboard('{ArrowDown}{ArrowLeft}');
+        expect(spy.mock.calls.map((c) => c[0])).toEqual(['2h', '3h', '2h']);
+        expect(screen.getByRole('radio', { name: '2 hours' })).toHaveFocus();
+    });
+});
+
+describe('RadioGroup — validation wiring and ref', () => {
+    it('error renders an inline alert, marks the group invalid and describes it', () => {
+        render(<Harness error="Pick a duration." />);
+        const group = screen.getByRole('radiogroup', { name: 'Duration' });
+        expect(screen.getByRole('alert')).toHaveTextContent('Pick a duration.');
+        expect(group, 'error did not mark the radiogroup invalid').toHaveAttribute('aria-invalid', 'true');
+        expect(group).toHaveAccessibleDescription('Pick a duration.');
+    });
+
+    it('invalid and aria-describedby pass through; a surrounding Field adds its wiring', () => {
+        render(<><p id="ext">Shown on the event.</p>
+            <Field label="Wrapper" hint="Pick one." error="Required."><Harness aria-describedby="ext" /></Field></>);
+        const group = screen.getByRole('radiogroup', { name: 'Duration' });
+        expect(group, 'the Field error did not reach the radiogroup').toHaveAttribute('aria-invalid', 'true');
+        expect(group).toHaveAccessibleDescription('Shown on the event. Pick one. Required.');
+    });
+
+    it('forwards its ref to the fieldset', () => {
+        const ref = createRef<HTMLFieldSetElement>();
+        render(<RadioGroup ref={ref} label="Duration" options={OPTIONS} value="1h" onChange={() => undefined} />);
+        expect(ref.current).toBe(screen.getByRole('radiogroup', { name: 'Duration' }));
     });
 });
