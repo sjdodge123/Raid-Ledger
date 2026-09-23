@@ -414,8 +414,8 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
   // DB, then posts what it returned.
   //
   // MUTATION: make `resolveLfgCommandUrgency` return `parseUrgencyChoice(raw)`
-  // unconditionally and this fails on `expect(received).toMatchObject(...)`,
-  // urgency 'tonight' instead of 'now' — and no session spawns.
+  // unconditionally and this fails on `expect(received).toEqual(...)` —
+  // received `{ urgency: 'tonight' }` instead of the group's now + 60 bucket.
   it('inherits a now group and counts toward its spawn threshold', async () => {
     const [a, b] = await members('alpha', 'beta');
     const game = await createGame(testApp, 'PEAK');
