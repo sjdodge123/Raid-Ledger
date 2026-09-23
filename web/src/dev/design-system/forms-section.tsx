@@ -1,7 +1,7 @@
 /**
  * Forms section for /dev/design-system (ROK-1646) — the form primitives from
  * `web/src/components/ui`: `Button`, `Field`, `Input`, `Select`, `Textarea`,
- * `Checkbox`, `RadioGroup`, `Slider`. Every example mounts the
+ * `Checkbox`, `RadioGroup`, `Slider`, `SearchInput`, `Combobox`. Every example mounts the
  * REAL component, so this page is the early warning if one drifts.
  *
  * Check both families: the side-by-side toggle renders this twice, and the
@@ -21,6 +21,8 @@ import { Textarea } from '../../components/ui/textarea';
 import { Checkbox } from '../../components/ui/checkbox';
 import { RadioGroup } from '../../components/ui/radio-group';
 import { Slider } from '../../components/ui/slider';
+import { SearchInput } from '../../components/ui/search-input';
+import { Combobox } from '../../components/ui/combobox';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 
 const noop = (): void => undefined;
@@ -153,6 +155,39 @@ function ChoiceStates(): JSX.Element {
     );
 }
 
+interface DemoGame { id: string; name: string }
+const DEMO_GAMES: DemoGame[] = ['Diablo IV', 'Destiny 2', 'Dota 2', 'Final Fantasy XIV', 'World of Warcraft']
+    .map((name, i) => ({ id: String(i), name }));
+
+function GameComboboxDemo(): JSX.Element {
+    const [game, setGame] = useState<DemoGame | null>(null);
+    const [text, setText] = useState('');
+    const matches = DEMO_GAMES.filter((g) => g.name.toLowerCase().includes(text.trim().toLowerCase()));
+    return (
+        <Field label="Game" hint="Arrows move, Enter picks, Esc closes (twice clears)." className="w-full">
+            <Combobox<DemoGame> options={matches} getKey={(g) => g.id} getLabel={(g) => g.name}
+                value={game} onChange={setGame} inputValue={text} onInputChange={setText}
+                emptyText="No games found" placeholder="Search games…" />
+        </Field>
+    );
+}
+
+function SearchStates(): JSX.Element {
+    const [query, setQuery] = useState('thrall');
+    return (
+        <>
+            <StateFrame label="SearchInput — leading icon, 44px Clear search" note="type=search; the native cancel glyph is hidden so there is one clear affordance.">
+                <Field label="Search players" hideLabel className="w-full">
+                    <SearchInput value={query} onChange={setQuery} placeholder="Search players…" />
+                </Field>
+            </StateFrame>
+            <StateFrame label="Combobox — portalled listbox" note="bg-surface border-edge popup, active row bg-overlay, 44px rows below lg; aria-activedescendant keeps focus in the input.">
+                <GameComboboxDemo />
+            </StateFrame>
+        </>
+    );
+}
+
 /** The form primitives in every state they ship in. */
 export function FormsSection(): JSX.Element {
     return (
@@ -168,6 +203,7 @@ export function FormsSection(): JSX.Element {
                     <InputVariants />
                     <SelectTextareaStates />
                     <ChoiceStates />
+                    <SearchStates />
                 </StateGrid>
             </div>
         </Section>

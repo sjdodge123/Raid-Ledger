@@ -69,6 +69,19 @@ describe('DesignSystemPage', () => {
         expect(within(forms).getByRole('slider', { name: 'Min owners' })).toHaveValue('3');
     });
 
+    it('the Forms section mounts SearchInput and a working Combobox (slice C)', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        expect(within(forms).getByRole('searchbox', { name: 'Search players' })).toHaveValue('thrall');
+        expect(within(forms).getByRole('button', { name: 'Clear search' })).toBeInTheDocument();
+        const game = within(forms).getByRole('combobox', { name: 'Game' });
+        expect(game).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.keyDown(game, { key: 'ArrowDown' });
+        expect(game).toHaveAttribute('aria-expanded', 'true');
+        expect(within(screen.getByRole('listbox', { name: 'Game' })).getAllByRole('option').length).toBeGreaterThan(1);
+    });
+
     it('shows the filtering DO and DON\'T side by side', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
