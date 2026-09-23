@@ -9,6 +9,8 @@
  * The fix routes each seed row through `findGameByNormalizedName`
  * before inserting; this spec asserts the merge replaces the INSERT.
  */
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { eq, ne } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
@@ -231,6 +233,35 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     expect(match).toBeDefined();
     expect(match?.id).toBe(existing.id);
     expect(match?.igdbId).toBe(500001);
+  });
+
+  // ROK-1643: the boot seed's JSON is IGDB-sourced and names 75379 "World of
+  // Warcraft Classic". It runs on every boot, so its ON CONFLICT (igdb_id)
+  // write must not rename the curated "Classic Era" row back.
+  it('keeps a seed-owned curated name and slug when the IGDB seed JSON disagrees', async () => {
+    const seedFile = JSON.parse(
+      readFileSync(join(__dirname, '../../seeds/games-seed.json'), 'utf8'),
+    ) as { games: GameSeed[] };
+    const classic = seedFile.games.find((g) => g.igdbId === 75379);
+    expect(classic?.name).toBe('World of Warcraft Classic');
+    const [seeded] = await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'World of Warcraft Classic Era',
+        slug: 'world-of-warcraft-classic',
+        igdbId: 75379,
+      })
+      .returning();
+
+    await upsertSeedGames(testApp.db, [classic as GameSeed]);
+
+    const [row] = await testApp.db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.id, seeded.id));
+    expect(row.summary).toBe(classic?.summary);
+    expect(row.name).toBe('World of Warcraft Classic Era');
+    expect(row.slug).toBe('world-of-warcraft-classic');
   });
 
   it('does NOT collapse sequels: existing row with different non-null igdb_id is left alone', async () => {

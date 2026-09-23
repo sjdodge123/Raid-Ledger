@@ -10,6 +10,7 @@ import * as schema from '../drizzle/schema';
 import { mapDbRowToDetail } from './igdb.mappers';
 import { findGameByNormalizedName } from './igdb-name-dedup.helpers';
 import { withGameNameLock } from './games-name-lock.helpers';
+import { keepSeedOwned } from '../games-lookup/seed-owned-games.helpers';
 
 /**
  * Upsert a single ITAD game to the database.
@@ -154,11 +155,14 @@ function buildItadInsertValues(game: GameDetailDto) {
   };
 }
 
-/** Build the update set for ITAD game upsert. Preserves existing IGDB data. */
+/**
+ * Build the update set for ITAD game upsert. Preserves existing IGDB data and
+ * a seed-owned row's curated name (ROK-1643).
+ */
 function buildItadUpdateSet(game: GameDetailDto) {
   const g = schema.games;
   return {
-    name: game.name,
+    name: keepSeedOwned(g.name, game.name),
     coverUrl: game.coverUrl || sql`${g.coverUrl}`,
     genres: game.genres?.length ? game.genres : sql`${g.genres}`,
     summary: game.summary || sql`${g.summary}`,
