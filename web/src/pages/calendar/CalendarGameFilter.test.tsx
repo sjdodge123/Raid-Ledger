@@ -46,7 +46,7 @@ describe('CalendarGameFilterControls (ROK-1662)', () => {
     });
 });
 
-describe('SectionedGameList', () => {
+describe('SectionedGameList — section headers', () => {
     it('renders section header for liked games', () => {
         const games = [
             makeGame('wow', 'World of Warcraft', true),
@@ -113,6 +113,9 @@ describe('SectionedGameList', () => {
         expect(screen.queryByText('Other Games')).not.toBeInTheDocument();
     });
 
+});
+
+describe('SectionedGameList — rows', () => {
     it('renders all game names', () => {
         const games = [
             makeGame('wow', 'World of Warcraft', true),
