@@ -70,7 +70,13 @@ import {
   assertPostsOnFirstHand,
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
+import {
+  assertComposerPinned,
+  disableComposer,
+  enableComposer,
+} from '../lfg-composer-pin.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
+import { pickBoardIntro } from '../lfg-board-intro-pick.js';
 import { assertThreadMembersFollowGroup } from '../lfg-board-thread-members-phase.js';
 import {
   assertSameStarter,
@@ -231,9 +237,14 @@ async function enableBoard(run: Run): Promise<void> {
   // which is what stops it satisfying T24's negative assertion.
   await pollForThread(
     run,
-    (t) => t.name === INTRO_TITLE,
-    `AC16 step 1: enabling the board must seed one intro post titled ` +
-      `"${INTRO_TITLE}" in forum ${run.forumChannelId}, and none appeared`,
+    // THIS env's bot's post, not title alone: the shared CI forum holds one
+    // same-titled intro per bot, so a title match passes whether or not THIS
+    // env seeded one. Not "pinned" either: the forum has ONE pin slot, held by
+    // whichever env pinned first; Discord refuses ours (30047) and the product
+    // logs it and carries on — see `pickBoardIntro`.
+    (t) => pickBoardIntro([t], INTRO_TITLE) !== null,
+    `AC16 step 1: enabling the board must seed an intro post titled ` +
+      `"${INTRO_TITLE}", owned by this env's bot, in forum ${run.forumChannelId}, and none appeared`,
     BOARD_READY_MS,
   );
   run.preexistingThreads = new Set(
@@ -627,6 +638,7 @@ async function cleanup(run: Run): Promise<void> {
   }
   if (run.threadId) await deleteThread(run.threadId);
   for (const id of run.retiredThreadIds) await deleteThread(id);
+  await disableComposer(run);
   await setLfgBoardEnabled(run.ctx.api, false).catch((err: unknown) => {
     console.log(
       `  [lfg-board] could not disable the board in cleanup: ${String(err)}`,
@@ -654,6 +666,8 @@ const lfgBoardLifecycle: SmokeTest = {
       };
       try {
         await enableBoard(run);
+        await enableComposer(run);
+        await assertComposerPinned(run);
         await assertPostsOnFirstHand(run, 'T24');
         await assertUpgradesOnSecondHand(run, 'T25');
         await assertBoardIsBotWriteOnly(run);
