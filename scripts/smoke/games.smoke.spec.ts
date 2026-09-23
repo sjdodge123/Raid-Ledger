@@ -1,10 +1,11 @@
 /**
  * Games page smoke tests — page load, mobile card spacing, mobile search styling,
- * co-op FilterPanel (ROK-1402).
+ * co-op filters in the Filters entry (ROK-1402, ROK-1659).
  */
 import { test, expect } from './base';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
+import { closeGamesFilters, openGamesFilters } from './games-filters';
 import { isMobile } from './helpers';
 
 test.describe('Games page', () => {
@@ -77,12 +78,12 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
 });
 
 // ---------------------------------------------------------------------------
-// ROK-1402 — co-op filters on the games library page (FilterPanel)
+// ROK-1402 — co-op filters on the games library page
 //
-// TDD: written before the implementation. Prescribed surface, matching the
-// Players-page FilterPanel precedent:
-//   • `FilterPanelTrigger` (aria-label "Filters") on the discover tab —
-//     distinct from the existing "Genre Filter" FAB.
+// Since ROK-1659 the co-op controls are one group (`coop-filter-group`) in the
+// /games Filters entry (`games-filters.ts`: the toolbar funnel + inline panel
+// at 1024px and up, the Filters FAB + BottomSheet below). The group is rendered
+// only while some loaded game carries Co-Optimus data (ROK-1402 dormancy):
 //   • Online-players predicate: a range slider, aria-label "Min online players"
 //     (0 = "Any"/inactive).
 //   • Boolean toggles: "Couch co-op", "LAN co-op", "Split-screen",
@@ -99,17 +100,45 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
 // numeric predicate — there is no IGDB `playerCount` fallback — so both null
 // rows drop out of any active predicate.
 //
-// Every test searches for the fixtures BEFORE touching the filter. The section
-// is fully dormant until some loaded game carries co-op data, and the seeded
+// Every test searches for the fixtures BEFORE touching the filter. The group
+// is dormant until some loaded game carries co-op data, and the seeded
 // fixtures reach the page through search rather than the curated discover rows,
-// so the search is what activates the trigger on a demo-seeded library. It also
+// so the search is what activates the group on a demo-seeded library. It also
 // keeps AC2 honest: the predicate and the query must intersect.
 //
 // The Co-Optimus HTTP user-agent is deliberately never referenced here.
 // ---------------------------------------------------------------------------
 
 const COOP_HINT = '[data-testid="coop-filter-hint"]';
+const COOP_GROUP = 'coop-filter-group';
 const FIXTURE_QUERY = 'ROK-1398 Co-Op';
+
+/**
+ * Every column `hasAnyCoopData` reads (`web/src/pages/games/coop-filter.helpers.ts`)
+ * — mirrored, not imported: a smoke spec cannot import from `web/src`.
+ */
+const COOP_COLUMNS = [
+    'cooptimusSyncedAt',
+    'cooptimusOnlineMax',
+    'cooptimusCouchMax',
+    'cooptimusLanMax',
+    'cooptimusSplitscreen',
+    'cooptimusCampaignCoop',
+] as const;
+
+type DiscoverBody = { rows?: { games?: Record<string, unknown>[] }[] };
+
+/** The discover payload with every co-op column blanked — a library with no Co-Optimus sync. */
+function withoutCoopData(body: DiscoverBody): DiscoverBody {
+    const blank = Object.fromEntries(COOP_COLUMNS.map((column) => [column, null]));
+    return {
+        ...body,
+        rows: (body.rows ?? []).map((row) => ({
+            ...row,
+            games: (row.games ?? []).map((game) => ({ ...game, ...blank })),
+        })),
+    };
+}
 
 type CooptimusSeed = {
     enrichedGameId: number;
@@ -118,23 +147,34 @@ type CooptimusSeed = {
     cooptimusUrl: string;
 };
 
+/** Open the Filters entry and wait for the co-op group's slider inside it. */
+async function openCoopControls(page: Page): Promise<Locator> {
+    const filters = await openGamesFilters(page);
+    await expect(filters.getByTestId(COOP_GROUP)).toBeVisible({ timeout: 10_000 });
+    await expect(onlineSlider(filters)).toBeVisible({ timeout: 10_000 });
+    return filters;
+}
+
+function onlineSlider(filters: Locator): Locator {
+    return filters.getByLabel(/min online players/i);
+}
+
 /**
- * Open the co-op FilterPanel, set the online-players predicate, then dismiss the
- * panel. The control is a range slider (operator review 2026-08-20), which
- * `fill()` cannot drive — Home parks it at the minimum and each ArrowRight steps
- * it up by one, both of which fire the real input events React listens for.
- * `minPlayers: 0` therefore clears the predicate.
+ * Set the online-players predicate. The control is a range slider (operator
+ * review 2026-08-20), which `fill()` cannot drive — Home parks it at the
+ * minimum and each ArrowRight steps it up by one, both of which fire the real
+ * input events React listens for. `minPlayers: 0` therefore clears it.
  */
-async function applyOnlineCoopFilter(page: Page, minPlayers: number): Promise<void> {
-    await page.getByRole('button', { name: /^filters$/i }).click();
-    const slider = page.getByLabel(/min online players/i);
-    await expect(slider).toBeVisible({ timeout: 10_000 });
-    await slider.focus();
+async function setOnlineMin(page: Page, filters: Locator, minPlayers: number): Promise<void> {
+    await onlineSlider(filters).focus();
     await page.keyboard.press('Home');
     for (let i = 0; i < minPlayers; i++) await page.keyboard.press('ArrowRight');
-    // Closes the panel (BottomSheet on mobile, the inline panel on desktop) so
-    // the results underneath are clickable.
-    await page.keyboard.press('Escape');
+}
+
+/** Open, set, and close again so the results underneath are clickable. */
+async function applyOnlineCoopFilter(page: Page, minPlayers: number): Promise<void> {
+    await setOnlineMin(page, await openCoopControls(page), minPlayers);
+    await closeGamesFilters(page);
 }
 
 /** Type a query into the games-page search box. */
@@ -153,7 +193,7 @@ function visibleGameLink(page: Page, gameId: number) {
     return page.locator(`a[href="/games/${gameId}"]:visible`).first();
 }
 
-test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
+test.describe('Games page — co-op filters in the Filters entry (ROK-1402)', () => {
     let seed: CooptimusSeed;
 
     test.beforeAll(async () => {
@@ -178,13 +218,37 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
         );
     });
 
-    test('the co-op filter trigger appears once co-op data is loaded', async ({ page }) => {
-        await page.goto('/games');
-        await searchGames(page, FIXTURE_QUERY);
-
-        await expect(page.getByRole('button', { name: /^filters$/i })).toBeVisible({
-            timeout: 15_000,
+    test('the co-op controls appear in the Filters entry only while co-op data is loaded', async ({ page }) => {
+        // A library with no Co-Optimus sync: the real discover rows, co-op
+        // columns blanked. Whatever the env's corpus carries, the ONLY co-op
+        // data this page can see is what the fixture search brings in below.
+        await page.route('**/games/discover**', async (route) => {
+            const response = await route.fetch();
+            const body = (await response.json()) as DiscoverBody;
+            await route.fulfill({ response, json: withoutCoopData(body) });
         });
+        await page.goto('/games');
+        // The discover rows have rendered, so the dormancy below is a verdict
+        // on loaded data — not a panel read before anything arrived.
+        await expect(
+            page
+                .getByTestId('discover-grid')
+                .locator('a[href^="/games/"]:visible, button[aria-label^="Research "]:visible')
+                .first(),
+        ).toBeVisible({ timeout: 20_000 });
+
+        let filters = await openGamesFilters(page);
+        // The panel is up (the genre group renders) but the co-op group is not.
+        await expect(filters.getByTestId('genre-filter-group')).toBeVisible();
+        await expect(filters.getByTestId(COOP_GROUP)).toHaveCount(0);
+        await expect(onlineSlider(filters)).toHaveCount(0);
+        await closeGamesFilters(page);
+
+        // The fixture search loads the enriched row — co-op data now exists.
+        await searchGames(page, FIXTURE_QUERY);
+        await expect(visibleGameLink(page, seed.enrichedGameId)).toBeVisible({ timeout: 15_000 });
+        filters = await openCoopControls(page);
+        await expect(filters.getByRole('checkbox', { name: 'Split-screen' })).toBeVisible();
     });
 
     test('an active co-op predicate excludes games with no co-op data', async ({ page }) => {
@@ -205,11 +269,13 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
     test('an active co-op predicate renders the co-op-data hint', async ({ page }) => {
         await page.goto('/games');
         await searchGames(page, FIXTURE_QUERY);
-        await expect(page.locator(COOP_HINT)).toHaveCount(0);
+        const filters = await openCoopControls(page);
+        // The group is up with no predicate on — so no hint yet.
+        await expect(filters.locator(COOP_HINT)).toHaveCount(0);
 
-        await applyOnlineCoopFilter(page, 4);
+        await setOnlineMin(page, filters, 4);
 
-        const hint = page.locator(COOP_HINT);
+        const hint = filters.locator(COOP_HINT);
         await expect(hint).toBeVisible({ timeout: 10_000 });
         await expect(hint).toHaveText(/showing games with co-op data/i);
     });
@@ -220,7 +286,11 @@ test.describe('Games page — co-op FilterPanel (ROK-1402)', () => {
         await applyOnlineCoopFilter(page, 4);
         await expect(page.locator(`a[href="/games/${seed.syncedEmptyGameId}"]`)).toHaveCount(0);
 
-        await applyOnlineCoopFilter(page, 0);
+        const filters = await openCoopControls(page);
+        await expect(filters.locator(COOP_HINT)).toBeVisible();
+        await setOnlineMin(page, filters, 0);
+        await expect(filters.locator(COOP_HINT)).toHaveCount(0);
+        await closeGamesFilters(page);
 
         await expect(visibleGameLink(page, seed.syncedEmptyGameId)).toBeVisible({
             timeout: 15_000,
