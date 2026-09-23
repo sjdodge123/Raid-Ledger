@@ -5,6 +5,7 @@ import { usePluginStore } from '../../stores/plugin-store';
 import { toast } from '../../lib/toast';
 import { ChannelBindingList } from '../../components/admin/ChannelBindingList';
 import { BindingCreateForm, type BindingChannelOption } from '../../components/admin/BindingCreateForm';
+import { ChannelSelector } from '../../components/admin/channel-selector';
 import type { UpdateChannelBindingDto, CreateChannelBindingDto } from '@raid-ledger/contract';
 
 export function DiscordChannelsPage() {
@@ -116,25 +117,6 @@ function ChannelsBotWarning() {
                 The Discord bot is not connected. Configure it on the{' '}
                 <Link to="/admin/settings/discord/connection" className="underline">Connection</Link> page to manage channels.
             </p>
-        </div>
-    );
-}
-
-function ChannelSelector({ id, label, channels, value, isPending, prefix, hint, onChange, onError }: {
-    id: string; label: string; channels: { id: string; name: string }[];
-    value: string; isPending: boolean; prefix: string; hint: string;
-    onChange: (v: string) => Promise<void>; onError: () => void;
-}) {
-    return (
-        <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-1.5">{label}</label>
-            <select id={id} value={value} disabled={isPending}
-                onChange={async (e) => { if (e.target.value) { try { await onChange(e.target.value); } catch { onError(); } } }}
-                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
-                <option value="" disabled>Select a channel...</option>
-                {channels.map((ch) => <option key={ch.id} value={ch.id}>{prefix}{ch.name}</option>)}
-            </select>
-            <p className="text-xs text-secondary mt-1.5">{hint}</p>
         </div>
     );
 }

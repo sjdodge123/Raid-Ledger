@@ -32,8 +32,10 @@ export interface LfgJoinControlProps {
     isBusy?: boolean;
     /**
      * ROK-1619 AC7: `pressWouldSpawnNow` from the group read — would THIS
-     * viewer's `Right now` pick form the group? Marks that pick, never the `+1`
-     * opener, which only asks when.
+     * viewer's `Right now` pick form the group? Marks the `+1` opener with the
+     * glyph, as the board card's `+1` and the invite DM's `Join` carry it, and
+     * the `Right now` pick with the glyph AND the words: on the web only that
+     * pick forms the group, so "starts the group" stays on it (AC6).
      */
     spawnsNow?: boolean;
     /**
@@ -43,16 +45,25 @@ export interface LfgJoinControlProps {
     spawnEmoji?: string;
 }
 
-/** The `+1` opener: toggles the urgency choice, never carries the indicator. */
-function JoinOpener({ className, isBusy, open, onToggle }: {
+/**
+ * The `+1` opener: toggles the urgency choice. When `spawnGlyph` is set it
+ * leads with the indicator, matching the Discord `+1`/`Join` buttons for the
+ * same setting (ROK-1619). The glyph is `aria-hidden`; the words that carry
+ * the meaning are on the `Right now` pick the opener reveals (AC6).
+ */
+function JoinOpener({ className, isBusy, open, onToggle, spawnGlyph }: {
     className: string;
     isBusy?: boolean;
     open: boolean;
     onToggle: () => void;
+    spawnGlyph?: string;
 }): JSX.Element {
     return (
         <button type="button" data-testid="lfg-join-button" className={className}
             disabled={isBusy} aria-expanded={open} onClick={onToggle}>
+            {spawnGlyph ? (
+                <><span aria-hidden="true" data-testid="lfg-join-spawn-indicator">{spawnGlyph}</span>{' '}</>
+            ) : null}
             {LFG_COPY.join}
         </button>
     );
@@ -66,7 +77,8 @@ function JoinOpener({ className, isBusy, open, onToggle }: {
  * @param props.className - Button classes supplied by the calling surface.
  * @param props.isBusy - True while a join or withdraw is in flight.
  * @param props.spawnsNow - True when the `Right now` pick would form the group.
- * @param props.spawnEmoji - The indicator glyph to mark that pick with.
+ * @param props.spawnEmoji - The indicator glyph to mark the opener and that
+ *   pick with.
  */
 export function LfgJoinControl({
     label,
@@ -81,13 +93,14 @@ export function LfgJoinControl({
         setChoosing(false);
         onJoin(chosen);
     };
+    const spawnGlyph = spawnsNow ? spawnEmoji : undefined;
     return (
         <div className="flex flex-wrap items-center gap-2">
             <JoinOpener className={className} isBusy={isBusy} open={choosing}
-                onToggle={() => setChoosing((open) => !open)} />
+                onToggle={() => setChoosing((open) => !open)} spawnGlyph={spawnGlyph} />
             {choosing ? (
                 <LfgUrgencyChoice label={label} disabled={isBusy} onPick={pick}
-                    spawnGlyph={spawnsNow ? spawnEmoji : undefined} />
+                    spawnGlyph={spawnGlyph} />
             ) : null}
         </div>
     );

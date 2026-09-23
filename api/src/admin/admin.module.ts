@@ -23,6 +23,7 @@ import { DemoTestResetController } from './demo-test-reset.controller';
 import { DemoTestFixtureUserController } from './demo-test-fixture-user.controller';
 import { DemoTestStandalonePollController } from './demo-test-standalone-poll.controller';
 import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
+import { DemoTestWeeklyDigestController } from './demo-test-weekly-digest.controller';
 import { DemoTestBackupController } from './demo-test-backup.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
@@ -108,6 +109,7 @@ import { LfgModule } from '../lfg/lfg.module';
     DemoTestFixtureUserController,
     DemoTestStandalonePollController,
     DemoTestRecruitmentController,
+    DemoTestWeeklyDigestController,
     DemoTestBackupController,
     AiChatTestController,
     SlashCommandTestController,

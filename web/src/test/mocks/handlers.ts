@@ -105,6 +105,14 @@ export const handlers = [
         const body = (await request.json()) as { enabled: boolean };
         return HttpResponse.json({ enabled: body.enabled });
     }),
+    // ROK-1435: weekly digest settings (defaults: off, Monday 09:00, fallback channel)
+    http.get(`${API_BASE}/admin/settings/discord-bot/weekly-digest`, () =>
+        HttpResponse.json({ enabled: false, channelId: null, day: 1, hour: 9, timezone: 'UTC' }),
+    ),
+    http.put(`${API_BASE}/admin/settings/discord-bot/weekly-digest`, async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ ...body, timezone: 'UTC' });
+    }),
     http.get(`${API_BASE}/admin/settings/oauth`, () =>
         HttpResponse.json({ configured: false }),
     ),

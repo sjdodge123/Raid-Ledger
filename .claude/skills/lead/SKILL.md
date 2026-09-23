@@ -65,7 +65,7 @@ Follow CLAUDE.md "Lead context discipline" (hand over at a seam at the measured 
 
 - The deliverable, the ≤N-turn budget, "batch reads into one message per turn", commit cadence, the handover file name.
 - Exact paths/anchors you already know; the files it may and may not touch; `git commit -o`, never `add -A`/`reset`/`stash`.
-- For ops lanes: **wait with a foreground `perl -e 'select(undef,undef,undef,90)'`** (a literal `sleep` is often blocked); never `run_in_background`; never end a turn with work running; reply ONCE at the end with PASS/FAIL and the failing rows verbatim.
+- For ops lanes: **wait with the blocking `rl_task_wait` tool call** (≤120s per call, repeat until terminal; CLAUDE.md context rule 2) — never a shell sleep of any spelling (`sleep`, `perl select`, a busy loop): the Bash tool blocks long sleeps on purpose and a lane asked to dodge that refused the whole brief (2026-09-23). Never `run_in_background`; never end a turn with work running; reply ONCE at the end with PASS/FAIL and the failing rows verbatim.
 - "If a tool call is denied, retry the identical call once; if denied again STOP and report it verbatim — never route around it." If a lane reports a denial and asks the Lead to do the action, **do not launder it** — ask the operator.
 - "Never print credentials; never type a password into a form."
 - A slot-destroying action (destroying another env, releasing with `preserve_envs:false`) only on an env whose plan is fully ruled — and the classifier may still require the operator's explicit OK.
