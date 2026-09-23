@@ -97,9 +97,13 @@ export interface LfgCreateOpts {
 /**
  * Read an urgency choice into the create options.
  *
- * Unknown and absent both fall back to `week`, which is the contract's own
- * default: a stale registered command sending an old value must keep working
- * exactly as it did rather than 400ing a player's hand away.
+ * ROK-1656 — ABSENT means `tonight`: a player who names no urgency is taken to
+ * want to play today. The `/lfg` command only reaches this fallback when the
+ * game has no open group to inherit — see `resolveLfgCommandUrgency`.
+ *
+ * UNKNOWN still falls back to `week`, the contract's own default: a stale
+ * registered command sending an old value must keep working exactly as it did
+ * rather than 400ing a player's hand away.
  *
  * ROK-1616 — `now:60` is no longer OFFERED but is still ACCEPTED, and it still
  * means sixty minutes. **Do not "tidy" it into `tonight`**: the retired option
@@ -114,7 +118,7 @@ export function parseUrgencyChoice(raw: string | null): LfgCreateOpts {
   if (raw === 'now:30') return { urgency: 'now', ttlMinutes: 30 };
   // Retired from the picker, still honoured at its ORIGINAL 60-minute TTL.
   if (raw === 'now:60') return { urgency: 'now', ttlMinutes: 60 };
-  if (raw === 'tonight') return { urgency: 'tonight' };
+  if (raw === 'tonight' || raw === null) return { urgency: 'tonight' };
   return { urgency: 'week' };
 }
 
@@ -148,6 +152,8 @@ export interface LfgJoinReplyInput {
   memberNames: string[];
   /** ROK-1471 D8 — link to the group's forum post; omitted when it has none. */
   postLink?: string | null;
+  /** ROK-1656 — names the horizon a bare `/lfg` chose; absent otherwise. */
+  horizonLine?: string | null;
 }
 
 /** ROK-1471 D8 — game id -> the masked link to that group's forum post. */
@@ -296,7 +302,7 @@ export function buildJoinReply(
   input: LfgJoinReplyInput,
   ctx: LfgReplyContext,
 ): ChannelEmbed {
-  const { group, created, memberNames } = input;
+  const { group } = input;
   // Alone is alone whether this hand is new or a repeat: a solo repeat must
   // not read "1 looking" beside "Nobody yet".
   const first = group.activeCount <= 1;
@@ -310,22 +316,25 @@ export function buildJoinReply(
       // ROK-1479 D9 — the urgency line leads, and carries the only clock a
       // now-group gets: the footer below cannot render `<t:…>` at all.
       nowLine(group),
+      input.horizonLine ?? null,
       joinBody(input, first),
       linkLine(ctx.clientUrl, group.gameSlug, input.postLink),
     ),
   );
   applyExpiryFooter(embed, group, ctx);
   return embed;
+}
 
-  function joinBody(_: LfgJoinReplyInput, isFirst: boolean): string {
-    if (isFirst) {
-      return `Nobody else is looking for **${group.gameName}** yet — I'll post when someone else is in.`;
-    }
-    const roster = formatRoster(memberNames) || 'Nobody yet';
-    if (!created)
-      return `You're already in — ${group.activeCount} looking\n${roster}`;
-    return `That's ${group.activeCount} now — here's the group:\n${roster}`;
+/** The join reply's body: first-hand notice, repeat notice, or the roster. */
+function joinBody(input: LfgJoinReplyInput, isFirst: boolean): string {
+  const { group, created, memberNames } = input;
+  if (isFirst) {
+    return `Nobody else is looking for **${group.gameName}** yet — I'll post when someone else is in.`;
   }
+  const roster = formatRoster(memberNames) || 'Nobody yet';
+  if (!created)
+    return `You're already in — ${group.activeCount} looking\n${roster}`;
+  return `That's ${group.activeCount} now — here's the group:\n${roster}`;
 }
 
 /** Free-typed text that matched no game. */
