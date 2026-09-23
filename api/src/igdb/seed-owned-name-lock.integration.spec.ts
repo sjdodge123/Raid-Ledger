@@ -32,11 +32,16 @@ afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
-async function seedRow(slug: string, name: string, igdbId: number) {
+async function seedRow(
+  slug: string,
+  name: string,
+  igdbId: number | null,
+  shortName: string | null = 'WoW Classic Era',
+) {
   await testApp.db.delete(schema.games).where(eq(schema.games.slug, slug));
   const [row] = await testApp.db
     .insert(schema.games)
-    .values({ slug, name, igdbId, shortName: 'WoW Classic Era' })
+    .values({ slug, name, igdbId, shortName })
     .returning();
   return row;
 }
@@ -91,8 +96,33 @@ describe('ROK-1643 — enrichment keeps a seed-owned name', () => {
     expect(row.name).toBe(CURATED);
   });
 
+  // The pre-fix slug-drift path: a null-igdb_id seed row matched by
+  // normalized name used to take IGDB's slug, which the WoW plugin keys on.
+  it('normalized-name merge keeps the seed slug and curated name', async () => {
+    const seeded = await seedRow(
+      'world-of-warcraft-forever',
+      'World of Warcraft: Forever',
+      null,
+    );
+    await upsertSingleGameRow(
+      testApp.db,
+      mapApiGameToDbRow(
+        igdbGame(990002, 'World of Warcraft Forever', 'igdb-wow-forever'),
+      ),
+    );
+    const row = await readRow(seeded.id);
+    expect(row.igdbId).toBe(990002);
+    expect(row.slug).toBe('world-of-warcraft-forever');
+    expect(row.name).toBe('World of Warcraft: Forever');
+  });
+
   it('a game the seed does not define still takes the IGDB name', async () => {
-    const seeded = await seedRow('some-unseeded-game', 'Old Name', 990001);
+    const seeded = await seedRow(
+      'some-unseeded-game',
+      'Old Name',
+      990001,
+      null,
+    );
     await upsertSingleGameRow(
       testApp.db,
       mapApiGameToDbRow(igdbGame(990001, 'New Name', 'some-unseeded-game')),
