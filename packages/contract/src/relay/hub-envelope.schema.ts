@@ -52,7 +52,9 @@ export type HubError = z.infer<typeof HubErrorSchema>;
 export const HubHealthResponseSchema = z.object({
   status: z.enum(['ok', 'unknown']).catch('unknown'),
   schemaVersions: z.array(z.number().int().positive()).min(1),
-  epoch: z.string(),
+  // Optional until RH-2b: RH-2a ships health as {status, schemaVersions}
+  // (scope doc §7 RH-2a AC2) and the epoch arrives with RH-2b.
+  epoch: z.string().optional(),
 });
 
 export type HubHealthResponse = z.infer<typeof HubHealthResponseSchema>;
