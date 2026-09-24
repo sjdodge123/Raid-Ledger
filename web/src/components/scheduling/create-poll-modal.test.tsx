@@ -311,9 +311,10 @@ describe('CreatePollModal — pinned footer (ROK-1655)', () => {
   it('Create Poll sits in the modal-footer, outside the scrolling body', () => {
     renderWithProviders(<CreatePollModal isOpen={true} onClose={vi.fn()} />);
     const button = screen.getByRole('button', { name: 'Create Poll' });
-    const footer = screen.getByTestId('modal-footer');
-    expect(footer, 'Create Poll must be in the pinned footer').toContainElement(button);
-    const body = footer.previousElementSibling as HTMLElement;
+    const footer = screen.queryByTestId('modal-footer');
+    expect(footer, 'the Modal must render its pinned footer').not.toBeNull();
+    expect(footer!, 'Create Poll must be in the pinned footer').toContainElement(button);
+    const body = footer!.previousElementSibling as HTMLElement;
     expect(body).toContainElement(screen.getByTestId('poll-duration-picker'));
     expect(body, 'the scroll body must not hold Create Poll').not.toContainElement(button);
   });
