@@ -208,7 +208,7 @@ export function DiscordBotForm() {
                     <label htmlFor="botToken" className="block text-sm font-medium text-secondary mb-1.5">Bot Token</label>
                     <PasswordInput id="botToken" value={h.botToken} onChange={h.setBotToken}
                         placeholder={h.discordBotStatus.data?.configured ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : 'Discord Bot Token'}
-                        showPassword={h.showToken} onToggleShow={() => h.setShowToken(!h.showToken)} ringColor="focus:ring-blue-500" fieldLabel="token" />
+                        showPassword={h.showToken} onToggleShow={() => h.setShowToken(!h.showToken)} fieldLabel="token" />
                 </div>
                 <EnableToggle enabled={h.enabled} onToggle={() => h.setEnabledOverride(!h.enabled)} />
                 <TestResultBanner result={h.testResult} />

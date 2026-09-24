@@ -3,9 +3,6 @@ import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { PasswordInput, TestResultBanner } from './admin-form-helpers';
 
-/** Steam brand color for ring/button styling */
-const STEAM_RING = 'focus:ring-[#1B2838]';
-
 function SteamSetupInstructions() {
     return (
         <div className="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 mb-6">
@@ -95,7 +92,7 @@ export function SteamForm() {
                     <PasswordInput id="steamApiKey" value={h.apiKey} onChange={h.setApiKey}
                         placeholder={placeholder}
                         showPassword={h.showKey} onToggleShow={() => h.setShowKey(!h.showKey)}
-                        ringColor={STEAM_RING} fieldLabel="API key" />
+                        fieldLabel="API key" />
                 </div>
                 <TestResultBanner result={h.testResult} />
                 <SteamActionButtons configured={isConfigured} isPending={h.isPending}

@@ -184,12 +184,12 @@ export function IgdbForm() {
             <RedirectUriSection />
             <form onSubmit={h.handleSave} className="space-y-4">
                 <FormTextField id="igdbClientId" label="Client ID" value={h.clientId} onChange={h.setClientId}
-                    placeholder={placeholder ?? 'Twitch Application Client ID'} ringColor="focus:ring-purple-500" />
+                    placeholder={placeholder ?? 'Twitch Application Client ID'} />
                 <div>
                     <label htmlFor="igdbClientSecret" className="block text-sm font-medium text-secondary mb-1.5">Client Secret</label>
                     <PasswordInput id="igdbClientSecret" value={h.clientSecret} onChange={h.setClientSecret}
                         placeholder={placeholder ?? 'Twitch Application Client Secret'}
-                        showPassword={h.showSecret} onToggleShow={() => h.setShowSecret(!h.showSecret)} ringColor="focus:ring-purple-500" />
+                        showPassword={h.showSecret} onToggleShow={() => h.setShowSecret(!h.showSecret)} />
                 </div>
                 <TestResultBanner result={h.testResult} />
                 <IgdbActionButtons configured={!!h.igdbStatus.data?.configured} isPending={h.isPending}
