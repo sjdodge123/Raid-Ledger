@@ -132,7 +132,12 @@ function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps)
                     </SheetDirtyContext.Provider>
                 </SheetHeaderContext.Provider>
             </div>
-            <DiscardChangesConfirm isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard} />
+            <DiscardChangesConfirm
+                isOpen={guard.confirming}
+                onKeep={guard.keep}
+                onDiscard={guard.discard}
+                message="The times you just entered haven't been saved yet."
+            />
         </BottomSheet>
     );
 }
