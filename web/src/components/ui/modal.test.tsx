@@ -343,3 +343,83 @@ describe('Modal — part 7', () => {
     });
 
 });
+
+describe('Modal — pinned footer + flex layout (ROK-1655 PR-1)', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
+    it('renders the footer as a later sibling of the body, outside the scroll element', () => {
+        render(
+            <Modal isOpen={true} onClose={vi.fn()} title="Test" footer={<button type="button">Save</button>}>
+                <p>Body content</p>
+            </Modal>,
+        );
+        const body = screen.getByText('Body content').parentElement as HTMLElement;
+        const footer = screen.queryByTestId('modal-footer');
+        expect(footer, 'the footer prop must render a modal-footer element').not.toBeNull();
+        expect(footer).toHaveTextContent('Save');
+        expect(body).toHaveClass('overflow-y-auto');
+        expect(body.nextElementSibling).toBe(footer);
+        expect(footer?.closest('.overflow-y-auto')).toBeNull();
+        expect(footer).toHaveClass('shrink-0', 'border-t', 'border-edge', 'justify-end');
+    });
+
+    it('renders no modal-footer element when the footer prop is omitted', () => {
+        render(
+            <Modal isOpen={true} onClose={vi.fn()} title="Test">
+                <p>Body content</p>
+            </Modal>,
+        );
+        expect(screen.queryByTestId('modal-footer')).toBeNull();
+    });
+});
+
+describe('Modal — 90dvh flex-column layout (ROK-1655 PR-1)', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
+
+    it('lays the dialog out as a 90dvh flex column with a shrink-0 header', () => {
+        render(
+            <Modal isOpen={true} onClose={vi.fn()} title="Layout Title">
+                <p>Body content</p>
+            </Modal>,
+        );
+        const dialog = screen.getByRole('dialog');
+        expect(dialog).toHaveClass('flex', 'flex-col', 'max-h-[90dvh]', 'overflow-hidden');
+        expect(dialog).not.toHaveClass('max-h-[90vh]');
+        expect(screen.getByText('Layout Title').parentElement).toHaveClass('shrink-0');
+    });
+
+    it('gives the default body the structural classes plus the p-4 overflow-y-auto skin', () => {
+        render(
+            <Modal isOpen={true} onClose={vi.fn()} title="Test">
+                <p>Body content</p>
+            </Modal>,
+        );
+        const body = screen.getByText('Body content').parentElement as HTMLElement;
+        expect(body).toHaveClass('flex-1', 'min-h-0', 'p-4', 'overflow-y-auto');
+        expect(body).not.toHaveClass('max-h-[calc(90vh-8rem)]');
+    });
+
+    it.each([
+        'p-4 pb-6 overflow-y-auto max-h-[calc(90vh-8rem)]',
+        'p-4 flex flex-col max-h-[calc(90vh-4rem)]',
+        'p-4',
+    ])('keeps flex-1 min-h-0 plus the caller skin %s', (skin) => {
+        render(
+            <Modal isOpen={true} onClose={vi.fn()} title="Test" bodyClassName={skin}>
+                <p>Body content</p>
+            </Modal>,
+        );
+        const body = screen.getByText('Body content').parentElement as HTMLElement;
+        expect(body).toHaveClass('flex-1', 'min-h-0', ...skin.split(' '));
+    });
+});

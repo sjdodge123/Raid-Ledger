@@ -1,81 +1,41 @@
-import { useEffect, useCallback, useId, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
-import { useFocusTrap } from '../../hooks/use-focus-trap';
-import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
-
-interface ModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    title: string;
-    children: ReactNode;
-    /** Override the default max-width (default: 'max-w-md') */
-    maxWidth?: string;
-    /** Override body overflow/height classes (default: scrollable body) */
-    bodyClassName?: string;
-    /** Element to focus on open instead of the first focusable (the close button) */
-    initialFocusRef?: React.RefObject<HTMLElement | null>;
-}
-
 /**
- * Simple modal component for dialogs.
- * Uses portal pattern for proper z-index stacking.
- * ROK-342: Focus trap + ARIA dialog semantics.
+ * Modal — the shared dialog. `ModalFrame` (./modal-frame) draws it; this
+ * layer adds the optional ROK-1655 dirty-close guard.
+ *
+ * Without `closeGuard`, Escape, the backdrop and × call `onClose` (unchanged).
+ * With it, they call `closeGuard.requestClose` instead, and Modal renders the
+ * shared "Discard your changes?" confirm while `closeGuard.confirming`. The
+ * consumer owns `useDirtyCloseGuard(isDirty, onClose)` (web/src/hooks), so it
+ * guards an explicit Cancel with `onClick={guard.requestClose}` and leaves
+ * Save/submit unguarded. Browser back is out of scope (ROK-1655 ruling 4).
+ * A close by another route (the parent flips `isOpen`) resets the guard.
  */
-function useModalEscape(isOpen: boolean, onClose: () => void) {
-    const handleKeyDown = useCallback(
-        (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); },
-        [onClose],
-    );
+import type { JSX } from 'react';
+import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
+import { ModalFrame, type ModalFrameProps } from './modal-frame';
+import { DiscardChangesConfirm } from './discard-changes-confirm';
 
-    useEffect(() => {
-        if (!isOpen) return;
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, handleKeyDown]);
-    // Ref-counted: a Modal stacked over an open sheet must not unlock the page on close (ROK-1640).
-    useBodyScrollLock(isOpen);
+export interface ModalProps extends ModalFrameProps {
+    /** Route Escape, backdrop and × through the dirty-close guard (ROK-1655). */
+    closeGuard?: DirtyCloseGuard;
+    /** What is unsaved, for the confirm. Defaults to its neutral copy. */
+    discardMessage?: string;
 }
 
-function ModalHeader({ titleId, title, onClose }: { titleId: string; title: string; onClose: () => void }) {
+/** See file docstring. */
+export function Modal({ closeGuard, discardMessage, onClose, ...frame }: ModalProps): JSX.Element {
+    useResetGuardOnClose(frame.isOpen, closeGuard);
     return (
-        <div className="flex items-center justify-between p-4 border-b border-edge">
-            <h2 id={titleId} className="text-lg font-semibold text-foreground">{title}</h2>
-            <button
-                onClick={onClose}
-                className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
-                aria-label="Close modal"
-            >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-    );
-}
-
-export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef }: ModalProps) {
-    const titleId = useId();
-    const trapRef = useFocusTrap<HTMLDivElement>(isOpen, initialFocusRef);
-
-    useModalEscape(isOpen, onClose);
-
-    if (!isOpen) return null;
-
-    return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
-            <div
-                ref={trapRef}
-                className={`relative bg-surface border border-edge rounded-xl shadow-2xl ${maxWidth} w-full mx-4 max-h-[90vh] overflow-hidden`}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby={titleId}
-                style={{ animation: 'modal-spring 350ms var(--spring-bounce) forwards' }}
-            >
-                <ModalHeader titleId={titleId} title={title} onClose={onClose} />
-                <div className={bodyClassName ?? "p-4 overflow-y-auto max-h-[calc(90vh-8rem)]"}>{children}</div>
-            </div>
-        </div>,
-        document.body,
+        <>
+            <ModalFrame {...frame} onClose={closeGuard?.requestClose ?? onClose} />
+            {closeGuard && (
+                <DiscardChangesConfirm
+                    isOpen={frame.isOpen && closeGuard.confirming}
+                    onKeep={closeGuard.keep}
+                    onDiscard={closeGuard.discard}
+                    message={discardMessage}
+                />
+            )}
+        </>
     );
 }
