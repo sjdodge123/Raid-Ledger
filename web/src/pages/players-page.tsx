@@ -81,7 +81,7 @@ export function PlayersPage() {
                     <div className="flex items-center justify-between flex-wrap gap-4">
                         <div className="flex items-center gap-2">
                             <h1 className="text-2xl font-bold text-foreground">Players</h1>
-                            <FilterPanelTrigger resultCount={total} hasActiveFilters={activeFilterCount > 0} onClick={toggleOpen} />
+                            <FilterPanelTrigger activeCount={activeFilterCount} isOpen={isOpen} onClick={toggleOpen} />
                         </div>
                         <span className="text-sm text-muted">{total} {activeFilterCount > 0 ? 'matching' : 'registered'}</span>
                     </div>

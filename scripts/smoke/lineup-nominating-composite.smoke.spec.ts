@@ -125,7 +125,7 @@ test.describe('Nominating composite — hero (ROK-1297)', () => {
             expect(cBox.y, `controls wrapped under the headline ${label}`).toBeLessThan(hBox.y + hBox.height);
             const chip = (await controls.getByTestId('lineup-participants-button').boundingBox())!;
             expect(Math.abs(chip.height - 36), `participants chip is not 36px ${label}`).toBeLessThanOrEqual(1);
-            // The sticky row under the card (Search) is untouched by ROK-1585.
+            // The sticky row under the card (the search box, ROK-1659) is untouched by ROK-1585.
             await expect(page.getByTestId('sticky-hero-search')).toBeVisible();
         }
     });
@@ -280,24 +280,36 @@ test.describe('Nominating composite — nominate adds to existing list (ROK-1297
 // vertical space, NOT in a modal).
 // ---------------------------------------------------------------------------
 
-test.describe('Nominating composite — search affordance (ROK-1297)', () => {
-    test('clicking sticky Search expands the inline filter row', async ({
+test.describe('Nominating composite — search + Filters entry (ROK-1297, ROK-1659)', () => {
+    test('the hero shows the search box inline and the Filters entry opens the panel', async ({
         page,
-    }) => {
-        // ROK-1297 round 5l–5q: the standalone "Search any game" CTA was
-        // replaced by a Search button embedded in the sticky JourneyHero
-        // (data-testid="sticky-hero-search"). Clicking it expands an
-        // inline filter row (search input + min-owners + players sliders)
-        // INSIDE the sticky strip — not a separate hero-body swap.
+    }, testInfo) => {
+        // ROK-1659: the bespoke filter card and its Search / Back toggle
+        // retired. The search box sits in the sticky JourneyHero row with no
+        // click to reveal it; the filters sit behind the shared funnel
+        // standard — the toolbar funnel from 1024px (inline panel under the
+        // toolbar), the Filters FAB below (BottomSheet).
         await gotoNominating(page);
 
-        const searchBtn = page.getByTestId('sticky-hero-search');
-        await expect(searchBtn).toBeVisible({ timeout: 10_000 });
-        await searchBtn.click();
-
+        const toolbar = page.getByTestId('nominating-hero-toolbar');
         await expect(
-            page.getByRole('searchbox', { name: /search games/i }),
+            toolbar.getByRole('searchbox', { name: /search games/i }),
         ).toBeVisible({ timeout: 10_000 });
+        await expect(
+            page.getByRole('button', { name: /search the game library/i }),
+        ).toHaveCount(0);
+
+        const width = page.viewportSize()?.width ?? 0;
+        const opener = width >= 1024
+            ? toolbar.getByTestId('filter-panel-trigger')
+            : page.getByTestId('filter-fab');
+        await expect(
+            opener,
+            `the ${width >= 1024 ? 'toolbar funnel' : 'Filters FAB'} is the filter opener at ${width}px (${testInfo.project.name})`,
+        ).toBeVisible({ timeout: 10_000 });
+        await opener.click();
+        await expect(opener).toHaveAttribute('aria-expanded', 'true');
+        await expect(page.getByRole('slider', { name: /min owners/i })).toBeVisible({ timeout: 10_000 });
     });
 });
 
@@ -469,12 +481,9 @@ test.describe('Nominating composite — co-op pill on a tile (ROK-1401)', () => 
         );
 
         await gotoNominating(page);
-        const searchBtn = page.getByTestId('sticky-hero-search');
-        await expect(searchBtn).toBeVisible({ timeout: 15_000 });
-        await searchBtn.click();
-
+        // ROK-1659: the search box is always in the sticky hero — no toggle.
         const box = page.getByRole('searchbox', { name: /search games/i });
-        await expect(box).toBeVisible({ timeout: 10_000 });
+        await expect(box).toBeVisible({ timeout: 15_000 });
         await box.fill('ROK-1398 Co-Op Enriched');
 
         const tile = page

@@ -9,8 +9,9 @@
  *   - Tone shifts to "waiting" when `viewerSubmissions.nominationsSubmittedAt`
  *     is set on the lineup detail.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { server } from '../../../../test/mocks/server';
@@ -372,5 +373,63 @@ describe('NominatingComposite — sticky hero, no auto-hide (ROK-1601)', () => {
         expect(classes.filter((c) => c.includes('translate'))).toEqual([]);
         expect(classes).not.toContain('will-change-transform');
         expect(wrapper.style.transition).toBe('');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1659 — the hero keeps search + nominations; filters go behind the
+// shared funnel standard (toolbar funnel from 1024px, Filters FAB below).
+// ---------------------------------------------------------------------------
+
+/** Evaluate `min-width` media queries against a fixed width. */
+function mockViewportWidth(width: number): void {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => {
+        const min = /min-width:\s*(\d+)px/.exec(query);
+        return {
+            matches: Boolean(min) && width >= Number(min![1]), media: query, onchange: null,
+            addListener: vi.fn(), removeListener: vi.fn(),
+            addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+        };
+    }) as unknown as typeof window.matchMedia;
+}
+
+describe('NominatingComposite — funnel filter standard (ROK-1659)', () => {
+    const originalMatchMedia = window.matchMedia;
+    afterEach(() => { window.matchMedia = originalMatchMedia; });
+
+    it('shows the search box in the hero without a Search button to expand it', async () => {
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        const toolbar = await screen.findByTestId('nominating-hero-toolbar');
+        expect(within(toolbar).getByRole('searchbox', { name: 'Search games' })).toBeVisible();
+        expect(screen.queryByRole('button', { name: /search the game library/i })).not.toBeInTheDocument();
+    });
+
+    it('phone: the Filters FAB opens the filters; no toolbar funnel', async () => {
+        mockViewportWidth(390);
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        await screen.findByTestId('nominating-hero-toolbar');
+        const fab = screen.getByTestId('filter-fab');
+        expect(screen.queryByTestId('filter-panel-trigger')).not.toBeInTheDocument();
+        await userEvent.click(fab);
+        expect(fab).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    it('tablet: the Filters FAB renders outside the sticky toolbar, so its z-index is not trapped', async () => {
+        mockViewportWidth(800);
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        const toolbar = await screen.findByTestId('nominating-hero-toolbar');
+        expect(toolbar).toHaveClass('sticky');
+        expect(toolbar).not.toContainElement(screen.getByTestId('filter-fab'));
+    });
+
+    it('desktop: the toolbar funnel opens the inline panel; no FAB', async () => {
+        mockViewportWidth(1280);
+        renderWithProviders(<NominatingComposite lineup={buildBuildingLineup()} canParticipate />);
+        const toolbar = await screen.findByTestId('nominating-hero-toolbar');
+        const funnel = within(toolbar).getByTestId('filter-panel-trigger');
+        expect(screen.queryByTestId('filter-fab')).not.toBeInTheDocument();
+        await userEvent.click(funnel);
+        expect(funnel).toHaveAttribute('aria-expanded', 'true');
+        expect(within(toolbar).getByTestId('filter-panel')).toHaveClass('opacity-100');
     });
 });

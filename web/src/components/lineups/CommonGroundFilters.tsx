@@ -1,15 +1,23 @@
 /**
- * Filter controls for the Common Ground panel (ROK-934).
- * Min owners slider, genre dropdown, max players input.
+ * Filter controls for the Common Ground panel (ROK-934, ROK-1659).
+ *
+ * `CommonGroundFilters` is the panel BODY — min owners, players and the
+ * opt-in co-op group size, built from the shared `Slider` / `Checkbox`
+ * primitives. `CommonGroundFilterEntry` puts that body behind the shared
+ * funnel filter standard (`FilterEntry`): the inline panel at 1024px and up,
+ * the Filters FAB + BottomSheet below. Search is NOT a filter here — it lives
+ * in the page toolbar next to the funnel (`FilterEntryTrigger`).
  */
 import { type JSX, useCallback, useEffect, useRef } from 'react';
 import type { CommonGroundParams } from '../../lib/api-client';
+import { Slider } from '../ui/slider';
+import { Checkbox } from '../ui/checkbox';
+import { FilterEntry } from '../ui/filter-entry';
+import { commonGroundActiveFilterCount } from './common-ground-filter-count';
 
-interface Props {
+export interface CommonGroundFiltersProps {
     filters: CommonGroundParams;
     onChange: (next: CommonGroundParams) => void;
-    search: string;
-    onSearchChange: (v: string) => void;
     /**
      * Voting-eligibility size for the active lineup (ROK-1255). When > 0
      * and `filters.maxPlayers` is unset, the player-count slider auto-sets
@@ -33,175 +41,34 @@ interface Props {
     coopDataAvailable?: boolean;
 }
 
-// ROK-1297 round 5m: mobile-compliant control sizing.
-//  - 44px min-height tap targets (Apple HIG / Material / WCAG 2.5.5)
-//  - text-base (16px) on inputs prevents iOS Safari auto-zoom on focus
-//  - Foreground label color (was text-muted, hard to read)
-//  - Full-width sliders so the track is comfortably tappable
-const SLIDER_CLS =
-    'flex-1 h-11 accent-emerald-500 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5';
-
-/** Slider for the minimum owners threshold (0–15). */
-function MinOwnersSlider({
-    value,
-    onChange,
-}: {
-    value: number;
-    onChange: (v: number) => void;
-}): JSX.Element {
-    return (
-        <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
-            <span className="whitespace-nowrap font-medium">Min owners</span>
-            <input
-                type="range"
-                min={0}
-                max={15}
-                value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className={SLIDER_CLS}
-            />
-            <span className="text-sm font-mono w-6 text-right text-foreground">
-                {value}
-            </span>
-        </label>
-    );
-}
-
-/** Free-text game name search. */
-function SearchBox({
-    value,
-    onChange,
-}: {
-    value: string;
-    onChange: (v: string) => void;
-}): JSX.Element {
-    return (
-        <input
-            type="search"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Search games..."
-            aria-label="Search games"
-            className="min-h-[44px] bg-panel border border-edge rounded-md px-3 py-2 text-base text-foreground placeholder:text-dim w-full focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-        />
-    );
-}
-
-/** Slider for filtering by player count. */
-function PlayersSlider({
-    value,
-    onChange,
-}: {
-    value: number | undefined;
-    onChange: (v: number | undefined) => void;
-}): JSX.Element {
-    const current = value ?? 0;
-    return (
-        <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
-            <span className="whitespace-nowrap font-medium">Players</span>
-            <input
-                type="range"
-                min={0}
-                max={16}
-                value={current}
-                onChange={(e) => {
-                    const v = Number(e.target.value);
-                    onChange(v === 0 ? undefined : v);
-                }}
-                className={SLIDER_CLS}
-            />
-            <span className="text-sm font-mono w-8 text-right text-foreground">
-                {current || 'Any'}
-            </span>
-        </label>
-    );
-}
+/** Players readout: 0 on the track means "no player-count filter". */
+const formatPlayers = (v: number): string => (v === 0 ? 'Any' : String(v));
 
 /**
- * Slider for the co-op group size (ROK-1400). Styled to match the Min
- * owners / Players sliders above — operator review 2026-08-20 asked for a
- * slider rather than a number box so the whole panel reads as one control
- * family. Minimum is 1 because the API schema rejects 0.
- */
-function CoopSizeSlider({
-    value,
-    onChange,
-}: {
-    value: number;
-    onChange: (v: number) => void;
-}): JSX.Element {
-    return (
-        <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
-            <span className="whitespace-nowrap font-medium">Co-op group size</span>
-            <input
-                type="range"
-                min={1}
-                max={16}
-                value={value}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className={SLIDER_CLS}
-            />
-            <span className="text-sm font-mono w-6 text-right text-foreground">
-                {value}
-            </span>
-        </label>
-    );
-}
-
-/**
- * ROK-1400 co-op group-size filter — opt-in toggle plus the size entry.
+ * ROK-1400 co-op group-size filter — opt-in toggle plus the size slider.
  * Switching ON seeds the size from `participantCount` (min 1); switching
  * OFF clears it so the server-side filter goes away entirely. While the
  * filter is active, games with no co-op data at all are excluded by the
- * API, so we say so rather than letting them vanish silently.
+ * API, so we say so rather than letting them vanish silently. The slider
+ * minimum is 1 because the API schema rejects 0.
  */
-function CoopToggle({
-    active,
-    onToggle,
-}: {
-    active: boolean;
-    onToggle: (on: boolean) => void;
-}): JSX.Element {
-    return (
-        <label className="flex items-center gap-2 text-base text-foreground min-h-[44px]">
-            <input
-                type="checkbox"
-                checked={active}
-                onChange={(e) => onToggle(e.target.checked)}
-                className="w-5 h-5 accent-emerald-500"
-            />
-            <span className="whitespace-nowrap font-medium">
-                Co-op for our group size
-            </span>
-        </label>
-    );
-}
-
-/** Opt-in co-op group-size filter: toggle, size entry, NULL-data hint. */
-function CoopGroupSizeFilter({
-    value,
-    participantCount,
-    onChange,
-}: {
+function CoopGroupSizeFilter({ value, participantCount, onChange }: {
     value: number | undefined;
     participantCount: number | undefined;
     onChange: (v: number | undefined) => void;
 }): JSX.Element {
     const active = value != null;
     return (
-        <div className="flex flex-col gap-1">
-            <CoopToggle
-                active={active}
-                onToggle={(on) =>
-                    onChange(on ? Math.max(1, participantCount ?? 1) : undefined)
-                }
+        <div className="flex flex-col">
+            <Checkbox
+                label="Co-op for our group size"
+                checked={active}
+                onChange={(e) => onChange(e.target.checked ? Math.max(1, participantCount ?? 1) : undefined)}
             />
             {active && (
                 <>
-                    <CoopSizeSlider value={value} onChange={onChange} />
-                    <span className="text-xs text-muted">
-                        Only showing games with co-op data
-                    </span>
+                    <Slider label="Co-op group size" min={1} max={16} value={value} onChange={onChange} />
+                    <p className="text-xs text-muted">Only showing games with co-op data</p>
                 </>
             )}
         </div>
@@ -238,8 +105,12 @@ function useMaxPlayersIntentCapture(
     }, [participantCount, filters, onChange, suppressAutoSeed]);
 }
 
-/** Filter bar for the Common Ground panel. */
-export function CommonGroundFilters({ filters, onChange, search, onSearchChange, participantCount, suppressAutoSeed, coopDataAvailable }: Props): JSX.Element {
+/**
+ * The filter body for the Common Ground panel. Stays mounted while the panel
+ * is collapsed (the inline panel and the BottomSheet both keep children in
+ * the DOM), so the ROK-1255 auto-seed runs on entry at every width.
+ */
+export function CommonGroundFilters({ filters, onChange, participantCount, suppressAutoSeed, coopDataAvailable }: CommonGroundFiltersProps): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
         [filters, onChange],
@@ -247,15 +118,11 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
     useMaxPlayersIntentCapture(participantCount, filters, onChange, suppressAutoSeed);
 
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:[grid-template-columns:repeat(3,minmax(220px,1fr))] gap-3 sm:gap-4 items-center">
-            <SearchBox value={search} onChange={onSearchChange} />
-            <MinOwnersSlider
-                value={filters.minOwners ?? 2}
-                onChange={(v) => update({ minOwners: v })}
-            />
-            <PlayersSlider
-                value={filters.maxPlayers}
-                onChange={(v) => update({ maxPlayers: v })}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 lg:gap-8 items-start">
+            <Slider label="Min owners" min={0} max={15} value={filters.minOwners ?? 2} onChange={(v) => update({ minOwners: v })} />
+            <Slider
+                label="Players" min={0} max={16} value={filters.maxPlayers ?? 0} formatValue={formatPlayers}
+                onChange={(v) => update({ maxPlayers: v === 0 ? undefined : v })}
             />
             {/* Dormant until the catalogue has Co-Optimus data — see Props. */}
             {coopDataAvailable && (
@@ -266,5 +133,30 @@ export function CommonGroundFilters({ filters, onChange, search, onSearchChange,
                 />
             )}
         </div>
+    );
+}
+
+export interface CommonGroundFilterEntryProps extends CommonGroundFiltersProps {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+}
+
+/**
+ * ROK-1659: the Common Ground filter set behind the shared funnel standard.
+ * Pair it with a `FilterEntryTrigger` (same `activeCount` / `isOpen`) in the
+ * toolbar. "Clear all" clears exactly what the badge counts — the co-op
+ * filter — and leaves the min-owners / player-count defaults alone.
+ */
+export function CommonGroundFilterEntry({ isOpen, onOpenChange, ...body }: CommonGroundFilterEntryProps): JSX.Element {
+    const { filters, onChange, coopDataAvailable } = body;
+    return (
+        <FilterEntry
+            activeCount={commonGroundActiveFilterCount(filters, coopDataAvailable)}
+            isOpen={isOpen}
+            onOpenChange={onOpenChange}
+            onClearAll={() => onChange({ ...filters, minOnlineCoop: undefined })}
+        >
+            <CommonGroundFilters {...body} />
+        </FilterEntry>
     );
 }

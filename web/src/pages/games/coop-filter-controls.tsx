@@ -12,10 +12,10 @@ type ToggleKey = 'couchCoop' | 'lanCoop' | 'splitscreen' | 'campaignCoop';
 const MAX_ONLINE_PLAYERS = 16;
 
 // Mirrors the Common Ground slider sizing (ROK-1297 round 5m): 44px tap target,
-// full-width track, emerald thumb. Kept as a local copy rather than an import so
+// full-width track, success-token thumb (ROK-1659: tokens, never raw emerald). Kept as a local copy rather than an import so
 // this page never reaches into the lineups module.
 const SLIDER_CLS =
-    'flex-1 h-11 accent-emerald-500 [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5';
+    'flex-1 min-w-0 h-11 accent-success [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5';
 
 const COOP_TOGGLES: { key: ToggleKey; label: string }[] = [
     { key: 'couchCoop', label: 'Couch co-op' },
@@ -36,7 +36,7 @@ interface CoopFilterControlsProps {
  */
 export function CoopFilterControls({ state, onChange }: CoopFilterControlsProps): JSX.Element {
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="flex flex-col gap-4">
             <MinOnlinePlayersSlider
                 value={state.onlineMinPlayers}
                 onChange={(onlineMinPlayers) => onChange({ ...state, onlineMinPlayers })}
@@ -98,7 +98,7 @@ function CoopToggle({ label, checked, onChange }: {
                 type="checkbox"
                 checked={checked}
                 onChange={onChange}
-                className="rounded border-edge text-emerald-500 focus:ring-emerald-500"
+                className="rounded border-edge text-success focus:ring-success"
             />
             {label}
         </label>

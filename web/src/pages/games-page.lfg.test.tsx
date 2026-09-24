@@ -304,14 +304,13 @@ describe('GamesPage — the genre row is URL-persisted (ROK-1525)', () => {
         expect(screen.queryByText('Popular RPGs')).not.toBeInTheDocument();
     });
 
-    it('writes the clicked pill to the URL without disturbing lfg', async () => {
+    it('writes the checked genre to the URL without disturbing lfg', async () => {
         mockGenreRows();
 
         renderPageWithLocation('/games?lfg=0&players=4');
-        const rpgPill = screen
-            .getAllByRole('button')
-            .find((b) => b.textContent === 'RPG');
-        fireEvent.click(rpgPill as HTMLElement);
+        // ROK-1659: genres are checkboxes in the one Filters panel.
+        fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
+        fireEvent.click(screen.getByRole('checkbox', { name: 'RPG' }));
 
         await waitFor(() => {
             const search = new URLSearchParams(
@@ -319,6 +318,22 @@ describe('GamesPage — the genre row is URL-persisted (ROK-1525)', () => {
             );
             expect(search.get('genres')).toBe('rpg');
             expect(search.get('lfg')).toBe('0');
+            expect(search.get('players')).toBe('4');
+        });
+    });
+
+    it('the Filters panel LFG switch writes lfg=1 and keeps the library params', async () => {
+        mockGenreRows();
+
+        renderPageWithLocation('/games?players=4');
+        fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
+        fireEvent.click(screen.getByRole('switch', { name: 'Players are looking' }));
+
+        await waitFor(() => {
+            const search = new URLSearchParams(
+                screen.getByTestId('location-search').textContent ?? '',
+            );
+            expect(search.get('lfg')).toBe('1');
             expect(search.get('players')).toBe('4');
         });
     });

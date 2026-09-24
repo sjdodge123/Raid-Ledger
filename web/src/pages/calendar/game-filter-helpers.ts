@@ -20,3 +20,22 @@ export function sortGamesWithLikedFirst(
             return a.name.localeCompare(b.name);
         });
 }
+
+/**
+ * ROK-1662 — the calendar Filters badge: how many KNOWN games are filtered out.
+ * Slugs in `selectedGames` that are not (yet) known do not count, so the badge
+ * never shows while every known game is visible and never hides while any is
+ * filtered out.
+ */
+export function countHiddenGames(games: GameInfo[], selectedGames: Set<string>): number {
+    let hidden = 0;
+    for (const g of games) if (!selectedGames.has(g.slug)) hidden += 1;
+    return hidden;
+}
+
+/** Case-insensitive name match for the filter's game search; a blank query keeps every game. */
+export function filterGamesByName<T extends GameInfo>(games: T[], query: string): T[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return games;
+    return games.filter((g) => g.name.toLowerCase().includes(q));
+}
