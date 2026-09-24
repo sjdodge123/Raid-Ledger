@@ -41,8 +41,16 @@ const VALHEIM = { id: 8, name: 'Valheim' };
 const LINKED = { id: 42, deactivatedAt: null, bannedAt: null };
 const RESULT = { created: true, body: { group: { gameName: 'DRG' } } };
 
-function deps(): ComposerFlowDeps & { createIntent: jest.Mock } {
+function deps(): ComposerFlowDeps & {
+  createIntent: jest.Mock;
+  generateLink: jest.Mock;
+} {
   const createIntent = jest.fn().mockResolvedValue(RESULT);
+  const generateLink = jest
+    .fn()
+    .mockImplementation((id: number, path: string, base: string) =>
+      Promise.resolve(`${base}${path}#token=FAKE-${id}`),
+    );
   return {
     db: {} as never,
     lfgService: { createIntent },
@@ -50,7 +58,9 @@ function deps(): ComposerFlowDeps & { createIntent: jest.Mock } {
       getClientUrl: jest.fn().mockResolvedValue('https://rl.test'),
       getDiscordBotTimezone: jest.fn().mockResolvedValue('UTC'),
     },
+    magicLinkService: { generateLink },
     createIntent,
+    generateLink,
   };
 }
 
@@ -88,6 +98,14 @@ function selectValues(body: { components: { toJSON(): unknown }[] }): string[] {
     .flatMap((row) => row.components)
     .find((c) => Array.isArray(c.options));
   return (select?.options ?? []).map((o) => o.value);
+}
+
+/** The `View games ↗` link button's URL in an edited reply, if any. */
+function viewUrl(body: { components: { toJSON(): unknown }[] }): unknown {
+  const rows = body.components.map(
+    (row) => row.toJSON() as { components: { url?: string }[] },
+  );
+  return rows.flatMap((row) => row.components).find((c) => c.url)?.url;
 }
 
 interface EditedBody {
@@ -312,5 +330,59 @@ describe('goComposer (AC4 — the one write path)', () => {
       content: LFG_COMPOSER_COPY.STALE_REPLY,
       flags: MessageFlags.Ephemeral,
     });
+  });
+});
+
+describe('View games carries the clicker\'s own magic link (ROK-1685 AC1/AC4)', () => {
+  const MINTED = 'https://rl.test/games?q=deep+rock#token=FAKE-42';
+
+  it('the match list links a token minted for the clicker', async () => {
+    search.mockResolvedValue([DRG]);
+    const d = deps();
+    const i = submit('deep rock');
+    await submitComposerSearch(d, i as never);
+    expect(viewUrl(edited(i))).toBe(MINTED);
+    expect(d.generateLink).toHaveBeenCalledWith(42, '/games', 'https://rl.test');
+  });
+
+  it('"no games match" links a token minted for the clicker', async () => {
+    search.mockResolvedValue([]);
+    fuzzy.mockResolvedValue([]);
+    const i = submit('deep rock');
+    await submitComposerSearch(deps(), i as never);
+    expect(viewUrl(edited(i))).toBe(MINTED);
+  });
+
+  it('Back to candidates re-mints for the clicker', async () => {
+    search.mockResolvedValue([DRG, VALHEIM]);
+    const i = fake('lfgc:backc:deep rock');
+    await backToComposerCandidates(deps(), i as never);
+    expect(viewUrl(edited(i))).toBe(MINTED);
+  });
+
+  it('the pick fallback\'s no-match links a token minted for the clicker', async () => {
+    findGame.mockResolvedValue(null);
+    const i = fake('lfgc:pick:deep rock', { values: ['7'] });
+    await pickComposerGame(deps(), i as never);
+    expect(viewUrl(edited(i))).toBe(MINTED);
+  });
+
+  it('mints for interaction.user.id and no other id', async () => {
+    search.mockResolvedValue([DRG]);
+    const d = deps();
+    const i = { ...submit('deep rock'), user: { id: 'discord-clicker' } };
+    await submitComposerSearch(d, i as never);
+    expect(caller.mock.calls.map((c) => c[1])).toEqual(['discord-clicker']);
+    expect(d.generateLink.mock.calls.map((c) => c[0])).toEqual([42]);
+  });
+
+  it('an unlinked clicker gets plain /games and no token is minted', async () => {
+    caller.mockResolvedValue(null);
+    search.mockResolvedValue([DRG]);
+    const d = deps();
+    const i = submit('deep rock');
+    await submitComposerSearch(d, i as never);
+    expect(viewUrl(edited(i))).toBe('https://rl.test/games?q=deep+rock');
+    expect(d.generateLink).not.toHaveBeenCalled();
   });
 });

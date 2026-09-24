@@ -93,6 +93,7 @@ describe('LfgComposerListener.handle', () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
     );
     const i = fake('button', 'lfgc:go:week:7:s:deep');
     await listener.handle(i as never);
@@ -103,6 +104,7 @@ describe('LfgComposerListener.handle', () => {
 
   it('answers an unknown lfgc id with the stale reply, not "interaction failed"', async () => {
     const listener = new LfgComposerListener(
+      {} as never,
       {} as never,
       {} as never,
       {} as never,
