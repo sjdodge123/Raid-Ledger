@@ -7,7 +7,7 @@
  * phase-duration values into the modal's form state. The resolved values are
  * what gets sent to the API — no preset enum is persisted.
  */
-import type { JSX, ReactNode } from 'react';
+import type { JSX, KeyboardEvent, ReactNode } from 'react';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import type { PresetKey } from './start-lineup-config';
@@ -38,10 +38,32 @@ const PRESET_OPTIONS: ReadonlyArray<PresetOption> = [
   ['custom', 'Custom', 'Set everything manually', 'col-span-2 sm:col-span-3'],
 ];
 
+/** Arrow keys → index step (ARIA radio group: Right/Down next, Left/Up previous). */
+const ARROW_STEP: Readonly<Record<string, number>> = {
+  ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1,
+};
+
+/**
+ * Radio-group arrow handling for the card Buttons: move AND select the
+ * neighbouring card, wrapping at both ends, and move focus with it.
+ */
+function handlePresetArrow(e: KeyboardEvent<HTMLDivElement>, value: PresetKey, onChange: (key: PresetKey) => void): void {
+  const step = ARROW_STEP[e.key];
+  if (!step) return;
+  e.preventDefault();
+  const count = PRESET_OPTIONS.length;
+  const current = PRESET_OPTIONS.findIndex(([key]) => key === value);
+  const next = PRESET_OPTIONS[(Math.max(current, 0) + step + count) % count][0];
+  onChange(next);
+  e.currentTarget.querySelector<HTMLElement>(`[data-testid="preset-${next}"]`)?.focus();
+}
+
 /** One preset option: a ghost Button acting as a radio, label over hint. */
-function PresetCard({ option, checked, onSelect }: {
+function PresetCard({ option, checked, tabbable, onSelect }: {
   option: PresetOption;
   checked: boolean;
+  /** Roving tabindex: the checked card, or the first when none is. */
+  tabbable: boolean;
   onSelect: (key: PresetKey) => void;
 }): JSX.Element {
   const [presetKey, label, hint, spanClass] = option;
@@ -51,6 +73,7 @@ function PresetCard({ option, checked, onSelect }: {
       size="sm"
       role="radio"
       aria-checked={checked}
+      tabIndex={tabbable ? 0 : -1}
       data-testid={`preset-${presetKey}`}
       onClick={() => onSelect(presetKey)}
       className={`${CARD_CLS} ${spanClass}`}
@@ -71,6 +94,7 @@ export function PresetChooser({
   value: PresetKey;
   onChange: (key: PresetKey) => void;
 }): JSX.Element {
+  const hasChecked = PRESET_OPTIONS.some(([key]) => key === value);
   return (
     <div>
       <span className="block text-sm font-medium text-success mb-2">
@@ -80,9 +104,11 @@ export function PresetChooser({
         role="radiogroup"
         aria-label="Lineup preset"
         className="grid grid-cols-2 gap-2 sm:grid-cols-6"
+        onKeyDown={(e) => handlePresetArrow(e, value, onChange)}
       >
-        {PRESET_OPTIONS.map((option) => (
-          <PresetCard key={option[0]} option={option} checked={value === option[0]} onSelect={onChange} />
+        {PRESET_OPTIONS.map((option, i) => (
+          <PresetCard key={option[0]} option={option} checked={value === option[0]}
+            tabbable={hasChecked ? value === option[0] : i === 0} onSelect={onChange} />
         ))}
       </div>
     </div>
