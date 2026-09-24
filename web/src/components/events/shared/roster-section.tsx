@@ -1,4 +1,7 @@
 import { useMemo } from 'react';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
+import { RadioGroup } from '../../ui/radio-group';
 import { SlotStepper } from './slot-stepper';
 import '../../../pages/event-detail-page.css';
 
@@ -21,17 +24,18 @@ export interface RosterSectionProps {
     onAutoUnbenchChange: (v: boolean) => void;
 }
 
-function SlotTypeToggle({ slotType, onChange }: { slotType: 'mmo' | 'generic'; onChange: (t: 'mmo' | 'generic') => void }) {
-    const btnClass = (active: boolean) =>
-        `flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? 'bg-emerald-600 text-white' : 'bg-panel border border-edge text-secondary hover:text-foreground'}`;
+type SlotType = RosterSectionProps['slotType'];
+
+const SLOT_TYPE_OPTIONS = [
+    { value: 'mmo', label: 'MMO Roles' },
+    { value: 'generic', label: 'Generic Slots' },
+] as const;
+
+/** ROK-1649: a segmented RadioGroup (was two hand-painted toggle buttons). */
+function SlotTypeToggle({ slotType, onChange }: { slotType: SlotType; onChange: (t: SlotType) => void }) {
     return (
-        <div>
-            <label className="block text-sm font-medium text-secondary mb-2">Slot Type</label>
-            <div className="flex gap-2">
-                <button type="button" onClick={() => onChange('mmo')} className={btnClass(slotType === 'mmo')}>MMO Roles</button>
-                <button type="button" onClick={() => onChange('generic')} className={btnClass(slotType === 'generic')}>Generic Slots</button>
-            </div>
-        </div>
+        <RadioGroup<SlotType> label="Slot Type" appearance="segmented" options={SLOT_TYPE_OPTIONS}
+            value={slotType} onChange={onChange} />
     );
 }
 
@@ -51,18 +55,15 @@ function SlotSteppers(props: RosterSectionProps) {
     );
 }
 
+/** ROK-1649: Field + Input; `maxAttendeesId` stays the control id (scroll-to-error target). */
 function MaxAttendeesField({ maxAttendees, maxAttendeesError, maxAttendeesId, onChange }: {
     maxAttendees: string; maxAttendeesError?: string; maxAttendeesId: string; onChange: (v: string) => void;
 }) {
     return (
-        <div>
-            <label htmlFor={maxAttendeesId} className="block text-sm font-medium text-secondary mb-2">Max Attendees</label>
-            <input id={maxAttendeesId} type="number" min={1} value={maxAttendees} onChange={(e) => onChange(e.target.value)}
-                placeholder="Unlimited"
-                className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${maxAttendeesError ? 'border-red-500' : 'border-edge'}`} />
-            <p className="mt-1 text-xs text-dim">Leave empty for unlimited</p>
-            {maxAttendeesError && <p className="mt-1 text-sm text-red-400">{maxAttendeesError}</p>}
-        </div>
+        <Field label="Max Attendees" id={maxAttendeesId} hint="Leave empty for unlimited" error={maxAttendeesError}>
+            <Input type="number" inputMode="numeric" min={1} value={maxAttendees} placeholder="Unlimited"
+                onChange={(e) => onChange(e.target.value)} />
+        </Field>
     );
 }
 
@@ -98,7 +99,7 @@ export function RosterSection(props: RosterSectionProps) {
         <>
             <SlotTypeToggle slotType={props.slotType} onChange={props.onSlotTypeChange} />
             <SlotSteppers {...props} />
-            <div className="text-sm text-muted">Total slots: <span className="text-emerald-400 font-medium">{totalSlots}</span></div>
+            <div className="text-sm text-muted">Total slots: <span className="text-success font-medium">{totalSlots}</span></div>
             <MaxAttendeesField maxAttendees={props.maxAttendees} maxAttendeesError={props.maxAttendeesError}
                 maxAttendeesId={maxAttendeesId} onChange={props.onMaxAttendeesChange} />
             <AutoUnbenchToggle autoUnbench={props.autoUnbench} onChange={props.onAutoUnbenchChange} />
