@@ -603,9 +603,9 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps, 'steam')).rejects.toThrow(
-        'connection lost',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('connection lost');
     });
   });
 });
@@ -734,9 +734,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps, 'steam')).rejects.toThrow(
-        'db connection lost during itad id lookup',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('db connection lost during itad id lookup');
       // Should not have reached insert or update
       expect(mockDb.insert).not.toHaveBeenCalled();
       expect(mockDb.update).not.toHaveBeenCalled();
@@ -761,9 +761,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps, 'steam')).rejects.toThrow(
-        'update constraint violation',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('update constraint violation');
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
@@ -783,9 +783,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps, 'steam')).rejects.toThrow(
-        'update deadlock',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('update deadlock');
     });
   });
 
@@ -808,7 +808,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
 
       // The caller indexes [0].id, so an empty array would surface as a
       // confusing `undefined.id` TypeError instead of the real cause.
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps, 'steam')).rejects.toThrow(
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow(
         /Unresolvable unique collision inserting game "Elden Ring"/,
       );
       expect(mockDb.insertValues).toHaveBeenCalledTimes(2);
@@ -828,7 +830,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps, 'steam')).rejects.toThrow();
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow();
 
       expect(mockDb.insertValues).toHaveBeenLastCalledWith(
         expect.objectContaining({

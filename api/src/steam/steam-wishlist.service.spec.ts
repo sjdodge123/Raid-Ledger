@@ -321,9 +321,7 @@ describe('SteamWishlistService — discovery steamAppIdSource (ROK-1680)', () =>
   let spy: jest.SpyInstance;
 
   beforeEach(() => {
-    spy = jest
-      .spyOn(discovery, 'discoverGameViaItad')
-      .mockResolvedValue(null);
+    spy = jest.spyOn(discovery, 'discoverGameViaItad').mockResolvedValue(null);
   });
 
   afterEach(() => spy.mockRestore());
