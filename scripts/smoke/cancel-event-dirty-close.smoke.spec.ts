@@ -64,6 +64,15 @@ async function openCancelModal(page: Page, testInfo: TestInfo): Promise<Locator>
     return dialog;
 }
 
+/** The API still reports the fixture event live, with no reason stored. */
+async function expectNotCancelled(): Promise<void> {
+    const event = (await apiGet(token, `/events/${eventId}`)) as
+        { cancelledAt?: string | null; cancellationReason?: string | null } | null;
+    expect(event, `GET /events/${eventId} failed`).not.toBeNull();
+    expect(event?.cancelledAt ?? null, 'Discard must not cancel the event').toBeNull();
+    expect(event?.cancellationReason ?? null, 'the discarded reason must not be saved').toBeNull();
+}
+
 test.describe('Cancel Event modal — dirty close asks first (ROK-1655 AC3)', () => {
     test('a typed reason: Escape asks, Keep editing keeps it, Keep Event + Discard closes without cancelling', async ({ page }, testInfo) => {
         const dialog = await openCancelModal(page, testInfo);
@@ -86,12 +95,7 @@ test.describe('Cancel Event modal — dirty close asks first (ROK-1655 AC3)', ()
         await confirm.getByRole('button', { name: 'Discard', exact: true }).click();
         await expect(confirm).toBeHidden();
         await expect(dialog, 'Discard should close the modal').toBeHidden();
-
-        const event = (await apiGet(token, `/events/${eventId}`)) as
-            { cancelledAt?: string | null; cancellationReason?: string | null } | null;
-        expect(event, `GET /events/${eventId} failed`).not.toBeNull();
-        expect(event?.cancelledAt ?? null, 'Discard must not cancel the event').toBeNull();
-        expect(event?.cancellationReason ?? null, 'the discarded reason must not be saved').toBeNull();
+        await expectNotCancelled();
     });
 
     test('a clean modal closes on Escape with no confirm', async ({ page }, testInfo) => {
