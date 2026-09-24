@@ -230,56 +230,52 @@ SendMessage(type: "message", recipient: "sprint-planner",
   summary: "Post In Review comment for ROK-XXX")
 ```
 
-**The operator uses Linear "In Review" to know what needs testing. This is NOT optional.**
+**Linear "In Review" is the signal that the story is ready for the `fleet-ui-verify` lane. This is NOT optional.**
 
 ## 6h. Review Tasks Stay Blocked
 
-Review tasks remain blocked until the operator tests locally and moves the story to "Code Review" status in Linear. The lead unblocks and spawns review agents in Step 7c after polling detects operator approval.
+For any story with a visible or felt surface, create a fleet test plan (`rl_test_plan_create`) and spawn a `fleet-ui-verify` lane (skill loaded first — `.claude/skills/fleet-ui-verify/SKILL.md`) to run it and return PASS/FAIL/BLOCKED/OPERATOR per step (CLAUDE.md "UI verification: agents run the fleet test plan"). Review tasks remain blocked until that lane's verdicts land — and, if it flagged any `OPERATOR` steps, until the operator rules those and moves the story to "Code Review" status in Linear. The lead unblocks and spawns review agents in Step 7c once that approval is in.
 
 ## 6i. Notify Operator (after all batch stories reach "In Review")
 
 Once ALL stories in the current batch have passed all gates and been moved to "In Review", **notify the operator**.
 
-Ensure the last story's feature branch is deployed locally:
+Ensure the last story's feature branch is deployed (fleet slot or local, per the active `test_infra_mode`), then run each story's `fleet-ui-verify` lane against it per 6h before notifying the operator.
+
+**Notify the operator only with the verify lane's results — do NOT ask for test results in the terminal:**
 
 ```
-SendMessage(type: "message", recipient: "build-agent",
-  content: "Deploy feature branch rok-<num>-<short-name> locally for operator testing. Worktree: ../Raid-Ledger--rok-<num>",
-  summary: "Deploy ROK-<num> for operator testing")
-```
-
-**Notify the operator — do NOT ask for test results in the terminal:**
-
-```
-## Batch N — Built & Ready for Testing
-All N stories have passed CI + Playwright. Local dev environment running at localhost:5173.
+## Batch N — Built & Verified
+All N stories have passed CI + Playwright + the fleet-ui-verify lane's plan run.
 Currently on branch: rok-<num>-<short-name> (ROK-XXX)
 
-Stories to test (all in "In Review" in Linear):
-- ROK-XXX: <title> — RUNNING NOW at localhost:5173
-- ROK-YYY: <title> — switch with: deploy_dev.sh --branch rok-<num>-<short-name>
+Stories (all in "In Review" in Linear):
+- ROK-XXX: <title> — verify lane: PASS (or: N OPERATOR steps below)
+- ROK-YYY: <title> — verify lane: PASS
 
-Testing checklists and Playwright results have been posted to each story in Linear.
+<If any OPERATOR steps were flagged, list them here batched, with the plan link.>
 
-When done testing each story, update its status in Linear:
-  -> "Code Review" = testing passed, ready for code review agent
-  -> "Changes Requested" (add comments explaining issues) = testing failed
+For stories with no OPERATOR steps, update Linear directly:
+  -> "Code Review" = ready for code review agent
+  -> "Changes Requested" (add comments explaining issues) = a lane FAIL needs rework
+
+For stories with OPERATOR steps, rule those first, then update Linear the same way.
 ```
 
-**Do NOT ask the operator for test results in the terminal. The operator communicates results by updating Linear statuses. The Sprint Planner polls Linear to detect changes.**
+**Do NOT ask the operator to browser-test in the terminal. Status moves happen via Linear once the verify lane's verdicts (and any OPERATOR rulings) are in. The Sprint Planner polls Linear to detect changes.**
 
 ---
 
 ## FULL STOP — DO NOT PROCEED PAST THIS POINT
 
-**Step 6 is COMPLETE. You MUST now WAIT for the operator.**
+**Step 6 is COMPLETE. You MUST now WAIT for the `fleet-ui-verify` lane's verdict table, and for the operator only if it flagged `OPERATOR` steps.**
 
 Do NOT:
 - Create pull requests (PRs are created in Step 8 AFTER code review)
-- Spawn review agents (reviews happen in Step 7c AFTER operator approves)
-- Move stories to "Done" or "Code Review" (the OPERATOR controls these transitions)
+- Spawn review agents (reviews happen in Step 7c AFTER the verify lane's verdicts land, and any OPERATOR steps are ruled)
+- Move stories to "Done" or "Code Review" (the verify lane's verdict, plus operator ruling on any OPERATOR steps, controls these transitions)
 - Skip ahead to Step 7b/7c/8 without the Sprint Planner confirming status changes
 
-The ONLY thing you do now is **ask the Sprint Planner to poll** (Step 7a) and wait for the operator to move stories out of "In Review". The operator is the gate — you cannot proceed without their approval.
+The ONLY thing you do now is **ask the Sprint Planner to poll** (Step 7a) and wait for stories to move out of "In Review". If the lane found no `OPERATOR` steps, that verdict table is the gate; otherwise the operator's ruling on those steps is.
 
-**Creating a PR with auto-merge before operator testing and code review causes unreviewed code to ship to main. This is a critical error.**
+**Creating a PR with auto-merge before the verify lane's verdict (and any required operator ruling) and code review causes unreviewed code to ship to main. This is a critical error.**

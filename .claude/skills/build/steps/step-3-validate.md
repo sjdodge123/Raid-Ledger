@@ -183,7 +183,7 @@ Gates: `gates.playwright: PASS` / `FAIL` / `SKIPPED`; `gates.discord_smoke: PASS
 
 ## 3c.6. Chrome MCP e2e Gate (MANDATORY before operator review)
 
-The Lead drives the *changed user flows* via `mcp__claude-in-chrome__*` on the deployed app — captures screenshots / GIFs, audits console + network, and produces an operator-facing summary BEFORE flipping Linear to "In Review". **Must complete before the operator FULL STOP (3e), before the Codex reviewer (4b), and before any push or PR work.**
+The Lead drives the *changed user flows* via `mcp__claude-in-chrome__*` on the deployed app — captures screenshots / GIFs, audits console + network, and produces an operator-facing summary BEFORE flipping Linear to "In Review". **Must complete before the `fleet-ui-verify` lane runs the story's test plan (3e), before the Codex reviewer (4b), and before any push or PR work.**
 
 Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Pass the browser base URL from the mode branch:
 
@@ -196,7 +196,7 @@ Full playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Pass the browser base
 2. Pass the flow list + the story ID as inputs to the shared playbook.
 3. Execute it. Do NOT skim it; the anti-pattern section catches the failure modes that triggered this gate's creation (ROK-1237).
 4. Write the summary to `planning-artifacts/chrome-mcp-summary-ROK-XXX.md`. Save captures under `planning-artifacts/chrome-mcp-screenshots/ROK-XXX/`.
-5. **Keep the review env available** — in fleet mode, keep the slot/env alive; in local mode, keep the env lock. The operator will browser-test on the same deploy in the FULL STOP window. Cleanup/release happens in 4a/5e depending on mode.
+5. **Keep the review env available** — in fleet mode, keep the slot/env alive; in local mode, keep the env lock. A `fleet-ui-verify` lane runs the story's test plan on the same deploy next (3e). Cleanup/release happens in 4a/5e depending on mode.
 
 **Gate outcomes:**
 
@@ -218,7 +218,9 @@ mcp__linear__save_issue({ id: "<linear_id>", state: "In Review" })
 
 ---
 
-## 3e. Update State and FULL STOP
+## 3e. Fleet-ui-verify lane, then FULL STOP for OPERATOR steps
+
+For any story with a visible or felt surface: create the fleet test plan (`rl_test_plan_create`), seed the objects AFTER this gate, then spawn a `fleet-ui-verify` lane (skill loaded first — `.claude/skills/fleet-ui-verify/SKILL.md`) with the plan id, slot URL, story/spec path and seeded ids. It signs in via `rl_env_signin_link`, drives desktop/tablet/phone × `default-dark`/`default-light`, and returns PASS/FAIL/BLOCKED/OPERATOR per step (CLAUDE.md "UI verification: agents run the fleet test plan"). A lane FAIL gets a root-cause pass before a fix, then a re-run of the failed steps. FULL STOP is for the operator's `OPERATOR`-marked steps only (design/product rulings, own Discord account, real-device quirks) — batch them into one ask.
 
 Update `<worktree>/build-state.yaml`:
 
@@ -232,7 +234,8 @@ stories.ROK-XXX:
     ci: PASS
     playwright: PASS
     chrome_mcp_e2e: PASS   # or "N/A — light scope" / "N/A — api-internal-only"
-    operator: WAITING
+    ui_verify: WAITING     # fleet-ui-verify lane verdict, or "N/A — no visible/felt surface"
+    operator: WAITING      # only OPERATOR-marked plan steps, if any
 ```
 
 Present to operator with the full verification table — this is mandatory, not optional:
@@ -266,9 +269,11 @@ Full Chrome MCP report: `planning-artifacts/chrome-mcp-summary-ROK-XXX.md`. Note
 |------|---------|
 | E2E Test First (TDD) / Dev AC Audit / CI / Test Coverage Audit / Chrome MCP e2e |
 
-The app is deployed (env-lock held — Lead releases when you give a verdict). Test each story and update Linear:
+The app is deployed and a `fleet-ui-verify` lane has run the story's test plan (verdict table attached). Env-lock stays held until any `OPERATOR`-marked steps are ruled. If there are none, proceed straight to Linear:
 - **Code Review** = approved, ready for code review
 - **Changes Requested** = needs rework (add feedback as comment)
+
+If `OPERATOR` steps exist, batch them into one ask with the plan link and wait for those rulings before moving on.
 
 I'll wait.
 ```

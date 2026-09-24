@@ -150,7 +150,7 @@ Default: release as soon as the gate's summary file is committed to disk. The re
 mcp__mcp-env__env_lock_release
 ```
 
-**Only keep the lock past this point if** the caller's pipeline explicitly says "operator will browser-test on this deploy" (build standard/full Step 3 → operator FULL STOP). In that case, the lock transfers responsibility to the operator-review window — Lead notes it in the operator-presentation block and releases when the operator signals done.
+**Only keep the lock past this point if** the caller's pipeline explicitly says "a `fleet-ui-verify` lane will run the plan on this deploy" (build standard/full Step 3). In that case, the lock transfers responsibility to that lane's run — Lead notes it in the operator-presentation block and releases once the lane's verdicts land and any `OPERATOR`-marked steps are ruled.
 
 If a later finding requires a fix + re-verify, re-acquire then. Pre-emptive holding is a pipeline violation.
 
@@ -205,7 +205,7 @@ Commit the backlog append as part of the batch's commits with the `chore(config)
 | Skill | Where the gate runs | State key |
 |-------|---------------------|-----------|
 | `/fix-batch` | Step 3, after unit + integration tests, BEFORE reviewer agent | `gates.chrome_mcp_e2e` |
-| `/build` (standard / full) | Step 3, after Playwright smoke, BEFORE Linear → "In Review" + operator FULL STOP | `gates.chrome_mcp_e2e` per story |
+| `/build` (standard / full) | Step 3, after Playwright smoke, BEFORE Linear → "In Review" + the `fleet-ui-verify` lane's plan run | `gates.chrome_mcp_e2e` per story |
 | `/build` (light) | Skipped — no worktree deploy. Operator reviews directly. | `gates.chrome_mcp_e2e: N/A — light scope` |
 | `/bulk` | Step 3, after Playwright smoke, BEFORE batch push + PR creation | `gates.chrome_mcp_e2e` |
 
