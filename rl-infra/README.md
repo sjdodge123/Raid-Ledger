@@ -847,10 +847,13 @@ supported way in. Server-side (inside the MCP process) it:
 The admin password and the admin access token are withheld from the result and
 scrubbed from every error message; failures come back as
 `{ok:false, error, status?, message}` (`env_not_found`, `admin_seed_failed`,
-`admin_login_failed`, `signin_link_failed` with the endpoint's 400/404 message).
-A 404 for a user that exists means the env's image predates the endpoint —
-rebuild from a branch that has it. If another env shares the slot the result
-carries a `warning`: the slot URL routes to whichever env owns the route.
+`admin_login_failed`, `signin_link_failed` with the endpoint's 400/404 message,
+`slot_shared`, `signin_link_wrong_origin`). A 404 for a user that exists means
+the env's image predates the endpoint — rebuild from a branch that has it.
+`admin_seed_failed` also covers an unset `RL_ADMIN_PASSWORD`: the tool never
+rotates admin@local to a random password (set it in `/srv/rl-infra/.env`).
+If another env shares the slot the tool fails closed with `slot_shared`, naming
+every env on it — the slot URL routes to whichever env owns the route.
 
 #### The pre-push sentinel is keyed to the WEB SURFACE (ROK-1566)
 
