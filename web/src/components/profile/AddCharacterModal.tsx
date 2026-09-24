@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useId } from 'react';
 import type { CharacterRole, CharacterDto, IgdbGameDto } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
+import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { useCreateCharacter, useUpdateCharacter, useSetMainCharacter } from '../../hooks/use-character-mutations';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
@@ -34,6 +35,17 @@ const getInitialFormState = (char?: CharacterDto | null): FormState => ({
     role: char?.role ?? '', realm: char?.realm ?? '', isMain: char?.isMain ?? false,
 });
 
+/**
+ * ROK-1655: unsaved = a field differs from the state the form opened with
+ * (`getInitialFormState(editing)`, plus the open-time Main default for a new
+ * character), OR a new character has a game picked that was not preselected.
+ * A search query alone never reaches here, so it is not dirty.
+ */
+function isCharacterFormDirty(form: FormState, baseline: FormState, pickedGameSlug: string | undefined, preselectedSlug: string | undefined): boolean {
+    const changed = (Object.keys(baseline) as (keyof FormState)[]).some((k) => form[k] !== baseline[k]);
+    return changed || (pickedGameSlug !== undefined && pickedGameSlug !== preselectedSlug);
+}
+
 function buildUpdateDto(form: FormState, showMmoFields: boolean) {
     return {
         name: form.name.trim(),
@@ -63,14 +75,15 @@ function validateCharacterForm(form: FormState, effectiveGameId: number | undefi
     return null;
 }
 
-function CharacterFormActions({ onClose, isPending, isEditing }: { onClose: () => void; isPending: boolean; isEditing: boolean }) {
+/** Pinned in the Modal footer (ROK-1655): the submit reaches the form by id; Cancel goes through the guard. */
+function CharacterFormActions({ formId, onCancel, isPending, isEditing }: { formId: string; onCancel: () => void; isPending: boolean; isEditing: boolean }) {
     return (
-        <div className="flex justify-end gap-3 pt-2">
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" variant="primary" loading={isPending} loadingLabel="Saving…">
+        <>
+            <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+            <Button type="submit" form={formId} variant="primary" loading={isPending} loadingLabel="Saving…">
                 {isEditing ? 'Save Changes' : 'Add Character'}
             </Button>
-        </div>
+        </>
     );
 }
 
@@ -96,7 +109,7 @@ function useCharacterModalRegistryLookup(selectedIgdbGame: IgdbGameDto | null, p
 }
 
 interface ModalResetState {
-    setForm: React.Dispatch<React.SetStateAction<FormState>>; setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
+    setForm: React.Dispatch<React.SetStateAction<FormState>>; setBaseline: React.Dispatch<React.SetStateAction<FormState>>; setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
     setResetKey: React.Dispatch<React.SetStateAction<number>>; setSelectedIgdbGame: React.Dispatch<React.SetStateAction<IgdbGameDto | null>>;
     setPrevIsOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
@@ -110,7 +123,7 @@ function syncModalOpenClose(
         rs.setPrevIsOpen(true); rs.setResetKey((k) => k + 1);
         const initial = getInitialFormState(editingCharacter);
         if (!editingCharacter && !hasMainForGame) initial.isMain = true;
-        rs.setForm(initial); rs.setErrors({});
+        rs.setForm(initial); rs.setBaseline(initial); rs.setErrors({});
         if (!editingCharacter) {
             if (preselectedGameId) { const match = registryGames.find((g) => g.id === preselectedGameId); if (match) rs.setSelectedIgdbGame({ id: 0, igdbId: 0, name: match.name, slug: match.slug, coverUrl: null }); }
             else { rs.setSelectedIgdbGame(null); }
@@ -127,6 +140,7 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const [prevIsOpen, setPrevIsOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
+    const [baseline, setBaseline] = useState<FormState>(() => getInitialFormState(editingCharacter));
     const [errors, setErrors] = useState<FormErrors>({});
     const { registryGames, registryGame, preselectedRegistryGame } = useCharacterModalRegistryLookup(selectedIgdbGame, preselectedGameId);
     const isEditing = !!editingCharacter;
@@ -136,10 +150,11 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const { data: gameCharsData } = useMyCharacters(effectiveGameId, !!effectiveGameId);
     const gameChars = gameCharsData?.data ?? [];
     const hasMainForGame = gameChars.some((c) => c.isMain);
-    syncModalOpenClose(isOpen, prevIsOpen, editingCharacter, hasMainForGame, preselectedGameId, registryGames, { setForm, setErrors, setResetKey, setSelectedIgdbGame, setPrevIsOpen });
+    syncModalOpenClose(isOpen, prevIsOpen, editingCharacter, hasMainForGame, preselectedGameId, registryGames, { setForm, setBaseline, setErrors, setResetKey, setSelectedIgdbGame, setPrevIsOpen });
+    const isDirty = isCharacterFormDirty(form, baseline, isEditing ? undefined : selectedIgdbGame?.slug, preselectedRegistryGame?.slug);
     const updateField = <K extends keyof FormState>(field: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [field]: value }));
 
-    return { form, errors, setErrors, selectedIgdbGame, setSelectedIgdbGame, activeTab, setActiveTab, resetKey, effectiveRegistryGame, effectiveGameId, showMmoFields, gameChars, hasMainForGame, isEditing, ...mutations, updateField, onClose };
+    return { form, errors, setErrors, selectedIgdbGame, setSelectedIgdbGame, activeTab, setActiveTab, resetKey, effectiveRegistryGame, effectiveGameId, showMmoFields, gameChars, hasMainForGame, isEditing, isDirty, ...mutations, updateField, onClose };
 }
 
 function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, editingCharacter: CharacterDto | null | undefined, onClose: () => void) {
@@ -158,12 +173,12 @@ function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, edi
     }
 }
 
-function CharacterModalFormBody({ s, editingCharacter, onClose, effectiveGameName, currentSlug, isArmorySynced }: {
-    s: ReturnType<typeof useCharacterModalState>; editingCharacter?: CharacterDto | null;
+function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiveGameName, currentSlug, isArmorySynced }: {
+    formId: string; s: ReturnType<typeof useCharacterModalState>; editingCharacter?: CharacterDto | null;
     onClose: () => void; effectiveGameName: string; currentSlug: string; isArmorySynced: boolean;
 }) {
     return (
-        <form onSubmit={(e) => { e.preventDefault(); handleCharacterSubmit(s, editingCharacter, onClose); }} className="space-y-4">
+        <form id={formId} onSubmit={(e) => { e.preventDefault(); handleCharacterSubmit(s, editingCharacter, onClose); }} className="space-y-4">
             {s.isEditing ? (
                 <div><p className="mb-1.5 text-sm font-medium text-secondary">Game</p><div className="px-3 py-2 bg-panel/50 border border-edge/50 rounded-lg text-muted text-sm">{effectiveGameName}</div></div>
             ) : (
@@ -181,7 +196,6 @@ function CharacterModalFormBody({ s, editingCharacter, onClose, effectiveGameNam
                             nameError={s.errors.name} onUpdateField={s.updateField} />
                     )}
                     {s.errors.form && <p role="alert" className="text-sm text-danger">{s.errors.form}</p>}
-                    <CharacterFormActions onClose={onClose} isPending={s.isPending} isEditing={s.isEditing} />
                 </>
             )}
         </form>
@@ -194,10 +208,16 @@ export function AddCharacterModal(props: AddCharacterModalProps) {
     const isArmorySynced = !!editingCharacter?.lastSyncedAt;
     const currentSlug = s.effectiveRegistryGame?.slug ?? s.selectedIgdbGame?.slug ?? '';
     const effectiveGameName = s.effectiveRegistryGame?.name ?? preselectedGameName ?? s.selectedIgdbGame?.name ?? 'Unknown Game';
+    const formId = useId();
+    // Escape, backdrop, × and Cancel ask first when dirty; a successful save calls onClose directly.
+    const guard = useDirtyCloseGuard(s.isDirty, onClose);
+    // The WoW Import tab keeps its plugin actions in the body, so the footer is Manual-only.
+    const footer = s.activeTab === 'manual'
+        && <CharacterFormActions formId={formId} onCancel={guard.requestClose} isPending={s.isPending} isEditing={s.isEditing} />;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title={s.isEditing ? 'Edit Character' : 'Add Character'}>
-            <CharacterModalFormBody s={s} editingCharacter={editingCharacter} onClose={onClose}
+        <Modal isOpen={isOpen} onClose={onClose} closeGuard={guard} footer={footer} title={s.isEditing ? 'Edit Character' : 'Add Character'}>
+            <CharacterModalFormBody formId={formId} s={s} editingCharacter={editingCharacter} onClose={onClose}
                 effectiveGameName={effectiveGameName} currentSlug={currentSlug} isArmorySynced={isArmorySynced} />
         </Modal>
     );
