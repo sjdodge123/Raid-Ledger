@@ -3,7 +3,10 @@ import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
+import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
+import { DiscardChangesConfirm } from './discard-changes-confirm';
+import { OVERLAY_FOOTER_CLASS } from './overlay-footer';
 
 interface BottomSheetProps {
     isOpen: boolean;
@@ -20,6 +23,20 @@ interface BottomSheetProps {
     initiallyExpanded?: boolean;
     /** Accessible name when the sheet draws its own header instead of a `title`. */
     ariaLabel?: string;
+    /**
+     * Pinned action row (ROK-1655): a shrink-0 sibling after the scrolling
+     * body, so the body shrinks and scrolls while the footer stays in view.
+     */
+    footer?: React.ReactNode;
+    /**
+     * Dirty-close layer (ROK-1655): from `useDirtyCloseGuard(isDirty, onClose)`.
+     * When set, Escape, the backdrop, the header × and swipe-down all call
+     * `closeGuard.requestClose`, and the sheet renders "Discard your changes?".
+     * A close by another route (`isOpen` → false, unmount) resets the guard.
+     */
+    closeGuard?: DirtyCloseGuard;
+    /** What is unsaved, in the caller's words (the confirm's message). */
+    discardMessage?: string;
 }
 
 const DEFAULT_MAX_HEIGHT = '60vh';
@@ -132,35 +149,47 @@ function useSheetHeights(cap: string) {
 const PANEL_CLASS = 'absolute bottom-0 inset-x-0 flex flex-col bg-surface rounded-t-2xl shadow-2xl '
     + 'pb-[env(safe-area-inset-bottom)] transition-all duration-300 ease-out';
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel }: BottomSheetProps) {
+/** Sheet state + side effects; `requestClose` is every close path (guarded or not). */
+function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: string, initiallyExpanded: boolean) {
     const sheetRef = useRef<HTMLDivElement>(null);
     const [expanded, setExpanded] = useState(initiallyExpanded);
 
     const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
     if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(initiallyExpanded); }
 
-    useSheetKeyboard(isOpen, onClose);
+    useSheetKeyboard(isOpen, requestClose);
     useBodyScrollLock(isOpen);
-    const { handleDragStart, handleDragMove, handleDragEnd } = useDragHandlers(sheetRef, expanded, setExpanded, onClose, initiallyExpanded);
+    const drag = useDragHandlers(sheetRef, expanded, setExpanded, requestClose, initiallyExpanded);
     useSheetFocus(isOpen, sheetRef);
-    const { activeMaxHeight, layerSize } = useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight);
+    return { sheetRef, drag, ...useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight) };
+}
 
-    return createPortal(
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage }: BottomSheetProps) {
+    const requestClose = closeGuard?.requestClose ?? onClose;
+    useResetGuardOnClose(isOpen, closeGuard);
+    const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
+
+    const sheet = createPortal(
         <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
-            <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={onClose} aria-hidden="true" />
+            <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={requestClose} aria-hidden="true" />
             <div
                 ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}
                 className={`${PANEL_CLASS} ${isOpen ? 'translate-y-0' : 'translate-y-full'}`}
                 style={{ maxHeight: activeMaxHeight }}
             >
-                <div className="flex shrink-0 justify-center pt-3 pb-2 cursor-grab" onTouchStart={handleDragStart} onTouchMove={handleDragMove} onTouchEnd={handleDragEnd}>
+                <div className="flex shrink-0 justify-center pt-3 pb-2 cursor-grab" onTouchStart={drag.handleDragStart} onTouchMove={drag.handleDragMove} onTouchEnd={drag.handleDragEnd}>
                     <div className="w-10 h-1 bg-muted rounded-full" />
                 </div>
-                {title && <SheetHeader title={title} onClose={onClose} />}
+                {title && <SheetHeader title={title} onClose={requestClose} />}
                 {/* Content-sized; shrinks and scrolls only once the sheet hits its cap. */}
                 <div className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>
+                {footer ? <div className={OVERLAY_FOOTER_CLASS} data-testid="bottom-sheet-footer">{footer}</div> : null}
             </div>
         </div>,
         document.body,
     );
+    // The confirm is a Modal (Z_INDEX.MODAL > BOTTOM_SHEET), so it stacks above the sheet.
+    const confirm = closeGuard
+        && <DiscardChangesConfirm isOpen={closeGuard.confirming} onKeep={closeGuard.keep} onDiscard={closeGuard.discard} message={discardMessage} />;
+    return <>{sheet}{confirm}</>;
 }
