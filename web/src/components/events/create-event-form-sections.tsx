@@ -24,7 +24,7 @@ export function FormSection({ title, children }: { title: string; children: Reac
 export function TemplatesBar({ templates, onLoad, onDelete }: { templates: Array<{ id: number; name: string; config: TemplateConfigDto }>; onLoad: (c: TemplateConfigDto) => void; onDelete: (id: number) => void }) {
     if (templates.length === 0) return null;
     return (
-        <div className="flex items-center gap-3 -mb-2">
+        <div className="flex items-center gap-3">
             <span className="text-xs text-muted shrink-0">Load template:</span>
             <div className="flex flex-wrap gap-2">
                 {templates.map((t) => (
