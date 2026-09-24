@@ -13,6 +13,13 @@ interface BanUserModalProps {
     isPending: boolean;
 }
 
+/** The wipe option's irreversibility warning, danger-toned (ruling 9: was text-red-400). */
+const WIPE_WARNING = (
+    <span className="text-danger">
+        Permanently deletes their characters, signups, and preferences. This cannot be undone.
+    </span>
+);
+
 /**
  * Confirm modal for admin "ban" (permanent lockout, ROK-313 §6d). Ban blocks all
  * future logins, drops the user from the Players list, and cancels upcoming
@@ -35,10 +42,8 @@ export function BanUserModal({ target, onClose, onConfirm, isPending }: BanUserM
                 </p>
                 <ReasonField id="ban-reason" value={reason} onChange={setReason}
                     placeholder="Optional note recorded in the moderation log" />
-                <Checkbox label="Wipe user data" checked={wipeData} onChange={(e) => setWipeData(e.target.checked)}
-                    description={<span className="text-danger">
-                        Permanently deletes their characters, signups, and preferences. This cannot be undone.
-                    </span>} />
+                <Checkbox label="Wipe user data" description={WIPE_WARNING} checked={wipeData}
+                    onChange={(e) => setWipeData(e.target.checked)} />
                 {isRealDiscordId(target?.discordId) && (
                     <Checkbox label="Also kick from Discord server" checked={kickFromDiscord}
                         onChange={(e) => setKickFromDiscord(e.target.checked)} />
