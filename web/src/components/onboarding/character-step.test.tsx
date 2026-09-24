@@ -336,8 +336,8 @@ describe('CharacterStep — part 5', () => {
                 />
             );
 
-            // The delete button is the X icon button
-            const deleteButton = screen.getByTitle(/remove character/i);
+            // The delete button is the X icon Button, named by aria-label
+            const deleteButton = screen.getByRole('button', { name: 'Remove character' });
             fireEvent.click(deleteButton);
 
             await waitFor(() => {

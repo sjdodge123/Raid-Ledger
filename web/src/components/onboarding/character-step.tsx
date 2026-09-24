@@ -1,9 +1,14 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { CharacterRole, GameRegistryDto, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { PluginSlot } from '../../plugins';
 import { CharacterCardCompact } from '../characters/character-card-compact';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { Select } from '../ui/select';
 
 interface CharacterStepProps {
     /** The registry game to create a character for (pre-filled from hearted games) */
@@ -26,7 +31,12 @@ interface FormState {
     realm: string;
 }
 
-const FIELD_CLS = 'w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-success/80 text-base lg:text-sm';
+/** A missing name is a Field error on Name; a failed create is a separate form-level alert (ROK-1648). */
+interface StepErrors { name?: string; submit?: string }
+
+const EMPTY_FORM: FormState = { name: '', class: '', spec: '', role: '', realm: '' };
+
+type UpdateField = <K extends keyof FormState>(f: K, v: FormState[K]) => void;
 
 function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean) {
     return {
@@ -47,30 +57,40 @@ function SavedCharacterView({ savedCharacter, onDelete, isDeleting, onAddAnother
         <div className="max-w-md mx-auto space-y-3">
             <div className="relative">
                 <CharacterCardCompact character={savedCharacter} size="sm" />
-                <button type="button" onClick={() => onDelete(savedCharacter.id)} disabled={isDeleting} title="Remove character"
-                    className="absolute top-1 right-1 w-10 h-10 flex items-center justify-center rounded-full bg-red-600/20 text-red-400 hover:bg-red-600/40 hover:text-red-300 transition-colors disabled:opacity-40">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
+                <div className="absolute top-1 right-1">
+                    <Button variant="destructive-soft" iconOnly aria-label="Remove character" onClick={() => onDelete(savedCharacter.id)} disabled={isDeleting}>
+                        <XMarkIcon className="w-4 h-4" aria-hidden="true" />
+                    </Button>
+                </div>
             </div>
-            <button type="button" onClick={onAddAnother} className="w-full px-4 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted hover:text-foreground border border-edge/50 rounded-lg transition-colors text-sm">+ Add Another Character</button>
+            <Button variant="secondary" fullWidth onClick={onAddAnother}>+ Add Another Character</Button>
         </div>
     );
 }
 
-function MmoFields({ form, updateField }: { form: FormState; updateField: <K extends keyof FormState>(f: K, v: FormState[K]) => void }) {
-    const id = useId();
+function TextField({ label, field, form, updateField, placeholder, maxLength }: {
+    label: string; field: 'class' | 'spec' | 'realm'; form: FormState; updateField: UpdateField; placeholder: string; maxLength: number;
+}) {
+    return (
+        <Field label={label}>
+            <Input type="text" value={form[field]} onChange={(e) => updateField(field, e.target.value)} placeholder={placeholder} maxLength={maxLength} />
+        </Field>
+    );
+}
+
+function MmoFields({ form, updateField }: { form: FormState; updateField: UpdateField }) {
     return (
         <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label htmlFor={`${id}-class`} className="block text-sm font-medium text-foreground mb-1">Class</label><input id={`${id}-class`} type="text" value={form.class} onChange={(e) => updateField('class', e.target.value)} placeholder="e.g. Warrior" maxLength={50} className={FIELD_CLS} /></div>
-                <div><label htmlFor={`${id}-spec`} className="block text-sm font-medium text-foreground mb-1">Spec</label><input id={`${id}-spec`} type="text" value={form.spec} onChange={(e) => updateField('spec', e.target.value)} placeholder="e.g. Arms" maxLength={50} className={FIELD_CLS} /></div>
+                <TextField label="Class" field="class" form={form} updateField={updateField} placeholder="e.g. Warrior" maxLength={50} />
+                <TextField label="Spec" field="spec" form={form} updateField={updateField} placeholder="e.g. Arms" maxLength={50} />
             </div>
-            <div><label htmlFor={`${id}-role`} className="block text-sm font-medium text-foreground mb-1">Role</label>
-                <select id={`${id}-role`} value={form.role} onChange={(e) => updateField('role', e.target.value as CharacterRole | '')} className={FIELD_CLS}>
-                    <option value="">Select role...</option><option value="tank">Tank</option><option value="healer">Healer</option><option value="dps">DPS</option>
-                </select>
-            </div>
-            <div><label htmlFor={`${id}-realm`} className="block text-sm font-medium text-foreground mb-1">Realm/Server</label><input id={`${id}-realm`} type="text" value={form.realm} onChange={(e) => updateField('realm', e.target.value)} placeholder="e.g. Illidan" maxLength={100} className={FIELD_CLS} /></div>
+            <Field label="Role">
+                <Select value={form.role} onChange={(e) => updateField('role', e.target.value as CharacterRole | '')} placeholder="Select role...">
+                    <option value="tank">Tank</option><option value="healer">Healer</option><option value="dps">DPS</option>
+                </Select>
+            </Field>
+            <TextField label="Realm/Server" field="realm" form={form} updateField={updateField} placeholder="e.g. Illidan" maxLength={100} />
         </>
     );
 }
@@ -80,12 +100,12 @@ function useCharacterStepState(preselectedGame: GameRegistryDto) {
     const deleteMutation = useDeleteCharacter();
     const { data: myCharsData } = useMyCharacters(preselectedGame.id);
     const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
-    const [form, setForm] = useState<FormState>({ name: '', class: '', spec: '', role: '', realm: '' });
-    const [error, setError] = useState('');
+    const [form, setForm] = useState<FormState>(EMPTY_FORM);
+    const [errors, setErrors] = useState<StepErrors>({});
     const existingChars = myCharsData?.data ?? [];
     function updateField<K extends keyof FormState>(field: K, value: FormState[K]) { setForm((prev) => ({ ...prev, [field]: value })); }
-    function resetForm() { setForm({ name: '', class: '', spec: '', role: '', realm: '' }); setError(''); setActiveTab('manual'); }
-    return { createMutation, deleteMutation, activeTab, setActiveTab, form, error, setError, existingChars, updateField, resetForm };
+    function resetForm() { setForm(EMPTY_FORM); setErrors({}); setActiveTab('manual'); }
+    return { createMutation, deleteMutation, activeTab, setActiveTab, form, errors, setErrors, existingChars, updateField, resetForm };
 }
 
 /** Step: Create a Character for a specific game. */
@@ -94,9 +114,9 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
     const savedCharacter = s.existingChars[charIndex] ?? null;
     const handleDelete = (id: string) => { s.deleteMutation.mutate(id, { onSuccess: () => { if (charIndex > 0) onRemoveStep?.(); } }); };
     const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault(); s.setError('');
-        if (!s.form.name.trim()) { s.setError('Character name is required'); return; }
-        s.createMutation.mutate(buildCharacterPayload(s.form, preselectedGame.id, preselectedGame.hasRoles, s.existingChars.length === 0), { onSuccess: () => s.resetForm(), onError: () => s.setError('Failed to create character. Please try again.') });
+        e.preventDefault(); s.setErrors({});
+        if (!s.form.name.trim()) { s.setErrors({ name: 'Character name is required' }); return; }
+        s.createMutation.mutate(buildCharacterPayload(s.form, preselectedGame.id, preselectedGame.hasRoles, s.existingChars.length === 0), { onSuccess: () => s.resetForm(), onError: () => s.setErrors({ submit: 'Failed to create character. Please try again.' }) });
     };
 
     return (
@@ -116,16 +136,17 @@ function CharacterStepForm({ s, preselectedGame, onRegisterValidator, handleSubm
     s: ReturnType<typeof useCharacterStepState>; preselectedGame: GameRegistryDto;
     onRegisterValidator?: (fn: () => boolean) => void; handleSubmit: (e: React.FormEvent) => void;
 }) {
-    const nameId = useId();
     return (
         <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
             {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, onRegisterValidator }} />}
             {s.activeTab === 'manual' && (
                 <>
-                    <div><label htmlFor={nameId} className="block text-sm font-medium text-foreground mb-1">Name <span aria-hidden="true" className="text-red-400">*</span></label><input id={nameId} type="text" value={s.form.name} onChange={(e) => s.updateField('name', e.target.value)} placeholder="Character name" maxLength={100} className={FIELD_CLS} /></div>
+                    <Field label="Name" required error={s.errors.name}>
+                        <Input type="text" value={s.form.name} onChange={(e) => s.updateField('name', e.target.value)} placeholder="Character name" maxLength={100} />
+                    </Field>
                     {preselectedGame.hasRoles && <MmoFields form={s.form} updateField={s.updateField} />}
-                    {s.error && <p className="text-sm text-red-400">{s.error}</p>}
-                    <button type="submit" disabled={s.createMutation.isPending} className="w-full px-4 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-medium rounded-lg transition-colors text-sm">{s.createMutation.isPending ? 'Creating...' : 'Create Character'}</button>
+                    {s.errors.submit && <p role="alert" className="text-sm text-danger">{s.errors.submit}</p>}
+                    <Button type="submit" variant="primary" fullWidth loading={s.createMutation.isPending} loadingLabel="Creating…">Create Character</Button>
                 </>
             )}
         </form>
