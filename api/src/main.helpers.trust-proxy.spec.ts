@@ -223,10 +223,11 @@ describe('TRUST_PROXY overrides the default (ROK-1665 AC4)', () => {
 
 /**
  * AC5: setting TRUST_PROXY REPLACES the default rather than adding to it, and
- * a hop count counts the container's own nginx and the Docker bridge too. Docs
- * that say "add the proxy" or "a hop count such as 2" put every visitor behind
- * a public proxy back in one bucket, so every public-proxy example the docs
- * give is run through the real app here.
+ * no single hop count fits every path into the container. Every public-proxy
+ * example the docs give is run through the real app for BOTH paths: a NAS
+ * reverse proxy in between (the Docker bridge appears in XFF) and a public
+ * proxy forwarding straight to the container port (it does not). A hop-count
+ * example can only be right for one of them, so documenting one fails here.
  */
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const PUBLIC_PROXY = '198.51.100.50';
@@ -250,11 +251,15 @@ describe('documented TRUST_PROXY examples for a public proxy (ROK-1665 AC5)', ()
     for (const example of publicProxyExamples(doc)) {
       const app = await buildApp(example.replace('<proxy-ip>', PUBLIC_PROXY));
       try {
-        const xff = `${CLIENT_A}, ${PUBLIC_PROXY}, ${BRIDGE}`;
-        const ip = await ipFor(app, xff);
-        expect(`TRUST_PROXY=${example} -> ${ip}`).toBe(
-          `TRUST_PROXY=${example} -> ${CLIENT_A}`,
-        );
+        for (const xff of [
+          `${CLIENT_A}, ${PUBLIC_PROXY}, ${BRIDGE}`,
+          `${CLIENT_A}, ${PUBLIC_PROXY}`,
+        ]) {
+          const ip = await ipFor(app, `1.2.3.4, ${xff}`);
+          expect(`TRUST_PROXY=${example} [${xff}] -> ${ip}`).toBe(
+            `TRUST_PROXY=${example} [${xff}] -> ${CLIENT_A}`,
+          );
+        }
       } finally {
         await app.close();
       }
