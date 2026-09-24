@@ -376,6 +376,15 @@ describe('Modal — pinned footer + flex layout (ROK-1655 PR-1)', () => {
         );
         expect(screen.queryByTestId('modal-footer')).toBeNull();
     });
+});
+
+describe('Modal — 90dvh flex-column layout (ROK-1655 PR-1)', () => {
+    beforeEach(() => {
+        document.body.style.overflow = '';
+    });
+    afterEach(() => {
+        document.body.style.overflow = '';
+    });
 
     it('lays the dialog out as a 90dvh flex column with a shrink-0 header', () => {
         render(
