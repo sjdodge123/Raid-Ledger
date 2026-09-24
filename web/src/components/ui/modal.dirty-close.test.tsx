@@ -42,8 +42,9 @@ function Harness({ dirty, onClose, onSave }: { dirty: boolean; onClose: () => vo
 function setup(dirty = true) {
     const onClose = vi.fn();
     const onSave = vi.fn();
-    render(<Harness dirty={dirty} onClose={onClose} onSave={onSave} />);
-    return { onClose, onSave };
+    const view = render(<Harness dirty={dirty} onClose={onClose} onSave={onSave} />);
+    const rerender = () => view.rerender(<Harness dirty={dirty} onClose={onClose} onSave={onSave} />);
+    return { onClose, onSave, rerender };
 }
 
 const parentDialog = () => screen.queryByRole('dialog', { name: TITLE });
@@ -115,13 +116,27 @@ describe('Modal closeGuard — confirm outcomes', () => {
     });
 });
 
+/*
+ * Both Modals listen for Escape on `document`, so one keypress reaches both.
+ * Listener order depends on registration: the parent's comes first until a
+ * consumer re-render (a refetch, any parent state change) gives `requestClose`
+ * a new identity and re-registers it AFTER the confirm's. In that order the
+ * confirm's Keep runs first and only the guard's one-macrotask latch stops the
+ * parent's listener from re-opening it, so both orders are pinned.
+ */
+const LISTENER_ORDERS: Array<[string, boolean]> = [
+    ['parent listener first', false],
+    ['confirm listener first (the parent re-rendered)', true],
+];
+
 describe('Modal closeGuard — Modal over Modal', () => {
-    it('one Escape with the confirm open closes only the confirm, and it does not re-open', async () => {
-        const { onClose } = setup(true);
+    it.each(LISTENER_ORDERS)('%s: one Escape closes only the confirm, and it does not re-open', async (_order, reRender) => {
+        const { onClose, rerender } = setup(true);
         await waitFor(() => expect(screen.getByRole('textbox', { name: 'Name' })).toHaveFocus());
         openConfirm();
         const keep = screen.getByTestId('discard-changes-keep');
         await waitFor(() => expect(keep, 'Keep editing must hold focus while the confirm is open').toHaveFocus());
+        if (reRender) rerender();
 
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(confirmBody(), 'the second Escape must close the confirm').toBeNull();
