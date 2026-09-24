@@ -826,7 +826,31 @@ call) and a compact tool index; this section is the authoritative detail.
 | `mcp__mcp-rl-fleet__rl_infra_logs` | Read-only `docker logs` for the 7 rl-infra stack services: `gc-sweeper`, `dashboard`, `traefik`, `loki`, `registry`, `promtail`, `docker-proxy`. `tail` defaults to 100, max 5000. Use to diagnose fleet-side issues (gc-sweeper claim reaps, dashboard 5xx, traefik routing, loki ingest) without SSH. ROK-1338 PR-1. |
 | `mcp__mcp-rl-fleet__rl_task_logs` | Tail the supervisor log for a task: `/srv/rl-infra/state/tasks/<id>.log` (stdout+stderr of the wrapped command). Companion to `rl_task_status` (summarized) and `rl_task_inspect` (raw JSON). `lines` defaults to 100, max 5000. `strip_ansi:true` (default false) strips ANSI color escapes for clean grep-able text. `follow:true` deferred to v2 — returns `error:"follow_not_implemented_in_v1"`; poll via `rl_task_status` if you need streaming. Rejects unknown params explicitly (`unknown_param`). Read-only. ROK-1338 PR-2. |
 | `mcp__mcp-rl-fleet__rl_env_inspect` | Render the actual contents of a config file inside a fleet env's allinone container. `what` enum: `nginx-conf` (Alpine `/etc/nginx/http.d/default.conf`) or `supervisor-conf` (`/etc/supervisor.d/raid-ledger.ini`). 64KB cap, `truncated:true` on overflow. Routes via rl-docker-proxy at 127.0.0.1:2375 (rl-agent not in docker group). Rejects unknown params explicitly. Read-only. ROK-1338 PR-2. |
+| `mcp__mcp-rl-fleet__rl_env_signin_link` | **Agent browser-verification lanes.** Mint a 15-minute magic sign-in link for a fleet env so the agent loads the app as a real user without ever typing a password. Input `{slug, user_id?, username?, path?, worktree_path?}` — default signs in as `admin@local`; `user_id` XOR `username` picks another user; `path` is a same-origin landing path (default `/`). Returns `{ok, url, user_id, expires_in_seconds, base_url}` where `base_url` is the slot-stable `https://slot-N.gamernight.net`. Open `url` in a fresh browser context. The token is env-only and short-lived: never paste `url` into reports, PRs, test plans or Linear. See "Agent sign-in links" below. |
 | `mcp__mcp-rl-fleet__rl_db_query` | Run a one-shot read-only SQL query against a fleet env's Postgres via `env-psql`. Layered safety: BEGIN/SET TRANSACTION READ ONLY + `SET LOCAL statement_timeout='5s'` inside the txn (PGOPTIONS does NOT propagate through env-psql's `docker exec`, dogfood-verified) + FORBIDDEN_KEYWORDS pre-check (the `set_config()` family is fully blocked; the `default_transaction_read_only` matcher is narrowed to the SET form, so `current_setting('default_transaction_read_only')` reads are allowed) + `SELECT * FROM (<your-sql>) AS rl_inner LIMIT 1001` subquery wrap + `-v ON_ERROR_STOP=1`. Output is `json_agg(row_to_json(__rl_q_row__))` — rows preserve JSON-native types (number/string/boolean/null), so NULL is unambiguous and CANNOT collide with any text data. Numbers come back as JS strings whenever JSON-text round-trip would lose precision — specifically, integers `>=` Number.MAX_SAFE_INTEGER (2^53−1) and float values whose decimal-text form doesn't round-trip cleanly (e.g. `0.1 + 0.2` arrives as the string `"0.30000000000000004"`). Safe integers + cleanly-representable floats stay as JS Number. Consumers doing arithmetic on large bigints or precise floats should `BigInt()`/parse explicitly rather than assume `typeof === "number"` (round-4 + round-5 fix via `json-bigint`, dogfood-verified). Caps at 1000 rows (`truncated:true` flag). Rejects unknown params explicitly. v1 is read-only only — write mode is a future tool. ROK-1338 PR-2. |
+
+#### Agent sign-in links (`rl_env_signin_link`, 2026-09-24)
+
+Operator ruling 2026-09-24: agents verify UI on fleet envs themselves in a
+browser, and may never type a password into a form. `rl_env_signin_link` is the
+supported way in. Server-side (inside the MCP process) it:
+
+1. resolves `slug` to its slot via `rl status` (the `rl_env_list` source) and
+   builds `https://slot-N.<RL_PUBLIC_DOMAIN>` — never the per-slug `public_url`;
+2. re-asserts the `admin@local` password with the same ROK-1368 re-seed
+   `rl_validate_ci` uses (`src/tools/env-admin-seed.ts`: `RL_ADMIN_PASSWORD`
+   from `/srv/rl-infra/.env` when set, so the password normally does not change);
+3. logs in via `POST <base>/api/auth/local` and calls
+   `POST <base>/api/admin/test/sign-in-link` (JWT admin + `DEMO_MODE`) with the
+   bearer token.
+
+The admin password and the admin access token are withheld from the result and
+scrubbed from every error message; failures come back as
+`{ok:false, error, status?, message}` (`env_not_found`, `admin_seed_failed`,
+`admin_login_failed`, `signin_link_failed` with the endpoint's 400/404 message).
+A 404 for a user that exists means the env's image predates the endpoint —
+rebuild from a branch that has it. If another env shares the slot the result
+carries a `warning`: the slot URL routes to whichever env owns the route.
 
 #### The pre-push sentinel is keyed to the WEB SURFACE (ROK-1566)
 
