@@ -54,9 +54,10 @@ describe('EditScheduleModal (ROK-1653 G4b)', () => {
         const user = userEvent.setup();
         render(<EditScheduleModal job={JOB} onClose={vi.fn()} />);
         await user.selectOptions(screen.getByLabelText('Interval'), 'Every 2 hours');
-        const save = screen.getByRole('button', { name: /saving/i });
+        const save = screen.getByRole('button', { name: /^sav/i });
         expect(save).toHaveAttribute('aria-busy', 'true');
         expect(save).toHaveAttribute('aria-disabled', 'true');
+        expect(save).toHaveAccessibleName('Saving…');
         await user.click(save);
         expect(h.mutate).not.toHaveBeenCalled();
     });
