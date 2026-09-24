@@ -33,6 +33,28 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setImmediate(resolve));
 }
 
+/** The service with its queue stalled forever and a socket-gateway spy. */
+async function buildService(mockDb: MockDb) {
+  // The card job never runs: any emit a case sees came from fireUpdateEmbed.
+  const enqueue = jest.fn(() => new Promise<void>(() => {}));
+  const emitScheduleChanged = jest.fn();
+  const module = await Test.createTestingModule({
+    providers: [
+      SchedulingPollEmbedService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: SchedulingPollEmbedQueueService, useValue: { enqueue } },
+      { provide: LineupsGateway, useValue: { emitScheduleChanged } },
+      { provide: DiscordEmbedFactory, useValue: {} },
+      { provide: DiscordBotClientService, useValue: {} },
+      { provide: ChannelResolverService, useValue: {} },
+      { provide: SettingsService, useValue: {} },
+      { provide: NotificationDedupService, useValue: {} },
+    ],
+  }).compile();
+  const service = module.get(SchedulingPollEmbedService);
+  return { service, enqueue, emitScheduleChanged };
+}
+
 describe('SchedulingPollEmbedService.fireUpdateEmbed — immediate nudge (ROK-1683)', () => {
   let service: SchedulingPollEmbedService;
   let mockDb: MockDb;
@@ -43,24 +65,8 @@ describe('SchedulingPollEmbedService.fireUpdateEmbed — immediate nudge (ROK-16
   beforeEach(async () => {
     mockDb = createDrizzleMock();
     mockDb.limit.mockResolvedValue([{ lineupId: LINEUP_ID }]);
-    // The card job never runs: any emit below came from fireUpdateEmbed.
-    enqueue = jest.fn(() => new Promise<void>(() => {}));
-    emitScheduleChanged = jest.fn();
     warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
-    const module = await Test.createTestingModule({
-      providers: [
-        SchedulingPollEmbedService,
-        { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: SchedulingPollEmbedQueueService, useValue: { enqueue } },
-        { provide: LineupsGateway, useValue: { emitScheduleChanged } },
-        { provide: DiscordEmbedFactory, useValue: {} },
-        { provide: DiscordBotClientService, useValue: {} },
-        { provide: ChannelResolverService, useValue: {} },
-        { provide: SettingsService, useValue: {} },
-        { provide: NotificationDedupService, useValue: {} },
-      ],
-    }).compile();
-    service = module.get(SchedulingPollEmbedService);
+    ({ service, enqueue, emitScheduleChanged } = await buildService(mockDb));
   });
 
   afterEach(() => warn.mockRestore());

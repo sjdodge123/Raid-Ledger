@@ -441,7 +441,13 @@ describe('SchedulingPollEmbedService — debounced sync (ROK-1549/1551)', () => 
     await flush();
     expect(sync.enqueue).toHaveBeenCalledWith(MATCH_ID);
     expect(sync.editEmbed).not.toHaveBeenCalled();
-    expect(mockDb.select).not.toHaveBeenCalled();
+    expect(buildSchedulingPollEmbed).not.toHaveBeenCalled();
+    // ROK-1683: the ONLY inline read is the lineupId projection the immediate
+    // page nudge needs — no render-data loads before the queued job.
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
+    expect(mockDb.select).toHaveBeenCalledWith({
+      lineupId: expect.anything(),
+    });
   });
 
   it('emits schedule-changed even when the poll has no Discord card', async () => {

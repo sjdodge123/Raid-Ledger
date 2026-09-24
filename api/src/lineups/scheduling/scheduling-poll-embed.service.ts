@@ -4,8 +4,9 @@
  * The initial post is fire-and-forget with error logging. Updates (ROK-1549)
  * go through the debounced `scheduling-poll-embed-sync` queue: the processor
  * calls {@link SchedulingPollEmbedService.syncEmbed}, retries with backoff and
- * reports the final failure to Sentry. Each sync also tells the web page the
- * poll changed (`lineup:schedule-changed`, ROK-1551).
+ * reports the final failure to Sentry. `fireUpdateEmbed` tells open web pages
+ * the poll changed right away (`lineup:schedule-changed`, ROK-1551/ROK-1683);
+ * each sync repeats it as a trailing nudge.
  *
  * CI: this directory is under the discord-smoke path filter (ROK-1547) — an
  * embed-affecting change here runs the companion-bot smoke suite on the PR.
@@ -141,15 +142,39 @@ export class SchedulingPollEmbedService {
   }
 
   /**
-   * Schedule a re-render of the poll card (ROK-1549 S1-AC1).
+   * Tell open poll pages the poll changed, then schedule a card re-render
+   * (ROK-1549 S1-AC1, ROK-1683).
    *
-   * Enqueues a coalesced job — a burst of votes inside the 2s window is one
-   * Discord edit. Never throws: the producer reports its own failures.
+   * The page nudge goes out NOW, independent of the card job: that job
+   * coalesces (2s window, reset per change) and queues behind every other
+   * poll's rate-limited Discord edit, so a vote could reach open pages 10s+
+   * late. Callers invoke this after their write commits. The enqueue is a
+   * coalesced job — a burst of votes inside the window is one Discord edit.
+   * Never throws: the nudge logs its own failures, the producer reports its.
    *
    * @param matchId - The poll's match id.
    */
   fireUpdateEmbed(matchId: number): void {
+    void this.nudgeOpenPages(matchId);
     void this.embedQueue.enqueue(matchId);
+  }
+
+  /** ROK-1683: one PK read for the lineup, then the socket nudge. */
+  private async nudgeOpenPages(matchId: number): Promise<void> {
+    try {
+      const [row] = await this.db
+        .select({ lineupId: schema.communityLineupMatches.lineupId })
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, matchId))
+        .limit(1);
+      if (row) this.emitScheduleChanged(row.lineupId, matchId);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to nudge open poll pages for match ${matchId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   /**
@@ -225,7 +250,8 @@ export class SchedulingPollEmbedService {
    *
    * Emits `lineup:schedule-changed` BEFORE the no-card early return, so web
    * freshness does not depend on the poll having a Discord card (private
-   * lineups have none).
+   * lineups have none). ROK-1683: `fireUpdateEmbed` already nudged; this is
+   * the trailing nudge, and the only one on the initial-post path.
    *
    * @param matchId - The poll's match id.
    * @throws Any render / `editEmbed` failure — the processor retries.
