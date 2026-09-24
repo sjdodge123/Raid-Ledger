@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { searchGames } from '../lib/api-client';
 import { useViewerCacheScope } from './use-auth';
 import { useDebouncedValue } from './use-debounced-value';
@@ -17,25 +16,19 @@ import { useDebouncedValue } from './use-debounced-value';
 export function useGameSearch(query: string, enabled = true) {
     // Debounce the query to prevent rapid-fire API requests (ROK-161, ROK-953)
     const debouncedQuery = useDebouncedValue(query, 400);
-    const queryClient = useQueryClient();
     const viewer = useViewerCacheScope();
 
-    // ROK-1233: TanStack Query only fires AbortSignal for re-fetches of the
-    // SAME queryKey. Superseded prefixes (e.g. `q=return` after the user keeps
-    // typing `q=return to moria`) sit in the cache and run to completion —
-    // wasting an IGDB call and creating races where stale results arrive after
-    // newer ones. Cancel any in-flight `/games/search` queries whose term is
-    // not the current debounced term.
-    useEffect(() => {
-        queryClient.cancelQueries({
-            queryKey: ['games', 'search'],
-            predicate: (q) => q.queryKey[2] !== debouncedQuery,
-        });
-    }, [debouncedQuery, queryClient]);
-
+    // ROK-1233 supersession: when the debounced term changes, the observer
+    // leaves the old term's query. TanStack cancels a query whose LAST
+    // observer leaves while its AbortSignal was consumed (queryFn takes
+    // `signal`), so a superseded IGDB call is aborted without a manual
+    // cancelQueries. ROK-1682: that manual cancel was removed — it aborted
+    // queries other instances were still showing (the /games page's search
+    // when a NominateModal mounted, closed or typed on), leaving them idle
+    // with no data. Library cancellation only fires once nobody observes it.
     return useQuery({
-        // ROK-1314: viewer appended LAST on purpose — the ROK-1233 cancel
-        // predicate above reads queryKey[2] as the search term.
+        // ROK-1314: viewer appended LAST — keeps ['games','search',term] a
+        // usable prefix for callers that match on the term.
         queryKey: ['games', 'search', debouncedQuery, viewer],
         queryFn: ({ signal }) => searchGames(debouncedQuery, signal),
         enabled: enabled && debouncedQuery.length >= 2,

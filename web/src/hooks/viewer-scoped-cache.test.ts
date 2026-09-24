@@ -52,11 +52,12 @@ describe('ROK-1314 — personalized queries are viewer-scoped', () => {
         expect(body).toMatch(/'anon'/);
     });
 
-    it("the search key keeps the term at index 2 for ROK-1233's cancel predicate", () => {
+    it('the search key keeps the term at index 2 (viewer last)', () => {
         const src = read('use-game-search.ts');
-        // The predicate cancels superseded searches by comparing queryKey[2].
-        // Inserting the viewer before the term would silently break it.
-        expect(src).toMatch(/q\.queryKey\[2\] !== debouncedQuery/);
+        // ['games','search',term] stays a usable prefix for callers that match
+        // on the term. ROK-1682 removed the manual cancel predicate that read
+        // queryKey[2]; ROK-1233 supersession is asserted at runtime in
+        // __tests__/use-game-search.test.ts.
         expect(src).toMatch(/'search', debouncedQuery, viewer/);
     });
 });
