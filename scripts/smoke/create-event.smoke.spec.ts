@@ -4,6 +4,7 @@
  */
 import { test, expect } from './base';
 import { getAdminToken, apiDelete } from './api-helpers';
+import { isMobile } from './helpers';
 
 // ROK-1070 Codex review (P2): removed the file-level reset-to-seed
 // beforeAll for the parallel-project race reason documented in
@@ -132,6 +133,23 @@ test.describe('Create event form', () => {
         await expect(page.getByRole('radio', { name: '3h', exact: true })).not.toBeChecked();
         await expect(page.getByRole('spinbutton', { name: 'Duration hours' })).toBeVisible();
         await expect(page.getByRole('spinbutton', { name: 'Duration minutes' })).toBeVisible();
+    });
+
+    // ROK-1649 review: six segments (~327px) outgrew the 293px card at 375px
+    // and pushed the page sideways. toBeVisible ignores the viewport, so the
+    // right edge and the page's scroll width are measured instead.
+    test('at 375px the Duration segments stay inside the card, no sideways scroll', async ({ page }) => {
+        test.skip(!isMobile(test.info()), 'Phone-width layout check (Pixel 5 is 393px; 375px is the narrowest phone)');
+        await page.setViewportSize({ width: 375, height: 812 });
+        await waitForForm(page);
+        const group = page.getByRole('radiogroup', { name: 'Duration', exact: true });
+        await expect(group).toBeVisible();
+        const box = await group.boundingBox();
+        if (!box) throw new Error('Duration radiogroup has no layout box');
+        // The page's px-4 gutter: the card and everything in it end 16px from the edge.
+        expect(box.x + box.width, 'Duration radiogroup right edge (px) must sit inside the 16px page gutter').toBeLessThanOrEqual(375 - 16);
+        const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: window.innerWidth }));
+        expect(widths.scroll, 'document scrollWidth must not exceed innerWidth at 375px').toBeLessThanOrEqual(widths.inner);
     });
 
     test('successful event creation redirects to event detail', async ({ page, world }) => {
