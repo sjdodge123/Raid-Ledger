@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { usePluginStore } from '../../stores/plugin-store';
 import { toast } from '../../lib/toast';
+import { Switch } from '../../components/ui/switch';
 import { EphemeralVoiceSection } from './ephemeral-voice-section';
 import { LfgBoardSection } from './lfg-board-section';
 import { WeeklyDigestSection } from './weekly-digest-section';
@@ -16,7 +17,7 @@ export function DiscordFeaturesPage() {
                     <p className="text-foreground font-medium">The Discord plugin is not active.</p>
                     <p className="text-sm text-muted mt-2">
                         Enable it in{' '}
-                        <Link to="/admin/settings/plugins" className="text-emerald-400 hover:underline">
+                        <Link to="/admin/settings/plugins" className="text-success hover:underline">
                             Manage Plugins
                         </Link>{' '}
                         to configure Discord.
@@ -78,10 +79,8 @@ function QuickPlayToggle({ checked, isPending, onToggle }: { checked: boolean; i
                     <h3 className="text-base font-semibold text-foreground">Quick Play Events</h3>
                     <p className="text-sm text-muted mt-1">Automatically create events when members join bound voice channels.</p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" aria-label="Enable Quick Play Events" checked={checked} onChange={(e) => onToggle(e.target.checked)} disabled={isPending} className="sr-only peer" />
-                    <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-emerald-500 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-                </label>
+                <Switch label="Enable Quick Play Events" checked={checked}
+                    disabled={isPending} onChange={onToggle} />
             </div>
         </div>
     );
@@ -89,8 +88,8 @@ function QuickPlayToggle({ checked, isPending, onToggle }: { checked: boolean; i
 
 function BotNotConnectedWarning() {
     return (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-            <p className="text-sm text-amber-400">
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
+            <p className="text-sm text-warning">
                 The Discord bot must be connected to manage features. Configure it on the{' '}
                 <Link to="/admin/settings/discord/connection" className="underline">Connection</Link> page.
             </p>
@@ -110,7 +109,7 @@ function GeneralLobbyInfo() {
             </p>
             <p className="text-xs text-secondary mt-2">
                 The <em>Allow Just Chatting</em> option is configured per-binding on the{' '}
-                <Link to="/admin/settings/discord/channels" className="text-emerald-400 hover:underline">Channels</Link> page.
+                <Link to="/admin/settings/discord/channels" className="text-success hover:underline">Channels</Link> page.
             </p>
         </div>
     );

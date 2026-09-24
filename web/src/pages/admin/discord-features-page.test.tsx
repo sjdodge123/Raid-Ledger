@@ -32,6 +32,17 @@ vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } 
 
 const RAW_HUE = /\b(?:bg|text|border|ring)-(?:emerald|amber|red|blue|purple|slate)-\d{2,3}/;
 
+/**
+ * Class lists carrying a raw hue, outside any `<button>`: the shared Button's
+ * primary fill is a documented raw `bg-emerald-600` (design-system §3), not
+ * this page's to change, and the Switch is asserted by role above.
+ */
+const rawHueClasses = (root: Element): string[] =>
+    Array.from(root.querySelectorAll('[class]'))
+        .filter((el) => !el.closest('button'))
+        .map((el) => el.getAttribute('class') ?? '')
+        .filter((cls) => RAW_HUE.test(cls));
+
 const renderPage = () =>
     render(
         <MemoryRouter>
@@ -115,7 +126,7 @@ describe('DiscordFeaturesPage — tokens, not raw hues (ROK-1652 ruling 9)', () 
         expect(warning).toHaveClass('bg-warning/10', 'border-warning/30');
         expect(screen.getByText(/Saved, but the bot is missing/)).toHaveClass('text-warning');
         expect(screen.getByText('Manage Threads').parentElement).toHaveClass('text-warning');
-        expect(warning.innerHTML).not.toMatch(RAW_HUE);
+        expect(rawHueClasses(warning)).toEqual([]);
     });
 
     it.each([
@@ -124,6 +135,6 @@ describe('DiscordFeaturesPage — tokens, not raw hues (ROK-1652 ruling 9)', () 
     ])('renders no raw emerald/amber hue (%s)', (_label, connected) => {
         admin.discordBotStatus.data = { connected };
         const { container } = renderPage();
-        expect(container.innerHTML).not.toMatch(RAW_HUE);
+        expect(rawHueClasses(container)).toEqual([]);
     });
 });

@@ -293,7 +293,7 @@ test.describe("Admin Discord — Features", () => {
     ) {
       await expect(quickPlayHeading).toBeVisible();
       await expect(
-        page.getByRole("checkbox", { name: "Enable Quick Play Events" }),
+        page.getByRole("switch", { name: "Enable Quick Play Events" }),
       ).toBeVisible();
     }
 
