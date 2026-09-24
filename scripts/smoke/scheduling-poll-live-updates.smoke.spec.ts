@@ -23,6 +23,7 @@ import {
     API_BASE,
     apiDelete,
     apiGet,
+    apiPatch,
     apiPost,
     getAdminToken,
     getInviteeFixture,
@@ -241,6 +242,16 @@ test.describe('Scheduling poll live votes (ROK-1551 S2-AC1)', () => {
 });
 
 test.describe('Scheduling poll ?lock= deep link (ROK-1604 S3-AC2)', () => {
+    // ROK-1683: on phones a stale admin game time opens the "Game time check"
+    // sheet on mount, and it stacks with the ?lock= confirm so neither can be
+    // dismissed. Full gates only passed because earlier specs happened to
+    // confirm the admin's game time first (reset-to-seed keeps the admin).
+    // Same guard as scheduling-leader-floor.smoke.spec.ts (ROK-1617).
+    test.beforeAll(async () => {
+        const token = await getAdminToken();
+        await apiPatch(token, '/users/me/game-time/confirm', {});
+    });
+
     test('creator/operator: opens the neutral lock-in confirm and never locks directly', async ({
         page,
     }) => {
