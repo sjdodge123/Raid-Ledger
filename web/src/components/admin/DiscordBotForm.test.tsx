@@ -78,6 +78,26 @@ vi.mock('../../hooks/use-admin-settings', () => ({
     }),
 }));
 
+/**
+ * ROK-1652 ruling 7: a pending button is Button `loading` — aria-disabled +
+ * aria-busy (focus stays), and it swallows clicks. Listed in the PR as the
+ * equivalent of the old native toBeDisabled(), not a weakening: each case
+ * also clicks the button and proves the mutation never fires.
+ */
+function expectLoading(btn: HTMLElement) {
+    expect(btn).toHaveAttribute('aria-disabled', 'true');
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+}
+
+function resetMocks() {
+    vi.clearAllMocks();
+    mockDiscordBotStatus.data = null;
+    for (const m of [mockUpdateDiscordBot, mockTestDiscordBot, mockClearDiscordBot, mockCheckDiscordBotPermissions]) {
+        m.isPending = false;
+        m.mutateAsync = vi.fn();
+    }
+}
+
 describe('DiscordBotForm — Basic rendering', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -143,10 +163,14 @@ describe('DiscordBotForm — Basic rendering', () => {
 
     // ── Save Configuration button state ───────────────────────────────────
 
-    it('shows "Saving..." when updateDiscordBot is pending', () => {
+    it('Save Configuration is loading and swallows the submit when updateDiscordBot is pending', () => {
         mockUpdateDiscordBot.isPending = true;
         render(<DiscordBotForm />);
-        expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+        fireEvent.change(screen.getByLabelText('Bot Token'), { target: { value: 'my-bot-token' } });
+        const btn = screen.getByRole('button', { name: 'Saving...' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockUpdateDiscordBot.mutateAsync).not.toHaveBeenCalled();
     });
 
 });
@@ -237,11 +261,14 @@ describe('DiscordBotForm — Clear button', () => {
         mockSetDiscordChannel.mutateAsync = vi.fn();
     });
 
-    it('shows "Testing..." when testDiscordBot is pending', () => {
+    it('Test Connection is loading and swallows clicks when testDiscordBot is pending', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         mockTestDiscordBot.isPending = true;
         render(<DiscordBotForm />);
-        expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
+        const btn = screen.getByRole('button', { name: 'Testing...' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockTestDiscordBot.mutateAsync).not.toHaveBeenCalled();
     });
 
     it('calls testDiscordBot.mutateAsync when Test Connection clicked', async () => {
@@ -524,5 +551,90 @@ describe('DiscordBotForm — invite URL + permission results (ROK-1471)', () => 
         expect(screen.queryByText('General:')).not.toBeInTheDocument();
         expect(screen.queryByText('Text:')).not.toBeInTheDocument();
         expect(screen.queryByText('Voice:')).not.toBeInTheDocument();
+    });
+});
+
+describe('DiscordBotForm — shared Switch, loading buttons and tokens (ROK-1652)', () => {
+    beforeEach(resetMocks);
+
+    it('Enable Bot is the token-coloured shared Switch and still toggles the saved value', async () => {
+        mockUpdateDiscordBot.mutateAsync.mockResolvedValueOnce({ success: true, message: 'Saved.' });
+        render(<DiscordBotForm />);
+        const toggle = screen.getByRole('switch', { name: 'Enable Bot' });
+        expect(toggle).toHaveClass('bg-success');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveClass('bg-dim');
+        fireEvent.change(screen.getByLabelText('Bot Token'), { target: { value: 'tok' } });
+        fireEvent.submit(toggle.closest('form')!);
+        await waitFor(() => expect(mockUpdateDiscordBot.mutateAsync).toHaveBeenCalledWith({ botToken: 'tok', enabled: false }));
+    });
+
+    it('Clear is loading and swallows clicks when clearDiscordBot is pending', () => {
+        mockDiscordBotStatus.data = { configured: true, connected: false };
+        mockClearDiscordBot.isPending = true;
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+        render(<DiscordBotForm />);
+        const btn = screen.getByRole('button', { name: 'Clear' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(confirmSpy).not.toHaveBeenCalled();
+        expect(mockClearDiscordBot.mutateAsync).not.toHaveBeenCalled();
+        confirmSpy.mockRestore();
+    });
+
+    it('Test Permissions is a secondary button that is loading and swallows clicks while checking', () => {
+        mockDiscordBotStatus.data = { configured: true, connected: true };
+        mockCheckDiscordBotPermissions.isPending = true;
+        render(<DiscordBotForm />);
+        const btn = screen.getByRole('button', { name: 'Checking\u2026' });
+        expect(btn).toHaveClass('bg-panel', 'border-edge');
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockCheckDiscordBotPermissions.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('renders the setup instructions as a neutral token panel', () => {
+        render(<DiscordBotForm />);
+        expect(screen.getByText('Setup Instructions').parentElement).toHaveClass('bg-overlay/30', 'border-edge');
+    });
+
+    it.each([
+        ['connecting', 'bg-warning', { connecting: true, connected: false }],
+        ['online', 'bg-success', { connected: true }],
+        ['offline', 'bg-danger', { connected: false }],
+    ])('paints the %s status dot with %s and no raw glow', (_state, cls, status) => {
+        mockDiscordBotStatus.data = { configured: true, ...status } as typeof mockDiscordBotStatus.data;
+        const { container } = render(<DiscordBotForm />);
+        const dot = container.querySelector('.w-3.h-3.rounded-full')!;
+        expect(dot).toHaveClass(cls);
+        expect(dot.className).not.toMatch(/shadow-\[|rgba/);
+    });
+});
+
+describe('DiscordBotForm — permission result tokens (ROK-1652)', () => {
+    beforeEach(() => {
+        resetMocks();
+        mockDiscordBotStatus.data = { configured: true, connected: true };
+    });
+
+    async function checkWith(allGranted: boolean, permissions: { name: string; granted: boolean }[]) {
+        mockCheckDiscordBotPermissions.mutateAsync.mockResolvedValueOnce({ allGranted, permissions });
+        render(<DiscordBotForm />);
+        fireEvent.click(screen.getByRole('button', { name: 'Test Permissions' }));
+        return screen.findByTestId('permissions-result');
+    }
+
+    it('paints an all-granted result with the success tokens', async () => {
+        const panel = await checkWith(true, [{ name: 'Manage Threads', granted: true }]);
+        expect(panel).toHaveClass('bg-success/10', 'border-success/30');
+        expect(within(panel).getByText(/All required permissions granted/)).toHaveClass('text-success');
+        expect(within(panel).getByText('\u2713')).toHaveClass('text-success');
+    });
+
+    it('paints a missing-permissions result with the warning and danger tokens', async () => {
+        const panel = await checkWith(false, [{ name: 'Manage Threads', granted: false }]);
+        expect(panel).toHaveClass('bg-warning/10', 'border-warning/30');
+        expect(within(panel).getByText(/Missing permissions/)).toHaveClass('text-warning');
+        expect(within(panel).getByText('Manage Threads').closest('ul')).toHaveClass('text-danger');
     });
 });
