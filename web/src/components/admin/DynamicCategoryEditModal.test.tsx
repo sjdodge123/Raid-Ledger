@@ -92,3 +92,47 @@ describe('DynamicCategoryEditModal', () => {
         expect(container).toBeEmptyDOMElement();
     });
 });
+
+/*
+ * ROK-1653 G5b (AC2b): the fields are shared `Field`s, so a failed save marks
+ * the control invalid and ties it to a role=alert message; Save is a loading
+ * `Button` (ruling 7: aria-busy + aria-disabled + a swallowed click, never
+ * native `disabled`).
+ */
+describe('DynamicCategoryEditModal — Field + Button (ROK-1653)', () => {
+    const renderModal = (onSave = vi.fn(), isSaving = false) => {
+        render(
+            <DynamicCategoryEditModal
+                isOpen
+                suggestion={SUGGESTION}
+                onClose={() => {}}
+                onSave={onSave}
+                isSaving={isSaving}
+            />,
+        );
+        return onSave;
+    };
+
+    it('an empty name on Save marks Name aria-invalid, described by a role=alert "Name is required"', async () => {
+        renderModal();
+        // Exact label, mirroring the smoke's getByLabel(/^Name$/i): no asterisk.
+        const name = screen.getByLabelText(/^Name$/i);
+        fireEvent.change(name, { target: { value: '' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+        const message = await screen.findByText('Name is required');
+        expect(name).toHaveAttribute('aria-invalid', 'true');
+        expect(message).toHaveAttribute('role', 'alert');
+        expect(message.id).not.toBe('');
+        expect(name.getAttribute('aria-describedby')?.split(' ')).toContain(message.id);
+        expect(screen.getByLabelText(/^Description$/i)).not.toHaveAttribute('aria-invalid', 'true');
+    });
+
+    it('a pending Save is aria-busy + aria-disabled, named "Saving…", and swallows a click (ruling 7)', () => {
+        const onSave = renderModal(vi.fn(), true);
+        const save = screen.getByRole('button', { name: 'Saving…' });
+        expect(save).toHaveAttribute('aria-busy', 'true');
+        expect(save).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(save);
+        expect(onSave).not.toHaveBeenCalled();
+    });
+});
