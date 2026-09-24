@@ -11,6 +11,7 @@ import { DurationSection } from './shared/duration-section';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import { TimeSlotsSection, PollSettingsSection } from './plan-event-time-slots';
+import { Button } from '../ui/button';
 
 function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
     return (
@@ -289,14 +290,8 @@ function PlanRemindersSection({ form, updateField }: {
 function PlanFormFooter({ isPending, onCancel }: { isPending: boolean; onCancel: () => void }) {
     return (
         <div className="flex items-center justify-end gap-4 pt-2">
-            <button type="button" onClick={onCancel}
-                className="px-6 py-3 text-secondary hover:text-foreground font-medium transition-colors">
-                Cancel
-            </button>
-            <button type="submit" disabled={isPending}
-                className="px-8 py-3 bg-violet-600 hover:bg-violet-500 disabled:bg-overlay disabled:text-muted text-foreground font-semibold rounded-lg transition-colors">
-                {isPending ? 'Posting Poll...' : 'Start Poll'}
-            </button>
+            <Button variant="ghost" size="lg" onClick={onCancel}>Cancel</Button>
+            <Button type="submit" size="lg" loading={isPending} loadingLabel="Posting Poll...">Start Poll</Button>
         </div>
     );
 }
