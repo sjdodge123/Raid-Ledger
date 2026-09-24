@@ -1,7 +1,11 @@
 import { useId } from 'react';
+import { Slider } from '../ui/slider';
 /**
  * MinVoteThresholdSlider — minimum-votes notification slider (ROK-1015).
- * Extracted from create-poll-modal.tsx (ROK-1206).
+ * Extracted from create-poll-modal.tsx (ROK-1206). ROK-1650: the shared
+ * `Slider` (44px, labelled, "N of M" readout that is also `aria-valuetext`).
+ * The outer `data-testid` and the inner `input[type=range]` min/max are smoke
+ * selectors (scheduling-poll-threshold.smoke).
  */
 
 /**
@@ -20,28 +24,20 @@ export function MinVoteThresholdSlider({
   max: number;
   onChange: (v: number) => void;
 }) {
-  const id = useId();
+  const hintId = useId();
   return (
     <div data-testid="min-vote-threshold-slider">
-      <div className="flex items-center justify-between mb-2">
-        <label htmlFor={id} className="text-sm font-medium text-secondary">
-          Minimum Votes
-        </label>
-        <span className="text-sm text-muted tabular-nums">
-          {value} of {max}
-        </span>
-      </div>
-      <input
-        id={id}
-        type="range"
+      <Slider
+        label="Minimum Votes"
         min={1}
         max={max}
         step={1}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-surface/50 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        onChange={onChange}
+        formatValue={(v) => `${v} of ${max}`}
+        aria-describedby={hintId}
       />
-      <p className="text-xs text-muted/60 mt-1">
+      <p id={hintId} className="text-xs text-muted">
         Notify me when this many members have voted
       </p>
     </div>

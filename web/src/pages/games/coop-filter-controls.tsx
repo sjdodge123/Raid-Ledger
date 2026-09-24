@@ -1,21 +1,18 @@
 /**
  * ROK-1402 — co-op filter controls rendered as `FilterPanel` children on the
  * games library page (Players-page precedent: inline on desktop, BottomSheet on
- * mobile). "Min online players" slider + four mode toggles.
+ * mobile). An "Online co-op" `Slider` + four mode `Checkbox`es (ROK-1650: the
+ * visible label is the accessible name — ruling 12).
  */
 import type { JSX } from 'react';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Slider } from '../../components/ui/slider';
 import type { CoopFilterState } from './coop-filter.helpers';
 
 type ToggleKey = 'couchCoop' | 'lanCoop' | 'splitscreen' | 'campaignCoop';
 
 /** Highest value the slider offers; 0 means "Any" (predicate inactive). */
 const MAX_ONLINE_PLAYERS = 16;
-
-// Mirrors the Common Ground slider sizing (ROK-1297 round 5m): 44px tap target,
-// full-width track, success-token thumb (ROK-1659: tokens, never raw emerald). Kept as a local copy rather than an import so
-// this page never reaches into the lineups module.
-const SLIDER_CLS =
-    'flex-1 min-w-0 h-11 accent-success [&::-webkit-slider-thumb]:w-5 [&::-webkit-slider-thumb]:h-5';
 
 const COOP_TOGGLES: { key: ToggleKey; label: string }[] = [
     { key: 'couchCoop', label: 'Couch co-op' },
@@ -63,44 +60,23 @@ function MinOnlinePlayersSlider({ value, onChange }: {
     value: number | undefined;
     onChange: (value: number | undefined) => void;
 }): JSX.Element {
-    const current = value ?? 0;
     return (
-        <label className="flex items-center gap-3 text-base text-foreground min-h-[44px]">
-            <span className="whitespace-nowrap font-medium">Online co-op</span>
-            <input
-                type="range"
-                aria-label="Min online players"
-                min={0}
-                max={MAX_ONLINE_PLAYERS}
-                value={current}
-                onChange={(e) => {
-                    const next = Number(e.target.value);
-                    onChange(next > 0 ? next : undefined);
-                }}
-                className={SLIDER_CLS}
-            />
-            <span className="text-sm font-mono w-8 text-right text-foreground">
-                {current || 'Any'}
-            </span>
-        </label>
+        <Slider
+            label="Online co-op"
+            min={0}
+            max={MAX_ONLINE_PLAYERS}
+            value={value ?? 0}
+            onChange={(next) => onChange(next > 0 ? next : undefined)}
+            formatValue={(v) => (v ? String(v) : 'Any')}
+        />
     );
 }
 
-/** Single co-op mode checkbox. */
+/** Single co-op mode checkbox: the visible label row is the 44px target. */
 function CoopToggle({ label, checked, onChange }: {
     label: string;
     checked: boolean;
     onChange: () => void;
 }): JSX.Element {
-    return (
-        <label className="flex items-center gap-1.5 text-sm text-foreground cursor-pointer">
-            <input
-                type="checkbox"
-                checked={checked}
-                onChange={onChange}
-                className="rounded border-edge text-success focus:ring-success"
-            />
-            {label}
-        </label>
-    );
+    return <Checkbox label={label} checked={checked} onChange={onChange} />;
 }

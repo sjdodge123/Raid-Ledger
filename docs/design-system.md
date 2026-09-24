@@ -206,8 +206,10 @@ is no `font-light`.
   - **Light / Dark:** dark separates with border + surface step; light adds the shadow it needs
     (`:753-757`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
     to neither. Detail: `design-system-tokens.md` §2.
-- **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG);
-  `CommonGroundFilters.tsx:38-42` carries the rationale.
+- **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG). The form
+  primitives build it in — `form-classes.ts` (fields stay 44px below `lg`), `slider.tsx` (an `h-11` hit
+  area in a 44px row), `checkbox.tsx` (the whole label row is the target) — so a filter body such as
+  `pages/games/coop-filter-controls.tsx` gets it by composing them rather than restating it.
 
 ### 2.6 Motion
 
@@ -821,10 +823,10 @@ them; do not fix them as scope creep.
    `var(--color-border)`. `web/src/styles/undefined-tokens.guard.test.ts` now fails on any colour utility
    or `var(--color-*)` whose token is not declared in `index.css` `@theme` (78 hits before the fix).
 
-4. ~~**Search input styling lives in three places**~~ — **Mostly resolved by ROK-1646/1647.** `SearchInput`
+4. ~~**Search input styling lives in three places**~~ — **Resolved by ROK-1646/1647.** `SearchInput`
    (`components/ui/search-input.tsx`) is the one search box: `ModalSearchInput` delegates to it and the
    Discover-tab, list-page, picker-modal and toolbar searches use it; game search is the shared `Combobox`.
-   *Remaining:* `CommonGroundFilters::SearchBox` still hand-rolls its own box (`bg-panel`, `rounded-md`).
+   Common Ground's last hand-rolled box went with ROK-1659/1662 (`CommonGroundPanel.tsx` uses `SearchInput`).
 
 5. **Empty states are ad-hoc** — `LineupEmptyState` for one surface, `ModalEmptyState` for modals, inline
    centred `<p>` elsewhere. *Suggested:* one `components/ui/empty-state.tsx` taking `{ title, action? }`.
