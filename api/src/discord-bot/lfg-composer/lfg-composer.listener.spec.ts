@@ -9,8 +9,11 @@ import {
   pickComposerGame,
   submitComposerSearch,
 } from './lfg-composer-flow.helpers';
+import { inspect } from 'node:util';
+import { Logger } from '@nestjs/common';
 import { MessageFlags } from 'discord.js';
 import { LFG_COMPOSER_COPY } from './lfg-composer.constants';
+import { viewComposerGames } from './lfg-composer-view.helpers';
 import {
   LfgComposerListener,
   isComposerInteraction,
@@ -24,13 +27,16 @@ jest.mock('./lfg-composer-flow.helpers', () => ({
   pickComposerGame: jest.fn().mockResolvedValue(undefined),
   submitComposerSearch: jest.fn().mockResolvedValue(undefined),
 }));
+jest.mock('./lfg-composer-view.helpers', () => ({
+  viewComposerGames: jest.fn().mockResolvedValue(undefined),
+}));
 
 type Kind = 'button' | 'select' | 'modal';
 
-function fake(kind: Kind, customId: string) {
+function fake(kind: Kind, customId: string, deferred = false) {
   return {
     customId,
-    deferred: false,
+    deferred,
     replied: false,
     isButton: () => kind === 'button',
     isStringSelectMenu: () => kind === 'select',
@@ -63,6 +69,7 @@ describe('routeComposerInteraction', () => {
     ['button', 'lfgc:go:week:7:s:deep', goComposer],
     ['select', 'lfgc:pick:deep', pickComposerGame],
     ['modal', 'lfgc:modal', submitComposerSearch],
+    ['button', 'lfgc:view', viewComposerGames],
   ] as const)('%s %s reaches its step', async (kind, id, step) => {
     await routeComposerInteraction(DEPS, fake(kind, id) as never);
     expect(step).toHaveBeenCalledTimes(1);
@@ -116,5 +123,35 @@ describe('LfgComposerListener.handle', () => {
       content: LFG_COMPOSER_COPY.STALE_REPLY,
       flags: MessageFlags.Ephemeral,
     });
+  });
+
+  it('logs a failed step without the request body, so no token leaks (AC4)', async () => {
+    const lines: string[] = [];
+    for (const level of ['error', 'warn', 'log'] as const) {
+      jest.spyOn(Logger.prototype, level).mockImplementation((...args) => {
+        lines.push(args.map((a) => inspect(a, { depth: 10 })).join(' '));
+      });
+    }
+    const apiError = Object.assign(new Error('Invalid Form Body'), {
+      code: 50035,
+      requestBody: {
+        json: { components: [{ url: 'https://rl.test/games#token=SECRET' }] },
+      },
+    });
+    jest.mocked(viewComposerGames).mockRejectedValueOnce(apiError);
+    const listener = new LfgComposerListener(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+    await listener.handle(fake('button', 'lfgc:view', true) as never);
+    const logged = lines.join('\n');
+    expect(logged).toContain('lfgc:view');
+    expect(logged).toContain('Invalid Form Body');
+    expect(logged).toContain('50035');
+    expect(logged).not.toContain('SECRET');
+    jest.restoreAllMocks();
   });
 });
