@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { useCooptimusSettings } from '../../hooks/admin/use-cooptimus-settings';
+import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
 import { TestResultBanner } from './admin-form-helpers';
-
-/** Co-Optimus brand blue for ring/button styling */
-const COOPTIMUS_RING = 'focus:ring-[#5b9bd5]';
 
 function CooptimusSetupInstructions() {
     return (
-        <div className="bg-slate-500/10 border border-slate-500/30 rounded-lg p-4 mb-6">
+        <div className="bg-overlay/30 border border-edge rounded-lg p-4 mb-6">
             <p className="text-sm text-foreground"><strong>Permission-first setup:</strong></p>
             <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
                 <li>Co-Optimus&apos;s API is keyless but Cloudflare-gated for unattended clients</li>
@@ -44,24 +45,20 @@ function useProseToggle() {
 function CooptimusProseToggle() {
     const { enabled, disabled, onChange } = useProseToggle();
     return (
-        <div className="flex items-start gap-3">
-            <input
-                id="cooptimus-prose"
-                type="checkbox"
-                checked={enabled}
-                disabled={disabled}
-                onChange={(e) => onChange(e.target.checked)}
-                className="mt-1 h-4 w-4 accent-[#5b9bd5] disabled:opacity-50"
-            />
-            <label htmlFor="cooptimus-prose" className="text-sm text-secondary">
-                <span className="font-medium text-foreground">Show editorial prose</span>
-                <span className="block text-xs text-muted mt-0.5">
+        <Checkbox
+            id="cooptimus-prose"
+            checked={enabled}
+            disabled={disabled}
+            onChange={(e) => onChange(e.target.checked)}
+            label="Show editorial prose"
+            description={
+                <>
                     Renders Co-Optimus&apos;s &quot;The Co-Op Experience&quot; blurb and game description on
                     game detail pages. Leave off unless they have confirmed prose reuse — co-op
                     facts and the attribution credit render either way.
-                </span>
-            </label>
-        </div>
+                </>
+            }
+        />
     );
 }
 
@@ -101,20 +98,17 @@ function CooptimusActionButtons({ configured, isPending, onTest, onClear }: {
 }) {
     return (
         <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={isPending.save}
-                className="px-4 py-2 bg-[#5b9bd5] hover:bg-[#4a8ac4] text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                {isPending.save ? 'Saving…' : 'Save'}
-            </button>
+            <Button type="submit" variant="primary" loading={isPending.save} loadingLabel="Saving…">
+                Save
+            </Button>
             {configured && (
                 <>
-                    <button type="button" onClick={onTest} disabled={isPending.test}
-                        className="px-4 py-2 bg-surface border border-edge hover:bg-overlay text-foreground text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                        {isPending.test ? 'Testing…' : 'Test connection'}
-                    </button>
-                    <button type="button" onClick={onClear} disabled={isPending.clear}
-                        className="px-4 py-2 bg-surface border border-red-500/40 hover:bg-red-500/10 text-red-400 text-sm font-medium rounded-lg transition-colors disabled:opacity-50">
-                        {isPending.clear ? 'Clearing…' : 'Clear'}
-                    </button>
+                    <Button variant="secondary" onClick={onTest} loading={isPending.test} loadingLabel="Testing…">
+                        Test connection
+                    </Button>
+                    <Button variant="destructive-soft" onClick={onClear} loading={isPending.clear} loadingLabel="Clearing…">
+                        Clear
+                    </Button>
                 </>
             )}
         </div>
@@ -127,19 +121,14 @@ export function CooptimusForm() {
     return (
         <form onSubmit={s.handleSave} className="space-y-4">
             <CooptimusSetupInstructions />
-            <div>
-                <label htmlFor="cooptimus-ua" className="block text-sm font-medium text-secondary mb-1">
-                    Allowlisted user-agent
-                </label>
-                <input
-                    id="cooptimus-ua"
+            <Field id="cooptimus-ua" label="Allowlisted user-agent">
+                <Input
                     type="text"
                     value={s.userAgent}
                     onChange={(e) => s.setUserAgent(e.target.value)}
                     placeholder={s.configured ? 'Configured — enter a new value to replace' : 'e.g. RaidLedger/1.0 (granted-by-cooptimus)'}
-                    className={`w-full px-3 py-2 bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:outline-none focus:ring-2 ${COOPTIMUS_RING}`}
                 />
-            </div>
+            </Field>
             <CooptimusProseToggle />
             <TestResultBanner result={s.testResult} />
             <CooptimusActionButtons configured={s.configured} isPending={s.isPending}
