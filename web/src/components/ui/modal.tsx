@@ -10,8 +10,14 @@ interface ModalProps {
     children: ReactNode;
     /** Override the default max-width (default: 'max-w-md') */
     maxWidth?: string;
-    /** Override body overflow/height classes (default: scrollable body) */
+    /**
+     * Replace the body skin (default: 'p-4 overflow-y-auto'). The structural
+     * 'flex-1 min-h-0' always applies so the body fills the space between the
+     * header and the footer inside the 90dvh column.
+     */
     bodyClassName?: string;
+    /** Actions pinned below the scrolling body; never scrolls away (ROK-1655). */
+    footer?: ReactNode;
     /** Element to focus on open instead of the first focusable (the close button) */
     initialFocusRef?: React.RefObject<HTMLElement | null>;
 }
@@ -36,9 +42,23 @@ function useModalEscape(isOpen: boolean, onClose: () => void) {
     useBodyScrollLock(isOpen);
 }
 
+const BODY_STRUCTURE = 'flex-1 min-h-0';
+const DEFAULT_BODY_SKIN = 'p-4 overflow-y-auto';
+
+function ModalFooter({ children }: { children: ReactNode }) {
+    return (
+        <div
+            data-testid="modal-footer"
+            className="shrink-0 flex flex-wrap items-center justify-end gap-2 border-t border-edge px-4 py-3"
+        >
+            {children}
+        </div>
+    );
+}
+
 function ModalHeader({ titleId, title, onClose }: { titleId: string; title: string; onClose: () => void }) {
     return (
-        <div className="flex items-center justify-between p-4 border-b border-edge">
+        <div className="shrink-0 flex items-center justify-between p-4 border-b border-edge">
             <h2 id={titleId} className="text-lg font-semibold text-foreground">{title}</h2>
             <button
                 onClick={onClose}
@@ -53,27 +73,30 @@ function ModalHeader({ titleId, title, onClose }: { titleId: string; title: stri
     );
 }
 
-export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef, footer }: ModalProps) {
     const titleId = useId();
     const trapRef = useFocusTrap<HTMLDivElement>(isOpen, initialFocusRef);
 
     useModalEscape(isOpen, onClose);
 
     if (!isOpen) return null;
+    // `footer={cond && <Buttons />}` passes false when off — render no empty bar.
+    const hasFooter = footer != null && typeof footer !== 'boolean';
 
     return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
             <div
                 ref={trapRef}
-                className={`relative bg-surface border border-edge rounded-xl shadow-2xl ${maxWidth} w-full mx-4 max-h-[90vh] overflow-hidden`}
+                className={`relative flex flex-col bg-surface border border-edge rounded-xl shadow-2xl ${maxWidth} w-full mx-4 max-h-[90dvh] overflow-hidden`}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
                 style={{ animation: 'modal-spring 350ms var(--spring-bounce) forwards' }}
             >
                 <ModalHeader titleId={titleId} title={title} onClose={onClose} />
-                <div className={bodyClassName ?? "p-4 overflow-y-auto max-h-[calc(90vh-8rem)]"}>{children}</div>
+                <div className={`${BODY_STRUCTURE} ${bodyClassName ?? DEFAULT_BODY_SKIN}`}>{children}</div>
+                {hasFooter && <ModalFooter>{footer}</ModalFooter>}
             </div>
         </div>,
         document.body,

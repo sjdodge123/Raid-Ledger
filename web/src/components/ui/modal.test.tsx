@@ -359,8 +359,9 @@ describe('Modal — pinned footer + flex layout (ROK-1655 PR-1)', () => {
             </Modal>,
         );
         const body = screen.getByText('Body content').parentElement as HTMLElement;
-        const footer = screen.getByText('Save').closest('[data-testid="modal-footer"]');
-        expect(footer).not.toBeNull();
+        const footer = screen.queryByTestId('modal-footer');
+        expect(footer, 'the footer prop must render a modal-footer element').not.toBeNull();
+        expect(footer).toHaveTextContent('Save');
         expect(body).toHaveClass('overflow-y-auto');
         expect(body.nextElementSibling).toBe(footer);
         expect(footer?.closest('.overflow-y-auto')).toBeNull();
