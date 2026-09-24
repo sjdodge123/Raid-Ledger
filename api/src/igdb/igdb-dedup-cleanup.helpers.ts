@@ -10,6 +10,7 @@ import { sql, eq } from 'drizzle-orm';
 import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import type { SteamAppIdSource } from '../drizzle/schema';
 import {
   reassignEventFks,
   reassignLineupFks,
@@ -267,6 +268,8 @@ interface CarryColumns {
   steamAppId: number | null;
   itadGameId: string | null;
   coverUrl: string | null;
+  /** ROK-1680: rides with steamAppId only — never carried on its own. */
+  steamAppIdSource: SteamAppIdSource | null;
 }
 
 /** Read the loser's donatable columns while the row still exists. */
@@ -279,11 +282,19 @@ async function captureCarryColumns(
       steamAppId: schema.games.steamAppId,
       itadGameId: schema.games.itadGameId,
       coverUrl: schema.games.coverUrl,
+      steamAppIdSource: schema.games.steamAppIdSource,
     })
     .from(schema.games)
     .where(eq(schema.games.id, loserId))
     .limit(1);
-  return row ?? { steamAppId: null, itadGameId: null, coverUrl: null };
+  return (
+    row ?? {
+      steamAppId: null,
+      itadGameId: null,
+      coverUrl: null,
+      steamAppIdSource: null,
+    }
+  );
 }
 
 /**
@@ -317,6 +328,8 @@ async function applyCarryColumns(
       Object.assign(patch, { [key]: carry[key] });
     }
   }
+  // ROK-1680: same UPDATE, so the reset trigger sees the source change too.
+  if (patch.steamAppId != null) patch.steamAppIdSource = carry.steamAppIdSource;
   if (Object.keys(patch).length === 0) return;
   await tx.update(schema.games).set(patch).where(eq(schema.games.id, winnerId));
 }

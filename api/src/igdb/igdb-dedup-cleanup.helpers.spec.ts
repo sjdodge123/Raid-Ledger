@@ -305,8 +305,12 @@ describe('mergeNameDuplicates — steamAppIdSource carry (ROK-1680)', () => {
     mockDb.from.mockResolvedValueOnce([winnerRow, loserRow]);
     mockDb.limit
       .mockResolvedValueOnce([
-        { steamAppId: 500, itadGameId: 'itad-carry', coverUrl: null,
-          steamAppIdSource: 'itad' },
+        {
+          steamAppId: 500,
+          itadGameId: 'itad-carry',
+          coverUrl: null,
+          steamAppIdSource: 'itad',
+        },
       ])
       .mockResolvedValueOnce([
         { steamAppId: winnerSteamAppId, itadGameId: null, coverUrl: null },
@@ -326,7 +330,9 @@ describe('mergeNameDuplicates — steamAppIdSource carry (ROK-1680)', () => {
 
   it('never carries the source alone when the winner already has a steamAppId', async () => {
     const patch = await runCarry(999);
-    expect(patch).toEqual(expect.objectContaining({ itadGameId: 'itad-carry' }));
+    expect(patch).toEqual(
+      expect.objectContaining({ itadGameId: 'itad-carry' }),
+    );
     expect(patch).not.toHaveProperty('steamAppIdSource');
     expect(patch).not.toHaveProperty('steamAppId');
   });
