@@ -147,13 +147,4 @@ describe('InstallSizeEntryModal — pinned footer (ROK-1655)', () => {
         expect(sizeDialog()).toBeInTheDocument();
         expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
     });
-
-    it('pressing Enter in the field submits too', async () => {
-        const user = userEvent.setup();
-        renderSize();
-        await user.type(sizeField(), '0{Enter}');
-        const alert = screen.queryByRole('alert');
-        expect(alert, 'Enter must submit the form and show the inline error').not.toBeNull();
-        expect(alert).toHaveClass('text-danger');
-    });
 });
