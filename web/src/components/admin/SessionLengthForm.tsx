@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { useSessionLength } from '../../hooks/admin/use-session-length';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
 
 /**
  * ROK-1353: admin control for the refresh-token session length (days).
@@ -47,35 +50,24 @@ export function SessionLengthForm() {
     return (
         <form onSubmit={handleSave} className="space-y-3">
             <SessionLengthField value={days} onChange={setDraft} />
-            <button
-                type="submit"
-                disabled={updateSessionLength.isPending}
-                className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-                {updateSessionLength.isPending ? 'Saving…' : 'Save'}
-            </button>
+            <Button type="submit" loading={updateSessionLength.isPending} loadingLabel="Saving…">
+                Save
+            </Button>
         </form>
     );
 }
 
 function SessionLengthField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
     return (
-        <div>
-            <label htmlFor="session-length-days" className="block text-sm font-medium text-secondary mb-1.5">
-                Session length (days)
-            </label>
-            <input
-                id="session-length-days"
-                type="number"
-                min={1}
-                max={365}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className="w-32 rounded-md border border-edge bg-surface px-3 py-2 text-sm text-foreground"
-            />
-            <p className="text-xs text-dim mt-1.5">
-                How long a signed-in session stays valid before re-login (default 60).
-            </p>
-        </div>
+        <Field
+            id="session-length-days"
+            label="Session length (days)"
+            hint="How long a signed-in session stays valid before re-login (default 60)."
+        >
+            {/* A wrapper sizes the control: Input's own frame is w-full. */}
+            <div className="w-32">
+                <Input type="number" min={1} max={365} value={value} onChange={(e) => onChange(e.target.value)} />
+            </div>
+        </Field>
     );
 }
