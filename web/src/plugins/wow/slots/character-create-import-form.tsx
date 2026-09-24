@@ -5,7 +5,10 @@ import { useSystemStatus } from '../../../hooks/use-system-status';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
 import { isArmoryImportSupported, ARMORY_CLASSIC_VARIANTS, defaultArmoryClassicVariant } from '../lib/armory-import';
-import { ArmoryUnavailableNote, DISABLED_TAB_CLS } from '../components/armory-unavailable-note';
+import { ArmoryUnavailableNote, ARMORY_TAB_CLS, ARMORY_TAB_TRACK_CLS } from '../components/armory-unavailable-note';
+import { Button } from '../../../components/ui/button';
+import { Field } from '../../../components/ui/field';
+import { Select } from '../../../components/ui/select';
 
 interface CharacterCreateImportFormProps {
     onClose: () => void;
@@ -36,19 +39,16 @@ function useImportFormVariant(gameSlug: string, eventId: number | undefined, exi
 
 type Tab = 'manual' | 'import';
 
-function importTabCls(activeTab: Tab, disabled: boolean): string {
-    if (disabled) return DISABLED_TAB_CLS;
-    return activeTab === 'import' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-muted hover:text-secondary';
-}
-
 /** ROK-1636: `noteId` set = Armory unavailable for this variant — tab is aria-disabled and described by the note. */
 function TabToggle({ activeTab, onTabChange, noteId }: { activeTab: Tab; onTabChange: (tab: Tab) => void; noteId?: string }) {
     return (
-        <div className="flex rounded-lg bg-panel/50 border border-edge p-1">
-            <button type="button" onClick={() => onTabChange('manual')}
-                className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'manual' ? 'bg-overlay text-foreground' : 'text-muted hover:text-secondary'}`}>Manual</button>
-            <button type="button" onClick={() => { if (!noteId) onTabChange('import'); }} aria-disabled={noteId ? true : undefined} aria-describedby={noteId}
-                className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${importTabCls(activeTab, !!noteId)}`}>Import from Armory</button>
+        <div role="group" aria-label="Add character by" className={ARMORY_TAB_TRACK_CLS}>
+            <Button variant="ghost" size="sm" className={ARMORY_TAB_CLS} aria-pressed={activeTab === 'manual'}
+                onClick={() => onTabChange('manual')}>Manual</Button>
+            <Button variant="ghost" size="sm" className={ARMORY_TAB_CLS} aria-pressed={activeTab === 'import'}
+                onClick={() => { if (!noteId) onTabChange('import'); }} aria-disabled={noteId ? true : undefined} aria-describedby={noteId}>
+                Import from Armory
+            </Button>
         </div>
     );
 }
@@ -61,22 +61,20 @@ function useArmoryTabSync(blizzardConfigured: boolean, armoryOk: boolean, active
 
 function VariantSelector({ wowVariant, gameSlug, onVariantChange }: { wowVariant: string; gameSlug: string; onVariantChange: (v: string) => void }) {
     return (
-        <div>
-            <label className="block text-sm font-medium text-secondary mb-1">Game Version</label>
-            <select value={wowVariant} onChange={(e) => onVariantChange(e.target.value)}
-                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
+        <Field label="Game version">
+            <Select value={wowVariant} onChange={(e) => onVariantChange(e.target.value)}>
                 {gameSlug === 'world-of-warcraft-classic' ? (
                     ARMORY_CLASSIC_VARIANTS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)
                 ) : <option value="retail">Retail (Live)</option>}
-            </select>
-        </div>
+            </Select>
+        </Field>
     );
 }
 
 function BlizzardNotConfigured() {
     return (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-            <p className="text-sm text-amber-400">Blizzard API not configured — ask an admin to set it up in Plugins.</p>
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
+            <p className="text-sm text-warning">Blizzard API not configured — ask an admin to set it up in Plugins.</p>
         </div>
     );
 }
