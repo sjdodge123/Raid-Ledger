@@ -97,9 +97,11 @@ function normalizedIlike(column: Column, word: string): SQL {
 }
 
 /**
- * Canonical Roman/Arabic numeral pairs (ROK-1053) now live in
- * `@raid-ledger/contract` (ROK-1668); re-exported here so existing importers
- * keep their path. `romanArabicAlt` (below) derives its lookup from them.
+ * Canonical Roman/Arabic numeral pairs (ROK-1053) live in `@raid-ledger/contract`
+ * (`packages/contract/src/game-identity/roman-numerals.ts`, moved there in
+ * ROK-1668) — the one list that both `romanArabicAlt` (below) and the
+ * contract's `normalizeForDedup` derive from. Re-exported here so existing
+ * importers keep their path.
  */
 export { ROMAN_ARABIC_PAIRS };
 

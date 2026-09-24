@@ -6,6 +6,9 @@
  * Used at ingest time to prevent duplicate rows, and by the admin merge tool to
  * collapse rows that already slipped past.
  *
+ * The pure name matching — `normalizeForDedup`, `tokenCount` and `namesMatch` —
+ * lives in `@raid-ledger/contract` (`packages/contract/src/game-identity/`,
+ * moved there in ROK-1668); this file keeps only the DB-bound lookups.
  * Subtitle stripping in `normalizeForDedup` is aggressive — it collapses
  * "Game: Subtitle" into "game subtitle". A token-count parity check keeps
  * "Doom" from colliding with "Doom: Eternal" (1 vs 2 tokens) while still
