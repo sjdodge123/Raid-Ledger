@@ -33,18 +33,44 @@ import {
 /** `LFG_COMPOSER_IDS.OPEN` — the card's `Post an LFG` custom id. */
 export const COMPOSER_OPEN_CUSTOM_ID = "lfgc:open";
 
+/**
+ * `LFG_COMPOSER_IDS.VIEW` — the card's `View games ↗` (ROK-1685). A press, not
+ * a link: the card is public, so the clicker's own magic link arrives in a
+ * private reply and the card itself never carries a token.
+ */
+export const COMPOSER_VIEW_CUSTOM_ID = "lfgc:view";
+
 /** Provisioning + the ENABLED handler are a few Discord round-trips. */
 const COMPOSER_READY_MS = 30_000;
 
-/** Every custom id on a message's action rows. */
-function customIds(message: Message): string[] {
+/** The fields this smoke reads off one component in an action row. */
+interface RowChild {
+  customId?: string | null;
+  url?: string | null;
+}
+
+/** Every component on a message's action rows. */
+function rowChildren(message: Message): RowChild[] {
   return message.components.flatMap((row) =>
     "components" in row && Array.isArray(row.components)
-      ? row.components.flatMap((c: { customId?: string | null }) =>
-          c.customId ? [c.customId] : [],
-        )
+      ? row.components.flatMap((c: RowChild) => [c])
       : [],
   );
+}
+
+/** Every custom id on a message's action rows. */
+function customIds(message: Message): string[] {
+  return rowChildren(message).flatMap((c) => (c.customId ? [c.customId] : []));
+}
+
+/**
+ * How many Link buttons carry a `token` — counted, never collected, so a
+ * failure message can report a leak without printing the token itself.
+ */
+function tokenUrlCount(message: Message): number {
+  return rowChildren(message).filter(
+    (c) => typeof c.url === "string" && c.url.includes("token"),
+  ).length;
 }
 
 /** What this env's intro post currently looks like. */
@@ -59,6 +85,8 @@ interface IntroState {
   introTitled: number;
   /** Custom ids on the intro's starter message. */
   ids: string[];
+  /** Link buttons on the starter whose URL carries a `token` (ROK-1685). */
+  tokenUrls: number;
 }
 
 /**
@@ -72,7 +100,14 @@ async function readIntro(run: Run): Promise<IntroState> {
   const intro = pickBoardIntro(threads, INTRO_TITLES);
   const introTitled = threads.filter((t) => INTRO_TITLES.includes(t.name)).length;
   if (!intro) {
-    return { introId: null, title: null, pinned: false, introTitled, ids: [] };
+    return {
+      introId: null,
+      title: null,
+      pinned: false,
+      introTitled,
+      ids: [],
+      tokenUrls: 0,
+    };
   }
   const thread = await getGuild().channels.fetch(intro.id);
   const starter = thread?.isThread()
@@ -84,6 +119,7 @@ async function readIntro(run: Run): Promise<IntroState> {
     pinned: intro.pinned,
     introTitled,
     ids: starter ? customIds(starter) : [],
+    tokenUrls: starter ? tokenUrlCount(starter) : 0,
   };
 }
 
@@ -112,13 +148,58 @@ export async function assertComposerPinned(run: Run): Promise<void> {
       return isComposerReady(state) ? state : null;
     }, COMPOSER_READY_MS);
   } catch {
+    await failComposerPinned(run);
+  }
+  await assertViewIsAPress(run);
+}
+
+/** The AC1 failure, quoting what the intro looked like last. */
+async function failComposerPinned(run: Run): Promise<never> {
+  const last = await readIntro(run).catch(() => null);
+  throw new Error(
+    "ROK-1612 AC1 / ROK-1658: this env's LFG board intro post must carry " +
+      `the composer button "${COMPOSER_OPEN_CUSTOM_ID}" and the title ` +
+      `"${INTRO_TITLE}" within ` +
+      `${String(COMPOSER_READY_MS)}ms of enabling the board; last seen ` +
+      `${JSON.stringify(last)} in forum ${forumId(run)}`,
+  );
+}
+
+/**
+ * ROK-1685 AC3/AC5 — the card's `View games ↗` is a press and no button on
+ * the public card carries a token.
+ *
+ * The card offers `View games ↗` whenever a client URL is configured, and the
+ * pin service reads `getClientUrl()`, which falls back to a default and is
+ * never empty (`settings-bot.helpers.ts` `getClientUrl`) — so every env's card
+ * carries it. It is polled for because a card posted by an older build (a
+ * `View games ↗` LINK) is re-edited by the same reconcile that set `Post an
+ * LFG`, which the caller has already seen. The token check is not polled: a
+ * token on a public message is a leak the moment it is there.
+ *
+ * @param run - The board run, after `assertComposerPinned`'s poll passed.
+ */
+async function assertViewIsAPress(run: Run): Promise<void> {
+  let state: IntroState | null = null;
+  try {
+    state = await pollForCondition(async () => {
+      const seen = await readIntro(run);
+      return seen.ids.includes(COMPOSER_VIEW_CUSTOM_ID) ? seen : null;
+    }, COMPOSER_READY_MS);
+  } catch {
     const last = await readIntro(run).catch(() => null);
     throw new Error(
-      "ROK-1612 AC1 / ROK-1658: this env's LFG board intro post must carry " +
-        `the composer button "${COMPOSER_OPEN_CUSTOM_ID}" and the title ` +
-        `"${INTRO_TITLE}" within ` +
-        `${String(COMPOSER_READY_MS)}ms of enabling the board; last seen ` +
-        `${JSON.stringify(last)} in forum ${forumId(run)}`,
+      "ROK-1685 AC3: this env's LFG board intro post must carry the " +
+        `"${COMPOSER_VIEW_CUSTOM_ID}" press (View games) within ` +
+        `${String(COMPOSER_READY_MS)}ms; last seen ${JSON.stringify(last)} ` +
+        `in forum ${forumId(run)}`,
+    );
+  }
+  if (state.tokenUrls > 0) {
+    throw new Error(
+      "ROK-1685 AC3/AC4: the public composer card must never carry a token; " +
+        `${String(state.tokenUrls)} button URL(s) on intro ${String(state.introId)} ` +
+        "contain 'token' (URLs withheld so the token is not printed)",
     );
   }
 }
