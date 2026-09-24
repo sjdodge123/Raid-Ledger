@@ -1860,3 +1860,7 @@ same day (#1278, #1279, #1280).
 
 ### 2026-09-24 — feat/rok-1685-view-games-magic-link (surfaced during PR #1348 GitHub discord-smoke)
 - **[med — flake, NOT this branch]** `tools/test-bot/src/smoke/lfg-board-spawn-indicator-phase.ts:108-115` — `LFG board: the +1 that forms a now-group says so, and drops the mark once it has (ROK-1619)` failed with `ROK-1619 AC3 precondition: two now-hands did NOT spawn a session on "Chao Chao" — playingNow is null (activeCount=2)` (run 36034494044, merge `f2eddb62a`). `assertSpawned` reads `playingNow` once with no poll, so it races the session spawn after the second now-hand (`activeCount=2` shows both hands landed). Same failure on unrelated `fix/rok-1683-poll-live-nudge` run 35961049041 (green on its next run); ROK-1685's diff is confined to `lfg-composer/**` + `lfg-composer-pin.ts`. Suggested: wrap the `playingNow` read in `pollForCondition` before throwing.
+
+### 2026-09-24 — feat/rok-1652-admin-integration-forms (surfaced during fleet UI verification, plan `2026-09-24-2123-5c11`)
+- **[low]** `web/src/components/admin/ChannelBindingList.tsx` — the binding row's Edit / Remove / Close buttons are 28px tall at 375px (below the 44px touch target). Not in ROK-1652's file list. Suggested: move them onto `Button size="sm"` (44px below `lg`).
+- **[nit]** `web/src/components/admin/ai-model-selector.tsx` — imported by nothing (dead code); the AI plugin page has no Model select. Suggested: delete it, or wire it if a model picker is still wanted.
