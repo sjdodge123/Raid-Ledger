@@ -175,21 +175,28 @@ test.describe('Plan event poll and duration settings', () => {
         await page.goto('/events/plan');
         await expect(page.getByRole('heading', { name: 'Poll Settings' })).toBeVisible({ timeout: 15_000 });
 
-        // Poll Duration options
-        await expect(page.getByRole('button', { name: '6h' })).toBeVisible();
-        await expect(page.getByRole('button', { name: '24h' })).toBeVisible();
-        await expect(page.getByRole('button', { name: '72h' })).toBeVisible();
+        // Poll Duration: a segmented radiogroup (ROK-1649). The native radio is
+        // sr-only, so visibility and clicks go through its segment (the parent label).
+        const pollDuration = page.getByRole('radiogroup', { name: 'Poll Duration', exact: true });
+        await expect(pollDuration.getByRole('radio', { name: '6h', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(pollDuration.getByRole('radio', { name: '24h', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(pollDuration.getByRole('radio', { name: '72h', exact: true }).locator('xpath=..')).toBeVisible();
 
-        // Click a different duration
-        await page.getByRole('button', { name: '48h' }).click();
+        // Click a different duration — its radio becomes the checked one
+        await pollDuration.getByRole('radio', { name: '48h', exact: true }).locator('xpath=..').click();
+        await expect(pollDuration.getByRole('radio', { name: '48h', exact: true })).toBeChecked();
+        await expect(pollDuration.getByRole('radio', { name: '24h', exact: true })).not.toBeChecked();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
 
-        // Poll Mode options
-        await expect(page.getByRole('button', { name: 'Standard' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'All or Nothing' })).toBeVisible();
+        // Poll Mode: a segmented radiogroup too
+        const pollMode = page.getByRole('radiogroup', { name: 'Poll Mode', exact: true });
+        await expect(pollMode.getByRole('radio', { name: 'Standard', exact: true })).toBeChecked();
+        await expect(pollMode.getByRole('radio', { name: 'All or Nothing', exact: true }).locator('xpath=..')).toBeVisible();
 
-        // Click All or Nothing mode
-        await page.getByRole('button', { name: 'All or Nothing' }).click();
+        // Click All or Nothing mode — it becomes checked and its description shows
+        await pollMode.getByRole('radio', { name: 'All or Nothing', exact: true }).locator('xpath=..').click();
+        await expect(pollMode.getByRole('radio', { name: 'All or Nothing', exact: true })).toBeChecked();
+        await expect(page.getByText(/If ANY voter picks/)).toBeVisible();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 
@@ -198,12 +205,15 @@ test.describe('Plan event poll and duration settings', () => {
         await expect(page.getByRole('heading', { name: 'Event Duration' })).toBeVisible({ timeout: 15_000 });
 
         // Duration presets — use exact: true to avoid matching 12h/72h etc.
-        await expect(page.getByRole('button', { name: '1h', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: '2h', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: '4h', exact: true })).toBeVisible();
+        // ROK-1649: a segmented radiogroup; the native radio is sr-only, so
+        // visibility is asserted on its segment <label>.
+        await expect(page.getByRole('radio', { name: '1h', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: '2h', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: '4h', exact: true }).locator('xpath=..')).toBeVisible();
 
         // Click 3h — no crash
-        await page.getByRole('button', { name: '3h', exact: true }).click();
+        await page.getByRole('radio', { name: '3h', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: '3h', exact: true })).toBeChecked();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 });
@@ -217,9 +227,11 @@ test.describe('Plan event roster configuration', () => {
         await page.goto('/events/plan');
         await expect(page.getByRole('heading', { name: 'Roster' })).toBeVisible({ timeout: 15_000 });
 
-        // Slot type toggle
-        await expect(page.getByRole('button', { name: 'MMO Roles' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Generic Slots' })).toBeVisible();
+        // Slot type: a segmented radiogroup (ROK-1649). The native radio is
+        // sr-only, so visibility is asserted on its segment <label>.
+        await expect(page.getByRole('radiogroup', { name: 'Slot Type', exact: true })).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'Generic Slots', exact: true })).toBeChecked();
 
         // Player count controls — scope to main content to avoid matching nav links
         const mainContent = page.locator('main');
@@ -236,8 +248,9 @@ test.describe('Plan event roster configuration', () => {
         await page.goto('/events/plan');
         await expect(page.getByRole('heading', { name: 'Roster' })).toBeVisible({ timeout: 15_000 });
 
-        // Click MMO Roles
-        await page.getByRole('button', { name: 'MMO Roles' }).click();
+        // Tap the MMO Roles segment — its sr-only radio becomes checked
+        await page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true })).toBeChecked();
 
         // MMO-specific labels should appear (Tank, Healer, DPS)
         await expect(page.getByText('Tank', { exact: true })).toBeVisible({ timeout: 5_000 });
