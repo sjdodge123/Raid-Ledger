@@ -37,11 +37,11 @@ function buildInlinePayload(name: string, charClass: string, spec: string, role:
     };
 }
 
-function InlineTextField({ label, value, onChange, maxLength }: {
-    label: string; value: string; onChange: (v: string) => void; maxLength: number;
+function InlineTextField({ label, value, onChange, maxLength, error }: {
+    label: string; value: string; onChange: (v: string) => void; maxLength: number; error?: string;
 }) {
     return (
-        <Field label={label} hideLabel>
+        <Field label={label} hideLabel error={error || undefined}>
             <Input type="text" fieldSize="sm" value={value} onChange={(e) => onChange(e.target.value)} placeholder={label} maxLength={maxLength} />
         </Field>
     );
@@ -88,17 +88,16 @@ export function InlineCharacterForm({ gameId, hasRoles = true, gameSlug, eventId
     const [spec, setSpec] = useState('');
     const [role, setRole] = useState<CharacterRole | ''>('');
     const [realm, setRealm] = useState('');
-    const [nameError, setNameError] = useState('');
-    const [submitError, setSubmitError] = useState('');
+    const [errors, setErrors] = useState<{ name?: string; form?: string }>({});
     const [pluginImportActive, setPluginImportActive] = useState(false);
     const handleModeChange = useCallback((mode: 'import' | 'manual') => { setPluginImportActive(mode === 'import'); }, []);
 
     const handleManualSubmit = (e: React.FormEvent) => {
-        e.preventDefault(); setNameError(''); setSubmitError('');
-        if (!name.trim()) { setNameError('Character name is required'); return; }
+        e.preventDefault(); setErrors({});
+        if (!name.trim()) { setErrors({ name: 'Character name is required' }); return; }
         createMutation.mutate(
             buildInlinePayload(name, charClass, spec, role, realm, gameId, hasRoles),
-            { onSuccess: (data) => onCharacterCreated?.(data), onError: (err) => setSubmitError(err.message) },
+            { onSuccess: (data) => onCharacterCreated?.(data), onError: (err) => setErrors({ form: err.message }) },
         );
     };
 
@@ -106,11 +105,9 @@ export function InlineCharacterForm({ gameId, hasRoles = true, gameSlug, eventId
         <div className="space-y-3">
             <PluginSlot name="character-create:inline-import" context={{ onSuccess: onCharacterCreated, isMain: true, gameSlug, onModeChange: handleModeChange, eventId }} />
             {!pluginImportActive && <form onSubmit={handleManualSubmit} className="space-y-3">
-                <Field label="Character name" hideLabel error={nameError || undefined}>
-                    <Input type="text" fieldSize="sm" value={name} onChange={(e) => setName(e.target.value)} placeholder="Character name" maxLength={100} />
-                </Field>
+                <InlineTextField label="Character name" value={name} onChange={setName} maxLength={100} error={errors.name} />
                 {hasRoles && <InlineRoleFields charClass={charClass} spec={spec} role={role} realm={realm} onClassChange={setCharClass} onSpecChange={setSpec} onRoleChange={setRole} onRealmChange={setRealm} />}
-                {submitError && <p role="alert" className="text-xs text-danger">{submitError}</p>}
+                {errors.form && <p role="alert" className="text-xs text-danger">{errors.form}</p>}
                 <InlineFormFooter onCancel={onCancel} isPending={createMutation.isPending} />
             </form>}
         </div>
