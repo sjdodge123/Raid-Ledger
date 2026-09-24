@@ -33,6 +33,11 @@ describe('CopyableInput — keyboard accessibility (ROK-881)', () => {
         });
     });
 
+    it('names the read-only field after its label (not only the copy button)', () => {
+        render(<CopyableInput value="https://x/cb" onCopied="Copied!" label="Callback URL" />);
+        expect(screen.getByRole('textbox', { name: 'Callback URL' })).toHaveValue('https://x/cb');
+    });
+
     it('copies value to clipboard on Enter key', async () => {
         render(<CopyableInput value="test-value" onCopied="Copied!" />);
         const input = screen.getByDisplayValue('test-value');

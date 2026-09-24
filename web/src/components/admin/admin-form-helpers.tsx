@@ -50,7 +50,8 @@ export function CopyableInput({ value, onCopied, label }: { value: string; onCop
         </Button>
     );
     return (
-        <Input type="text" value={value} readOnly fieldSize="lg" onKeyDown={handleKeyDown} onClick={copyValue}
+        <Input type="text" value={value} readOnly fieldSize="lg" aria-label={label ?? 'Copyable value'}
+            onKeyDown={handleKeyDown} onClick={copyValue}
             className="cursor-pointer select-all" trailing={copyButton} />
     );
 }
