@@ -68,9 +68,9 @@ describe('EditLineupMetadataModal — inline title validation', () => {
         fireEvent.blur(titleInput());
         fireEvent.click(saveButton());
 
-        expect(saveButton()).toBeDisabled();
         expect(toast.error).not.toHaveBeenCalledWith('Title is required');
         expect(m.mutateAsync).not.toHaveBeenCalled();
+        expect(saveButton()).toBeDisabled();
     });
 
     it('does not flag the title before the field has been left', () => {
