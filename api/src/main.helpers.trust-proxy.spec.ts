@@ -10,6 +10,8 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
+import * as fs from 'fs';
+import * as path from 'path';
 import * as supertest from 'supertest';
 import {
   applyTrustProxy,
@@ -215,6 +217,47 @@ describe('TRUST_PROXY overrides the default (ROK-1665 AC4)', () => {
       expect(await ipFor(app, spoofed)).toMatch(/127\.0\.0\.1$/);
     } finally {
       await app.close();
+    }
+  });
+});
+
+/**
+ * AC5: setting TRUST_PROXY REPLACES the default rather than adding to it, and
+ * a hop count counts the container's own nginx and the Docker bridge too. Docs
+ * that say "add the proxy" or "a hop count such as 2" put every visitor behind
+ * a public proxy back in one bucket, so every public-proxy example the docs
+ * give is run through the real app here.
+ */
+const REPO_ROOT = path.resolve(__dirname, '..', '..');
+const PUBLIC_PROXY = '198.51.100.50';
+const DOCS = ['README.md', '.env.example'];
+
+function publicProxyExamples(doc: string): string[] {
+  const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
+  const found = text.matchAll(/TRUST_PROXY=(\d+|[^`\n]*<proxy-ip>)/g);
+  return [...found].map((m) => m[1]);
+}
+
+describe('documented TRUST_PROXY examples for a public proxy (ROK-1665 AC5)', () => {
+  it.each(DOCS)('%s appends the proxy to the default list', (doc) => {
+    const appended = new RegExp(`^${DEFAULT_TRUST_PROXY}, .*<proxy-ip>$`);
+    expect(publicProxyExamples(doc)).toContainEqual(
+      expect.stringMatching(appended),
+    );
+  });
+
+  it.each(DOCS)('every %s example resolves the visitor', async (doc) => {
+    for (const example of publicProxyExamples(doc)) {
+      const app = await buildApp(example.replace('<proxy-ip>', PUBLIC_PROXY));
+      try {
+        const xff = `${CLIENT_A}, ${PUBLIC_PROXY}, ${BRIDGE}`;
+        const ip = await ipFor(app, xff);
+        expect(`TRUST_PROXY=${example} -> ${ip}`).toBe(
+          `TRUST_PROXY=${example} -> ${CLIENT_A}`,
+        );
+      } finally {
+        await app.close();
+      }
     }
   });
 });
