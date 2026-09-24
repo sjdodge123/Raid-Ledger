@@ -1,21 +1,25 @@
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { toast } from '../../lib/toast';
+import { Switch } from '../../components/ui/switch';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Field } from '../../components/ui/field';
+import { Select } from '../../components/ui/select';
+import { Input } from '../../components/ui/input';
+
+type SaveFn = (patch: Record<string, unknown>, msg: string) => void;
 
 /**
  * ROK-1352: Admin controls for ephemeral voice channels — global toggle plus
  * category picker + buffer/idle inputs (shown only when enabled). Extracted to
  * its own file so `discord-features-page.tsx` stays small.
+ * ROK-1652: the shared Switch, Checkbox, Field, Select and Input.
  */
 export function EphemeralVoiceSection() {
-    const {
-        ephemeralVoiceConfig,
-        ephemeralVoiceCategories,
-        updateEphemeralVoice,
-    } = useAdminSettings();
+    const { ephemeralVoiceConfig, ephemeralVoiceCategories, updateEphemeralVoice } = useAdminSettings();
     const cfg = ephemeralVoiceConfig.data;
     const enabled = cfg?.enabled ?? false;
 
-    const save = (patch: Record<string, unknown>, msg: string) =>
+    const save: SaveFn = (patch, msg) =>
         updateEphemeralVoice.mutate(patch, {
             onSuccess: () => toast.success(msg),
             onError: () => toast.error('Failed to update ephemeral voice settings'),
@@ -23,25 +27,7 @@ export function EphemeralVoiceSection() {
 
     return (
         <div className="bg-surface rounded-xl border border-edge p-6 space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-base font-semibold text-foreground">Ephemeral Voice Channels</h3>
-                    <p className="text-sm text-muted mt-1">
-                        Create a temporary voice channel before an event and delete it after it sits empty.
-                    </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                        type="checkbox"
-                        aria-label="Enable ephemeral voice channels"
-                        checked={enabled}
-                        onChange={(e) => save({ enabled: e.target.checked }, e.target.checked ? 'Ephemeral voice enabled' : 'Ephemeral voice disabled')}
-                        disabled={updateEphemeralVoice.isPending}
-                        className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-emerald-500 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-                </label>
-            </div>
+            <EphemeralVoiceHeader enabled={enabled} pending={updateEphemeralVoice.isPending} onSave={save} />
             {enabled && (
                 <>
                     <ForceEphemeralToggle forced={cfg?.forced ?? false} onSave={save} />
@@ -58,19 +44,33 @@ export function EphemeralVoiceSection() {
     );
 }
 
-/** ROK-1352: force-ephemeral — every event gets a channel; never reuse static. */
-function ForceEphemeralToggle({
-    forced,
-    onSave,
-}: {
-    forced: boolean;
-    onSave: (patch: Record<string, unknown>, msg: string) => void;
-}) {
+/** Title, blurb and the master on/off switch. */
+function EphemeralVoiceHeader({ enabled, pending, onSave }: { enabled: boolean; pending: boolean; onSave: SaveFn }) {
     return (
-        <label className="flex items-start gap-3 pt-2 border-t border-edge cursor-pointer">
-            <input
-                type="checkbox"
-                aria-label="Force ephemeral voice for every event"
+        <div className="flex items-center justify-between gap-4">
+            <div>
+                <h3 className="text-base font-semibold text-foreground">Ephemeral Voice Channels</h3>
+                <p className="text-sm text-muted mt-1">
+                    Create a temporary voice channel before an event and delete it after it sits empty.
+                </p>
+            </div>
+            <Switch
+                label="Enable ephemeral voice channels"
+                checked={enabled}
+                disabled={pending}
+                onChange={(on) => onSave({ enabled: on }, on ? 'Ephemeral voice enabled' : 'Ephemeral voice disabled')}
+            />
+        </div>
+    );
+}
+
+/** ROK-1352: force-ephemeral — every event gets a channel; never reuse static. */
+function ForceEphemeralToggle({ forced, onSave }: { forced: boolean; onSave: SaveFn }) {
+    return (
+        <div className="pt-2 border-t border-edge">
+            <Checkbox
+                label="Always create a temporary channel for every event"
+                description="Raid Ledger never points events at existing/static voice channels."
                 checked={forced}
                 onChange={(e) =>
                     onSave(
@@ -78,15 +78,8 @@ function ForceEphemeralToggle({
                         e.target.checked ? 'Force-ephemeral enabled' : 'Force-ephemeral disabled',
                     )
                 }
-                className="h-4 w-4 mt-0.5 rounded border-edge text-emerald-500 focus:ring-emerald-500"
             />
-            <span className="text-sm text-foreground">
-                Always create a temporary channel for every event
-                <span className="block text-muted">
-                    Raid Ledger never points events at existing/static voice channels.
-                </span>
-            </span>
-        </label>
+        </div>
     );
 }
 
@@ -95,16 +88,15 @@ interface FieldsProps {
     createBufferMinutes: number;
     idleMinutes: number;
     categories: { id: string; name: string }[];
-    onSave: (patch: Record<string, unknown>, msg: string) => void;
+    onSave: SaveFn;
 }
 
 function EphemeralVoiceConfigFields(props: FieldsProps) {
     return (
         <div className="grid gap-4 sm:grid-cols-3 pt-2 border-t border-edge">
-            <label className="flex flex-col gap-1 text-sm">
-                <span className="text-muted">Parent category</span>
-                <select
-                    className="bg-overlay border border-edge rounded px-2 py-1 text-foreground"
+            <Field label="Parent category">
+                <Select
+                    fieldSize="sm"
                     value={props.categoryId ?? ''}
                     onChange={(e) => props.onSave({ categoryId: e.target.value || null }, 'Category updated')}
                 >
@@ -112,8 +104,8 @@ function EphemeralVoiceConfigFields(props: FieldsProps) {
                     {props.categories.map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
-                </select>
-            </label>
+                </Select>
+            </Field>
             <MinutesInput
                 label="Create buffer (min)"
                 value={props.createBufferMinutes}
@@ -128,21 +120,20 @@ function EphemeralVoiceConfigFields(props: FieldsProps) {
     );
 }
 
+/** Uncontrolled minutes box: commits a changed, non-negative number on blur. */
 function MinutesInput({ label, value, onCommit }: { label: string; value: number; onCommit: (n: number) => void }) {
     return (
-        <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted">{label}</span>
-            <input
+        <Field label={label}>
+            <Input
                 type="number"
+                fieldSize="sm"
                 min={0}
                 defaultValue={value}
-                aria-label={label}
-                className="bg-overlay border border-edge rounded px-2 py-1 text-foreground"
                 onBlur={(e) => {
                     const n = Number(e.target.value);
                     if (Number.isFinite(n) && n >= 0 && n !== value) onCommit(n);
                 }}
             />
-        </label>
+        </Field>
     );
 }

@@ -89,3 +89,98 @@ describe('CloudProviderCard', () => {
         expect(input).toHaveAttribute('type', 'text');
     });
 });
+
+/** Class strings of every element outside a Button (the primitive owns its variant paint). */
+function nonButtonClasses(root: Element): string {
+    return Array.from(root.querySelectorAll('[class]'))
+        .filter((el) => el.closest('button') === null)
+        .map((el) => el.getAttribute('class') ?? '').join(' ');
+}
+
+describe('CloudProviderCard — API key field and disclosure', () => {
+    it('names the API key input "API key" and keeps its placeholder', () => {
+        renderWithProviders(<CloudProviderCard provider={createProvider()} />);
+        expect(screen.queryByLabelText('API key')).toBe(screen.getByPlaceholderText('Enter API key'));
+    });
+
+    it('"Show API key" points at the API key input', () => {
+        renderWithProviders(<CloudProviderCard provider={createProvider()} />);
+        const input = screen.getByPlaceholderText('Enter API key');
+        expect(screen.getByRole('button', { name: /show api key/i })).toHaveAttribute('aria-controls', input.id);
+    });
+
+    it('the "How to get an API key" disclosure flips aria-expanded and reveals the steps', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<CloudProviderCard provider={createProvider()} />);
+        const toggle = screen.getByRole('button', { name: /how to get an api key/i });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.getByRole('link', { name: /open openai console/i })).toBeInTheDocument();
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    });
+});
+
+describe('CloudProviderCard — loading buttons', () => {
+    it('Save is loading and swallows clicks while the configure request is pending', async () => {
+        let calls = 0;
+        server.use(http.post(`${API}/admin/ai/providers/:key/configure`, () => { calls += 1; return new Promise<never>(() => {}); }));
+        const user = userEvent.setup();
+        renderWithProviders(<CloudProviderCard provider={createProvider()} />);
+        await user.type(screen.getByPlaceholderText('Enter API key'), 'sk-test');
+        const save = screen.getByRole('button', { name: /save/i });
+        await user.click(save);
+        await vi.waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+        expect(save).toHaveAttribute('aria-disabled', 'true');
+        await user.click(save);
+        expect(calls).toBe(1);
+    });
+
+    it('Set as Active is secondary, loading and swallows clicks while pending', async () => {
+        let calls = 0;
+        server.use(http.post(`${API}/admin/ai/providers/:key/activate`, () => { calls += 1; return new Promise<never>(() => {}); }));
+        const user = userEvent.setup();
+        renderWithProviders(<CloudProviderCard provider={createProvider({ configured: true })} />);
+        const activate = screen.getByRole('button', { name: /set as active/i });
+        expect(activate.className).toContain('bg-panel');
+        await user.click(activate);
+        await vi.waitFor(() => expect(activate).toHaveAttribute('aria-busy', 'true'));
+        expect(activate).toHaveAttribute('aria-disabled', 'true');
+        await user.click(activate);
+        expect(calls).toBe(1);
+    });
+});
+
+describe('CloudProviderCard — theme tokens', () => {
+    it('the Active pill uses the success token', () => {
+        renderWithProviders(<CloudProviderCard provider={createProvider({ active: true, available: true })} />);
+        expect(screen.getByText('Active').className).toContain('text-success');
+    });
+
+    it('the Selected · Offline pill uses the warning token', () => {
+        renderWithProviders(<CloudProviderCard provider={createProvider({ active: true, available: false })} />);
+        expect(screen.getByText('Selected · Offline').className).toContain('text-warning');
+    });
+
+    it('the Configured pill is neutral', () => {
+        renderWithProviders(<CloudProviderCard provider={createProvider({ configured: true })} />);
+        const pill = screen.getByText('Configured');
+        expect(pill.className).toContain('text-secondary');
+        expect(pill.className).toContain('bg-overlay');
+    });
+
+    it('the provider error uses the warning token', () => {
+        renderWithProviders(<CloudProviderCard provider={createProvider({ error: 'Key rejected' })} />);
+        expect(screen.getByText('Key rejected').className).toContain('text-warning');
+    });
+
+    it('renders no raw palette hues outside its buttons', async () => {
+        const user = userEvent.setup();
+        const { container } = renderWithProviders(
+            <CloudProviderCard provider={createProvider({ configured: true, error: 'Key rejected' })} />,
+        );
+        await user.click(screen.getByRole('button', { name: /how to get an api key/i }));
+        expect(nonButtonClasses(container)).not.toMatch(/-(purple|emerald|amber|blue|red)-\d{3}/);
+    });
+});

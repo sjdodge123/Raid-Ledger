@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Switch } from '../ui/switch';
 import { PasswordInput, TestResultBanner } from './admin-form-helpers';
 import { DiscordBotInvitePanel, BotInviteLink } from './discord-bot-invite-panel';
+import { IntegrationFormActions } from './integration-form-actions';
 
 function SetupInstructions() {
     return (
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6">
+        <div className="bg-overlay/30 border border-edge rounded-lg p-4 mb-6">
             <p className="text-sm text-foreground font-semibold mb-2">Setup Instructions</p>
             <p className="text-xs text-secondary font-semibold mt-2 mb-1">1. Create a Bot</p>
             <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
-                <li>Go to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-300">Discord Developer Portal</a></li>
+                <li>Go to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Discord Developer Portal</a></li>
                 <li>Click <strong>New Application</strong>, name it, then go to the <strong>Bot</strong> tab</li>
                 <li>Click <strong>Reset Token</strong> to generate a bot token and paste it below</li>
             </ul>
@@ -29,35 +33,9 @@ function SetupInstructions() {
 function EnableToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
     return (
         <div className="flex items-center justify-between">
-            <label htmlFor="botEnabled" className="text-sm font-medium text-secondary">Enable Bot</label>
-            <button type="button" role="switch" id="botEnabled" aria-checked={enabled} onClick={onToggle}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-success/80 ${enabled ? 'bg-emerald-500' : 'bg-gray-600'}`}>
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-        </div>
-    );
-}
-
-function BotActionButtons({ configured, botToken, isPending, onTest, onClear }: {
-    configured: boolean; botToken: string; isPending: { save: boolean; test: boolean; clear: boolean };
-    onTest: () => void; onClear: () => void;
-}) {
-    return (
-        <div className="flex flex-wrap gap-3 pt-2">
-            <button type="submit" disabled={isPending.save}
-                className="flex-1 py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
-                {isPending.save ? 'Saving...' : 'Save Configuration'}
-            </button>
-            {(configured || botToken) && (
-                <button type="button" onClick={onTest} disabled={isPending.test}
-                    className="py-3 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
-                    {isPending.test ? 'Testing...' : 'Test Connection'}
-                </button>
-            )}
-            {configured && (
-                <button type="button" onClick={onClear} disabled={isPending.clear}
-                    className="py-3 px-4 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold rounded-lg transition-colors border border-red-600/50">Clear</button>
-            )}
+            {/* The Switch is named by its own aria-label; this visible text is hidden from AT so it is not read twice. */}
+            <span aria-hidden="true" className="text-sm font-medium text-secondary">Enable Bot</span>
+            <Switch label="Enable Bot" checked={enabled} onChange={() => onToggle()} />
         </div>
     );
 }
@@ -69,9 +47,9 @@ function botStatusLabel(data: { connecting?: boolean; connected?: boolean }) {
 }
 
 function botStatusDotClass(data: { connecting?: boolean; connected?: boolean }) {
-    if (data.connecting) return 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] animate-pulse';
-    if (data.connected) return 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]';
-    return 'bg-red-400 shadow-[0_0_8px_rgba(239,68,68,0.6)]';
+    if (data.connecting) return 'bg-warning animate-pulse';
+    if (data.connected) return 'bg-success';
+    return 'bg-danger';
 }
 
 function BotStatusBar({ data, onCheckPermissions, isChecking }: {
@@ -90,10 +68,10 @@ function BotStatusBar({ data, onCheckPermissions, isChecking }: {
                 )}
             </div>
             {data.connected && (
-                <button type="button" onClick={onCheckPermissions} disabled={isChecking}
-                    className="py-2 px-3 text-xs bg-violet-600 hover:bg-violet-500 disabled:bg-violet-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
-                    {isChecking ? 'Checking\u2026' : 'Test Permissions'}
-                </button>
+                <Button variant="secondary" size="sm" onClick={onCheckPermissions}
+                    loading={isChecking} loadingLabel={'Checking\u2026'}>
+                    Test Permissions
+                </Button>
             )}
         </div>
     );
@@ -105,7 +83,7 @@ type PermissionCheck = { name: string; granted: boolean };
 function MissingPermissions({ permissions }: { permissions: PermissionCheck[] }) {
     return (
         <>
-            <ul className="text-xs text-red-300 space-y-1 list-disc list-inside">
+            <ul className="text-xs text-danger space-y-1 list-disc list-inside">
                 {permissions.filter((p) => !p.granted).map((p) => (
                     <li key={p.name}>{p.name}</li>
                 ))}
@@ -120,7 +98,7 @@ function GrantedPermissions({ permissions }: { permissions: PermissionCheck[] })
         <div className="space-y-1">
             {permissions.map((p) => (
                 <div key={p.name} className="flex items-center gap-2 text-xs">
-                    <span className="text-emerald-400">{'\u2713'}</span>
+                    <span className="text-success">{'\u2713'}</span>
                     <span className="text-secondary">{p.name}</span>
                 </div>
             ))}
@@ -131,8 +109,8 @@ function GrantedPermissions({ permissions }: { permissions: PermissionCheck[] })
 function PermissionsResult({ result }: { result: { allGranted: boolean; permissions: PermissionCheck[] } | null }) {
     if (!result) return null;
     return (
-        <div data-testid="permissions-result" className={`mt-3 rounded-lg p-4 animate-[fadeIn_0.3s_ease-in] ${result.allGranted ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-amber-500/10 border border-amber-500/30'}`}>
-            <p className={`text-xs font-semibold mb-2 ${result.allGranted ? 'text-emerald-400' : 'text-amber-400'}`}>
+        <div data-testid="permissions-result" className={`mt-3 rounded-lg p-4 animate-[fadeIn_0.3s_ease-in] ${result.allGranted ? 'bg-success/10 border border-success/30' : 'bg-warning/10 border border-warning/30'}`}>
+            <p className={`text-xs font-semibold mb-2 ${result.allGranted ? 'text-success' : 'text-warning'}`}>
                 {result.allGranted ? '\u2713 All required permissions granted' : '\u26A0 Missing permissions \u2014 re-authorise the bot with the invite URL below'}
             </p>
             {result.allGranted
@@ -204,15 +182,15 @@ export function DiscordBotForm() {
         <>
             <SetupInstructions />
             <form onSubmit={h.handleSave} className="space-y-4">
-                <div>
-                    <label htmlFor="botToken" className="block text-sm font-medium text-secondary mb-1.5">Bot Token</label>
+                <Field id="botToken" label="Bot Token">
                     <PasswordInput id="botToken" value={h.botToken} onChange={h.setBotToken}
                         placeholder={h.discordBotStatus.data?.configured ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : 'Discord Bot Token'}
-                        showPassword={h.showToken} onToggleShow={() => h.setShowToken(!h.showToken)} ringColor="focus:ring-blue-500" fieldLabel="token" />
-                </div>
+                        showPassword={h.showToken} onToggleShow={() => h.setShowToken(!h.showToken)} fieldLabel="token" />
+                </Field>
                 <EnableToggle enabled={h.enabled} onToggle={() => h.setEnabledOverride(!h.enabled)} />
                 <TestResultBanner result={h.testResult} />
-                <BotActionButtons configured={!!h.discordBotStatus.data?.configured} botToken={h.botToken}
+                <IntegrationFormActions showTest={!!h.discordBotStatus.data?.configured || !!h.botToken}
+                    showClear={!!h.discordBotStatus.data?.configured}
                     isPending={h.isPending} onTest={h.handleTest} onClear={h.handleClear} />
             </form>
             {h.discordBotStatus.data?.configured && (

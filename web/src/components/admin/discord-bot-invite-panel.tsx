@@ -6,6 +6,7 @@
  * hardcodes a permission name or a permission integer.
  */
 import { toast } from '../../lib/toast';
+import { Button } from '../ui/button';
 import { useBotInviteInfo } from '../../hooks/admin/use-lfg-board-settings';
 
 /** Why re-authorising is safe and why editing the portal app is not enough. */
@@ -37,13 +38,12 @@ export function BotInviteLink(): React.ReactElement {
     return (
         <div className="flex flex-wrap items-center gap-3 mt-2">
             <a href={data.url} target="_blank" rel="noopener noreferrer"
-                className="text-xs underline text-blue-300 hover:text-blue-200 break-all">
+                className="text-xs underline text-success hover:opacity-80 break-all">
                 Invite URL
             </a>
-            <button type="button" onClick={() => copyInviteUrl(data.url as string)}
-                className="py-1 px-2 text-xs bg-blue-600 hover:bg-blue-500 text-foreground font-semibold rounded transition-colors">
+            <Button variant="secondary" size="sm" onClick={() => copyInviteUrl(data.url as string)}>
                 Copy invite URL
-            </button>
+            </Button>
         </div>
     );
 }

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { IgdbGameDto } from "@raid-ledger/contract";
 import type { BindingPurpose, ChannelType } from "@raid-ledger/contract";
 import {
@@ -9,6 +10,11 @@ import {
   minPlayersLabel,
 } from "@raid-ledger/contract";
 import { GameSearchInput } from "../events/game-search-input";
+import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
+import { Field } from "../ui/field";
+import { Input } from "../ui/input";
+import { Select } from "../ui/select";
 
 /**
  * Purpose options a channel of each type may legally carry (ROK-1415 invariant).
@@ -37,46 +43,63 @@ const PURPOSE_OPTIONS: Record<
   ],
 };
 
-const INPUT_CLASS =
-  "w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground " +
-  "text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40";
-const CHECKBOX_CLASS =
-  "rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40";
+const PURPOSE_HINT =
+  "Voice + a game = Activity Monitor · Voice, no game = General Lobby · " +
+  "Text = Announcements. The form won't let you save an invalid combination.";
+
+/** A whole-number field from 1 to `max`, on the shared Field + Input. */
+function NumberField(props: {
+  id: string;
+  label: string;
+  hint?: ReactNode;
+  max: number;
+  value: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <Field id={props.id} label={props.label} hint={props.hint}>
+      <Input
+        type="number"
+        min={1}
+        max={props.max}
+        step={1}
+        value={props.value}
+        onChange={(e) => props.onChange(Number(e.target.value))}
+      />
+    </Field>
+  );
+}
+
+interface MinPlayersProps {
+  purpose: BindingPurpose;
+  minPlayers: number;
+  onMinPlayersChange: (v: number) => void;
+}
 
 /**
  * The minimum-players field. Purpose-aware because the threshold counts
  * different things per purpose (ROK-1445): a General Lobby counts a detected
- * game group, an Activity Monitor counts the channel.
+ * game group, an Activity Monitor counts the channel. Both help lines are the
+ * Field hint, so the input is described by them.
  */
-function MinPlayersField({
-  purpose,
-  minPlayers,
-  onMinPlayersChange,
-}: {
-  purpose: BindingPurpose;
-  minPlayers: number;
-  onMinPlayersChange: (v: number) => void;
-}) {
-  const label = minPlayersLabel(purpose);
-  return (
-    <div>
-      <label htmlFor="minPlayers" className="block text-xs text-muted mb-1">
-        {label}
-      </label>
-      <input
-        id="minPlayers"
-        type="number"
-        min={1}
-        max={50}
-        value={minPlayers}
-        onChange={(e) => onMinPlayersChange(Number(e.target.value))}
-        className={INPUT_CLASS}
-      />
-      <p className="text-[11px] text-muted mt-1">{MIN_PLAYERS_HELP[purpose]}</p>
-      {purpose === "general-lobby" && (
-        <p className="text-[11px] text-muted mt-1">{MIN_PLAYERS_CONSEQUENCE}</p>
+function MinPlayersField(p: MinPlayersProps) {
+  const hint = (
+    <>
+      {MIN_PLAYERS_HELP[p.purpose]}{" "}
+      {p.purpose === "general-lobby" && (
+        <span className="block mt-1">{MIN_PLAYERS_CONSEQUENCE}</span>
       )}
-    </div>
+    </>
+  );
+  return (
+    <NumberField
+      id="minPlayers"
+      label={minPlayersLabel(p.purpose)}
+      hint={hint}
+      max={50}
+      value={p.minPlayers}
+      onChange={p.onMinPlayersChange}
+    />
   );
 }
 
@@ -87,36 +110,22 @@ function MinPlayersField({
  * the old "when voice empties" label described a channel-wide behaviour that
  * does not exist. The control itself is unchanged.
  */
-function AutoCloseField({
-  autoClose,
-  onAutoCloseChange,
-}: {
+function AutoCloseField(p: {
   autoClose: boolean;
   onAutoCloseChange: (v: boolean) => void;
 }) {
   return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="autoClose"
-          checked={autoClose}
-          onChange={(e) => onAutoCloseChange(e.target.checked)}
-          className={CHECKBOX_CLASS}
-        />
-        <label htmlFor="autoClose" className="text-sm text-foreground">
-          {autoCloseLabel()}
-        </label>
-      </div>
-      <p className="text-[11px] text-muted">{AUTO_CLOSE_HELP}</p>
-    </div>
+    <Checkbox
+      id="autoClose"
+      label={autoCloseLabel()}
+      description={AUTO_CLOSE_HELP}
+      checked={p.autoClose}
+      onChange={(e) => p.onAutoCloseChange(e.target.checked)}
+    />
   );
 }
 
-export function GeneralLobbySection({
-  allowJustChatting,
-  onChange,
-}: {
+export function GeneralLobbySection(p: {
   allowJustChatting: boolean;
   onChange: (v: boolean) => void;
 }) {
@@ -130,129 +139,87 @@ export function GeneralLobbySection({
         </code>{" "}
         as a manual fallback.
       </p>
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="allowJustChatting"
-          checked={allowJustChatting}
-          onChange={(e) => onChange(e.target.checked)}
-          className="rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40"
-        />
-        <label htmlFor="allowJustChatting" className="text-sm text-foreground">
-          Allow &quot;Just Chatting&quot; events (no game required)
-        </label>
-      </div>
+      <Checkbox
+        id="allowJustChatting"
+        label='Allow "Just Chatting" events (no game required)'
+        checked={p.allowJustChatting}
+        onChange={(e) => p.onChange(e.target.checked)}
+      />
     </div>
   );
+}
+
+interface VoiceMonitorFieldsProps extends MinPlayersProps {
+  autoClose: boolean;
+  onAutoCloseChange: (v: boolean) => void;
+  gracePeriod: number;
+  onGracePeriodChange: (v: number) => void;
 }
 
 /**
  * The voice-tuning settings for a monitor or lobby binding.
  *
- * @param props.purpose - Drives the threshold copy (ROK-1448 / ROK-1462 AC4).
+ * @param p.purpose - Drives the threshold copy (ROK-1448 / ROK-1462 AC4).
  */
-export function VoiceMonitorFields({
-  purpose,
-  minPlayers,
-  onMinPlayersChange,
-  autoClose,
-  onAutoCloseChange,
-  gracePeriod,
-  onGracePeriodChange,
-}: {
-  purpose: BindingPurpose;
-  minPlayers: number;
-  onMinPlayersChange: (v: number) => void;
-  autoClose: boolean;
-  onAutoCloseChange: (v: boolean) => void;
-  gracePeriod: number;
-  onGracePeriodChange: (v: number) => void;
-}) {
+export function VoiceMonitorFields(p: VoiceMonitorFieldsProps) {
   return (
     <>
       <MinPlayersField
-        purpose={purpose}
-        minPlayers={minPlayers}
-        onMinPlayersChange={onMinPlayersChange}
+        purpose={p.purpose}
+        minPlayers={p.minPlayers}
+        onMinPlayersChange={p.onMinPlayersChange}
       />
       <AutoCloseField
-        autoClose={autoClose}
-        onAutoCloseChange={onAutoCloseChange}
+        autoClose={p.autoClose}
+        onAutoCloseChange={p.onAutoCloseChange}
       />
-      <div>
-        <label htmlFor="gracePeriod" className="block text-xs text-muted mb-1">
-          Grace Period (minutes before closing)
-        </label>
-        <input
-          id="gracePeriod"
-          type="number"
-          min={1}
-          max={60}
-          step={1}
-          value={gracePeriod}
-          onChange={(e) => onGracePeriodChange(Number(e.target.value))}
-          className={INPUT_CLASS}
-        />
-      </div>
+      <NumberField
+        id="gracePeriod"
+        label="Grace Period (minutes before closing)"
+        max={60}
+        value={p.gracePeriod}
+        onChange={p.onGracePeriodChange}
+      />
     </>
   );
 }
 
-export function PurposeSelect({
-  id,
-  channelType,
-  value,
-  onChange,
-}: {
+export function PurposeSelect(p: {
   id: string;
   channelType: ChannelType;
   value: BindingPurpose;
   onChange: (v: BindingPurpose) => void;
 }) {
   return (
-    <div>
-      <label htmlFor={id} className="block text-xs text-muted mb-1">
-        Purpose
-      </label>
-      <select
-        id={id}
-        value={value}
-        onChange={(e) => onChange(e.target.value as BindingPurpose)}
-        className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+    <Field id={p.id} label="Purpose" hint={PURPOSE_HINT}>
+      <Select
+        value={p.value}
+        onChange={(e) => p.onChange(e.target.value as BindingPurpose)}
       >
-        {PURPOSE_OPTIONS[channelType].map((o) => (
+        {PURPOSE_OPTIONS[p.channelType].map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
           </option>
         ))}
-      </select>
-      <p className="text-[11px] text-muted mt-1">
-        Voice + a game = Activity Monitor · Voice, no game = General Lobby ·
-        Text = Announcements. The form won&apos;t let you save an invalid
-        combination.
-      </p>
-    </div>
+      </Select>
+    </Field>
   );
 }
 
 export function InertHealBanner({ onConvert }: { onConvert: () => void }) {
   return (
-    <div className="border border-red-500/40 bg-red-500/10 rounded-lg p-2 text-xs">
-      <div className="text-red-200 font-medium">
+    <div className="border border-danger/40 bg-danger/10 rounded-lg p-2 text-xs">
+      <div className="text-danger font-medium">
         ⚠ This voice monitor has no game — Quick Play can never fire on it.
       </div>
       <div className="flex items-center justify-between gap-2 mt-1">
-        <span className="text-red-300/80">
+        <span className="text-danger">
           Pick a game below, or convert to a General Lobby (any game,
           auto-detected).
         </span>
-        <button
-          type="button"
-          onClick={onConvert}
-          className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[11px] whitespace-nowrap"
-        >
+        <Button size="sm" onClick={onConvert} className="whitespace-nowrap">
           Convert to General Lobby
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -284,31 +251,29 @@ export function GameField({
   );
 }
 
-export function FormActions({
-  saveDisabled,
-  isSaving,
-  onCancel,
-}: {
+/**
+ * Save + Cancel. `saveDisabled` is VALIDATION only (native disabled — the
+ * inert triple cannot be saved); a pending save is Button `loading`, which
+ * keeps focus and swallows the submit (ROK-1652 ruling 7).
+ */
+export function FormActions(p: {
   saveDisabled: boolean;
   isSaving: boolean;
   onCancel: () => void;
 }) {
   return (
     <div className="flex gap-2 pt-2">
-      <button
+      <Button
         type="submit"
-        disabled={saveDisabled}
-        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm transition-colors"
+        loading={p.isSaving}
+        loadingLabel="Saving..."
+        disabled={p.saveDisabled}
       >
-        {isSaving ? "Saving..." : "Save"}
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="px-4 py-2 bg-overlay hover:bg-faint text-foreground rounded-lg text-sm transition-colors"
-      >
+        Save
+      </Button>
+      <Button variant="secondary" onClick={p.onCancel}>
         Cancel
-      </button>
+      </Button>
     </div>
   );
 }
