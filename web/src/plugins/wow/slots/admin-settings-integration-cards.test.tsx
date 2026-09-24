@@ -176,7 +176,11 @@ describe('BlizzardIntegrationSlot — test result and theme tokens', () => {
         // Ruling 9: the brand logo tile is the one hex this file keeps.
         expect(classesIn(container).match(/\[#[0-9A-Fa-f]{3,8}\]/g) ?? []).toEqual(['[#148EFF]']);
         // The card body is everything this file renders below the shared IntegrationCard header.
+        // Buttons are skipped: the Button primitive owns its variant paint (design-system §2.2).
         const body = container.querySelector('form')?.parentElement as HTMLElement;
-        expect(classesIn(body)).not.toMatch(/-(blue|emerald|red)-\d{3}/);
+        const bodyClasses = Array.from(body.querySelectorAll('[class]'))
+            .filter((el) => el.closest('button') === null)
+            .map((el) => el.getAttribute('class') ?? '').join(' ');
+        expect(bodyClasses).not.toMatch(/-(blue|emerald|red)-\d{3}/);
     });
 });
