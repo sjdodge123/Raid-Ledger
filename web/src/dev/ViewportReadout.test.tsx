@@ -35,6 +35,11 @@ describe('ViewportReadout (ROK-1661 diagnostic)', () => {
         expect(screen.queryByTestId('viewport-readout')).toBeNull();
     });
 
+    it('shell minHeight reads off when the ?noshellfloor experiment has dropped the floor', () => {
+        render(<ViewportReadout shellHeight={null} />);
+        expect(screen.getByTestId('viewport-readout')).toHaveTextContent(/shell minHeight\s*off/);
+    });
+
     it('last event starts at none and then names the most recent watched event', async () => {
         render(<ViewportReadout shellHeight={1048} />);
         const panel = screen.getByTestId('viewport-readout');
