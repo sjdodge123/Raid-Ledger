@@ -620,6 +620,15 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
         expect(rowCount('Solo Row')).toBeGreaterThan(0);
         expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
     });
+});
+
+describe('GamesPage — ROK-1650: co-op controls are the shared Slider and Checkbox', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isDesktopViewport = true;
+        mockCoopDiscover();
+        mockSearch();
+    });
 
     it('renders the online minimum as a Slider named "Online co-op" whose readout says "Any" at 0', () => {
         renderPage();
@@ -649,7 +658,6 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
             expect(box.closest('label')).toHaveClass('min-h-[44px]');
         }
     });
-
 });
 
 describe('GamesPage — ROK-1402: co-op FilterPanel — part 2', () => {
