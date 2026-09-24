@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { searchGames } from '../lib/api-client';
 import { useViewerCacheScope } from './use-auth';
@@ -24,18 +24,21 @@ export function useGameSearch(query: string, enabled = true) {
     // SAME queryKey. Superseded prefixes (e.g. `q=return` after the user keeps
     // typing `q=return to moria`) sit in the cache and run to completion —
     // wasting an IGDB call and creating races where stale results arrive after
-    // newer ones. Cancel any in-flight `/games/search` queries whose term is
-    // not the current debounced term.
+    // newer ones. Cancel this instance's own superseded term when it changes.
+    // ROK-1682: scoped to THIS instance's previous term — never other terms
+    // app-wide. A closed NominateModal mounting `useGameSearch('')` used to
+    // cancel the /games page's in-flight search, leaving it idle with no data.
+    const previousQuery = useRef(debouncedQuery);
     useEffect(() => {
-        queryClient.cancelQueries({
-            queryKey: ['games', 'search'],
-            predicate: (q) => q.queryKey[2] !== debouncedQuery,
-        });
+        const superseded = previousQuery.current;
+        previousQuery.current = debouncedQuery;
+        if (superseded === debouncedQuery) return;
+        queryClient.cancelQueries({ queryKey: ['games', 'search', superseded] });
     }, [debouncedQuery, queryClient]);
 
     return useQuery({
         // ROK-1314: viewer appended LAST on purpose — the ROK-1233 cancel
-        // predicate above reads queryKey[2] as the search term.
+        // above matches the ['games','search',term] prefix.
         queryKey: ['games', 'search', debouncedQuery, viewer],
         queryFn: ({ signal }) => searchGames(debouncedQuery, signal),
         enabled: enabled && debouncedQuery.length >= 2,
