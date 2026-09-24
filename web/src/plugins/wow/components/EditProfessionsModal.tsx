@@ -3,7 +3,11 @@ import type {
     CharacterProfessionsDto,
     ProfessionEntryDto,
 } from '@raid-ledger/contract';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Modal } from '../../../components/ui/modal';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { Select } from '../../../components/ui/select';
 import { useUpdateCharacter } from '../../../hooks/use-character-mutations';
 import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { professionNameToSlug } from '../lib/profession-icons';
@@ -128,9 +132,7 @@ export function EditProfessionsModal({
     );
 }
 
-function ProfessionSection({
-    heading, category, drafts, onChange, maxEntries, maxSkill, gameSlug, siblingNames,
-}: {
+interface ProfessionSectionProps {
     heading: string;
     category: ProfessionCategory;
     drafts: DraftEntry[];
@@ -139,7 +141,11 @@ function ProfessionSection({
     maxSkill: number;
     gameSlug: string | null;
     siblingNames: string[];
-}) {
+}
+
+function ProfessionSection({
+    heading, category, drafts, onChange, maxEntries, maxSkill, gameSlug, siblingNames,
+}: ProfessionSectionProps) {
     const allOptions = getProfessionOptions(category, gameSlug);
     return (
         <section>
@@ -156,10 +162,9 @@ function ProfessionSection({
                     />
                 ))}
                 {drafts.length < maxEntries && (
-                    <button type="button" onClick={() => onChange([...drafts, emptyEntry()])}
-                        className="text-sm text-indigo-400 hover:text-indigo-300">
+                    <Button variant="ghost" size="sm" onClick={() => onChange([...drafts, emptyEntry()])}>
                         + Add {heading.toLowerCase()}
-                    </button>
+                    </Button>
                 )}
             </div>
         </section>
@@ -176,34 +181,37 @@ function availableFor(
     return all.filter((opt) => !taken.has(opt));
 }
 
-function ProfessionRowEditor({
-    draft, onChange, onRemove, maxSkill, availableOptions,
-}: {
+interface ProfessionRowEditorProps {
     draft: DraftEntry;
     onChange: (next: DraftEntry) => void;
     onRemove: () => void;
     maxSkill: number;
     availableOptions: readonly string[];
-}) {
+}
+
+function ProfessionRowEditor({
+    draft, onChange, onRemove, maxSkill, availableOptions,
+}: ProfessionRowEditorProps) {
     return (
         <div className="flex items-center gap-2">
-            <select value={draft.name}
-                onChange={(e) => onChange({ ...draft, name: e.target.value })}
-                aria-label="Profession"
-                className="flex-1 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground">
-                <option value="">Select profession…</option>
-                {availableOptions.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                ))}
-            </select>
-            <input type="number" inputMode="numeric" min="0" max={maxSkill} value={draft.skillLevel}
-                aria-label="Skill" placeholder="0"
-                onChange={(e) => onChange({ ...draft, skillLevel: e.target.value })}
-                className="w-20 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground" />
+            <div className="flex-1 min-w-0">
+                <Select aria-label="Profession" placeholder="Select profession…" value={draft.name}
+                    onChange={(e) => onChange({ ...draft, name: e.target.value })}>
+                    {availableOptions.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                    ))}
+                </Select>
+            </div>
+            <div className="w-20 shrink-0">
+                <Input type="number" inputMode="numeric" min={0} max={maxSkill} value={draft.skillLevel}
+                    aria-label="Skill" placeholder="0"
+                    onChange={(e) => onChange({ ...draft, skillLevel: e.target.value })} />
+            </div>
             <span className="text-muted">/</span>
-            <span className="w-16 text-center text-muted font-mono" aria-label="Max skill">{maxSkill}</span>
-            <button type="button" onClick={onRemove} aria-label="Remove profession"
-                className="text-muted hover:text-red-400">✕</button>
+            <span className="shrink-0 min-w-[3ch] text-center text-muted font-mono" aria-label="Max skill">{maxSkill}</span>
+            <Button variant="ghost" iconOnly aria-label="Remove profession" onClick={onRemove}>
+                <XMarkIcon aria-hidden="true" className="w-5 h-5" />
+            </Button>
         </div>
     );
 }
@@ -213,11 +221,8 @@ function ModalActions({ onCancel, onSave, isPending }: {
 }) {
     return (
         <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="px-4 py-2 text-secondary hover:text-foreground transition-colors">Cancel</button>
-            <button type="button" onClick={onSave} disabled={isPending}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors">
-                {isPending ? 'Saving...' : 'Save'}
-            </button>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button onClick={onSave} loading={isPending} loadingLabel="Saving…">Save</Button>
         </div>
     );
 }
