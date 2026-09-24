@@ -20,6 +20,7 @@ import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { NotificationDedupService } from './notification-dedup.service';
 import { DEFAULT_CHANNEL_PREFS } from '../drizzle/schema/notification-preferences';
+import { buildQuietDmChannelPrefs } from '../admin/demo-test-quiet-dms.helpers';
 
 describe('DiscordNotificationService — lfg_invite prefs (ROK-1471)', () => {
   let service: DiscordNotificationService;
@@ -115,4 +116,29 @@ describe('DiscordNotificationService — lfg_invite prefs (ROK-1471)', () => {
     expect(sent).toBe(false);
     expect(mockQueue.add).not.toHaveBeenCalled();
   });
+
+  // Moderation smoke fixture: `seed-non-guild-user { quietDms: true }` stores
+  // these prefs so a live fleet bot's DM fan-out never reaches (and 10013-
+  // deactivates) the seeded fake-snowflake member.
+  it.each([
+    'lineup_steam_nudge',
+    'community_lineup',
+    'event_reminder',
+  ] as const)(
+    'does not send %s to a user whose prefs are the quietDms matrix',
+    async (type) => {
+      storedPrefs(buildQuietDmChannelPrefs());
+
+      const sent = await service.dispatch({
+        notificationId: 'n-quiet',
+        userId: 1,
+        type,
+        title: 'Link your Steam account',
+        message: 'A new community lineup is being built!',
+      });
+
+      expect(sent).toBe(false);
+      expect(mockQueue.add).not.toHaveBeenCalled();
+    },
+  );
 });
