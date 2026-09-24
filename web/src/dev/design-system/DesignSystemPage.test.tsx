@@ -328,3 +328,80 @@ describe('DesignSystemPage — ROK-1586 sections', () => {
         expect(screen.getByTestId('ds-cell-picked')).toHaveClass('ring-success');
     });
 });
+
+describe('DesignSystemPage — ROK-1655 form foundation (Forms)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('mounts the real PasswordInput: "Show Password" reveals the value', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        const input = within(forms).getByLabelText('Password', { selector: 'input' });
+        expect(input).toHaveAttribute('type', 'password');
+        const toggle = within(forms).queryByRole('button', { name: 'Show Password' });
+        expect(toggle, 'Forms must mount PasswordInput (a toggle named "Show Password")').not.toBeNull();
+        fireEvent.click(toggle!);
+        expect(input, 'the PasswordInput toggle must reveal the value').toHaveAttribute('type', 'text');
+        expect(within(forms).getByRole('button', { name: 'Hide Password' })).toBeInTheDocument();
+    });
+
+    it('mounts FilePicker, ColorInput and a brandColor Button', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        expect(within(forms).queryByRole('button', { name: 'Upload logo' }), 'a FilePicker trigger must be present').not.toBeNull();
+        expect(forms.querySelector('input[type="file"]'), 'the FilePicker keeps its hidden native input').not.toBeNull();
+        expect(within(forms).queryByRole('textbox', { name: 'Accent' }), 'the ColorInput hex textbox must be present').not.toBeNull();
+        expect(within(forms).queryByLabelText('Accent colour picker'), 'the ColorInput well must be present').not.toBeNull();
+        const brand = within(forms).queryByRole('button', { name: 'Link Discord' });
+        expect(brand, 'a brandColor Button demo must be present').not.toBeNull();
+        expect(brand).toHaveAttribute('data-brand-fill');
+    });
+});
+
+describe('DesignSystemPage — ROK-1655 form foundation (Overlays)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    function openFormModal(): HTMLElement {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const overlays = screen.getByTestId('ds-overlays');
+        fireEvent.click(within(overlays).getByRole('button', { name: 'Open form modal' }));
+        return screen.getByRole('dialog', { name: 'Edit note' });
+    }
+
+    it('the form Modal pins its footer outside the scrolling body', () => {
+        const dialog = openFormModal();
+        const footer = within(dialog).queryByTestId('modal-footer');
+        expect(footer, 'the form Modal demo must pass a footer').not.toBeNull();
+        const body = within(dialog).getByRole('textbox', { name: 'Note' }).closest('.overflow-y-auto');
+        expect(body, 'the field must sit in the scrolling body').not.toBeNull();
+        expect(body!.contains(footer), 'the footer must sit outside the scroll body').toBe(false);
+    });
+
+    it('a dirty Escape asks "Discard your changes?", and so does a dirty Cancel', () => {
+        const dialog = openFormModal();
+        fireEvent.change(within(dialog).getByRole('textbox', { name: 'Note' }), { target: { value: 'half-typed' } });
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty Escape must ask first').not.toBeNull();
+        expect(screen.getByRole('dialog', { name: 'Edit note' })).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('discard-changes-keep'));
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' })).toBeNull();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty Cancel must ask too').not.toBeNull();
+    });
+
+    it('the form BottomSheet has a pinned footer and guards a dirty Escape', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        fireEvent.click(within(screen.getByTestId('ds-overlays')).getByRole('button', { name: 'Open form sheet' }));
+        expect(screen.queryByTestId('bottom-sheet-footer'), 'the form sheet demo must pass a footer').not.toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Note' }), { target: { value: 'half-typed' } });
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty sheet Escape must ask first').not.toBeNull();
+    });
+});
