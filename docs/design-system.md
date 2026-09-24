@@ -618,6 +618,22 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `#fff`; on the dark schemes it stays `text-foreground`, which is already near-white there — so the
   label reads light on every scheme, but is pure white only on the light ones. Theme colours use the variants: never pass a token or a
   hand-picked hex to `brandColor`, and never hand-write `bg-[#hex]` on a button.
+- **A segmented filter with an "All" option uses a sentinel value** (ROK-1653, ruling 6). `RadioGroup`
+  values are strings, so "no filter" is a reserved value (`'__all__'`) mapped to `null` at the boundary:
+  `value={active ?? ALL}`, `onChange={(v) => set(v === ALL ? null : v)}`. "All" is the first option and the
+  only reset — a radio can't be un-checked, so re-clicking the checked option does nothing (the old
+  toggle-to-clear pills are gone). Counts go in the labels (`All (12)`). When the options outgrow a phone,
+  wrap the group in `max-w-full overflow-x-auto` and pass `className="[&_label]:whitespace-nowrap"` so the
+  track scrolls inside its own box. Reference: `pages/admin/cron-jobs-panel.tsx::ThemeFilter`. Per-option
+  hues (the cron themes' colours) are dropped — the segmented ON state is the one treatment.
+- **Row action menus are `Button` rows** (ROK-1653, ruling 10): a `role="menu"` popover (`bg-panel
+  border-edge rounded-lg shadow-lg p-1`) of `<Button role="menuitem" variant="ghost" size="sm" fullWidth>`,
+  with `destructive-soft` for the destructive rows (Kick / Ban / Remove) — no new tone prop. `Button`
+  centres its label and has no tailwind-merge, so a `justify-start` override is unreliable; left-align by
+  widening the label span instead: `className="[&>[data-button-label]]:w-full"` (the span's own
+  `inline-flex` then packs icon + text from the left). Reference:
+  `components/admin/UserManagementRow.tsx::ActionMenuList`. That menu dismisses on Esc and outside click
+  only; the §4.14 dropdown (`SchedulingManageDropdown`) is the one with full arrow/Home/End menu keys.
 
 **Guard:** `components/ui/form-primitives.guard.test.ts` freezes raw `<input>` / `<select>` / `<textarea>` /
 `<button>` outside `components/ui` and `dev` at `form-primitives.baseline.json`. The list only shrinks: a new

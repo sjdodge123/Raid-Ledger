@@ -105,6 +105,23 @@ describe('DesignSystemPage — Forms section', () => {
         expect(within(screen.getByRole('listbox', { name: 'Game' })).getAllByRole('option').length).toBeGreaterThan(1);
     });
 
+    it('the Forms section renders the segmented "All" filter and the row-menu recipes (ROK-1653)', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        const themes = within(forms).getByRole('radiogroup', { name: 'Filter by theme' });
+        expect(within(themes).getByRole('radio', { name: 'All (6)' })).toBeChecked();
+        expect(within(forms).getByText('Showing all 6 jobs')).toBeInTheDocument();
+        fireEvent.click(within(themes).getByRole('radio', { name: 'Discord (2)' }));
+        expect(within(forms).getByText('Showing 2 Discord jobs')).toBeInTheDocument();
+        fireEvent.click(within(themes).getByRole('radio', { name: 'All (6)' }));
+        expect(within(forms).getByText('Showing all 6 jobs')).toBeInTheDocument();
+        const menu = within(forms).getByRole('menu', { name: 'Row actions' });
+        expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual(['Edit role', 'Kick', 'Ban']);
+        expect(within(menu).getByRole('menuitem', { name: 'Ban' })).toHaveClass('text-danger', '[&>[data-button-label]]:w-full');
+        expect(within(menu).getByRole('menuitem', { name: 'Edit role' })).not.toHaveClass('text-danger');
+    });
+
     it('renders token swatches for the surface roles', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
