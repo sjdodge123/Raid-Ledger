@@ -526,6 +526,7 @@ describe('CreateEventForm — Game details fields (ROK-1649 AC1)', () => {
 function expectFieldRequired(input: Element | null, label: string) {
     expect(input).not.toBeNull();
     expect(input).toBeRequired();
+    expect(input).toHaveAttribute('required');
     expect(input).toHaveAttribute('aria-required', 'true');
     const lbl = (input as HTMLInputElement).labels?.[0];
     expect(lbl).toHaveTextContent(label);
