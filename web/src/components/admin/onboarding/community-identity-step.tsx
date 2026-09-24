@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useOnboarding } from '../../../hooks/use-onboarding';
 import { useBranding } from '../../../hooks/use-branding';
 import { API_BASE_URL } from '../../../lib/config';
@@ -10,6 +10,11 @@ import {
 } from '../../../constants/timezones';
 import { getTimezoneAbbr } from '../../../lib/timezone-utils';
 import { LOGO_ACCEPT_MIME, LOGO_FORMAT_HINT } from '../../../constants/branding';
+import { Button } from '../../ui/button';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
+import { Select } from '../../ui/select';
+import { FilePicker } from '../../ui/file-picker';
 
 interface CommunityIdentityStepProps {
   onNext: () => void;
@@ -44,17 +49,17 @@ function CommunityNameSection({ communityName, onChange }: { communityName: stri
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Community Name</h3>
                 <p className="text-xs text-muted mt-1">Displayed on the login page, page title, and header. Max 60 characters.</p>
             </div>
-            <input type="text" aria-label="Community name" maxLength={60} value={communityName} onChange={(e) => onChange(e.target.value)}
-                placeholder="e.g., Midnight Raiders, The Vanguard"
-                className="w-full sm:max-w-md px-4 py-2.5 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm" />
-            <p className="text-xs text-dim">{communityName.length}/60</p>
+            {/* The h3 above is the visible caption, so the Field label is sr-only (it still names the input). */}
+            <Field label="Community name" hideLabel hint={`${communityName.length}/60`} className="sm:max-w-md">
+                <Input type="text" maxLength={60} value={communityName} onChange={(e) => onChange(e.target.value)}
+                    placeholder="e.g., Midnight Raiders, The Vanguard" />
+            </Field>
         </div>
     );
 }
 
-function LogoUploadSection({ logoUrl, onUploadClick, isPending, fileInputRef, onFileChange }: {
-    logoUrl: string | null; onUploadClick: () => void; isPending: boolean;
-    fileInputRef: React.RefObject<HTMLInputElement | null>; onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+function LogoUploadSection({ logoUrl, isPending, onFile }: {
+    logoUrl: string | null; isPending: boolean; onFile: (file: File) => void;
 }) {
     return (
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
@@ -64,11 +69,10 @@ function LogoUploadSection({ logoUrl, onUploadClick, isPending, fileInputRef, on
             </div>
             <div className="flex items-center gap-4">
                 <LogoPreviewBox logoUrl={logoUrl} />
-                <button onClick={onUploadClick} disabled={isPending}
-                    className="px-4 py-2.5 min-h-[44px] text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50">
-                    {isPending ? 'Uploading...' : 'Upload Logo'}
-                </button>
-                <input ref={fileInputRef} type="file" accept={LOGO_ACCEPT_MIME} onChange={onFileChange} className="hidden" />
+                <FilePicker variant="secondary" accept={LOGO_ACCEPT_MIME} loading={isPending} loadingLabel="Uploading…"
+                    onFiles={(files) => onFile(files[0])}>
+                    Upload Logo
+                </FilePicker>
             </div>
         </div>
     );
@@ -84,17 +88,18 @@ function TimezoneSection({ timezone, onChange }: { timezone: string; onChange: (
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Default Timezone</h3>
                 <p className="text-xs text-muted mt-1">Used as the default for community-wide displays (e.g., event schedules). Individual users see times in their own browser timezone by default and can override it in their profile.</p>
             </div>
-            <select aria-label="Default timezone" value={timezone} onChange={(e) => onChange(e.target.value)}
-                className="w-full sm:max-w-md px-4 py-3 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors text-sm">
-                <option value={TIMEZONE_AUTO}>Auto -- detect from browser ({browserAbbr})</option>
-                {TIMEZONE_GROUPS.map((group) => (
-                    <optgroup key={group} label={group}>
-                        {TIMEZONE_OPTIONS.filter((o) => o.group === group).map((o) => (
-                            <option key={o.id} value={o.id}>{o.label} ({getTimezoneAbbr(o.id)})</option>
-                        ))}
-                    </optgroup>
-                ))}
-            </select>
+            <Field label="Default timezone" hideLabel className="sm:max-w-md">
+                <Select value={timezone} onChange={(e) => onChange(e.target.value)}>
+                    <option value={TIMEZONE_AUTO}>Auto -- detect from browser ({browserAbbr})</option>
+                    {TIMEZONE_GROUPS.map((group) => (
+                        <optgroup key={group} label={group}>
+                            {TIMEZONE_OPTIONS.filter((o) => o.group === group).map((o) => (
+                                <option key={o.id} value={o.id}>{o.label} ({getTimezoneAbbr(o.id)})</option>
+                            ))}
+                        </optgroup>
+                    ))}
+                </Select>
+            </Field>
         </div>
     );
 }
@@ -111,7 +116,7 @@ function LoginPagePreview({ logoUrl, communityName }: { logoUrl: string | null; 
                 <div className="w-56 space-y-2">
                     <div className="h-9 bg-surface/30 rounded-lg border border-edge/30" />
                     <div className="h-9 bg-surface/30 rounded-lg border border-edge/30" />
-                    <div className="h-9 bg-emerald-600/30 rounded-lg" />
+                    <div className="h-9 bg-success/30 rounded-lg" />
                 </div>
             </div>
         </div>
@@ -124,13 +129,10 @@ function StepNavigation({ onBack, onSkip, onNext, isPending }: {
     return (
         <div className="flex items-center justify-between pt-4 border-t border-edge/30">
             <div className="flex items-center gap-3">
-                <button onClick={onBack} className="px-5 py-2.5 min-h-[44px] bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm">Back</button>
-                <button onClick={onSkip} className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-edge/20">Skip</button>
+                <Button variant="secondary" onClick={onBack}>Back</Button>
+                <Button variant="ghost" onClick={onSkip}>Skip</Button>
             </div>
-            <button onClick={onNext} disabled={isPending}
-                className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white font-semibold rounded-lg transition-colors text-sm">
-                {isPending ? 'Saving...' : 'Next'}
-            </button>
+            <Button variant="primary" onClick={onNext} loading={isPending} loadingLabel="Saving…">Next</Button>
         </div>
     );
 }
@@ -142,16 +144,12 @@ function useCommunityIdentity(onNext: () => void) {
     const { updateCommunity } = useOnboarding();
     const { brandingQuery, uploadLogo } = useBranding();
     const branding = brandingQuery.data;
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const [communityName, setCommunityName] = useState(branding?.communityName || '');
     const [timezone, setTimezone] = useState(TIMEZONE_AUTO);
     const logoUrl = branding?.communityLogoUrl ? `${API_BASE_URL}${branding.communityLogoUrl}` : null;
 
-    const handleLogoUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]; if (!file) return;
-        uploadLogo.mutate(file);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    }, [uploadLogo]);
+    // FilePicker hands over a non-empty File[] and resets its input, so re-picking the same file uploads again.
+    const handleLogoUpload = useCallback((file: File) => uploadLogo.mutate(file), [uploadLogo]);
 
     const handleSaveAndNext = useCallback(() => {
         const updates: { communityName?: string; defaultTimezone?: string } = {};
@@ -161,7 +159,7 @@ function useCommunityIdentity(onNext: () => void) {
         else onNext();
     }, [communityName, timezone, updateCommunity, onNext]);
 
-    return { communityName, setCommunityName, timezone, setTimezone, logoUrl, uploadLogo, fileInputRef, handleLogoUpload, handleSaveAndNext, updateCommunity };
+    return { communityName, setCommunityName, timezone, setTimezone, logoUrl, uploadLogo, handleLogoUpload, handleSaveAndNext, updateCommunity };
 }
 
 /**
@@ -177,8 +175,7 @@ export function CommunityIdentityStep({ onNext, onBack, onSkip }: CommunityIdent
                 <p className="text-sm text-muted mt-1">Set your community's name and branding. These appear on the login page and throughout the app.</p>
             </div>
             <CommunityNameSection communityName={h.communityName} onChange={h.setCommunityName} />
-            <LogoUploadSection logoUrl={h.logoUrl} onUploadClick={() => h.fileInputRef.current?.click()}
-                isPending={h.uploadLogo.isPending} fileInputRef={h.fileInputRef} onFileChange={h.handleLogoUpload} />
+            <LogoUploadSection logoUrl={h.logoUrl} isPending={h.uploadLogo.isPending} onFile={h.handleLogoUpload} />
             <TimezoneSection timezone={h.timezone} onChange={h.setTimezone} />
             <LoginPagePreview logoUrl={h.logoUrl} communityName={h.communityName} />
             <StepNavigation onBack={onBack} onSkip={onSkip} onNext={h.handleSaveAndNext} isPending={h.updateCommunity.isPending} />
