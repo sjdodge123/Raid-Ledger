@@ -4,7 +4,7 @@
  * to Wed Sep 16 2026 12:00 LOCAL so every assertion is TZ-agnostic.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RescheduleModal } from './RescheduleModal';
@@ -366,12 +366,158 @@ describe('RescheduleModal — close behavior', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('resets selection state on close', () => {
+    it('resets selection state on close (a pick is dirty, so the close goes through Discard)', () => {
         const onClose = vi.fn();
         renderModal({ onClose });
         fireEvent.click(cell(4, 21));
         fireEvent.click(screen.getByLabelText('Close modal'));
-        expect(onClose).toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
         expect(startInput().value).toBe('');
+    });
+});
+
+const discardHeading = () => screen.queryByRole('heading', { name: 'Discard your changes?' });
+
+describe('RescheduleModal — dirty-close guard (ROK-1655 AC1)', () => {
+    beforeEach(setup);
+    afterEach(teardown);
+
+    it('a dirty × asks first; Keep editing keeps the picked start', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        fireEvent.click(cell(4, 21));
+        fireEvent.click(screen.getByLabelText('Close modal'));
+        expect(discardHeading()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+        expect(discardHeading()).not.toBeInTheDocument();
+        expect(startInput().value).toBe('2026-09-24T21:00');
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('a duration-only change is dirty: Escape asks, Discard closes once', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        fireEvent.click(screen.getByRole('radio', { name: '3h' }));
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(discardHeading()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('a duration put back to the original is clean and closes at once', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        fireEvent.click(screen.getByRole('radio', { name: '3h' }));
+        fireEvent.click(screen.getByRole('radio', { name: '2h' }));
+        fireEvent.click(screen.getByLabelText('Close modal'));
+        expect(discardHeading()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('Discard drops the duration too, so the next open starts clean', () => {
+        const onClose = vi.fn();
+        const { rerender } = renderModal({ onClose });
+        fireEvent.click(screen.getByRole('radio', { name: '3h' }));
+        fireEvent.click(screen.getByLabelText('Close modal'));
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+        rerender(<RescheduleModal {...defaultProps} onClose={onClose} isOpen={false} />);
+        rerender(<RescheduleModal {...defaultProps} onClose={onClose} isOpen />);
+        expect(screen.getByRole('radio', { name: '2h' })).toBeChecked();
+        fireEvent.click(screen.getByLabelText('Close modal'));
+        expect(discardHeading()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(2);
+    });
+
+    it('a successful reschedule closes directly, not through the confirm', async () => {
+        mockMutateAsync.mockResolvedValueOnce({});
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        fireEvent.click(cell(4, 21));
+        fireEvent.click(screen.getByRole('button', { name: 'Move to Thu Sep 24, 9 PM' }));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(discardHeading()).not.toBeInTheDocument();
+    });
+
+    it('a successful Poll for Best Time closes directly, not through the confirm', async () => {
+        mockPollMutateAsync.mockResolvedValueOnce({ id: 9, lineupId: 3 });
+        const onClose = vi.fn();
+        renderModal({ onClose, gameId: 7 });
+        fireEvent.click(cell(4, 21));
+        fireEvent.click(screen.getByRole('button', { name: 'Poll for Best Time' }));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(discardHeading()).not.toBeInTheDocument();
+    });
+});
+
+describe('RescheduleModal — pinned footer (ROK-1655 AC2)', () => {
+    beforeEach(setup);
+    afterEach(teardown);
+
+    it('no footer until a start is picked', () => {
+        renderModal();
+        expect(screen.queryByTestId('modal-footer')).not.toBeInTheDocument();
+    });
+
+    it('the confirmation bar sits in the Modal footer, outside the scroll body', () => {
+        renderModal();
+        fireEvent.click(cell(4, 21));
+        const footer = screen.getByTestId('modal-footer');
+        expect(within(footer).getByRole('button', { name: 'Move to Thu Sep 24, 9 PM' })).toBeInTheDocument();
+        expect(within(footer).getByRole('button', { name: 'Clear' })).toBeInTheDocument();
+        expect(footer.contains(startInput())).toBe(false);
+    });
+});
+
+describe('RescheduleModal — phone guard and footer (ROK-1655)', () => {
+    beforeEach(() => { setup(); media.phone = true; });
+    afterEach(teardown);
+
+    const sheet = () => screen.getByRole('dialog', { name: 'Reschedule Event' });
+    function swipeDown() {
+        const handle = sheet().querySelector('.cursor-grab') as HTMLElement;
+        fireEvent.touchStart(handle, { touches: [{ clientX: 0, clientY: 300 }] });
+        fireEvent.touchMove(handle, { touches: [{ clientX: 0, clientY: 500 }] });
+        fireEvent.touchEnd(handle);
+    }
+
+    it('a dirty swipe-down asks first; Keep editing keeps the pick', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        fireEvent.click(screen.getByText('phone-pick'));
+        swipeDown();
+        expect(discardHeading()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+        expect(startInput().value).toBe('2026-09-24T21:00');
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('a dirty sheet × asks first; Discard closes once', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        fireEvent.click(screen.getByText('phone-pick'));
+        fireEvent.click(within(sheet()).getByRole('button', { name: 'Close' }));
+        expect(discardHeading()).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('a clean swipe-down closes at once', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        swipeDown();
+        expect(discardHeading()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('the confirmation bar sits in the sheet footer, outside the scroll body', () => {
+        renderModal();
+        fireEvent.click(screen.getByText('phone-pick'));
+        const footer = screen.getByTestId('bottom-sheet-footer');
+        expect(within(footer).getByRole('button', { name: 'Move to Thu Sep 24, 9 PM' })).toBeInTheDocument();
+        expect(footer.contains(startInput())).toBe(false);
     });
 });
