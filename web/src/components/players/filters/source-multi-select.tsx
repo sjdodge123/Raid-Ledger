@@ -1,8 +1,10 @@
 /**
- * Source multi-select checkbox group for player filters (ROK-821).
+ * Source multi-select checkbox group for player filters (ROK-821; ROK-1651 moved
+ * the rows onto Checkbox and the legend onto the Field label typography).
  * All unchecked = default behavior (no source filter applied).
  */
 import type { JSX } from 'react';
+import { Checkbox } from '../../ui/checkbox';
 
 const SOURCE_OPTIONS = [
     { value: 'manual', label: 'Manual' },
@@ -33,10 +35,10 @@ export function SourceMultiSelect({ selectedSources, onChange }: SourceMultiSele
 
     return (
         <fieldset>
-            <legend className="text-xs font-medium text-muted mb-2">Sources</legend>
-            <div className="flex flex-wrap gap-3">
+            <legend className="mb-1.5 text-sm font-medium text-secondary">Sources</legend>
+            <div className="flex flex-wrap gap-x-5">
                 {SOURCE_OPTIONS.map((opt) => (
-                    <SourceCheckbox
+                    <Checkbox
                         key={opt.value}
                         label={opt.label}
                         checked={effectiveSources.includes(opt.value)}
@@ -45,24 +47,5 @@ export function SourceMultiSelect({ selectedSources, onChange }: SourceMultiSele
                 ))}
             </div>
         </fieldset>
-    );
-}
-
-/** Single source checkbox item. */
-function SourceCheckbox({ label, checked, onChange }: {
-    label: string;
-    checked: boolean;
-    onChange: () => void;
-}): JSX.Element {
-    return (
-        <label className="flex items-center gap-1.5 text-sm text-foreground cursor-pointer">
-            <input
-                type="checkbox"
-                checked={checked}
-                onChange={onChange}
-                className="rounded border-edge text-emerald-500 focus:ring-emerald-500"
-            />
-            {label}
-        </label>
     );
 }

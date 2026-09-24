@@ -1,8 +1,10 @@
 /**
- * Minimum playtime input for player filters (ROK-821).
+ * Minimum playtime input for player filters (ROK-821; ROK-1651 moved it onto Field + Input).
  * Accepts hours, converts to minutes for URL/API.
  */
 import type { JSX } from 'react';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
 
 interface PlaytimeMinInputProps {
     value?: number;
@@ -10,7 +12,7 @@ interface PlaytimeMinInputProps {
     disabled?: boolean;
 }
 
-/** Number input for minimum playtime hours. Disabled when no game is selected. */
+/** Number input for minimum playtime hours. Disabled (with a visible hint) when no game is selected. */
 export function PlaytimeMinInput({ value, onChange, disabled }: PlaytimeMinInputProps): JSX.Element {
     const displayValue = value ? String(Math.round(value / 60)) : '';
 
@@ -24,19 +26,18 @@ export function PlaytimeMinInput({ value, onChange, disabled }: PlaytimeMinInput
     };
 
     return (
-        <label className={`flex flex-col gap-1.5 ${disabled ? 'opacity-50' : ''}`}>
-            <span className="text-xs font-medium text-muted">Min Hours</span>
-            <input
-                type="number"
-                aria-label="Min Hours"
-                min={0}
-                value={disabled ? '' : displayValue}
-                onChange={(e) => handleChange(e.target.value)}
-                disabled={disabled}
-                title={disabled ? 'Select a game first' : undefined}
-                placeholder="0"
-                className="w-24 px-2 py-1.5 bg-surface border border-edge rounded text-foreground text-sm placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed"
-            />
-        </label>
+        <Field label="Min hours" hint={disabled ? 'Select a game first' : undefined}>
+            <div className="w-24">
+                <Input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    value={disabled ? '' : displayValue}
+                    onChange={(e) => handleChange(e.target.value)}
+                    disabled={disabled}
+                    placeholder="0"
+                />
+            </div>
+        </Field>
     );
 }
