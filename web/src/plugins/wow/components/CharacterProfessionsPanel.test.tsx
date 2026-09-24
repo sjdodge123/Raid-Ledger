@@ -6,9 +6,13 @@
  *   • non-owner + has data → render the panel (read-only)
  *   • owner    + no data   → render an "Add Professions" CTA card
  *   • owner    + has data  → render the panel + an "Edit" affordance
+ *
+ * The real EditProfessionsModal renders here (its data hooks are mocked) so
+ * the ROK-1655 Discard → reopen round trip is exercised end to end.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { CharacterProfessionsDto } from '@raid-ledger/contract';
 import { CharacterProfessionsPanel } from './CharacterProfessionsPanel';
 
@@ -22,10 +26,28 @@ vi.mock('../lib/profession-icons', () => ({
         name.toLowerCase().replace(/\s+/g, '-'),
 }));
 
-vi.mock('./EditProfessionsModal', () => ({
-    EditProfessionsModal: ({ isOpen }: { isOpen: boolean }) =>
-        isOpen ? <div data-testid="edit-modal" /> : null,
+vi.mock('../../../hooks/use-character-mutations', () => ({
+    useUpdateCharacter: vi.fn(),
 }));
+
+vi.mock('../../../hooks/use-game-registry', () => ({
+    useGameRegistry: vi.fn(),
+}));
+
+import { useUpdateCharacter } from '../../../hooks/use-character-mutations';
+import { useGameRegistry } from '../../../hooks/use-game-registry';
+
+beforeEach(() => {
+    vi.mocked(useUpdateCharacter).mockReturnValue({
+        mutate: vi.fn(),
+        isPending: false,
+    } as unknown as ReturnType<typeof useUpdateCharacter>);
+    vi.mocked(useGameRegistry).mockReturnValue({
+        games: [{ id: 1, slug: 'world-of-warcraft-cataclysm-classic' }],
+        isLoading: false,
+        error: null,
+    } as unknown as ReturnType<typeof useGameRegistry>);
+});
 
 const TAILORING_WITH_TIER: CharacterProfessionsDto = {
     primary: [
@@ -100,5 +122,26 @@ describe('CharacterProfessionsPanel — populated state', () => {
         render(<CharacterProfessionsPanel professions={unknown} isOwner={false} characterId="c1" />);
         expect(screen.getByText('Mystery Craft')).toBeInTheDocument();
         expect(screen.queryByRole('img', { name: /mystery craft/i })).toBeNull();
+    });
+});
+
+describe('CharacterProfessionsPanel — Discard really drops the draft (ROK-1655 AC1)', () => {
+    const skillInputs = () => screen.getAllByRole('spinbutton', { name: /skill/i }) as HTMLInputElement[];
+
+    it('reopening Edit after Discard shows the saved values, not the discarded draft', async () => {
+        const user = userEvent.setup();
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} />);
+
+        await user.click(screen.getByRole('button', { name: /^edit$/i }));
+        expect(skillInputs()[0].value).toBe('450');
+        await user.clear(skillInputs()[0]);
+        await user.type(skillInputs()[0], '300');
+
+        await user.keyboard('{Escape}');
+        await user.click(screen.getByTestId('discard-changes-discard'));
+        expect(screen.queryByRole('dialog', { name: 'Edit Professions' })).toBeNull();
+
+        await user.click(screen.getByRole('button', { name: /^edit$/i }));
+        expect(skillInputs()[0].value, 'Discard must drop the draft: reopen starts from the saved 450').toBe('450');
     });
 });
