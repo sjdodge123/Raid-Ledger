@@ -4,6 +4,8 @@
  */
 import { useState } from 'react';
 import type { JSX } from 'react';
+import { Input } from '../ui/input';
+import { Slider } from '../ui/slider';
 import { formatDurationHours } from './start-lineup-config';
 
 const MIN_HOURS = 1;
@@ -29,17 +31,14 @@ function clampHours(v: number): number {
  * blur; in-range intermediates still propagate live so the slider and the
  * readout track what is being typed.
  */
-function HoursInput({
-  label,
-  testId,
-  value,
-  onChange,
-}: {
-  label: string;
-  testId: string;
-  value: number;
-  onChange: (v: number | '') => void;
-}): JSX.Element {
+function useHoursDraft(
+  value: number,
+  onChange: (v: number | '') => void,
+): {
+  draft: string | null;
+  handleChange: (raw: string) => void;
+  handleBlur: (raw: string) => void;
+} {
   const [draft, setDraft] = useState<string | null>(null);
 
   function handleChange(raw: string): void {
@@ -61,19 +60,49 @@ function HoursInput({
     onChange(Number.isFinite(parsed) ? clampHours(parsed) : value);
   }
 
+  return { draft, handleChange, handleBlur };
+}
+
+interface DurationFieldProps {
+  label: string;
+  testId: string;
+  value: number;
+  onChange: (v: number | '') => void;
+}
+
+function HoursInput({
+  label,
+  testId,
+  value,
+  onChange,
+}: DurationFieldProps): JSX.Element {
+  const { draft, handleChange, handleBlur } = useHoursDraft(value, onChange);
   return (
-    <input
-      type="number"
-      data-testid={testId}
-      aria-label={`${label} duration in hours`}
-      min={0.25}
-      max={MAX_HOURS}
-      step="any"
-      value={draft ?? value}
-      onChange={(e) => handleChange(e.target.value)}
-      onBlur={(e) => handleBlur(e.target.value)}
-      className="w-16 shrink-0 px-2 py-1 text-sm bg-panel border border-edge rounded-lg text-foreground tabular-nums focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-    />
+    <div className="w-20 shrink-0">
+      <Input
+        type="number"
+        fieldSize="sm"
+        data-testid={testId}
+        aria-label={`${label} duration in hours`}
+        min={0.25}
+        max={MAX_HOURS}
+        step="any"
+        value={draft ?? value}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={(e) => handleBlur(e.target.value)}
+        className="tabular-nums"
+      />
+    </div>
+  );
+}
+
+/** The hours field plus its unit, beside the duration track. */
+function HoursEntry(props: DurationFieldProps): JSX.Element {
+  return (
+    <div className="flex items-center gap-2">
+      <HoursInput {...props} />
+      <span className="shrink-0 text-xs text-muted">hrs</span>
+    </div>
   );
 }
 
@@ -87,51 +116,33 @@ function HoursInput({
  * reachable without a 720-stop drag, and the readout always reflects the TRUE
  * current value — so a sub-hour preset value still renders as "15 min".
  */
-export function DurationSlider({
-  label,
-  name,
-  testId,
-  value,
-  onChange,
-}: {
-  label: string;
-  name: string;
-  testId: string;
-  value: number;
-  onChange: (v: number | '') => void;
-}): JSX.Element {
-  const sliderHours = Math.min(
-    SLIDER_MAX_HOURS,
-    Math.max(MIN_HOURS, Math.round(value)),
-  );
+export function DurationSlider(
+  props: DurationFieldProps & { name: string },
+): JSX.Element {
+  const { label, name, testId, value, onChange } = props;
+  const sliderHours = Math.min(SLIDER_MAX_HOURS, Math.max(MIN_HOURS, Math.round(value)));
+  // The track is clamped to 1h-168h, so the readout (and aria-valuetext)
+  // formats the TRUE value, not the clamped track position.
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-secondary">{label}</label>
-        <span className="text-sm text-muted tabular-nums">
-          {formatDurationHours(value)}
-        </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <input
-          type="range"
-          name={name}
-          data-testid={testId}
-          min={MIN_HOURS}
-          max={SLIDER_MAX_HOURS}
-          step={1}
-          value={sliderHours}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="w-full h-2 bg-overlay rounded-lg appearance-none cursor-pointer accent-emerald-500"
-        />
-        <HoursInput
-          label={label}
-          testId={`${testId}-hours`}
-          value={value}
-          onChange={onChange}
-        />
-        <span className="shrink-0 text-xs text-muted">hrs</span>
-      </div>
+    <div className="flex flex-wrap items-center justify-end gap-x-3">
+      <Slider
+        label={label}
+        name={name}
+        data-testid={testId}
+        min={MIN_HOURS}
+        max={SLIDER_MAX_HOURS}
+        step={1}
+        value={sliderHours}
+        onChange={onChange}
+        formatValue={() => formatDurationHours(value)}
+        wrapperClassName="flex-1 min-w-[16rem]"
+      />
+      <HoursEntry
+        label={label}
+        testId={`${testId}-hours`}
+        value={value}
+        onChange={onChange}
+      />
     </div>
   );
 }
@@ -146,23 +157,16 @@ export function VotesPerPlayerSlider({
 }): JSX.Element {
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-secondary">
-          Votes per Player
-        </label>
-        <span className="text-sm text-muted tabular-nums">{value}</span>
-      </div>
-      <input
-        type="range"
+      <Slider
+        label="Votes per Player"
         data-testid="votes-per-player"
         min={1}
         max={10}
         step={1}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-overlay rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        onChange={onChange}
       />
-      <div className="flex justify-between text-xs text-muted/60 mt-1">
+      <div className="flex justify-between text-xs text-muted/60">
         <span>1 vote</span>
         <span>10 votes</span>
       </div>
@@ -180,23 +184,17 @@ export function ThresholdSlider({
 }): JSX.Element {
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <label className="text-sm font-medium text-secondary">
-          Match Threshold
-        </label>
-        <span className="text-sm text-muted tabular-nums">{value}%</span>
-      </div>
-      <input
-        type="range"
+      <Slider
+        label="Match Threshold"
         data-testid="match-threshold"
         min={0}
         max={100}
         step={5}
         value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-overlay rounded-lg appearance-none cursor-pointer accent-emerald-500"
+        onChange={onChange}
+        formatValue={(v) => `${v}%`}
       />
-      <div className="flex justify-between text-xs text-muted/60 mt-1">
+      <div className="flex justify-between text-xs text-muted/60">
         <span>More matches</span>
         <span>Fewer, larger matches</span>
       </div>
