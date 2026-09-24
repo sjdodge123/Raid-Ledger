@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
 import { CreateEventForm } from './create-event-form';
 import { useEventTypes } from '../../hooks/use-game-registry';
+import { useEventTemplates, useCreateTemplate, useDeleteTemplate } from '../../hooks/use-event-templates';
 import type { FormState } from './create-event-form.types';
 
 // ─── jsdom does not implement scrollIntoView — suppress unhandled errors ─────
@@ -517,6 +518,100 @@ describe('CreateEventForm — Game details fields (ROK-1649 AC1)', () => {
             expect(screen.getByRole('option', { name: 'Raid (10-player)' })).toBeInTheDocument();
         } finally {
             vi.mocked(useEventTypes).mockReturnValue({ data: null } as unknown as ReturnType<typeof useEventTypes>);
+        }
+    });
+});
+
+// ─── ROK-1649 AC1: When-section fields are Field-required ────────────────────
+function expectFieldRequired(input: Element | null, label: string) {
+    expect(input).not.toBeNull();
+    expect(input).toBeRequired();
+    expect(input).toHaveAttribute('aria-required', 'true');
+    const lbl = (input as HTMLInputElement).labels?.[0];
+    expect(lbl).toHaveTextContent(label);
+    const star = lbl?.querySelector('[aria-hidden="true"]');
+    expect(star).toHaveTextContent('*');
+    expect(star).toHaveClass('text-danger');
+}
+
+describe('CreateEventForm — When section fields (ROK-1649 AC1)', () => {
+    it('Date and Start Time are natively required + aria-required, asterisk from Field', () => {
+        const { container } = renderForm();
+        expectFieldRequired(container.querySelector('#startDate'), 'Date');
+        expectFieldRequired(container.querySelector('#startTime'), 'Start Time');
+    });
+
+    it('Repeat is a combobox named exactly "Repeat"; Repeat Until is Field-required', () => {
+        const { container } = renderForm();
+        const repeat = screen.getByRole('combobox', { name: 'Repeat' });
+        expect(repeat).toHaveAttribute('id', 'recurrence');
+        fireEvent.change(repeat, { target: { value: 'weekly' } });
+        expectFieldRequired(container.querySelector('#recurrenceUntil'), 'Repeat Until');
+    });
+
+    it('an empty submit marks Date invalid and describes it with the inline error', () => {
+        const { container } = renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        const date = container.querySelector('#startDate');
+        expect(date).toHaveAttribute('aria-invalid', 'true');
+        expect(date).toHaveAccessibleDescription(/Start date is required/);
+    });
+});
+
+// ─── ROK-1649 AC2: templates bar, save-template bar and footer on Button ─────
+type TplReturn = ReturnType<typeof useEventTemplates>;
+type MutReturn = ReturnType<typeof useMutation>;
+
+describe('CreateEventForm — templates and footer on the primitives (ROK-1649 AC2)', () => {
+    it('each template is a chip plus an icon-only delete named after it', () => {
+        const del = vi.fn();
+        const tpls = { data: { data: [{ id: 42, name: 'Raid Night', config: {} }] } };
+        vi.mocked(useEventTemplates).mockReturnValue(tpls as unknown as TplReturn);
+        vi.mocked(useDeleteTemplate).mockReturnValue({ mutate: del, isPending: false } as unknown as ReturnType<typeof useDeleteTemplate>);
+        try {
+            renderForm();
+            expect(screen.getByRole('button', { name: 'Raid Night' })).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Delete template Raid Night' }));
+            expect(del).toHaveBeenCalledWith(42);
+        } finally {
+            vi.mocked(useEventTemplates).mockReturnValue({ data: null } as unknown as TplReturn);
+        }
+    });
+
+    it('Save as Template opens a Field-named "Template name" box with a named close button', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Save as Template' }));
+        const box = screen.getByRole('textbox', { name: 'Template name' });
+        expect(box).toHaveAttribute('maxLength', '100');
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Close template name' }));
+        expect(screen.queryByRole('textbox', { name: 'Template name' })).not.toBeInTheDocument();
+    });
+
+    it('a pending template save is a busy Save button named "Saving..."', () => {
+        const pending = { mutate: vi.fn(), isPending: true };
+        vi.mocked(useCreateTemplate).mockReturnValue(pending as unknown as ReturnType<typeof useCreateTemplate>);
+        try {
+            renderForm();
+            fireEvent.click(screen.getByRole('button', { name: 'Save as Template' }));
+            const save = screen.getByRole('button', { name: 'Saving...' });
+            expect(save).toHaveAttribute('aria-busy', 'true');
+            expect(save).toHaveAttribute('aria-disabled', 'true');
+        } finally {
+            vi.mocked(useCreateTemplate).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useCreateTemplate>);
+        }
+    });
+
+    it('a pending create is a busy submit button named "Creating..."', () => {
+        vi.mocked(useMutation).mockReturnValue({ mutate: vi.fn(), isPending: true } as unknown as MutReturn);
+        try {
+            renderForm();
+            const submit = screen.getByRole('button', { name: 'Creating...' });
+            expect(submit).toHaveAttribute('type', 'submit');
+            expect(submit).toHaveAttribute('aria-busy', 'true');
+            expect(submit).toHaveAttribute('aria-disabled', 'true');
+        } finally {
+            vi.mocked(useMutation).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as MutReturn);
         }
     });
 });
