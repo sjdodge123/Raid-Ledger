@@ -366,8 +366,9 @@ carries the focus trap and ARIA dialog semantics you would otherwise have to re-
   a `vh` `maxHeight` for you. Raw `vh` on iOS/iPadOS Safari excludes the toolbars, so a bottom-anchored
   sheet opened with its last rows (the ⋯ menu's Rally / Lock) under the browser bar.
 - **An action footer is a pinned flex footer OUTSIDE the scroll body** — pass it as `BottomSheet footer` /
-  `Modal footer` (ROK-1655), which render a `shrink-0` sibling after a `flex-1 min-h-0` scrolling body
-  (the game-time drawer's `phone-week-check-footer.tsx` `StepFooter` is the hand-built original). Never
+  `Modal footer` (ROK-1655), which render a `shrink-0` sibling after the scrolling body — `Modal`'s is
+  `flex-1 min-h-0`; `BottomSheet`'s is content-sized (`min-h-0 overflow-y-auto`) and shrinks and scrolls
+  only once the sheet reaches its `maxHeight` cap (the game-time drawer's `phone-week-check-footer.tsx` `StepFooter` is the hand-built original). Never
   `sticky` inside the scroll body: that is what hid the game-time drawer's Save on an iPad.
 - **A sheet that edits data guards its close** — see *Dirty-close* below.
 - `web/index.html` has no `viewport-fit=cover`, so `env(safe-area-inset-bottom)` resolves to 0 and the
@@ -511,8 +512,9 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   saved accent), never a theme colour; presets and Reset set `value` and the draft follows.
 - **Brand fills are `Button brandColor`** (ruling 3): a provider's runtime colour (`provider.color`,
   Discord `#5865F2`) as an inline fill. It replaces the variant's classes and adds `data-brand-fill` +
-  `text-foreground`, which the index.css forced-white rule (`:796-803`) turns white on the six light
-  schemes, so the label is white everywhere. Theme colours use the variants: never pass a token or a
+  `text-foreground`. On the six light schemes the index.css forced-white rule (`:797-805`) sets it to
+  `#fff`; on the dark schemes it stays `text-foreground`, which is already near-white there — so the
+  label reads light on every scheme, but is pure white only on the light ones. Theme colours use the variants: never pass a token or a
   hand-picked hex to `brandColor`, and never hand-write `bg-[#hex]` on a button.
 
 **Guard:** `components/ui/form-primitives.guard.test.ts` freezes raw `<input>` / `<select>` / `<textarea>` /
