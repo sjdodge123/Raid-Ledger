@@ -111,10 +111,14 @@ export async function resolveGameBySteamAppId(
   const existing = await lookupGameBySteamAppId(deps.db, steamAppId);
   if (existing) return { game: existing, newGameId: null };
 
-  const result = await discoverGameViaItad(steamAppId, {
-    ...deps,
-    queryIgdb: undefined, // Skip sync IGDB — enrichment runs async
-  });
+  const result = await discoverGameViaItad(
+    steamAppId,
+    {
+      ...deps,
+      queryIgdb: undefined, // Skip sync IGDB — enrichment runs async
+    },
+    'itad',
+  );
   if (!result) return null;
 
   const created = await lookupGameById(deps.db, result.gameId);

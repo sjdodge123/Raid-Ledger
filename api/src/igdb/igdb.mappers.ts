@@ -80,6 +80,7 @@ function buildMediaFields(game: IgdbApiGame) {
 export function mapApiGameToDbRow(game: IgdbApiGame) {
   const { playerCount, crossplay } = extractMultiplayerInfo(game);
   const media = buildMediaFields(game);
+  const steamAppId = extractSteamAppId(game);
 
   return {
     igdbId: game.id,
@@ -110,7 +111,11 @@ export function mapApiGameToDbRow(game: IgdbApiGame) {
     // dedup all match on it, and they need the id even for games ITAD has
     // never indexed. The DTO field is a store LINK, which is why it waits for
     // ITAD to confirm a real listing. Two purposes, not an inconsistency.
-    steamAppId: extractSteamAppId(game),
+    steamAppId,
+    // ROK-1680: provenance of steamAppId. On conflict the SET clause only
+    // re-tags when IGDB's id differs from the stored one (see
+    // igdb-upsert-sets.helpers::steamSourceOnChange).
+    steamAppIdSource: steamAppId != null ? ('igdb' as const) : null,
   };
 }
 

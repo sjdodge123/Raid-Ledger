@@ -162,7 +162,7 @@ export async function discoverGameBySteamAppId(
   deps: DiscoveryDeps,
   steamAppId: number,
 ): Promise<{ id: number; name: string; igdbId: number | null } | null> {
-  const result = await discoverGameViaItad(steamAppId, deps);
+  const result = await discoverGameViaItad(steamAppId, deps, 'itad');
   if (!result) return null;
   return findGameBySteamAppId(deps.db, steamAppId);
 }

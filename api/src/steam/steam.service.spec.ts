@@ -6,6 +6,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import * as steamHttp from './steam-http.util';
+import * as discovery from './steam-itad-discovery.helpers';
 
 jest.mock('./steam-http.util');
 
@@ -202,5 +203,30 @@ describe('SteamService', () => {
       // Let microtask queue flush so the .catch() handler runs
       await new Promise((r) => setImmediate(r));
     });
+  });
+});
+
+describe('SteamService — discovery steamAppIdSource (ROK-1680)', () => {
+  let spy: jest.SpyInstance;
+
+  beforeEach(() => {
+    spy = jest.spyOn(discovery, 'discoverGameViaItad').mockResolvedValue(null);
+  });
+
+  afterEach(() => spy.mockRestore());
+
+  it("tags owned-library discoveries 'steam'", async () => {
+    const service = new SteamService(
+      createDrizzleMock() as never,
+      { get: jest.fn().mockResolvedValue('false') } as never,
+      undefined,
+      { lookupBySteamAppId: jest.fn() } as never,
+    );
+
+    await service['discoverUnmatchedGames']([
+      { appid: 200, name: 'Owned', playtime_forever: 1 },
+    ]);
+
+    expect(spy).toHaveBeenCalledWith(200, expect.any(Object), 'steam');
   });
 });

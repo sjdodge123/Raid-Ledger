@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GameDetailDto, GameSlugLookupDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -9,6 +9,7 @@ import { IgdbService } from '../igdb/igdb.service';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 import { mapDbRowToDetail } from '../igdb/igdb.mappers';
+import { steamSourceOnChange } from '../igdb/igdb-upsert-sets.helpers';
 import type { ItadGame } from '../itad/itad.constants';
 import { keepSeedOwned } from './seed-owned-games.helpers';
 
@@ -113,6 +114,7 @@ export class GamesLookupService {
           slug: itadGame.slug || itadGame.id,
           itadGameId: itadGame.id || null,
           steamAppId,
+          steamAppIdSource: steamAppId != null ? 'itad' : null,
           coverUrl: itadGame.assets?.boxart ?? null,
         })
         .returning({ id: schema.games.id });
@@ -131,6 +133,11 @@ export class GamesLookupService {
       .set({
         itadGameId: itadGame.id || null,
         steamAppId: steamAppId ?? undefined,
+        // ROK-1680: 'itad' only when this write changes the Steam id.
+        steamAppIdSource:
+          steamAppId != null
+            ? steamSourceOnChange(sql`${steamAppId}::integer`, 'itad')
+            : undefined,
         coverUrl: itadGame.assets?.boxart ?? undefined,
       })
       .where(eq(schema.games.id, id));
