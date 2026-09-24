@@ -74,6 +74,14 @@ async function seedGame(
   return row.id;
 }
 
+/** A row that already has IGDB_ID's Steam id X, tagged `source`. */
+function seedStored(
+  source: 'steam' | 'itad',
+  igdbId: number | null = IGDB_ID,
+): Promise<number> {
+  return seedGame({ igdbId, steamAppId: STEAM_X, steamAppIdSource: source });
+}
+
 async function readGame(where: { id: number } | { igdbId: number }) {
   const cond =
     'id' in where
@@ -86,11 +94,7 @@ async function readGame(where: { id: number } | { igdbId: number }) {
 
 describe.each(PATHS)('ROK-1680 IGDB steam_app_id_source — %s', (_, write) => {
   it("(a) keeps 'steam' when IGDB agrees with the stored Steam id", async () => {
-    const id = await seedGame({
-      igdbId: IGDB_ID,
-      steamAppId: STEAM_X,
-      steamAppIdSource: 'steam',
-    });
+    const id = await seedStored('steam');
 
     await write(igdbGame(STEAM_X));
 
@@ -101,11 +105,7 @@ describe.each(PATHS)('ROK-1680 IGDB steam_app_id_source — %s', (_, write) => {
   });
 
   it("(b) tags 'igdb' when IGDB replaces the stored Steam id (AC5 value unchanged)", async () => {
-    const id = await seedGame({
-      igdbId: IGDB_ID,
-      steamAppId: STEAM_X,
-      steamAppIdSource: 'steam',
-    });
+    const id = await seedStored('steam');
 
     await write(igdbGame(STEAM_Y));
 
@@ -131,11 +131,7 @@ describe.each(PATHS)('ROK-1680 IGDB steam_app_id_source — %s', (_, write) => {
   });
 
   it("(e) keeps 'itad' when IGDB merges into an ITAD row by the same Steam id", async () => {
-    const id = await seedGame({
-      igdbId: null,
-      steamAppId: STEAM_X,
-      steamAppIdSource: 'itad',
-    });
+    const id = await seedStored('itad', null);
 
     await write(igdbGame(STEAM_X));
 
@@ -146,11 +142,7 @@ describe.each(PATHS)('ROK-1680 IGDB steam_app_id_source — %s', (_, write) => {
   });
 
   it('(f) keeps id and source when IGDB carries no Steam id', async () => {
-    const id = await seedGame({
-      igdbId: IGDB_ID,
-      steamAppId: STEAM_X,
-      steamAppIdSource: 'steam',
-    });
+    const id = await seedStored('steam');
 
     await write(igdbGame(null));
 
