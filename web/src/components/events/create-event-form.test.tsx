@@ -120,33 +120,26 @@ describe('CreateEventForm — custom duration inputs stacking', () => {
 });
 
 function createeventformSlotStepperBehaviorGroup1() {
-it('increments slot value when + button is clicked', () => {
-        const { container } = renderForm();
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        const firstInput = numberInputs[0] as HTMLInputElement;
-        const initialValue = parseInt(firstInput.value);
+it('increments slot value when the Increase button is clicked', () => {
+        renderForm();
+        // Generic Slots is the default: one "Players" stepper
+        const playersInput = screen.getByRole('spinbutton', { name: 'Players slots' });
+        const initialValue = parseInt((playersInput as HTMLInputElement).value);
 
-        const incrementButtons = screen.getAllByRole('button', { name: '+' });
-        fireEvent.click(incrementButtons[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Increase Players' }));
 
-        expect(parseInt(firstInput.value)).toBe(initialValue + 1);
+        expect(playersInput).toHaveValue(initialValue + 1);
     });
 
-it('decrements slot value when - button is clicked', () => {
-        const { container } = renderForm();
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        const firstInput = numberInputs[0] as HTMLInputElement;
-        const initialValue = parseInt(firstInput.value);
+it('decrements slot value when the Decrease button is clicked', () => {
+        renderForm();
+        const playersInput = screen.getByRole('spinbutton', { name: 'Players slots' });
+        const initialValue = parseInt((playersInput as HTMLInputElement).value);
 
-        const decrementButtons = screen.getAllByRole('button', { name: '-' });
-        fireEvent.click(decrementButtons[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Decrease Players' }));
 
         // Value should not go below 0 (min)
-        expect(parseInt(firstInput.value)).toBe(Math.max(0, initialValue - 1));
+        expect(playersInput).toHaveValue(Math.max(0, initialValue - 1));
     });
 
 }
@@ -154,16 +147,10 @@ it('decrements slot value when - button is clicked', () => {
 function createeventformSlotStepperBehaviorGroup2() {
 it('decrement button is disabled when value is at minimum (0)', () => {
         renderForm();
-        // Find the Tank row's decrement button (Tank defaults to 2 for MMO)
-        fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
-        const tankLabel = screen.getByText('Tank');
-        const tankRow = tankLabel.closest('.flex.items-center.justify-between');
-        expect(tankRow).not.toBeNull();
-        const buttons = tankRow!.querySelectorAll('button[type="button"]');
-        // First button in the row is decrement (-), last is increment (+)
-        const tankDecrement = buttons[0] as HTMLButtonElement;
-        const tankInput = tankRow!.querySelector('input[type="number"]') as HTMLInputElement;
-        expect(tankDecrement).not.toBeUndefined();
+        // Switch to MMO roles, then walk the Tank stepper down to 0
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
+        const tankDecrement = screen.getByRole('button', { name: 'Decrease Tank' });
+        const tankInput = screen.getByRole('spinbutton', { name: 'Tank slots' }) as HTMLInputElement;
 
         // Click decrement until we reach 0
         const initialVal = parseInt(tankInput.value);
@@ -183,10 +170,11 @@ describe('CreateEventForm — SlotStepper behavior', () => {
 });
 
 describe('CreateEventForm — desktop layout unchanged', () => {
-    it('renders all slot type buttons', () => {
+    it('renders the Slot Type radiogroup with both options', () => {
         renderForm();
-        expect(screen.getByRole('button', { name: 'MMO Roles' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Generic Slots' })).toBeInTheDocument();
+        expect(screen.getByRole('radiogroup', { name: 'Slot Type' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'MMO Roles' })).not.toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Generic Slots' })).toBeChecked();
     });
 
     it('renders all duration preset radios', () => {
@@ -215,8 +203,9 @@ describe('CreateEventForm — desktop layout unchanged', () => {
 describe('CreateEventForm — MMO vs generic slot toggle', () => {
     it('shows MMO role steppers (Tank, Healer, DPS) when MMO Roles selected', () => {
         renderForm();
-        fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
 
+        expect(screen.getByRole('radio', { name: 'MMO Roles' })).toBeChecked();
         expect(screen.getByText('Tank')).toBeInTheDocument();
         expect(screen.getByText('Healer')).toBeInTheDocument();
         expect(screen.getByText('DPS')).toBeInTheDocument();
@@ -224,7 +213,7 @@ describe('CreateEventForm — MMO vs generic slot toggle', () => {
 
     it('shows Players stepper when Generic Slots selected', () => {
         renderForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Generic Slots' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Generic Slots' }));
 
         expect(screen.getByText('Players')).toBeInTheDocument();
     });
@@ -233,7 +222,7 @@ describe('CreateEventForm — MMO vs generic slot toggle', () => {
         renderForm();
         expect(screen.queryByText('Bench')).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
         expect(screen.queryByText('Bench')).not.toBeInTheDocument();
     });
 });
