@@ -222,21 +222,38 @@ export const DEFAULT_TRUST_PROXY = 'loopback, linklocal, uniquelocal';
 
 /**
  * Resolves Express's `trust proxy` value from `TRUST_PROXY`: a whole number is
- * a hop count, anything else passes through in Express syntax (IPs, CIDRs or
- * the named subnets, comma-separated). Unset or blank → the private subnets.
+ * a hop count, `true`/`false` (any case) are the Express booleans, anything
+ * else passes through in Express syntax (IPs, CIDRs or the named subnets,
+ * comma-separated). Unset or blank → the private subnets. The booleans must be
+ * mapped: Express compiles the STRING 'true' as an IP and throws at boot.
  */
-export function resolveTrustProxy(raw: string | undefined): number | string {
+export function resolveTrustProxy(
+  raw: string | undefined,
+): boolean | number | string {
   const value = raw?.trim();
   if (!value) return DEFAULT_TRUST_PROXY;
+  const lower = value.toLowerCase();
+  if (lower === 'true' || lower === 'false') return lower === 'true';
   return /^\d+$/.test(value) ? Number(value) : value;
 }
 
-/** Applies `resolveTrustProxy` in production only; dev sees no proxy. */
+/**
+ * Applies `resolveTrustProxy` in production only; dev sees no proxy. A value
+ * Express cannot compile (a typo such as `loopbak`) fails boot with a message
+ * that names the variable instead of a bare "invalid IP address".
+ */
 export function applyTrustProxy(
   app: NestExpressApplication,
   isProduction: boolean,
   raw: string | undefined,
 ): void {
   if (!isProduction) return;
-  app.set('trust proxy', resolveTrustProxy(raw));
+  try {
+    app.set('trust proxy', resolveTrustProxy(raw));
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    throw new Error(`Invalid TRUST_PROXY "${raw?.trim()}": ${reason}`, {
+      cause: err,
+    });
+  }
 }

@@ -87,6 +87,33 @@ describe('resolveTrustProxy (ROK-1665)', () => {
     expect(resolveTrustProxy(list)).toBe(list);
     expect(resolveTrustProxy('loopback')).toBe('loopback');
   });
+
+  // Express compiles a STRING 'true'/'false' as an IP and throws at boot.
+  it('maps true/false (any case) to the Express booleans', () => {
+    expect(resolveTrustProxy('true')).toBe(true);
+    expect(resolveTrustProxy(' TRUE ')).toBe(true);
+    expect(resolveTrustProxy('false')).toBe(false);
+    expect(resolveTrustProxy('False')).toBe(false);
+  });
+});
+
+describe('applyTrustProxy on a real Express app (ROK-1665)', () => {
+  let app: NestExpressApplication;
+  beforeAll(async () => {
+    const module = await Test.createTestingModule({}).compile();
+    app = module.createNestApplication<NestExpressApplication>();
+  });
+  afterAll(() => app.close());
+
+  it.each(['true', 'false', 'TRUE'])('boots with TRUST_PROXY=%s', (raw) => {
+    expect(() => applyTrustProxy(app, true, raw)).not.toThrow();
+  });
+
+  it('names TRUST_PROXY when the value is not valid Express syntax', () => {
+    expect(() => applyTrustProxy(app, true, 'loopbak')).toThrow(
+      'Invalid TRUST_PROXY "loopbak": invalid IP address: loopbak',
+    );
+  });
 });
 
 describe('applyTrustProxy (ROK-1665)', () => {
@@ -168,6 +195,24 @@ describe('TRUST_PROXY overrides the default (ROK-1665 AC4)', () => {
     const app = await buildApp('127.0.0.0/8');
     try {
       expect(await ipFor(app, spoofed)).toBe(BRIDGE);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('"true" trusts every hop, so the spoofable leftmost address wins', async () => {
+    const app = await buildApp('true');
+    try {
+      expect(await ipFor(app, spoofed)).toBe('1.2.3.4');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('"false" trusts no hop, so req.ip is the socket peer', async () => {
+    const app = await buildApp('false');
+    try {
+      expect(await ipFor(app, spoofed)).toMatch(/127\.0\.0\.1$/);
     } finally {
       await app.close();
     }
