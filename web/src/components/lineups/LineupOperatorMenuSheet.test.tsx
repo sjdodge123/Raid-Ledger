@@ -96,9 +96,17 @@ describe('LineupOperatorMenu — phone sheet (ROK-1584)', () => {
     });
 
     it('keeps focus on the Advance confirm button when the sheet closes (fleet UI verify, 375px)', async () => {
-        renderMenu(false);
-        // The sheet moves focus into itself on a 0ms timer; let it land so the
-        // sheet has a real "previous" (the trigger) to restore on close.
+        stubViewport(false);
+        const lineup = createMockLineupDetail({
+            status: 'building',
+        } as Parameters<typeof createMockLineupDetail>[0]);
+        renderWithProviders(<LineupOperatorMenu lineup={lineup} />);
+        // A real tap focuses the trigger (jsdom's click does not), which is the
+        // element the sheet hands focus back to when it closes.
+        const trigger = screen.getByTestId('lineup-operator-menu-trigger');
+        trigger.focus();
+        fireEvent.click(trigger);
+        // The sheet moves focus into itself on a 0ms timer; let it land.
         await act(() => new Promise<void>((r) => setTimeout(r, 0)));
         fireEvent.click(screen.getByTestId('lineup-operator-menu-advance'));
         // The modal's focus trap settles on the next animation frame.
