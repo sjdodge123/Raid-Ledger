@@ -33,27 +33,6 @@ describe('SeriesScopeModal', () => {
         expect(within(group).getByRole('radio', { name: 'All events in series' })).not.toBeChecked();
     });
 
-    it('describes each scope option', () => {
-        render(
-            <SeriesScopeModal isOpen={true} onClose={vi.fn()} onConfirm={vi.fn()} action="edit" />,
-        );
-        expect(screen.getByRole('radio', { name: 'This event only' }))
-            .toHaveAccessibleDescription('Only the selected event will be affected.');
-        expect(screen.getByRole('radio', { name: 'This and following events' }))
-            .toHaveAccessibleDescription('This event and all future events in the series.');
-        expect(screen.getByRole('radio', { name: 'All events in series' }))
-            .toHaveAccessibleDescription('Every event in the recurring series.');
-    });
-
-    it('sits the actions in the pinned modal footer', () => {
-        render(
-            <SeriesScopeModal isOpen={true} onClose={vi.fn()} onConfirm={vi.fn()} action="edit" />,
-        );
-        const footer = screen.getByTestId('modal-footer');
-        expect(within(footer).getByRole('button', { name: 'Back' })).toBeInTheDocument();
-        expect(within(footer).getByRole('button', { name: 'Continue' })).toBeInTheDocument();
-    });
-
     it('shows correct title for edit action', () => {
         render(
             <SeriesScopeModal isOpen={true} onClose={vi.fn()} onConfirm={vi.fn()} action="edit" />,
@@ -73,6 +52,32 @@ describe('SeriesScopeModal', () => {
             <SeriesScopeModal isOpen={true} onClose={vi.fn()} onConfirm={vi.fn()} action="cancel" />,
         );
         expect(screen.getByText('Cancel Series Event')).toBeInTheDocument();
+    });
+});
+
+describe('SeriesScopeModal — layout', () => {
+    beforeEach(() => { document.body.style.overflow = ''; });
+    afterEach(() => { document.body.style.overflow = ''; });
+
+    it('describes each scope option', () => {
+        render(
+            <SeriesScopeModal isOpen={true} onClose={vi.fn()} onConfirm={vi.fn()} action="edit" />,
+        );
+        expect(screen.getByRole('radio', { name: 'This event only' }))
+            .toHaveAccessibleDescription('Only the selected event will be affected.');
+        expect(screen.getByRole('radio', { name: 'This and following events' }))
+            .toHaveAccessibleDescription('This event and all future events in the series.');
+        expect(screen.getByRole('radio', { name: 'All events in series' }))
+            .toHaveAccessibleDescription('Every event in the recurring series.');
+    });
+
+    it('sits the actions in the pinned modal footer', () => {
+        render(
+            <SeriesScopeModal isOpen={true} onClose={vi.fn()} onConfirm={vi.fn()} action="edit" />,
+        );
+        const footer = screen.getByTestId('modal-footer');
+        expect(within(footer).getByRole('button', { name: 'Back' })).toBeInTheDocument();
+        expect(within(footer).getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
 });
 
