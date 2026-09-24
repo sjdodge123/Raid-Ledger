@@ -228,7 +228,7 @@ export function UserRow({ user, currentUserId, onRoleChange, handlers, isUpdatin
     return (
         <div className="flex items-center gap-3 py-2.5">
             <UserAvatar username={user.username} avatarUrl={av.url} />
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                 <span className="text-sm text-foreground truncate">{user.username}</span>
                 <RoleBadge role={user.role} />
                 <UserStatusBadge user={user} />
