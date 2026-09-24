@@ -63,7 +63,9 @@ function collectTsFiles(dir: string, rel = ''): string[] {
 }
 
 function specifiersOf(relFile: string): string[] {
-  return extractSpecifiers(readFileSync(path.join(CONTRACT_SRC, relFile), 'utf8'));
+  return extractSpecifiers(
+    readFileSync(path.join(CONTRACT_SRC, relFile), 'utf8'),
+  );
 }
 
 const contractFiles = collectTsFiles(CONTRACT_SRC);
@@ -86,7 +88,8 @@ describe('extractSpecifiers (guard self-check)', () => {
   });
 
   it('ignores specifiers that only appear in comments', () => {
-    const source = "// import 'drizzle-orm';\n/* from 'postgres' */\nconst x = 1;";
+    const source =
+      "// import 'drizzle-orm';\n/* from 'postgres' */\nconst x = 1;";
     expect(extractSpecifiers(source)).toEqual([]);
   });
 });
@@ -118,10 +121,9 @@ describe('@raid-ledger/contract purity (ROK-1668 AC3)', () => {
   });
 
   it('packages/contract/package.json does not depend on drizzle-orm', () => {
-    const pkg = JSON.parse(readFileSync(CONTRACT_PACKAGE_JSON, 'utf8')) as Record<
-      string,
-      Record<string, string> | undefined
-    >;
+    const pkg = JSON.parse(
+      readFileSync(CONTRACT_PACKAGE_JSON, 'utf8'),
+    ) as Record<string, Record<string, string> | undefined>;
     const sections = [
       'dependencies',
       'devDependencies',
