@@ -4,7 +4,7 @@
  * to Wed Sep 16 2026 12:00 LOCAL so every assertion is TZ-agnostic.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RescheduleModal } from './RescheduleModal';
@@ -443,8 +443,9 @@ describe('RescheduleModal — success paths close directly (ROK-1655)', () => {
         renderModal({ onClose });
         fireEvent.click(cell(4, 21));
         fireEvent.click(screen.getByRole('button', { name: 'Move to Thu Sep 24, 9 PM' }));
-        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        await act(async () => {}); // settle the resolved mutation
         expect(discardHeading()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 
     it('a successful Poll for Best Time closes directly, not through the confirm', async () => {
@@ -453,8 +454,9 @@ describe('RescheduleModal — success paths close directly (ROK-1655)', () => {
         renderModal({ onClose, gameId: 7 });
         fireEvent.click(cell(4, 21));
         fireEvent.click(screen.getByRole('button', { name: 'Poll for Best Time' }));
-        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        await act(async () => {}); // settle the resolved mutation
         expect(discardHeading()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });
 
