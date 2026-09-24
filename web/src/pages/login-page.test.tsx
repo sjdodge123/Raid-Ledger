@@ -191,6 +191,52 @@ describe('LoginPage — part 2', () => {
 
 });
 
+describe('LoginPage on the form primitives (ROK-1648)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('paints each provider button with its brand colour through Button brandColor', () => {
+        const github = { ...discordProvider, key: 'github', label: 'Continue with GitHub', icon: 'github', color: '#24292F' };
+        mockSystemStatus({ isFirstRun: false, authProviders: [discordProvider, github] });
+
+        renderWithRouter(<LoginPage />);
+
+        const discord = screen.getByRole('button', { name: 'Continue with Discord' });
+        expect(discord).toHaveAttribute('data-brand-fill');
+        expect(discord).toHaveStyle({ backgroundColor: '#5865F2' });
+        expect(discord.className).not.toMatch(/ring-offset-slate/);
+        const gh = screen.getByRole('button', { name: 'Continue with GitHub' });
+        expect(gh).toHaveAttribute('data-brand-fill');
+        expect(gh).toHaveStyle({ backgroundColor: '#24292F' });
+    });
+
+    it('marks the provider button busy + aria-disabled while redirecting', () => {
+        mockSystemStatus({ isFirstRun: false, authProviders: [discordProvider] });
+
+        renderWithRouter(<LoginPage />);
+        fireEvent.click(screen.getByRole('button', { name: 'Continue with Discord' }));
+
+        const busy = screen.getByRole('button', { name: 'Redirecting...' });
+        expect(busy).toHaveAttribute('aria-busy', 'true');
+        expect(busy).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('renders the "username instead" toggle as a non-submitting ghost Button', () => {
+        mockSystemStatus({ isFirstRun: false, authProviders: [discordProvider] });
+
+        renderWithRouter(<LoginPage />);
+
+        const toggle = screen.getByRole('button', { name: 'Sign in with username instead' });
+        expect(toggle).toHaveAttribute('type', 'button');
+        // Button wraps its label in a [data-button-label] span; a raw <button> does not.
+        expect(toggle.querySelector('[data-button-label]'), 'toggle is the shared Button (has a data-button-label span)').not.toBeNull();
+        fireEvent.click(toggle);
+        expect(screen.getByRole('button', { name: 'Hide username login' })).toBeInTheDocument();
+        expect(document.querySelector('#username')).not.toBeNull();
+    });
+});
+
 // ROK-313 AC4: the Discord OAuth ban/kick path redirects to
 // /login?error=suspended&reason=<enc>; the SPA must surface the reason and
 // scrub both query params. Shared by the ban and kick cooldown flows.
