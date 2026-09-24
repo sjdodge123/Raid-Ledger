@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
 import { Views, type View } from 'react-big-calendar';
 import { Z_INDEX } from '../../lib/z-index';
@@ -12,6 +13,8 @@ interface CalendarToolbarProps {
     onNext: () => void;
     onToday: () => void;
     onViewChange: (view: View) => void;
+    /** ROK-1662: trailing toolbar control — the calendar's Filters funnel (renders nothing below 1024px). */
+    action?: ReactNode;
 }
 
 function NavButtons({ view, onPrev, onNext, onToday }: { view: View; onPrev: () => void; onNext: () => void; onToday: () => void }) {
@@ -50,14 +53,17 @@ function getToolbarTitle(view: View, currentDate: Date): string {
 
 export function CalendarToolbar({
     view, currentDate, tzAbbr, isHeaderHidden, calendarView,
-    onPrev, onNext, onToday, onViewChange,
+    onPrev, onNext, onToday, onViewChange, action,
 }: CalendarToolbarProps) {
     return (
         <div className={`calendar-toolbar ${calendarView ? 'calendar-toolbar-desktop-only' : 'sticky md:static'}`}
             style={{ top: isHeaderHidden ? '4.25rem' : '8.25rem', zIndex: Z_INDEX.TOOLBAR, transition: 'top 300ms ease-in-out' }}>
             <NavButtons view={view} onPrev={onPrev} onNext={onNext} onToday={onToday} />
             <h2 className="toolbar-title">{getToolbarTitle(view, currentDate)}</h2>
-            <ViewSwitcher view={view} tzAbbr={tzAbbr} onViewChange={onViewChange} />
+            <div className="flex items-center gap-2">
+                <ViewSwitcher view={view} tzAbbr={tzAbbr} onViewChange={onViewChange} />
+                {action}
+            </div>
         </div>
     );
 }

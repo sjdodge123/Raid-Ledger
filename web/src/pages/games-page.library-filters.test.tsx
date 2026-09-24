@@ -14,7 +14,7 @@
  * IGDB" — a false statement AND a recovery action the user cannot take.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GamesPage } from './games-page';
@@ -119,27 +119,46 @@ beforeEach(() => {
     sessionStorage.clear();
 });
 
-describe('GamesPage — B1: the library chips do not lie in the LFG view', () => {
-    it('hides the whole chip row while lfg=1 is the active view', () => {
+/** Open the Filters sheet — jsdom answers every media query false, so this is the phone path (FAB + BottomSheet). */
+function openFiltersSheet(): HTMLElement {
+    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
+    return screen.getByRole('dialog');
+}
+
+// ROK-1659: the chip row retired into the one Filters panel. While lfg=1 swaps
+// in `LfgLookingGrid` (rows with neither `playerCount` nor `ownerCount`), the
+// library fields PAUSE — disabled, values kept — instead of disappearing.
+describe('GamesPage — B1: the library filters do not lie in the LFG view', () => {
+    it('pauses players, owners and genres while lfg=1 is the active view; the switch stays live', () => {
         renderPage('/games?lfg=1');
+        const sheet = openFiltersSheet();
 
-        expect(screen.queryByTestId('player-count-chip-4')).toBeNull();
-        expect(screen.queryByTestId('owners-filter-chip')).toBeNull();
+        const lfgSwitch = within(sheet).getByRole('switch', { name: 'Players are looking' });
+        expect(lfgSwitch).toHaveAttribute('aria-checked', 'true');
+        expect(lfgSwitch).toBeEnabled();
+        expect(within(sheet).getByRole('radio', { name: '4' })).toBeDisabled();
+        expect(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' })).toBeDisabled();
+        expect(within(sheet).getByTestId('genre-filter-group')).toBeDisabled();
     });
 
-    it('hides the row AND its hint even when players/owners are in the URL', () => {
+    it('keeps URL players/owners checked but paused, with no hint, while lfg=1', () => {
         renderPage('/games?lfg=1&players=4&owners=2');
+        const sheet = openFiltersSheet();
 
-        expect(screen.queryByTestId('player-count-chip-4')).toBeNull();
-        expect(screen.queryByTestId('owners-filter-chip')).toBeNull();
-        expect(screen.queryByTestId('library-filter-hint')).toBeNull();
+        expect(within(sheet).getByRole('radio', { name: '4' })).toBeChecked();
+        expect(within(sheet).getByRole('radio', { name: '4' })).toBeDisabled();
+        expect(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' })).toBeChecked();
+        expect(within(sheet).queryByTestId('library-filter-hint')).toBeNull();
     });
 
-    it('still renders the row on the normal Discover view', () => {
+    it('renders them live, with the NULL-semantics hint, on the normal Discover view', () => {
         renderPage('/games?players=4');
+        const sheet = openFiltersSheet();
 
-        expect(screen.getByTestId('player-count-chip-4')).toHaveAttribute('aria-pressed', 'true');
-        expect(screen.getByTestId('owners-filter-chip')).toBeInTheDocument();
+        expect(within(sheet).getByRole('radio', { name: '4' })).toBeChecked();
+        expect(within(sheet).getByRole('radio', { name: '4' })).toBeEnabled();
+        expect(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' })).toBeEnabled();
+        expect(within(sheet).getByTestId('library-filter-hint')).toHaveTextContent('Showing only games with player-count data');
     });
 });
 
@@ -177,5 +196,46 @@ describe('GamesPage — B2: the empty state names the filter that emptied it', (
 
         expect(screen.getByText('No games in the library yet')).toBeInTheDocument();
         expect(screen.queryByTestId('library-filters-empty')).toBeNull();
+    });
+});
+
+// ROK-1659: the URL writes the retired library-filter-chips.test.tsx covered,
+// now driven through the Filters sheet's Owners checkbox and Players radios.
+describe('GamesPage — library filter URL writes from the Filters sheet', () => {
+    it('Owners checkbox writes owners=2 alongside the other params, then clears it', () => {
+        renderPage('/games?players=4&genres=rpg');
+        const sheet = openFiltersSheet();
+        const owners = within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' });
+
+        fireEvent.click(owners);
+        const on = new URLSearchParams(screen.getByTestId('url-probe').textContent ?? '');
+        expect(on.get('owners')).toBe('2');
+        expect(on.get('players')).toBe('4');
+        expect(on.get('genres')).toBe('rpg');
+
+        fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' }));
+        const off = new URLSearchParams(screen.getByTestId('url-probe').textContent ?? '');
+        expect(off.has('owners')).toBe(false);
+        expect(off.get('players')).toBe('4');
+    });
+
+    it('"Any" drops the players param', () => {
+        renderPage('/games?players=4&owners=2');
+        const sheet = openFiltersSheet();
+
+        fireEvent.click(within(sheet).getByRole('radio', { name: 'Any' }));
+        const params = new URLSearchParams(screen.getByTestId('url-probe').textContent ?? '');
+        expect(params.has('players')).toBe(false);
+        expect(params.get('owners')).toBe('2');
+    });
+
+    it('dims a paused group once — the legend only, never a second opacity over the controls', () => {
+        renderPage('/games?lfg=1&owners=2');
+        const sheet = openFiltersSheet();
+        const owners = within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' });
+
+        expect(owners).toBeDisabled();
+        expect(owners.closest('fieldset')).not.toHaveClass('opacity-50');
+        expect(within(sheet).getByRole('radiogroup', { name: 'Players' }).parentElement).not.toHaveClass('opacity-50');
     });
 });

@@ -1,42 +1,71 @@
 /**
- * Tests for FilterPanel component (ROK-821).
- * Verifies trigger button, badge, inline/collapsible behavior, and clear all.
+ * Tests for FilterPanel component (ROK-821, ROK-1659).
+ * Verifies trigger button, active-filter badge, inline/collapsible behavior,
+ * the inner scroll region, Escape-to-close and clear all.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { screen } from '@testing-library/react';
+import { useState } from 'react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FilterPanelTrigger, FilterPanel } from './filter-panel';
 import { renderWithProviders } from '../../test/render-helpers';
 
+const originalMatchMedia = window.matchMedia;
+
+/** Evaluate `min-width` / `max-width` media queries against a fixed width. */
+function mockViewportWidth(width: number): void {
+    window.matchMedia = vi.fn().mockImplementation((query: string) => {
+        const min = /min-width:\s*(\d+)px/.exec(query);
+        const max = /max-width:\s*(\d+)px/.exec(query);
+        const matches = Boolean(min || max)
+            && (!min || width >= Number(min[1]))
+            && (!max || width <= Number(max[1]));
+        return {
+            matches, media: query, onchange: null,
+            addListener: vi.fn(), removeListener: vi.fn(),
+            addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+        };
+    }) as unknown as typeof window.matchMedia;
+}
+
+afterEach(() => {
+    window.matchMedia = originalMatchMedia;
+});
+
 describe('FilterPanelTrigger', () => {
-    it('renders a button with funnel icon', () => {
-        renderWithProviders(
-            <FilterPanelTrigger hasActiveFilters={false} onClick={vi.fn()} />,
-        );
-        expect(screen.getByRole('button', { name: /filter/i })).toBeInTheDocument();
+    it('renders a button named "Filters"', () => {
+        renderWithProviders(<FilterPanelTrigger activeCount={0} onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument();
     });
 
-    it('shows badge with result count when filters are active', () => {
-        renderWithProviders(
-            <FilterPanelTrigger resultCount={6} hasActiveFilters={true} onClick={vi.fn()} />,
-        );
-        expect(screen.getByText('6')).toBeInTheDocument();
+    it('shows the ACTIVE-FILTER count in the badge (ROK-1659)', () => {
+        renderWithProviders(<FilterPanelTrigger activeCount={3} onClick={vi.fn()} />);
+        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('3');
     });
 
-    it('does not show badge when no filters are active', () => {
-        renderWithProviders(
-            <FilterPanelTrigger resultCount={20} hasActiveFilters={false} onClick={vi.fn()} />,
-        );
-        expect(screen.queryByText('20')).not.toBeInTheDocument();
+    it('hides the badge at zero active filters', () => {
+        renderWithProviders(<FilterPanelTrigger activeCount={0} onClick={vi.fn()} />);
+        expect(screen.queryByTestId('filter-count-badge')).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Filters' })).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('describes the count to assistive tech via aria-describedby', () => {
+        renderWithProviders(<FilterPanelTrigger activeCount={2} onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveAccessibleDescription('2 active filters');
+    });
+
+    it('reflects the panel state in aria-expanded', () => {
+        const { rerender } = renderWithProviders(<FilterPanelTrigger activeCount={0} isOpen={false} onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveAttribute('aria-expanded', 'false');
+        rerender(<FilterPanelTrigger activeCount={0} isOpen onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('calls onClick when clicked', async () => {
         const user = userEvent.setup();
         const onClick = vi.fn();
-        renderWithProviders(
-            <FilterPanelTrigger hasActiveFilters={false} onClick={onClick} />,
-        );
-        await user.click(screen.getByRole('button', { name: /filter/i }));
+        renderWithProviders(<FilterPanelTrigger activeCount={0} onClick={onClick} />);
+        await user.click(screen.getByRole('button', { name: 'Filters' }));
         expect(onClick).toHaveBeenCalledOnce();
     });
 });
@@ -88,5 +117,181 @@ describe('FilterPanel', () => {
         );
         await user.click(screen.getByRole('button', { name: /clear all/i }));
         expect(onClearAll).toHaveBeenCalledOnce();
+    });
+});
+
+describe('FilterPanel — desktop inline panel (ROK-1659)', () => {
+    it('scrolls a long body inside its own region instead of clipping it', () => {
+        mockViewportWidth(1280);
+        renderWithProviders(
+            <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen onToggle={vi.fn()}>
+                <div>long list</div>
+            </FilterPanel>,
+        );
+        const body = screen.getByTestId('filter-panel-body');
+        expect(body).toContainElement(screen.getByText('long list'));
+        expect(body).toHaveClass('overflow-y-auto', 'min-h-0');
+    });
+
+    it('closes on Escape while open', () => {
+        mockViewportWidth(1280);
+        const onToggle = vi.fn();
+        renderWithProviders(
+            <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen onToggle={onToggle}>
+                <div>content</div>
+            </FilterPanel>,
+        );
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onToggle).toHaveBeenCalledOnce();
+    });
+
+    it('prefers onClose over onToggle for Escape, and ignores Escape while closed', () => {
+        mockViewportWidth(1280);
+        const onClose = vi.fn();
+        const onToggle = vi.fn();
+        const { rerender } = renderWithProviders(
+            <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen={false} onToggle={onToggle} onClose={onClose}>
+                <div>content</div>
+            </FilterPanel>,
+        );
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onClose).not.toHaveBeenCalled();
+        rerender(
+            <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen onToggle={onToggle} onClose={onClose}>
+                <div>content</div>
+            </FilterPanel>,
+        );
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledOnce();
+        expect(onToggle).not.toHaveBeenCalled();
+    });
+});
+
+describe('FilterPanel — Escape owned by another layer (ROK-1659)', () => {
+    const openPanel = (onClose: () => void) => (
+        <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen onToggle={vi.fn()} onClose={onClose}>
+            <div>content</div>
+        </FilterPanel>
+    );
+
+    it('stays open on an Escape pressed while a modal dialog is on top, and closes once it is gone', () => {
+        mockViewportWidth(1280);
+        const onClose = vi.fn();
+        const { rerender } = renderWithProviders(
+            <>
+                {openPanel(onClose)}
+                <div role="dialog" aria-modal="true"><button type="button">Drawer action</button></div>
+            </>,
+        );
+        fireEvent.keyDown(screen.getByRole('button', { name: 'Drawer action' }), { key: 'Escape' });
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onClose).not.toHaveBeenCalled();
+
+        rerender(openPanel(onClose));
+        fireEvent.keyDown(window, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('ignores an Escape another handler already consumed (defaultPrevented)', () => {
+        mockViewportWidth(1280);
+        const onClose = vi.fn();
+        renderWithProviders(openPanel(onClose));
+        const consumer = document.createElement('div');
+        consumer.addEventListener('keydown', (e) => e.preventDefault());
+        document.body.appendChild(consumer);
+        fireEvent.keyDown(consumer, { key: 'Escape' });
+        expect(onClose).not.toHaveBeenCalled();
+        consumer.remove();
+    });
+});
+
+describe('FilterPanel — collapsed panel leaves the tab order (ROK-1659)', () => {
+    it('is inert and aria-hidden while closed, and neither while open', () => {
+        mockViewportWidth(1280);
+        const panel = (isOpen: boolean) => (
+            <FilterPanel activeFilterCount={0} onClearAll={vi.fn()} isOpen={isOpen} onToggle={vi.fn()}>
+                <button type="button">Hidden control</button>
+            </FilterPanel>
+        );
+        const { rerender } = renderWithProviders(panel(false));
+        expect(screen.getByTestId('filter-panel')).toHaveAttribute('inert');
+        expect(screen.queryByRole('button', { name: 'Hidden control' })).toBeNull();
+
+        rerender(panel(true));
+        expect(screen.getByTestId('filter-panel')).not.toHaveAttribute('inert');
+        expect(screen.getByRole('button', { name: 'Hidden control' })).toBeInTheDocument();
+    });
+});
+
+describe('FilterPanel — closed sheet leaves the tab order (ROK-1659)', () => {
+    // Phone and tablet both take the BottomSheet path; a closed sheet is only
+    // translated off-screen, so without `inert` its controls stay tabbable.
+    it.each([390, 800])('keeps the closed sheet body mounted but inert and aria-hidden at %ipx', (width) => {
+        mockViewportWidth(width);
+        const panel = (isOpen: boolean) => (
+            <FilterPanel activeFilterCount={1} onClearAll={vi.fn()} isOpen={isOpen} onToggle={vi.fn()}>
+                <input type="checkbox" aria-label="Sheet option" />
+            </FilterPanel>
+        );
+        const { rerender } = renderWithProviders(panel(false));
+        // Out of the a11y tree and the Tab order, "Clear all" included ...
+        expect(screen.queryByRole('checkbox')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
+        // ... but still mounted, so body effects keep running.
+        expect(screen.getByLabelText('Sheet option').closest('[inert]')).not.toBeNull();
+
+        rerender(panel(true));
+        expect(screen.getByLabelText('Sheet option').closest('[inert]')).toBeNull();
+        expect(screen.getByRole('checkbox', { name: 'Sheet option' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Clear all' })).toBeInTheDocument();
+    });
+});
+
+describe('FilterPanelTrigger — open state and count wording (ROK-1659)', () => {
+    it('switches from the panel fill to the overlay fill while open', () => {
+        const { rerender } = renderWithProviders(<FilterPanelTrigger activeCount={0} isOpen={false} onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveClass('bg-panel', 'text-muted');
+        rerender(<FilterPanelTrigger activeCount={0} isOpen onClick={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveClass('bg-overlay', 'text-foreground');
+    });
+
+    it('uses a page-supplied description for the count', () => {
+        renderWithProviders(
+            <FilterPanelTrigger activeCount={3} onClick={vi.fn()} describeCount={(n) => `${n} games hidden`} />,
+        );
+        expect(screen.getByRole('button', { name: 'Filters' })).toHaveAccessibleDescription('3 games hidden');
+    });
+});
+
+describe('FilterPanel — "Clear all" keeps focus (ROK-1659)', () => {
+    // Clearing takes the count to 0, which unmounts the button that had focus.
+    function ClearAllHarness() {
+        const [count, setCount] = useState(2);
+        return (
+            <FilterPanel activeFilterCount={count} onClearAll={() => setCount(0)} isOpen onToggle={vi.fn()}>
+                <input type="checkbox" aria-label="Option" />
+            </FilterPanel>
+        );
+    }
+
+    function clickClearAll(): void {
+        const clear = screen.getByRole('button', { name: 'Clear all' });
+        clear.focus();
+        fireEvent.click(clear);
+        expect(screen.queryByRole('button', { name: 'Clear all' })).toBeNull();
+    }
+
+    it('moves focus to the "Filters" title on the desktop panel', () => {
+        mockViewportWidth(1280);
+        renderWithProviders(<ClearAllHarness />);
+        clickClearAll();
+        expect(screen.getByRole('heading', { name: 'Filters' })).toHaveFocus();
+    });
+
+    it('moves focus to the sheet\'s Close button below 1024px', () => {
+        mockViewportWidth(390);
+        renderWithProviders(<ClearAllHarness />);
+        clickClearAll();
+        expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     });
 });

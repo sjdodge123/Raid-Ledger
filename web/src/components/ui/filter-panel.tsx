@@ -1,108 +1,198 @@
 /**
- * Shared FilterPanel component (ROK-821).
- * Desktop: inline collapsible panel. Mobile: BottomSheet wrapper.
+ * Shared FilterPanel component (ROK-821, ROK-1659).
+ * Desktop (1024px and up): inline collapsible panel. Below: BottomSheet wrapper.
+ *
+ * Pages normally render this through `FilterEntry` (filter-entry.tsx), which
+ * pairs it with the right opener for the viewport.
  */
-import type { JSX, ReactNode } from 'react';
+import { useEffect, useId, useRef, type JSX, type ReactNode, type RefObject } from 'react';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { BottomSheet } from './bottom-sheet';
+import { FilterCountBadge } from './filter-count-badge';
+import type { DescribeFilterCount } from './filter-count-badge.helpers';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 
-interface FilterPanelTriggerProps {
-    resultCount?: number;
-    hasActiveFilters: boolean;
+export interface FilterPanelTriggerProps {
+    /** Active filters (values differing from the page defaults) — NOT a result count. Badge hidden at 0. */
+    activeCount: number;
+    /** Whether the panel is open — drives `aria-expanded`. */
+    isOpen?: boolean;
     onClick: () => void;
+    /** Screen-reader wording for the count; defaults to "N active filters". */
+    describeCount?: DescribeFilterCount;
 }
 
-/** Funnel icon button with result count badge when filters are active. */
-export function FilterPanelTrigger({ resultCount, hasActiveFilters, onClick }: FilterPanelTriggerProps): JSX.Element {
+const TRIGGER_CLASS = 'relative inline-flex shrink-0 items-center justify-center w-11 h-11 rounded-lg '
+    + 'border border-edge hover:text-foreground hover:border-edge-strong transition-colors '
+    + 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/50';
+
+/** Closed: `panel` fill, muted funnel. Open: `overlay` fill, foreground funnel. */
+const triggerStateClass = (isOpen?: boolean): string => (isOpen ? 'bg-overlay text-foreground' : 'bg-panel text-muted');
+
+/** 44px bordered funnel button with the active-filter count badge. */
+export function FilterPanelTrigger({ activeCount, isOpen, onClick, describeCount }: FilterPanelTriggerProps): JSX.Element {
+    const countId = useId();
     return (
         <button
             type="button"
             onClick={onClick}
             aria-label="Filters"
-            className="relative inline-flex items-center gap-1.5 px-3 py-2 text-sm text-muted hover:text-foreground transition-colors"
+            aria-expanded={isOpen}
+            aria-describedby={activeCount > 0 ? countId : undefined}
+            data-testid="filter-panel-trigger"
+            className={`${TRIGGER_CLASS} ${triggerStateClass(isOpen)}`}
         >
-            <FunnelIcon className="w-5 h-5" />
-            {hasActiveFilters && resultCount !== undefined && <FilterBadge count={resultCount} />}
+            <FunnelIcon className="w-5 h-5" aria-hidden="true" />
+            <FilterCountBadge count={activeCount} id={countId} describe={describeCount} offset="trigger" />
         </button>
     );
 }
 
-/** Emerald badge showing filter count. */
-function FilterBadge({ count }: { count: number }): JSX.Element {
-    return (
-        <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-emerald-500 rounded-full">
-            {count}
-        </span>
-    );
-}
-
-interface FilterPanelProps {
+export interface FilterPanelProps {
     activeFilterCount: number;
     onClearAll: () => void;
     isOpen: boolean;
     onToggle: () => void;
+    /** Close handler for the sheet's X / scrim / Escape and the desktop Escape. Defaults to `onToggle`. */
+    onClose?: () => void;
     children: ReactNode;
 }
 
-/** Responsive filter panel: inline on desktop, BottomSheet on mobile. */
-export function FilterPanel({ activeFilterCount, onClearAll, isOpen, onToggle, children }: FilterPanelProps): JSX.Element {
+/** The open funnel (only one filter entry per page); focus goes back to it on Escape. */
+const OPEN_TRIGGER_SELECTOR = '[data-testid="filter-panel-trigger"][aria-expanded="true"]';
+
+/**
+ * An Escape another layer owns: already handled (`defaultPrevented`), pressed
+ * inside a dialog that is not this panel, or pressed while a modal dialog
+ * (Modal, a drawer, a sheet) is open on top of the page. That layer closes;
+ * the inline panel underneath must stay open. A non-empty search field owns
+ * its Escape too: the browser clears it natively, so the first press clears
+ * the query and only the next one closes the panel.
+ */
+function isEscapeForAnotherLayer(e: KeyboardEvent, panel: HTMLElement | null): boolean {
+    if (e.defaultPrevented) return true;
+    const target = e.target instanceof Element ? e.target : null;
+    if (target instanceof HTMLInputElement && target.type === 'search' && target.value !== '') return true;
+    const targetDialog = target?.closest('[role="dialog"], [aria-modal="true"]');
+    if (targetDialog && !panel?.contains(targetDialog)) return true;
+    return document.querySelector('[aria-modal="true"]') !== null;
+}
+
+/**
+ * Closes the desktop inline panel on Escape (the BottomSheet handles its own)
+ * and, when focus was inside the panel, hands it back to the funnel — the
+ * collapsed panel is `inert`, so focus left in it would be lost.
+ */
+function useEscapeToClose(active: boolean, onClose: () => void, panelRef: RefObject<HTMLDivElement | null>): void {
+    useEffect(() => {
+        if (!active) return undefined;
+        const handleKeyDown = (e: KeyboardEvent): void => {
+            if (e.key !== 'Escape' || isEscapeForAnotherLayer(e, panelRef.current)) return;
+            const focusInside = panelRef.current?.contains(document.activeElement) ?? false;
+            const trigger = document.querySelector<HTMLElement>(OPEN_TRIGGER_SELECTOR);
+            onClose();
+            if (focusInside) trigger?.focus();
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [active, onClose, panelRef]);
+}
+
+/** Responsive filter panel: inline on desktop, BottomSheet below 1024px. */
+export function FilterPanel({ activeFilterCount, onClearAll, isOpen, onToggle, onClose, children }: FilterPanelProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
+    const close = onClose ?? onToggle;
+    const panelRef = useRef<HTMLDivElement>(null);
+    const sheetBodyRef = useRef<HTMLDivElement>(null);
+    useEscapeToClose(isDesktop && isOpen, close, panelRef);
 
     if (!isDesktop) {
+        // "Clear all" unmounts itself at 0; hand focus to the sheet's Close button so it isn't dropped.
+        const focusSheetClose = (): void => sheetBodyRef.current?.closest('[role="dialog"]')
+            ?.querySelector<HTMLElement>('button[aria-label="Close"]')?.focus();
         return (
-            <BottomSheet isOpen={isOpen} onClose={onToggle} title="Filters">
-                <MobileClearRow activeFilterCount={activeFilterCount} onClearAll={onClearAll} />
-                {children}
+            <BottomSheet isOpen={isOpen} onClose={close} title="Filters">
+                {/* A closed sheet only slides off-screen, so its body is `inert` + `aria-hidden` like the
+                    collapsed inline panel — still mounted for the ROK-1255 auto-seed. */}
+                <div ref={sheetBodyRef} inert={!isOpen} aria-hidden={!isOpen || undefined}>
+                    <MobileClearRow activeFilterCount={activeFilterCount} onClearAll={onClearAll} focusAfterClear={focusSheetClose} />
+                    {children}
+                </div>
             </BottomSheet>
         );
     }
 
     return (
+        <InlinePanel panelRef={panelRef} isOpen={isOpen} activeFilterCount={activeFilterCount} onClearAll={onClearAll}>
+            {children}
+        </InlinePanel>
+    );
+}
+
+/** The desktop inline card; a long body scrolls inside it. */
+function InlinePanel({ panelRef, isOpen, activeFilterCount, onClearAll, children }: {
+    panelRef: RefObject<HTMLDivElement | null>; isOpen: boolean;
+    activeFilterCount: number; onClearAll: () => void; children: ReactNode;
+}): JSX.Element {
+    return (
+        // Collapsed = `inert` + `aria-hidden`: out of the Tab order and the a11y tree, but
+        // still mounted so body effects (e.g. the ROK-1255 auto-seed) keep running.
         <div
+            ref={panelRef}
+            data-testid="filter-panel"
+            inert={!isOpen}
+            aria-hidden={!isOpen || undefined}
             className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
         >
-            <div className="bg-panel border border-edge rounded-lg p-4">
+            {/* Bounded card: the header stays put and a long body scrolls instead of being clipped. */}
+            <div className="flex flex-col max-h-[500px] bg-panel border border-edge rounded-lg p-4">
                 <FilterPanelHeader activeFilterCount={activeFilterCount} onClearAll={onClearAll} />
-                {children}
+                <div data-testid="filter-panel-body" className="min-h-0 overflow-y-auto">
+                    {children}
+                </div>
             </div>
         </div>
     );
 }
 
 /** "Clear all" button row for mobile BottomSheet (title provided by BottomSheet itself). */
-function MobileClearRow({ activeFilterCount, onClearAll }: {
+function MobileClearRow({ activeFilterCount, onClearAll, focusAfterClear }: {
     activeFilterCount: number;
     onClearAll: () => void;
+    focusAfterClear: () => void;
 }): JSX.Element | null {
     if (activeFilterCount === 0) return null;
     return (
         <div className="flex justify-end mb-4">
-            <ClearAllButton onClearAll={onClearAll} />
+            <ClearAllButton onClearAll={onClearAll} focusAfterClear={focusAfterClear} />
         </div>
     );
 }
 
-/** Title row with "Filters" and optional "Clear all" button. */
+/** Title row with "Filters" and optional "Clear all" button; the title takes focus after a clear. */
 function FilterPanelHeader({ activeFilterCount, onClearAll }: {
     activeFilterCount: number;
     onClearAll: () => void;
 }): JSX.Element {
+    const titleRef = useRef<HTMLHeadingElement>(null);
     return (
-        <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-foreground">Filters</h3>
-            {activeFilterCount > 0 && <ClearAllButton onClearAll={onClearAll} />}
+        <div className="flex shrink-0 items-center justify-between mb-4">
+            <h3 ref={titleRef} tabIndex={-1} className="text-sm font-semibold text-foreground focus:outline-none">Filters</h3>
+            {activeFilterCount > 0 && <ClearAllButton onClearAll={onClearAll} focusAfterClear={() => titleRef.current?.focus()} />}
         </div>
     );
 }
 
-/** Shared "Clear all" button. */
-function ClearAllButton({ onClearAll }: { onClearAll: () => void }): JSX.Element {
+/**
+ * Shared "Clear all" button. Clearing takes the count to 0, which unmounts this
+ * button, so focus moves to a target that stays (`focusAfterClear`) first.
+ */
+function ClearAllButton({ onClearAll, focusAfterClear }: { onClearAll: () => void; focusAfterClear: () => void }): JSX.Element {
     return (
         <button
             type="button"
-            onClick={onClearAll}
+            onClick={() => { onClearAll(); focusAfterClear(); }}
             aria-label="Clear all"
             className="text-sm text-muted hover:text-foreground transition-colors"
         >

@@ -45,8 +45,6 @@ function renderFilters(
         <CommonGroundFilters
             filters={{ ...baseFilters, ...overrides }}
             onChange={onChange}
-            search=""
-            onSearchChange={vi.fn()}
             participantCount={props.participantCount}
             coopDataAvailable={props.coopDataAvailable ?? true}
         />,
@@ -109,8 +107,6 @@ describe('CommonGroundFilters — dormant without co-op data (ROK-1400)', () => 
             <CommonGroundFilters
                 filters={baseFilters}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         expect(
@@ -262,8 +258,6 @@ describe('CommonGroundFilters — suppressAutoSeed (ROK-1400)', () => {
             <CommonGroundFilters
                 filters={{ ...baseFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={4}
                 suppressAutoSeed
             />,
