@@ -105,10 +105,11 @@ async function resolveBaseUrl(slug: string, deps: SigninLinkDeps): Promise<BaseR
   const baseUrl = `https://slot-${env.slot}.${deps.publicDomain}`;
   // Fail closed: the slot URL routes to whichever env owns the slot, so with a
   // sibling present the link could land on (and sign into) the wrong env.
-  const onSlot = listed.envs.filter((e) => e.slot === env.slot);
+  // One env is several containers (allinone + pg), each listed with the same
+  // slug — so count distinct slugs, not rows.
+  const onSlot = [...new Set(listed.envs.filter((e) => e.slot === env.slot).map((e) => e.slug ?? '(unnamed)'))];
   if (onSlot.length !== 1) {
-    const names = onSlot.map((e) => e.slug ?? '(unnamed)').join(', ');
-    return fail('slot_shared', `slot ${env.slot} hosts ${onSlot.length} envs (${names}); destroy the others so the slot URL routes to "${slug}"`);
+    return fail('slot_shared', `slot ${env.slot} hosts ${onSlot.length} envs (${onSlot.join(', ')}); destroy the others so the slot URL routes to "${slug}"`);
   }
   return { baseUrl };
 }
