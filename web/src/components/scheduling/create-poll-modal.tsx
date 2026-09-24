@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import type { IgdbGameDto } from '@raid-ledger/contract';
 import { useQuery } from '@tanstack/react-query';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
 import { useCreateSchedulingPoll } from '../../hooks/use-standalone-poll';
 import { MemberPicker } from './member-picker-modal';
 import { PollGameSearch } from './poll-game-search';
@@ -124,14 +125,35 @@ function CreatePollFormBody({ form, isPending, onSubmit }: {
         max={sliderMax}
         onChange={form.setMinVoteThreshold}
       />
-      <button
-        type="button"
-        onClick={onSubmit}
-        disabled={!form.selectedGame || isPending}
-        className="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors"
-      >
-        {isPending ? 'Creating...' : 'Create Poll'}
-      </button>
+      <CreatePollSubmit
+        disabled={!form.selectedGame}
+        isPending={isPending}
+        onSubmit={onSubmit}
+      />
     </div>
+  );
+}
+
+/**
+ * The primary action. `loading` (ruling 7) swaps the label for a spinner and
+ * an sr-only "Creating…", sets aria-busy + aria-disabled, and swallows clicks.
+ */
+function CreatePollSubmit({ disabled, isPending, onSubmit }: {
+  disabled: boolean;
+  isPending: boolean;
+  onSubmit: () => void;
+}) {
+  return (
+    <Button
+      variant="primary"
+      size="lg"
+      fullWidth
+      onClick={onSubmit}
+      disabled={disabled}
+      loading={isPending}
+      loadingLabel="Creating…"
+    >
+      Create Poll
+    </Button>
   );
 }
