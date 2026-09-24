@@ -1338,6 +1338,13 @@
       "when": 1790134827981,
       "tag": "0191_restore_seed_owned_game_names",
       "breakpoints": true
+    },
+    {
+      "idx": 192,
+      "version": "7",
+      "when": 1790218551622,
+      "tag": "0192_steam_app_id_source",
+      "breakpoints": true
     }
   ]
 }

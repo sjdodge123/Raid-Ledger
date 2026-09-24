@@ -8,6 +8,7 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   findDuplicateGames,
   mergeAndDeleteDuplicates,
+  mergeNameDuplicates,
   type DuplicateGroup,
 } from './igdb-dedup-cleanup.helpers';
 
@@ -276,5 +277,63 @@ describe('mergeAndDeleteDuplicates return shape (AC 10)', () => {
 
     expect(result.merged).toBe(3);
     expect(result.errors).toHaveLength(0);
+  });
+});
+
+// ─── ROK-1680: name-dedup carry of steam_app_id_source ────────────────────
+
+describe('mergeNameDuplicates — steamAppIdSource carry (ROK-1680)', () => {
+  const winnerRow = {
+    id: 1,
+    name: 'Carry Game',
+    igdbId: 10,
+    steamAppId: null,
+    itadGameId: null,
+  };
+  const loserRow = {
+    id: 2,
+    name: 'Carry Game',
+    igdbId: null,
+    steamAppId: 500,
+    itadGameId: 'itad-carry',
+  };
+
+  /** Drive one winner+loser name group; return the carry UPDATE's patch. */
+  async function runCarry(winnerSteamAppId: number | null) {
+    const mockDb = createDrizzleMock();
+    // selectAllRows awaits `.from()`; the carry reads end in `.limit()`.
+    mockDb.from.mockResolvedValueOnce([winnerRow, loserRow]);
+    mockDb.limit
+      .mockResolvedValueOnce([
+        {
+          steamAppId: 500,
+          itadGameId: 'itad-carry',
+          coverUrl: null,
+          steamAppIdSource: 'itad',
+        },
+      ])
+      .mockResolvedValueOnce([
+        { steamAppId: winnerSteamAppId, itadGameId: null, coverUrl: null },
+      ]);
+    const result = await mergeNameDuplicates(mockDb as never);
+    expect(result.errors).toEqual([]);
+    const calls = mockDb.set.mock.calls;
+    return calls.length ? (calls[calls.length - 1][0] as object) : undefined;
+  }
+
+  it("carries the loser's source with its steamAppId when the winner has none", async () => {
+    const patch = await runCarry(null);
+    expect(patch).toEqual(
+      expect.objectContaining({ steamAppId: 500, steamAppIdSource: 'itad' }),
+    );
+  });
+
+  it('never carries the source alone when the winner already has a steamAppId', async () => {
+    const patch = await runCarry(999);
+    expect(patch).toEqual(
+      expect.objectContaining({ itadGameId: 'itad-carry' }),
+    );
+    expect(patch).not.toHaveProperty('steamAppIdSource');
+    expect(patch).not.toHaveProperty('steamAppId');
   });
 });

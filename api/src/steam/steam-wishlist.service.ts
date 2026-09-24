@@ -147,7 +147,7 @@ export class SteamWishlistService {
     let discovered = 0;
     for (const item of unmatched) {
       try {
-        const result = await discoverGameViaItad(item.appid, deps);
+        const result = await discoverGameViaItad(item.appid, deps, 'steam');
         if (result) discovered++;
       } catch (err) {
         this.logger.warn(

@@ -34,6 +34,13 @@ export interface DiscoveryDeps {
   adultFilterEnabled: boolean;
 }
 
+/**
+ * Where the Steam app id a discovery writes came from (ROK-1680). The caller
+ * decides: an id read off a Steam API response is 'steam'; an id a user
+ * supplied and ITAD resolved is 'itad'.
+ */
+export type DiscoverySteamAppIdSource = 'steam' | 'itad';
+
 /** Result of discovering a single game via ITAD. */
 export interface DiscoveryResult {
   gameId: number;
@@ -45,11 +52,13 @@ export interface DiscoveryResult {
 function buildItadGameRow(
   itadGame: ItadGame,
   steamAppId: number,
+  steamAppIdSource: DiscoverySteamAppIdSource,
 ): GameInsertRow {
   return {
     name: itadGame.title,
     slug: itadGame.slug,
     steamAppId,
+    steamAppIdSource,
     itadGameId: itadGame.id || null,
     coverUrl: itadGame.assets?.boxart ?? null,
     hidden: false,
@@ -176,6 +185,7 @@ async function mergeIntoExisting(
     .update(schema.games)
     .set({
       steamAppId: row.steamAppId,
+      steamAppIdSource: row.steamAppIdSource,
       itadGameId: row.itadGameId,
       coverUrl: row.coverUrl ?? undefined,
       hidden: row.hidden,
@@ -289,10 +299,14 @@ function applyAdultFilter(
  * Discover a single game via ITAD, optionally enrich from IGDB,
  * insert into DB, and return the new game ID.
  * Returns null if the game is banned or ITAD lookup fails.
+ * `steamAppIdSource` is required with no default so every caller has to say
+ * where its Steam id came from (ROK-1680); it rides on the insert, the
+ * suffixed-slug retry and the merge.
  */
 export async function discoverGameViaItad(
   steamAppId: number,
   deps: DiscoveryDeps,
+  steamAppIdSource: DiscoverySteamAppIdSource,
 ): Promise<DiscoveryResult | null> {
   const itadGame = await deps.lookupBySteamAppId(steamAppId);
   if (!itadGame) return null;
@@ -303,7 +317,7 @@ export async function discoverGameViaItad(
   const banned = await isBannedBySlug(deps.db, itadGame.slug);
   if (banned) return null;
 
-  let row = buildItadGameRow(itadGame, steamAppId);
+  let row = buildItadGameRow(itadGame, steamAppId, steamAppIdSource);
   let source: DiscoveryResult['source'] = 'itad';
   let igdbThemes: number[] | undefined;
 
@@ -324,8 +338,7 @@ export async function discoverGameViaItad(
     igdbThemes,
   );
 
-  const insertRow: GameInsertRow = { ...row, hidden };
-  const [result] = await upsertGame(deps.db, insertRow);
+  const [result] = await upsertGame(deps.db, { ...row, hidden });
 
   return { gameId: result.id, source, hidden };
 }
