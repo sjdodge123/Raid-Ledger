@@ -14,6 +14,7 @@
 import { or, ilike } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { namesMatch, tokenCount } from '@raid-ledger/contract';
 import { normalizeForDedup } from './igdb-search-dedup.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -27,25 +28,12 @@ interface NameDedupRow {
   itadGameId: string | null;
 }
 
-/** Token count for a normalized name. */
-function tokenCount(normalized: string): number {
-  if (!normalized) return 0;
-  return normalized.split(' ').filter(Boolean).length;
-}
-
 /** First "significant" token (length >= 2) used as a coarse SQL prefilter. */
 function firstSignificantToken(normalized: string): string | null {
   for (const token of normalized.split(' ')) {
     if (token.length >= 2) return token;
   }
   return null;
-}
-
-/** True when two normalized names match AND have the same token count. */
-function namesMatch(a: string, b: string): boolean {
-  if (!a || !b) return false;
-  if (a !== b) return false;
-  return tokenCount(a) === tokenCount(b);
 }
 
 /**

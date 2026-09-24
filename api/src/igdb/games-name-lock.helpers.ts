@@ -33,7 +33,7 @@
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { normalizeForDedup } from './igdb-search-dedup.helpers';
+import { buildGameNameLockKeys } from '@raid-ledger/contract';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -47,26 +47,12 @@ type Db = PostgresJsDatabase<typeof schema>;
 export const GAMES_NAME_LOCK_CLASS = 1438;
 
 /**
- * Normalized, de-duplicated, SORTED lock keys for `names`.
- *
- * Sorting is what keeps two overlapping batches from deadlocking: every caller
- * acquires the shared subset of keys in the same order, so no cycle can form.
- * Callers that lock a single name can't deadlock regardless.
- *
- * Names that normalize to empty contribute no key — there is nothing for the
- * ROK-1113 guard to match on, so there is nothing to serialize.
+ * Normalized, de-duplicated, SORTED lock keys for `names` — pure key
+ * derivation, moved to `@raid-ledger/contract` (ROK-1668) and re-exported
+ * here so existing importers keep their path. Sorting is what keeps two
+ * overlapping batches from deadlocking.
  */
-export function buildGameNameLockKeys(
-  names: string | readonly string[],
-): string[] {
-  const list = typeof names === 'string' ? [names] : names;
-  const keys = new Set<string>();
-  for (const name of list) {
-    const normalized = normalizeForDedup(name);
-    if (normalized) keys.add(normalized);
-  }
-  return [...keys].sort();
-}
+export { buildGameNameLockKeys };
 
 /**
  * Run `fn` with a transaction-scoped advisory lock held on each distinct
