@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import { ReasonField } from '../lineups/shared/ReasonField';
-import { isRealDiscordId, CHECKBOX_CLASS, type ModerationTarget } from './moderation-shared';
+import { isRealDiscordId, type ModerationTarget } from './moderation-shared';
 import type { KickUserDto } from '@raid-ledger/contract';
 
 interface KickUserModalProps {
@@ -34,19 +36,14 @@ export function KickUserModal({ target, onClose, onConfirm, isPending }: KickUse
                 <ReasonField id="kick-reason" value={reason} onChange={setReason}
                     placeholder="Optional note recorded in the moderation log" />
                 {isRealDiscordId(target?.discordId) && (
-                    <label className="flex items-center gap-2 text-sm text-foreground">
-                        <input type="checkbox" checked={kickFromDiscord}
-                            onChange={(e) => setKickFromDiscord(e.target.checked)} className={CHECKBOX_CLASS} />
-                        Also kick from Discord server
-                    </label>
+                    <Checkbox label="Also kick from Discord server" checked={kickFromDiscord}
+                        onChange={(e) => setKickFromDiscord(e.target.checked)} />
                 )}
                 <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={onClose}
-                        className="px-4 py-2 text-sm bg-overlay hover:bg-faint text-foreground rounded-lg transition-colors">Cancel</button>
-                    <button onClick={handleConfirm} disabled={isPending}
-                        className="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
-                        {isPending ? 'Kicking...' : 'Kick'}
-                    </button>
+                    <Button variant="secondary" onClick={onClose}>Cancel</Button>
+                    <Button variant="destructive" onClick={handleConfirm} loading={isPending} loadingLabel="Kicking...">
+                        Kick
+                    </Button>
                 </div>
             </div>
         </Modal>
