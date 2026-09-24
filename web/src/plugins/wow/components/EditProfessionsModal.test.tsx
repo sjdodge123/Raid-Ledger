@@ -300,26 +300,26 @@ describe('EditProfessionsModal — shared primitives (ROK-1654 H3)', () => {
     });
 });
 
-describe('EditProfessionsModal — dirty-close guard + pinned footer (ROK-1655 AC1/AC2)', () => {
-    const CONFIRM_TITLE = 'Discard your changes?';
-    const confirmDialog = () => screen.queryByRole('dialog', { name: CONFIRM_TITLE });
+const CONFIRM_TITLE = 'Discard your changes?';
+const confirmDialog = () => screen.queryByRole('dialog', { name: CONFIRM_TITLE });
 
-    function renderModal(onClose = vi.fn()) {
-        const user = userEvent.setup();
-        renderWithProviders(
-            <EditProfessionsModal {...baseProps} onClose={onClose} initial={null} />,
-        );
-        return { user, onClose };
-    }
+function renderModal(onClose = vi.fn()) {
+    const user = userEvent.setup();
+    renderWithProviders(
+        <EditProfessionsModal {...baseProps} onClose={onClose} initial={null} />,
+    );
+    return { user, onClose };
+}
 
-    async function makeDirty(user: ReturnType<typeof userEvent.setup>) {
-        await user.click(screen.getByRole('button', { name: /add primary/i }));
-        await user.selectOptions(screen.getByRole('combobox', { name: /profession/i }), 'Tailoring');
-    }
+async function makeDirty(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /add primary/i }));
+    await user.selectOptions(screen.getByRole('combobox', { name: /profession/i }), 'Tailoring');
+}
 
-    /** The guard latches for one macrotask after Keep so the same Escape cannot re-open it. */
-    const flushGuardLatch = () => new Promise((resolve) => setTimeout(resolve, 0));
+/** The guard latches for one macrotask after Keep so the same Escape cannot re-open it. */
+const flushGuardLatch = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+describe('EditProfessionsModal — pinned footer (ROK-1655 AC2)', () => {
     it('Save and Cancel sit in the pinned modal footer, outside the scroll body', () => {
         renderModal();
         const footer = screen.queryByTestId('modal-footer');
@@ -328,7 +328,9 @@ describe('EditProfessionsModal — dirty-close guard + pinned footer (ROK-1655 A
         expect(within(footer as HTMLElement).getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
         expect((footer as HTMLElement).contains(screen.getByRole('button', { name: /add primary/i }))).toBe(false);
     });
+});
 
+describe('EditProfessionsModal — dirty-close guard (ROK-1655 AC1)', () => {
     it('clean form: Escape closes at once, with no discard confirm', async () => {
         const { user, onClose } = renderModal();
         await user.keyboard('{Escape}');

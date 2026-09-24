@@ -111,23 +111,32 @@ function useEditProfessionsState(
     return { gameSlug, maxSkill, primary, setPrimary, secondary, setSecondary, isDirty };
 }
 
+/** Save closes through the plain `onClose` (never the guard), so it never prompts. */
+function useSaveProfessions(
+    characterId: string,
+    s: ReturnType<typeof useEditProfessionsState>,
+    onClose: () => void,
+) {
+    const update = useUpdateCharacter();
+    const run = () => update.mutate(
+        { id: characterId, dto: { professions: buildProfessionsPayload(s.primary, s.secondary, s.maxSkill) } },
+        { onSuccess: onClose },
+    );
+    return { run, isPending: update.isPending };
+}
+
 export function EditProfessionsModal({
     isOpen, onClose, characterId, gameId, initial,
 }: EditProfessionsModalProps) {
     const s = useEditProfessionsState(gameId, initial);
-    const update = useUpdateCharacter();
+    const save = useSaveProfessions(characterId, s, onClose);
     // Escape, the backdrop, × and Cancel ask first on a dirty form; Save's
     // onSuccess closes through the plain onClose, so a Save never prompts.
     const guard = useDirtyCloseGuard(s.isDirty, onClose);
 
-    const handleSave = () => update.mutate(
-        { id: characterId, dto: { professions: buildProfessionsPayload(s.primary, s.secondary, s.maxSkill) } },
-        { onSuccess: onClose },
-    );
-
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Edit Professions" closeGuard={guard}
-            footer={<ModalActions onCancel={guard.requestClose} onSave={handleSave} isPending={update.isPending} />}>
+            footer={<ModalActions onCancel={guard.requestClose} onSave={save.run} isPending={save.isPending} />}>
             <div className="space-y-6">
                 <p className="text-xs text-muted">
                     Skill cap for this game variant: <span className="font-mono">{s.maxSkill}</span>
