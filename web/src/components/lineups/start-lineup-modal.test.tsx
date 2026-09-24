@@ -698,6 +698,14 @@ describe('StartLineupModal — pinned footer actions (ROK-1655)', () => {
     const footerButton = (name: RegExp) =>
         within(screen.getByTestId('modal-footer')).getByRole('button', { name });
 
+    it('puts Cancel and Create Lineup in the pinned modal footer', () => {
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={vi.fn()} />);
+        for (const name of [/^cancel$/i, /create lineup/i]) {
+            const button = screen.getByRole('button', { name });
+            expect(button.closest('[data-testid="modal-footer"]')).not.toBeNull();
+        }
+    });
+
     it('a successful create closes without the confirm', async () => {
         const user = userEvent.setup();
         const onClose = vi.fn();
