@@ -69,6 +69,7 @@ const createWrapper = () => {
 
 describe('AvatarPanel', () => {
     const mockUpload = vi.fn();
+    const mockUploadAsync = vi.fn(() => Promise.resolve({ customAvatarUrl: '/custom/new.png' }));
     const mockDeleteAvatar = vi.fn();
     const mockRefetch = vi.fn();
 
@@ -88,6 +89,7 @@ describe('AvatarPanel', () => {
 
         vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
             upload: mockUpload,
+            uploadAsync: mockUploadAsync,
             deleteAvatar: mockDeleteAvatar,
             isUploading: false,
             uploadProgress: 0,
@@ -223,17 +225,31 @@ it('calls updatePreference when a thumbnail is clicked', () => {
                 refetch: mockRefetch,
             } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
+            render(<AvatarPanel />, { wrapper: createWrapper() });
 
-            // Click the Discord option (second thumbnail)
-            const thumbnailButtons = container.querySelectorAll('button.relative.group');
-            if (thumbnailButtons.length > 1) {
-                fireEvent.click(thumbnailButtons[1]);
-                expect(apiClient.updatePreference).toHaveBeenCalledWith(
-                    'avatarPreference',
-                    { type: 'discord' },
-                );
-            }
+            // The Discord tile is a Button named by its option label.
+            fireEvent.click(screen.getByRole('button', { name: 'Discord' }));
+            expect(apiClient.updatePreference).toHaveBeenCalledWith(
+                'avatarPreference',
+                { type: 'discord' },
+            );
+        });
+
+it('marks only the current avatar tile aria-pressed, and the mark follows a selection', () => {
+            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
+                user: { ...mockUser, customAvatarUrl: '/custom/avatar.jpg' },
+                isAuthenticated: true,
+                refetch: mockRefetch,
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
+            render(<AvatarPanel />, { wrapper: createWrapper() });
+            const custom = screen.queryByRole('button', { name: 'Custom' });
+            const discord = screen.queryByRole('button', { name: 'Discord' });
+            expect(custom, 'the Custom tile should be a Button named "Custom"').not.toBeNull();
+            expect(custom?.getAttribute('aria-pressed'), 'the current (custom) tile should be aria-pressed').toBe('true');
+            expect(discord?.getAttribute('aria-pressed'), 'a non-current tile should be aria-pressed=false').toBe('false');
+            fireEvent.click(discord as HTMLElement);
+            expect(discord?.getAttribute('aria-pressed'), 'the picked tile should become pressed').toBe('true');
+            expect(custom?.getAttribute('aria-pressed')).toBe('false');
         });
 
     }
@@ -249,18 +265,13 @@ it('calls updatePreference with characterName for character avatar', () => {
                 isLoading: false,
             } as unknown as ReturnType<typeof useCharactersHook.useMyCharacters>);
 
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
+            render(<AvatarPanel />, { wrapper: createWrapper() });
 
-            // Find and click the character thumbnail (after Discord)
-            const thumbnailButtons = container.querySelectorAll('button.relative.group');
-            // Discord is index 0, Thrall is index 1
-            if (thumbnailButtons.length > 1) {
-                fireEvent.click(thumbnailButtons[1]);
-                expect(apiClient.updatePreference).toHaveBeenCalledWith(
-                    'avatarPreference',
-                    { type: 'character', characterName: 'Thrall' },
-                );
-            }
+            fireEvent.click(screen.getByRole('button', { name: 'Thrall' }));
+            expect(apiClient.updatePreference).toHaveBeenCalledWith(
+                'avatarPreference',
+                { type: 'character', characterName: 'Thrall' },
+            );
         });
 
     }
@@ -272,8 +283,19 @@ it('calls updatePreference with characterName for character avatar', () => {
 
     function uploadCustomButtonGroup1() {
 it('renders Upload Custom button', () => {
-            render(<AvatarPanel />, { wrapper: createWrapper() });
+            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Upload Custom')).toBeInTheDocument();
+            expect(screen.queryByRole('button', { name: 'Upload Custom' }),
+                'Upload Custom should be the FilePicker trigger Button').not.toBeNull();
+            expect(container.querySelector('input[type="file"]'))
+                .toHaveAttribute('accept', 'image/png,image/jpeg,image/webp,image/gif');
+        });
+
+it('uploads the picked file through uploadAsync', async () => {
+            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
+            const file = new File(['x'], 'me.png', { type: 'image/png' });
+            fireEvent.change(container.querySelector('input[type="file"]') as HTMLInputElement, { target: { files: [file] } });
+            await vi.waitFor(() => expect(mockUploadAsync).toHaveBeenCalledWith(file));
         });
 
 it('shows uploading progress text when isUploading is true', () => {
@@ -286,6 +308,11 @@ it('shows uploading progress text when isUploading is true', () => {
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Uploading 42%')).toBeInTheDocument();
+            // Ruling 7 exception: the percentage stays the visible label (no spinner swap), and the picker is closed.
+            const trigger = screen.queryByRole('button', { name: 'Uploading 42%' });
+            expect(trigger, 'the trigger should keep "Uploading 42%" as its visible name').not.toBeNull();
+            expect(trigger).toBeDisabled();
+            expect(trigger).not.toHaveAttribute('aria-busy');
         });
 
     }
@@ -303,7 +330,10 @@ it('renders Remove Custom button when user has customAvatarUrl', () => {
             } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
-            expect(screen.getByText('Remove Custom')).toBeInTheDocument();
+            const remove = screen.getByRole('button', { name: 'Remove Custom' });
+            expect(remove.className, 'Remove Custom should wear the destructive-soft variant').toContain('bg-danger/10');
+            fireEvent.click(remove);
+            expect(mockDeleteAvatar).toHaveBeenCalledOnce();
         });
 
 it('does not render Remove Custom button when user has no customAvatarUrl', () => {
