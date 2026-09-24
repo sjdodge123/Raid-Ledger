@@ -431,6 +431,12 @@ describe('RescheduleModal — dirty-close guard (ROK-1655 AC1)', () => {
         expect(onClose).toHaveBeenCalledTimes(2);
     });
 
+});
+
+describe('RescheduleModal — success paths close directly (ROK-1655)', () => {
+    beforeEach(setup);
+    afterEach(teardown);
+
     it('a successful reschedule closes directly, not through the confirm', async () => {
         mockMutateAsync.mockResolvedValueOnce({});
         const onClose = vi.fn();
