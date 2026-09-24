@@ -577,7 +577,9 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   44px target (`Checkbox`, `RadioGroup` list). A pill/segmented toggle is `RadioGroup appearance="segmented"` —
   real radios, so it has `radiogroup` semantics and arrow keys; never a row of buttons with no state. Its track
   wraps rather than overflowing a narrow card (six duration segments at 375px take two rows) — never give it
-  `flex-nowrap` or a fixed width.
+  `flex-nowrap` or a fixed width. Segments never shrink below their longest word, so when a wrapped row would
+  read badly, switch to `appearance="list"` below `sm` with `useMediaQuery('(min-width: 640px)')` (FeedbackDialog's
+  four categories need ~327px against ~287px) rather than a sideways-scrolling row.
 - **Sliders are `Slider`**: `appearance-none` with a painted `bg-edge` track, `success` fill and 20px thumb in a
   44px hit area, a `font-medium` label left and a `font-mono` readout right (`aria-live="off"`);
   `formatValue` doubles as `aria-valuetext`.
