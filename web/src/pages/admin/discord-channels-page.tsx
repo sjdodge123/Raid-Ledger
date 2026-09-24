@@ -18,7 +18,7 @@ export function DiscordChannelsPage() {
                     <p className="text-foreground font-medium">The Discord plugin is not active.</p>
                     <p className="text-sm text-muted mt-2">
                         Enable it in{' '}
-                        <Link to="/admin/settings/plugins" className="text-emerald-400 hover:underline">
+                        <Link to="/admin/settings/plugins" className="text-success hover:underline">
                             Manage Plugins
                         </Link>{' '}
                         to configure Discord.
@@ -112,8 +112,8 @@ function DiscordChannelsContent() {
 
 function ChannelsBotWarning() {
     return (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-            <p className="text-sm text-amber-400">
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
+            <p className="text-sm text-warning">
                 The Discord bot is not connected. Configure it on the{' '}
                 <Link to="/admin/settings/discord/connection" className="underline">Connection</Link> page to manage channels.
             </p>
@@ -149,8 +149,8 @@ function ChannelBindingsSection({ handlers, channels }: {
             {bindings.isLoading ? (
                 <div className="animate-pulse space-y-3">{[1, 2, 3].map((i) => <div key={i} className="h-16 bg-overlay rounded-lg" />)}</div>
             ) : bindings.isError ? (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
-                    <p className="text-sm text-red-400">Failed to load bindings: {bindings.error?.message}</p>
+                <div className="bg-danger/10 border border-danger/30 rounded-lg p-4">
+                    <p className="text-sm text-danger">Failed to load bindings: {bindings.error?.message}</p>
                 </div>
             ) : (
                 <ChannelBindingList bindings={bindings.data?.data ?? []} onUpdate={handlers.handleUpdate} onDelete={handlers.handleDelete}
