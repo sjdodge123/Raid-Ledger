@@ -69,13 +69,16 @@ describe('buildComposerCard', () => {
       style: ButtonStyle.Primary,
       label: '+ Post an LFG',
     });
+    // ROK-1685: a press that answers with the clicker's own link, never a URL.
     expect(row.components[1]).toMatchObject({
-      style: ButtonStyle.Link,
-      url: `${CLIENT_URL}/games`,
+      style: ButtonStyle.Secondary,
+      label: LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON,
+      custom_id: 'lfgc:view',
     });
+    expect(row.components[1]).not.toHaveProperty('url');
   });
 
-  it('drops the link rather than the card when no client URL is configured', () => {
+  it('drops View games rather than the card when no client URL is configured', () => {
     const row = buildComposerCard(null).components[0].toJSON();
     expect(row.components).toHaveLength(1);
     expect(gamesPageUrl(null)).toBeNull();
@@ -107,7 +110,7 @@ describe('buildCandidatesReply', () => {
       'rock',
       [DRG, { id: 4, name: 'Rocket League' }],
       false,
-      CLIENT_URL,
+      gamesPageUrl(CLIENT_URL, 'rock'),
     );
     expect(reply.content).toBe('2 games match “rock”');
     const select = reply.components[0].toJSON().components[0];
@@ -121,12 +124,22 @@ describe('buildCandidatesReply', () => {
   });
 
   it('asks rather than tells on the trigram path', () => {
-    const reply = buildCandidatesReply('valhiem', [DRG], true, CLIENT_URL);
+    const reply = buildCandidatesReply(
+      'valhiem',
+      [DRG],
+      true,
+      gamesPageUrl(CLIENT_URL, 'valhiem'),
+    );
     expect(reply.content).toBe('No exact match for “valhiem”. Did you mean:');
   });
 
   it('always goes back and always offers the games page (AC8)', () => {
-    const reply = buildCandidatesReply('rock', [DRG], false, CLIENT_URL);
+    const reply = buildCandidatesReply(
+      'rock',
+      [DRG],
+      false,
+      gamesPageUrl(CLIENT_URL, 'rock'),
+    );
     expect(labels(reply)).toEqual(
       expect.arrayContaining([
         LFG_COMPOSER_COPY.BACK_BUTTON,
@@ -197,7 +210,7 @@ describe('orderUrgencyChoices', () => {
 
 describe('buildNoMatchReply', () => {
   it('carries ONLY Back and View games — no select, no separate Try again', () => {
-    const reply = buildNoMatchReply('bg3', CLIENT_URL);
+    const reply = buildNoMatchReply('bg3', gamesPageUrl(CLIENT_URL, 'bg3'));
     expect(reply.content).toBe('No games match “bg3”');
     expect(reply.components).toHaveLength(1);
     expect(labels(reply)).toEqual(['← Back', 'View games ↗']);
@@ -219,7 +232,8 @@ describe('View games carries the searched term (ROK-1658 operator note)', () => 
 
   it('opens /games searching for what the results message was built from', () => {
     const url = linkUrl(
-      buildCandidatesReply(TERM, [DRG], false, CLIENT_URL).components,
+      buildCandidatesReply(TERM, [DRG], false, gamesPageUrl(CLIENT_URL, TERM))
+        .components,
     );
     expect(url).toBe(`${CLIENT_URL}/games?q=deep+rock+%26+stone`);
     expect(new URL(url ?? '').searchParams.get('q')).toBe(TERM);
@@ -227,22 +241,26 @@ describe('View games carries the searched term (ROK-1658 operator note)', () => 
 
   it('opens /games searching for the term that found nothing', () => {
     const url = linkUrl(
-      buildNoMatchReply('pokémon #1 & co', CLIENT_URL).components,
+      buildNoMatchReply(
+        'pokémon #1 & co',
+        gamesPageUrl(CLIENT_URL, 'pokémon #1 & co'),
+      ).components,
     );
     expect(url?.startsWith(`${CLIENT_URL}/games?q=`)).toBe(true);
     expect(url).not.toMatch(/[ #&]/);
     expect(new URL(url ?? '').searchParams.get('q')).toBe('pokémon #1 & co');
   });
 
-  it('keeps the pinned card on plain /games — nothing has been searched yet', () => {
-    const url = linkUrl(buildComposerCard(CLIENT_URL).components);
-    expect(url).toBe(`${CLIENT_URL}/games`);
-    expect(new URL(url ?? '').searchParams.has('q')).toBe(false);
+  it('keeps every link off the pinned card — it is public (ROK-1685)', () => {
+    expect(linkUrl(buildComposerCard(CLIENT_URL).components)).toBeUndefined();
   });
 
   it('never hands /games a q longer than it accepts', () => {
     const url = linkUrl(
-      buildNoMatchReply('x'.repeat(150), CLIENT_URL).components,
+      buildNoMatchReply(
+        'x'.repeat(150),
+        gamesPageUrl(CLIENT_URL, 'x'.repeat(150)),
+      ).components,
     );
     const q = new URL(url ?? '').searchParams.get('q') ?? '';
     expect(q).toBe('x'.repeat(LFG_COMPOSER_TERM_MAX));
@@ -283,12 +301,19 @@ describe('View games stays inside Discord’s link cap', () => {
   }
 
   it.each(WIDE_TERMS)('shortens the no-match link for a %s term', (_, term) => {
-    const url = linkUrl(buildNoMatchReply(term, PROD_URL).components);
+    const url = linkUrl(
+      buildNoMatchReply(term, gamesPageUrl(PROD_URL, term)).components,
+    );
     expectShortenedLink(url, term);
   });
 
   it.each(WIDE_TERMS)('shortens the results link for a %s term', (_, term) => {
-    const reply = buildCandidatesReply(term, [DRG], false, PROD_URL);
+    const reply = buildCandidatesReply(
+      term,
+      [DRG],
+      false,
+      gamesPageUrl(PROD_URL, term),
+    );
     expectShortenedLink(linkUrl(reply.components), term);
   });
 
