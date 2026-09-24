@@ -3,7 +3,8 @@
  * Steam, Discord Bot / OAuth, Blizzard). Below `lg` Save Configuration is a
  * full-width primary row and Test Connection + Clear sit under it, each label
  * on one line; from `lg` Save is `flex-1` beside them (the desktop layout).
- * Copy is fixed here so the forms cannot drift. Co-Optimus keeps its own `md` row.
+ * Copy is fixed here so the forms cannot drift. Co-Optimus keeps its own shorter
+ * copy ("Save" / "Test connection") in its own row, laid out the same way.
  */
 import { Button } from '../ui/button';
 

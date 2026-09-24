@@ -133,7 +133,7 @@ function SyncStatusBar({ igdbSyncStatus, syncIgdb }: { igdbSyncStatus: ReturnTyp
                     <span className="text-dim ml-2">&middot; Last sync {formatRelativeTime(igdbSyncStatus.data.lastSyncAt)}</span>
                 )}
             </div>
-            <Button variant="secondary" size="sm" onClick={handleSync} disabled={inProgress}
+            <Button variant="secondary" size="sm" className="shrink-0 whitespace-nowrap" onClick={handleSync} disabled={inProgress}
                 loading={syncIgdb.isPending} loadingLabel="Syncing...">
                 {inProgress && <ArrowPathIcon className="w-4 h-4 animate-spin" aria-hidden="true" />}
                 Sync Now

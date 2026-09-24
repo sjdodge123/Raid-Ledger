@@ -97,16 +97,19 @@ function CooptimusActionButtons({ configured, isPending, onTest, onClear }: {
     onTest: () => void; onClear: () => void;
 }) {
     return (
-        <div className="flex flex-wrap gap-2">
-            <Button type="submit" variant="primary" loading={isPending.save} loadingLabel="Saving…">
+        <div className="flex flex-wrap gap-3 pt-2">
+            <Button type="submit" variant="primary" size="lg" className="w-full lg:w-auto lg:flex-1"
+                loading={isPending.save} loadingLabel="Saving…">
                 Save
             </Button>
             {configured && (
                 <>
-                    <Button variant="secondary" onClick={onTest} loading={isPending.test} loadingLabel="Testing…">
+                    <Button variant="secondary" size="lg" className="whitespace-nowrap" onClick={onTest}
+                        loading={isPending.test} loadingLabel="Testing…">
                         Test connection
                     </Button>
-                    <Button variant="destructive-soft" onClick={onClear} loading={isPending.clear} loadingLabel="Clearing…">
+                    <Button variant="destructive-soft" size="lg" className="whitespace-nowrap" onClick={onClear}
+                        loading={isPending.clear} loadingLabel="Clearing…">
                         Clear
                     </Button>
                 </>

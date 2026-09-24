@@ -121,6 +121,12 @@ describe('CooptimusForm — user-agent save', () => {
         expect(toastError).toHaveBeenCalledWith('User-agent is required');
     });
 
+    it('lays Save out like the shared integration triad: a full-width row below lg', () => {
+        renderWithProviders(<CooptimusForm />);
+        const save = screen.getByRole('button', { name: 'Save' });
+        expect(save).toHaveClass('w-full', 'lg:w-auto', 'lg:flex-1');
+    });
+
     it('Save is loading and swallows the submit when save is pending', () => {
         pending.save = true;
         renderWithProviders(<CooptimusForm />);
