@@ -35,7 +35,13 @@ test.describe('Admin User Management — moderation (ROK-313)', () => {
         adminToken = await getAdminToken();
         const me = await apiGet(adminToken, '/auth/me');
         adminName = me.username;
-        const seeded = await apiPost(adminToken, '/admin/test/seed-non-guild-user');
+        // quietDms: the member's snowflake is not in the guild, so on a fleet
+        // env (live bot) any concurrent spec's DM to it — e.g. the steam-link
+        // nudge a `POST /lineups` fans out — 10013s and deactivates it mid-run.
+        const seeded = await apiPost(adminToken, '/admin/test/seed-non-guild-user', {
+            quietDms: true,
+        });
+        expect(seeded.quietDms, 'seed-non-guild-user ignored quietDms').toBe(true);
         memberId = seeded.userId;
         const profile = await apiGet(adminToken, `/users/${memberId}/profile`);
         memberName = profile.data.username;
@@ -56,6 +62,19 @@ test.describe('Admin User Management — moderation (ROK-313)', () => {
         // SAME member, so first() targets the right row without strict-mode flake.
         await expect(page.getByText(memberName, { exact: true }).first()).toBeVisible();
         const kebab = page.getByRole('button', { name: `Actions for ${memberName}` }).first();
+
+        // Precondition: the member must still be active. If it was deactivated
+        // (a DM to its fake snowflake failed), the kebab offers Reactivate/Ban
+        // and the Kick assertion below would only time out on a missing item.
+        const state = await apiGet(adminToken, `/admin/test/user-state?userId=${memberId}`);
+        expect(
+            state.deactivatedAt,
+            `seeded member ${memberName} was deactivated at ${state.deactivatedAt} before the kick test`,
+        ).toBeNull();
+        await expect(
+            page.getByText('Deactivated', { exact: true }),
+            `seeded member ${memberName}'s row reads "Deactivated" — the kebab will not offer Kick`,
+        ).toHaveCount(0);
 
         // Kebab exposes Kick + Ban for an active, non-admin member.
         await kebab.click();

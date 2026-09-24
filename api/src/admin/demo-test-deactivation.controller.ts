@@ -33,6 +33,7 @@ import {
   DISCORD_NOTIFICATION_QUEUE,
   type DiscordNotificationJobData,
 } from '../notifications/discord-notification.constants';
+import { muteDiscordDms, parseQuietDms } from './demo-test-quiet-dms.helpers';
 
 @Controller('admin/test')
 @SkipThrottle()
@@ -62,11 +63,18 @@ export class DemoTestDeactivationController {
   /**
    * Seed a fresh user with a syntactically-valid Discord snowflake that
    * is NOT in the test guild. Provides a deterministic 50278 recipient.
+   *
+   * `quietDms: true` (opt-in) also turns the member's Discord channel off for
+   * every notification type, so a concurrent spec's DM fan-out cannot
+   * deactivate it mid-run on a live-bot fleet env (see the helpers file).
    */
   @Post('seed-non-guild-user')
   @HttpCode(HttpStatus.OK)
-  async seedNonGuildUser(): Promise<{ userId: number; discordId: string }> {
+  async seedNonGuildUser(
+    @Body() body?: { quietDms?: boolean },
+  ): Promise<{ userId: number; discordId: string; quietDms: boolean }> {
     await this.assertDemoMode();
+    const quietDms = parseQuietDms(body);
     const snowflake = `9${Date.now()}${Math.floor(Math.random() * 1000)
       .toString()
       .padStart(3, '0')}`;
@@ -82,7 +90,8 @@ export class DemoTestDeactivationController {
         role: 'member',
       })
       .returning({ id: schema.users.id });
-    return { userId: user.id, discordId: snowflake };
+    if (quietDms) await muteDiscordDms(this.db, user.id);
+    return { userId: user.id, discordId: snowflake, quietDms };
   }
 
   /**
