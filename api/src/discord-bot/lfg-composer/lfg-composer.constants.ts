@@ -10,8 +10,10 @@ import { escapeMarkdown } from 'discord.js';
  *  1. **No meta-copy about staying in Discord.** "no need to leave the channel"
  *     was explicitly struck. The card's title is its only body text.
  *  2. **`View games ↗` is permanent furniture**, not a fallback that appears
- *     only when a search fails. It is a URL button, so it raises no interaction
- *     and cannot fail or time out.
+ *     only when a search fails. On the public card it is a press (`VIEW`) that
+ *     answers the clicker privately with their own signed-in link, so no token
+ *     ever sits on a message everyone can see (ROK-1685); on the private
+ *     replies it is a Link button carrying that link directly.
  */
 
 /**
@@ -41,6 +43,12 @@ export const LFG_COMPOSER_IDS = {
    * matches on `<prefix>:`, and `lfgc:backc:` never starts with `lfgc:back:`.
    */
   BACK_TO_CANDIDATES: 'lfgc:backc',
+  /**
+   * The pinned card's `View games ↗` (ROK-1685). A press, not a link: the
+   * card is public, so its handler replies ephemerally with the clicker's own
+   * magic link instead of one token everyone could reuse.
+   */
+  VIEW: 'lfgc:view',
 } as const;
 
 /**
