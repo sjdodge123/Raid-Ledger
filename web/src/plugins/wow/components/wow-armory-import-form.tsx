@@ -7,6 +7,10 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { WowRegion, BlizzardCharacterPreviewDto } from '@raid-ledger/contract';
 import { useImportWowCharacter } from '../hooks/use-wow-mutations';
 import { previewWowCharacter } from '../api-client';
+import { Button } from '../../../components/ui/button';
+import { Field } from '../../../components/ui/field';
+import { Input } from '../../../components/ui/input';
+import { RadioGroup } from '../../../components/ui/radio-group';
 import { RealmAutocomplete } from './realm-autocomplete';
 import { CharacterPreviewCard } from './character-preview-card';
 
@@ -31,6 +35,10 @@ const REGIONS: { value: WowRegion; label: string }[] = [
 ];
 
 type FormState = 'idle' | 'searching' | 'preview' | 'importing' | 'done';
+
+/** Ruling 8: these two render as their Field's error; every other message (the API's) is the banner's. */
+const NAME_REQUIRED = 'Character name is required';
+const REALM_REQUIRED = 'Realm is required';
 
 function useSkipWarningValidator(formStateRef: React.RefObject<FormState>, onRegisterValidator: WowArmoryImportFormProps['onRegisterValidator']) {
     const warningShownRef = useRef(false);
@@ -70,8 +78,8 @@ function useImportFormState(isMain: boolean, defaultRealm?: string, defaultRegio
 function useSearchHandler(state: ReturnType<typeof useImportFormState>, gameVariant: string | undefined) {
     return useCallback(async () => {
         state.setError('');
-        if (!state.name.trim()) { state.setError('Character name is required'); return; }
-        if (!state.realm.trim()) { state.setError('Realm is required'); return; }
+        if (!state.name.trim()) { state.setError(NAME_REQUIRED); return; }
+        if (!state.realm.trim()) { state.setError(REALM_REQUIRED); return; }
         state.setPreviewData(null); state.setFormState('searching');
         try {
             const data = await previewWowCharacter(state.name.trim(), state.realm.trim(), state.region, gameVariant);
@@ -130,7 +138,7 @@ export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant, de
                 onNameChange={(v) => { state.setName(v); handlers.handleFieldChange(); }} onSearch={() => void handlers.handleSearch()} />}
             {showPreview && (
                 <>
-                    {showSkipWarning && <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 text-center"><p className="text-xs text-amber-400">You have unsaved progress. Use the buttons on the card, or click <strong>Next</strong> again to skip.</p></div>}
+                    {showSkipWarning && <div className="bg-warning/10 border border-warning/30 rounded-lg p-2.5 text-center"><p className="text-xs text-warning">You have unsaved progress. Use the buttons on the card, or click <strong>Next</strong> again to skip.</p></div>}
                     <CharacterPreviewCard preview={state.previewData!} setAsMain={state.setAsMain} onSetAsMainChange={state.setSetAsMain} onImport={handlers.handleImport}
                         onBack={handlers.handleBack} isImporting={state.formState === 'importing'} error={state.error} highlightActions={showSkipWarning} />
                 </>
@@ -140,30 +148,34 @@ export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant, de
 }
 
 function RegionSelector({ region, onRegionChange }: { region: WowRegion; onRegionChange: (v: WowRegion) => void }) {
+    return <RadioGroup appearance="segmented" label="Region" options={REGIONS} value={region} onChange={onRegionChange} />;
+}
+
+function CharacterNameInput({ name, error, onNameChange, onSearch }: {
+    name: string; error?: string; onNameChange: (v: string) => void; onSearch: () => void;
+}) {
     return (
-        <div>
-            <label className="block text-xs font-bold text-secondary uppercase tracking-wider mb-1.5">Region</label>
-            <div className="flex gap-1.5">
-                {REGIONS.map((r) => (
-                    <button key={r.value} type="button" onClick={() => onRegionChange(r.value)}
-                        className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all ${region === r.value ? 'bg-blue-600/20 border border-blue-500 text-blue-300' : 'bg-panel border border-edge text-muted hover:text-foreground hover:border-edge-strong'}`}>
-                        {r.label}
-                    </button>
-                ))}
-            </div>
+        <Field label="Character Name" required error={error}>
+            <Input type="text" value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="e.g. Arthas" maxLength={100}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSearch(); } }} />
+        </Field>
+    );
+}
+
+function SearchErrorBanner({ error }: { error: string }) {
+    return (
+        <div role="alert" className="flex items-start gap-2 p-3 bg-danger/10 border border-danger/30 rounded-lg">
+            <span aria-hidden="true" className="text-lg leading-none mt-0.5">&#10060;</span>
+            <p className="text-sm text-danger">{error}</p>
         </div>
     );
 }
 
-function CharacterNameInput({ name, onNameChange, onSearch }: { name: string; onNameChange: (v: string) => void; onSearch: () => void }) {
-    return (
-        <div>
-            <label className="block text-sm font-medium text-secondary mb-1">Character Name <span className="text-red-400">*</span></label>
-            <input type="text" value={name} onChange={(e) => onNameChange(e.target.value)} placeholder="e.g. Arthas" maxLength={100}
-                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-blue-500"
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onSearch(); } }} />
-        </div>
-    );
+/** Ruling 8: a missing name or realm is that Field's error (aria-invalid); anything else stays in the banner. */
+function splitSearchError(error: string) {
+    const nameErr = error === NAME_REQUIRED ? error : undefined;
+    const realmErr = error === REALM_REQUIRED ? error : undefined;
+    return { nameErr, realmErr, bannerErr: nameErr || realmErr ? '' : error };
 }
 
 /** Search form fields: region, realm, character name */
@@ -171,21 +183,18 @@ function SearchFields({ region, realm, name, formState, error, gameVariant, onRe
     region: WowRegion; realm: string; name: string; formState: FormState; error: string; gameVariant?: string;
     onRegionChange: (v: WowRegion) => void; onRealmChange: (v: string) => void; onNameChange: (v: string) => void; onSearch: () => void;
 }) {
+    const { nameErr, realmErr, bannerErr } = splitSearchError(error);
     return (
         <>
             <div className="space-y-3">
                 <RegionSelector region={region} onRegionChange={onRegionChange} />
-                <div>
-                    <label className="block text-xs font-bold text-secondary uppercase tracking-wider mb-1.5">Realm <span className="text-red-400 normal-case">*</span></label>
+                <Field label="Realm" required error={realmErr}>
                     <RealmAutocomplete region={region} value={realm} onChange={onRealmChange} gameVariant={gameVariant} />
-                </div>
+                </Field>
             </div>
-            <CharacterNameInput name={name} onNameChange={onNameChange} onSearch={onSearch} />
-            {error && <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg"><span className="text-red-400 text-lg leading-none mt-0.5">&#10060;</span><p className="text-sm text-red-400">{error}</p></div>}
-            <button type="button" onClick={onSearch} disabled={formState === 'searching'}
-                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors">
-                {formState === 'searching' ? <span className="flex items-center justify-center gap-2"><span className="w-4 h-4 border-2 border-dim border-t-blue-400 rounded-full animate-spin" />Searching Armory...</span> : 'Search Armory'}
-            </button>
+            <CharacterNameInput name={name} error={nameErr} onNameChange={onNameChange} onSearch={onSearch} />
+            {bannerErr && <SearchErrorBanner error={bannerErr} />}
+            <Button fullWidth loading={formState === 'searching'} loadingLabel="Searching Armory…" onClick={onSearch}>Search Armory</Button>
         </>
     );
 }
