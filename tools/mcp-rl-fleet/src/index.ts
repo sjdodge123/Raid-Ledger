@@ -39,6 +39,7 @@ import * as taskInspect from './tools/task-inspect.js';
 import * as taskLogs from './tools/task-logs.js';
 import * as infraLogs from './tools/infra-logs.js';
 import * as envInspect from './tools/env-inspect.js';
+import * as envSigninLink from './tools/env-signin-link.js';
 import * as dbQuery from './tools/db-query.js';
 import * as lease from './tools/lease.js';
 import * as fleetHealth from './tools/fleet-health.js';
@@ -475,6 +476,21 @@ registerTool(
   envInspect.TOOL_DESCRIPTION,
   envInspectSchema,
   async (p) => jsonResult(await envInspect.execute(p as envInspect.EnvInspectParams)),
+);
+
+// ----- Env sign-in link (agent browser verification, 2026-09-24) -----
+const envSigninLinkSchema: Shape = {
+  slug: slugSchema,
+  user_id: z.number().int().positive().optional(),
+  username: z.string().min(1).max(100).optional(),
+  path: z.string().min(1).max(2048).optional(),
+  worktree_path: worktreePathSchema,
+};
+registerTool(
+  envSigninLink.TOOL_NAME,
+  envSigninLink.TOOL_DESCRIPTION,
+  envSigninLinkSchema,
+  async (p) => jsonResult(await envSigninLink.execute(p as envSigninLink.SigninLinkParams)),
 );
 
 // ----- DB query (ROK-1338 PR-2 — architect-hardened, read-only v1) -----

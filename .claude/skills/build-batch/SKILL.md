@@ -60,7 +60,7 @@ Wave 2..K — Dev: wave-by-wave dev agents per the dependency graph
 
 Validate: CI (fleet validate-ci --full once), local deploy,
           Playwright (if UI changes), Chrome MCP e2e
-          Operator FULL STOP for browser-test verdict
+          fleet-ui-verify lane runs the plan → FULL STOP for operator only on OPERATOR-marked steps
 
 Review:   Codex + /security-review + devedup-rl chunked reviewer (parallel)
           Architect final pass (mandatory for batch builds — cross-milestone surface)

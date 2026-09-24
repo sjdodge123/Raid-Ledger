@@ -54,7 +54,7 @@ Local exception: if rework is `material` and re-running the deploy + e2e on the 
      cd -
      ```
    - Skip full deploy/Playwright/smoke — operator will re-test
-   - Loop back to 4a (operator tests the fix)
+   - Loop back to 4a (`fleet-ui-verify` lane re-runs the affected plan steps; operator only for any `OPERATOR`-marked steps)
 
    **material** — full path:
    - Spawn test agent if new behavior added (standard/full scope)

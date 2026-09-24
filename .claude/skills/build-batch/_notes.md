@@ -64,7 +64,7 @@ Wave 2+ — Dev (waves determined by dependency graph)
   Lead audits each wave's commits before spawning next
 
 Validate → CI (fleet validate-ci --full once on combined branch), local deploy, Playwright, Chrome MCP e2e
-Operator FULL STOP for browser-test verdict
+fleet-ui-verify lane runs the plan → FULL STOP for operator only on OPERATOR-marked steps
 Review → Codex + /security-review + devedup-rl chunked reviewer (parallel)
 Architect final (likely needed given the scope)
 Lead smoke tests

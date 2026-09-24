@@ -55,7 +55,7 @@ Requirements Interview (plan mode, if spec incomplete)
   → E2E Test Agent writes FAILING test (2d — TDD)
   → Dev builds to pass test (2e)
   → CI → Deploy review env (fleet when available, local fallback; no push) → Playwright → Chrome MCP e2e (Lead-driven, mandatory)
-  → Linear "In Review" → FULL STOP for operator (operator browser-tests on the same deploy)
+  → Linear "In Review" → fleet-ui-verify lane runs the plan → FULL STOP for operator only on OPERATOR-marked steps
   → Commit operator changes → Linear "Code Review" → Codex Reviewer
   → Optional: Architect final (if needs_architect)
   → Lead smoke tests → git push → Create PR → Auto-merge (LAST) → Linear "Done"
@@ -63,12 +63,12 @@ Requirements Interview (plan mode, if spec incomplete)
 
 **Nine gates before PR:** requirements, e2e_test_first (N/A only for light), dev, ci, **chrome_mcp_e2e** (N/A only for light or pure api-internal), operator, reviewer, architect_final (if needed), smoke_test.
 
-**Chrome MCP e2e (Lead-driven, mandatory for standard / full):** before the operator FULL STOP, Lead drives the changed user flows via `mcp__claude-in-chrome__*` on the deployed review env — fleet URL when `pipeline.test_infra_mode=fleet`, local URL when `pipeline.test_infra_mode=local`. It captures screenshots / GIFs, audits console + network, and produces a summary block that's included in the operator-presentation table. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Source-of-truth memory: `feedback_chrome_mcp_e2e_before_review.md`.
+**Chrome MCP e2e (Lead-driven, mandatory for standard / full):** before the `fleet-ui-verify` lane runs the plan, Lead drives the changed user flows via `mcp__claude-in-chrome__*` on the deployed review env — fleet URL when `pipeline.test_infra_mode=fleet`, local URL when `pipeline.test_infra_mode=local`. It captures screenshots / GIFs, audits console + network, and produces a summary block that's included in the operator-presentation table. Playbook: `.claude/skills/_shared/chrome-mcp-e2e.md`. Source-of-truth memory: `feedback_chrome_mcp_e2e_before_review.md`.
 
 **Test-infra discipline (mode-branched):**
 
 - **MODE=fleet:** preflight (1f.5) implicitly claims a slot. Step 3c spins the per-story env via `rl_env_deploy`. Slot + env stay alive through reviewer / architect / Lead-smoke / Step 5. Cleanup: optional `rl_env_destroy` per story after PR merges, single `rl_release` at end of batch (5e). Sweeper safety-nets: 5-min heartbeat / 8-hr hoarded-slot / 24-hr env TTL.
-- **MODE=local:** env-lock acquire just before deploy (3c), hold through Playwright + Chrome MCP + the operator FULL STOP (operator needs the env to browser-test), release as soon as the operator gives a verdict (4a). Reviewer (4b), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY for 4d Playwright on UI changes.
+- **MODE=local:** env-lock acquire just before deploy (3c), hold through Playwright + Chrome MCP + the `fleet-ui-verify` lane's plan run, release once the lane's verdicts land and any `OPERATOR`-marked steps are ruled (4a). Reviewer (4b), architect (4c), and most of Lead smoke (4d) do NOT need the env — re-acquire ONLY for 4d Playwright on UI changes.
 
 Both modes: light scope skips test-infra steps entirely.
 

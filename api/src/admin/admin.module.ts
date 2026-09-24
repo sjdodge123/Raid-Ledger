@@ -25,6 +25,7 @@ import { DemoTestStandalonePollController } from './demo-test-standalone-poll.co
 import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
 import { DemoTestWeeklyDigestController } from './demo-test-weekly-digest.controller';
 import { DemoTestBackupController } from './demo-test-backup.controller';
+import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { CooptimusSettingsController } from './cooptimus-settings.controller';
@@ -111,6 +112,7 @@ import { LfgModule } from '../lfg/lfg.module';
     DemoTestRecruitmentController,
     DemoTestWeeklyDigestController,
     DemoTestBackupController,
+    DemoTestSignInLinkController,
     AiChatTestController,
     SlashCommandTestController,
     ItadSettingsController,

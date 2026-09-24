@@ -19,7 +19,7 @@ Checks for in-flight work first (and finishes it), then pulls dispatchable stori
 
 Each step has detailed instructions in a separate file under `steps/`. **Read each step file when you reach that step** — do NOT read all steps upfront.
 
-The dispatch flow is: clean up workspace -> sprint sync -> check in-flight work -> finish it -> gather new stories -> orchestrator profiles -> present batch -> create worktrees -> spawn parallel team -> operator tests -> review agents -> smoke test -> merge to main.
+The dispatch flow is: clean up workspace -> sprint sync -> check in-flight work -> finish it -> gather new stories -> orchestrator profiles -> present batch -> create worktrees -> spawn parallel team -> fleet-ui-verify lane runs the plan (operator only for OPERATOR-marked steps) -> review agents -> smoke test -> merge to main.
 
 ### MANDATORY Pipeline Order (DO NOT SKIP GATES)
 

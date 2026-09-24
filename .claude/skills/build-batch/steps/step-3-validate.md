@@ -129,23 +129,26 @@ Add a Linear comment summarizing:
 - All milestones shipped + their commit ranges
 - CI / Playwright / Chrome MCP / Discord smoke results
 - Any tech-debt entries added to TECH-DEBT-BACKLOG.md
-- Slot URL the operator will browser-test against: `https://slot-${RL_SLOT}.gamernight.net`
+- Slot URL the `fleet-ui-verify` lane (and any OPERATOR-marked plan steps) run against: `https://slot-${RL_SLOT}.gamernight.net`
 
 ---
 
-## 3g. Update state, present to operator, FULL STOP
+## 3g. Fleet-ui-verify lane, present to operator, FULL STOP
+
+For any milestone with a visible or felt surface: create the fleet test plan (`rl_test_plan_create`), seed AFTER this gate, then spawn a `fleet-ui-verify` lane (skill loaded first — `.claude/skills/fleet-ui-verify/SKILL.md`) against the slot URL with the plan id and seeded ids. Take its PASS/FAIL/BLOCKED/OPERATOR verdicts into the presentation table below. FULL STOP is for the operator's `OPERATOR`-marked steps only, batched into one ask.
 
 Update `<worktree>/build-state.yaml`:
 
 ```yaml
 pipeline:
   current_step: "review"
-  next_action: "All milestones in 'In Review'. Operator browser-tests at https://slot-N.gamernight.net. When verdict given via Linear → read step-4-review.md."
+  next_action: "All milestones in 'In Review'. fleet-ui-verify lane ran the plan. Operator rules only OPERATOR-marked steps (or, if none, gives a Code Review/Changes Requested verdict on the diff). When verdict given via Linear → read step-4-review.md."
 global_gates:
   ci: PASS
   playwright: PASS                # or SKIPPED if no UI changes
   discord_smoke: PASS             # or SKIPPED if no bot changes
   chrome_mcp_e2e: PASS            # or PASS WITH NOTES
+  ui_verify: PASS                 # fleet-ui-verify lane verdict, or "N/A — no visible/felt surface"
   operator_review: WAITING
 ```
 
@@ -173,6 +176,7 @@ Slot URL: `https://slot-N.gamernight.net` (fleet — your laptop env is FREE)
 | Playwright (desktop + mobile[, scoped: N specs]) | PASS / SKIPPED |
 | Discord smoke | PASS / SKIPPED |
 | Chrome MCP e2e | PASS / PASS WITH NOTES |
+| fleet-ui-verify lane (test plan) | PASS/FAIL/BLOCKED per step / N/A |
 
 ### Chrome MCP e2e summary
 | Flow exercised | Console | Network | Captures |
@@ -191,7 +195,7 @@ Notes for operator attention: <inline bullets from findings>
 - <list any from the plan that were done>
 - <list any still pending — surface explicitly>
 
-Test the slot URL and update Linear:
+Review the `fleet-ui-verify` verdict table and any `OPERATOR`-marked steps, then update Linear:
 - **Code Review** = approved, ready for code review
 - **Changes Requested** = needs rework (add feedback as comment)
 
@@ -206,6 +210,6 @@ Reviewer (Step 4) and architect (Step 4d) do NOT need the env. Release now:
 mcp__mcp-env__env_lock_release
 ```
 
-For fleet builds the slot lease stays active — the operator is browser-testing against the slot and the slot's lease lives independently of the local env-lock. Don't release the slot until Step 5 ship cleanup.
+For fleet builds the slot lease stays active — the `fleet-ui-verify` lane (and any OPERATOR-marked steps) run against the slot, and the slot's lease lives independently of the local env-lock. Don't release the slot until Step 5 ship cleanup.
 
 Proceed to **Step 4 — Review** when the operator gives a verdict via Linear.
