@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ViewportReadout } from './ViewportReadout';
 
@@ -24,7 +24,7 @@ describe('ViewportReadout (ROK-1661 diagnostic)', () => {
         expect(panel).not.toHaveClass('fixed');
         for (const label of ['innerHeight', 'clientHeight', 'vv.height', 'vv.offsetTop', 'vv.pageTop', 'vv.scale',
             'scrollY', 'max scroll', 'scrollHeight', 'fixed probe bottom', 'shell minHeight', 'footer bottom',
-            'html bg', 'body bg', 'orientation']) {
+            'html bg', 'body bg', 'orientation', 'icb − vv', 'activeElement', 'screen', 'visibility', 'last event']) {
             expect(panel).toHaveTextContent(label);
         }
         expect(panel).toHaveTextContent('950px');
@@ -33,6 +33,14 @@ describe('ViewportReadout (ROK-1661 diagnostic)', () => {
         status.demoMode = false;
         render(<ViewportReadout shellHeight={950} />);
         expect(screen.queryByTestId('viewport-readout')).toBeNull();
+    });
+
+    it('last event starts at none and then names the most recent watched event', async () => {
+        render(<ViewportReadout shellHeight={1048} />);
+        const panel = screen.getByTestId('viewport-readout');
+        expect(panel).toHaveTextContent(/last event\s*none/);
+        window.dispatchEvent(new Event('pageshow'));
+        await waitFor(() => expect(panel).toHaveTextContent(/last event\s*pageshow \d+ms ago/));
     });
 
     it('nudge pulls a scroll past the document end back to scrollHeight - innerHeight', () => {
