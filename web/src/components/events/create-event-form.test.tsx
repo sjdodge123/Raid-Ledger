@@ -108,11 +108,14 @@ function renderForm(props: Parameters<typeof CreateEventForm>[0] = {}) {
 describe('CreateEventForm — custom duration inputs stacking', () => {
     it('custom duration inputs show hr and min labels', () => {
         renderForm();
-        const customBtn = screen.getByRole('button', { name: 'Custom' });
-        fireEvent.click(customBtn);
+        const customRadio = screen.getByRole('radio', { name: 'Custom' });
+        fireEvent.click(customRadio);
 
+        expect(customRadio).toBeChecked();
         expect(screen.getByText('hr')).toBeInTheDocument();
         expect(screen.getByText('min')).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: 'Duration hours' })).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: 'Duration minutes' })).toBeInTheDocument();
     });
 });
 
@@ -186,13 +189,13 @@ describe('CreateEventForm — desktop layout unchanged', () => {
         expect(screen.getByRole('button', { name: 'Generic Slots' })).toBeInTheDocument();
     });
 
-    it('renders all duration preset buttons', () => {
+    it('renders all duration preset radios', () => {
         renderForm();
-        expect(screen.getByRole('button', { name: '1h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '1.5h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '2h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '3h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '4h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '1h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '1.5h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '2h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '3h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '4h' })).toBeInTheDocument();
     });
 
     it('renders form section labels', () => {
