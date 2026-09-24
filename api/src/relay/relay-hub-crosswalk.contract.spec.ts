@@ -56,7 +56,10 @@ const FAILING_ITEMS: Array<[string, Record<string, unknown>, object]> = [
   ],
   [
     'has a provenance entry with no matching id',
-    { ...VALID_ITEM, provenance: { ...VALID_ITEM.provenance, itadUuid: 'itad' } },
+    {
+      ...VALID_ITEM,
+      provenance: { ...VALID_ITEM.provenance, itadUuid: 'itad' },
+    },
     { message: ONE_PROVENANCE_PER_ID },
   ],
 ];
@@ -88,7 +91,10 @@ describe('CrosswalkContributionItemSchema (AC3)', () => {
   });
 
   it("degrades an unrecognised provenance value such as 'bogus' to 'unknown' (D15)", () => {
-    const item = { ...VALID_ITEM, provenance: { igdbId: 'bogus', steamAppId: 'steam' } };
+    const item = {
+      ...VALID_ITEM,
+      provenance: { igdbId: 'bogus', steamAppId: 'steam' },
+    };
 
     const result = CrosswalkContributionItemSchema.safeParse(item);
 
@@ -114,7 +120,11 @@ describe('CrosswalkContributionBatchSchema (AC3)', () => {
 
     expect(result.success).toBe(false);
     expect(result.error?.issues).toEqual([
-      expect.objectContaining({ code: 'too_big', maximum: 100, path: ['items'] }),
+      expect.objectContaining({
+        code: 'too_big',
+        maximum: 100,
+        path: ['items'],
+      }),
     ]);
   });
 });

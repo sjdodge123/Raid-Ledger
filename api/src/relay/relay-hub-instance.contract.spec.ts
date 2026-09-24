@@ -63,9 +63,12 @@ const TODAY_STATS = {
 };
 
 describe('relay hub contract — barrel (AC1)', () => {
-  it.each(RELAY_HUB_EXPORTS)('exports %s from @raid-ledger/contract', (name) => {
-    expect(Object.keys(contract)).toContain(name);
-  });
+  it.each(RELAY_HUB_EXPORTS)(
+    'exports %s from @raid-ledger/contract',
+    (name) => {
+      expect(Object.keys(contract)).toContain(name);
+    },
+  );
 
   it('exports a z.infer type for each of the 14 schemas (checked by tsc)', () => {
     const typeCount: RelayHubInferredTypes['length'] = 14;
