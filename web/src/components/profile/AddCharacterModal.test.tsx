@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AddCharacterModal } from './AddCharacterModal';
-import { useCreateCharacter } from '../../hooks/use-character-mutations';
+import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
 import type { CharacterDto } from '@raid-ledger/contract';
 
 // Mock hooks used by AddCharacterModal
@@ -44,8 +44,10 @@ vi.mock('../../hooks/use-game-registry', () => ({
 
 // Mock GameSearchInput to avoid IGDB search complexity
 vi.mock('../events/game-search-input', () => ({
-    GameSearchInput: vi.fn(({ error }: { error?: string }) => (
+    GameSearchInput: vi.fn(({ error, onChange }: { error?: string; onChange?: (game: unknown) => void }) => (
         <div data-testid="game-search-input">
+            <button type="button" data-testid="pick-game"
+                onClick={() => onChange?.({ id: 9, igdbId: 9, name: 'Valheim', slug: 'valheim', coverUrl: null })}>Pick</button>
             {error && <span data-testid="game-search-error">{error}</span>}
         </div>
     )),
@@ -53,7 +55,9 @@ vi.mock('../events/game-search-input', () => ({
 
 // Mock PluginSlot to render nothing (no plugins active in tests)
 vi.mock('../../plugins', () => ({
-    PluginSlot: vi.fn(() => null),
+    PluginSlot: vi.fn(({ context }: { context?: { onTabChange?: (tab: 'import') => void } }) => (context?.onTabChange
+        ? <button type="button" data-testid="to-import" onClick={() => context.onTabChange?.('import')}>Import tab</button>
+        : null)),
 }));
 
 const createArmorySyncedCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
@@ -452,5 +456,149 @@ describe('AddCharacterModal — form primitives (ROK-1648)', () => {
     it('the read-only Game caption is plain text, not an orphan <label>', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         expect(screen.getByText('Game', { exact: true }).closest('label')).toBeNull();
+    });
+});
+
+// ROK-1655 — every close path goes through the dirty-close guard; Save does not.
+const pressEscape = () => fireEvent.keyDown(document, { key: 'Escape' });
+const confirmShown = () => screen.queryByRole('dialog', { name: 'Discard your changes?' });
+const typeName = (value: string) => fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), { target: { value } });
+
+function renderDirty(props: Partial<Parameters<typeof AddCharacterModal>[0]> = {}) {
+    const onClose = vi.fn();
+    renderModal({ onClose, ...props });
+    typeName('Thrall');
+    return onClose;
+}
+
+function clickConfirmButton(name: 'Keep editing' | 'Discard') {
+    const button = screen.queryByRole('button', { name });
+    expect(button, `the discard confirm should offer "${name}"`).not.toBeNull();
+    fireEvent.click(button!);
+}
+
+const closePaths: [string, () => void][] = [
+    ['Escape', pressEscape],
+    ['the backdrop', () => fireEvent.click(screen.getByRole('dialog', { name: 'Add Character' }).previousElementSibling!)],
+    ['×', () => fireEvent.click(screen.getByRole('button', { name: 'Close modal' }))],
+    ['Cancel', () => fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))],
+];
+
+describe('AddCharacterModal — dirty-close guard (ROK-1655)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(useCreateCharacter).mockImplementation(defaultCreate as never);
+    });
+
+    it.each(closePaths)('on a dirty form, %s shows "Discard your changes?" instead of closing', (_path, close) => {
+        const onClose = renderDirty();
+        close();
+        expect(confirmShown(), 'the discard confirm should open').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('Keep editing dismisses the confirm and preserves the typed name', () => {
+        const onClose = renderDirty();
+        pressEscape();
+        clickConfirmButton('Keep editing');
+        expect(confirmShown()).toBeNull();
+        expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Thrall');
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('Discard closes the modal', () => {
+        const onClose = renderDirty();
+        pressEscape();
+        clickConfirmButton('Discard');
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('a clean new character (preselected game, default Main) closes on Escape with no confirm', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        pressEscape();
+        expect(onClose, 'an untouched form should close at once').toHaveBeenCalledTimes(1);
+        expect(confirmShown()).toBeNull();
+    });
+
+    it('picking a game on a new character counts as dirty', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose, gameId: undefined, gameName: undefined });
+        fireEvent.click(screen.getByTestId('pick-game'));
+        pressEscape();
+        expect(confirmShown(), 'a picked game is a change').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+});
+
+describe('AddCharacterModal — editing path + successful save (ROK-1655)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(useCreateCharacter).mockImplementation(defaultCreate as never);
+        vi.mocked(useUpdateCharacter).mockImplementation(defaultCreate as never);
+    });
+
+    it('an untouched edit closes on Escape with no confirm', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose, editingCharacter: createManualCharacter() });
+        pressEscape();
+        expect(onClose, 'an untouched edit should close at once').toHaveBeenCalledTimes(1);
+        expect(confirmShown()).toBeNull();
+    });
+
+    it('an edit is dirty once a field changes', () => {
+        const onClose = renderDirty({ editingCharacter: createManualCharacter() });
+        pressEscape();
+        expect(confirmShown(), 'a changed name is a change').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('a successful create closes with no confirm', () => {
+        const mutate = vi.fn((_dto: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+        vi.mocked(useCreateCharacter).mockImplementation((() => ({ mutate, isPending: false })) as never);
+        const onClose = renderDirty();
+        fireEvent.click(screen.getByRole('button', { name: 'Add Character' }));
+        expect(mutate).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirmShown()).toBeNull();
+    });
+
+    it('a successful update closes with no confirm', () => {
+        const mutate = vi.fn((_dto: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+        vi.mocked(useUpdateCharacter).mockImplementation((() => ({ mutate, isPending: false })) as never);
+        const onClose = renderDirty({ editingCharacter: createManualCharacter() });
+        fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+        expect(mutate).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirmShown()).toBeNull();
+    });
+});
+
+describe('AddCharacterModal — pinned footer (ROK-1655)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(useCreateCharacter).mockImplementation(defaultCreate as never);
+    });
+
+    it('the submit sits in the Modal footer, outside the scrolling form, and still submits it', () => {
+        const mutate = vi.fn();
+        vi.mocked(useCreateCharacter).mockImplementation((() => ({ mutate, isPending: false })) as never);
+        renderModal();
+        const footer = screen.queryByTestId('modal-footer');
+        expect(footer, 'the form actions should render in the pinned Modal footer').not.toBeNull();
+        const submit = within(footer!).getByRole('button', { name: 'Add Character' });
+        const form = document.querySelector('form')!;
+        expect(form.contains(submit), 'the submit must not scroll with the body').toBe(false);
+        expect(submit).toHaveAttribute('form', form.id);
+        expect(within(footer!).getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+        typeName('Thrall');
+        fireEvent.click(submit);
+        expect(mutate).toHaveBeenCalledTimes(1);
+    });
+
+    it('on the Import tab there is no footer (the plugin keeps its own actions in the body)', () => {
+        renderModal();
+        fireEvent.click(screen.getByTestId('to-import'));
+        expect(screen.queryByTestId('modal-footer')).toBeNull();
     });
 });
