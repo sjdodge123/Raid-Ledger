@@ -20,6 +20,7 @@ import type {
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import type { MagicLinkService } from '../../auth/magic-link.service';
 import type { LfgService } from '../../lfg/lfg.service';
 import type { SettingsService } from '../../settings/settings.service';
 import {
@@ -32,6 +33,7 @@ import { resolveLfgCaller, type LfgCaller } from '../commands/lfg.command';
 import { buildLfgJoinConfirmation } from '../listeners/lfg-join-confirmation.helpers';
 import { LFG_COMPOSER_COPY, LFG_COMPOSER_IDS } from './lfg-composer.constants';
 import { buildComposerModal } from './lfg-composer-card.helpers';
+import { resolveComposerGamesUrl } from './lfg-composer-link.helpers';
 import {
   buildCandidatesReply,
   buildNoMatchReply,
@@ -60,6 +62,8 @@ export interface ComposerFlowDeps {
     SettingsService,
     'getClientUrl' | 'getDiscordBotTimezone'
   >;
+  /** ROK-1685 — mints the clicker's own `View games ↗` magic link. */
+  magicLinkService: Pick<MagicLinkService, 'generateLink'>;
 }
 
 /** AC5 — the `/lfg` refusal for this caller, or null when they may post. */
@@ -104,23 +108,25 @@ export async function openComposerModal(
  *
  * @param deps - Flow dependencies.
  * @param rawTerm - What was typed.
+ * @param discordUserId - The clicker; `View games ↗` signs THEM in (ROK-1685).
  * @returns The ephemeral reply for that outcome.
  */
 export async function renderComposerSearch(
   deps: ComposerFlowDeps,
   rawTerm: string,
+  discordUserId: string,
 ): Promise<LfgComposerReply> {
   const term = normalizeComposerTerm(rawTerm);
-  const clientUrl = await deps.settingsService.getClientUrl();
-  if (!term) return buildNoMatchReply(term, clientUrl);
+  const gamesUrl = await resolveComposerGamesUrl(deps, discordUserId, term);
+  if (!term) return buildNoMatchReply(term, gamesUrl);
   const matches = await searchComposerGames(deps.db, term);
   const fuzzy = matches.length
     ? []
     : await searchComposerGamesFuzzy(deps.db, term);
   const match = classifyComposerMatch(term, matches, fuzzy);
-  if (match.kind === 'none') return buildNoMatchReply(term, clientUrl);
+  if (match.kind === 'none') return buildNoMatchReply(term, gamesUrl);
   const games = match.kind === 'single' ? [match.game] : match.games;
-  return buildCandidatesReply(term, games, match.kind === 'fuzzy', clientUrl);
+  return buildCandidatesReply(term, games, match.kind === 'fuzzy', gamesUrl);
 }
 
 /**
@@ -138,7 +144,9 @@ export async function submitComposerSearch(
     interaction.message.flags.has(MessageFlags.Ephemeral);
   if (inPlace) await interaction.deferUpdate();
   else await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await interaction.editReply(await renderComposerSearch(deps, term));
+  await interaction.editReply(
+    await renderComposerSearch(deps, term, interaction.user.id),
+  );
 }
 
 /**
@@ -156,7 +164,9 @@ export async function backToComposerCandidates(
       LFG_COMPOSER_IDS.BACK_TO_CANDIDATES,
     ) ?? '';
   await interaction.deferUpdate();
-  await interaction.editReply(await renderComposerSearch(deps, term));
+  await interaction.editReply(
+    await renderComposerSearch(deps, term, interaction.user.id),
+  );
 }
 
 /** A candidate picked — step 4 for that game, with Back to the select. */
@@ -171,11 +181,13 @@ export async function pickComposerGame(
   const game = /^\d+$/.test(raw)
     ? await findComposerGame(deps.db, Number(raw))
     : null;
-  const clientUrl = await deps.settingsService.getClientUrl();
   if (!game) {
-    await interaction.editReply(buildNoMatchReply(term, clientUrl));
+    const user = interaction.user.id;
+    const gamesUrl = await resolveComposerGamesUrl(deps, user, term);
+    await interaction.editReply(buildNoMatchReply(term, gamesUrl));
     return;
   }
+  const clientUrl = await deps.settingsService.getClientUrl();
   await interaction.editReply(
     buildUrgencyReply({
       game,

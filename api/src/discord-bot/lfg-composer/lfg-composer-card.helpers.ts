@@ -1,12 +1,15 @@
 /**
  * ROK-1612 — the pinned card and the search modal.
  *
- * PURE builders: no database, no settings, no client. `View games ↗` is a URL
- * button, which is the whole reason it is safe to leave on the card forever —
- * it raises no interaction, so it cannot fail, rate-limit or time out. Discord
- * rejects a Link button with an empty URL, so an unconfigured deployment loses
- * the link rather than the entire card (the rule `buildLfgPostComponents`
- * already follows).
+ * PURE builders: no database, no settings, no client. The pinned card is a
+ * PUBLIC message, so since ROK-1685 its `View games ↗` is a press
+ * (`LFG_COMPOSER_IDS.VIEW`), never a link: the handler answers the clicker
+ * ephemerally with a link carrying THEIR OWN magic-link token, and the card
+ * itself holds no URL a stranger could reuse. An unconfigured deployment drops
+ * that press rather than the entire card — there would be nothing to link to.
+ * The ephemeral replies keep a Link button, built from a finished URL by
+ * `buildViewGamesLinkButton`; `fitGamesLink` fits the searched term into a
+ * minted link under Discord's cap without touching the token.
  *
  * The modal carries exactly one text input. That asymmetry is forced, not
  * chosen: `LabelBuilder` appears 0 times in the installed discord.js typings,
@@ -44,13 +47,17 @@ export const DISCORD_LINK_URL_MAX = 512;
  * so 64 of them overflow the cap on an ordinary base. The term loses one code
  * point at a time (never half a surrogate pair) until the URL fits; a base too
  * long to fit even one links plain /games.
+ *
+ * @param reserve - Characters the caller appends afterwards (a `#token=…`
+ *   fragment); the cap has to leave room for them.
  */
-function withSearchTerm(url: string, term: string): string {
+function withSearchTerm(url: string, term: string, reserve = 0): string {
+  const max = DISCORD_LINK_URL_MAX - reserve;
   const points = Array.from(term);
   while (points.length > 0) {
     const q = new URLSearchParams({ q: points.join('') }).toString();
     const linked = `${url}?${q}`;
-    if (linked.length <= DISCORD_LINK_URL_MAX) return linked;
+    if (linked.length <= max) return linked;
     points.pop();
   }
   return url;
@@ -79,19 +86,43 @@ export function gamesPageUrl(
 }
 
 /**
- * The `View games ↗` link button, or null when the deployment has no web URL.
+ * A minted `/games#token=…` magic link with `?q=<term>` fitted in (ROK-1685).
  *
- * @param clientUrl - Deployment client URL.
- * @param term - The searched term, carried into the link as `?q=`; the pinned
- *   card passes none (nothing has been searched yet).
+ * The link splits at its FIRST `#`. Everything from there is the token
+ * fragment: it is kept byte for byte and reserved out of the cap before the
+ * term is placed, so only the term gives way. The term is encoded, so a `#` or
+ * `&` typed into it can never pose as the fragment. `generateLink` builds the
+ * link from a bare path, so there is no query for `?q=` to collide with.
+ *
+ * @param link - A finished link from `MagicLinkService.generateLink`.
+ * @param term - What the player searched; blank hands back the bare link.
+ * @returns The fitted link, or null when even the bare link is over the cap —
+ *   Discord would reject the whole message rather than the one button.
+ */
+export function fitGamesLink(link: string, term: string): string | null {
+  if (link.length > DISCORD_LINK_URL_MAX) return null;
+  const hash = link.indexOf('#');
+  const base = hash < 0 ? link : link.slice(0, hash);
+  const fragment = hash < 0 ? '' : link.slice(hash);
+  const fitted = withSearchTerm(
+    base,
+    normalizeComposerTerm(term),
+    fragment.length,
+  );
+  return `${fitted}${fragment}`;
+}
+
+/**
+ * The ephemeral replies' `View games ↗` link button, from a finished URL.
+ *
+ * @param url - The link to open (`gamesPageUrl`'s or `fitGamesLink`'s), or
+ *   null when there is none.
  * @returns The button, or null — callers spread the result so an unconfigured
  *   instance simply renders one fewer control.
  */
-export function buildViewGamesButton(
-  clientUrl?: string | null,
-  term?: string | null,
+export function buildViewGamesLinkButton(
+  url: string | null,
 ): ButtonBuilder | null {
-  const url = gamesPageUrl(clientUrl, term);
   if (!url) return null;
   return new ButtonBuilder()
     .setStyle(ButtonStyle.Link)
@@ -111,7 +142,8 @@ export interface LfgComposerCard {
  * Title only — the operator struck every line of subtitle and every mention of
  * not having to leave the channel.
  *
- * @param clientUrl - Deployment client URL; absent drops `View games ↗`.
+ * @param clientUrl - Deployment client URL; absent drops `View games ↗`,
+ *   whose handler would have nothing to link to.
  * @returns Content and one button row.
  */
 export function buildComposerCard(clientUrl?: string | null): LfgComposerCard {
@@ -119,8 +151,11 @@ export function buildComposerCard(clientUrl?: string | null): LfgComposerCard {
     .setCustomId(LFG_COMPOSER_IDS.OPEN)
     .setStyle(ButtonStyle.Primary)
     .setLabel(LFG_COMPOSER_COPY.POST_BUTTON);
-  const view = buildViewGamesButton(clientUrl);
-  const buttons = view ? [post, view] : [post];
+  const view = new ButtonBuilder()
+    .setCustomId(LFG_COMPOSER_IDS.VIEW)
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel(LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON);
+  const buttons = clientUrl?.trim() ? [post, view] : [post];
   return {
     content: LFG_COMPOSER_COPY.CARD_TITLE,
     components: [new ActionRowBuilder<ButtonBuilder>().addComponents(buttons)],
