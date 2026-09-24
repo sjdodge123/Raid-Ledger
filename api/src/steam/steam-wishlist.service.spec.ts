@@ -8,6 +8,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import * as steamHttp from './steam-http.util';
+import * as discovery from './steam-itad-discovery.helpers';
 
 jest.mock('./steam-http.util');
 
@@ -313,5 +314,30 @@ describe('SteamWishlistService', () => {
         removed: 0,
       });
     });
+  });
+});
+
+describe('SteamWishlistService — discovery steamAppIdSource (ROK-1680)', () => {
+  let spy: jest.SpyInstance;
+
+  beforeEach(() => {
+    spy = jest
+      .spyOn(discovery, 'discoverGameViaItad')
+      .mockResolvedValue(null);
+  });
+
+  afterEach(() => spy.mockRestore());
+
+  it("tags wishlist discoveries 'steam'", async () => {
+    const service = new SteamWishlistService(
+      createDrizzleMock() as never,
+      { get: jest.fn().mockResolvedValue('false') } as never,
+      undefined,
+      { lookupBySteamAppId: jest.fn() } as never,
+    );
+
+    await service['discoverUnmatched']([{ appid: 300 }] as never, []);
+
+    expect(spy).toHaveBeenCalledWith(300, expect.any(Object), 'steam');
   });
 });

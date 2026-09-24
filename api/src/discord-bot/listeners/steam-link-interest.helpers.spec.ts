@@ -20,7 +20,9 @@ import {
   isGameNominated,
   getAutoNominateSteamUrlsPref,
   setAutoNominateSteamUrlsPref,
+  discoverGameBySteamAppId,
 } from './steam-link-interest.helpers';
+import * as discovery from '../../steam/steam-itad-discovery.helpers';
 import {
   createDrizzleMock,
   type MockDb,
@@ -268,5 +270,27 @@ describe('setAutoNominateSteamUrlsPref', () => {
     await setAutoNominateSteamUrlsPref(mockDb as never, 7, true);
 
     expect(mockDb.onConflictDoUpdate).toHaveBeenCalled();
+  });
+});
+
+describe('discoverGameBySteamAppId — steamAppIdSource (ROK-1680)', () => {
+  it("tags a pasted store URL's discovery 'itad'", async () => {
+    const spy = jest
+      .spyOn(discovery, 'discoverGameViaItad')
+      .mockResolvedValue(null);
+    const deps = {
+      db: mockDb as never,
+      lookupBySteamAppId: jest.fn(),
+      adultFilterEnabled: false,
+    };
+
+    try {
+      const result = await discoverGameBySteamAppId(deps, 570);
+
+      expect(result).toBeNull();
+      expect(spy).toHaveBeenCalledWith(570, deps, 'itad');
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
