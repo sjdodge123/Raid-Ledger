@@ -651,7 +651,8 @@ solid `primary`/`destructive` fills are identical in both with the label forced 
 Native control chrome follows root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the
 ROOT, not in a scoped preview (`design-system-tokens.md` §3). A `brandColor` fill is the caller's data and
 does not flip; its label is white in both. Rendered: `/dev/design-system` → *Forms*
-(`web/src/dev/design-system/forms-section.tsx` + `forms-pickers-demo.tsx`).
+(`web/src/dev/design-system/forms-section.tsx` + `forms-pickers-demo.tsx` + `forms-recipes-demo.tsx` — the
+segmented "All" filter and the row menu).
 
 ### 4.12 Badges with counts
 

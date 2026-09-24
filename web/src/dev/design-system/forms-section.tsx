@@ -3,7 +3,8 @@
  * `web/src/components/ui`: `Button`, `Field`, `Input`, `Select`, `Textarea`,
  * `Checkbox`, `RadioGroup`, `Slider`, `SearchInput`, `Combobox`, plus ROK-1655's
  * `PasswordInput` here and `FilePicker` / `ColorInput` / `Button brandColor` in
- * forms-pickers-demo.tsx. Every example mounts the REAL component, so this page
+ * forms-pickers-demo.tsx, and ROK-1653's segmented "All" filter and row-menu
+ * recipes in forms-recipes-demo.tsx. Every example mounts the REAL component, so this page
  * is the early warning if one drifts.
  *
  * Check both families: the side-by-side toggle renders this twice, and the
@@ -28,6 +29,7 @@ import { SearchInput } from '../../components/ui/search-input';
 import { Combobox } from '../../components/ui/combobox';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { PickerStates } from './forms-pickers-demo';
+import { RecipeStates } from './forms-recipes-demo';
 
 function ButtonVariants(): JSX.Element {
     return (
@@ -205,6 +207,7 @@ export function FormsSection(): JSX.Element {
                     <ChoiceStates />
                     <SearchStates />
                     <PickerStates />
+                    <RecipeStates />
                 </StateGrid>
             </div>
         </Section>
