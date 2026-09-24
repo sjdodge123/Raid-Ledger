@@ -88,6 +88,11 @@ describe('rl_env_signin_link — happy path', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('treats one env listed as several containers (allinone + pg) as one env', async () => {
+    const { deps } = makeDeps({ envs: [{ slug: 'rok-1', slot: '2' }, { slug: 'rok-1', slot: '2' }] });
+    expect((await execute({ slug: 'rok-1' }, deps)).ok).toBe(true);
+  });
+
   it('ignores envs on other slots', async () => {
     const { deps } = makeDeps({ envs: [{ slug: 'rok-1', slot: '2' }, { slug: 'other', slot: '1' }] });
     expect((await execute({ slug: 'rok-1' }, deps)).ok).toBe(true);
