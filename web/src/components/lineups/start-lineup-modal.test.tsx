@@ -630,7 +630,7 @@ describe('PublicShareToggle — Copy link (ROK-1650)', () => {
 // (Cancel too, ruling 4); the actions sit in the pinned footer; a pending
 // create is a loading Button (ruling 7). LineupBanner keeps the modal mounted,
 // so a reopen must start from fresh defaults.
-describe('StartLineupModal — dirty close + pinned footer (ROK-1655)', () => {
+describe('StartLineupModal — dirty close guard (ROK-1655)', () => {
     const confirm = () => screen.queryByRole('dialog', { name: 'Discard your changes?' });
     const title = () => screen.getByLabelText(/title/i) as HTMLInputElement;
     const footerButton = (name: RegExp) =>
@@ -691,11 +691,20 @@ describe('StartLineupModal — dirty close + pinned footer (ROK-1655)', () => {
         expect(onClose).toHaveBeenCalledTimes(2);
     });
 
+});
+
+describe('StartLineupModal — pinned footer actions (ROK-1655)', () => {
+    const confirm = () => screen.queryByRole('dialog', { name: 'Discard your changes?' });
+    const footerButton = (name: RegExp) =>
+        within(screen.getByTestId('modal-footer')).getByRole('button', { name });
+
     it('a successful create closes without the confirm', async () => {
         const user = userEvent.setup();
         const onClose = vi.fn();
         renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
-        await editTitle(user);
+        const title = screen.getByLabelText(/title/i);
+        await user.clear(title);
+        await user.type(title, 'Raid night');
         await user.click(footerButton(/create lineup/i));
         expect(mutateAsync).toHaveBeenCalledTimes(1);
         expect(onClose).toHaveBeenCalledTimes(1);

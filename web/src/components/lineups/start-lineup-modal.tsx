@@ -8,8 +8,11 @@
  * canonical match-shape + phase-duration values; the scheduling toggle controls
  * whether the lineup advances into a scheduling poll after Decided.
  */
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
+import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { useCreateLineup } from '../../hooks/use-lineups';
 import { toast } from '../../lib/toast';
 import { NominationTargetControl } from './start-lineup-nomination-target';
@@ -81,10 +84,10 @@ function buildCreatePayload(
   };
 }
 
-/** The advanced controls behind "More options" (ROK-1302). */
-function StartLineupMoreOptions({ form }: { form: StartLineupForm }) {
+/** Match shape, nomination target, scheduling and channel (ROK-1302). */
+function MatchShapeOptions({ form }: { form: StartLineupForm }) {
   return (
-    <MoreOptions>
+    <>
       <div className="border-t border-edge/30 pt-4">
         <ThresholdSlider
           value={form.durations.matchThreshold}
@@ -108,6 +111,14 @@ function StartLineupMoreOptions({ form }: { form: StartLineupForm }) {
         value={form.fields.channelOverrideId}
         onChange={(v) => form.setField('channelOverrideId', v)}
       />
+    </>
+  );
+}
+
+/** Phase durations + tiebreaker (ROK-1302). */
+function PhaseOptions({ form }: { form: StartLineupForm }) {
+  return (
+    <>
       <p className="text-sm text-muted">
         Configure the duration for each phase. The lineup automatically
         advances through phases when time expires.
@@ -130,93 +141,148 @@ function StartLineupMoreOptions({ form }: { form: StartLineupForm }) {
         value={form.durations.tiebreakerMode}
         onChange={form.durations.setTiebreakerMode}
       />
+    </>
+  );
+}
+
+/** The advanced controls behind "More options" (ROK-1302). */
+function StartLineupMoreOptions({ form }: { form: StartLineupForm }) {
+  return (
+    <MoreOptions>
+      <MatchShapeOptions form={form} />
+      <PhaseOptions form={form} />
     </MoreOptions>
   );
 }
 
-export function StartLineupModal({ isOpen, onClose }: Props) {
+/** Visibility, public share and invitees — the lineup's audience. */
+function AudienceFields({ form }: { form: StartLineupForm }) {
+  const { fields, setField } = form;
+  return (
+    <>
+      <VisibilityToggle
+        value={fields.visibility}
+        onChange={(v) => setField('visibility', v)}
+      />
+      {fields.visibility === 'public' && (
+        <PublicShareToggle
+          enabled={fields.publicShareEnabled}
+          onChange={(v) => setField('publicShareEnabled', v)}
+        />
+      )}
+      {/* ROK-1440: shown for public lineups too — it seeds known attendees
+          without closing the lineup to anyone else. */}
+      <InviteeMultiSelect
+        value={fields.inviteeUserIds}
+        onChange={(v) => setField('inviteeUserIds', v)}
+        mode={fields.visibility}
+      />
+    </>
+  );
+}
+
+/**
+ * ROK-1302 (operator review): top-level = Title, Preset chooser, Description,
+ * Visibility + audience; the raw sliders + scheduling toggle sit under "More
+ * options".
+ */
+function StartLineupFieldsBody({ form }: { form: StartLineupForm }) {
+  const { fields, setField } = form;
+  return (
+    <div className="space-y-4">
+      <TitleField value={fields.title} onChange={(v) => setField('title', v)} />
+      <PresetChooser value={fields.preset} onChange={form.applyPreset} />
+      <DescriptionField
+        value={fields.description}
+        onChange={(v) => setField('description', v)}
+      />
+      <AudienceFields form={form} />
+      <StartLineupMoreOptions form={form} />
+    </div>
+  );
+}
+
+/** Create the lineup, then close (raw `onClose` — no confirm) and navigate. */
+function useStartLineupSubmit(form: StartLineupForm, onClose: () => void) {
   const navigate = useNavigate();
   const createLineup = useCreateLineup();
-  const form = useStartLineupForm();
-  const { fields, setField, durations } = form;
-  const { title, visibility, inviteeUserIds } = fields;
-
+  const { title, visibility, inviteeUserIds } = form.fields;
   const canSubmit =
-    title.trim() !== '' &&
-    (visibility === 'public' || inviteeUserIds.length > 0);
+    title.trim() !== '' && (visibility === 'public' || inviteeUserIds.length > 0);
 
-  async function handleSubmit() {
-    const trimmed = title.trim();
-    if (!trimmed) {
-      toast.error('Title is required');
-      return;
-    }
+  async function submit() {
+    if (!title.trim()) return void toast.error('Title is required');
     if (visibility === 'private' && inviteeUserIds.length === 0) {
-      toast.error('Private lineups require at least one invitee');
-      return;
+      return void toast.error('Private lineups require at least one invitee');
     }
     try {
       const result = await createLineup.mutateAsync(
-        buildCreatePayload({ ...fields, durations }),
+        buildCreatePayload({ ...form.fields, durations: form.durations }),
       );
       onClose();
       navigate(`/community-lineup/${result.id}`);
     } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : 'Failed to create lineup',
-      );
+      toast.error(err instanceof Error ? err.message : 'Failed to create lineup');
     }
   }
+  return { submit, canSubmit, isPending: createLineup.isPending };
+}
 
+interface ActionsProps {
+  onCancel: () => void;
+  onCreate: () => void;
+  canSubmit: boolean;
+  isPending: boolean;
+}
+
+/** The pinned footer (ROK-1655): Cancel goes through the guard (ruling 4). */
+function StartLineupActions({ onCancel, onCreate, canSubmit, isPending }: ActionsProps) {
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Start Community Lineup">
-      <div className="space-y-4">
-        {/* ROK-1302 (operator review): top-level = Title, Preset chooser,
-            Description, Visibility + audience. The Preset chooser is the visible
-            match-shape control; the raw Threshold/Votes sliders + scheduling
-            toggle live under "More options" for advanced tweaking. */}
-        <TitleField value={title} onChange={(v) => setField('title', v)} />
-        <PresetChooser value={fields.preset} onChange={form.applyPreset} />
-        <DescriptionField
-          value={fields.description}
-          onChange={(v) => setField('description', v)}
-        />
-        <VisibilityToggle
-          value={visibility}
-          onChange={(v) => setField('visibility', v)}
-        />
-        {visibility === 'public' && (
-          <PublicShareToggle
-            enabled={fields.publicShareEnabled}
-            onChange={(v) => setField('publicShareEnabled', v)}
-          />
-        )}
-        {/* ROK-1440: shown for public lineups too — on public it seeds
-            known attendees without closing the lineup to anyone else. */}
-        <InviteeMultiSelect
-          value={inviteeUserIds}
-          onChange={(v) => setField('inviteeUserIds', v)}
-          mode={visibility}
-        />
-        <StartLineupMoreOptions form={form} />
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-secondary bg-panel border border-edge rounded-lg hover:bg-overlay transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => void handleSubmit()}
-            disabled={createLineup.isPending || !canSubmit}
-            className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
-          >
-            {createLineup.isPending ? 'Creating...' : 'Create Lineup'}
-          </button>
-        </div>
-      </div>
+    <>
+      <Button variant="secondary" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button onClick={onCreate} disabled={!canSubmit} loading={isPending}>
+        Create Lineup
+      </Button>
+    </>
+  );
+}
+
+function StartLineupDialog({ isOpen, onClose }: Props) {
+  const form = useStartLineupForm();
+  const { submit, canSubmit, isPending } = useStartLineupSubmit(form, onClose);
+  const closeGuard = useDirtyCloseGuard(form.isDirty, onClose);
+  const footer = (
+    <StartLineupActions
+      onCancel={closeGuard.requestClose}
+      onCreate={() => void submit()}
+      canSubmit={canSubmit}
+      isPending={isPending}
+    />
+  );
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} closeGuard={closeGuard}
+      title="Start Community Lineup" footer={footer}>
+      <StartLineupFieldsBody form={form} />
     </Modal>
   );
+}
+
+/**
+ * Counts the opens. LineupBanner keeps this modal mounted with `isOpen` false,
+ * so the dialog is keyed on the count: every open (after a Discard, a create
+ * or a clean close) starts from fresh defaults and a clean dirty snapshot.
+ */
+function useOpenCount(isOpen: boolean): number {
+  const [seen, setSeen] = useState({ isOpen, count: 0 });
+  if (seen.isOpen !== isOpen) {
+    setSeen({ isOpen, count: isOpen ? seen.count + 1 : seen.count });
+  }
+  return seen.count;
+}
+
+export function StartLineupModal({ isOpen, onClose }: Props) {
+  const openCount = useOpenCount(isOpen);
+  return <StartLineupDialog key={openCount} isOpen={isOpen} onClose={onClose} />;
 }
