@@ -19,7 +19,7 @@ function fileInput(container: HTMLElement): HTMLInputElement {
     return input;
 }
 
-describe('FilePicker', () => {
+describe('FilePicker — trigger', () => {
     it('is a button named by its label', () => {
         render(<FilePicker onFiles={vi.fn()}>Upload logo</FilePicker>);
         expect(screen.getByRole('button', { name: 'Upload logo' })).toHaveAttribute('type', 'button');
@@ -39,7 +39,9 @@ describe('FilePicker', () => {
         expect(input).toHaveClass('hidden');
         expect(input).toHaveAttribute('tabindex', '-1');
     });
+});
 
+describe('FilePicker — picking files', () => {
     it('hands the picked files to onFiles as a File[]', async () => {
         const onFiles = vi.fn();
         const { container } = render(<FilePicker onFiles={onFiles}>Upload logo</FilePicker>);
@@ -73,7 +75,9 @@ describe('FilePicker', () => {
         await userEvent.upload(input, file);
         expect(onFiles).toHaveBeenCalledTimes(2);
     });
+});
 
+describe('FilePicker — states and passthrough', () => {
     it('while loading the button is busy and the click never reaches the input', async () => {
         const { container } = render(
             <FilePicker onFiles={vi.fn()} loading loadingLabel="Uploading…">Upload logo</FilePicker>,
