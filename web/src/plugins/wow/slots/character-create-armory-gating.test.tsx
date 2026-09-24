@@ -101,3 +101,42 @@ describe('CharacterCreateInlineImport — Armory gating (ROK-1636)', () => {
         expect(screen.queryByText(ARMORY_UNAVAILABLE_NOTE)).not.toBeInTheDocument();
     });
 });
+
+/** ROK-1648 (ruling 6 exception): the Manual/Import tabs are Buttons that carry their state in aria-pressed. */
+const manualTab = () => screen.getByRole('button', { name: /^manual$/i });
+const gameVersion = () => screen.getByRole('combobox', { name: 'Game version' });
+
+describe('WoW character-create toggles — aria-pressed + named Game version (ROK-1648)', () => {
+    it('import form: the active tab is pressed, the other is not, and a click moves it', async () => {
+        const user = userEvent.setup();
+        blizzardConfigured();
+        renderWithProviders(<Harness gameSlug="world-of-warcraft-classic" initial="manual" />);
+        await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('import'));
+        expect(importTab(), 'the active Import tab should be aria-pressed').toHaveAttribute('aria-pressed', 'true');
+        expect(manualTab(), 'the inactive Manual tab should not be pressed').toHaveAttribute('aria-pressed', 'false');
+        expect(gameVersion(), 'the Game version select should be named by a visible label').toBeVisible();
+        await user.click(manualTab());
+        expect(manualTab()).toHaveAttribute('aria-pressed', 'true');
+        expect(importTab()).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('import form: a disabled Armory tab is not pressed while Manual is', async () => {
+        blizzardConfigured();
+        renderWithProviders(<Harness gameSlug={FOREVER} initial="import" />);
+        await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('manual'));
+        expect(manualTab()).toHaveAttribute('aria-pressed', 'true');
+        expect(importTab()).toHaveAttribute('aria-pressed', 'false');
+        expect(importTab()).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('inline import: the active mode is pressed and the Game version select is named', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<CharacterCreateInlineImport gameSlug="world-of-warcraft-classic" />);
+        expect(importTab(), 'the active Import mode should be aria-pressed').toHaveAttribute('aria-pressed', 'true');
+        expect(manualTab()).toHaveAttribute('aria-pressed', 'false');
+        expect(gameVersion(), 'the inline Game version select should carry an accessible name').toHaveValue('classic_anniversary');
+        await user.click(manualTab());
+        expect(manualTab()).toHaveAttribute('aria-pressed', 'true');
+        expect(importTab()).toHaveAttribute('aria-pressed', 'false');
+    });
+});
