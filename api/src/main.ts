@@ -19,6 +19,7 @@ import {
   getLogLevels,
   buildLoggerSelfTest,
   installCspReportBodyParser,
+  applyTrustProxy,
 } from './main.helpers';
 
 function configureStaticAssets(
@@ -70,7 +71,8 @@ async function bootstrap() {
     // ROK-1164: the web reads a log download's server-chosen filename.
     exposedHeaders: ['Content-Disposition'],
   });
-  if (isProduction) app.getHttpAdapter().getInstance().set('trust proxy', 1);
+  // ROK-1665: trust private hops (TRUST_PROXY overrides), not a hop count.
+  applyTrustProxy(app, isProduction, process.env.TRUST_PROXY);
   // ROK-1627: CLIENT_URL is seeded from trusted configuration by
   // ClientUrlSeederService — never from a request header.
   configureStaticAssets(app, isProduction);
