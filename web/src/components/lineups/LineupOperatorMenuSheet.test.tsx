@@ -4,7 +4,7 @@
  * same gates, same testids, same modals; the desktop dropdown is unchanged.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, act } from '@testing-library/react';
 import { renderWithProviders } from '../../test/render-helpers';
 import { createMockLineupDetail } from '../../test/lineup-factories';
 import { LineupOperatorMenu } from './LineupOperatorMenu';
@@ -93,6 +93,18 @@ describe('LineupOperatorMenu — phone sheet (ROK-1584)', () => {
         renderMenu(false);
         fireEvent.mouseDown(screen.getByTestId('lineup-operator-menu-edit'));
         expect(screen.getByRole('dialog', { name: 'Lineup menu' })).toBeInTheDocument();
+    });
+
+    it('keeps focus on the Advance confirm button when the sheet closes (fleet UI verify, 375px)', async () => {
+        renderMenu(false);
+        // The sheet moves focus into itself on a 0ms timer; let it land so the
+        // sheet has a real "previous" (the trigger) to restore on close.
+        await act(() => new Promise<void>((r) => setTimeout(r, 0)));
+        fireEvent.click(screen.getByTestId('lineup-operator-menu-advance'));
+        // The modal's focus trap settles on the next animation frame.
+        await act(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
+        const confirm = screen.getByRole('button', { name: 'Advance to Voting' });
+        expect(document.activeElement).toBe(confirm);
     });
 
     it('keeps the popover dropdown on desktop', () => {
