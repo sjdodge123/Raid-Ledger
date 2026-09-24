@@ -124,8 +124,10 @@ describe('LfgComposerListener.handle', () => {
       flags: MessageFlags.Ephemeral,
     });
   });
+});
 
-  it('logs a failed step without the request body, so no token leaks (AC4)', async () => {
+describe('LfgComposerListener.handle logging (ROK-1685 AC4)', () => {
+  it('logs a failed step without the request body, so no token leaks', async () => {
     const lines: string[] = [];
     for (const level of ['error', 'warn', 'log'] as const) {
       jest.spyOn(Logger.prototype, level).mockImplementation((...args) => {
