@@ -383,16 +383,31 @@ describe('DesignSystemPage — ROK-1655 form foundation (Overlays)', () => {
         expect(body!.contains(footer), 'the footer must sit outside the scroll body').toBe(false);
     });
 
-    it('a dirty Escape asks "Discard your changes?", and so does a dirty Cancel', () => {
+    it('a dirty Escape asks "Discard your changes?"; Keep editing returns to the draft', () => {
         const dialog = openFormModal();
-        fireEvent.change(within(dialog).getByRole('textbox', { name: 'Note' }), { target: { value: 'half-typed' } });
+        const note = within(dialog).getByRole('textbox', { name: 'Note' });
+        fireEvent.change(note, { target: { value: 'half-typed' } });
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty Escape must ask first').not.toBeNull();
         expect(screen.getByRole('dialog', { name: 'Edit note' })).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('discard-changes-keep'));
         expect(screen.queryByRole('dialog', { name: 'Discard your changes?' })).toBeNull();
+        expect(note).toHaveValue('half-typed');
+    });
+
+    it('a dirty Cancel asks too; Save closes without asking', () => {
+        const dialog = openFormModal();
+        fireEvent.change(within(dialog).getByRole('textbox', { name: 'Note' }), { target: { value: 'half-typed' } });
         fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
-        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty Cancel must ask too').not.toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty Cancel must ask first').not.toBeNull();
+        fireEvent.click(screen.getByTestId('discard-changes-discard'));
+        expect(screen.queryByRole('dialog', { name: 'Edit note' }), 'Discard must close the modal').toBeNull();
+        fireEvent.click(within(screen.getByTestId('ds-overlays')).getByRole('button', { name: 'Open form modal' }));
+        const again = screen.getByRole('dialog', { name: 'Edit note' });
+        fireEvent.change(within(again).getByRole('textbox', { name: 'Note' }), { target: { value: 'kept' } });
+        fireEvent.click(within(again).getByRole('button', { name: 'Save' }));
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'Save is unguarded').toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Edit note' })).toBeNull();
     });
 
     it('the form BottomSheet has a pinned footer and guards a dirty Escape', () => {
