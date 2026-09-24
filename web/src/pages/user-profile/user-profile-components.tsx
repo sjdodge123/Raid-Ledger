@@ -15,6 +15,8 @@ import { useUserActivity } from "../../hooks/use-user-profile";
 import { getMyPreferences, updatePreference } from "../../lib/api-client";
 import { CharacterCardCompact } from "../../components/characters/character-card-compact";
 import { ActivityContent } from "./activity-modal";
+import { RadioGroup } from "../../components/ui/radio-group";
+import { Checkbox } from "../../components/ui/checkbox";
 export {
   GuestProfile,
   SteamLibrarySection,
@@ -120,7 +122,7 @@ export function GroupedCharacters({
   );
 }
 
-/** Period selector buttons for activity section */
+/** Period selector for the activity section — a segmented RadioGroup (ROK-1648) */
 function PeriodSelector({
   period,
   setPeriod,
@@ -129,21 +131,14 @@ function PeriodSelector({
   setPeriod: (p: ActivityPeriod) => void;
 }): JSX.Element {
   return (
-    <div className="flex gap-1">
-      {PERIOD_LABELS.map((p) => (
-        <button
-          key={p.value}
-          onClick={() => setPeriod(p.value)}
-          className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-            period === p.value
-              ? "bg-emerald-600 text-white"
-              : "bg-overlay text-muted hover:text-foreground"
-          }`}
-        >
-          {p.label}
-        </button>
-      ))}
-    </div>
+    <RadioGroup
+      label="Activity period"
+      hideLabel
+      appearance="segmented"
+      options={PERIOD_LABELS}
+      value={period}
+      onChange={setPeriod}
+    />
   );
 }
 
@@ -190,7 +185,7 @@ export function ActivitySection({
 
   return (
     <div className="user-profile-section">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <h2 className="user-profile-section-title mb-0">Game Activity</h2>
         <PeriodSelector period={period} setPeriod={setPeriod} />
       </div>
@@ -217,22 +212,14 @@ function ActivityPrivacyToggle({
   isPending: boolean;
 }): JSX.Element {
   return (
-    <label className="flex items-center gap-3 cursor-pointer mt-4 pt-4 border-t border-edge-subtle">
-      <input
-        type="checkbox"
+    <div className="mt-4 pt-4 border-t border-edge-subtle">
+      <Checkbox
+        label="Show my game activity publicly"
+        description="When disabled, your activity is hidden from others"
         checked={showActivity}
         onChange={(e) => onToggle(e.target.checked)}
         disabled={isPending}
-        className="w-4 h-4 rounded border-edge text-emerald-600 focus:ring-emerald-500"
       />
-      <div>
-        <span className="text-sm font-medium text-foreground">
-          Show my game activity publicly
-        </span>
-        <p className="text-xs text-muted">
-          When disabled, your activity is hidden from others
-        </p>
-      </div>
-    </label>
+    </div>
   );
 }

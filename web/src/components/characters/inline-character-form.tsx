@@ -2,6 +2,10 @@ import { useCallback, useState } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter } from '../../hooks/use-character-mutations';
 import { PluginSlot } from '../../plugins';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { Select } from '../ui/select';
 
 interface InlineCharacterFormProps {
     gameId: number;
@@ -18,10 +22,10 @@ interface InlineCharacterFormProps {
 /**
  * Reusable inline character creation form (ROK-234).
  * Used inside the signup confirmation modal and other contexts
- * where a full modal isn't appropriate.
+ * where a full modal isn't appropriate. ROK-1648: shared Field / Input /
+ * Select / Button primitives; a missing name is a Field error on the name
+ * input, a failed create is a separate form-level alert.
  */
-const INLINE_INPUT_CLS = 'px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm';
-
 function buildInlinePayload(name: string, charClass: string, spec: string, role: CharacterRole | '', realm: string, gameId: number, hasRoles: boolean) {
     return {
         gameId, name: name.trim(),
@@ -33,6 +37,16 @@ function buildInlinePayload(name: string, charClass: string, spec: string, role:
     };
 }
 
+function InlineTextField({ label, value, onChange, maxLength, error }: {
+    label: string; value: string; onChange: (v: string) => void; maxLength: number; error?: string;
+}) {
+    return (
+        <Field label={label} hideLabel error={error || undefined}>
+            <Input type="text" fieldSize="sm" value={value} onChange={(e) => onChange(e.target.value)} placeholder={label} maxLength={maxLength} />
+        </Field>
+    );
+}
+
 function InlineRoleFields({ charClass, spec, role, realm, onClassChange, onSpecChange, onRoleChange, onRealmChange }: {
     charClass: string; spec: string; role: CharacterRole | ''; realm: string;
     onClassChange: (v: string) => void; onSpecChange: (v: string) => void;
@@ -41,14 +55,16 @@ function InlineRoleFields({ charClass, spec, role, realm, onClassChange, onSpecC
     return (
         <>
             <div className="grid grid-cols-2 gap-2">
-                <input type="text" aria-label="Class" value={charClass} onChange={(e) => onClassChange(e.target.value)} placeholder="Class" maxLength={50} className={INLINE_INPUT_CLS} />
-                <input type="text" aria-label="Spec" value={spec} onChange={(e) => onSpecChange(e.target.value)} placeholder="Spec" maxLength={50} className={INLINE_INPUT_CLS} />
+                <InlineTextField label="Class" value={charClass} onChange={onClassChange} maxLength={50} />
+                <InlineTextField label="Spec" value={spec} onChange={onSpecChange} maxLength={50} />
             </div>
             <div className="grid grid-cols-2 gap-2">
-                <select aria-label="Role" value={role} onChange={(e) => onRoleChange(e.target.value as CharacterRole | '')} className={INLINE_INPUT_CLS}>
-                    <option value="">Role...</option><option value="tank">Tank</option><option value="healer">Healer</option><option value="dps">DPS</option>
-                </select>
-                <input type="text" aria-label="Realm" value={realm} onChange={(e) => onRealmChange(e.target.value)} placeholder="Realm" maxLength={100} className={INLINE_INPUT_CLS} />
+                <Field label="Role" hideLabel>
+                    <Select fieldSize="sm" value={role} onChange={(e) => onRoleChange(e.target.value as CharacterRole | '')} placeholder="Role...">
+                        <option value="tank">Tank</option><option value="healer">Healer</option><option value="dps">DPS</option>
+                    </Select>
+                </Field>
+                <InlineTextField label="Realm" value={realm} onChange={onRealmChange} maxLength={100} />
             </div>
         </>
     );
@@ -57,10 +73,10 @@ function InlineRoleFields({ charClass, spec, role, realm, onClassChange, onSpecC
 function InlineFormFooter({ onCancel, isPending }: { onCancel?: () => void; isPending: boolean }) {
     return (
         <div className="flex gap-2">
-            {onCancel && <button type="button" onClick={onCancel} className="flex-1 px-3 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors text-sm">Cancel</button>}
-            <button type="submit" disabled={isPending} className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-foreground font-medium rounded-lg transition-colors text-sm">
-                {isPending ? 'Creating...' : 'Create Character'}
-            </button>
+            {onCancel && <Button variant="secondary" size="sm" className="flex-1" onClick={onCancel}>Cancel</Button>}
+            <Button type="submit" variant="primary" size="sm" className="flex-1" loading={isPending} loadingLabel="Creating…">
+                Create Character
+            </Button>
         </div>
     );
 }
@@ -72,16 +88,16 @@ export function InlineCharacterForm({ gameId, hasRoles = true, gameSlug, eventId
     const [spec, setSpec] = useState('');
     const [role, setRole] = useState<CharacterRole | ''>('');
     const [realm, setRealm] = useState('');
-    const [error, setError] = useState('');
+    const [errors, setErrors] = useState<{ name?: string; form?: string }>({});
     const [pluginImportActive, setPluginImportActive] = useState(false);
     const handleModeChange = useCallback((mode: 'import' | 'manual') => { setPluginImportActive(mode === 'import'); }, []);
 
     const handleManualSubmit = (e: React.FormEvent) => {
-        e.preventDefault(); setError('');
-        if (!name.trim()) { setError('Character name is required'); return; }
+        e.preventDefault(); setErrors({});
+        if (!name.trim()) { setErrors({ name: 'Character name is required' }); return; }
         createMutation.mutate(
             buildInlinePayload(name, charClass, spec, role, realm, gameId, hasRoles),
-            { onSuccess: (data) => onCharacterCreated?.(data), onError: (err) => setError(err.message) },
+            { onSuccess: (data) => onCharacterCreated?.(data), onError: (err) => setErrors({ form: err.message }) },
         );
     };
 
@@ -89,9 +105,9 @@ export function InlineCharacterForm({ gameId, hasRoles = true, gameSlug, eventId
         <div className="space-y-3">
             <PluginSlot name="character-create:inline-import" context={{ onSuccess: onCharacterCreated, isMain: true, gameSlug, onModeChange: handleModeChange, eventId }} />
             {!pluginImportActive && <form onSubmit={handleManualSubmit} className="space-y-3">
-                <div><input type="text" aria-label="Character name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Character name" maxLength={100} className={`w-full ${INLINE_INPUT_CLS}`} /></div>
+                <InlineTextField label="Character name" value={name} onChange={setName} maxLength={100} error={errors.name} />
                 {hasRoles && <InlineRoleFields charClass={charClass} spec={spec} role={role} realm={realm} onClassChange={setCharClass} onSpecChange={setSpec} onRoleChange={setRole} onRealmChange={setRealm} />}
-                {error && <p className="text-xs text-red-400">{error}</p>}
+                {errors.form && <p role="alert" className="text-xs text-danger">{errors.form}</p>}
                 <InlineFormFooter onCancel={onCancel} isPending={createMutation.isPending} />
             </form>}
         </div>

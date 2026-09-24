@@ -10,6 +10,7 @@ import { setAuthMethod, clearSilentGuard } from '../lib/api/silent-reauth';
 import { DiscordIcon } from '../components/icons/DiscordIcon';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LocalLoginForm } from './login/LocalLoginForm';
+import { Button } from '../components/ui/button';
 
 /** Watches for OAuth error query param and displays a toast */
 function useOAuthErrorHandler(): void {
@@ -183,9 +184,9 @@ function LoginBody({ hasProviders, authProviders, isRedirecting, onProviderLogin
         <>
             <ProviderButtons providers={authProviders} isRedirecting={isRedirecting} onLogin={onProviderLogin} />
             <div className="text-center mt-6">
-                <button type="button" onClick={onToggleLocal} className="text-sm text-muted hover:text-secondary transition-colors">
+                <Button variant="ghost" size="sm" onClick={onToggleLocal}>
                     {showLocalLogin ? 'Hide username login' : 'Sign in with username instead'}
-                </button>
+                </Button>
             </div>
             {showLocalLogin && (
                 <div className="mt-4">
@@ -201,8 +202,8 @@ function LoginBody({ hasProviders, authProviders, isRedirecting, onProviderLogin
 function FirstRunBanner({ isFirstRun }: { isFirstRun: boolean }): JSX.Element | null {
     if (!isFirstRun) return null;
     return (
-        <div className="mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <p className="text-sm text-blue-300 text-center">First time? Your admin credentials are in the container logs.</p>
+        <div className="mt-6 p-3 bg-overlay/30 border border-edge rounded-lg">
+            <p className="text-sm text-secondary text-center">First time? Your admin credentials are in the container logs.</p>
         </div>
     );
 }
@@ -214,20 +215,12 @@ function ProviderButtons({ providers, isRedirecting, onLogin }: {
 }): JSX.Element {
     return (
         <div className="space-y-3">
-            {providers.map((provider) => {
-                const color = provider.color ?? '#5865F2';
-                return (
-                    <button key={provider.key} onClick={() => onLogin(provider)} disabled={isRedirecting}
-                        className="w-full py-3.5 px-4 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900"
-                        style={{ backgroundColor: color, '--tw-ring-color': color } as React.CSSProperties}>
-                        {isRedirecting ? (
-                            <><span className="w-5 h-5 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />Redirecting...</>
-                        ) : (
-                            <>{provider.icon === 'discord' && <DiscordIcon className="w-5 h-5" />}{provider.label}</>
-                        )}
-                    </button>
-                );
-            })}
+            {providers.map((provider) => (
+                <Button key={provider.key} onClick={() => onLogin(provider)} size="lg" fullWidth
+                    brandColor={provider.color ?? '#5865F2'} loading={isRedirecting} loadingLabel="Redirecting...">
+                    {provider.icon === 'discord' && <DiscordIcon className="w-5 h-5" />}{provider.label}
+                </Button>
+            ))}
         </div>
     );
 }

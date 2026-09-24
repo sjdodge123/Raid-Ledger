@@ -4,7 +4,9 @@
  * and the FAB. ROK-1655 adds the pinned `footer` and the dirty-close
  * `closeGuard` (`useDirtyCloseGuard`) on both Modal and BottomSheet: type in
  * the form demos, then press Esc, tap the backdrop, × or Cancel to see
- * "Discard your changes?". Interactive examples mount the real components; the FAB is
+ * "Discard your changes?". ROK-1648 L13: each form demo also opens as a long
+ * form (~25 filler rows) so the body scrolls under the pinned footer without
+ * browser zoom. Interactive examples mount the real components; the FAB is
  * reproduced statically because the real one is `position: fixed` + `md:hidden`
  * and would float over the whole reference page.
  */
@@ -52,20 +54,29 @@ function BottomSheetDemo(): JSX.Element {
 
 interface GuardedDraft {
     open: boolean;
+    /** Which variant the last trigger opened: the long form adds the filler rows. */
+    long: boolean;
     show: () => void;
+    showLong: () => void;
     draft: string;
     setDraft: (next: string) => void;
     close: () => void;
     guard: DirtyCloseGuard;
 }
 
-/** Open state + a one-field draft; dirty while the draft is non-empty. The consumer owns the guard. */
+/**
+ * Open state + a one-field draft; dirty while the draft is non-empty. The consumer owns the guard.
+ * One overlay per demo serves both variants — a closed BottomSheet stays mounted, so a second
+ * sheet would duplicate its Note field and footer in the DOM.
+ */
 function useGuardedDraft(): GuardedDraft {
     const [open, setOpen] = useState(false);
+    const [long, setLong] = useState(false);
     const [draft, setDraft] = useState('');
     const close = useCallback(() => { setOpen(false); setDraft(''); }, []);
     const guard = useDirtyCloseGuard(draft !== '', close);
-    return { open, show: () => setOpen(true), draft, setDraft, close, guard };
+    const showAs = (asLong: boolean) => () => { setLong(asLong); setOpen(true); };
+    return { open, long, show: showAs(false), showLong: showAs(true), draft, setDraft, close, guard };
 }
 
 function NoteField({ draft, onChange }: { draft: string; onChange: (next: string) => void }): JSX.Element {
@@ -75,6 +86,33 @@ function NoteField({ draft, onChange }: { draft: string; onChange: (next: string
         </Field>
     );
 }
+
+const FILLER_LABELS = Array.from({ length: 25 }, (_, i) => `Filler field ${i + 1}`);
+
+/** ~25 inert Field + Input rows: enough to overflow the 90dvh cap on any screen. */
+function LongFiller(): JSX.Element {
+    return (
+        <div className="mt-4 flex flex-col gap-3" data-testid="ds-long-filler">
+            {FILLER_LABELS.map((label) => (
+                <Field key={label} label={label} className="w-full">
+                    <Input placeholder="Filler — scroll to check the footer stays put" />
+                </Field>
+            ))}
+        </div>
+    );
+}
+
+/** The Note field, plus the filler rows in the long variant. */
+function DraftBody({ d }: { d: GuardedDraft }): JSX.Element {
+    return (
+        <>
+            <NoteField draft={d.draft} onChange={d.setDraft} />
+            {d.long ? <LongFiller /> : null}
+        </>
+    );
+}
+
+const draftTitle = (d: GuardedDraft): string => (d.long ? 'Edit long note' : 'Edit note');
 
 /** Cancel is guarded (requestClose); Save is not — it closes on purpose. */
 function GuardedActions({ d }: { d: GuardedDraft }): JSX.Element {
@@ -89,10 +127,11 @@ function GuardedActions({ d }: { d: GuardedDraft }): JSX.Element {
 function FormModalDemo(): JSX.Element {
     const d = useGuardedDraft();
     return (
-        <StateFrame label="Modal — pinned footer + dirty-close guard" note="footer is a shrink-0 bar outside the scroll body (90dvh cap). closeGuard: Esc / backdrop / × / Cancel ask first; Save does not.">
+        <StateFrame label="Modal — pinned footer + dirty-close guard" note="footer is a shrink-0 bar outside the scroll body (90dvh cap) — open the long form to scroll under it. closeGuard: Esc / backdrop / × / Cancel ask first; Save does not.">
             <Button variant="secondary" onClick={d.show}>Open form modal</Button>
-            <Modal isOpen={d.open} onClose={d.close} title="Edit note" closeGuard={d.guard} footer={<GuardedActions d={d} />}>
-                <NoteField draft={d.draft} onChange={d.setDraft} />
+            <Button variant="secondary" onClick={d.showLong}>Open long form modal</Button>
+            <Modal isOpen={d.open} onClose={d.close} title={draftTitle(d)} closeGuard={d.guard} footer={<GuardedActions d={d} />}>
+                <DraftBody d={d} />
             </Modal>
         </StateFrame>
     );
@@ -101,10 +140,11 @@ function FormModalDemo(): JSX.Element {
 function FormSheetDemo(): JSX.Element {
     const d = useGuardedDraft();
     return (
-        <StateFrame label="BottomSheet — pinned footer + dirty-close guard" note="Same contract as Modal; swipe-down is guarded too. Browser back is out of scope.">
+        <StateFrame label="BottomSheet — pinned footer + dirty-close guard" note="Same contract as Modal; the long form scrolls under the footer. Swipe-down is guarded too. Browser back is out of scope.">
             <Button variant="secondary" onClick={d.show}>Open form sheet</Button>
-            <BottomSheet isOpen={d.open} onClose={d.close} title="Edit note" closeGuard={d.guard} footer={<GuardedActions d={d} />}>
-                <NoteField draft={d.draft} onChange={d.setDraft} />
+            <Button variant="secondary" onClick={d.showLong}>Open long form sheet</Button>
+            <BottomSheet isOpen={d.open} onClose={d.close} title={draftTitle(d)} closeGuard={d.guard} footer={<GuardedActions d={d} />}>
+                <DraftBody d={d} />
             </BottomSheet>
         </StateFrame>
     );

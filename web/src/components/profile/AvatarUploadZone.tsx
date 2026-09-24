@@ -1,7 +1,10 @@
 import { useRef, useState, useCallback } from 'react';
+import { Button } from '../ui/button';
+import { FilePicker } from '../ui/file-picker';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'];
+const ACCEPT_ATTR = ACCEPTED_TYPES.join(',');
 
 interface AvatarUploadZoneProps {
     onFileSelected: (file: File) => void;
@@ -88,28 +91,33 @@ function useDragHandlers(validateAndSelect: (file: File) => void) {
     return { dragOver, handleDrop, handleDragOver, handleDragLeave };
 }
 
+/**
+ * The drop zone is the mouse/drag affordance; the FilePicker trigger below it is the named, keyboard-reachable
+ * control. The zone opens the SAME native input through the picker's forwarded ref — it sits outside the zone
+ * so a trigger click never bubbles into a second open.
+ */
 export function AvatarUploadZone({ onFileSelected, isUploading, uploadProgress, currentCustomUrl, onRemove }: AvatarUploadZoneProps) {
     const inputRef = useRef<HTMLInputElement>(null);
     const { previewUrl, setPreviewUrl, error, validateAndSelect } = useAvatarValidation(onFileSelected);
     const { dragOver, handleDrop, handleDragOver, handleDragLeave } = useDragHandlers(validateAndSelect);
-    const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]; if (file) validateAndSelect(file); e.target.value = '';
-    }, [validateAndSelect]);
     const displayUrl = previewUrl ?? currentCustomUrl;
 
     return (
         <div className="space-y-3">
-            <label className="text-sm font-medium text-muted">Upload Custom Avatar</label>
             <div className={`relative rounded-xl border-2 border-dashed transition-colors p-4 flex flex-col items-center gap-3 cursor-pointer ${dragOver ? 'border-success bg-success/5' : 'border-edge hover:border-muted'}`}
                 onClick={() => inputRef.current?.click()} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
-                <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={handleChange} />
                 <AvatarPreview displayUrl={displayUrl} isUploading={isUploading} uploadProgress={uploadProgress} />
                 <DropZoneContent dragOver={dragOver} />
             </div>
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            <FilePicker ref={inputRef} accept={ACCEPT_ATTR} onFiles={(files) => validateAndSelect(files[0])}
+                loading={isUploading} loadingLabel="Uploading…" fullWidth>
+                Upload Custom Avatar
+            </FilePicker>
+            {error && <p role="alert" className="text-xs text-danger">{error}</p>}
             {currentCustomUrl && !isUploading && (
-                <button type="button" onClick={(e) => { e.stopPropagation(); setPreviewUrl(null); onRemove(); }}
-                    className="w-full text-sm text-red-400 hover:text-red-300 transition-colors py-1">Remove custom avatar</button>
+                <Button variant="destructive-soft" size="sm" fullWidth onClick={() => { setPreviewUrl(null); onRemove(); }}>
+                    Remove custom avatar
+                </Button>
             )}
         </div>
     );

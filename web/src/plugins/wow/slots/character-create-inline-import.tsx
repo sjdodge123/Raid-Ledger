@@ -3,7 +3,10 @@ import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
 import { isArmoryImportSupported, ARMORY_CLASSIC_VARIANTS, defaultArmoryClassicVariant } from '../lib/armory-import';
-import { ArmoryUnavailableNote, DISABLED_TAB_CLS } from '../components/armory-unavailable-note';
+import { ArmoryUnavailableNote, ARMORY_TAB_CLS, ARMORY_TAB_TRACK_CLS } from '../components/armory-unavailable-note';
+import { Button } from '../../../components/ui/button';
+import { Field } from '../../../components/ui/field';
+import { Select } from '../../../components/ui/select';
 
 interface CharacterCreateInlineImportProps {
     onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
@@ -14,35 +17,31 @@ interface CharacterCreateInlineImportProps {
     eventId?: number;
 }
 
-function inlineImportCls(mode: 'manual' | 'import', disabled: boolean): string {
-    if (disabled) return DISABLED_TAB_CLS;
-    return mode === 'import' ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-muted hover:text-secondary';
-}
-
 /** ROK-1636: `noteId` set = Armory unavailable for this variant — tab is aria-disabled and described by the note. */
 function InlineModeToggle({ mode, onModeChange, noteId }: {
     mode: 'manual' | 'import'; onModeChange: (m: 'manual' | 'import') => void; noteId?: string;
 }) {
     return (
-        <div className="flex rounded-lg bg-panel/50 border border-edge p-1">
-            <button type="button" onClick={() => { if (!noteId) onModeChange('import'); }} aria-disabled={noteId ? true : undefined} aria-describedby={noteId}
-                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${inlineImportCls(mode, !!noteId)}`}>
+        <div role="group" aria-label="Add character by" className={ARMORY_TAB_TRACK_CLS}>
+            <Button variant="ghost" size="sm" className={ARMORY_TAB_CLS} aria-pressed={mode === 'import'}
+                onClick={() => { if (!noteId) onModeChange('import'); }} aria-disabled={noteId ? true : undefined} aria-describedby={noteId}>
                 Import from Armory
-            </button>
-            <button type="button" onClick={() => onModeChange('manual')}
-                className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${mode === 'manual' ? 'bg-overlay text-foreground' : 'text-muted hover:text-secondary'}`}>
+            </Button>
+            <Button variant="ghost" size="sm" className={ARMORY_TAB_CLS} aria-pressed={mode === 'manual'}
+                onClick={() => onModeChange('manual')}>
                 Manual
-            </button>
+            </Button>
         </div>
     );
 }
 
 function InlineClassicSelector({ classicVariant, onVariantChange }: { classicVariant: string; onVariantChange: (v: string) => void }) {
     return (
-        <select value={classicVariant} onChange={(e) => onVariantChange(e.target.value)}
-            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm">
-            {ARMORY_CLASSIC_VARIANTS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
-        </select>
+        <Field label="Game version" hideLabel>
+            <Select value={classicVariant} onChange={(e) => onVariantChange(e.target.value)}>
+                {ARMORY_CLASSIC_VARIANTS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+            </Select>
+        </Field>
     );
 }
 

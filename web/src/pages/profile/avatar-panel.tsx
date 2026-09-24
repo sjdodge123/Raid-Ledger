@@ -7,6 +7,10 @@ import { API_BASE_URL } from '../../lib/config';
 import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, getCurrentUserAvatarData, setCurrentUserAvatarData } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 import { updatePreference } from '../../lib/api-client';
+import { Button } from '../../components/ui/button';
+import { FilePicker } from '../../components/ui/file-picker';
+
+const AVATAR_ACCEPT = 'image/png,image/jpeg,image/webp,image/gif';
 
 type SelectableAvatarType = 'custom' | 'discord' | 'character';
 
@@ -49,9 +53,7 @@ function applyAvatarOptimistic(
 }
 
 function useUploadHandler(queryClient: ReturnType<typeof useQueryClient>, uploadAsync: (file: File) => Promise<{ customAvatarUrl: string }>, setOptimisticUrl: (url: string | null) => void) {
-    return useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+    return useCallback(async (file: File) => {
         try {
             const result = await uploadAsync(file);
             toast.success('Avatar uploaded successfully!');
@@ -95,7 +97,7 @@ function useAvatarHandlers(refetch: () => void) {
 function AvatarPreview({ currentUrl, username, currentLabel }: { currentUrl: string; username: string; currentLabel: string }) {
     return (
         <div className="flex items-center gap-4 mb-6">
-            <img src={currentUrl} alt={username} className="w-20 h-20 rounded-full border-2 border-emerald-500/50 object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
+            <img src={currentUrl} alt={username} className="w-20 h-20 rounded-full border-2 border-success/50 object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
             <div>
                 <p className="text-sm font-medium text-foreground">{currentLabel} avatar</p>
                 <p className="text-xs text-muted">Click below to change</p>
@@ -104,18 +106,27 @@ function AvatarPreview({ currentUrl, username, currentLabel }: { currentUrl: str
     );
 }
 
+/** One selectable avatar: a ghost Button named by its label; the current one is aria-pressed and ringed. */
+function AvatarOptionTile({ url, label, pressed, onSelect }: { url: string; label: string; pressed: boolean; onSelect: (url: string) => void }) {
+    return (
+        <Button variant="ghost" size="sm" aria-label={label} aria-pressed={pressed} onClick={() => onSelect(url)} className="group">
+            <span className="flex flex-col items-center gap-1">
+                <img src={url} alt="" className={`w-14 h-14 rounded-full object-cover transition-shadow ${pressed ? 'ring-2 ring-success' : 'group-hover:ring-2 group-hover:ring-edge-strong'}`}
+                    onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
+                <span className={`max-w-[5rem] truncate text-[10px] ${pressed ? 'text-foreground' : 'text-muted'}`}>{label}</span>
+            </span>
+        </Button>
+    );
+}
+
 function AvatarOptionsGrid({ options, currentUrl, onSelect }: { options: ReturnType<typeof buildAvatarOptions>; currentUrl: string; onSelect: (url: string) => void }) {
     if (options.length === 0) return null;
     return (
         <div className="mb-6">
             <h3 className="text-sm font-medium text-secondary mb-3">Available Avatars</h3>
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2">
                 {options.map((opt) => (
-                    <button key={opt.url} onClick={() => onSelect(opt.url)}
-                        className={`relative group w-14 h-14 rounded-full transition-shadow ${currentUrl === opt.url ? 'ring-2 ring-emerald-500' : 'hover:ring-2 hover:ring-edge-strong'}`}>
-                        <img src={opt.url} alt={opt.label} className="w-14 h-14 rounded-full object-cover" onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
-                        <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-muted whitespace-nowrap">{opt.label}</span>
-                    </button>
+                    <AvatarOptionTile key={opt.url} url={opt.url} label={opt.label} pressed={currentUrl === opt.url} onSelect={onSelect} />
                 ))}
             </div>
         </div>
@@ -123,18 +134,16 @@ function AvatarOptionsGrid({ options, currentUrl, onSelect }: { options: ReturnT
 }
 
 function AvatarUploadBar({ isUploading, uploadProgress, onUpload, onRemove, hasCustom }: {
-    isUploading: boolean; uploadProgress: number; onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void; onRemove: () => void; hasCustom: boolean;
+    isUploading: boolean; uploadProgress: number; onUpload: (file: File) => void; onRemove: () => void; hasCustom: boolean;
 }) {
+    // Ruling 7 exception: the upload percentage stays the visible label, so this is `disabled`, not `loading`.
     return (
-        <div className="flex items-center gap-3 pt-2 border-t border-edge-subtle">
-            <label className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-medium rounded-lg transition-colors cursor-pointer">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+        <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-edge-subtle">
+            <FilePicker variant="primary" accept={AVATAR_ACCEPT} disabled={isUploading} onFiles={(files) => onUpload(files[0])}>
+                <svg aria-hidden className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 {isUploading ? `Uploading ${uploadProgress}%` : 'Upload Custom'}
-                <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={onUpload} disabled={isUploading} />
-            </label>
-            {hasCustom && (
-                <button onClick={onRemove} className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg transition-colors border border-red-500/20">Remove Custom</button>
-            )}
+            </FilePicker>
+            {hasCustom && <Button variant="destructive-soft" onClick={onRemove}>Remove Custom</Button>}
         </div>
     );
 }

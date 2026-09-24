@@ -1,6 +1,9 @@
-import { useId } from 'react';
 import type { CharacterRole } from '@raid-ledger/contract';
 import { LockClosedIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { Select } from '../ui/select';
+import { Checkbox } from '../ui/checkbox';
 
 interface FormState {
     name: string;
@@ -18,53 +21,59 @@ interface CharacterFormFieldsProps {
     isEditing: boolean;
     editingIsMain: boolean;
     hasMainForGame: boolean;
+    /** Inline error on the Name field (e.g. 'Character name is required'). */
+    nameError?: string;
     onUpdateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
 }
 
-const INPUT_BASE = 'w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500';
 const ARMORY_TITLE = 'This field is synced from the Blizzard Armory';
 
 function ArmorySyncBanner() {
     return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-blue-300 text-sm">
-            <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+        <div className="flex items-center gap-2 px-3 py-2 bg-overlay/30 border border-edge rounded-lg text-secondary text-sm">
+            <InformationCircleIcon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
             <span>This character is synced from the Blizzard Armory. Some fields are read-only.</span>
         </div>
     );
 }
 
-function SyncableInput({ label, value, onChange, placeholder, maxLength, isArmorySynced, required }: {
-    label: string; value: string; onChange: (v: string) => void; placeholder: string; maxLength: number; isArmorySynced: boolean; required?: boolean;
+/** The lock hint on a read-only, Armory-synced field (Field's label is a string, so the icon lives here). */
+const ARMORY_LOCK_HINT = (
+    <span className="inline-flex items-center gap-1">
+        <LockClosedIcon className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+        Synced from Armory
+    </span>
+);
+
+function SyncableInput({ label, value, onChange, placeholder, maxLength, isArmorySynced, required, error }: {
+    label: string; value: string; onChange: (v: string) => void; placeholder: string; maxLength: number;
+    isArmorySynced: boolean; required?: boolean; error?: string;
 }) {
-    const id = useId();
     return (
-        <div>
-            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-1">
-                {label} {required && <span aria-hidden="true" className="text-red-400">*</span>}
-                {isArmorySynced && <LockClosedIcon className="w-3.5 h-3.5 inline ml-1 text-muted" />}
-            </label>
-            <input id={id} type="text" value={value} onChange={(e) => onChange(e.target.value)}
+        <Field label={label} required={required} error={error} hint={isArmorySynced ? ARMORY_LOCK_HINT : undefined}>
+            <Input type="text" value={value} onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder} maxLength={maxLength} disabled={isArmorySynced}
-                title={isArmorySynced ? ARMORY_TITLE : undefined}
-                className={`${INPUT_BASE} ${isArmorySynced ? 'opacity-60 cursor-not-allowed' : ''}`} />
-        </div>
+                title={isArmorySynced ? ARMORY_TITLE : undefined} />
+        </Field>
     );
 }
 
 function RoleSelect({ value, onChange }: { value: string; onChange: (v: CharacterRole | '') => void }) {
-    const id = useId();
     return (
-        <div>
-            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-1">Role</label>
-            <select id={id} value={value} onChange={(e) => onChange(e.target.value as CharacterRole | '')}
-                className={INPUT_BASE}>
-                <option value="">Select role...</option>
+        <Field label="Role">
+            <Select value={value} onChange={(e) => onChange(e.target.value as CharacterRole | '')} placeholder="Select role...">
                 <option value="tank">Tank</option>
                 <option value="healer">Healer</option>
                 <option value="dps">DPS</option>
-            </select>
-        </div>
+            </Select>
+        </Field>
     );
+}
+
+function mainNote(isEditing: boolean, editingIsMain: boolean, hasMainForGame: boolean): string | undefined {
+    if (isEditing && editingIsMain) return '(already main)';
+    if (!isEditing && !hasMainForGame) return '(no main set)';
+    return undefined;
 }
 
 function MainCheckbox({ form, isEditing, editingIsMain, hasMainForGame, onUpdateField }: {
@@ -73,26 +82,19 @@ function MainCheckbox({ form, isEditing, editingIsMain, hasMainForGame, onUpdate
 }) {
     const disabled = (isEditing && editingIsMain) || (!isEditing && !hasMainForGame);
     return (
-        <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={form.isMain} onChange={(e) => onUpdateField('isMain', e.target.checked)}
-                disabled={disabled} className="w-4 h-4 rounded border-edge-strong bg-panel text-emerald-500 focus:ring-emerald-500 disabled:opacity-50" />
-            <span className={`text-sm ${disabled ? 'text-muted' : 'text-secondary'}`}>
-                Main character
-                {isEditing && editingIsMain && <span className="ml-1 text-xs text-muted">(already main)</span>}
-                {!isEditing && !hasMainForGame && <span className="ml-1 text-xs text-muted">(no main set)</span>}
-            </span>
-        </label>
+        <Checkbox label="Main character" description={mainNote(isEditing, editingIsMain, hasMainForGame)}
+            checked={form.isMain} onChange={(e) => onUpdateField('isMain', e.target.checked)} disabled={disabled} />
     );
 }
 
 export function CharacterFormFields({
-    form, showMmoFields, isArmorySynced, isEditing, editingIsMain, hasMainForGame, onUpdateField,
+    form, showMmoFields, isArmorySynced, isEditing, editingIsMain, hasMainForGame, nameError, onUpdateField,
 }: CharacterFormFieldsProps) {
     return (
         <>
             {isArmorySynced && <ArmorySyncBanner />}
             <SyncableInput label="Name" value={form.name} onChange={(v) => onUpdateField('name', v)}
-                placeholder="Character name" maxLength={100} isArmorySynced={isArmorySynced} required />
+                placeholder="Character name" maxLength={100} isArmorySynced={isArmorySynced} required error={nameError} />
             {showMmoFields && (
                 <>
                     <div className="grid grid-cols-2 gap-3">
