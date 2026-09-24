@@ -9,6 +9,7 @@ import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Select } from '../../../components/ui/select';
 import { useUpdateCharacter } from '../../../hooks/use-character-mutations';
+import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { professionNameToSlug } from '../lib/profession-icons';
 import { getMaxProfessionSkill } from '../lib/profession-max-skill';
@@ -83,6 +84,16 @@ function buildProfessionsPayload(
     };
 }
 
+function sameDrafts(a: DraftEntry[], b: DraftEntry[]): boolean {
+    return a.length === b.length
+        && a.every((d, i) => d.name === b[i].name && d.skillLevel === b[i].skillLevel);
+}
+
+/**
+ * The drafts start from `baseline`, captured once at mount (the panel mounts
+ * this modal only while editing, so every open starts fresh). `isDirty` is a
+ * structural compare against it, and drives the ROK-1655 dirty-close guard.
+ */
 function useEditProfessionsState(
     gameId: number,
     initial: CharacterProfessionsDto | null,
@@ -90,13 +101,14 @@ function useEditProfessionsState(
     const { games } = useGameRegistry();
     const gameSlug = games.find((g) => g.id === gameId)?.slug ?? null;
     const maxSkill = getMaxProfessionSkill(gameSlug);
-    const [primary, setPrimary] = useState<DraftEntry[]>(
-        () => entriesToDraft(initial?.primary ?? []),
-    );
-    const [secondary, setSecondary] = useState<DraftEntry[]>(
-        () => entriesToDraft(initial?.secondary ?? []),
-    );
-    return { gameSlug, maxSkill, primary, setPrimary, secondary, setSecondary };
+    const [baseline] = useState(() => ({
+        primary: entriesToDraft(initial?.primary ?? []),
+        secondary: entriesToDraft(initial?.secondary ?? []),
+    }));
+    const [primary, setPrimary] = useState<DraftEntry[]>(baseline.primary);
+    const [secondary, setSecondary] = useState<DraftEntry[]>(baseline.secondary);
+    const isDirty = !sameDrafts(primary, baseline.primary) || !sameDrafts(secondary, baseline.secondary);
+    return { gameSlug, maxSkill, primary, setPrimary, secondary, setSecondary, isDirty };
 }
 
 export function EditProfessionsModal({
@@ -104,6 +116,9 @@ export function EditProfessionsModal({
 }: EditProfessionsModalProps) {
     const s = useEditProfessionsState(gameId, initial);
     const update = useUpdateCharacter();
+    // Escape, the backdrop, × and Cancel ask first on a dirty form; Save's
+    // onSuccess closes through the plain onClose, so a Save never prompts.
+    const guard = useDirtyCloseGuard(s.isDirty, onClose);
 
     const handleSave = () => update.mutate(
         { id: characterId, dto: { professions: buildProfessionsPayload(s.primary, s.secondary, s.maxSkill) } },
@@ -111,7 +126,8 @@ export function EditProfessionsModal({
     );
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Edit Professions">
+        <Modal isOpen={isOpen} onClose={onClose} title="Edit Professions" closeGuard={guard}
+            footer={<ModalActions onCancel={guard.requestClose} onSave={handleSave} isPending={update.isPending} />}>
             <div className="space-y-6">
                 <p className="text-xs text-muted">
                     Skill cap for this game variant: <span className="font-mono">{s.maxSkill}</span>
@@ -126,7 +142,6 @@ export function EditProfessionsModal({
                     maxEntries={getMaxEntriesForCategory('secondary', s.gameSlug)}
                     maxSkill={s.maxSkill} gameSlug={s.gameSlug}
                     siblingNames={s.secondary.map((d) => d.name)} />
-                <ModalActions onCancel={onClose} onSave={handleSave} isPending={update.isPending} />
             </div>
         </Modal>
     );
@@ -219,10 +234,11 @@ function ProfessionRowEditor({
 function ModalActions({ onCancel, onSave, isPending }: {
     onCancel: () => void; onSave: () => void; isPending: boolean;
 }) {
+    // The Modal footer (OVERLAY_FOOTER_CLASS) already lays these out right-aligned.
     return (
-        <div className="flex justify-end gap-3 pt-2">
+        <>
             <Button variant="secondary" onClick={onCancel}>Cancel</Button>
             <Button onClick={onSave} loading={isPending} loadingLabel="Saving…">Save</Button>
-        </div>
+        </>
     );
 }
