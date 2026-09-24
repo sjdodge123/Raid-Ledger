@@ -794,11 +794,12 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
 
-/* --- Solid-color button text: force white on colored backgrounds --- */
+/* --- Solid-color button text: force white on colored backgrounds ---
+   [data-brand-fill] = Button brandColor (ROK-1655): an inline runtime/provider fill. */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(
     .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
     .bg-red-600, .bg-red-500, .bg-amber-600, .bg-violet-600,
-    .bg-\[\#5865F2\]
+    .bg-\[\#5865F2\], [data-brand-fill]
 ).text-foreground {
     --color-foreground: #ffffff;
 }

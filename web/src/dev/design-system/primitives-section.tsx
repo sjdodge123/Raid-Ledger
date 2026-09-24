@@ -16,7 +16,7 @@ import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-hel
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 
-/** Chip geometry, verbatim from pages/games/library-filter-chips.tsx. */
+/** Chip geometry per docs/design-system.md §4.3 (its /games adopters were retired by ROK-1659). */
 const CHIP_BASE = 'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors';
 const CHIP_ON = 'bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20';
 const CHIP_OFF = 'bg-panel border border-edge text-secondary hover:bg-overlay';

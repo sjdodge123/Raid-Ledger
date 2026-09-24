@@ -60,11 +60,20 @@ export function StartupGate({ children }: { children: ReactNode }) {
     const handleTransitionEnd = useCallback(() => setGateVisible(false), []);
     const isBypassRoute = BYPASS_PATHS.includes(window.location.pathname);
 
-    if (!gateVisible || isBypassRoute) return <>{children}</>;
-
-    if (hasBeenOnline) {
-        return (<><FadingOverlay onTransitionEnd={handleTransitionEnd} />{children}</>);
+    const gateActive = gateVisible && !isBypassRoute;
+    if (gateActive && !hasBeenOnline) {
+        return <WaitingScreen isSlow={isSlow} onRetry={() => void check()} />;
     }
 
-    return <WaitingScreen isSlow={isSlow} onRetry={() => void check()} />;
+    // `children` must stay in the SAME child slot while the overlay fades and
+    // after it is gone: `false` still occupies slot 0. Moving it (overlay +
+    // children -> children alone) made React remount the whole app ~300ms
+    // after startup, wiping any state set in that window (e.g. a modal opened
+    // by a one-shot effect).
+    return (
+        <>
+            {gateActive && <FadingOverlay onTransitionEnd={handleTransitionEnd} />}
+            {children}
+        </>
+    );
 }

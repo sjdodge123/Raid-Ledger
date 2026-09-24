@@ -103,9 +103,11 @@ describe('SectionedGameList — edge cases', () => {
             />,
         );
 
-        const gameNames = screen.getAllByRole('checkbox').map(
-            (cb) => cb.closest('label')?.querySelector('.game-filter-name')?.textContent ?? '',
-        );
+        const gameNames = screen.getAllByRole('checkbox').map((cb) => {
+            const label = document.getElementById(cb.getAttribute('aria-labelledby') ?? '')?.cloneNode(true) as HTMLElement | undefined;
+            label?.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
+            return label?.textContent ?? '';
+        });
 
         // Liked section first, then other section
         expect(gameNames).toEqual([

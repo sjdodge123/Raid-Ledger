@@ -1,8 +1,10 @@
 /**
  * Forms section for /dev/design-system (ROK-1646) — the form primitives from
  * `web/src/components/ui`: `Button`, `Field`, `Input`, `Select`, `Textarea`,
- * `Checkbox`, `RadioGroup`, `Slider`, `SearchInput`, `Combobox`. Every example mounts the
- * REAL component, so this page is the early warning if one drifts.
+ * `Checkbox`, `RadioGroup`, `Slider`, `SearchInput`, `Combobox`, plus ROK-1655's
+ * `PasswordInput` here and `FilePicker` / `ColorInput` / `Button brandColor` in
+ * forms-pickers-demo.tsx. Every example mounts the REAL component, so this page
+ * is the early warning if one drifts.
  *
  * Check both families: the side-by-side toggle renders this twice, and the
  * focus ring (`ring-success/80`) is the value to eyeball — Tab through the
@@ -12,10 +14,11 @@
  * those with the page-level scheme switcher, not the scoped side-by-side.
  */
 import { useState, type JSX } from 'react';
-import { EyeIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/button';
 import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
+import { PasswordInput } from '../../components/ui/password-input';
 import { Select } from '../../components/ui/select';
 import { Textarea } from '../../components/ui/textarea';
 import { Checkbox } from '../../components/ui/checkbox';
@@ -24,8 +27,7 @@ import { Slider } from '../../components/ui/slider';
 import { SearchInput } from '../../components/ui/search-input';
 import { Combobox } from '../../components/ui/combobox';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
-
-const noop = (): void => undefined;
+import { PickerStates } from './forms-pickers-demo';
 
 function ButtonVariants(): JSX.Element {
     return (
@@ -76,14 +78,12 @@ function FieldStates(): JSX.Element {
 function InputVariants(): JSX.Element {
     return (
         <>
-            <StateFrame label="Input — leading / trailing" note="leading is decorative; trailing takes a 44px button.">
+            <StateFrame label="Input — leading / PasswordInput" note="leading is decorative; PasswordInput's Show/Hide toggle is the 44px trailing Button.">
                 <Field label="Search" hideLabel className="w-full">
                     <Input placeholder="Search games…" leading={<MagnifyingGlassIcon className="w-5 h-5" />} />
                 </Field>
                 <Field label="Password" className="w-full">
-                    <Input type="password" defaultValue="hunter2" trailing={
-                        <Button iconOnly aria-label="Show password" variant="ghost" onClick={noop}><EyeIcon className="w-5 h-5" /></Button>
-                    } />
+                    <PasswordInput label="Password" defaultValue="hunter2" />
                 </Field>
             </StateFrame>
             <StateFrame label="Input — fieldSize sm / md / lg" note="text-base below lg stops iOS zoom; sm is compact from lg only.">
@@ -204,6 +204,7 @@ export function FormsSection(): JSX.Element {
                     <SelectTextareaStates />
                     <ChoiceStates />
                     <SearchStates />
+                    <PickerStates />
                 </StateGrid>
             </div>
         </Section>

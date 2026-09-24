@@ -24,7 +24,8 @@
  * `SheetHeaderContext`; `null` restores the default title.
  *
  * ROK-1640: every close path (×, backdrop, swipe-down, Escape) runs through
- * `useDirtyCloseGuard` — with unsaved edits (the body reports them through
+ * `useDirtyCloseGuard`, handed to `BottomSheet`'s `closeGuard` (ROK-1655; the
+ * sheet renders the confirm, the title row's own × calls `requestClose`) — with unsaved edits (the body reports them through
  * `useReportSheetDirty`) it asks "Discard your changes?" instead of silently
  * dropping the times just entered. All three entry points (profile route, the
  * poll's check, the More drawer's Game Time row) mount this sheet, so all
@@ -40,11 +41,13 @@ import { StepOneDoneContext } from './game-time-check-step';
 import { SheetTitleRow } from './SheetTitleRow';
 import { SheetHeaderContext, type SheetHeaderOverride } from './sheet-header-context';
 import { SheetDirtyContext, useSheetDirtySources } from '../../components/features/game-time/sheet-dirty-context';
-import { useDirtyCloseGuard } from '../../components/features/game-time/use-dirty-close-guard';
-import { DiscardChangesConfirm } from '../../components/features/game-time/DiscardChangesConfirm';
+import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 
 /** The sheet's default title — the question itself is the body's prompt line. */
 const TITLE = 'Your game time';
+
+/** The discard confirm's copy when a dirty close is asked for (Escape, backdrop, ×, swipe-down). */
+const DISCARD_MESSAGE = "The times you just entered haven't been saved yet.";
 
 /**
  * A DEFINITE height for the body: the week editor stretches its rows to fill it
@@ -116,7 +119,10 @@ function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps)
     const { dirty, report } = useSheetDirtySources();
     const guard = useDirtyCloseGuard(dirty, onClose);
     return (
-        <BottomSheet isOpen onClose={guard.requestClose} maxHeight="95vh" initiallyExpanded ariaLabel="Game time check">
+        <BottomSheet
+            isOpen onClose={onClose} closeGuard={guard} discardMessage={DISCARD_MESSAGE}
+            maxHeight="95vh" initiallyExpanded ariaLabel="Game time check"
+        >
             <div data-testid="game-time-check-sheet" className="flex flex-col gap-3">
                 <SheetTitleRow
                     title={header?.title ?? title} onClose={guard.requestClose} testId="game-time-check-header"
@@ -132,7 +138,6 @@ function CheckSheetFrame({ title, onClose, onDone, body }: CheckSheetFrameProps)
                     </SheetDirtyContext.Provider>
                 </SheetHeaderContext.Provider>
             </div>
-            <DiscardChangesConfirm isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard} />
         </BottomSheet>
     );
 }

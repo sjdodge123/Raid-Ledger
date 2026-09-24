@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
-import { CalendarGameFilterModal, SectionedGameList } from './CalendarGameFilter';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { CalendarGameFilterControls, SectionedGameList } from './CalendarGameFilter';
 import type { GameWithLiked } from './game-filter-helpers';
 
 vi.mock('../../constants/game-colors', () => ({
@@ -11,28 +11,42 @@ function makeGame(slug: string, name: string, liked: boolean): GameWithLiked {
     return { slug, name, coverUrl: null, liked };
 }
 
-describe('CalendarGameFilterModal', () => {
-    it('focuses the search input when opened (not the close button)', async () => {
-        render(
-            <CalendarGameFilterModal
-                isOpen
-                onClose={vi.fn()}
-                allKnownGames={[{ slug: 'wow', name: 'World of Warcraft', coverUrl: null }]}
-                selectedGames={new Set(['wow'])}
-                toggleGame={vi.fn()}
-                selectAllGames={vi.fn()}
-                deselectAllGames={vi.fn()}
-            />,
-        );
+describe('CalendarGameFilterControls (ROK-1662)', () => {
+    const games = [{ slug: 'wow', name: 'World of Warcraft', coverUrl: null }, { slug: 'apex', name: 'Apex Legends', coverUrl: null }];
 
-        // Focus is applied by the focus trap in a requestAnimationFrame.
-        await waitFor(() => {
-            expect(screen.getByPlaceholderText('Search games...')).toHaveFocus();
-        });
+    it('search narrows the list and says when nothing matches', () => {
+        render(<CalendarGameFilterControls allKnownGames={games} selectedGames={new Set(['wow', 'apex'])}
+            toggleGame={vi.fn()} deselectAllGames={vi.fn()} layout="panel" />);
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search games' }), { target: { value: 'apex' } });
+        expect(screen.getByText('Apex Legends')).toBeInTheDocument();
+        expect(screen.queryByText('World of Warcraft')).toBeNull();
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search games' }), { target: { value: 'zzz' } });
+        expect(screen.getByText('No games match your search.')).toBeInTheDocument();
+    });
+
+    it('shows "N of M selected" counting known games only, and None hides every game', () => {
+        const deselectAll = vi.fn();
+        render(<CalendarGameFilterControls allKnownGames={games} selectedGames={new Set(['wow', 'stale-slug'])}
+            toggleGame={vi.fn()} deselectAllGames={deselectAll} layout="sheet" />);
+        expect(screen.getByText('1 of 2 selected')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'None' }));
+        expect(deselectAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('sheet rows are tap buttons with aria-pressed; panel rows are checkboxes', () => {
+        const { unmount } = render(<CalendarGameFilterControls allKnownGames={games} selectedGames={new Set(['wow'])}
+            toggleGame={vi.fn()} deselectAllGames={vi.fn()} layout="sheet" />);
+        expect(screen.getByRole('button', { name: 'World of Warcraft' })).toHaveAttribute('aria-pressed', 'true');
+        expect(screen.getByRole('button', { name: 'Apex Legends' })).toHaveAttribute('aria-pressed', 'false');
+        unmount();
+        render(<CalendarGameFilterControls allKnownGames={games} selectedGames={new Set(['wow'])}
+            toggleGame={vi.fn()} deselectAllGames={vi.fn()} layout="panel" />);
+        expect(screen.getByRole('checkbox', { name: 'World of Warcraft' })).toBeChecked();
+        expect(screen.getByRole('checkbox', { name: 'Apex Legends' })).not.toBeChecked();
     });
 });
 
-describe('SectionedGameList', () => {
+describe('SectionedGameList — section headers', () => {
     it('renders section header for liked games', () => {
         const games = [
             makeGame('wow', 'World of Warcraft', true),
@@ -99,6 +113,9 @@ describe('SectionedGameList', () => {
         expect(screen.queryByText('Other Games')).not.toBeInTheDocument();
     });
 
+});
+
+describe('SectionedGameList — rows', () => {
     it('renders all game names', () => {
         const games = [
             makeGame('wow', 'World of Warcraft', true),

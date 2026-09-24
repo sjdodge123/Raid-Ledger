@@ -4,6 +4,9 @@
  *   Flow A (§6.1)  /events banner            → /lfg/<slug>   in ≤ 2 clicks
  *   Flow B (§6.2)  /games "Players are looking" toggle → filtered grid →
  *                  the tile badge            → /lfg/<slug>
+ *                  (since ROK-1659 the toggle is the `switch` inside the one
+ *                  Filters entry — funnel + inline panel at 1024px and up,
+ *                  Filters FAB + BottomSheet below; `games-filters.ts`)
  *   Flow C (§6.3)  the toggle turns back OFF — the regression that could not
  *                  exist before this story, when the only way out of the
  *                  filtered view was the ✕ the toggle has now absorbed.
@@ -69,12 +72,12 @@ import {
     apiDelete,
     pollForCondition,
 } from './api-helpers';
+import { closeGamesFilters, lfgSwitch, openGamesFilters } from './games-filters';
 
 const HOOK_TIMEOUT_MS = 90_000;
 
 const TILE = '[data-testid="lfg-looking-tile"]';
 const CHIP = '[data-testid="lfg-chip"]';
-const TOGGLE = 'lfg-filter-chip';
 const BANNER = 'lfg-summary-banner';
 const BANNER_CTA = 'lfg-summary-banner-cta';
 
@@ -313,16 +316,18 @@ test('turning the looking filter on shows the looking games, and a badge opens o
     // AC1: the toggle is present with NO `lfg` param — before this story the
     // control did not render at all until the filter was already on.
     await page.goto('/games');
-    const toggle = page.getByTestId(TOGGLE);
+    const toggle = lfgSwitch(await openGamesFilters(page));
     await expect(toggle).toBeVisible({ timeout: 20_000 });
     await expect(
         toggle,
-        'the toggle is unpressed on /games with no lfg param',
-    ).toHaveAttribute('aria-pressed', 'false');
+        'the toggle is off on /games with no lfg param',
+    ).toHaveAttribute('aria-checked', 'false');
 
     await toggle.click();
     await expect(page).toHaveURL(/[?&]lfg=1/, { timeout: 15_000 });
-    await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    await expect(toggle).toHaveAttribute('aria-checked', 'true');
+    // Out of the way before the badge click: below 1024px the sheet covers the grid.
+    await closeGamesFilters(page);
 
     const chip = await seededChip(page);
 
@@ -362,20 +367,20 @@ test('a deep link shows the filter pressed, and pressing it again returns discov
     await waitForSeededGroup();
 
     await page.goto('/games?lfg=1');
-    const toggle = page.getByTestId(TOGGLE);
+    await expect(seededTile(page).first()).toBeVisible({ timeout: 20_000 });
+    const toggle = lfgSwitch(await openGamesFilters(page));
     await expect(toggle).toBeVisible({ timeout: 20_000 });
     await expect(
         toggle,
-        'a deep link to ?lfg=1 shows the toggle already pressed',
-    ).toHaveAttribute('aria-pressed', 'true');
-    await expect(seededTile(page).first()).toBeVisible({ timeout: 20_000 });
+        'a deep link to ?lfg=1 shows the toggle already on',
+    ).toHaveAttribute('aria-checked', 'true');
 
     await toggle.click();
     await expect(page).not.toHaveURL(/[?&]lfg=1/, { timeout: 15_000 });
     await expect(
         toggle,
         'pressing the toggle again clears the filter',
-    ).toHaveAttribute('aria-pressed', 'false');
+    ).toHaveAttribute('aria-checked', 'false');
     // The looking grid is unmounted, so the discover view rendered in its
     // place. Scoped to the heading role: the toggle's own label reads
     // "🎯 Players are looking" too.

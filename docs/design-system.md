@@ -8,7 +8,8 @@ aspirational. Per-family shade and per-pattern detail lives in the companion
 **Why this file exists (operator, 2026-09-13):** "A lot of new features end up doing something drastically
 different and it leaves users confused." Canonical example: `/games` filters with the shared
 `FilterPanel`; the lineup's Common Ground panel is a bespoke card with none of it — same job, two designs,
-because nothing told the second author.
+because nothing told the second author. **Resolved 2026-09-23 (ROK-1659):** Common Ground now uses the
+same primitive — §4.1, §6 divergence #1.
 
 ## Keeping this doc current (STRICT)
 
@@ -155,7 +156,7 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
 text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
-(`:759-773`); solid fills are identical in both with the label forced white on light (`:795-801`), and
+(`:759-773`); solid fills are identical in both with the label forced white on light (`:796-803`), and
 `.badge-overlay` (`:774-794`) opts cover-art badges out. Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
@@ -238,10 +239,14 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 
 | Component | What it is | Use when | Key props |
 |---|---|---|---|
-| `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | **The** filtering primitive. Desktop: collapsible bordered panel with "Filters" + "Clear all". Mobile (<768px): `BottomSheet`. Trigger is a funnel icon with an emerald count badge. | Any list/grid filtering, anywhere | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `children`; trigger: `resultCount`, `hasActiveFilters`, `onClick` |
-| `button.tsx` → `Button` (ROK-1646) | **The** button. Five variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), `destructive-soft` (`bg-danger/10 text-danger border-danger/30`) — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), forwarded ref, all `ButtonHTMLAttributes` |
+| `filter-entry.tsx` → `FilterEntry`, `FilterEntryTrigger` | **The** filter entry point — the funnel standard (§4.1, ROK-1659). Pairs `FilterPanel` with the right opener for the viewport: `FilterEntryTrigger` renders the toolbar funnel at ≥1024px and nothing below it; `FilterEntry` renders the inline panel at ≥1024px and the `FilterFab` + `BottomSheet` below. Pages build on this, not `filter-panel.tsx` directly. | Any list/grid filtering, anywhere — `/games`, Common Ground, Calendar | `activeCount`, `isOpen`, `onOpenChange`, `onClearAll`, `children`, `stackAboveCreate`, `describeCount`; trigger: `activeCount`, `isOpen`, `onOpenChange`, `describeCount` |
+| `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | The lower-level pieces `filter-entry.tsx` composes: `FilterPanel` is the inline collapsible panel ("Filters" + "Clear all", scrolls internally past `max-h-[500px]`) that becomes a `BottomSheet` below `DESKTOP_MQ`, and closes on Escape with focus returned to the trigger (§4.1); `FilterPanelTrigger` is the bare 44px funnel button. Reach for these only when `FilterEntry` doesn't fit. | Building a new filter entry point, or reading how one works | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `onClose`, `children`; trigger: `activeCount`, `isOpen`, `onClick`, `describeCount` |
+| `filter-fab.tsx` → `FilterFab` (+ `fab-position.ts`) | The Filters FAB (§4.1, ROK-1659): 56px round, `right-4` (`md:right-5` from 768px, centred over the feedback button), `lg:hidden`, neutral tone (`bg-surface border-edge-strong`) with the active-filter badge. Portaled to `document.body` so a sticky toolbar's stacking context never traps it. Normally reached through `FilterEntry`, not mounted directly. | Phone/tablet filter entry, below 1024px | `activeCount`, `isOpen`, `onClick`, `stackAboveCreate` (lifts it above a page's create `FAB` — `fab-position.ts`), `describeCount` |
+| `filter-count-badge.tsx` → `FilterCountBadge` | The active-filter count badge shared by `FilterPanelTrigger` and `FilterFab`: solid `bg-success` pill, renders nothing at 0, count re-exposed via `aria-describedby` since both openers are named "Filters". | Never mounted directly — internal to `filter-panel.tsx` / `filter-fab.tsx` | `count`, `id`, `describe` (screen-reader wording override, defaults to `describeActiveFilters` (in `filter-count-badge.helpers.ts`, with the `DescribeFilterCount` type) → "N active filters"; the calendar passes `describeHiddenGames` → "N games hidden"), `offset` (`'fab'` 4px corner inset for the 56px FAB, default; `'trigger'` 6px for the 44px toolbar funnel) |
+| `button.tsx` → `Button` (ROK-1646) | **The** button. Five variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), `destructive-soft` (`bg-danger/10 text-danger border-danger/30`) — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), `brandColor` (ROK-1655 — a runtime/provider fill only, §4.11), forwarded ref, all `ButtonHTMLAttributes` |
 | `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
 | `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-14` so text clears a 44px button), `mono`, forwarded ref |
+| `password-input.tsx` → `PasswordInput` (ROK-1655) | `Input` with a trailing 44px `Button ghost sm iconOnly` that flips `type` between `password` and `text`, named "Show <label>" / "Hide <label>", with `aria-controls` on the input. `label` names only the toggle — the input is named by its `Field` (or an `aria-label`). | Every password / secret field (login, first-run admin, API keys) — never `Input type="password"` plus a hand-rolled eye button (§4.11) | `label`, `revealed` + `onRevealedChange` (controlled — one "Show passwords" `Checkbox` driving several fields), every `Input` prop except `type` / `trailing`, forwarded ref |
 | `select.tsx` → `Select` (ROK-1646) | The native `<select>` on the shared field frame: `appearance-none pr-9` + a `text-muted` chevron. | Any pick-one-from-a-list field (stays native — no custom listbox) | `Omit<SelectHTMLAttributes,'size'>` + `fieldSize`, `invalid`, `placeholder` (empty-value first option; pair with `value=""`), `wrapperClassName` (default `w-full`), forwarded ref |
 | `textarea.tsx` → `Textarea` (ROK-1646) | Multi-line field on the shared frame with an optional counter (`n/max`, `text-xs text-dim`, always visible, joined to `aria-describedby`; not live — an `sr-only` polite region says "N characters left" only in the last 10% of `maxLength`, at most 20). | Reasons, descriptions, notes, feedback | all `TextareaHTMLAttributes` + `invalid`, `fieldSize` `md`/`lg`/`sm`, `showCount` (needs `maxLength`), `resize` `'y'` (default) / `'none'`, forwarded ref |
 | `checkbox.tsx` → `Checkbox` (ROK-1646) | Native checkbox, `w-5 h-5 accent-success`, success focus ring. With `label` the whole `<label>` row is the 44px target and the name is the label text alone. | Any boolean in a form or a multi-select list. A single on/off setting is a `Switch`. | `label`, `description` (→ `aria-describedby`), `indeterminate` (sets the DOM property → mixed), `invalid`, all input attributes, forwarded ref. In a `Field`, omit `label` — context wires it |
@@ -249,11 +254,14 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `slider.tsx` → `Slider` (ROK-1646) | Labelled native range, `appearance-none` so the thumb sizing applies: label left, a 44px (`h-11`) hit area over a 6px `bg-edge` track filled in `success` to the value, a 20px `bg-success` thumb, `font-mono` `<output aria-live="off">` readout right. Replaces the duplicated `SLIDER_CLS`. | Any bounded numeric filter/threshold — and every sibling in that filter family (§4.11 DON'T) | `label`, `hideLabel`, `value: number`, `onChange(number)`, `min`/`max`/`step`, `formatValue` (readout + `aria-valuetext`), `showValue` (default true), `wrapperClassName`, ref → the input. Renders its own label — don't wrap it in `Field` |
 | `search-input.tsx` → `SearchInput` (ROK-1646) | `Input` with `type="search"` (role `searchbox`), a decorative leading magnifier, and — while there is text — a 44px `Button ghost iconOnly` named "Clear search" that empties the box, refocuses it and fires `onSearch('')` at once. The browser's own cancel glyph is hidden. | Every search/filter text box — list pages, picker modals, toolbars. Replaces `ModalSearchInput` (migration: ROK-1647) | `value`, `onChange(string)`, `label` (→ `aria-label`; omit inside `Field`), `onSearch` (debounced, never on mount), `debounceMs` (default 300), `onClear`, plus `Input` props (`fieldSize`, `invalid`, …), forwarded ref |
 | `combobox.tsx` → `Combobox` (+ `use-combobox.ts`, `use-anchored-popup.ts`, `combobox-popup.tsx`) (ROK-1646) | **The** autocomplete, in-house WAI-ARIA 1.2: an `Input` (ref forwarded) with `role="combobox"` / `aria-expanded` / `aria-controls` (only while open) / `aria-activedescendant` (focus never leaves it) and a `role="listbox"` at `Z_INDEX.MODAL + 1`, portalled into the surrounding `[role="dialog"]` (so `aria-modal` doesn't hide it) or else `<body>`. Keys are ignored during IME composition; an external reset of `value` to `null` clears the text; one persistent `role="status"` region announces loading / empty / error. Keys: ↑/↓ open then move (wrapping), Home/End jump, Enter picks, Esc closes (a second Esc clears text + value), Tab commits the active option. Closes on an outside press; keeps the active row in view. | Type-to-pick from a long or async list (game search, realm). A short fixed list is a `Select` | `options`, `getKey`, `getLabel`, `value`, `onChange(option \| null)`, `label` (or `Field`, which also names the listbox), `inputValue` + `onInputChange` (controlled text; omit to let it own the text), `renderOption(option, { active, selected })`, `loading` + `loadingText`, `emptyText` (default "No results"), `errorText`, `placeholder`, `disabled`, `invalid`, `fieldSize`, `portalContainer` (overrides the portal target), `className`, `trailing` (interactive slot at the input's right edge, e.g. a 44px clear `Button ghost iconOnly`), `openOnFocus` (open on focus with nothing highlighted, to offer suggestions before typing), `testIds` (`{ input, popup, option }` → `data-testid` on the input, the popup and every `role="option"` row) |
+| `file-picker.tsx` → `FilePicker` (ROK-1655) | A `Button` (default `secondary`) that opens a hidden native `<input type="file" tabIndex={-1}>`. The input's value resets after every pick, so the same file fires twice; `loading` / `disabled` disable both. | Every file upload (avatar, logo, import). Plan ruling 1: a primitive, not a guard exemption for a raw `<input type="file">` | `children` (the trigger's name), `onFiles(File[])` (never empty), `accept`, `multiple`, `loading` + `loadingLabel`, `disabled`, `variant`, `size`, `fullWidth`, `className`, `inputProps` (e.g. `data-testid`), ref → the native input (a drop zone calls `ref.current.click()`) |
+| `color-input.tsx` → `ColorInput` (ROK-1655) | A native `<input type="color">` well (44px, `rounded-lg border-edge`, the shared focus ring) named "<label> colour picker", beside a `mono` hex `Input`. The hex field keeps a draft: only a complete `#rrggbb` is reported (lowercased); anything else is `aria-invalid` and reverts on blur. Controlled only. | Any user-chosen colour (a community accent) — the value is caller data, never a theme colour | `value` (`#rrggbb`), `onChange(hex)`, `label`, `disabled`, `invalid`. Inside a `Field` the hex field takes the Field's id / label / hint / error |
 | `form-classes.ts` → `FIELD_FRAME`, `FIELD_FRAME_BASE`, `FIELD_PAD`, `FOCUS_RING`, `DISABLED` (ROK-1646) | The class strings the form primitives share | Building the next form primitive (`Select`, `Textarea`, `SearchInput`…) — never re-type the frame | — |
-| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: height, cap and bottom edge come from `window.visualViewport` in px via `useVisibleViewport` (`bottom-sheet-viewport.ts`, exposed as `--sheet-vh`), so iPad/iOS Safari toolbars never hide the footer (ROK-1640/1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, resolved against the visible viewport), `initiallyExpanded`, `ariaLabel` |
-| `modal.tsx` → `Modal` | Portalled dialog, focus trap + ARIA (ROK-342) | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName`, `initialFocusRef` |
+| `bottom-sheet.tsx` → `BottomSheet` | Mobile drawer from the bottom, drag-to-dismiss. Lays out against the VISIBLE viewport: height, cap and bottom edge come from `window.visualViewport` in px via `useVisibleViewport` (`bottom-sheet-viewport.ts`, exposed as `--sheet-vh`), so iPad/iOS Safari toolbars never hide the footer (ROK-1640/1641). Body scroll lock is ref-counted with `Modal` (`hooks/use-body-scroll-lock.ts`), so a confirm stacked over an open sheet can close without unlocking the page | Mobile equivalent of a modal or panel | `isOpen`, `onClose`, `title`, `maxHeight` (default `60vh`, resolved against the visible viewport), `initiallyExpanded`, `ariaLabel`, `footer` (ROK-1655 — a pinned `shrink-0` bar after the scrolling body, `data-testid="bottom-sheet-footer"`), `closeGuard` + `discardMessage` (§4.4) |
+| `modal.tsx` → `Modal` (+ `modal-frame.tsx` → `ModalFrame`, the unguarded shell) | Portalled dialog, focus trap + ARIA (ROK-342). A `flex flex-col max-h-[90dvh]` column: `shrink-0` header, a `flex-1 min-h-0` body that scrolls, and an optional pinned `footer` bar (`data-testid="modal-footer"`) that never scrolls away (ROK-1655, §4.4). Feature code imports `Modal`; only `DiscardChangesConfirm` renders `ModalFrame` | Desktop dialogs, confirmations | `isOpen`, `onClose`, `title`, `maxWidth` (default `max-w-md`), `bodyClassName` (replaces only the body skin, §4.4), `footer`, `closeGuard` (from `useDirtyCloseGuard`) + `discardMessage` (§4.4), `initialFocusRef`. The × keeps `aria-label="Close modal"` |
+| `discard-changes-confirm.tsx` → `DiscardChangesConfirm` (ROK-1640, shared by ROK-1655) | "Discard your changes?": a `ModalFrame` (so it stacks above a sheet and is never itself guarded) with `secondary` "Keep editing" (focused on open) and `destructive` "Discard" (`data-testid` `discard-changes-keep` / `discard-changes-discard`) | Rendered for you by `Modal` / `BottomSheet` when they get a `closeGuard`. Render it yourself only for a custom overlay | `isOpen`, `onKeep`, `onDiscard`, `message` (default "Your changes haven't been saved yet.") |
 | `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal. `ModalSearchInput` is now a thin wrapper that delegates to `SearchInput` (ROK-1647) and still requires a `label` (→ `aria-label`) | Any searchable picker modal. New code uses `SearchInput` directly | see file |
-| `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page | `onClick`, `icon` (default `PlusIcon`), `label` |
+| `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page — a neutral-toned Filters FAB (§4.1, ROK-1659) may stack directly above it, same right edge, 12px gap; the create FAB keeps the emerald fill | `onClick`, `icon` (default `PlusIcon`), `label` |
 | `nav-chip.tsx` → `NavChip`, `NAV_CHIP_CLASS` | Navigational link chip | Linking to a sibling lineup/page from a banner | `to`, `children`, `testId` |
 | `switch.tsx` → `Switch` | Accessible on/off switch: native `<button role="switch" aria-checked>`, Space/Enter toggle, `focus-visible` ring, disabled dims + blocks, `bg-success` on / `bg-dim` off (ROK-1612) | Any boolean setting that applies immediately (admin toggles, feature opt-ins). Not for form fields submitted later — use a checkbox | `checked`, `onChange(next)`, `label` (accessible name), `disabled`, `className`, `testId` |
 | `new-badge.tsx` → `NewBadge` | "New" marker | Freshly added items | `visible` |
@@ -291,7 +299,8 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 
 | Hook | Path | Use when |
 |---|---|---|
-| `use-body-scroll-lock.ts` → a ref-counted body scroll lock **(landing with ROK-1640 PR #1314 — not yet on main)** | `web/src/hooks/` | Any modal/sheet that locks background scroll; ref-counted so nested/stacked sheets don't unlock each other early |
+| `use-body-scroll-lock.ts` → a ref-counted body scroll lock (ROK-1640, PR #1314) | `web/src/hooks/` | Any modal/sheet that locks background scroll; ref-counted so nested/stacked sheets don't unlock each other early. `Modal` and `BottomSheet` already use it |
+| `use-dirty-close-guard.ts` → `useDirtyCloseGuard(isDirty, onClose)` (ROK-1640, shared by ROK-1655) | `web/src/hooks/` | Any overlay that edits data. Returns `{ requestClose, confirming, keep, discard, reset }`: pass it as `closeGuard` to `Modal` / `BottomSheet` and wire an explicit Cancel to `requestClose` (§4.4). A one-macrotask latch stops the Escape that closed the confirm from re-opening it. `Modal` / `BottomSheet` call `reset` (via `useResetGuardOnClose`) when they close by another route or unmount, so the next open never starts mid-confirm |
 
 Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105`; call `toast.success(...)`
 / `toast.error(...)` from `sonner` directly.
@@ -300,21 +309,65 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
 
 ## 4. Pattern rules
 
-### 4.1 Filtering — `FilterPanel` is canonical
+### 4.1 Filtering — the funnel standard (ROK-1659)
 
-**DO** — `pages/games/coop-filter-section.tsx` and `pages/players-page.tsx:87-93`: a `FilterPanelTrigger`
-(funnel + result-count badge) in the page toolbar; `FilterPanel` holds the controls and owns "Filters" +
-"Clear all"; on mobile it becomes a `BottomSheet` for free. Escape closes the desktop panel only where the
-consumer wires it (`useEscapeToClose`, a local function at `coop-filter-section.tsx:30,51` — not a
-`FilterPanel` affordance; `players-page.tsx` lacks it). When a predicate drops NULL-data rows, disclose it
-in a hint line (`CoopFilterHint`) rather than silently emptying the grid.
+**DO** — one shape everywhere a list/grid is filtered, chosen by viewport:
 
-**DON'T** — `components/lineups/CommonGroundFilters.tsx`: a bespoke always-visible `grid grid-cols-1
-sm:grid-cols-2 lg:...`. No funnel, no count badge, no "Clear all", no mobile sheet, no collapse — every
-one of those exists three files away. The counter-example this document was written for (§6.1).
+- **Desktop (≥1024px, `DESKTOP_MQ`)** — a toolbar `FilterPanelTrigger` (funnel + active-filter badge)
+  opens the inline `FilterPanel`, which owns "Filters" + "Clear all" and scrolls internally past its
+  `max-h-[500px]` cap. Reference: `components/ui/filter-entry.tsx` (`FilterEntry` / `FilterEntryTrigger`,
+  the standard pairing) and its adopters `pages/games/games-filter-panel.tsx`,
+  `components/lineups/CommonGroundFilters.tsx`, `pages/calendar/CalendarFilterEntry.tsx`.
+  `pages/players-page.tsx:84-90` wires the lower-level `FilterPanelTrigger` / `FilterPanel` pair directly
+  instead of `FilterEntry` (not yet migrated to the shared entry point).
+  Escape-to-close is built into `FilterPanel` itself (`useEscapeToClose` + `isEscapeForAnotherLayer` in
+  `filter-panel.tsx`) — not a per-page affordance. It closes the desktop panel and, when focus was inside
+  it, returns focus to the open funnel (`[data-testid="filter-panel-trigger"][aria-expanded="true"]`),
+  because the collapsed panel is `inert`. A non-empty search field inside the panel keeps the first
+  Escape (the browser clears it); the next one closes. "Clear all" unmounts itself at 0, so it hands focus
+  to the panel's "Filters" title (desktop) or the sheet's Close button first (`ClearAllButton`). Every `FilterPanel` consumer gets this for free, including `players-page.tsx`.
+  Below 1024px the same rule holds for the sheet: a closed `BottomSheet` only slides off-screen, so
+  `FilterPanel` wraps the sheet body in `inert` + `aria-hidden` while closed (children stay mounted, so
+  body effects such as the ROK-1255 auto-seed still run). Tests that drive sheet controls open the FAB first.
+- **Phone + tablet (<1024px)** — no toolbar trigger. A floating **Filters FAB** (56px round, `right-4`,
+  `lg:hidden` — below 768px it sits above the bottom tab bar: `bottom: 72px` (`FAB_BOTTOM_ABOVE_TAB_BAR`)
+  while it shows, `bottom: 16px` (`FAB_BOTTOM_NO_TAB_BAR`) once it hides on scroll. At 768–1023px there is
+  no tab bar but the feedback button (`FeedbackWidget.tsx`, `hidden md:flex bottom-6 right-6`, 48px) holds
+  the corner, so the FAB stacks above it: `bottom: 84px` (`FAB_BOTTOM_ABOVE_FEEDBACK` = 24 + 48 + the 12px
+  gap) and `md:right-5`, which puts both circles' centres 48px from the edge — computed by
+  `useFilterFabBottom`, `components/ui/fab-position.ts`. It is portaled to `document.body`, so a sticky
+  toolbar that hosts `FilterEntry` (Common Ground) cannot trap its z-index; a page's bottom padding clears
+  the 140px stack at 768–1023px with `md:pb-40`) opens the same `FilterPanel` as a
+  `BottomSheet`, which uses its own height cap instead. Neutral tone (`bg-surface border border-edge-strong
+  shadow-lg`, funnel `text-foreground`) — it is a secondary trigger, not a page's primary action, so it
+  does NOT take the `FAB` primitive's default emerald fill. `aria-label="Filters"`, `aria-describedby`
+  naming the count, `aria-expanded`.
+- **The badge counts ACTIVE filters, not results** — hidden at zero active filters, on both the desktop
+  trigger and the FAB.
+- **Stacking** (documented here; `/events` is the live case and out of scope for ROK-1659) — a page's
+  create `FAB` and its Filters FAB share the right edge, 12px apart (`FAB_STACK_GAP_PX`,
+  `fab-position.ts`): `72px`/`140px` while the tab bar shows, or `16px`/`84px` once it hides — the create
+  FAB's own bottom offset plus the 56px FAB height and the 12px gap (`useFilterFabBottom(stackAboveCreate)`);
+  the create FAB keeps the emerald fill, the Filters FAB stays neutral, and the page's bottom padding
+  clears both (§3.1 `fab.tsx`).
+- When a predicate drops NULL-data rows, disclose it in a hint line inside the panel rather than
+  silently emptying the grid — `/games` shows `coop-filter-hint` under the Co-op group
+  (`pages/games/games-filter-panel.tsx`) and `LibraryFilterHint` / `library-filter-hint` under the
+  Players and Owners fields (defined in `pages/games/games-filter-fields.tsx`, mounted by
+  `games-filter-panel.tsx`).
 
-**Light / Dark** — panel and sheet are tokens and follow the family; the emerald count badge is a solid
-accent and is identical in both (`design-system-tokens.md` §3).
+On the standard: `/games` (retired the `LfgFilterChip` / `LibraryFilterChips` / `DesktopGenrePills` chip
+rows and the genre-only sheet — the Filters FAB opens the full panel instead), Common Ground (retired the
+bespoke always-visible card — §6 divergence #1, resolved), Calendar (retired the desktop sidebar chip +
+`CalendarGameFilterModal` — the "Filter by Game" FAB becomes the Filters FAB, now visible up to 1024px
+instead of 768px).
+
+**DON'T** — render filter controls inline on the page below 1024px with no FAB, leave a toolbar funnel
+visible below 1024px alongside the FAB, or fall back to a chip row as a page's filter set (§4.3) — pick
+the one trigger the viewport calls for.
+
+**Light / Dark** — panel and sheet are tokens and follow the family; the count badge (`bg-success`) and
+the Filters FAB's neutral surface (`bg-surface`/`border-edge-strong`) are tokens too (`design-system-tokens.md` §3).
 
 ### 4.2 Cards
 
@@ -335,12 +388,16 @@ white titles stay legible over the *image*; anything on the art needs `.badge-ov
 **DO** — the chip geometry is fixed: `inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full
 text-sm font-medium transition-colors`, ON = `bg-amber-500/10 border border-amber-500/30 text-amber-300
 hover:bg-amber-500/20`, OFF = `bg-panel border border-edge text-secondary hover:bg-overlay`. Rendered as
-`<button type="button">` with `aria-pressed`. See `web/src/pages/games/library-filter-chips.tsx` and
-`lfg-filter-chip.tsx`.
+`<button type="button">` with `aria-pressed`. No product page renders this toggle chip any more: ROK-1659
+retired its only adopters, the `/games` chip rows (`library-filter-chips.tsx`, `lfg-filter-chip.tsx`,
+both deleted). The geometry survives only in the `/dev/design-system` gallery
+(`web/src/dev/design-system/primitives-section.tsx`, `scheme-controls.tsx`).
 
-**DON'T** write a fourth copy of those class strings. Both files carry an explicit note that a **fifth**
-chip means promoting them to a shared module — if you are that fifth chip, do the promotion. For
-navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with a pill className.
+**DON'T** copy those class strings out of the gallery. The next product surface that needs a toggle chip
+promotes them to a shared module (`components/ui/filter-chip.tsx`) and adopts that instead. For
+navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with a pill className. And
+don't press a chip row into service as a page's filter set (ROK-1659) — chips are for toggles and
+navigation only; filtering is §4.1's funnel standard.
 
 **Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:677`) and border
 (`:713`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
@@ -348,9 +405,10 @@ navigation use `NavChip` / `NAV_CHIP_CLASS`, never a hand-written `<Link>` with 
 
 ### 4.4 Modal vs bottom sheet
 
-**DO** — pick by viewport, not by taste: `useMediaQuery('(min-width: 768px)')` → `Modal` on desktop,
-`BottomSheet` below. `FilterPanel` already does this internally; copy its branch
-(`filter-panel.tsx:50-59`) when you need the same split elsewhere.
+**DO** — pick by viewport, not by taste: `useMediaQuery(DESKTOP_MQ)` (1024px, §4.18) →
+`Modal` / inline at 1024px and up, `BottomSheet` below. `FilterPanel` splits at `DESKTOP_MQ` (1024)
+internally; copy its `if (!isDesktop)` branch in `FilterPanel` (`filter-panel.tsx`) when you need the
+same split elsewhere.
 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
@@ -360,27 +418,47 @@ carries the focus trap and ARIA dialog semantics you would otherwise have to re-
 - **Size against the visible viewport.** Sheet heights are `dvh` with a `vh` fallback — `BottomSheet` converts
   a `vh` `maxHeight` for you. Raw `vh` on iOS/iPadOS Safari excludes the toolbars, so a bottom-anchored
   sheet opened with its last rows (the ⋯ menu's Rally / Lock) under the browser bar.
-- **An action footer is a pinned flex footer OUTSIDE the scroll body** — the body is `flex-1 min-h-0
-  overflow-y-auto`, the footer a `shrink-0` sibling (`phone-week-check-footer.tsx` `StepFooter`). Never
+- **An action footer is a pinned flex footer OUTSIDE the scroll body** — pass it as `BottomSheet footer` /
+  `Modal footer` (ROK-1655), which render a `shrink-0` sibling after the scrolling body — `Modal`'s is
+  `flex-1 min-h-0`; `BottomSheet`'s is content-sized (`min-h-0 overflow-y-auto`) and shrinks and scrolls
+  only once the sheet reaches its `maxHeight` cap (the game-time drawer's `phone-week-check-footer.tsx` `StepFooter` is the hand-built original). Never
   `sticky` inside the scroll body: that is what hid the game-time drawer's Save on an iPad.
-- **A sheet that edits data guards its close** with `useDirtyCloseGuard`
-  (`components/features/game-time/use-dirty-close-guard.ts`): ×, backdrop, swipe-down and Escape ask
-  "Discard your changes?" (`DiscardChangesConfirm`, a `Modal` over the sheet) while the draft is dirty.
-  Explicit Save / Skip stay unguarded.
+- **A sheet that edits data guards its close** — see *Dirty-close* below.
 - `web/index.html` has no `viewport-fit=cover`, so `env(safe-area-inset-bottom)` resolves to 0 and the
   sheets' safe-area padding is inert for now — keep it (it activates if the meta tag is ever added), but do
   not rely on it to clear a home indicator.
 
-**Light / Dark** — the body is tokens; the scrim is a raw black alpha with no light override, so it dims
-identically in both. Do not invent a third — the two that exist already disagree (§6.11).
+**Modal footer and body (ROK-1655):**
 
-**Sheet rules (ROK-1640 — not fully on main; PR #1314 lands the hook, `useDirtyCloseGuard` is not yet
-shipped anywhere):**
-- Size the sheet from the visible viewport, not `100vh` — mobile browser chrome eats real height.
-- A pinned footer (primary action) sits OUTSIDE the scrollable body, not inside it, so it never scrolls
-  out of reach.
-- A sheet with unsaved changes uses the dirty-close guard `useDirtyCloseGuard` to confirm before closing
-  on backdrop-tap/back-gesture instead of silently discarding input.
+- **`Modal` is a `max-h-[90dvh]` flex column** — `shrink-0` header, `flex-1 min-h-0` body, optional
+  `footer`. Put the dialog's actions in `footer`: a `shrink-0` bar (`border-t border-edge`, right-aligned,
+  wraps) below the scrolling body, so Save stays on screen however long the form grows. Never a `sticky`
+  row inside the body. A `Modal` / `BottomSheet` pair (`RescheduleModal`) passes the same actions to both:
+  both overlays draw the one bar (`OVERLAY_FOOTER_CLASS`, `web/src/components/ui/overlay-footer.ts`), so
+  pass the bare buttons — never wrap them in your own `flex justify-end` row.
+- **The `bodyClassName` contract:** the structural `flex-1 min-h-0` is ALWAYS applied; `bodyClassName`
+  replaces only the skin (default `p-4 overflow-y-auto`). An overrider that drops `overflow-y-auto` owns
+  its own scroller — give the child that scrolls `h-full overflow-y-auto`, or it clips at the 90dvh cap.
+  The three overriders on main (`GameTimeWidget`, `RescheduleModal`, `GameTimeRefreshModal`) keep their
+  behaviour under this contract.
+
+**Dirty-close (ROK-1655) — an overlay that edits data guards its close:**
+
+- **The consumer owns the guard:** `const guard = useDirtyCloseGuard(isDirty, onClose)`
+  (`web/src/hooks/use-dirty-close-guard.ts`), then `<Modal closeGuard={guard}>` /
+  `<BottomSheet closeGuard={guard}>`. The overlay shows "Discard your changes?" (`DiscardChangesConfirm`;
+  `discardMessage` says what is unsaved) while `guard.confirming`.
+- **Guarded:** Escape, the backdrop, the header ×, and a sheet's swipe-down — they call
+  `guard.requestClose`. An explicit **Cancel** is guarded too: wire it to `guard.requestClose`, not
+  `onClose`.
+- **Unguarded:** Save and submit close on purpose (`onClose`), as does the confirm's own Discard. A clean
+  overlay closes at once on every path — no confirm.
+- **Browser back is out of scope** (forms plan ruling 4): no `popstate` handling.
+- Rendered: `/dev/design-system` → *Overlays* → the form Modal and form sheet demos.
+
+**Light / Dark** — the body and the footer bar (`border-edge`) are tokens; the scrim is a raw black alpha
+with no light override, so it dims identically in both. Do not invent a third — the two that exist already
+disagree (§6.11).
 
 ### 4.5 Empty states
 
@@ -475,6 +553,22 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   shadow-xl`, the active row `bg-overlay`, rows 44px below `lg`; async lookups pass `loading` / `emptyText` /
   `errorText` (a status row, announced by one persistent `role="status"` region) instead of rendering their own
   spinner. Inside a Modal or BottomSheet the popup portals into the dialog and the first Esc closes only the popup.
+- **Passwords and secrets are `PasswordInput`** (ROK-1655, forms plan ruling 2): inside a `Field`, with
+  `label` naming the toggle ("Show Password" / "Hide Password"). Several fields revealed together → one
+  "Show passwords" `Checkbox` driving each field's controlled `revealed`. Never `Input type="password"`
+  plus a hand-rolled eye button.
+- **File uploads are `FilePicker`** (ruling 1): the trigger is a `Button` named by `children`; the native
+  input stays hidden in the DOM (tests drive it with `userEvent.upload`). A drop zone reuses the picker's
+  ref to open the same dialog instead of rendering a second `<input type="file">`. A raw file input gets
+  no guard exemption.
+- **Colours are `ColorInput`** (ruling 1): well + mono hex inside a `Field`. The value is caller data (a
+  saved accent), never a theme colour; presets and Reset set `value` and the draft follows.
+- **Brand fills are `Button brandColor`** (ruling 3): a provider's runtime colour (`provider.color`,
+  Discord `#5865F2`) as an inline fill. It replaces the variant's classes and adds `data-brand-fill` +
+  `text-foreground`. On the six light schemes the index.css forced-white rule (`:797-805`) sets it to
+  `#fff`; on the dark schemes it stays `text-foreground`, which is already near-white there — so the
+  label reads light on every scheme, but is pure white only on the light ones. Theme colours use the variants: never pass a token or a
+  hand-picked hex to `brandColor`, and never hand-write `bg-[#hex]` on a button.
 
 **Guard:** `components/ui/form-primitives.guard.test.ts` freezes raw `<input>` / `<select>` / `<textarea>` /
 `<button>` outside `components/ui` and `dev` at `form-primitives.baseline.json`. The list only shrinks: a new
@@ -490,20 +584,23 @@ the in-house one (operator ruling, ROK-1646).
 **Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
 solid `primary`/`destructive` fills are identical in both with the label forced white on light (§6.10).
 Native control chrome follows root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the
-ROOT, not in a scoped preview (`design-system-tokens.md` §3). Rendered: `/dev/design-system` → *Forms*
-(`web/src/dev/design-system/forms-section.tsx`).
+ROOT, not in a scoped preview (`design-system-tokens.md` §3). A `brandColor` fill is the caller's data and
+does not flip; its label is white in both. Rendered: `/dev/design-system` → *Forms*
+(`web/src/dev/design-system/forms-section.tsx` + `forms-pickers-demo.tsx`).
 
 ### 4.12 Badges with counts
 
 **DO** — absolutely-positioned circle on the trigger: `absolute -top-1 -right-1 flex items-center
-justify-center w-5 h-5 text-xs font-bold text-white bg-emerald-500 rounded-full`
-(`filter-panel.tsx::FilterBadge`). Inline count pills use `px-2 py-0.5 text-xs rounded-full` with a tinted
-background.
+justify-center min-w-5 h-5 px-1 text-xs font-bold text-white bg-success rounded-full`
+(`filter-count-badge.tsx::FilterCountBadge`, ROK-1659 — shared by `FilterPanelTrigger` and `FilterFab`;
+`min-w-5 px-1` over a fixed `w-5` so a two-digit count doesn't clip). Inline count pills use `px-2 py-0.5
+text-xs rounded-full` with a tinted background.
 
-**DON'T** show a zero-count badge — `FilterPanelTrigger` only renders it when `hasActiveFilters`.
+**DON'T** show a zero-count badge — `FilterCountBadge` renders nothing at `count <= 0`.
 
-**Light / Dark** — a solid-fill badge is identical in both by design (§6.10); a tinted pill must use
-`bg-<hue>-500/10` + `text-<hue>-400` to pick up the remap.
+**Light / Dark** — a solid-fill badge is identical in both by design (§6.10) whether it is a raw hue or,
+as here, the `success` token; a tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
+remap.
 
 ### 4.13 Journey hero — one component, every phase, every width
 
@@ -641,7 +738,7 @@ ship `CHECK_HOURS` (hour 17 first) instead, so the desktop group week view start
 **DO** — the phone/desktop split is **1024px (`lg`), not 768px (`md`)**: iPads in portrait (768–834px)
 and the iPad mini in landscape get the phone layouts (sheets, drawers, one-day module, Manage sheet). In JS
 import `DESKTOP_MQ` / `PHONE_MQ` from `web/src/lib/breakpoints.ts:14-18` and pass to `useMediaQuery`
-(e.g. `SchedulingToolbar.tsx:50`, `filter-panel.tsx:51`); in CSS use `lg:` on the same component so the
+(e.g. `SchedulingToolbar.tsx:50`, `FilterPanel` in `filter-panel.tsx`); in CSS use `lg:` on the same component so the
 two halves agree (the toolbar's `lg:sticky`, `SchedulingToolbar.tsx:54`). Known drift: `Layout.tsx:48`
 hand-writes `'(min-width: 1024px)'` — right value, wrong spelling; switch it to `DESKTOP_MQ` when next touched.
 
@@ -698,16 +795,20 @@ changing any of them.
 Found while reading the code for this document. Each is a candidate unification story — the Lead files
 them; do not fix them as scope creep.
 
-1. **`CommonGroundFilters` vs `FilterPanel`** (`components/lineups/CommonGroundFilters.tsx` vs
-   `components/ui/filter-panel.tsx`) — the §4.1 DON'T. `/games` and `/players` use the shared panel.
-   *Suggested:* move the four controls into `FilterPanel` children (mirroring
-   `pages/games/coop-filter-controls.tsx`) and add a `FilterPanelTrigger`; the auto-seed hook and co-op
-   dormancy logic move across unchanged.
+1. ~~**`CommonGroundFilters` vs `FilterPanel`**~~ (`components/lineups/CommonGroundFilters.tsx` vs
+   `components/ui/filter-panel.tsx`) — **Resolved by ROK-1659:** the bespoke always-visible card is
+   retired; Common Ground's three controls (min owners, players, co-op) moved into `FilterEntry` children
+   behind the same Filters FAB (phone/tablet) / toolbar funnel (desktop) as `/games` (`/players` is not
+   yet migrated — it still wires the lower-level `FilterPanelTrigger` / `FilterPanel` pair directly, shown
+   at every width, §4.1). Common Ground has no genre control. The auto-seed hook (ROK-1255),
+   restore/suppress (ROK-1400) and co-op dormancy moved across unchanged. The badge counts co-op only —
+   min owners 2 and auto-seeded players are defaults and don't count.
 
-2. **Chip class strings duplicated across two files** — `pages/games/library-filter-chips.tsx` and
-   `pages/games/lfg-filter-chip.tsx` carry byte-identical `BASE_CLS` / `ON_CLS` / `OFF_CLS`; only the
-   former carries the note (`:14-16`) that a fifth chip means extraction. *Suggested:* promote to
-   `components/ui/filter-chip.tsx`.
+2. ~~**Chip class strings duplicated across two files**~~ (`pages/games/library-filter-chips.tsx` vs
+   `pages/games/lfg-filter-chip.tsx`) — **Resolved by ROK-1659:** both files were deleted when `/games`
+   retired its chip rows for the Filters entry (§4.1), so no product page carries the duplicated
+   `BASE_CLS` / `ON_CLS` / `OFF_CLS` any more. The geometry lives on only in the `/dev/design-system`
+   gallery (§4.3); a future product adopter promotes it to `components/ui/filter-chip.tsx`.
 
 3. ~~**`--color-accent` is referenced but never defined**~~ — **Resolved by ROK-1645.** Every call site
    was replaced rather than the token declared (operator ruling 2026-09-22: "accent" means nothing distinct
@@ -759,7 +860,7 @@ them; do not fix them as scope creep.
     it reads as a miss: it is deliberate — and it is why solid button fills were NOT tokenised by
     ROK-1586 (§2.2).
 
-11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal.tsx:68`) vs
+11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal-frame.tsx:98`) vs
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both
     feel heavier on a white page. *Suggested:* one scrim constant.
 
@@ -783,6 +884,7 @@ surface it describes is retired.
 | 5 | **Cycle 4 Unify** — simplified lineup flow wireframes | `/dev/wireframes/simplify` (DEMO_MODE; sources `web/src/dev/simplify-wireframes/*`) + Figma `ROK-929 Community Lineup Prototypes` | memory `reference_cycle_4_unify_design` | the Cycle 4 stories (ROK-1300 family) | — |
 | 6 | **Embed system** + **Looking For Group** sheets (2026-09-01) — one grammar for every bot embed; async LFG matchmaking | (text extracts) | `design-embed-system-2026-09-01.txt`, `design-lfg-system-2026-09-01.txt` | ROK-1450 epic (LFG), embed stories | ROK-1571/1572/1573 (LFG follow-ups) |
 | 7 | **Find a better time, second round** — ROK-1587 (three overlays in one phone row: You outline, Suggested block, slot chips), ROK-1588 (desktop week-columns replacement for the painted heatmap, in the day-view language) | — | — | ROK-1587 + ROK-1588 (PR #1250) | — |
+| 8 | **Funnel filter standard** (2026-09-23, v3) — desktop toolbar `FilterPanelTrigger` + inline `FilterPanel`; phone/tablet (<1024px) neutral Filters FAB + `BottomSheet`, badge = active filters; `/games` chip rows + genre sheet retire, Common Ground's bespoke card retires, Calendar's sidebar chip + modal retire; a page's create FAB + Filters FAB stack per §4.1 | https://claude.ai/artifact/3fhB1i3QCDmhJQRbYu8JTZ | `planning-artifacts/specs/ROK-1659.md` | ROK-1659 (`/games`, Common Ground) + ROK-1662 (Calendar) | — |
 
 Rules that came out of these rounds (operator, 2026-09-16): prototype before actioning a design change;
 only decisions ship (prune losing candidates from `web/src/dev/**`); a shared component (`JourneyHero`)

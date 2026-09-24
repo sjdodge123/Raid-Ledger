@@ -136,3 +136,51 @@ describe('Button — loading keeps focus and swallows repeat clicks', () => {
         expect(onSubmit, 'a loading submit button still submitted the form').not.toHaveBeenCalled();
     });
 });
+
+/**
+ * ROK-1655 ruling 3 — `brandColor` is runtime/brand data (a provider colour,
+ * Discord #5865F2), never a theme colour. The inline fill replaces the
+ * variant's paint, so the button carries its own label + hover treatment and a
+ * `data-brand-fill` hook for the index.css forced-white rule.
+ */
+describe('Button — brandColor (runtime brand fill)', () => {
+    it('paints an inline fill, carries data-brand-fill and keeps a text-foreground label', () => {
+        render(<Button brandColor="#5865F2">Discord</Button>);
+        const btn = screen.getByRole('button', { name: 'Discord' });
+        expect(btn, 'brandColor must set the inline background').toHaveStyle({ backgroundColor: '#5865F2' });
+        expect(btn, 'brandColor must emit the data-brand-fill hook for index.css').toHaveAttribute('data-brand-fill');
+        expect(btn).toHaveClass('text-foreground', 'hover:brightness-110');
+    });
+
+    it('replaces the variant paint so a ghost brand button has no muted label or emerald fill', () => {
+        render(<Button variant="ghost" brandColor="#5865F2">Discord</Button>);
+        const btn = screen.getByRole('button', { name: 'Discord' });
+        expect(btn).toHaveClass('text-foreground');
+        expect(btn, 'the variant label colour fights the forced-white label').not.toHaveClass('text-muted');
+        expect(btn).not.toHaveClass('bg-emerald-600');
+    });
+
+    it("merges into the caller's style without clobbering it", () => {
+        render(<Button brandColor="#5865F2" style={{ width: '192px' }}>Discord</Button>);
+        const btn = screen.getByRole('button', { name: 'Discord' });
+        expect(btn, "the caller's width was dropped by the brand merge").toHaveStyle({ width: '192px' });
+        expect(btn).toHaveStyle({ backgroundColor: '#5865F2' });
+    });
+
+    it('without brandColor there is no data-brand-fill and no inline background', () => {
+        render(<Button>Save</Button>);
+        const btn = screen.getByRole('button', { name: 'Save' });
+        expect(btn).not.toHaveAttribute('data-brand-fill');
+        expect(btn.style.backgroundColor).toBe('');
+    });
+
+    it('loading with brandColor still shows the spinner and swallows the click', () => {
+        const onClick = vi.fn();
+        render(<Button brandColor="#5865F2" loading onClick={onClick}>Discord</Button>);
+        const btn = screen.getByRole('button', { name: 'Discord' });
+        expect(screen.getByTestId('button-spinner')).toBeInTheDocument();
+        expect(btn).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(btn);
+        expect(onClick, 'a loading brand button fired onClick').not.toHaveBeenCalled();
+    });
+});

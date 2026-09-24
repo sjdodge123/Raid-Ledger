@@ -160,11 +160,9 @@ async function commonGroundTile(page: Page) {
     await expect(page.locator('body')).not.toHaveText(/something went wrong/i, {
         timeout: 15_000,
     });
-    const searchBtn = page.getByTestId('sticky-hero-search');
-    await expect(searchBtn).toBeVisible({ timeout: 20_000 });
-    await searchBtn.click();
+    // ROK-1659: the search box is always in the sticky hero — no toggle.
     const box = page.getByRole('searchbox', { name: /search games/i });
-    await expect(box).toBeVisible({ timeout: 10_000 });
+    await expect(box).toBeVisible({ timeout: 20_000 });
     await box.fill(gameName);
     const tile = page
         .getByTestId('common-ground-tile')

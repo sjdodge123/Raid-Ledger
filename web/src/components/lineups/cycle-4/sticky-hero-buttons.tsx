@@ -1,44 +1,12 @@
 /**
  * Compact buttons embedded in the sticky JourneyHero of the Nominating
- * (ROK-1297) and Voting (ROK-1298) composites. Extracted so the parent
+ * (ROK-1297) and Voting (ROK-1298) composites. (ROK-1659 retired the
+ * Nominating Search / Back pair: the search box now sits in the toolbar.) Extracted so the parent
  * files stay under the 300-line cap. All share visual structure (icon +
  * label, emerald solid, 44px mobile / 36px desktop tap target) so they
  * read as a uniform action row.
  */
 import type { JSX } from 'react';
-
-export function StickyHeroSearchButton({
-  onClick,
-  disabled,
-}: {
-  onClick: () => void;
-  disabled: boolean;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      aria-label="Search the game library"
-      data-testid="sticky-hero-search"
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      <svg
-        aria-hidden="true"
-        className="w-4 h-4 stroke-current"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <circle cx={11} cy={11} r={7} />
-        <path d="m20 20-3-3" />
-      </svg>
-      <span>Search</span>
-    </button>
-  );
-}
 
 export function StickyHeroJumpButton({
   count,
@@ -53,7 +21,7 @@ export function StickyHeroJumpButton({
       onClick={onClick}
       data-testid="sticky-hero-jump"
       aria-label={`Jump to your ${count} nominated games`}
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors whitespace-nowrap"
+      className="shrink-0 min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors whitespace-nowrap"
     >
       <svg
         aria-hidden="true"
@@ -72,41 +40,10 @@ export function StickyHeroJumpButton({
   );
 }
 
-export function StickyHeroBackButton({
-  onClick,
-}: {
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Back to Common Ground suggestions"
-      data-testid="sticky-hero-back"
-      className="flex-1 sm:flex-initial min-h-[44px] sm:min-h-[36px] inline-flex items-center justify-center gap-2 px-3 sm:px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-sm font-semibold text-white shadow-md transition-colors whitespace-nowrap"
-    >
-      <svg
-        aria-hidden="true"
-        className="w-4 h-4 stroke-current flex-shrink-0"
-        viewBox="0 0 24 24"
-        fill="none"
-        strokeWidth={2}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M19 12H5" />
-        <path d="m12 19-7-7 7-7" />
-      </svg>
-      <span>Back</span>
-    </button>
-  );
-}
-
 /**
  * Sticky-hero submit affordance for the Voting composite (ROK-1298).
  *
- * Matches the visual chrome of StickyHeroSearchButton / JumpButton /
- * BackButton — emerald solid, 44px mobile / 36px desktop tap target.
+ * Matches the visual chrome of StickyHeroJumpButton — emerald solid, 44px mobile / 36px desktop tap target.
  * Label + icon change between Submit ↔ Change my votes (state is in
  * the copy, not the color).
  *

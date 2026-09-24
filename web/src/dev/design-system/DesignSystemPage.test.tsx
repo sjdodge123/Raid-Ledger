@@ -11,6 +11,21 @@ import { THEME_REGISTRY } from '../../stores/theme-registry';
 import { useThemeStore } from '../../stores/theme-store';
 import { GROUP_FILL, GROUP_GRADIENT } from '../../components/features/game-time/phone/week-strip.fills';
 
+/** Answers `min-width` / `max-width` queries as a viewport `width` px wide (others false); returns the restore. */
+function withViewportWidth(width: number): () => void {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => {
+        const min = /min-width:\s*(\d+)px/.exec(query);
+        const max = /max-width:\s*(\d+)px/.exec(query);
+        const matches = Boolean(min || max) && (!min || width >= Number(min[1])) && (!max || width <= Number(max[1]));
+        return {
+            matches, media: query, onchange: null, addListener: () => {}, removeListener: () => {},
+            addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => false,
+        };
+    }) as unknown as typeof window.matchMedia;
+    return () => { window.matchMedia = original; };
+}
+
 const mockUseSystemStatus = vi.fn();
 vi.mock('../../hooks/use-system-status', () => ({
     useSystemStatus: () => mockUseSystemStatus(),
@@ -89,20 +104,43 @@ describe('DesignSystemPage — Forms section', () => {
         expect(within(screen.getByRole('listbox', { name: 'Game' })).getAllByRole('option').length).toBeGreaterThan(1);
     });
 
-    it('shows the filtering DO and DON\'T side by side', () => {
-        demoMode(true);
-        renderWithProviders(<DesignSystemPage />);
-        expect(screen.getByTestId('ds-filter-do')).toBeInTheDocument();
-        expect(screen.getByTestId('ds-filter-dont')).toBeInTheDocument();
-        // The canonical panel owns "Clear all"; the bespoke copy has no such control.
-        expect(screen.getByRole('button', { name: /clear all/i })).toBeInTheDocument();
-    });
-
     it('renders token swatches for the surface roles', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
         for (const token of ['--color-backdrop', '--color-surface', '--color-panel', '--color-foreground', '--color-edge']) {
             expect(screen.getByTestId(`swatch-live-${token}`)).toBeInTheDocument();
+        }
+    });
+});
+
+describe('DesignSystemPage — Filtering section', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('shows the desktop and phone filtering demos side by side', () => {
+        demoMode(true);
+        const restore = withViewportWidth(1280);
+        try {
+            renderWithProviders(<DesignSystemPage />);
+            expect(screen.getByTestId('ds-filter-do')).toBeInTheDocument();
+            expect(screen.getByTestId('ds-filter-phone')).toBeInTheDocument();
+            // The canonical panel owns "Clear all" — inline, in the desktop demo itself.
+            expect(within(screen.getByTestId('ds-filter-do')).getByRole('button', { name: /clear all/i })).toBeInTheDocument();
+        } finally {
+            restore();
+        }
+    });
+
+    it('mounts no real (fixed) Filters FAB below 1024px — the live desktop demo is gated to ≥1024px', () => {
+        demoMode(true);
+        const restore = withViewportWidth(800);
+        try {
+            renderWithProviders(<DesignSystemPage />);
+            expect(screen.queryByTestId('filter-fab')).toBeNull();
+            expect(screen.getByTestId('ds-filter-do')).toHaveTextContent(/renders at 1024px and up/);
+        } finally {
+            restore();
         }
     });
 });
@@ -168,8 +206,8 @@ describe('DesignSystemPage — side-by-side toggle', () => {
             expect(within(light).getByRole('heading', { name: heading, level: 2 })).toBeInTheDocument();
         }
         // The DO / DON'T pair is inside both columns, not only the dark one.
-        expect(within(dark).getByTestId('ds-filter-dont')).toBeInTheDocument();
-        expect(within(light).getByTestId('ds-filter-dont')).toBeInTheDocument();
+        expect(within(dark).getByTestId('ds-filter-phone')).toBeInTheDocument();
+        expect(within(light).getByTestId('ds-filter-phone')).toBeInTheDocument();
     });
 
     it('pins the root to default-dark while on, and restores the scheme when off', () => {
@@ -326,5 +364,97 @@ describe('DesignSystemPage — ROK-1586 sections', () => {
         expect(screen.getByTestId('ds-cell-busy')).toHaveClass('before:bg-busy');
         expect(screen.getByTestId('ds-cell-slot')).toHaveClass('outline-slot');
         expect(screen.getByTestId('ds-cell-picked')).toHaveClass('ring-success');
+    });
+});
+
+describe('DesignSystemPage — ROK-1655 form foundation (Forms)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('mounts the real PasswordInput: "Show Password" reveals the value', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        const input = within(forms).getByLabelText('Password', { selector: 'input' });
+        expect(input).toHaveAttribute('type', 'password');
+        const toggle = within(forms).queryByRole('button', { name: 'Show Password' });
+        expect(toggle, 'Forms must mount PasswordInput (a toggle named "Show Password")').not.toBeNull();
+        fireEvent.click(toggle!);
+        expect(input, 'the PasswordInput toggle must reveal the value').toHaveAttribute('type', 'text');
+        expect(within(forms).getByRole('button', { name: 'Hide Password' })).toBeInTheDocument();
+    });
+
+    it('mounts FilePicker, ColorInput and a brandColor Button', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        expect(within(forms).queryByRole('button', { name: 'Upload logo' }), 'a FilePicker trigger must be present').not.toBeNull();
+        expect(forms.querySelector('input[type="file"]'), 'the FilePicker keeps its hidden native input').not.toBeNull();
+        expect(within(forms).queryByRole('textbox', { name: 'Accent' }), 'the ColorInput hex textbox must be present').not.toBeNull();
+        expect(within(forms).queryByLabelText('Accent colour picker'), 'the ColorInput well must be present').not.toBeNull();
+        const brand = within(forms).queryByRole('button', { name: 'Link Discord' });
+        expect(brand, 'a brandColor Button demo must be present').not.toBeNull();
+        expect(brand).toHaveAttribute('data-brand-fill');
+    });
+});
+
+describe('DesignSystemPage — ROK-1655 form foundation (Overlays)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    function openFormModal(): HTMLElement {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const overlays = screen.getByTestId('ds-overlays');
+        fireEvent.click(within(overlays).getByRole('button', { name: 'Open form modal' }));
+        return screen.getByRole('dialog', { name: 'Edit note' });
+    }
+
+    it('the form Modal pins its footer outside the scrolling body', () => {
+        const dialog = openFormModal();
+        const footer = within(dialog).queryByTestId('modal-footer');
+        expect(footer, 'the form Modal demo must pass a footer').not.toBeNull();
+        const body = within(dialog).getByRole('textbox', { name: 'Note' }).closest('.overflow-y-auto');
+        expect(body, 'the field must sit in the scrolling body').not.toBeNull();
+        expect(body!.contains(footer), 'the footer must sit outside the scroll body').toBe(false);
+    });
+
+    it('a dirty Escape asks "Discard your changes?"; Keep editing returns to the draft', () => {
+        const dialog = openFormModal();
+        const note = within(dialog).getByRole('textbox', { name: 'Note' });
+        fireEvent.change(note, { target: { value: 'half-typed' } });
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty Escape must ask first').not.toBeNull();
+        expect(screen.getByRole('dialog', { name: 'Edit note' })).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('discard-changes-keep'));
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' })).toBeNull();
+        expect(note).toHaveValue('half-typed');
+    });
+
+    it('a dirty Cancel asks too; Save closes without asking', () => {
+        const dialog = openFormModal();
+        fireEvent.change(within(dialog).getByRole('textbox', { name: 'Note' }), { target: { value: 'half-typed' } });
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty Cancel must ask first').not.toBeNull();
+        fireEvent.click(screen.getByTestId('discard-changes-discard'));
+        expect(screen.queryByRole('dialog', { name: 'Edit note' }), 'Discard must close the modal').toBeNull();
+        fireEvent.click(within(screen.getByTestId('ds-overlays')).getByRole('button', { name: 'Open form modal' }));
+        const again = screen.getByRole('dialog', { name: 'Edit note' });
+        fireEvent.change(within(again).getByRole('textbox', { name: 'Note' }), { target: { value: 'kept' } });
+        fireEvent.click(within(again).getByRole('button', { name: 'Save' }));
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'Save is unguarded').toBeNull();
+        expect(screen.queryByRole('dialog', { name: 'Edit note' })).toBeNull();
+    });
+
+    it('the form BottomSheet has a pinned footer and guards a dirty Escape', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        fireEvent.click(within(screen.getByTestId('ds-overlays')).getByRole('button', { name: 'Open form sheet' }));
+        expect(screen.queryByTestId('bottom-sheet-footer'), 'the form sheet demo must pass a footer').not.toBeNull();
+        fireEvent.change(screen.getByRole('textbox', { name: 'Note' }), { target: { value: 'half-typed' } });
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty sheet Escape must ask first').not.toBeNull();
     });
 });
