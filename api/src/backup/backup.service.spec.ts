@@ -6,6 +6,7 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
 import { runBootMigrations } from '../../scripts/run-migrations-with-sentry';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
 
 jest.mock('node:fs');
@@ -24,6 +25,59 @@ jest.mock('../../scripts/run-migrations-with-sentry', () => ({
 const mockFs = fs as jest.Mocked<typeof fs>;
 const mockChildProcess = childProcess as jest.Mocked<typeof childProcess>;
 const mockRunBootMigrations = runBootMigrations as jest.Mock;
+
+// ROK-1663 fixtures. The unit suite runs with the cwd-relative default
+// BACKUP_DIR, so snapshots live at <cwd>/backups/migrations.
+const MIGRATION_DIR = path.join(process.cwd(), 'backups', 'migrations');
+const migrationPath = (name: string) => path.join(MIGRATION_DIR, name);
+const BASE_MS = Date.UTC(2026, 8, 1);
+const minutes = (m: number) => new Date(BASE_MS + m * 60_000);
+
+/** `pre_migration_2026-09-DD_020000.dump` for DD = 01..n (name order = age). */
+function snapshotNames(n: number): string[] {
+  return Array.from(
+    { length: n },
+    (_, i) =>
+      `pre_migration_2026-09-${String(i + 1).padStart(2, '0')}_020000.dump`,
+  );
+}
+
+/** Serve `files` from backups/migrations (daily/ stays empty); `symlinks` lstat as non-regular. */
+function mockMigrationDir(
+  files: string[],
+  mtimeOf: (name: string) => Date,
+  symlinks: string[] = [],
+): void {
+  (mockFs.readdirSync as jest.Mock).mockImplementation((dir: string) =>
+    dir === MIGRATION_DIR ? [...files] : [],
+  );
+  (mockFs.lstatSync as jest.Mock).mockImplementation((p: string) => ({
+    isFile: () => !symlinks.includes(path.basename(p)),
+    mtime: mtimeOf(path.basename(p)),
+  }));
+}
+
+/**
+ * 12 snapshots whose mtime order deliberately differs from name order (so the
+ * sort key is provably mtime), plus an older pre_restore_ dump and an older
+ * prefixed .txt. Returns the two paths that must be pruned (09-07, 09-03).
+ */
+function twelveSnapshotFixture(): string[] {
+  const names = snapshotNames(12);
+  const ranks = [5, 9, 1, 11, 3, 7, 0, 8, 2, 10, 4, 6]; // 0 = oldest mtime
+  const extras = [
+    'pre_restore_2026-08-01_000000.dump',
+    'pre_migration_notes.txt',
+  ];
+  mockMigrationDir([...extras, ...[...names].reverse()], (n) => {
+    const i = names.indexOf(n);
+    return i < 0 ? minutes(-1440) : minutes(ranks[i]);
+  });
+  return [names[6], names[2]].map(migrationPath).sort();
+}
+
+const unlinkedPaths = (): string[] =>
+  mockFs.unlinkSync.mock.calls.map((c) => String(c[0])).sort();
 
 function describeBackupService() {
   let service: BackupService;
@@ -158,6 +212,136 @@ function describeBackupService() {
     });
   }
   describe('rotateDailyBackups', () => describeRotateDailyBackups());
+
+  // ROK-1663: every boot writes a pre_migration_ dump; keep only the newest 10.
+  function describeRotateMigrationSnapshots() {
+    let warnSpy: jest.SpyInstance;
+    beforeEach(() => {
+      jest.clearAllMocks();
+      warnSpy = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+    });
+    afterEach(() => {
+      warnSpy.mockRestore();
+      mockFs.unlinkSync.mockReset(); // drop any unconsumed once-impl
+    });
+
+    it('the daily cron unlinks exactly the 2 oldest pre_migration_ dumps (AC2, AC6a)', async () => {
+      const expected = twelveSnapshotFixture();
+      await service.handleDailyBackup();
+      expect(unlinkedPaths()).toEqual(expected);
+    });
+
+    it('unlinks nothing with 10 or fewer snapshots (AC6b)', () => {
+      const names = snapshotNames(10);
+      mockMigrationDir(names, (n) => minutes(names.indexOf(n)));
+      expect(service.rotateMigrationSnapshots()).toBe(0);
+      expect(mockFs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('onModuleInit prunes, after the directories are ensured (AC3, AC6c)', () => {
+      const expected = twelveSnapshotFixture();
+      service.onModuleInit();
+      expect(unlinkedPaths()).toEqual(expected);
+      const lastMkdir = Math.max(
+        ...(mockFs.mkdirSync as jest.Mock).mock.invocationCallOrder,
+      );
+      const firstRead = (mockFs.readdirSync as jest.Mock).mock
+        .invocationCallOrder[0];
+      expect(firstRead).toBeGreaterThan(lastMkdir);
+    });
+
+    it('never counts or deletes pre_factory-reset_, pre_restore_, symlinks or non-.dump files (AC4)', () => {
+      const names = snapshotNames(10);
+      const symlink = 'pre_migration_2026-01-02_000000.dump';
+      const others = [
+        'pre_factory-reset_2026-01-01_000000.dump',
+        'pre_restore_2026-01-01_000000.dump',
+        'pre_migration_2026-01-01_000000.dump.txt',
+        symlink,
+      ];
+      // Every non-candidate is older than all 10 real snapshots: counting any
+      // of them would make 11 and prune it.
+      mockMigrationDir(
+        [...others, ...names],
+        (n) => (names.includes(n) ? minutes(names.indexOf(n)) : minutes(-1440)),
+        [symlink],
+      );
+      expect(service.rotateMigrationSnapshots()).toBe(0);
+      expect(mockFs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('never reads or deletes anything under daily/ (AC4)', () => {
+      const names = snapshotNames(12);
+      (mockFs.readdirSync as jest.Mock).mockReturnValue(names); // every dir looks full
+      (mockFs.lstatSync as jest.Mock).mockImplementation((p: string) => ({
+        isFile: () => true,
+        mtime: minutes(names.indexOf(path.basename(p))),
+      }));
+      service.rotateMigrationSnapshots();
+      const dirsRead = (mockFs.readdirSync as jest.Mock).mock.calls.map(
+        (c: unknown[]) => c[0],
+      );
+      expect(dirsRead).toEqual([MIGRATION_DIR]);
+      expect(unlinkedPaths()).toEqual(
+        [names[0], names[1]].map(migrationPath).sort(),
+      );
+    });
+
+    it('breaks equal-mtime ties by filename timestamp, whatever the readdir order', () => {
+      const names = snapshotNames(11);
+      for (const order of [names, [...names].reverse()]) {
+        jest.clearAllMocks();
+        mockMigrationDir(order, () => minutes(0));
+        service.rotateMigrationSnapshots();
+        expect(unlinkedPaths()).toEqual([migrationPath(names[0])]);
+      }
+    });
+
+    it('warns without throwing on an unreadable directory; boot and cron still succeed (AC5)', async () => {
+      (mockFs.readdirSync as jest.Mock).mockImplementation((dir: string) => {
+        if (dir === MIGRATION_DIR) throw new Error('EACCES: permission denied');
+        return [];
+      });
+      expect(() => service.onModuleInit()).not.toThrow();
+      await expect(service.handleDailyBackup()).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('EACCES: permission denied'),
+      );
+      expect(mockFs.unlinkSync).not.toHaveBeenCalled();
+    });
+
+    it('skips a snapshot whose lstat fails and still prunes the rest (AC5)', () => {
+      const names = snapshotNames(12);
+      mockMigrationDir(names, (n) => minutes(names.indexOf(n)));
+      const lstat = (mockFs.lstatSync as jest.Mock).getMockImplementation()!;
+      (mockFs.lstatSync as jest.Mock).mockImplementation((p: string) => {
+        if (p === migrationPath(names[0])) throw new Error('ENOENT: vanished');
+        return lstat(p);
+      });
+      // The unstat-able file is neither counted nor deleted: 11 left, 1 pruned.
+      expect(service.rotateMigrationSnapshots()).toBe(1);
+      expect(unlinkedPaths()).toEqual([migrationPath(names[1])]);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('ENOENT: vanished'),
+      );
+    });
+
+    it('warns on a failed unlink, still tries the rest, and the cron succeeds (AC5)', async () => {
+      const expected = twelveSnapshotFixture();
+      mockFs.unlinkSync.mockImplementationOnce(() => {
+        throw new Error('EBUSY: locked');
+      });
+      await expect(service.handleDailyBackup()).resolves.toBeUndefined();
+      expect(unlinkedPaths()).toEqual(expected);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('EBUSY: locked'),
+      );
+    });
+  }
+  describe('rotateMigrationSnapshots', () =>
+    describeRotateMigrationSnapshots());
 
   describe('listBackups', () => {
     it('should list .dump files from both directories sorted newest first', () => {
