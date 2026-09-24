@@ -5,6 +5,7 @@ import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { PasswordInput, TestResultBanner, CopyableInput, FormTextField } from './admin-form-helpers';
+import { IntegrationFormActions } from './integration-form-actions';
 
 /** Format ISO date as relative time (e.g., "5m ago") */
 function formatRelativeTime(iso: string) {
@@ -77,30 +78,6 @@ function useIgdbHandlers() {
 
     return { ...s, handleSave, handleTest, handleClear,
         isPending: { save: s.updateIgdb.isPending, test: s.testIgdb.isPending, clear: s.clearIgdb.isPending } };
-}
-
-function IgdbActionButtons({ configured, isPending, onTest, onClear }: {
-    configured: boolean; isPending: { save: boolean; test: boolean; clear: boolean };
-    onTest: () => void; onClear: () => void;
-}) {
-    return (
-        <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="submit" variant="primary" size="lg" className="flex-1"
-                loading={isPending.save} loadingLabel="Saving...">
-                Save Configuration
-            </Button>
-            {configured && (
-                <>
-                    <Button variant="secondary" size="lg" onClick={onTest} loading={isPending.test} loadingLabel="Testing...">
-                        Test Connection
-                    </Button>
-                    <Button variant="destructive-soft" size="lg" onClick={onClear} loading={isPending.clear}>
-                        Clear
-                    </Button>
-                </>
-            )}
-        </div>
-    );
 }
 
 function tokenStatusDotClass(status: string) {
@@ -182,7 +159,8 @@ export function IgdbForm() {
                         showPassword={h.showSecret} onToggleShow={() => h.setShowSecret(!h.showSecret)} />
                 </Field>
                 <TestResultBanner result={h.testResult} />
-                <IgdbActionButtons configured={!!h.igdbStatus.data?.configured} isPending={h.isPending}
+                <IntegrationFormActions showTest={!!h.igdbStatus.data?.configured}
+                    showClear={!!h.igdbStatus.data?.configured} isPending={h.isPending}
                     onTest={h.handleTest} onClear={h.handleClear} />
             </form>
             {h.igdbStatus.data?.configured && (

@@ -573,8 +573,11 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `PasswordInput`, which wraps the ui `PasswordInput` at `fieldSize="lg"` and names its toggle "Show API key" /
   "Show password". Copyable values (Redirect URI, callback URLs) use `CopyableInput`: a `readOnly` `Input` with
   a trailing ghost icon `Button` named "Copy <label>". Enter and a click on the field also copy. The action row is
-  Save `primary` (`lg`, `flex-1`; Co-Optimus keeps `md`), Test `secondary`, and Clear `destructive-soft`, all
-  with `loading`. Secondary actions use `secondary`, not a brand or ring hue (ruling 10): Sync Now (IGDB),
+  ONE shared component, `components/admin/integration-form-actions.tsx` → `IntegrationFormActions` (`isPending`,
+  `showTest`, `showClear`, `onTest`, `onClear`; the copy lives in it): Save `primary` (`lg`), Test `secondary`, and
+  Clear `destructive-soft`, all with `loading`. Below `lg` Save is a full-width row (`w-full`) with Test and Clear
+  under it, each label `whitespace-nowrap` so nothing wraps at 375px; from `lg` Save is `flex-1` beside them. Never
+  hand-roll the triad per form (Co-Optimus keeps its own `md` row and shorter labels). Secondary actions use `secondary`, not a brand or ring hue (ruling 10): Sync Now (IGDB),
   Test Permissions (Discord Bot) and Set as Active (AI providers). No per-integration `ringColor` or `*_RING`
   constant remains.
 - **File uploads are `FilePicker`** (ruling 1): the trigger is a `Button` named by `children`; the native

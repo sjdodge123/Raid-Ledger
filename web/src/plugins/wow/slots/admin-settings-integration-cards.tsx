@@ -4,12 +4,12 @@ import { IntegrationCard } from '../../../components/admin/IntegrationCard';
 import { useAdminSettings } from '../../../hooks/use-admin-settings';
 import { useNewBadge } from '../../../hooks/use-new-badge';
 import { NewBadge } from '../../../components/ui/new-badge';
-import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { PasswordInput } from '../../../components/ui/password-input';
 import { TestResultBanner } from '../../../components/admin/admin-form-helpers';
 import { getPluginBadge } from '../../plugin-registry';
+import { IntegrationFormActions } from '../../../components/admin/integration-form-actions';
 
 async function handleSave(
     e: React.FormEvent, clientId: string, clientSecret: string,
@@ -84,28 +84,9 @@ function BlizzardConfigForm({ isConfigured, clientId, clientSecret, testResult, 
                     placeholder={`${placeholder} Client Secret`} fieldSize="lg" label="Client Secret" />
             </Field>
             <TestResultBanner result={testResult} />
-            <BlizzardActionButtons isConfigured={isConfigured} savePending={savePending} testPending={testPending} clearPending={clearPending} onTest={onTest} onClear={onClear} />
+            <IntegrationFormActions showTest={isConfigured} showClear={isConfigured}
+                isPending={{ save: savePending, test: testPending, clear: clearPending }} onTest={onTest} onClear={onClear} />
         </form>
-    );
-}
-
-function BlizzardActionButtons({ isConfigured, savePending, testPending, clearPending, onTest, onClear }: {
-    isConfigured: boolean; savePending: boolean; testPending: boolean; clearPending: boolean; onTest: () => void; onClear: () => void;
-}) {
-    return (
-        <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="submit" variant="primary" size="lg" className="flex-1" loading={savePending} loadingLabel="Saving...">
-                Save Configuration
-            </Button>
-            {isConfigured && (
-                <>
-                    <Button variant="secondary" size="lg" onClick={onTest} loading={testPending} loadingLabel="Testing...">
-                        Test Connection
-                    </Button>
-                    <Button variant="destructive-soft" size="lg" onClick={onClear} loading={clearPending}>Clear</Button>
-                </>
-            )}
-        </div>
     );
 }
 

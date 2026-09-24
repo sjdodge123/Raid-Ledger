@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { useItadSettings } from '../../hooks/admin/use-itad-settings';
-import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { PasswordInput, TestResultBanner } from './admin-form-helpers';
+import { IntegrationFormActions } from './integration-form-actions';
 
 function ItadSetupInstructions() {
     return (
@@ -54,30 +54,6 @@ function useItadHandlers() {
         isPending: { save: s.updateItad.isPending, test: s.testItad.isPending, clear: s.clearItad.isPending } };
 }
 
-function ItadActionButtons({ configured, isPending, onTest, onClear }: {
-    configured: boolean; isPending: { save: boolean; test: boolean; clear: boolean };
-    onTest: () => void; onClear: () => void;
-}) {
-    return (
-        <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="submit" variant="primary" size="lg" className="flex-1"
-                loading={isPending.save} loadingLabel="Saving...">
-                Save Configuration
-            </Button>
-            {configured && (
-                <>
-                    <Button variant="secondary" size="lg" onClick={onTest} loading={isPending.test} loadingLabel="Testing...">
-                        Test Connection
-                    </Button>
-                    <Button variant="destructive-soft" size="lg" onClick={onClear} loading={isPending.clear}>
-                        Clear
-                    </Button>
-                </>
-            )}
-        </div>
-    );
-}
-
 export function ItadForm() {
     const h = useItadHandlers();
     const isConfigured = h.itadStatus.data?.configured ?? false;
@@ -94,7 +70,7 @@ export function ItadForm() {
                         fieldLabel="API key" />
                 </Field>
                 <TestResultBanner result={h.testResult} />
-                <ItadActionButtons configured={isConfigured} isPending={h.isPending}
+                <IntegrationFormActions showTest={isConfigured} showClear={isConfigured} isPending={h.isPending}
                     onTest={h.handleTest} onClear={h.handleClear} />
             </form>
         </>

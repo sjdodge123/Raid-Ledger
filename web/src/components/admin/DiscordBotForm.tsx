@@ -6,6 +6,7 @@ import { Field } from '../ui/field';
 import { Switch } from '../ui/switch';
 import { PasswordInput, TestResultBanner } from './admin-form-helpers';
 import { DiscordBotInvitePanel, BotInviteLink } from './discord-bot-invite-panel';
+import { IntegrationFormActions } from './integration-form-actions';
 
 function SetupInstructions() {
     return (
@@ -35,30 +36,6 @@ function EnableToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () =>
             {/* The Switch is named by its own aria-label; this visible text is hidden from AT so it is not read twice. */}
             <span aria-hidden="true" className="text-sm font-medium text-secondary">Enable Bot</span>
             <Switch label="Enable Bot" checked={enabled} onChange={() => onToggle()} />
-        </div>
-    );
-}
-
-function BotActionButtons({ configured, botToken, isPending, onTest, onClear }: {
-    configured: boolean; botToken: string; isPending: { save: boolean; test: boolean; clear: boolean };
-    onTest: () => void; onClear: () => void;
-}) {
-    return (
-        <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="submit" variant="primary" size="lg" className="flex-1"
-                loading={isPending.save} loadingLabel="Saving...">
-                Save Configuration
-            </Button>
-            {(configured || botToken) && (
-                <Button variant="secondary" size="lg" onClick={onTest} loading={isPending.test} loadingLabel="Testing...">
-                    Test Connection
-                </Button>
-            )}
-            {configured && (
-                <Button variant="destructive-soft" size="lg" onClick={onClear} loading={isPending.clear}>
-                    Clear
-                </Button>
-            )}
         </div>
     );
 }
@@ -212,7 +189,8 @@ export function DiscordBotForm() {
                 </Field>
                 <EnableToggle enabled={h.enabled} onToggle={() => h.setEnabledOverride(!h.enabled)} />
                 <TestResultBanner result={h.testResult} />
-                <BotActionButtons configured={!!h.discordBotStatus.data?.configured} botToken={h.botToken}
+                <IntegrationFormActions showTest={!!h.discordBotStatus.data?.configured || !!h.botToken}
+                    showClear={!!h.discordBotStatus.data?.configured}
                     isPending={h.isPending} onTest={h.handleTest} onClear={h.handleClear} />
             </form>
             {h.discordBotStatus.data?.configured && (

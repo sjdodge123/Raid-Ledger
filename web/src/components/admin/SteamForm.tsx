@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
-import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { PasswordInput, TestResultBanner } from './admin-form-helpers';
+import { IntegrationFormActions } from './integration-form-actions';
 
 function SteamSetupInstructions() {
     return (
@@ -54,30 +54,6 @@ function useSteamHandlers() {
         isPending: { save: s.updateSteam.isPending, test: s.testSteam.isPending, clear: s.clearSteam.isPending } };
 }
 
-function SteamActionButtons({ configured, isPending, onTest, onClear }: {
-    configured: boolean; isPending: { save: boolean; test: boolean; clear: boolean };
-    onTest: () => void; onClear: () => void;
-}) {
-    return (
-        <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="submit" variant="primary" size="lg" className="flex-1"
-                loading={isPending.save} loadingLabel="Saving...">
-                Save Configuration
-            </Button>
-            {configured && (
-                <>
-                    <Button variant="secondary" size="lg" onClick={onTest} loading={isPending.test} loadingLabel="Testing...">
-                        Test Connection
-                    </Button>
-                    <Button variant="destructive-soft" size="lg" onClick={onClear} loading={isPending.clear}>
-                        Clear
-                    </Button>
-                </>
-            )}
-        </div>
-    );
-}
-
 export function SteamForm() {
     const h = useSteamHandlers();
     const isConfigured = h.steamStatus.data?.configured ?? false;
@@ -94,7 +70,7 @@ export function SteamForm() {
                         fieldLabel="API key" />
                 </Field>
                 <TestResultBanner result={h.testResult} />
-                <SteamActionButtons configured={isConfigured} isPending={h.isPending}
+                <IntegrationFormActions showTest={isConfigured} showClear={isConfigured} isPending={h.isPending}
                     onTest={h.handleTest} onClear={h.handleClear} />
             </form>
         </>

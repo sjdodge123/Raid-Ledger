@@ -2,9 +2,9 @@ import { useState, useMemo } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { API_BASE_URL } from '../../lib/config';
-import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { PasswordInput, TestResultBanner, CopyableInput, FormTextField } from './admin-form-helpers';
+import { IntegrationFormActions } from './integration-form-actions';
 
 function SetupInstructions() {
     return (
@@ -83,30 +83,6 @@ function useOAuthHandlers() {
         isPending: { save: s.updateOAuth.isPending, test: s.testOAuth.isPending, clear: s.clearOAuth.isPending } };
 }
 
-function ActionButtons({ configured, isPending, onTest, onClear }: {
-    configured: boolean; isPending: { save: boolean; test: boolean; clear: boolean };
-    onTest: () => void; onClear: () => void;
-}) {
-    return (
-        <div className="flex flex-wrap gap-3 pt-2">
-            <Button type="submit" variant="primary" size="lg" className="flex-1"
-                loading={isPending.save} loadingLabel="Saving...">
-                Save Configuration
-            </Button>
-            {configured && (
-                <>
-                    <Button variant="secondary" size="lg" onClick={onTest} loading={isPending.test} loadingLabel="Testing...">
-                        Test Connection
-                    </Button>
-                    <Button variant="destructive-soft" size="lg" onClick={onClear} loading={isPending.clear}>
-                        Clear
-                    </Button>
-                </>
-            )}
-        </div>
-    );
-}
-
 export function DiscordOAuthForm() {
     const h = useOAuthHandlers();
     const placeholder = h.oauthStatus.data?.configured ? '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022' : undefined;
@@ -124,7 +100,8 @@ export function DiscordOAuthForm() {
                 </Field>
                 <CallbackUrlsSection callbackUrl={h.callbackUrl} linkCallbackUrl={h.linkCallbackUrl} />
                 <TestResultBanner result={h.testResult} />
-                <ActionButtons configured={!!h.oauthStatus.data?.configured} isPending={h.isPending}
+                <IntegrationFormActions showTest={!!h.oauthStatus.data?.configured}
+                    showClear={!!h.oauthStatus.data?.configured} isPending={h.isPending}
                     onTest={h.handleTest} onClear={h.handleClear} />
             </form>
         </>
