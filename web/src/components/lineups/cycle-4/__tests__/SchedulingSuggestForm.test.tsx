@@ -32,3 +32,27 @@ describe('SchedulingSuggestForm CTA label (ROK-1588)', () => {
         expect(suggestButtonLabel('2026-09-17T00:00')).toBe('Suggest Thu 12 AM');
     });
 });
+
+describe('SchedulingSuggestForm wears the shared Field / Input / Button (ROK-1650)', () => {
+    it('names the picker through a Field label linked by for/id, testid still on the <input>', () => {
+        render(<SchedulingSuggestForm isSuggesting={false} onSuggest={vi.fn()} />);
+        const picker = screen.getByTestId('slot-datetime-picker');
+        // The smoke specs locate `[data-testid="slot-datetime-picker"]` and
+        // `input[type="datetime-local"]` — both must stay on the native input.
+        expect(picker.tagName).toBe('INPUT');
+        expect(picker).toHaveAttribute('type', 'datetime-local');
+        expect(picker.id, 'the Field must give the picker an id its label points at').not.toBe('');
+        const label = screen.getByText('Suggest another time');
+        expect(label.tagName).toBe('LABEL');
+        expect(label).toHaveAttribute('for', picker.id);
+        expect(screen.getByLabelText('Suggest another time')).toBe(picker);
+    });
+
+    it('gives the picker and the Suggest button the 44px tap target, with no raw emerald on the picker', () => {
+        render(<SchedulingSuggestForm prefillTime="2026-09-16T21:00" isSuggesting={false} onSuggest={vi.fn()} />);
+        const picker = screen.getByTestId('slot-datetime-picker');
+        expect(picker).toHaveClass('min-h-[44px]');
+        expect(picker.className).not.toMatch(/emerald/);
+        expect(screen.getByRole('button', { name: 'Suggest Wed 9 PM' })).toHaveClass('min-h-[44px]');
+    });
+});
