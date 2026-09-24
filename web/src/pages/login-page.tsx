@@ -202,8 +202,8 @@ function LoginBody({ hasProviders, authProviders, isRedirecting, onProviderLogin
 function FirstRunBanner({ isFirstRun }: { isFirstRun: boolean }): JSX.Element | null {
     if (!isFirstRun) return null;
     return (
-        <div className="mt-6 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <p className="text-sm text-blue-300 text-center">First time? Your admin credentials are in the container logs.</p>
+        <div className="mt-6 p-3 bg-overlay/30 border border-edge rounded-lg">
+            <p className="text-sm text-secondary text-center">First time? Your admin credentials are in the container logs.</p>
         </div>
     );
 }

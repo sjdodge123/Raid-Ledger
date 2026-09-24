@@ -283,3 +283,20 @@ describe('LoginPage — suspended OAuth error (ROK-313 AC4)', () => {
         expect(toast.error).not.toHaveBeenCalled();
     });
 });
+
+describe('LoginPage — first-run hint tokens (ROK-1648 ruling 9)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('paints the first-run hint as a neutral panel, not a raw blue callout (ruling 9)', () => {
+        mockSystemStatus({ isFirstRun: true, authProviders: [] });
+        renderWithRouter(<LoginPage />);
+        const text = screen.getByText(/container logs/i);
+        const panel = text.parentElement!;
+        expect(panel.className, 'the hint should wear the neutral bg-overlay/30 panel').toContain('bg-overlay/30');
+        expect(panel.className, 'the hint border should be the edge token').toContain('border-edge');
+        expect(`${panel.className} ${text.className}`, 'the hint must not hardcode a blue/indigo/purple/violet hue')
+            .not.toMatch(/(blue|indigo|purple|violet)-\d/);
+    });
+});
