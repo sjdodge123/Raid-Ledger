@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { DesignSystemPage } from './DesignSystemPage';
 import { THEME_REGISTRY } from '../../stores/theme-registry';
@@ -456,5 +457,70 @@ describe('DesignSystemPage — ROK-1655 form foundation (Overlays)', () => {
         fireEvent.change(screen.getByRole('textbox', { name: 'Note' }), { target: { value: 'half-typed' } });
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(screen.queryByRole('dialog', { name: 'Discard your changes?' }), 'a dirty sheet Escape must ask first').not.toBeNull();
+    });
+});
+
+/**
+ * ROK-1648 L13 — dev-gallery follow-ups flagged by the PR-1 plan writer: a
+ * long-form variant of each form overlay, so the pinned footer can be checked
+ * against a scrolling body without browser zoom, and a FilePicker pick counter
+ * that makes re-picking the same file visible.
+ */
+describe('DesignSystemPage — ROK-1648 L13 dev-gallery demos', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    /** Opens the long variant by its trigger; the trigger must exist (asserted, not thrown). */
+    function openLong(trigger: string): void {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const button = within(screen.getByTestId('ds-overlays')).queryByRole('button', { name: trigger });
+        expect(button, `a "${trigger}" trigger must be present`).not.toBeNull();
+        fireEvent.click(button!);
+    }
+
+    /** The filler overflows the scroll body, and the footer is a sibling outside it. */
+    function expectScrollingBodyAndPinnedFooter(footerTestId: string): void {
+        const filler = screen.queryByTestId('ds-long-filler');
+        expect(filler, 'the long variant must render the filler rows').not.toBeNull();
+        expect(within(filler!).getAllByRole('textbox').length, 'the filler must be ~25 Field + Input rows').toBeGreaterThanOrEqual(25);
+        const body = filler!.closest('.overflow-y-auto');
+        expect(body, 'the filler must sit in the scrolling body').not.toBeNull();
+        const footer = screen.getByTestId(footerTestId);
+        expect(body!.contains(footer), 'the footer must stay outside the scroll body').toBe(false);
+        expect(within(footer).getByRole('button', { name: 'Save' })).toBeInTheDocument();
+    }
+
+    it('the long form Modal scrolls its body under the pinned footer', () => {
+        openLong('Open long form modal');
+        expect(screen.queryByRole('dialog', { name: 'Edit long note' }), 'the long form modal must open').not.toBeNull();
+        expectScrollingBodyAndPinnedFooter('modal-footer');
+    });
+
+    it('the long form BottomSheet scrolls its body under the pinned footer', () => {
+        openLong('Open long form sheet');
+        expect(screen.queryByRole('dialog', { name: 'Edit long note' }), 'the long form sheet must open').not.toBeNull();
+        expectScrollingBodyAndPinnedFooter('bottom-sheet-footer');
+    });
+
+    it('the short form Modal stays short (no filler)', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        fireEvent.click(within(screen.getByTestId('ds-overlays')).getByRole('button', { name: 'Open form modal' }));
+        const dialog = screen.getByRole('dialog', { name: 'Edit note' });
+        expect(within(dialog).queryByTestId('ds-long-filler'), 'the short variant must not render the filler').toBeNull();
+    });
+
+    it('the FilePicker demo counts every pick, so re-picking the same file is visible', async () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const forms = screen.getByTestId('ds-forms');
+        const input = forms.querySelector<HTMLInputElement>('input[type="file"]:not([disabled])')!;
+        const logo = new File(['png'], 'logo.png', { type: 'image/png' });
+        await userEvent.upload(input, logo);
+        expect(within(forms).queryByText('Picked logo.png · 1 pick'), 'the first pick must read "· 1 pick"').not.toBeNull();
+        await userEvent.upload(input, logo);
+        expect(within(forms).queryByText('Picked logo.png · 2 picks'), 'the same file picked again must bump the counter').not.toBeNull();
     });
 });
