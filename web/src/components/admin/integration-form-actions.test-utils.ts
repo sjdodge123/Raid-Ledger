@@ -3,6 +3,7 @@
  * Save Configuration is a full-width primary row below `lg` (flex-1 only from
  * `lg`), then Test Connection (secondary) and Clear (soft danger), each on one line.
  */
+import '@testing-library/jest-dom/vitest'; // matcher types: this file sits outside the tsconfig.app test excludes
 import { expect } from 'vitest';
 import { screen } from '@testing-library/react';
 
