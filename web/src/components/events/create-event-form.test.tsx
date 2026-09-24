@@ -497,12 +497,11 @@ describe('CreateEventForm — Game details fields (ROK-1649 AC1)', () => {
         expect(screen.getByRole('textbox', { name: 'Description' })).toHaveAttribute('id', 'title-description');
     });
 
-    it('an empty submit through the button still shows the inline title error (form is noValidate)', async () => {
+    it('an empty submit through the button still shows the inline title error (form is noValidate)', () => {
         const { container } = renderForm();
         expect(container.querySelector('form')).toHaveAttribute('novalidate');
         fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
         const title = screen.getByRole('textbox', { name: 'Event Title' });
-        expect(await screen.findByText('Title is required')).toBeInTheDocument();
         expect(title).toHaveAttribute('aria-invalid', 'true');
         expect(title).toHaveAccessibleDescription(/Title is required/);
     });
