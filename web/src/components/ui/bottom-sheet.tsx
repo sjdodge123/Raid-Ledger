@@ -50,8 +50,11 @@ const EXPANDED_HEIGHT = '95vh';
  */
 function focusMovedToAnotherDialog(sheet: HTMLElement | null): boolean {
     const active = document.activeElement;
-    const dialog = active?.closest('[role="dialog"], [role="alertdialog"]');
-    return dialog != null && dialog !== sheet;
+    if (!active || sheet?.contains(active)) return false;
+    const dialog = active.closest('[role="dialog"], [role="alertdialog"]');
+    // A dialog that CONTAINS the sheet is its host (a sheet opened inside a
+    // Modal), not a new dialog — the opener inside it should get focus back.
+    return dialog != null && dialog !== sheet && !(sheet && dialog.contains(sheet));
 }
 
 /**
