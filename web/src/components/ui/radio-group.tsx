@@ -11,7 +11,9 @@
  *   duration picker per the operator's ruling). The radio is `sr-only`; the
  *   segment paints ON as `bg-overlay text-foreground`, OFF as `text-muted`, and
  *   carries the focus ring through `has-[:focus-visible]`. Descriptions are
- *   not shown in a segment — keep segment labels short.
+ *   not shown in a segment — keep segment labels short. The track wraps: a
+ *   set wider than its container (six duration segments in a 375px card)
+ *   flows onto a second row instead of pushing out past the card (ROK-1649).
  * - Controlled only: `value` + `onChange(value)`.
  * - Validation like the other controls: `invalid`, `error` (an inline
  *   `role="alert"` under the group, linked by `aria-describedby`) and
@@ -108,7 +110,7 @@ function RadioGroupImpl<V extends string>(p: RadioGroupProps<V>, ref: ForwardedR
     const Option = segmented ? SegmentOption : ListOption;
     const a11y = useGroupA11y(p, `${base}-error`);
     const legendCls = p.hideLabel ? 'sr-only' : 'mb-1.5 text-sm font-medium text-secondary';
-    const listCls = segmented ? 'flex gap-1 p-1 bg-panel border border-edge rounded-lg' : 'flex flex-col';
+    const listCls = segmented ? 'flex flex-wrap gap-1 p-1 bg-panel border border-edge rounded-lg' : 'flex flex-col';
     return (
         <fieldset ref={ref} role="radiogroup" aria-labelledby={`${base}-legend`} {...a11y} className={p.className}>
             <legend id={`${base}-legend`} className={legendCls}>{p.label}</legend>

@@ -4,6 +4,7 @@
  */
 import { test, expect } from './base';
 import { getAdminToken, apiDelete } from './api-helpers';
+import { isMobile } from './helpers';
 
 // ROK-1070 Codex review (P2): removed the file-level reset-to-seed
 // beforeAll for the parallel-project race reason documented in
@@ -41,8 +42,10 @@ test.describe('Create event form', () => {
         await expect(page.getByRole('textbox', { name: 'Date' })).toBeVisible();
         await expect(page.getByRole('textbox', { name: 'Start Time' })).toBeVisible();
 
-        // Duration buttons
-        await expect(page.getByRole('button', { name: '2h' })).toBeVisible();
+        // Duration: a segmented radiogroup (ROK-1649). The native radio is
+        // sr-only, so visibility is asserted on its segment <label>.
+        await expect(page.getByRole('radiogroup', { name: 'Duration', exact: true })).toBeVisible();
+        await expect(page.getByRole('radio', { name: '2h', exact: true }).locator('xpath=..')).toBeVisible();
 
         // Repeat dropdown
         await expect(page.getByRole('combobox', { name: 'Repeat' })).toBeVisible();
@@ -89,12 +92,16 @@ test.describe('Create event form', () => {
     test('MMO Roles slot type shows Tank/Healer/DPS composition', async ({ page }) => {
         await waitForForm(page);
 
-        // Default view shows "Generic Slots" with single "Players" spinbutton
-        await expect(page.getByRole('button', { name: 'MMO Roles' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Generic Slots' })).toBeVisible();
+        // Default view shows "Generic Slots" with single "Players" spinbutton.
+        // Slot Type is a segmented radiogroup (ROK-1649); the native radio is
+        // sr-only, so visibility and taps go to its segment <label>.
+        await expect(page.getByRole('radiogroup', { name: 'Slot Type', exact: true })).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'Generic Slots', exact: true })).toBeChecked();
 
-        // Click MMO Roles
-        await page.getByRole('button', { name: 'MMO Roles' }).click();
+        // Tap MMO Roles — its radio becomes the checked one
+        await page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true })).toBeChecked();
 
         // Role composition fields should appear
         await expect(page.getByText('Tank')).toBeVisible({ timeout: 5_000 });
@@ -105,20 +112,44 @@ test.describe('Create event form', () => {
         await expect(page.getByText(/Total slots: \d+/)).toBeVisible();
     });
 
-    test('duration buttons are selectable', async ({ page }) => {
+    test('duration radios are selectable', async ({ page }) => {
         await waitForForm(page);
 
-        // Click each duration button and verify it stays in the DOM
+        // Every duration segment renders (ROK-1649: segmented radiogroup; the
+        // native radio is sr-only, so the segment <label> is what is visible)
         const durations = ['1h', '1.5h', '2h', '3h', '4h', 'Custom'];
         for (const dur of durations) {
-            const btn = page.getByRole('button', { name: dur, exact: true });
-            await expect(btn).toBeVisible();
+            const radio = page.getByRole('radio', { name: dur, exact: true });
+            await expect(radio.locator('xpath=..')).toBeVisible();
         }
 
-        // Click the 3h button
-        await page.getByRole('button', { name: '3h', exact: true }).click();
-        // The button should still be visible (selected state)
-        await expect(page.getByRole('button', { name: '3h', exact: true })).toBeVisible();
+        // Tap the 3h segment — its radio becomes the checked one
+        await page.getByRole('radio', { name: '3h', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: '3h', exact: true })).toBeChecked();
+
+        // Custom reveals the named hour/minute fields
+        await page.getByRole('radio', { name: 'Custom', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: 'Custom', exact: true })).toBeChecked();
+        await expect(page.getByRole('radio', { name: '3h', exact: true })).not.toBeChecked();
+        await expect(page.getByRole('spinbutton', { name: 'Duration hours' })).toBeVisible();
+        await expect(page.getByRole('spinbutton', { name: 'Duration minutes' })).toBeVisible();
+    });
+
+    // ROK-1649 review: six segments (~327px) outgrew the 293px card at 375px
+    // and pushed the page sideways. toBeVisible ignores the viewport, so the
+    // right edge and the page's scroll width are measured instead.
+    test('at 375px the Duration segments stay inside the card, no sideways scroll', async ({ page }) => {
+        test.skip(!isMobile(test.info()), 'Phone-width layout check (Pixel 5 is 393px; 375px is the narrowest phone)');
+        await page.setViewportSize({ width: 375, height: 812 });
+        await waitForForm(page);
+        const group = page.getByRole('radiogroup', { name: 'Duration', exact: true });
+        await expect(group).toBeVisible();
+        const box = await group.boundingBox();
+        if (!box) throw new Error('Duration radiogroup has no layout box');
+        // The page's px-4 gutter: the card and everything in it end 16px from the edge.
+        expect(box.x + box.width, 'Duration radiogroup right edge (px) must sit inside the 16px page gutter').toBeLessThanOrEqual(375 - 16);
+        const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: window.innerWidth }));
+        expect(widths.scroll, 'document scrollWidth must not exceed innerWidth at 375px').toBeLessThanOrEqual(widths.inner);
     });
 
     test('successful event creation redirects to event detail', async ({ page, world }) => {
@@ -142,8 +173,9 @@ test.describe('Create event form', () => {
         // Set start time (type="time" inputs need HH:MM 24-hr format)
         await page.getByRole('textbox', { name: 'Start Time' }).fill('20:00');
 
-        // Select a duration
-        await page.getByRole('button', { name: '2h', exact: true }).click();
+        // Select a duration (tap the segment; the sr-only radio is checked)
+        await page.getByRole('radio', { name: '2h', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: '2h', exact: true })).toBeChecked();
 
         // Submit the form
         await page.getByRole('button', { name: 'Create Event' }).click();

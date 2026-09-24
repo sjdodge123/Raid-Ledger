@@ -52,6 +52,15 @@ describe('RadioGroup — semantics', () => {
         expect(seg).toHaveClass('min-h-[44px]', 'text-muted', 'has-[:checked]:bg-overlay', 'has-[:checked]:text-foreground');
         expect(seg).toHaveClass('has-[:focus-visible]:ring-success/80');
     });
+
+    // ROK-1649 review: six duration segments (~327px of labels + padding) are
+    // wider than the 293px create-event card at 375px. A nowrap track pushed
+    // the fieldset's min-content out through the card; the track must wrap.
+    it('segmented: the track wraps, so a set wider than its container flows onto a second row', () => {
+        render(<Harness appearance="segmented" />);
+        const track = screen.getByRole('radio', { name: '2 hours' }).closest('label')?.parentElement;
+        expect(track).toHaveClass('flex', 'flex-wrap');
+    });
 });
 
 describe('RadioGroup — interaction', () => {

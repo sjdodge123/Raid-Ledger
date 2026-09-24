@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useMutation } from '@tanstack/react-query';
 import { CreateEventForm } from './create-event-form';
+import { useEventTypes } from '../../hooks/use-game-registry';
+import { useEventTemplates, useCreateTemplate, useDeleteTemplate } from '../../hooks/use-event-templates';
 import type { FormState } from './create-event-form.types';
 
 // ─── jsdom does not implement scrollIntoView — suppress unhandled errors ─────
@@ -108,42 +110,38 @@ function renderForm(props: Parameters<typeof CreateEventForm>[0] = {}) {
 describe('CreateEventForm — custom duration inputs stacking', () => {
     it('custom duration inputs show hr and min labels', () => {
         renderForm();
-        const customBtn = screen.getByRole('button', { name: 'Custom' });
-        fireEvent.click(customBtn);
+        const customRadio = screen.getByRole('radio', { name: 'Custom' });
+        fireEvent.click(customRadio);
 
+        expect(customRadio).toBeChecked();
         expect(screen.getByText('hr')).toBeInTheDocument();
         expect(screen.getByText('min')).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: 'Duration hours' })).toBeInTheDocument();
+        expect(screen.getByRole('spinbutton', { name: 'Duration minutes' })).toBeInTheDocument();
     });
 });
 
 function createeventformSlotStepperBehaviorGroup1() {
-it('increments slot value when + button is clicked', () => {
-        const { container } = renderForm();
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        const firstInput = numberInputs[0] as HTMLInputElement;
-        const initialValue = parseInt(firstInput.value);
+it('increments slot value when the Increase button is clicked', () => {
+        renderForm();
+        // Generic Slots is the default: one "Players" stepper
+        const playersInput = screen.getByRole('spinbutton', { name: 'Players slots' });
+        const initialValue = parseInt((playersInput as HTMLInputElement).value);
 
-        const incrementButtons = screen.getAllByRole('button', { name: '+' });
-        fireEvent.click(incrementButtons[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Increase Players' }));
 
-        expect(parseInt(firstInput.value)).toBe(initialValue + 1);
+        expect(playersInput).toHaveValue(initialValue + 1);
     });
 
-it('decrements slot value when - button is clicked', () => {
-        const { container } = renderForm();
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        const firstInput = numberInputs[0] as HTMLInputElement;
-        const initialValue = parseInt(firstInput.value);
+it('decrements slot value when the Decrease button is clicked', () => {
+        renderForm();
+        const playersInput = screen.getByRole('spinbutton', { name: 'Players slots' });
+        const initialValue = parseInt((playersInput as HTMLInputElement).value);
 
-        const decrementButtons = screen.getAllByRole('button', { name: '-' });
-        fireEvent.click(decrementButtons[0]);
+        fireEvent.click(screen.getByRole('button', { name: 'Decrease Players' }));
 
         // Value should not go below 0 (min)
-        expect(parseInt(firstInput.value)).toBe(Math.max(0, initialValue - 1));
+        expect(playersInput).toHaveValue(Math.max(0, initialValue - 1));
     });
 
 }
@@ -151,16 +149,10 @@ it('decrements slot value when - button is clicked', () => {
 function createeventformSlotStepperBehaviorGroup2() {
 it('decrement button is disabled when value is at minimum (0)', () => {
         renderForm();
-        // Find the Tank row's decrement button (Tank defaults to 2 for MMO)
-        fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
-        const tankLabel = screen.getByText('Tank');
-        const tankRow = tankLabel.closest('.flex.items-center.justify-between');
-        expect(tankRow).not.toBeNull();
-        const buttons = tankRow!.querySelectorAll('button[type="button"]');
-        // First button in the row is decrement (-), last is increment (+)
-        const tankDecrement = buttons[0] as HTMLButtonElement;
-        const tankInput = tankRow!.querySelector('input[type="number"]') as HTMLInputElement;
-        expect(tankDecrement).not.toBeUndefined();
+        // Switch to MMO roles, then walk the Tank stepper down to 0
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
+        const tankDecrement = screen.getByRole('button', { name: 'Decrease Tank' });
+        const tankInput = screen.getByRole('spinbutton', { name: 'Tank slots' }) as HTMLInputElement;
 
         // Click decrement until we reach 0
         const initialVal = parseInt(tankInput.value);
@@ -180,19 +172,20 @@ describe('CreateEventForm — SlotStepper behavior', () => {
 });
 
 describe('CreateEventForm — desktop layout unchanged', () => {
-    it('renders all slot type buttons', () => {
+    it('renders the Slot Type radiogroup with both options', () => {
         renderForm();
-        expect(screen.getByRole('button', { name: 'MMO Roles' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'Generic Slots' })).toBeInTheDocument();
+        expect(screen.getByRole('radiogroup', { name: 'Slot Type' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: 'MMO Roles' })).not.toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Generic Slots' })).toBeChecked();
     });
 
-    it('renders all duration preset buttons', () => {
+    it('renders all duration preset radios', () => {
         renderForm();
-        expect(screen.getByRole('button', { name: '1h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '1.5h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '2h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '3h' })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: '4h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '1h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '1.5h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '2h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '3h' })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: '4h' })).toBeInTheDocument();
     });
 
     it('renders form section labels', () => {
@@ -212,8 +205,9 @@ describe('CreateEventForm — desktop layout unchanged', () => {
 describe('CreateEventForm — MMO vs generic slot toggle', () => {
     it('shows MMO role steppers (Tank, Healer, DPS) when MMO Roles selected', () => {
         renderForm();
-        fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
 
+        expect(screen.getByRole('radio', { name: 'MMO Roles' })).toBeChecked();
         expect(screen.getByText('Tank')).toBeInTheDocument();
         expect(screen.getByText('Healer')).toBeInTheDocument();
         expect(screen.getByText('DPS')).toBeInTheDocument();
@@ -221,7 +215,7 @@ describe('CreateEventForm — MMO vs generic slot toggle', () => {
 
     it('shows Players stepper when Generic Slots selected', () => {
         renderForm();
-        fireEvent.click(screen.getByRole('button', { name: 'Generic Slots' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'Generic Slots' }));
 
         expect(screen.getByText('Players')).toBeInTheDocument();
     });
@@ -230,7 +224,7 @@ describe('CreateEventForm — MMO vs generic slot toggle', () => {
         renderForm();
         expect(screen.queryByText('Bench')).not.toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'MMO Roles' }));
         expect(screen.queryByText('Bench')).not.toBeInTheDocument();
     });
 });
@@ -477,5 +471,148 @@ describe('CreateEventForm copyFromEvent prefill', () => {
         renderForm();
 
         expect(screen.queryByDisplayValue('Thursday Deep Rock')).not.toBeInTheDocument();
+    });
+});
+
+// ─── ROK-1649 AC1: required title via Field, noValidate on the form ──────────
+describe('CreateEventForm — Game details fields (ROK-1649 AC1)', () => {
+    it('the title is natively required + aria-required and named exactly "Event Title"', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('id', 'title');
+        expect(title).toBeRequired();
+        expect(title).toHaveAttribute('required');
+        expect(title).toHaveAttribute('aria-required', 'true');
+    });
+
+    it('the title asterisk comes from Field: aria-hidden inside the label', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' }) as HTMLInputElement;
+        const star = title.labels?.[0]?.querySelector('[aria-hidden="true"]');
+        expect(star).toHaveTextContent('*');
+        expect(star).toHaveClass('text-danger');
+    });
+
+    it('Description is a Textarea named "Description" that keeps the title-description id', () => {
+        renderForm();
+        expect(screen.getByRole('textbox', { name: 'Description' })).toHaveAttribute('id', 'title-description');
+    });
+
+    it('an empty submit through the button still shows the inline title error (form is noValidate)', () => {
+        const { container } = renderForm();
+        expect(container.querySelector('form')).toHaveAttribute('novalidate');
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('aria-invalid', 'true');
+        expect(title).toHaveAccessibleDescription(/Title is required/);
+    });
+
+    it('Event Type is a Select named exactly "Event Type" with its hint as the description', () => {
+        const types = { data: { data: [{ id: 7, name: 'Raid', slug: 'raid', defaultPlayerCap: 10 }] } };
+        vi.mocked(useEventTypes).mockReturnValue(types as unknown as ReturnType<typeof useEventTypes>);
+        try {
+            renderForm();
+            const select = screen.getByRole('combobox', { name: 'Event Type' });
+            expect(select).toHaveAttribute('id', 'eventType');
+            expect(select).toHaveAccessibleDescription('Auto-fills duration and roster slots based on content type');
+            expect(screen.getByRole('option', { name: 'Raid (10-player)' })).toBeInTheDocument();
+        } finally {
+            vi.mocked(useEventTypes).mockReturnValue({ data: null } as unknown as ReturnType<typeof useEventTypes>);
+        }
+    });
+});
+
+// ─── ROK-1649 AC1: When-section fields are Field-required ────────────────────
+function expectFieldRequired(input: Element | null, label: string) {
+    expect(input).not.toBeNull();
+    expect(input).toBeRequired();
+    expect(input).toHaveAttribute('required');
+    expect(input).toHaveAttribute('aria-required', 'true');
+    const lbl = (input as HTMLInputElement).labels?.[0];
+    expect(lbl).toHaveTextContent(label);
+    const star = lbl?.querySelector('[aria-hidden="true"]');
+    expect(star).toHaveTextContent('*');
+    expect(star).toHaveClass('text-danger');
+}
+
+describe('CreateEventForm — When section fields (ROK-1649 AC1)', () => {
+    it('Date and Start Time are natively required + aria-required, asterisk from Field', () => {
+        const { container } = renderForm();
+        expectFieldRequired(container.querySelector('#startDate'), 'Date');
+        expectFieldRequired(container.querySelector('#startTime'), 'Start Time');
+    });
+
+    it('Repeat is a combobox named exactly "Repeat"; Repeat Until is Field-required', () => {
+        const { container } = renderForm();
+        const repeat = screen.getByRole('combobox', { name: 'Repeat' });
+        expect(repeat).toHaveAttribute('id', 'recurrence');
+        fireEvent.change(repeat, { target: { value: 'weekly' } });
+        expectFieldRequired(container.querySelector('#recurrenceUntil'), 'Repeat Until');
+    });
+
+    it('an empty submit marks Date invalid and describes it with the inline error', () => {
+        const { container } = renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        const date = container.querySelector('#startDate');
+        expect(date).toHaveAttribute('aria-invalid', 'true');
+        expect(date).toHaveAccessibleDescription(/Start date is required/);
+    });
+});
+
+// ─── ROK-1649 AC2: templates bar, save-template bar and footer on Button ─────
+type TplReturn = ReturnType<typeof useEventTemplates>;
+type MutReturn = ReturnType<typeof useMutation>;
+
+describe('CreateEventForm — templates and footer on the primitives (ROK-1649 AC2)', () => {
+    it('each template is a chip plus an icon-only delete named after it', () => {
+        const del = vi.fn();
+        const tpls = { data: { data: [{ id: 42, name: 'Raid Night', config: {} }] } };
+        vi.mocked(useEventTemplates).mockReturnValue(tpls as unknown as TplReturn);
+        vi.mocked(useDeleteTemplate).mockReturnValue({ mutate: del, isPending: false } as unknown as ReturnType<typeof useDeleteTemplate>);
+        try {
+            renderForm();
+            expect(screen.getByRole('button', { name: 'Raid Night' })).toBeInTheDocument();
+            fireEvent.click(screen.getByRole('button', { name: 'Delete template Raid Night' }));
+            expect(del).toHaveBeenCalledWith(42);
+        } finally {
+            vi.mocked(useEventTemplates).mockReturnValue({ data: null } as unknown as TplReturn);
+        }
+    });
+
+    it('Save as Template opens a Field-named "Template name" box with a named close button', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Save as Template' }));
+        const box = screen.getByRole('textbox', { name: 'Template name' });
+        expect(box).toHaveAttribute('maxLength', '100');
+        expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
+        fireEvent.click(screen.getByRole('button', { name: 'Close template name' }));
+        expect(screen.queryByRole('textbox', { name: 'Template name' })).not.toBeInTheDocument();
+    });
+
+    it('a pending template save is a busy Save button named "Saving..."', () => {
+        const pending = { mutate: vi.fn(), isPending: true };
+        vi.mocked(useCreateTemplate).mockReturnValue(pending as unknown as ReturnType<typeof useCreateTemplate>);
+        try {
+            renderForm();
+            fireEvent.click(screen.getByRole('button', { name: 'Save as Template' }));
+            const save = screen.getByRole('button', { name: 'Saving...' });
+            expect(save).toHaveAttribute('aria-busy', 'true');
+            expect(save).toHaveAttribute('aria-disabled', 'true');
+        } finally {
+            vi.mocked(useCreateTemplate).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useCreateTemplate>);
+        }
+    });
+
+    it('a pending create is a busy submit button named "Creating..."', () => {
+        vi.mocked(useMutation).mockReturnValue({ mutate: vi.fn(), isPending: true } as unknown as MutReturn);
+        try {
+            renderForm();
+            const submit = screen.getByRole('button', { name: 'Creating...' });
+            expect(submit).toHaveAttribute('type', 'submit');
+            expect(submit).toHaveAttribute('aria-busy', 'true');
+            expect(submit).toHaveAttribute('aria-disabled', 'true');
+        } finally {
+            vi.mocked(useMutation).mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as MutReturn);
+        }
     });
 });
