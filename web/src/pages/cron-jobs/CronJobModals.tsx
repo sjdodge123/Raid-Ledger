@@ -1,6 +1,10 @@
 import type { JSX } from 'react';
 import { useState } from 'react';
 import type { CronJobDto, CronJobExecutionDto } from '@raid-ledger/contract';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { Button } from '../../components/ui/button';
+import { Field } from '../../components/ui/field';
+import { Select } from '../../components/ui/select';
 import { useCronJobs, useCronJobExecutions } from '../../hooks/use-cron-jobs';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { formatJobName, formatTimestamp, formatDuration, normalizeCron, getCronLabel, INTERVAL_PRESETS } from './cron-utils';
@@ -47,8 +51,16 @@ function ExecutionHistoryHeader({ job, onClose }: { job: CronJobDto; onClose: ()
                 <h3 className="text-lg font-semibold text-foreground">Execution History</h3>
                 <p className="text-sm text-muted mt-0.5">{job.description || job.name}</p>
             </div>
-            <button type="button" aria-label="Close" onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">&#10005;</button>
+            <CloseButton onClose={onClose} />
         </div>
+    );
+}
+
+function CloseButton({ onClose }: { onClose: () => void }): JSX.Element {
+    return (
+        <Button variant="ghost" size="sm" iconOnly aria-label="Close" onClick={onClose}>
+            <XMarkIcon className="w-5 h-5" />
+        </Button>
     );
 }
 
@@ -145,9 +157,7 @@ function EditScheduleHeader({ job, onClose }: { job: CronJobDto; onClose: () => 
                 <p className="text-xs font-medium text-muted uppercase tracking-wide">Edit Schedule</p>
                 <h3 className="text-lg font-semibold text-foreground">{formatJobName(job.name)}</h3>
             </div>
-            <button onClick={onClose} aria-label="Close" className="text-muted hover:text-foreground transition-colors text-xl">
-                &#10005;
-            </button>
+            <CloseButton onClose={onClose} />
         </div>
     );
 }
@@ -194,14 +204,12 @@ function IntervalSelector({ selectedExpression, onExpressionChange, isCustomExpr
     isCustomExpression: boolean; jobExpression: string;
 }): JSX.Element {
     return (
-        <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Interval</label>
-            <select value={selectedExpression} onChange={(e) => onExpressionChange(e.target.value)}
-                className="w-full px-3 py-2 bg-surface border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent">
+        <Field label="Interval">
+            <Select value={selectedExpression} onChange={(e) => onExpressionChange(e.target.value)}>
                 {isCustomExpression && <option value={jobExpression}>{getCronLabel(jobExpression)}</option>}
                 {INTERVAL_PRESETS.map((preset) => (<option key={preset.value} value={preset.value}>{preset.label}</option>))}
-            </select>
-        </div>
+            </Select>
+        </Field>
     );
 }
 
@@ -220,12 +228,10 @@ function ScheduleActions({ onClose, onSave, isSaving, disabled }: {
 }): JSX.Element {
     return (
         <div className="flex justify-end gap-3">
-            <button onClick={onClose}
-                className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors">Cancel</button>
-            <button onClick={onSave} disabled={isSaving || disabled}
-                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition-colors disabled:opacity-50">
-                {isSaving ? 'Saving...' : 'Save'}
-            </button>
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" onClick={onSave} loading={isSaving} loadingLabel="Saving…" disabled={disabled}>
+                Save
+            </Button>
         </div>
     );
 }
