@@ -6,6 +6,7 @@ import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import type { DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 import { DiscardChangesConfirm } from './discard-changes-confirm';
+import { OVERLAY_FOOTER_CLASS } from './overlay-footer';
 
 interface BottomSheetProps {
     isOpen: boolean;
@@ -180,7 +181,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
                 {title && <SheetHeader title={title} onClose={requestClose} />}
                 {/* Content-sized; shrinks and scrolls only once the sheet hits its cap. */}
                 <div className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>
-                {footer ? <div className="shrink-0 border-t border-edge px-4 py-3" data-testid="bottom-sheet-footer">{footer}</div> : null}
+                {footer ? <div className={OVERLAY_FOOTER_CLASS} data-testid="bottom-sheet-footer">{footer}</div> : null}
             </div>
         </div>,
         document.body,

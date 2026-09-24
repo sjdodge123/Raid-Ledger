@@ -100,11 +100,10 @@ function FormModalDemo(): JSX.Element {
 
 function FormSheetDemo(): JSX.Element {
     const d = useGuardedDraft();
-    const footer = <div className="flex justify-end gap-2"><GuardedActions d={d} /></div>;
     return (
         <StateFrame label="BottomSheet — pinned footer + dirty-close guard" note="Same contract as Modal; swipe-down is guarded too. Browser back is out of scope.">
             <Button variant="secondary" onClick={d.show}>Open form sheet</Button>
-            <BottomSheet isOpen={d.open} onClose={d.close} title="Edit note" closeGuard={d.guard} footer={footer}>
+            <BottomSheet isOpen={d.open} onClose={d.close} title="Edit note" closeGuard={d.guard} footer={<GuardedActions d={d} />}>
                 <NoteField draft={d.draft} onChange={d.setDraft} />
             </BottomSheet>
         </StateFrame>

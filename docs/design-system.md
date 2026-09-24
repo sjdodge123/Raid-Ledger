@@ -379,7 +379,9 @@ carries the focus trap and ARIA dialog semantics you would otherwise have to re-
 - **`Modal` is a `max-h-[90dvh]` flex column** — `shrink-0` header, `flex-1 min-h-0` body, optional
   `footer`. Put the dialog's actions in `footer`: a `shrink-0` bar (`border-t border-edge`, right-aligned,
   wraps) below the scrolling body, so Save stays on screen however long the form grows. Never a `sticky`
-  row inside the body. A `Modal` / `BottomSheet` pair (`RescheduleModal`) passes the same actions to both.
+  row inside the body. A `Modal` / `BottomSheet` pair (`RescheduleModal`) passes the same actions to both:
+  both overlays draw the one bar (`OVERLAY_FOOTER_CLASS`, `web/src/components/ui/overlay-footer.ts`), so
+  pass the bare buttons — never wrap them in your own `flex justify-end` row.
 - **The `bodyClassName` contract:** the structural `flex-1 min-h-0` is ALWAYS applied; `bodyClassName`
   replaces only the skin (default `p-4 overflow-y-auto`). An overrider that drops `overflow-y-auto` owns
   its own scroller — give the child that scrolls `h-full overflow-y-auto`, or it clips at the 90dvh cap.

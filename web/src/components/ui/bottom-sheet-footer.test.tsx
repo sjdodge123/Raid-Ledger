@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BottomSheet } from './bottom-sheet';
+import { Modal } from './modal';
 
 /** The visible viewport (`visualViewport`, via `bottom-sheet-viewport`); a 1000px screen. */
 vi.mock('./bottom-sheet-viewport', async (importOriginal) => {
@@ -69,5 +70,18 @@ describe('BottomSheet footer slot', () => {
         renderSheet({ footer, maxHeight: '40vh' });
         const { dialog } = expectPinnedFooter();
         expect(dialog.style.maxHeight).toBe('400px');
+    });
+});
+
+describe('BottomSheet footer matches the Modal footer', () => {
+    /** A Modal / BottomSheet pair passes the same actions to both (design-system.md), so the bars must lay out alike. */
+    it('uses the same footer bar layout as Modal', () => {
+        const actions = <><button type="button">Cancel</button><button type="button">Save</button></>;
+        render(<Modal isOpen onClose={() => {}} title="Reschedule" footer={actions}><p>Modal body</p></Modal>);
+        renderSheet({ footer: actions });
+        const modalBar = screen.getByTestId('modal-footer').className.split(' ').sort();
+        const sheetBar = screen.getByTestId('bottom-sheet-footer').className.split(' ').sort();
+        expect(sheetBar, 'BottomSheet footer bar must use the Modal footer layout classes').toEqual(modalBar);
+        expect(sheetBar).toEqual(expect.arrayContaining(['flex', 'flex-wrap', 'items-center', 'justify-end', 'gap-2']));
     });
 });

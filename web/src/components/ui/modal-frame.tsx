@@ -7,6 +7,7 @@ import { useEffect, useCallback, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
+import { OVERLAY_FOOTER_CLASS } from './overlay-footer';
 
 export interface ModalFrameProps {
     isOpen: boolean;
@@ -47,10 +48,7 @@ const DEFAULT_BODY_SKIN = 'p-4 overflow-y-auto';
 
 function ModalFooter({ children }: { children: ReactNode }) {
     return (
-        <div
-            data-testid="modal-footer"
-            className="shrink-0 flex flex-wrap items-center justify-end gap-2 border-t border-edge px-4 py-3"
-        >
+        <div data-testid="modal-footer" className={OVERLAY_FOOTER_CLASS}>
             {children}
         </div>
     );
