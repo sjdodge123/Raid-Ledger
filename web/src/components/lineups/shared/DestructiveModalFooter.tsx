@@ -2,8 +2,15 @@
  * Shared Cancel + destructive-confirm footer for lineup modals (ROK-1219).
  * Extracted from AbortLineupModal (ROK-1062). Parameterized confirm/pending
  * labels so cancel-poll and abort-lineup share one footer.
+ *
+ * ROK-1651/1655: rendered in the pinned Modal `footer` slot (which owns the
+ * row layout), on the Button primitive. While pending the confirm is a
+ * `loading` Button (aria-busy + aria-disabled, the click is swallowed) whose
+ * sr-only name is `pendingLabel` (ruling 7). Callers pass the dirty-close
+ * guard's `requestClose` as `onCancel`, so the explicit Cancel is guarded too.
  */
 import type { JSX } from 'react';
+import { Button } from '../../ui/button';
 
 interface DestructiveModalFooterProps {
     onCancel: () => void;
@@ -11,7 +18,7 @@ interface DestructiveModalFooterProps {
     isPending: boolean;
     /** Label for the destructive confirm button (e.g. "Abort Lineup"). */
     confirmLabel: string;
-    /** Label shown while the mutation is pending (e.g. "Aborting..."). */
+    /** Accessible name while the mutation is pending (e.g. "Aborting..."). */
     pendingLabel: string;
 }
 
@@ -23,28 +30,18 @@ export function DestructiveModalFooter({
     pendingLabel,
 }: DestructiveModalFooterProps): JSX.Element {
     return (
-        <div className="flex justify-end gap-3 pt-2">
-            <button
-                type="button"
-                onClick={onCancel}
-                className="px-4 py-2 text-sm font-medium text-secondary bg-panel border border-edge rounded-lg hover:bg-overlay transition-colors"
-            >
+        <>
+            <Button variant="secondary" onClick={onCancel}>
                 Cancel
-            </button>
-            <button
-                type="button"
+            </Button>
+            <Button
+                variant="destructive"
                 onClick={onConfirm}
-                disabled={isPending}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-rose-600 text-white rounded-lg hover:bg-rose-500 transition-colors disabled:opacity-50"
+                loading={isPending}
+                loadingLabel={pendingLabel}
             >
-                {isPending && (
-                    <span
-                        aria-hidden="true"
-                        className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"
-                    />
-                )}
-                {isPending ? pendingLabel : confirmLabel}
-            </button>
-        </div>
+                {confirmLabel}
+            </Button>
+        </>
     );
 }

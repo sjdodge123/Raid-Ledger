@@ -201,6 +201,17 @@ describe('AbortLineupModal', () => {
 const discardConfirm = () =>
     screen.queryByRole('dialog', { name: 'Discard your changes?' });
 
+function renderModal(): ReturnType<typeof vi.fn> {
+    const onClose = vi.fn();
+    renderWithProviders(<AbortLineupModal lineupId={1} onClose={onClose} />);
+    return onClose;
+}
+
+function renderClean(): ReturnType<typeof vi.fn> {
+    mockMutation();
+    return renderModal();
+}
+
 describe('AbortLineupModal — dirty close (ROK-1655)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -208,11 +219,7 @@ describe('AbortLineupModal — dirty close (ROK-1655)', () => {
 
     it('asks before Escape discards a typed reason', async () => {
         const user = userEvent.setup();
-        const onClose = vi.fn();
-        mockMutation();
-        renderWithProviders(
-            <AbortLineupModal lineupId={1} onClose={onClose} />,
-        );
+        const onClose = renderClean();
 
         await user.type(screen.getByRole('textbox'), 'wrong scope');
         await user.keyboard('{Escape}');
@@ -222,11 +229,8 @@ describe('AbortLineupModal — dirty close (ROK-1655)', () => {
 
     it('guards the explicit Cancel too: confirm, then Discard closes', async () => {
         const user = userEvent.setup();
-        const onClose = vi.fn();
         const mutation = mockMutation();
-        renderWithProviders(
-            <AbortLineupModal lineupId={1} onClose={onClose} />,
-        );
+        const onClose = renderModal();
 
         await user.type(screen.getByRole('textbox'), 'wrong scope');
         await user.click(screen.getByRole('button', { name: /^Cancel$/ }));
@@ -240,11 +244,7 @@ describe('AbortLineupModal — dirty close (ROK-1655)', () => {
 
     it('closes at once on Escape when the reason is whitespace only', async () => {
         const user = userEvent.setup();
-        const onClose = vi.fn();
-        mockMutation();
-        renderWithProviders(
-            <AbortLineupModal lineupId={1} onClose={onClose} />,
-        );
+        const onClose = renderClean();
 
         await user.type(screen.getByRole('textbox'), '   ');
         await user.keyboard('{Escape}');
@@ -254,11 +254,7 @@ describe('AbortLineupModal — dirty close (ROK-1655)', () => {
 
     it('a successful abort with a typed reason closes without the confirm', async () => {
         const user = userEvent.setup();
-        const onClose = vi.fn();
-        mockMutation();
-        renderWithProviders(
-            <AbortLineupModal lineupId={1} onClose={onClose} />,
-        );
+        const onClose = renderClean();
 
         await user.type(screen.getByRole('textbox'), 'wrong scope');
         await user.click(screen.getByRole('button', { name: /Abort Lineup/i }));
@@ -267,10 +263,7 @@ describe('AbortLineupModal — dirty close (ROK-1655)', () => {
     });
 
     it('pins Cancel and the confirm in the modal footer', () => {
-        mockMutation();
-        renderWithProviders(
-            <AbortLineupModal lineupId={1} onClose={vi.fn()} />,
-        );
+        renderClean();
 
         const footer = screen.getByTestId('modal-footer');
         expect(within(footer).getByRole('button', { name: /^Cancel$/ })).toBeInTheDocument();
