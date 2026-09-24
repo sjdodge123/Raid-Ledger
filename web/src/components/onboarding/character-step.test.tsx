@@ -433,3 +433,66 @@ describe('CharacterStep — label wiring (ROK-1645)', () => {
         }
     });
 });
+
+const SAVED_CHAR = { id: 'char-1', name: 'Thrall', class: null, spec: null, effectiveRole: null, isMain: true, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 };
+
+describe('CharacterStep — form primitives (ROK-1648)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseDeleteCharacter.mockReturnValue({ mutate: vi.fn(), isPending: false });
+        mockUseMyCharacters.mockReturnValue({ data: { data: [] } });
+    });
+
+    it('Name is a required Field', () => {
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        expect(screen.getByRole('textbox', { name: 'Name' }).getAttribute('aria-required'), 'Name should be a required Field').toBe('true');
+    });
+
+    it('an empty-name submit marks the Name field invalid and describes it with the error', () => {
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const name = screen.getByRole('textbox', { name: 'Name' });
+        fireEvent.click(screen.getByRole('button', { name: /create character/i }));
+        expect(name.getAttribute('aria-invalid'), 'the name input should be aria-invalid').toBe('true');
+        const errorId = (name.getAttribute('aria-describedby') ?? '').split(' ').find((id) => document.getElementById(id)?.textContent === 'Character name is required');
+        expect(errorId, 'the name error should describe the name input').toBeDefined();
+    });
+
+    it('a failed create is a form-level alert, not a Name field error', () => {
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn((_d, o) => o?.onError?.()), isPending: false });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const name = screen.getByRole('textbox', { name: 'Name' });
+        fireEvent.change(name, { target: { value: 'Arthas' } });
+        fireEvent.click(screen.getByRole('button', { name: /create character/i }));
+        const alert = screen.queryAllByRole('alert').find((a) => /failed to create character/i.test(a.textContent ?? ''));
+        expect(alert, 'the mutation error should render as role=alert').not.toBeUndefined();
+        expect(alert?.className, 'the alert should use the danger token').toContain('text-danger');
+        expect(name.getAttribute('aria-invalid'), 'a server error must not mark the name invalid').not.toBe('true');
+    });
+
+    it('Create Character is a loading Button while pending (aria-busy, sr-only label)', () => {
+        mockUseCreateCharacter.mockReturnValue({ mutate: vi.fn(), isPending: true });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const submit = screen.getByRole('button', { name: /creating/i });
+        expect(submit.getAttribute('aria-busy'), 'Create should be aria-busy while pending').toBe('true');
+        expect(submit.getAttribute('aria-disabled'), 'Create should be aria-disabled while pending').toBe('true');
+        expect(submit.getAttribute('type')).toBe('submit');
+    });
+
+    it('the remove button is a 44px icon Button named "Remove character"', () => {
+        mockUseMyCharacters.mockReturnValue({ data: { data: [SAVED_CHAR] } });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} />);
+        const remove = screen.queryByRole('button', { name: 'Remove character' });
+        expect(remove, 'a button should be named "Remove character"').not.toBeNull();
+        expect(remove?.querySelector('[data-button-label]'), 'remove should be a Button').not.toBeNull();
+        expect(remove?.className, 'remove should be a 44px icon button').toContain('min-w-[44px]');
+    });
+
+    it('"Add Another Character" is a full-width Button', () => {
+        mockUseMyCharacters.mockReturnValue({ data: { data: [SAVED_CHAR] } });
+        renderWithProviders(<CharacterStep preselectedGame={baseGame} charIndex={0} onAddAnother={vi.fn()} />);
+        const add = screen.getByRole('button', { name: /add another character/i });
+        expect(add.querySelector('[data-button-label]'), 'Add Another should be a Button').not.toBeNull();
+        expect(add.className).toContain('w-full');
+    });
+});
