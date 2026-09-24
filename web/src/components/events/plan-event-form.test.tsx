@@ -455,3 +455,40 @@ describe('PlanEventForm — custom time entry', () => {
         expect(addBtn).not.toBeDisabled();
     });
 });
+
+// ─── ROK-1649 AC1: required title via Field, noValidate on the form ──────────
+describe('PlanEventForm — Game details fields (ROK-1649 AC1)', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('the title is natively required + aria-required and named exactly "Event Title"', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('id', 'planTitle');
+        expect(title).toBeRequired();
+        expect(title).toHaveAttribute('required');
+        expect(title).toHaveAttribute('aria-required', 'true');
+    });
+
+    it('the title asterisk comes from Field: aria-hidden inside the label', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' }) as HTMLInputElement;
+        const star = title.labels?.[0]?.querySelector('[aria-hidden="true"]');
+        expect(star).toHaveTextContent('*');
+        expect(star).toHaveClass('text-danger');
+    });
+
+    it('Description is named "Description" and keeps the planTitle-description id', () => {
+        renderForm();
+        expect(screen.getByRole('textbox', { name: 'Description' })).toHaveAttribute('id', 'planTitle-description');
+    });
+
+    it('the form is noValidate, so an empty Start Poll reaches the inline title error', () => {
+        const { container } = renderForm();
+        expect(container.querySelector('form')).toHaveAttribute('novalidate');
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('aria-invalid', 'true');
+        expect(title).toHaveAccessibleDescription(/Title is required/);
+    });
+});

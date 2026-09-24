@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CreateEventForm } from './create-event-form';
+import { useEventTypes } from '../../hooks/use-game-registry';
 import type { FormState } from './create-event-form.types';
 
 // ─── jsdom does not implement scrollIntoView — suppress unhandled errors ─────
@@ -469,5 +470,54 @@ describe('CreateEventForm copyFromEvent prefill', () => {
         renderForm();
 
         expect(screen.queryByDisplayValue('Thursday Deep Rock')).not.toBeInTheDocument();
+    });
+});
+
+// ─── ROK-1649 AC1: required title via Field, noValidate on the form ──────────
+describe('CreateEventForm — Game details fields (ROK-1649 AC1)', () => {
+    it('the title is natively required + aria-required and named exactly "Event Title"', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(title).toHaveAttribute('id', 'title');
+        expect(title).toBeRequired();
+        expect(title).toHaveAttribute('required');
+        expect(title).toHaveAttribute('aria-required', 'true');
+    });
+
+    it('the title asterisk comes from Field: aria-hidden inside the label', () => {
+        renderForm();
+        const title = screen.getByRole('textbox', { name: 'Event Title' }) as HTMLInputElement;
+        const star = title.labels?.[0]?.querySelector('[aria-hidden="true"]');
+        expect(star).toHaveTextContent('*');
+        expect(star).toHaveClass('text-danger');
+    });
+
+    it('Description is a Textarea named "Description" that keeps the title-description id', () => {
+        renderForm();
+        expect(screen.getByRole('textbox', { name: 'Description' })).toHaveAttribute('id', 'title-description');
+    });
+
+    it('an empty submit through the button still shows the inline title error (form is noValidate)', async () => {
+        const { container } = renderForm();
+        expect(container.querySelector('form')).toHaveAttribute('novalidate');
+        fireEvent.click(screen.getByRole('button', { name: 'Create Event' }));
+        const title = screen.getByRole('textbox', { name: 'Event Title' });
+        expect(await screen.findByText('Title is required')).toBeInTheDocument();
+        expect(title).toHaveAttribute('aria-invalid', 'true');
+        expect(title).toHaveAccessibleDescription(/Title is required/);
+    });
+
+    it('Event Type is a Select named exactly "Event Type" with its hint as the description', () => {
+        const types = { data: { data: [{ id: 7, name: 'Raid', slug: 'raid', defaultPlayerCap: 10 }] } };
+        vi.mocked(useEventTypes).mockReturnValue(types as unknown as ReturnType<typeof useEventTypes>);
+        try {
+            renderForm();
+            const select = screen.getByRole('combobox', { name: 'Event Type' });
+            expect(select).toHaveAttribute('id', 'eventType');
+            expect(select).toHaveAccessibleDescription('Auto-fills duration and roster slots based on content type');
+            expect(screen.getByRole('option', { name: 'Raid (10-player)' })).toBeInTheDocument();
+        } finally {
+            vi.mocked(useEventTypes).mockReturnValue({ data: null } as unknown as ReturnType<typeof useEventTypes>);
+        }
     });
 });
