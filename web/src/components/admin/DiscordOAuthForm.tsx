@@ -2,14 +2,16 @@ import { useState, useMemo } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { API_BASE_URL } from '../../lib/config';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
 import { PasswordInput, TestResultBanner, CopyableInput, FormTextField } from './admin-form-helpers';
 
 function SetupInstructions() {
     return (
-        <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6">
+        <div className="bg-overlay/30 border border-edge rounded-lg p-4 mb-6">
             <p className="text-sm text-foreground"><strong>Setup Instructions:</strong></p>
             <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
-                <li>Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-100">Discord Developer Portal</a></li>
+                <li>Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Discord Developer Portal</a></li>
                 <li>Create or select an application</li>
                 <li>Go to OAuth2 &rarr; Copy Client ID and Client Secret</li>
                 <li>Add redirect URL to OAuth2 &rarr; Redirects</li>
@@ -31,9 +33,9 @@ function CallbackUrlsSection({ callbackUrl, linkCallbackUrl }: { callbackUrl: st
                 <>Callback URLs <span className="text-dim">(add both to Discord)</span></>
             </label>
             <div className="mb-2">
-                <CopyableInput value={callbackUrl} onCopied="Callback URL copied!" />
+                <CopyableInput value={callbackUrl} onCopied="Callback URL copied!" label="Callback URL" />
             </div>
-            <CopyableInput value={linkCallbackUrl} onCopied="Link callback copied!" />
+            <CopyableInput value={linkCallbackUrl} onCopied="Link callback copied!" label="Link Callback URL" />
             <p className="text-xs text-dim mt-1.5">
                 <>Click to copy. Add <strong>both</strong> URLs to Discord &rarr; OAuth2 &rarr; Redirects.</>
             </p>
@@ -87,20 +89,18 @@ function ActionButtons({ configured, isPending, onTest, onClear }: {
 }) {
     return (
         <div className="flex flex-wrap gap-3 pt-2">
-            <button type="submit" disabled={isPending.save}
-                className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
-                {isPending.save ? 'Saving...' : 'Save Configuration'}
-            </button>
+            <Button type="submit" variant="primary" size="lg" className="flex-1"
+                loading={isPending.save} loadingLabel="Saving...">
+                Save Configuration
+            </Button>
             {configured && (
                 <>
-                    <button type="button" onClick={onTest} disabled={isPending.test}
-                        className="py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
-                        {isPending.test ? 'Testing...' : 'Test Connection'}
-                    </button>
-                    <button type="button" onClick={onClear} disabled={isPending.clear}
-                        className="py-3 px-4 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold rounded-lg transition-colors border border-red-600/50">
+                    <Button variant="secondary" size="lg" onClick={onTest} loading={isPending.test} loadingLabel="Testing...">
+                        Test Connection
+                    </Button>
+                    <Button variant="destructive-soft" size="lg" onClick={onClear} loading={isPending.clear}>
                         Clear
-                    </button>
+                    </Button>
                 </>
             )}
         </div>
@@ -117,12 +117,11 @@ export function DiscordOAuthForm() {
             <form onSubmit={h.handleSave} className="space-y-4">
                 <FormTextField id="clientId" label="Client ID" value={h.clientId} onChange={h.setClientId}
                     placeholder={placeholder ?? 'Discord Application Client ID'} />
-                <div>
-                    <label htmlFor="clientSecret" className="block text-sm font-medium text-secondary mb-1.5">Client Secret</label>
+                <Field id="clientSecret" label="Client Secret">
                     <PasswordInput id="clientSecret" value={h.clientSecret} onChange={h.setClientSecret}
                         placeholder={placeholder ?? 'Discord Application Client Secret'}
                         showPassword={h.showSecret} onToggleShow={() => h.setShowSecret(!h.showSecret)} />
-                </div>
+                </Field>
                 <CallbackUrlsSection callbackUrl={h.callbackUrl} linkCallbackUrl={h.linkCallbackUrl} />
                 <TestResultBanner result={h.testResult} />
                 <ActionButtons configured={!!h.oauthStatus.data?.configured} isPending={h.isPending}

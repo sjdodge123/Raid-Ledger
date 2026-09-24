@@ -92,29 +92,16 @@ function expectLoading(btn: HTMLElement) {
 function resetMocks() {
     vi.clearAllMocks();
     mockDiscordBotStatus.data = null;
-    for (const m of [mockUpdateDiscordBot, mockTestDiscordBot, mockClearDiscordBot, mockCheckDiscordBotPermissions]) {
+    mockDiscordChannels.data = null;
+    mockDiscordDefaultChannel.data = null;
+    for (const m of [mockUpdateDiscordBot, mockTestDiscordBot, mockClearDiscordBot, mockCheckDiscordBotPermissions, mockSetDiscordChannel]) {
         m.isPending = false;
         m.mutateAsync = vi.fn();
     }
 }
 
 describe('DiscordBotForm — Basic rendering', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockDiscordBotStatus.data = null;
-        mockDiscordChannels.data = null;
-        mockDiscordDefaultChannel.data = null;
-        mockUpdateDiscordBot.isPending = false;
-        mockUpdateDiscordBot.mutateAsync = vi.fn();
-        mockTestDiscordBot.isPending = false;
-        mockTestDiscordBot.mutateAsync = vi.fn();
-        mockClearDiscordBot.isPending = false;
-        mockClearDiscordBot.mutateAsync = vi.fn();
-        mockCheckDiscordBotPermissions.isPending = false;
-        mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
-        mockSetDiscordChannel.isPending = false;
-        mockSetDiscordChannel.mutateAsync = vi.fn();
-    });
+    beforeEach(resetMocks);
 
     // ── Basic rendering ───────────────────────────────────────────────────
 
