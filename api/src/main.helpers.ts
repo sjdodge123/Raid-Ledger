@@ -208,3 +208,35 @@ export function buildHelmetOptions(): HelmetOptions {
     },
   };
 }
+
+/**
+ * ROK-1665: trust every private hop, not a fixed hop count. Prod runs
+ * browser → Cloudflare → cloudflared → Docker bridge → nginx → Node, so a hop
+ * count of 1 resolved `req.ip` to the bridge (172.17.0.1) for every user and
+ * the throttler kept ONE bucket per handler for the whole site. proxy-addr
+ * walks X-Forwarded-For from the right, skips these trusted ranges and stops
+ * at the first public address — the real client — so a spoofed value on the
+ * left is never reached.
+ */
+export const DEFAULT_TRUST_PROXY = 'loopback, linklocal, uniquelocal';
+
+/**
+ * Resolves Express's `trust proxy` value from `TRUST_PROXY`: a whole number is
+ * a hop count, anything else passes through in Express syntax (IPs, CIDRs or
+ * the named subnets, comma-separated). Unset or blank → the private subnets.
+ */
+export function resolveTrustProxy(raw: string | undefined): number | string {
+  const value = raw?.trim();
+  if (!value) return DEFAULT_TRUST_PROXY;
+  return /^\d+$/.test(value) ? Number(value) : value;
+}
+
+/** Applies `resolveTrustProxy` in production only; dev sees no proxy. */
+export function applyTrustProxy(
+  app: NestExpressApplication,
+  isProduction: boolean,
+  raw: string | undefined,
+): void {
+  if (!isProduction) return;
+  app.set('trust proxy', resolveTrustProxy(raw));
+}
