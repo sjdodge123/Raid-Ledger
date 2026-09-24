@@ -38,6 +38,12 @@ import {
   type SignInLinkTarget,
 } from './demo-test-sign-in-link.helpers';
 
+/**
+ * Mints a link for ANY existing user, whatever their role — admins included,
+ * so an admin caller can hand out an admin session. That is acceptable only
+ * because the route is reachable solely in DEMO_MODE (env + DB flag) and
+ * behind the JWT + AdminGuard: it never exists on a real deployment.
+ */
 @Controller('admin/test')
 @SkipThrottle()
 @UseGuards(AuthGuard('jwt'), AdminGuard)

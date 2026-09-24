@@ -128,12 +128,24 @@ describe('DemoTestSignInLinkController — POST /admin/test/sign-in-link', () =>
     ['backslash path', { userId: 7, path: '/\\evil.com' }],
     ['javascript scheme', { userId: 7, path: 'javascript:alert(1)' }],
     ['non-string path', { userId: 7, path: 42 }],
+    ['tab-smuggled path', { userId: 7, path: '/\t/evil' }],
+    ['newline-smuggled path', { userId: 7, path: '/\n/evil.com' }],
   ])('400 on %s', async (_label, body) => {
     const { controller, generateLink } = setup();
     await expect(controller.signInLink(body)).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(generateLink).not.toHaveBeenCalled();
+  });
+
+  it('percent-encoded slashes stay a same-origin path (never a new host)', async () => {
+    const { controller } = setup();
+    const res = await controller.signInLink({
+      userId: 7,
+      path: '/%2F%2Fevil.com',
+    });
+    expect(new URL(res.url).origin).toBe(CLIENT);
+    expect(res.url).toBe(`${CLIENT}/%2F%2Fevil.com#token=tok.en.sig`);
   });
 
   it('403 when DEMO_MODE env is off — before any parsing or lookup', async () => {
