@@ -4,8 +4,12 @@
  */
 import { ButtonStyle, ComponentType } from 'discord.js';
 import { LFG_URGENCY_CHOICES } from '../commands/lfg.command.helpers';
-import { LFG_COMPOSER_COPY } from './lfg-composer.constants';
 import {
+  LFG_COMPOSER_COPY,
+  LFG_COMPOSER_TERM_MAX,
+} from './lfg-composer.constants';
+import {
+  DISCORD_LINK_URL_MAX,
   buildComposerCard,
   buildComposerModal,
   gamesPageUrl,
@@ -20,6 +24,11 @@ import { horizonOf, orderUrgencyChoices } from './lfg-composer-urgency.helpers';
 
 const CLIENT_URL = 'https://raid.example.net';
 const DRG = { id: 3, name: 'Deep Rock Galactic' };
+/**
+ * The web's `MAX_SEARCH_QUERY_LENGTH` (`web/src/pages/games/use-search-query-param.ts`):
+ * /games ignores a longer `?q=`, so the composer's term cap must stay under it.
+ */
+const WEB_SEARCH_QUERY_MAX = 100;
 
 /** The one text input inside a built modal, narrowed out of the union. */
 function modalInput(
@@ -28,6 +37,15 @@ function modalInput(
   const row = modal.toJSON().components[0];
   if (!('components' in row)) throw new Error('expected an action row');
   return row.components[0] as unknown as Record<string, unknown>;
+}
+
+/** The URL of the one Link button across a reply's rows, if any. */
+function linkUrl(
+  rows: ReadonlyArray<{ toJSON(): { components: ReadonlyArray<object> } }>,
+): string | undefined {
+  return rows
+    .flatMap((row) => row.toJSON().components)
+    .find((c): c is { url: string } => 'url' in c)?.url;
 }
 
 /** Every button label in a reply, flattened across its rows. */
@@ -49,7 +67,7 @@ describe('buildComposerCard', () => {
     expect(row.components).toHaveLength(2);
     expect(row.components[0]).toMatchObject({
       style: ButtonStyle.Primary,
-      label: LFG_COMPOSER_COPY.POST_BUTTON,
+      label: '+ Post an LFG',
     });
     expect(row.components[1]).toMatchObject({
       style: ButtonStyle.Link,
@@ -91,7 +109,7 @@ describe('buildCandidatesReply', () => {
       false,
       CLIENT_URL,
     );
-    expect(reply.content).toBe('2 games match `rock`');
+    expect(reply.content).toBe('2 games match “rock”');
     const select = reply.components[0].toJSON().components[0];
     expect(select.type).toBe(ComponentType.StringSelect);
     expect(select).toMatchObject({
@@ -104,7 +122,7 @@ describe('buildCandidatesReply', () => {
 
   it('asks rather than tells on the trigram path', () => {
     const reply = buildCandidatesReply('valhiem', [DRG], true, CLIENT_URL);
-    expect(reply.content).toBe('No exact match for `valhiem`. Did you mean:');
+    expect(reply.content).toBe('No exact match for “valhiem”. Did you mean:');
   });
 
   it('always goes back and always offers the games page (AC8)', () => {
@@ -130,18 +148,31 @@ describe('buildUrgencyReply', () => {
     expect(reply.content).toBe('When do you want to play Deep Rock Galactic?');
     const row = reply.components[0].toJSON();
     expect(row.components).toHaveLength(LFG_URGENCY_CHOICES.length);
+    expect(row.components.map((c) => ('style' in c ? c.style : null))).toEqual(
+      LFG_URGENCY_CHOICES.map(() => ButtonStyle.Primary),
+    );
   });
 
-  it('still goes back — the urgency press is the only irreversible step', () => {
-    const reply = buildUrgencyReply({
-      game: DRG,
-      term: 'deep rock',
-      origin: 'search',
-      choices: LFG_URGENCY_CHOICES,
-      clientUrl: CLIENT_URL,
-    });
-    expect(labels(reply)).toContain(LFG_COMPOSER_COPY.BACK_BUTTON);
-  });
+  it.each(['search', 'candidates'] as const)(
+    'still goes back, always to the select (origin %s, ROK-1658)',
+    (origin) => {
+      const reply = buildUrgencyReply({
+        game: DRG,
+        term: 'deep rock',
+        origin,
+        choices: LFG_URGENCY_CHOICES,
+        clientUrl: CLIENT_URL,
+      });
+      const tailRow = reply.components[1].toJSON().components;
+      expect(tailRow.map((c) => ('label' in c ? c.label : c.type))).toEqual([
+        LFG_COMPOSER_COPY.BACK_BUTTON,
+      ]);
+      const tail = tailRow[0];
+      expect('custom_id' in tail ? tail.custom_id : undefined).toBe(
+        'lfgc:backc:deep rock',
+      );
+    },
+  );
 });
 
 describe('orderUrgencyChoices', () => {
@@ -165,18 +196,107 @@ describe('orderUrgencyChoices', () => {
 });
 
 describe('buildNoMatchReply', () => {
-  it('ends in Try again and View games — never in nothing to press', () => {
+  it('carries ONLY Back and View games — no select, no separate Try again', () => {
     const reply = buildNoMatchReply('bg3', CLIENT_URL);
-    expect(reply.content).toBe('Nothing in the library matches `bg3`.');
-    expect(labels(reply)).toEqual([
-      LFG_COMPOSER_COPY.TRY_AGAIN_BUTTON,
-      LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON,
-    ]);
+    expect(reply.content).toBe('No games match “bg3”');
+    expect(reply.components).toHaveLength(1);
+    expect(labels(reply)).toEqual(['← Back', 'View games ↗']);
   });
 
-  it('still offers Try again on a deployment with no web URL', () => {
-    expect(labels(buildNoMatchReply('bg3', null))).toEqual([
-      LFG_COMPOSER_COPY.TRY_AGAIN_BUTTON,
-    ]);
+  it('still offers Back on a deployment with no web URL', () => {
+    expect(labels(buildNoMatchReply('bg3', null))).toEqual(['← Back']);
+  });
+
+  it('shows a typed term literally, markdown and all', () => {
+    expect(buildNoMatchReply('*bg3*', null).content).toBe(
+      'No games match “\\*bg3\\*”',
+    );
+  });
+});
+
+describe('View games carries the searched term (ROK-1658 operator note)', () => {
+  const TERM = 'deep rock & stone';
+
+  it('opens /games searching for what the results message was built from', () => {
+    const url = linkUrl(
+      buildCandidatesReply(TERM, [DRG], false, CLIENT_URL).components,
+    );
+    expect(url).toBe(`${CLIENT_URL}/games?q=deep+rock+%26+stone`);
+    expect(new URL(url ?? '').searchParams.get('q')).toBe(TERM);
+  });
+
+  it('opens /games searching for the term that found nothing', () => {
+    const url = linkUrl(
+      buildNoMatchReply('pokémon #1 & co', CLIENT_URL).components,
+    );
+    expect(url?.startsWith(`${CLIENT_URL}/games?q=`)).toBe(true);
+    expect(url).not.toMatch(/[ #&]/);
+    expect(new URL(url ?? '').searchParams.get('q')).toBe('pokémon #1 & co');
+  });
+
+  it('keeps the pinned card on plain /games — nothing has been searched yet', () => {
+    const url = linkUrl(buildComposerCard(CLIENT_URL).components);
+    expect(url).toBe(`${CLIENT_URL}/games`);
+    expect(new URL(url ?? '').searchParams.has('q')).toBe(false);
+  });
+
+  it('never hands /games a q longer than it accepts', () => {
+    const url = linkUrl(
+      buildNoMatchReply('x'.repeat(150), CLIENT_URL).components,
+    );
+    const q = new URL(url ?? '').searchParams.get('q') ?? '';
+    expect(q).toBe('x'.repeat(LFG_COMPOSER_TERM_MAX));
+    expect(LFG_COMPOSER_TERM_MAX).toBeLessThanOrEqual(WEB_SEARCH_QUERY_MAX);
+  });
+
+  it('trims the term and links plain /games when it is blank', () => {
+    expect(gamesPageUrl(CLIENT_URL, '  bg3  ')).toBe(
+      `${CLIENT_URL}/games?q=bg3`,
+    );
+    expect(gamesPageUrl(CLIENT_URL, '   ')).toBe(`${CLIENT_URL}/games`);
+  });
+
+  it('still drops the link on a deployment with no web URL', () => {
+    expect(gamesPageUrl(null, TERM)).toBeNull();
+    const reply = buildCandidatesReply(TERM, [DRG], false, null);
+    expect(linkUrl(reply.components)).toBeUndefined();
+    expect(labels(reply)).not.toContain(LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON);
+  });
+});
+
+describe('View games stays inside Discord’s link cap', () => {
+  const PROD_URL = 'https://raid.gamernight.net';
+  /** Each of these is 3 UTF-8 bytes, so 9 URL characters once encoded. */
+  const WIDE_TERMS: Array<[string, string]> = [
+    ['CJK', '漢'.repeat(LFG_COMPOSER_TERM_MAX)],
+    ['euro sign', '€'.repeat(LFG_COMPOSER_TERM_MAX)],
+  ];
+
+  /** The link fits, still searches, and was cut by no more than it had to be. */
+  function expectShortenedLink(url: string | undefined, term: string): void {
+    expect(url?.length).toBeLessThanOrEqual(DISCORD_LINK_URL_MAX);
+    expect(url?.startsWith(`${PROD_URL}/games?q=`)).toBe(true);
+    const q = new URL(url ?? '').searchParams.get('q') ?? '';
+    expect(q.length).toBeGreaterThan(0);
+    expect(term.startsWith(q)).toBe(true);
+    expect((url ?? '').length + 9).toBeGreaterThan(DISCORD_LINK_URL_MAX);
+  }
+
+  it.each(WIDE_TERMS)('shortens the no-match link for a %s term', (_, term) => {
+    const url = linkUrl(buildNoMatchReply(term, PROD_URL).components);
+    expectShortenedLink(url, term);
+  });
+
+  it.each(WIDE_TERMS)('shortens the results link for a %s term', (_, term) => {
+    const reply = buildCandidatesReply(term, [DRG], false, PROD_URL);
+    expectShortenedLink(linkUrl(reply.components), term);
+  });
+
+  it('links plain /games when the base leaves no room for one character', () => {
+    // 500 characters: /games fits at 506, `?q=%E6%BC%A2` would make it 518.
+    const base = `https://raid.example.net/${'a'.repeat(475)}`;
+    expect(gamesPageUrl(base, '漢'.repeat(LFG_COMPOSER_TERM_MAX))).toBe(
+      `${base}/games`,
+    );
   });
 });

@@ -2,9 +2,13 @@
  * ROK-1612 AC1 — which forum post is "this env's board intro post".
  *
  * The CI guild is SHARED: every fleet env's bot (and prod's) seeds its own
- * "How this board works" post into the one board forum, so a live forum holds
- * several posts with that exact title (five, on 2026-09-23). A title match
- * alone picks whichever one Discord lists first — usually another env's.
+ * intro post into the one board forum, so a live forum holds several posts
+ * with the same title (five "How this board works", on 2026-09-23). A title
+ * match alone picks whichever one Discord lists first — usually another env's.
+ *
+ * ROK-1658 renamed the intro; the forum now holds both the current and the
+ * legacy title, so the pick takes a LIST of titles (`INTRO_TITLES`). Which
+ * title this env's intro must END on is the caller's assertion, not the pick's.
  *
  * Ownership is what names this env's intro (Codex P2), and it is REQUIRED.
  * The pin is NOT: Discord allows one pinned post per forum and refuses a
@@ -51,21 +55,23 @@ function preferred(a: IntroCandidate, b: IntroCandidate): number {
 }
 
 /**
- * This env's intro post: titled `title`, created by this env's bot and ACTIVE
+ * This env's intro post: titled one of `titles`, created by this env's bot and ACTIVE
  * (the product only adopts from `fetchActive()`, so an archived post is never
  * the live intro), preferring the pinned one, then the oldest.
  *
  * @param threads - Every post in the forum, in any order.
- * @param title - The intro post's title.
+ * @param titles - Every title the intro post may carry (current + legacy).
  * @param botUserId - This env's API bot; null falls back to "the pinned one".
  * @returns The post, or null when this bot owns no intro yet.
  */
 export function pickBoardIntro<T extends IntroCandidate>(
   threads: readonly T[],
-  title: string,
+  titles: readonly string[],
   botUserId: string | null = getApiBotUserId(),
 ): T | null {
-  const titled = threads.filter((t) => t.name === title && t.archived !== true);
+  const titled = threads.filter(
+    (t) => titles.includes(t.name) && t.archived !== true,
+  );
   if (botUserId === null) return titled.find((t) => t.pinned) ?? null;
   const mine = titled.filter((t) => t.ownerId === botUserId);
   return [...mine].sort(preferred)[0] ?? null;

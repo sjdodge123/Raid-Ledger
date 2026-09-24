@@ -153,7 +153,6 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
       enabled: false,
       channelId: null,
       nowIndicatorEmoji: null,
-      composerEnabled: false,
     });
 
     await put(true);
@@ -164,7 +163,6 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
       enabled: true,
       channelId: null,
       nowIndicatorEmoji: null,
-      composerEnabled: false,
     });
   });
 
@@ -184,9 +182,9 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
       enabled: true,
       channelId: '999888777',
       nowIndicatorEmoji: null,
-      composerEnabled: false,
     });
   });
+
   // ROK-1523 final review — a disable on a busy board retires posts one at a
   // time against Discord's thread bucket, which can outlast nginx's 60s. The
   // save is what the PUT answers for; the Discord side follows in background.
@@ -214,6 +212,19 @@ describe('LfgBoardSettingsController (ROK-1471 D1/D5)', () => {
     expect(res.status).toBe(200);
     expect(Sentry.captureException).toHaveBeenCalledWith(boom, {
       tags: { context: 'lfg-board-toggle' },
+    });
+  });
+
+  // ROK-1658 AC1 — the composer rides the board; its separate opt-in and the
+  // endpoint that flipped it are gone.
+  describe('composer opt-in removed (ROK-1658)', () => {
+    it('the composer opt-in endpoint is gone', async () => {
+      const res = await supertest(http())
+        .put('/admin/settings/discord-bot/lfg-board/composer')
+        .send({ enabled: true });
+
+      expect(res.status).toBe(404);
+      expect(set).not.toHaveBeenCalled();
     });
   });
 

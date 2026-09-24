@@ -70,11 +70,7 @@ import {
   assertPostsOnFirstHand,
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
-import {
-  assertComposerPinned,
-  disableComposer,
-  enableComposer,
-} from '../lfg-composer-pin.js';
+import { assertComposerPinned } from '../lfg-composer-pin.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
 import { assertSpawnIndicatorLifecycle } from '../lfg-board-spawn-indicator-phase.js';
 import { pickBoardIntro } from '../lfg-board-intro-pick.js';
@@ -84,7 +80,7 @@ import {
   describeThreads,
   expectedThreadName,
   forumId,
-  INTRO_TITLE,
+  INTRO_TITLES,
   isGroupThread,
   JOIN_LABEL,
   pollForThread,
@@ -243,9 +239,12 @@ async function enableBoard(run: Run): Promise<void> {
     // env seeded one. Not "pinned" either: the forum has ONE pin slot, held by
     // whichever env pinned first; Discord refuses ours (30047) and the product
     // logs it and carries on — see `pickBoardIntro`.
-    (t) => pickBoardIntro([t], INTRO_TITLE) !== null,
-    `AC16 step 1: enabling the board must seed an intro post titled ` +
-      `"${INTRO_TITLE}", owned by this env's bot, in forum ${run.forumChannelId}, and none appeared`,
+    // ROK-1658: an intro of ours under the legacy title is ADOPTED, not
+    // re-seeded, so either title counts here; `assertComposerPinned` then
+    // requires the rename to the current title.
+    (t) => pickBoardIntro([t], INTRO_TITLES) !== null,
+    `AC16 step 1: enabling the board must seed (or adopt) an intro post titled ` +
+      `one of ${JSON.stringify(INTRO_TITLES)}, owned by this env's bot, in forum ${run.forumChannelId}, and none appeared`,
     BOARD_READY_MS,
   );
   run.preexistingThreads = new Set(
@@ -639,7 +638,6 @@ async function cleanup(run: Run): Promise<void> {
   }
   if (run.threadId) await deleteThread(run.threadId);
   for (const id of run.retiredThreadIds) await deleteThread(id);
-  await disableComposer(run);
   await setLfgBoardEnabled(run.ctx.api, false).catch((err: unknown) => {
     console.log(
       `  [lfg-board] could not disable the board in cleanup: ${String(err)}`,
@@ -684,7 +682,6 @@ const lfgBoardLifecycle: SmokeTest = {
   category: 'embed',
   run(ctx) {
     return onBoard(ctx, "lfg-board", async (run) => {
-      await enableComposer(run);
       await assertComposerPinned(run);
       await assertPostsOnFirstHand(run, 'T24');
       await assertUpgradesOnSecondHand(run, 'T25');

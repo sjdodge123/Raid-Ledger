@@ -44,7 +44,7 @@ interface FakeThread {
  * A forum post as the intro rediscovery reads it (D6).
  *
  * @param over.id - Snowflake; the scan prefers the lowest when none is pinned.
- * @param over.name - Thread title; only `LFG_BOARD_INTRO_TITLE` may be adopted.
+ * @param over.name - Thread title; only an intro title (current or legacy) may be adopted.
  * @param over.ownerId - Starter; only the app's own user id may be adopted.
  * @param over.pinned - Whether the post already carries `ChannelFlags.Pinned`.
  */
@@ -255,14 +255,16 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
     expect(body).toContain('+1');
     expect(body).toContain('/lfg');
     expect(body.toLowerCase()).toContain('withdraw');
-    expect(body.toLowerCase()).toContain('second');
-    expect(body.toLowerCase()).toContain('archive');
+    // ROK-1658 concise copy: posts "close" (was: retagged + archived).
+    expect(body).toContain('Posts close');
+    expect(body).toBe(LFG_BOARD_INTRO_BODY);
     // ROK-1479/1616 — the three horizons are explained where members read the
     // rules, in the same words every other surface uses.
     expect(body).toContain('This week');
     expect(body).toContain('Right now');
     expect(body).toContain('Tonight');
-    expect(body).not.toMatch(/30 min|1 hour/);
+    // "30 min" is Right now's lifetime; the retired 60-minute option is gone.
+    expect(body).not.toMatch(/1 hour|60 min/);
   });
 
   it('pins the intro post, and still persists the id when pinning is denied', async () => {
@@ -518,6 +520,16 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
     expect(h.settings.get(INTRO_KEY)).toBe('intro-thread');
   });
 
+  it('adopts a LEGACY-titled intro of its own; no second intro (ROK-1658)', async () => {
+    const legacy = fakeThread({ id: 'intro-7', name: 'How this board works' });
+    const h = harness({ active: [legacy] });
+
+    await h.listener.onToggled({ enabled: true });
+
+    expect(h.create).not.toHaveBeenCalled();
+    expect(h.settings.get(INTRO_KEY)).toBe('intro-7');
+  });
+
   it('refuses one of the bot\u2019s own posts with a different title', async () => {
     const other = fakeThread({ id: 'group-42', name: 'Deep Rock Galactic' });
     const h = harness({ active: [other] });
@@ -626,34 +638,28 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
   });
 });
 
-describe('LFG_BOARD_INTRO_BODY (ROK-1493 D11 / AC4)', () => {
-  it('tells members they cannot post, and where the way in is', () => {
-    // The forum is locked from ROK-1493 on, so the first thing a member does
-    // — try to start a post — now fails silently. The intro has to say why,
-    // and name both entry points, or the board reads as broken.
-    expect(LFG_BOARD_INTRO_BODY).toContain(
-      '**You cannot post here yourself.** New posts are made by Raid Ledger ' +
-        'only — `/lfg` or the site is the way in. Replies inside a post stay ' +
-        'open, so a group can talk once it exists.',
-    );
+describe('LFG_BOARD_INTRO_BODY (ROK-1658 concise intro)', () => {
+  it('is the operator-approved short copy, line for line', () => {
+    // Operator ask 2026-09-23: "reduce the amount of reading". Pinned line
+    // for line so a later edit is a deliberate copy change, not drift.
+    expect(LFG_BOARD_INTRO_BODY.split('\n')).toEqual([
+      '**Each post is a group looking for players for one game.**',
+      '',
+      '**Start one**: press **Post an LFG** below, or use `/lfg` or the Raid Ledger site.',
+      "**Join one**: press **+1 · I'm in** on a post. It's interest, not a commitment.",
+      '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next 14 days).',
+      '**Changed your mind?** Run `/lfg` and press **Withdraw**.',
+      '',
+      "Posts close when the group becomes an event or everyone's hand expires.",
+    ]);
   });
 
-  it('keeps every paragraph the board already explained', () => {
-    // D11 inserts a paragraph; it edits and deletes nothing.
-    expect(LFG_BOARD_INTRO_BODY).toContain('**This is the LFG board.**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**Why a post appears.**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**Changed your mind?**');
-    expect(LFG_BOARD_INTRO_BODY).toContain('**How posts end.**');
+  it('no longer tells members they cannot post (the composer lets them)', () => {
+    expect(LFG_BOARD_INTRO_BODY).not.toContain('cannot post');
+    expect(LFG_BOARD_INTRO_BODY).toContain('**Post an LFG**');
   });
 
-  it('states the one-hand rule, and no longer the old quiet-first-hand rule (ROK-1505 AC6)', () => {
-    // ROK-1505 posts every active hand. The positive half pins the new rule;
-    // the negative half stops a future tidy-up from re-importing the old
-    // "second person" sentence next to it.
-    expect(LFG_BOARD_INTRO_BODY).toContain(
-      'A post appears as soon as one person raises a hand',
-    );
-    expect(LFG_BOARD_INTRO_BODY).toContain('upgrades to looking-for-more');
+  it('does not re-import the old quiet-first-hand rule (ROK-1505 AC6)', () => {
     expect(LFG_BOARD_INTRO_BODY).not.toContain('stays quiet');
     expect(LFG_BOARD_INTRO_BODY).not.toContain(
       'only created once a **second**',

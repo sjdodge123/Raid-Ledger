@@ -6,8 +6,15 @@
  * real 151-row library on 2026-09-17, `valhiem` returns `Valheim` at 0.33 AND
  * `Valorant` at 0.21 — a single-row fuzzy result is a coincidence of the
  * threshold, not a confident answer, so even one trigram hit is still offered
- * rather than chosen. The only short-circuit is an EXACT normalized title
- * match, which is the same test `/lfg`'s `resolveGameId` already makes.
+ * with the "Did you mean" heading rather than as a match.
+ *
+ * **One confident match means the search returned exactly ONE game** (`kind:
+ * 'single'`), and even that renders as a one-option select (ROK-1658) so the
+ * player sees the search ran and confirms the pick. An EXACT normalized title
+ * — the same test `/lfg`'s `resolveGameId` makes — among several matches is
+ * NOT narrowed: it is the "several candidates" row of the step-3 table, listed
+ * with the exact title first (ROK-1658 amendment 2, "refer to the original
+ * design").
  *
  * The classification is pure so all four outcomes are unit-testable without a
  * database; the two queries live in `lfg-composer-search.db-helpers`.
@@ -29,7 +36,7 @@ export interface LfgComposerGame {
  * would let a future edit quietly auto-select the one-row fuzzy case.
  */
 export type LfgComposerMatch =
-  | { kind: 'exact'; game: LfgComposerGame }
+  | { kind: 'single'; game: LfgComposerGame }
   | { kind: 'candidates'; games: LfgComposerGame[] }
   | { kind: 'fuzzy'; games: LfgComposerGame[] }
   | { kind: 'none' };
@@ -63,24 +70,27 @@ export function classifyComposerMatch(
   matches: LfgComposerGame[],
   fuzzy: LfgComposerGame[] = [],
 ): LfgComposerMatch {
-  const exact = exactHit(matches, term);
-  if (exact) return { kind: 'exact', game: exact };
-  if (matches.length === 1) return { kind: 'exact', game: matches[0] };
+  if (matches.length === 1) return { kind: 'single', game: matches[0] };
   if (matches.length > 1) {
-    return { kind: 'candidates', games: capCandidates(matches) };
+    return {
+      kind: 'candidates',
+      games: capCandidates(exactFirst(matches, term)),
+    };
   }
   if (fuzzy.length > 0) return { kind: 'fuzzy', games: capCandidates(fuzzy) };
   return { kind: 'none' };
 }
 
+/**
+ * The exact-title row (if any) moved to the front; the rest keep their rank.
+ * Runs BEFORE the cap, so an exact title ranked 26th is never cut.
+ */
+function exactFirst(games: LfgComposerGame[], term: string): LfgComposerGame[] {
+  const exact = exactHit(games, term);
+  return exact ? [exact, ...games.filter((g) => g !== exact)] : games;
+}
+
 /** Discord rejects a select with more than 25 options. */
 function capCandidates(games: LfgComposerGame[]): LfgComposerGame[] {
   return games.slice(0, LFG_COMPOSER_MAX_CANDIDATES);
-}
-
-/** True when the outcome renders a candidate select rather than a decision. */
-export function isCandidateOutcome(
-  match: LfgComposerMatch,
-): match is Extract<LfgComposerMatch, { kind: 'candidates' | 'fuzzy' }> {
-  return match.kind === 'candidates' || match.kind === 'fuzzy';
 }
