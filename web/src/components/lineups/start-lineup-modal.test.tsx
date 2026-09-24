@@ -529,7 +529,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
 // ROK-1650 (lane C2): the preset cards stay the Button primitive with
 // role=radio (ruling 6); the scheduling toggle is a Checkbox; public share is a
 // Switch; the channel picker is a Field + Select; raw emerald → success tokens.
-describe('StartLineupModal — form primitives (ROK-1650)', () => {
+describe('StartLineupModal — preset + scheduling primitives (ROK-1650)', () => {
     function renderModal(): void {
         renderWithProviders(
             <StartLineupModal isOpen={true} onClose={vi.fn()} />,
@@ -571,6 +571,15 @@ describe('StartLineupModal — form primitives (ROK-1650)', () => {
             /no time-scheduling poll is created/i,
         );
     });
+
+});
+
+describe('StartLineupModal — share + channel primitives (ROK-1650)', () => {
+    function renderModal(): void {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+    }
 
     it('public share is a Switch named "Public share link" that drives the submit', async () => {
         const user = userEvent.setup();
