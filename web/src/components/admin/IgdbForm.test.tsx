@@ -52,6 +52,20 @@ vi.mock('../../hooks/use-admin-settings', () => ({
     }),
 }));
 
+function resetMocks() {
+    vi.clearAllMocks();
+    mockIgdbStatus.data = null;
+    mockIgdbSyncStatus.data = null;
+    mockUpdateIgdb.isPending = false;
+    mockUpdateIgdb.mutateAsync = vi.fn();
+    mockTestIgdb.isPending = false;
+    mockTestIgdb.mutateAsync = vi.fn();
+    mockClearIgdb.isPending = false;
+    mockClearIgdb.mutateAsync = vi.fn();
+    mockSyncIgdb.isPending = false;
+    mockSyncIgdb.mutateAsync = vi.fn();
+}
+
 /**
  * ROK-1652 ruling 7: a pending button is Button `loading` — aria-disabled +
  * aria-busy (focus stays), and it swallows clicks. Listed in the PR as the
@@ -64,19 +78,7 @@ function expectLoading(btn: HTMLElement) {
 }
 
 describe('IgdbForm — Form rendering', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockIgdbStatus.data = null;
-        mockIgdbSyncStatus.data = null;
-        mockUpdateIgdb.isPending = false;
-        mockUpdateIgdb.mutateAsync = vi.fn();
-        mockTestIgdb.isPending = false;
-        mockTestIgdb.mutateAsync = vi.fn();
-        mockClearIgdb.isPending = false;
-        mockClearIgdb.mutateAsync = vi.fn();
-        mockSyncIgdb.isPending = false;
-        mockSyncIgdb.mutateAsync = vi.fn();
-    });
+    beforeEach(resetMocks);
 
     // ── Form rendering ───────────────────────────────────────────
 
@@ -116,24 +118,6 @@ describe('IgdbForm — Form rendering', () => {
         expect(mockUpdateIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 
-    it('keeps the smoke ids on the Client ID and Client Secret fields', () => {
-        render(<IgdbForm />);
-        expect(screen.getByLabelText('Client ID')).toHaveAttribute('id', 'igdbClientId');
-        expect(screen.getByLabelText('Client Secret')).toHaveAttribute('id', 'igdbClientSecret');
-    });
-
-    it('names the Redirect URI field and its copy button', () => {
-        render(<IgdbForm />);
-        expect(screen.getByLabelText('Redirect URI')).toHaveValue('http://localhost');
-        expect(screen.getByRole('button', { name: 'Copy Redirect URI' })).toBeInTheDocument();
-    });
-
-    it('renders the setup instructions as a neutral token panel', () => {
-        render(<IgdbForm />);
-        const panel = screen.getByText(/Setup Instructions/).closest('p')!.parentElement!;
-        expect(panel).toHaveClass('bg-overlay/30', 'border-edge');
-    });
-
     // ── Unconfigured state ───────────────────────────────────────
 
     it('does not show Test Connection button when not configured', () => {
@@ -159,19 +143,7 @@ describe('IgdbForm — Form rendering', () => {
 });
 
 describe('IgdbForm — Sync Now button', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockIgdbStatus.data = null;
-        mockIgdbSyncStatus.data = null;
-        mockUpdateIgdb.isPending = false;
-        mockUpdateIgdb.mutateAsync = vi.fn();
-        mockTestIgdb.isPending = false;
-        mockTestIgdb.mutateAsync = vi.fn();
-        mockClearIgdb.isPending = false;
-        mockClearIgdb.mutateAsync = vi.fn();
-        mockSyncIgdb.isPending = false;
-        mockSyncIgdb.mutateAsync = vi.fn();
-    });
+    beforeEach(resetMocks);
 
     it('shows Test Connection button when configured', () => {
         mockIgdbStatus.data = { configured: true };
@@ -230,28 +202,6 @@ describe('IgdbForm — Sync Now button', () => {
 
     // ── Sync status display ──────────────────────────────────────
 
-    it.each([
-        ['valid', 'bg-success'],
-        ['expired', 'bg-warning'],
-        ['none', 'bg-dim'],
-    ])('paints the %s token-status dot with %s', (tokenStatus, cls) => {
-        mockIgdbStatus.data = { configured: true, health: { tokenStatus } };
-        const { container } = render(<IgdbForm />);
-        expect(container.querySelector('.w-2.h-2.rounded-full')).toHaveClass(cls);
-    });
-
-    it.each([
-        [true, 'bg-success'],
-        [false, 'bg-danger'],
-    ])('paints the last-API-call dot (success=%s) with %s', (lastApiCallSuccess, cls) => {
-        mockIgdbStatus.data = {
-            configured: true,
-            health: { tokenStatus: 'valid', lastApiCallAt: new Date().toISOString(), lastApiCallSuccess },
-        };
-        const { container } = render(<IgdbForm />);
-        expect(container.querySelectorAll('.w-2.h-2.rounded-full')[1]).toHaveClass(cls);
-    });
-
     it('shows game count from sync status', () => {
         mockIgdbStatus.data = { configured: true };
         mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 123, syncInProgress: false };
@@ -262,19 +212,7 @@ describe('IgdbForm — Sync Now button', () => {
 });
 
 describe('IgdbForm — Password visibility toggle', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockIgdbStatus.data = null;
-        mockIgdbSyncStatus.data = null;
-        mockUpdateIgdb.isPending = false;
-        mockUpdateIgdb.mutateAsync = vi.fn();
-        mockTestIgdb.isPending = false;
-        mockTestIgdb.mutateAsync = vi.fn();
-        mockClearIgdb.isPending = false;
-        mockClearIgdb.mutateAsync = vi.fn();
-        mockSyncIgdb.isPending = false;
-        mockSyncIgdb.mutateAsync = vi.fn();
-    });
+    beforeEach(resetMocks);
 
     it('shows Loading... when sync status data is null', () => {
         mockIgdbStatus.data = { configured: true };
@@ -327,4 +265,52 @@ describe('IgdbForm — Password visibility toggle', () => {
         expect(mockClearIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 
+});
+
+describe('IgdbForm — Fields and panels (ROK-1652)', () => {
+    beforeEach(resetMocks);
+
+    it('keeps the smoke ids on the Client ID and Client Secret fields', () => {
+        render(<IgdbForm />);
+        expect(screen.getByLabelText('Client ID')).toHaveAttribute('id', 'igdbClientId');
+        expect(screen.getByLabelText('Client Secret')).toHaveAttribute('id', 'igdbClientSecret');
+    });
+
+    it('names the Redirect URI field and its copy button', () => {
+        render(<IgdbForm />);
+        expect(screen.getByLabelText('Redirect URI')).toHaveValue('http://localhost');
+        expect(screen.getByRole('button', { name: 'Copy Redirect URI' })).toBeInTheDocument();
+    });
+
+    it('renders the setup instructions as a neutral token panel', () => {
+        render(<IgdbForm />);
+        const panel = screen.getByText(/Setup Instructions/).closest('p')!.parentElement!;
+        expect(panel).toHaveClass('bg-overlay/30', 'border-edge');
+    });
+});
+
+describe('IgdbForm — Health dots (ROK-1652)', () => {
+    beforeEach(resetMocks);
+
+    it.each([
+        ['valid', 'bg-success'],
+        ['expired', 'bg-warning'],
+        ['none', 'bg-dim'],
+    ])('paints the %s token-status dot with %s', (tokenStatus, cls) => {
+        mockIgdbStatus.data = { configured: true, health: { tokenStatus } };
+        const { container } = render(<IgdbForm />);
+        expect(container.querySelector('.w-2.h-2.rounded-full')).toHaveClass(cls);
+    });
+
+    it.each([
+        [true, 'bg-success'],
+        [false, 'bg-danger'],
+    ])('paints the last-API-call dot (success=%s) with %s', (lastApiCallSuccess, cls) => {
+        mockIgdbStatus.data = {
+            configured: true,
+            health: { tokenStatus: 'valid', lastApiCallAt: new Date().toISOString(), lastApiCallSuccess },
+        };
+        const { container } = render(<IgdbForm />);
+        expect(container.querySelectorAll('.w-2.h-2.rounded-full')[1]).toHaveClass(cls);
+    });
 });
