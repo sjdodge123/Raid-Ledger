@@ -65,7 +65,9 @@ describe('useStartLineupForm — isDirty', () => {
         act(() => result.current.setField('includeSchedulingPhase', false));
         expect(result.current.isDirty).toBe(true);
     });
+});
 
+describe('useStartLineupForm — the mount snapshot', () => {
     it('is clean again when edited values return to their snapshot', () => {
         const { result } = setup();
         const original = result.current.fields.title;

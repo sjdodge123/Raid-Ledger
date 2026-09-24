@@ -8,7 +8,6 @@
  * canonical match-shape + phase-duration values; the scheduling toggle controls
  * whether the lineup advances into a scheduling poll after Decided.
  */
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal } from '../ui/modal';
 import { useCreateLineup } from '../../hooks/use-lineups';
@@ -32,63 +31,22 @@ import {
   PlayerCapsNote,
   MoreOptions,
 } from './start-lineup-presets';
-import { LINEUP_PRESETS, type PresetKey } from './start-lineup-config';
+import {
+  useStartLineupForm,
+  type DurationState,
+  type StartLineupFields,
+  type StartLineupForm,
+} from './use-start-lineup-dirty';
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
 }
 
-function defaultTitle(): string {
-  const now = new Date();
-  const month = now.toLocaleString('en-US', { month: 'long' });
-  return `Lineup — ${month} ${now.getFullYear()}`;
-}
-
-const DEFAULT_BUILDING_HOURS = 48;
-const DEFAULT_VOTING_HOURS = 24;
-
-function useDurationState() {
-  const [building, setBuilding] = useState<number | ''>('');
-  const [voting, setVoting] = useState<number | ''>('');
-  const [matchThreshold, setMatchThreshold] = useState<number>(35);
-  const [votesPerPlayer, setVotesPerPlayer] = useState<number>(3);
-  const [tiebreakerMode, setTiebreakerMode] =
-    useState<'bracket' | 'veto' | null>('bracket');
-  // ROK-1444: null = off (deadline-only advancement), the default.
-  const [nominationTargetPct, setNominationTargetPct] = useState<number | null>(
-    null,
-  );
-  const buildingVal = building === '' ? DEFAULT_BUILDING_HOURS : building;
-  const votingVal = voting === '' ? DEFAULT_VOTING_HOURS : voting;
-
-  return {
-    building: buildingVal,
-    voting: votingVal,
-    matchThreshold,
-    votesPerPlayer,
-    tiebreakerMode,
-    nominationTargetPct,
-    setNominationTargetPct,
-    setBuilding,
-    setVoting,
-    setMatchThreshold,
-    setVotesPerPlayer,
-    setTiebreakerMode,
-  };
-}
-
 /** Build the create-lineup mutation payload from the modal's form state. */
-function buildCreatePayload(state: {
-  title: string;
-  description: string;
-  durations: ReturnType<typeof useDurationState>;
-  channelOverrideId: string;
-  visibility: 'public' | 'private';
-  inviteeUserIds: number[];
-  publicShareEnabled: boolean;
-  includeSchedulingPhase: boolean;
-}) {
+function buildCreatePayload(
+  state: StartLineupFields & { durations: DurationState },
+) {
   const { durations } = state;
   return {
     title: state.title.trim(),
@@ -123,50 +81,65 @@ function buildCreatePayload(state: {
   };
 }
 
+/** The advanced controls behind "More options" (ROK-1302). */
+function StartLineupMoreOptions({ form }: { form: StartLineupForm }) {
+  return (
+    <MoreOptions>
+      <div className="border-t border-edge/30 pt-4">
+        <ThresholdSlider
+          value={form.durations.matchThreshold}
+          onChange={form.onThreshold}
+        />
+      </div>
+      <VotesPerPlayerSlider
+        value={form.durations.votesPerPlayer}
+        onChange={form.onVotes}
+      />
+      <PlayerCapsNote />
+      <NominationTargetControl
+        value={form.durations.nominationTargetPct}
+        onChange={form.durations.setNominationTargetPct}
+      />
+      <SchedulingPhaseToggle
+        enabled={form.fields.includeSchedulingPhase}
+        onChange={(v) => form.setField('includeSchedulingPhase', v)}
+      />
+      <LineupChannelOverrideSelect
+        value={form.fields.channelOverrideId}
+        onChange={(v) => form.setField('channelOverrideId', v)}
+      />
+      <p className="text-sm text-muted">
+        Configure the duration for each phase. The lineup automatically
+        advances through phases when time expires.
+      </p>
+      <DurationSlider
+        label="Building Phase"
+        name="buildingDurationHours"
+        testId="building-duration"
+        value={form.durations.building}
+        onChange={form.onBuilding}
+      />
+      <DurationSlider
+        label="Voting Phase"
+        name="votingDurationHours"
+        testId="voting-duration"
+        value={form.durations.voting}
+        onChange={form.onVoting}
+      />
+      <TiebreakerPicker
+        value={form.durations.tiebreakerMode}
+        onChange={form.durations.setTiebreakerMode}
+      />
+    </MoreOptions>
+  );
+}
+
 export function StartLineupModal({ isOpen, onClose }: Props) {
   const navigate = useNavigate();
   const createLineup = useCreateLineup();
-  const durations = useDurationState();
-  const [title, setTitle] = useState<string>(defaultTitle);
-  const [description, setDescription] = useState<string>('');
-  const [channelOverrideId, setChannelOverrideId] = useState<string>('');
-  // ROK-1065: visibility + invitees.
-  const [visibility, setVisibility] = useState<'public' | 'private'>('public');
-  const [inviteeUserIds, setInviteeUserIds] = useState<number[]>([]);
-  // ROK-1067: public-share toggle (default ON; forced false for private).
-  const [publicShareEnabled, setPublicShareEnabled] = useState<boolean>(true);
-  // ROK-1302: preset selection + scheduling-phase opt-in (default ON).
-  const [preset, setPreset] = useState<PresetKey>('custom');
-  const [includeSchedulingPhase, setIncludeSchedulingPhase] =
-    useState<boolean>(true);
-
-  function applyPreset(key: PresetKey): void {
-    setPreset(key);
-    if (key === 'custom') return;
-    const p = LINEUP_PRESETS[key];
-    durations.setMatchThreshold(p.matchThreshold);
-    durations.setVotesPerPlayer(p.votesPerPlayer);
-    durations.setBuilding(p.buildingDurationHours);
-    durations.setVoting(p.votingDurationHours);
-  }
-
-  // Any manual match-shape / duration edit drops the preset back to Custom.
-  function onThreshold(v: number): void {
-    durations.setMatchThreshold(v);
-    setPreset('custom');
-  }
-  function onVotes(v: number): void {
-    durations.setVotesPerPlayer(v);
-    setPreset('custom');
-  }
-  function onBuilding(v: number | ''): void {
-    durations.setBuilding(v);
-    setPreset('custom');
-  }
-  function onVoting(v: number | ''): void {
-    durations.setVoting(v);
-    setPreset('custom');
-  }
+  const form = useStartLineupForm();
+  const { fields, setField, durations } = form;
+  const { title, visibility, inviteeUserIds } = fields;
 
   const canSubmit =
     title.trim() !== '' &&
@@ -184,16 +157,7 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
     }
     try {
       const result = await createLineup.mutateAsync(
-        buildCreatePayload({
-          title,
-          description,
-          durations,
-          channelOverrideId,
-          visibility,
-          inviteeUserIds,
-          publicShareEnabled,
-          includeSchedulingPhase,
-        }),
+        buildCreatePayload({ ...fields, durations }),
       );
       onClose();
       navigate(`/community-lineup/${result.id}`);
@@ -211,70 +175,30 @@ export function StartLineupModal({ isOpen, onClose }: Props) {
             Description, Visibility + audience. The Preset chooser is the visible
             match-shape control; the raw Threshold/Votes sliders + scheduling
             toggle live under "More options" for advanced tweaking. */}
-        <TitleField value={title} onChange={setTitle} />
-        <PresetChooser value={preset} onChange={applyPreset} />
-        <DescriptionField value={description} onChange={setDescription} />
-        <VisibilityToggle value={visibility} onChange={setVisibility} />
+        <TitleField value={title} onChange={(v) => setField('title', v)} />
+        <PresetChooser value={fields.preset} onChange={form.applyPreset} />
+        <DescriptionField
+          value={fields.description}
+          onChange={(v) => setField('description', v)}
+        />
+        <VisibilityToggle
+          value={visibility}
+          onChange={(v) => setField('visibility', v)}
+        />
         {visibility === 'public' && (
           <PublicShareToggle
-            enabled={publicShareEnabled}
-            onChange={setPublicShareEnabled}
+            enabled={fields.publicShareEnabled}
+            onChange={(v) => setField('publicShareEnabled', v)}
           />
         )}
         {/* ROK-1440: shown for public lineups too — on public it seeds
             known attendees without closing the lineup to anyone else. */}
         <InviteeMultiSelect
           value={inviteeUserIds}
-          onChange={setInviteeUserIds}
+          onChange={(v) => setField('inviteeUserIds', v)}
           mode={visibility}
         />
-        <MoreOptions>
-          <div className="border-t border-edge/30 pt-4">
-            <ThresholdSlider
-              value={durations.matchThreshold}
-              onChange={onThreshold}
-            />
-          </div>
-          <VotesPerPlayerSlider
-            value={durations.votesPerPlayer}
-            onChange={onVotes}
-          />
-          <PlayerCapsNote />
-          <NominationTargetControl
-            value={durations.nominationTargetPct}
-            onChange={durations.setNominationTargetPct}
-          />
-          <SchedulingPhaseToggle
-            enabled={includeSchedulingPhase}
-            onChange={setIncludeSchedulingPhase}
-          />
-          <LineupChannelOverrideSelect
-            value={channelOverrideId}
-            onChange={setChannelOverrideId}
-          />
-          <p className="text-sm text-muted">
-            Configure the duration for each phase. The lineup automatically
-            advances through phases when time expires.
-          </p>
-          <DurationSlider
-            label="Building Phase"
-            name="buildingDurationHours"
-            testId="building-duration"
-            value={durations.building}
-            onChange={onBuilding}
-          />
-          <DurationSlider
-            label="Voting Phase"
-            name="votingDurationHours"
-            testId="voting-duration"
-            value={durations.voting}
-            onChange={onVoting}
-          />
-          <TiebreakerPicker
-            value={durations.tiebreakerMode}
-            onChange={durations.setTiebreakerMode}
-          />
-        </MoreOptions>
+        <StartLineupMoreOptions form={form} />
         <div className="flex justify-end gap-3 pt-2">
           <button
             type="button"
