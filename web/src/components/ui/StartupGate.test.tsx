@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { useEffect } from 'react';
 import { render, screen, act } from '@testing-library/react';
 import { StartupGate } from './StartupGate';
 import { useConnectivityStore } from '../../stores/connectivity-store';
@@ -249,4 +250,29 @@ describe('StartupGate — part 3', () => {
         });
     });
 
+});
+
+// Regression: the app tree was remounted ~300ms after startup because
+// `children` moved child slot when the fading overlay was dropped, wiping
+// state set in that window (the /games ?test=open-lineup-modal smoke flake).
+describe('StartupGate — children survive the fade-out', () => {
+    let mounts = 0;
+    function MountCounter() {
+        useEffect(() => { mounts += 1; }, []);
+        return <div>App Content</div>;
+    }
+    beforeEach(() => {
+        vi.useFakeTimers();
+        mounts = 0;
+        Object.defineProperty(window, 'location', { value: { pathname: '/' }, writable: true });
+        setStoreState({ status: 'online', hasBeenOnline: true, check: vi.fn() });
+    });
+    afterEach(() => { vi.useRealTimers(); });
+
+    it('mounts the app tree once across the 300ms fade (App.tsx passes two children)', () => {
+        render(<StartupGate><span>particles</span><MountCounter /></StartupGate>);
+        act(() => { vi.advanceTimersByTime(400); });
+        expect(screen.getByText('App Content')).toBeInTheDocument();
+        expect(mounts).toBe(1);
+    });
 });

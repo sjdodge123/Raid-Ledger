@@ -43,4 +43,11 @@ describe('FAB', () => {
         expect(button).toHaveAttribute('aria-label', 'Create Event');
     });
 
+    it('stays the md:hidden create FAB at bottom 72 above the tab bar (ROK-1659 guard)', () => {
+        render(<FAB onClick={() => {}} label="Create Event" />);
+        const button = screen.getByRole('button', { name: 'Create Event' });
+        expect(button).toHaveClass('md:hidden', 'bg-emerald-600');
+        expect(button.style.bottom).toBe('72px');
+    });
+
 });

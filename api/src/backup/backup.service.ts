@@ -24,9 +24,12 @@ import {
   dropSchemas,
   cleanupPartialFile,
 } from './backup.helpers';
+import { rotateDailyDir, rotateMigrationDir } from './backup-rotation.helpers';
 
 const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 const DAILY_RETENTION_DAYS = 30;
+/** ROK-1663: newest pre_migration_*.dump snapshots kept (one is written per boot). */
+const MIGRATION_SNAPSHOT_KEEP = 10;
 const DEFAULT_DB_CONTAINER = 'raid-ledger-db';
 
 // ROK-1279: tables whose ROW DATA is excluded from every dump produced by this
@@ -79,6 +82,7 @@ export class BackupService implements OnModuleInit {
 
   onModuleInit(): void {
     this.ensureDirectories();
+    this.rotateMigrationSnapshots();
   }
 
   /** Create backup directories if they don't exist. */
@@ -102,6 +106,7 @@ export class BackupService implements OnModuleInit {
       async () => {
         await this.createDailyBackup();
         this.rotateDailyBackups();
+        this.rotateMigrationSnapshots();
       },
     );
   }
@@ -137,23 +142,22 @@ export class BackupService implements OnModuleInit {
 
   /** Remove daily backups older than retention period. */
   rotateDailyBackups(): number {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - DAILY_RETENTION_DAYS);
-    let removed = 0;
-    try {
-      for (const file of fs.readdirSync(this.dailyDir)) {
-        const filepath = path.join(this.dailyDir, file);
-        if (fs.statSync(filepath).mtime < cutoff) {
-          fs.unlinkSync(filepath);
-          removed++;
-        }
-      }
-    } catch (err) {
-      this.logger.warn(
-        `Backup rotation error: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
+    const removed = rotateDailyDir(this.dailyDir, DAILY_RETENTION_DAYS, (m) =>
+      this.logger.warn(m),
+    );
     if (removed > 0) this.logger.log(`Rotated ${removed} backup(s)`);
+    return removed;
+  }
+
+  /** Keep the newest MIGRATION_SNAPSHOT_KEEP pre_migration_ dumps (warns, never throws). */
+  rotateMigrationSnapshots(): number {
+    const removed = rotateMigrationDir(
+      this.migrationDir,
+      MIGRATION_SNAPSHOT_KEEP,
+      (m) => this.logger.warn(m),
+    );
+    if (removed > 0)
+      this.logger.log(`Pruned ${removed} pre-migration snapshot(s)`);
     return removed;
   }
 

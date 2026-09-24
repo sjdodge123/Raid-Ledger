@@ -239,7 +239,12 @@ test.describe('AI suggestions blend into Common Ground', () => {
     // server applies this to real rows; `aiStubMatchesFilters` mirrors it for
     // stubs. If the mirror breaks, the stub survives a filter nothing else
     // survives — exactly the parity bug this case exists for.
-    const minOwners = page.getByLabel('Min owners');
+    // ROK-1659: the filters sit behind the shared Filters entry — the
+    // toolbar funnel from 1024px, the Filters FAB below. Both are named
+    // "Filters" and only one renders per viewport.
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+    const minOwners = page.getByRole('slider', { name: 'Min owners' });
+    await expect(minOwners).toBeVisible();
     await minOwners.fill(String(FILTER_ABOVE_STUB));
     await expect(tileFor(page, stubGameName)).toHaveCount(0);
   });

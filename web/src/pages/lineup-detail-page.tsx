@@ -217,7 +217,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
   // `isBuilding`, and there is no nominate path post-build.
 
   return (
-    <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 md:pb-4">
+    <div className="max-w-4xl mx-auto px-4 pt-4 pb-24 md:pb-40 lg:pb-4">
       <GraceCountdownBanner
         pendingAdvanceAt={lineup.pendingAdvanceAt}
         status={lineup.status}

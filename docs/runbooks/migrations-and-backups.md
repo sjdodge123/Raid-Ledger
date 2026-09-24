@@ -32,6 +32,14 @@ Copy `api/scripts/run-migrations-with-sentry.ts::reportBootFailure`. Boot-time s
 - `deploy_dev.sh` calls reconcile automatically after an auto-restore from `api/backups/daily/`.
 - **Symptom that means you need reconcile:** `npm run db:migrate -w api` fails with `column/relation X already exists` on a migration whose hash isn't in `drizzle.__drizzle_migrations`.
 
+## Retention (ROK-1663)
+
+Both kinds of dump live under `BACKUP_DIR` (`/data/backups` in both shipped topologies):
+
+- **Daily dumps** (`daily/raid_ledger_*.dump`, 02:00 cron) are kept **30 days** (`DAILY_RETENTION_DAYS`).
+- **Pre-migration snapshots** (`migrations/pre_migration_*.dump`) are written by `api/scripts/docker-entrypoint.sh` on **every** API start, whether or not migrations are pending. `BackupService` keeps only the newest **10** by mtime (`MIGRATION_SNAPSHOT_KEEP`), pruning once at boot and again in the 02:00 cron. `pre_restore_*` and `pre_factory-reset_*` in the same directory are operator-triggered safety nets and are never pruned — delete them by hand in Admin → Backups. A crash loop of more than 10 restarts rotates out the snapshot from before the bad boot; the daily dumps are the rollback floor.
+- Both sit on the **same disk as PGDATA**: they are not a disaster-recovery copy, and a full disk stops Postgres. Off-site copies are the operator's job — download them from Admin → Backups.
+
 ## Restore drill — proving the backups actually restore
 
 `scripts/backup-restore-drill.sh --dump-file <path> --migrations-dir <dir>` restores a daily dump into a throwaway Postgres container **including its `drizzle` schema** (prod dumps keep the migration journal — ROK-1160 D4, operator ruling 2026-09-22; the dev dump path and the in-app restore still exclude it), verifies the restored journal against the image's migrations (`scripts/restore-drill-journal.mjs`: every journal entry's hash is present in `__drizzle_migrations` — extra historical rows, such as an orphaned draft hash, are noted but do not fail — and the newest restored hash = sha256 of the `<tag>.sql` with the greatest `when`), reconciles the journal with the script above, runs five assertion tiers (A1 archive integrity → A5 sanitization), and with `--boot-check` starts the API on a free ephemeral port against the result and asserts `GET /health` (the root probe — the API sets no `/api` prefix). It writes `restore-drill-report.json` at the repo root (`--report <path>` to relocate): `status`, per-tier `findings`, and the restore/reconcile/boot timings. A backup that does not restore is a backup that does not exist.

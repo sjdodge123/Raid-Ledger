@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GamesPage } from './games-page';
+import { GENRE_FILTERS } from './games/games-constants';
 import * as useGamesDiscoverModule from '../hooks/use-games-discover';
 import * as useGameSearchModule from '../hooks/use-game-search';
 
@@ -143,287 +144,163 @@ beforeEach(() => {
     sessionStorage.clear();
 });
 
-describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 1', () => {
+// ============================================================
+// ROK-1659: ONE Filters entry replaces the "Genre Filter" FAB + genre-only
+// sheet and the desktop genre pills. Below 1024px the Filters FAB opens the
+// whole panel in the BottomSheet; at 1024px and up the toolbar funnel opens it
+// inline. Genres are checkboxes inside it; the badge counts ACTIVE filters.
+// ============================================================
+
+/** Open the Filters entry — the FAB below 1024px, the toolbar funnel at 1024px and up; both are named "Filters". */
+function openFilters() {
+    fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
+}
+
+/** Phone/tablet viewport + default data, shared by the two FAB + sheet suites below. */
+function setUpPhoneViewportSuite(): void {
     beforeEach(() => {
         vi.clearAllMocks();
+        isDesktopViewport = false;
         mockDiscover();
         mockSearch();
     });
 
-    describe('Mobile Filter Button', () => {
-        it('renders genre filter button', () => {
-            renderPage();
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            expect(filterBtn).toBeInTheDocument();
-        });
+    afterEach(() => {
+        isDesktopViewport = true;
+    });
+}
 
-        it('renders Genre Filter aria-label on the FAB', () => {
-            renderPage();
-            expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
-        });
+describe('GamesPage — ROK-1659: the Filters FAB + sheet (below 1024px) — opener and genre group', () => {
+    setUpPhoneViewportSuite();
 
-        it('renders funnel icon inside the filter button', () => {
-            renderPage();
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            // FunnelIcon renders as an svg inside the button
-            const svg = filterBtn.querySelector('svg');
-            expect(svg).toBeInTheDocument();
-        });
+    it('renders exactly one Filters opener — the FAB — and neither the genre FAB nor the toolbar funnel', () => {
+        renderPage();
+        expect(screen.getAllByRole('button', { name: /^filters$/i })).toHaveLength(1);
+        expect(screen.getByTestId('filter-fab')).toHaveAccessibleName('Filters');
+        expect(screen.queryByTestId('filter-panel-trigger')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /genre filter/i })).not.toBeInTheDocument();
+    });
 
-        it('does NOT show badge when no genre selected', () => {
-            renderPage();
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            // Badge is a span with text "1" — should not be present
-            expect(filterBtn.querySelector('span.rounded-full')).not.toBeInTheDocument();
-        });
+    it('shows no count badge while no filter is active', () => {
+        renderPage();
+        expect(screen.getByTestId('filter-fab')).not.toHaveAttribute('aria-describedby');
+        expect(screen.getByTestId('filter-fab')).toHaveTextContent(/^$/);
+    });
 
-        it('hides filter button when searching (search query >= 2 chars)', () => {
-            // With our useDebouncedValue mock returning the value directly,
-            // we need the component to have a search query >= 2 chars
-            // We can check this by verifying after entering search text
-            renderPage();
-            const searchInput = screen.getByPlaceholderText('Search games...');
-            fireEvent.change(searchInput, { target: { value: 'wa' } });
+    it('stays up while searching; the genre group turns off with its one-line hint instead', () => {
+        renderPage();
+        fireEvent.change(screen.getByPlaceholderText('Search games...'), { target: { value: 'wa' } });
+        expect(screen.getByTestId('filter-fab')).toBeInTheDocument();
 
-            // After entering 2+ chars, the filter button container should not be in the DOM
-            expect(screen.queryByRole('button', { name: /genre filter/i })).not.toBeInTheDocument();
-        });
+        openFilters();
+        const sheet = screen.getByRole('dialog');
+        expect(within(sheet).getByTestId('genre-filter-group')).toBeDisabled();
+        expect(within(sheet).getByRole('checkbox', { name: 'RPG' })).toBeDisabled();
+        expect(within(sheet).getByTestId('genre-search-hint')).toHaveTextContent(
+            'Search results skip genres, so this group turns off while a search is active.',
+        );
+    });
 
-        it('shows filter button again when search is cleared', () => {
-            renderPage();
-            const searchInput = screen.getByPlaceholderText('Search games...');
-            fireEvent.change(searchInput, { target: { value: 'wa' } });
-            expect(screen.queryByRole('button', { name: /genre filter/i })).not.toBeInTheDocument();
-
-            fireEvent.change(searchInput, { target: { value: '' } });
-            expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
-        });
+    it('keeps the genre group live (and hint-free) while not searching', () => {
+        renderPage();
+        openFilters();
+        const sheet = screen.getByRole('dialog');
+        expect(within(sheet).getByTestId('genre-filter-group')).toBeEnabled();
+        expect(within(sheet).queryByTestId('genre-search-hint')).not.toBeInTheDocument();
     });
 
 });
 
-describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 2', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockDiscover();
-        mockSearch();
+describe('GamesPage — ROK-1659: the Filters FAB + sheet (below 1024px) — contents, badge and Clear all', () => {
+    setUpPhoneViewportSuite();
+
+    it('opens the whole set in the "Filters" sheet: LFG switch, players, owners and all 11 genres', () => {
+        renderPage();
+        openFilters();
+        const sheet = screen.getByRole('dialog');
+        expect(sheet.querySelector('h3')?.textContent).toBe('Filters');
+        expect(within(sheet).getByRole('switch', { name: 'Players are looking' })).toHaveAttribute('aria-checked', 'false');
+        expect(within(sheet).getByRole('radio', { name: 'Any' })).toBeChecked();
+        expect(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' })).not.toBeChecked();
+        const genres = within(within(sheet).getByTestId('genre-filter-group'));
+        expect(genres.getAllByRole('checkbox')).toHaveLength(GENRE_FILTERS.length);
+        for (const genre of GENRE_FILTERS) {
+            expect(genres.getByRole('checkbox', { name: genre.label })).not.toBeChecked();
+        }
     });
 
-    describe('Desktop Genre Filter Pills', () => {
-        it('renders "All" pill on desktop', () => {
-            const { container } = renderPage();
-            const pillsContainer = container.querySelector('.hidden.md\\:flex');
-            expect(pillsContainer).not.toBeNull();
-            const allButton = Array.from(pillsContainer!.querySelectorAll('button')).find(
-                (btn) => btn.textContent?.trim() === 'All',
-            );
-            expect(allButton).toBeInTheDocument();
-        });
+    it('badges the FAB with the active-filter count: one per genre plus the players preset', () => {
+        renderPage();
+        openFilters();
+        const sheet = screen.getByRole('dialog');
+        fireEvent.click(within(sheet).getByRole('checkbox', { name: 'RPG' }));
+        fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Shooter' }));
+        fireEvent.click(within(sheet).getByRole('radio', { name: '4' }));
 
-        it('renders all 11 genre pills on desktop', () => {
-            const { container } = renderPage();
-            const pillsContainer = container.querySelector('.hidden.md\\:flex');
-            expect(pillsContainer).not.toBeNull();
-            // 1 "All" button + 11 genre buttons
-            const buttons = pillsContainer!.querySelectorAll('button');
-            expect(buttons.length).toBe(12);
-        });
+        expect(within(sheet).getByRole('checkbox', { name: 'RPG' })).toBeChecked();
+        expect(screen.getByTestId('filter-fab')).toHaveTextContent('3');
+        expect(screen.getByTestId('filter-fab')).toHaveAttribute('aria-describedby');
     });
 
-    describe('Bottom Sheet behavior', () => {
-        it('bottom sheet has title "Genre Filter"', () => {
-            renderPage();
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            fireEvent.click(filterBtn);
+    it('"Clear all" drops every filter and the badge with it', () => {
+        renderPage();
+        openFilters();
+        const sheet = screen.getByRole('dialog');
+        fireEvent.click(within(sheet).getByRole('checkbox', { name: 'RPG' }));
+        fireEvent.click(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' }));
+        expect(screen.getByTestId('filter-fab')).toHaveTextContent('2');
 
-            // The bottom sheet title renders as an h3 element
-            const dialog = screen.getByRole('dialog');
-            const title = dialog.querySelector('h3');
-            expect(title?.textContent).toBe('Genre Filter');
-        });
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Clear all' }));
 
-        it('renders "All" option in bottom sheet', () => {
-            renderPage();
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-
-            // Inside the dialog, there should be an "All" button
-            const dialog = screen.getByRole('dialog');
-            const allButton = Array.from(dialog.querySelectorAll('button')).find(
-                (btn) => btn.textContent?.includes('All'),
-            );
-            expect(allButton).toBeInTheDocument();
-        });
-
-        it('renders all 11 genre rows in bottom sheet', () => {
-            const genreLabels = ['RPG', 'Shooter', 'Adventure', 'Strategy', 'Simulator', 'Sport', 'Racing', 'Fighting', 'Indie', 'MMORPG', 'MOBA'];
-
-            renderPage();
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-
-            const dialog = screen.getByRole('dialog');
-            for (const label of genreLabels) {
-                const btn = Array.from(dialog.querySelectorAll('button')).find(
-                    (b) => b.textContent?.includes(label),
-                );
-                expect(btn).toBeInTheDocument();
-            }
-        });
-
+        expect(within(sheet).getByRole('checkbox', { name: 'RPG' })).not.toBeChecked();
+        expect(within(sheet).getByRole('checkbox', { name: 'Owned by 2+ members' })).not.toBeChecked();
+        expect(screen.getByTestId('filter-fab')).toHaveTextContent(/^$/);
     });
-
 });
 
-describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 3', () => {
+describe('GamesPage — ROK-1659: the toolbar funnel + inline panel (1024px and up)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        isDesktopViewport = true;
         mockDiscover();
         mockSearch();
     });
 
-    describe('Genre selection', () => {
-        it('selected genre row shows checkmark icon', () => {
-            renderPage();
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn!);
-
-            // Reopen the sheet
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialogAfter = screen.getByRole('dialog');
-            const rpgBtnAfter = Array.from(dialogAfter.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            // CheckIcon is an SVG inside the button
-            const checkIcon = rpgBtnAfter?.querySelector('svg');
-            expect(checkIcon).toBeInTheDocument();
-        });
-
-        it('"All" option shows checkmark when no genre is selected (default state)', () => {
-            renderPage();
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-
-            const dialog = screen.getByRole('dialog');
-            const allBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('All'),
-            );
-            // CheckIcon is an SVG
-            const checkIcon = allBtn?.querySelector('svg');
-            expect(checkIcon).toBeInTheDocument();
-        });
-
-        it('"All" button clears selection and shows checkmark', () => {
-            renderPage();
-            // First select a genre
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn!);
-
-            // Now click "All" to clear
-            const allBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('All'),
-            );
-            fireEvent.click(allBtn!);
-
-            // "All" should now show checkmark (selected state)
-            const checkIcon = allBtn?.querySelector('svg');
-            expect(checkIcon).toBeInTheDocument();
-        });
+    it('puts the funnel in the toolbar and renders no FAB and no genre pill row', () => {
+        renderPage();
+        expect(screen.getByTestId('filter-panel-trigger')).toHaveAccessibleName('Filters');
+        expect(screen.getByTestId('filter-panel-trigger')).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByTestId('filter-fab')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'RPG' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'All' })).not.toBeInTheDocument();
     });
 
-});
+    it('filters the discover rows by the checked genre and badges the funnel', () => {
+        renderPage();
+        expect(screen.getAllByText('Top Shooters').length).toBeGreaterThan(0);
 
-describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 4', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockDiscover();
-        mockSearch();
+        openFilters();
+        expect(screen.getByTestId('filter-panel-trigger')).toHaveAttribute('aria-expanded', 'true');
+        fireEvent.click(screen.getByRole('checkbox', { name: 'RPG' }));
+
+        expect(screen.getAllByText('Popular RPGs').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Top Shooters')).not.toBeInTheDocument();
+        expect(screen.getByTestId('filter-panel-trigger')).toHaveTextContent('1');
     });
 
-    describe('FAB filter button', () => {
-        it('renders FAB with FunnelIcon when genres are available', () => {
-            renderPage();
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            expect(filterBtn).toBeInTheDocument();
-            // FAB renders an SVG icon (FunnelIcon)
-            expect(filterBtn.querySelector('svg')).toBeInTheDocument();
-        });
+    it('shows the genre empty state when no game matches the checked genre', () => {
+        vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
+            data: { rows: [{ slug: 'row-1', category: 'Action', games: [{ ...mockGame, genres: [5] }] }] },
+            isLoading: false,
+            error: null,
+        } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
+        renderPage();
 
-        it('selected genre is reflected inside bottom sheet, not on FAB badge', () => {
-            renderPage();
-            // Select a genre
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn!);
+        openFilters();
+        fireEvent.click(screen.getByRole('checkbox', { name: 'MOBA' }));
 
-            // FAB should NOT contain a badge (no inline badge on FAB)
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            expect(filterBtn.querySelector('span.rounded-full')).not.toBeInTheDocument();
-        });
+        expect(screen.getByText(/Try selecting a different genre/i)).toBeInTheDocument();
     });
-
-});
-
-describe('GamesPage — Genre Filter Bottom Sheet (ROK-337) — part 5', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockDiscover();
-        mockSearch();
-    });
-
-    describe('Genre filter applied to content', () => {
-        it('filters discover rows by selected genre', () => {
-            renderPage();
-            // Initially both carousel categories show (may appear in multiple elements due to carousel + h2 mocks)
-            expect(screen.getAllByText('Popular RPGs').length).toBeGreaterThan(0);
-            expect(screen.getAllByText('Top Shooters').length).toBeGreaterThan(0);
-
-            // Select RPG (genre id 12) — mockGame has genres: [12]
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn!);
-
-            // Only the RPG row should show (Shooter row game has genres [5], not [12])
-            expect(screen.getAllByText('Popular RPGs').length).toBeGreaterThan(0);
-            expect(screen.queryByText('Top Shooters')).not.toBeInTheDocument();
-        });
-
-        it('shows empty state message when no games match selected genre', () => {
-            vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
-                data: {
-                    rows: [
-                        { slug: 'row-1', category: 'Action', games: [{ ...mockGame, genres: [5] }] },
-                    ],
-                },
-                isLoading: false,
-                error: null,
-            } as unknown as ReturnType<typeof useGamesDiscoverModule.useGamesDiscover>);
-
-            renderPage();
-
-            // Select MOBA (genre id 36) — no games have that genre
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const mobaBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('MOBA'),
-            );
-            fireEvent.click(mobaBtn!);
-
-            expect(screen.getByText(/Try selecting a different genre/i)).toBeInTheDocument();
-        });
-    });
-
 });
 
 // ============================================================
@@ -740,7 +617,9 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
 
         const slider = screen.getByRole('slider', { name: /min online players/i });
         expect(slider).toHaveAttribute('type', 'range');
-        expect(screen.getByText('Any')).toBeInTheDocument();
+        // Scoped to the slider's own readout: ROK-1659's Players group has an
+        // "Any" segment too, so a page-wide getByText is ambiguous.
+        expect(slider.closest('label')).toHaveTextContent('Any');
 
         setOnlineMin('4');
         // Scoped to the slider's OWN readout: ROK-1525's player-count chips put
@@ -770,18 +649,13 @@ describe('GamesPage — ROK-1402: co-op FilterPanel — part 2', () => {
         expect(screen.getByTestId(COOP_HINT)).toBeInTheDocument();
     });
 
-    it('intersects the co-op predicate with the genre pills', () => {
+    it('intersects the co-op predicate with the genre checkboxes in the same panel', () => {
         renderPage();
         openCoopPanel();
         setOnlineMin('4');
 
-        // Select RPG (genre id 12) from the mobile genre sheet.
-        fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-        const dialog = screen.getByRole('dialog');
-        const rpgBtn = Array.from(dialog.querySelectorAll('button')).find((b) =>
-            b.textContent?.includes('RPG'),
-        );
-        fireEvent.click(rpgBtn!);
+        // Check RPG (genre id 12) — ROK-1659 moved genres into the one panel.
+        fireEvent.click(screen.getByRole('checkbox', { name: 'RPG' }));
 
         expect(rowCount('Coop Row')).toBeGreaterThan(0);
         expect(rowCount('Shooter Coop Row')).toBe(0);
@@ -891,19 +765,20 @@ describe('GamesPage — ROK-1402: the whole section is dormant without co-op dat
         mockSearch();
     });
 
-    it('renders no trigger, no slider and no toggles when nothing has co-op data', () => {
+    it('renders no co-op group, no slider and no toggles when nothing has co-op data', () => {
         mockNoCoopDiscover();
         renderPage();
 
-        // Pre-activation the page must look exactly as it did before ROK-1402.
-        expect(screen.queryByRole('button', { name: /^filters$/i })).not.toBeInTheDocument();
+        // ROK-1659: the Filters entry itself always exists now (it holds LFG,
+        // players, owners and genres), so dormancy is the co-op GROUP inside it.
+        openCoopPanel();
+        expect(screen.getByTestId('genre-filter-group')).toBeInTheDocument();
+        expect(screen.queryByTestId('coop-filter-group')).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/min online players/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/couch co-op/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/lan co-op/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/split-screen/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/co-op campaign/i)).not.toBeInTheDocument();
-        // The genre FAB — the page's pre-existing filter affordance — is untouched.
-        expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
     });
 
     it('activates the whole section once one loaded game is enriched', () => {
@@ -926,7 +801,9 @@ describe('GamesPage — ROK-1402: the whole section is dormant without co-op dat
 
         expect(rowCount('Solo Row')).toBeGreaterThan(0);
         expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /^filters$/i })).not.toBeInTheDocument();
+        expect(screen.queryByTestId('coop-filter-group')).not.toBeInTheDocument();
+        // The inert restored predicate must not count on the badge either.
+        expect(screen.getByTestId('filter-panel-trigger')).toHaveTextContent(/^$/);
     });
 });
 

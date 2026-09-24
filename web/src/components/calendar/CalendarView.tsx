@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
 import { enUS } from 'date-fns/locale';
@@ -41,6 +41,10 @@ interface CalendarViewProps {
     gameTimeSlots?: Set<string>;
     calendarView?: CalendarViewMode;
     onCalendarViewChange?: (view: CalendarViewMode) => void;
+    /** ROK-1662: rendered at the right end of the month/week/day toolbar (the page's Filters funnel). */
+    toolbarAction?: ReactNode;
+    /** ROK-1662: rendered between the toolbar and the grid (the page's inline Filters panel). */
+    belowToolbar?: ReactNode;
 }
 
 function useCalendarDate(controlledDate?: Date, onDateChange?: (d: Date) => void) {
@@ -162,14 +166,16 @@ function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, 
     return { MonthEventWrapper, WeekEventWrapper, DayEventWrapper };
 }
 
-function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handleSelectEvent, wrappers, calendarView, onCalendarViewChange }: {
+function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handleSelectEvent, wrappers, calendarView, onCalendarViewChange, toolbarAction, belowToolbar }: {
     s: ReturnType<typeof useCalendarViewState>; className: string; isHeaderHidden: boolean;
     eventPropGetter: (e: CalendarEvent) => { style: React.CSSProperties }; handleSelectEvent: (e: CalendarEvent) => void;
     wrappers: ReturnType<typeof useEventWrappers>; calendarView: CalendarViewMode | undefined; onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined;
+    toolbarAction?: ReactNode; belowToolbar?: ReactNode;
 }) {
     return (
         <div className={`calendar-container calendar-view-${s.view} ${className}`}>
-            <CalendarToolbar view={s.view} currentDate={s.currentDate} tzAbbr={s.tzAbbr} isHeaderHidden={isHeaderHidden} calendarView={calendarView} onPrev={s.handlePrev} onNext={s.handleNext} onToday={s.handleToday} onViewChange={s.setView} />
+            <CalendarToolbar view={s.view} currentDate={s.currentDate} tzAbbr={s.tzAbbr} isHeaderHidden={isHeaderHidden} calendarView={calendarView} onPrev={s.handlePrev} onNext={s.handleNext} onToday={s.handleToday} onViewChange={s.setView} action={toolbarAction} />
+            {belowToolbar}
             {(s.isLoading || (s.isFetching && s.calendarEvents.length === 0)) && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
             <div className="calendar-grid-wrapper">
                 <Calendar key={s.view} localizer={localizer} events={s.calendarEvents} date={s.currentDate} view={s.view}
@@ -215,9 +221,24 @@ function useCalendarInteractions(
     return { handleSelectEvent, eventPropGetter, wrappers };
 }
 
+/**
+ * ROK-1662: Schedule view has no month/week/day toolbar, but a page that was loaded
+ * phone-width (Schedule is the phone default) and then widened past 1024px must still
+ * reach its filters — so the funnel sits in its own right-aligned row with the panel
+ * under it. Both slots render nothing below 1024px (the page's Filters FAB takes over).
+ */
+function ScheduleFilterSlots({ toolbarAction, belowToolbar }: { toolbarAction?: ReactNode; belowToolbar?: ReactNode }) {
+    return (
+        <>
+            <div className="flex justify-end mb-3 empty:hidden">{toolbarAction}</div>
+            {belowToolbar}
+        </>
+    );
+}
+
 export function CalendarView({
     className = '', currentDate: controlledDate, onDateChange, selectedGames,
-    gameTimeSlots, calendarView, onCalendarViewChange,
+    gameTimeSlots, calendarView, onCalendarViewChange, toolbarAction, belowToolbar,
 }: CalendarViewProps) {
     const s = useCalendarViewState(controlledDate, onDateChange, calendarView, selectedGames);
     const scrollDirection = useScrollDirection();
@@ -228,6 +249,7 @@ export function CalendarView({
     if (s.isScheduleView) {
         return (
             <div className={`min-w-0 ${className}`}>
+                <ScheduleFilterSlots toolbarAction={toolbarAction} belowToolbar={belowToolbar} />
                 {s.isLoading && <div className="flex items-center justify-center py-16 gap-2 text-muted"><div className="loading-spinner" /><span>Loading events...</span></div>}
                 {!s.isLoading && <ScheduleView events={s.calendarEvents} currentDate={s.currentDate} onDateChange={s.setCurrentDate} onSelectEvent={handleSelectEvent} eventOverlapsGameTime={eventOverlapsGameTime} isFetching={s.isFetching} />}
             </div>
@@ -235,5 +257,6 @@ export function CalendarView({
     }
 
     return <CalendarGridBody s={s} className={className} isHeaderHidden={isHeaderHidden} eventPropGetter={eventPropGetter}
-        handleSelectEvent={handleSelectEvent} wrappers={wrappers} calendarView={calendarView} onCalendarViewChange={onCalendarViewChange} />;
+        handleSelectEvent={handleSelectEvent} wrappers={wrappers} calendarView={calendarView} onCalendarViewChange={onCalendarViewChange}
+        toolbarAction={toolbarAction} belowToolbar={belowToolbar} />;
 }

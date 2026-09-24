@@ -18,19 +18,16 @@ import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import { useNominateGame } from '../../../hooks/use-lineups';
 import { useAuth } from '../../../hooks/use-auth';
 import { CommonGroundHero } from './CommonGroundHero';
-import { CommonGroundFilters } from '../CommonGroundFilters';
+import { CommonGroundFilterEntry } from '../CommonGroundFilters';
+import { commonGroundActiveFilterCount } from '../common-ground-filter-count';
 import { useCommonGroundState } from '../use-common-ground-state';
 import { MyNominationsDrawer } from './MyNominationsDrawer';
 import { ExistingNominations } from './ExistingNominations';
-import {
-  StickyHeroSearchButton,
-  StickyHeroJumpButton,
-  StickyHeroBackButton,
-} from './sticky-hero-buttons';
+import { StickyHeroJumpButton } from './sticky-hero-buttons';
+import { SearchInput } from '../../ui/search-input';
+import { FilterEntryTrigger } from '../../ui/filter-entry';
 import { GameResearchDrawer } from '../../games/GameResearchDrawer';
 import { LineupHeroMeta } from '../LineupHeroMeta';
-
-type CommonGroundMode = 'suggestions' | 'search';
 
 export interface NominatingCompositeProps {
   lineup: LineupDetailResponseDto;
@@ -132,21 +129,17 @@ export function NominatingComposite(
   const { user } = useAuth();
   const viewerId = user?.id ?? null;
   const [drawerGameId, setDrawerGameId] = useState<number | null>(null);
-  // ROK-1297 round-5b: search mode lives here (lifted from CommonGroundHero)
-  // so the sticky JourneyHero header can host a duplicate Search trigger
-  // that's reachable even when scrolled past the panel.
-  const [commonGroundMode, setCommonGroundMode] =
-    useState<CommonGroundMode>('suggestions');
+  // ROK-1659: the Common Ground filters sit behind the shared funnel
+  // standard — toolbar funnel from 1024px, Filters FAB + sheet below.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   // ROK-1297 round 5h: replace the smooth-scroll-to-section flow with a
   // proper drawer so the user can review/remove their nominations
   // without leaving the Common Ground context.
   const [nominationsDrawerOpen, setNominationsDrawerOpen] = useState(false);
   const nominate = useNominateGame();
   // ROK-1297 round 5l: own the Common Ground state at the composite level
-  // so the sticky JourneyHero can render the CommonGroundFilters inline
-  // (the filters need to live INSIDE the sticky wrapper — operator
-  // feedback: tapping Search halfway down the page should reveal filters
-  // right there, not back at the Common Ground panel).
+  // so the sticky JourneyHero hosts the search box and the filter entry
+  // (reachable halfway down the page, not back at the Common Ground panel).
   const commonGroundState = useCommonGroundState(lineup.id, canParticipate);
   const {
     mergedData,
@@ -163,18 +156,15 @@ export function NominatingComposite(
   } = commonGroundState;
   const stickyHeaderRef = useRef<HTMLDivElement | null>(null);
 
-  // ROK-1297 round 5r: when the typed query changes WHILE in search mode,
-  // the filtered Common Ground response may collapse from N tiles to a
+  // ROK-1297 round 5r: when the typed query changes, the filtered Common Ground response may collapse from N tiles to a
   // few — the user's existing scroll position can land them deep inside
   // a now-tiny grid (or off the bottom of it), with the matching tile
   // visually behind the expanded sticky. Re-anchor on query change so
   // the first tile lands just below the sticky.
   //
-  // This is distinct from auto-scrolling on the Search button press
-  // (which the operator rejected): we only adjust scroll position when
-  // the user has actively typed a new query.
+  // We only adjust scroll position when the user has actively typed a new
+  // query (auto-scrolling on focus was rejected by the operator).
   useEffect(() => {
-    if (commonGroundMode !== 'search') return;
     if (!search.trim()) return;
     const id = requestAnimationFrame(() => {
       const cg = document.querySelector('[data-testid="common-ground-hero"]');
@@ -189,7 +179,7 @@ export function NominatingComposite(
       window.scrollBy({ top: delta, behavior: 'smooth' });
     });
     return () => cancelAnimationFrame(id);
-  }, [search, commonGroundMode]);
+  }, [search]);
 
   const myNominatedCount = useMemo(() => {
     if (viewerId == null) return 0;
@@ -212,11 +202,11 @@ export function NominatingComposite(
       data-testid="nominating-composite-view"
       className="space-y-3"
     >
-      {/* Sticky JourneyHero toolbar (ROK-1297 round 5b): hosts the Search
-          trigger, the jump-to-nominations affordance and the inline filter
-          bar, and stays pinned under the global Header (`top-14`) at EVERY
-          width so those controls remain reachable while the user scrolls
-          through Common Ground tiles.
+      {/* Sticky JourneyHero toolbar (ROK-1297 round 5b): hosts the search
+          box, the Filters funnel (1024px and up), the jump-to-nominations
+          affordance and the inline filter panel, and stays pinned under the
+          global Header (`top-14`) at EVERY width so those controls remain
+          reachable while the user scrolls through Common Ground tiles.
 
           ROK-1601: it no longer auto-hides on mobile scroll-down. The hide
           translated the sticky box off-screen, but a transform does not
@@ -238,16 +228,20 @@ export function NominatingComposite(
           }
         />
         <div className="flex items-center gap-2 mt-2 px-1">
-          {commonGroundMode === 'search' ? (
-            <StickyHeroBackButton
-              onClick={() => setCommonGroundMode('suggestions')}
+          <div className="flex-1 min-w-0">
+            <SearchInput
+              value={search}
+              onChange={setSearch}
+              label="Search games"
+              placeholder="Search games..."
+              data-testid="sticky-hero-search"
             />
-          ) : (
-            <StickyHeroSearchButton
-              onClick={() => setCommonGroundMode('search')}
-              disabled={false}
-            />
-          )}
+          </div>
+          <FilterEntryTrigger
+            activeCount={commonGroundActiveFilterCount(filters, coopDataAvailable)}
+            isOpen={filtersOpen}
+            onOpenChange={setFiltersOpen}
+          />
           {lineup.entries.length > 0 && (
             <StickyHeroJumpButton
               count={lineup.entries.length}
@@ -255,36 +249,18 @@ export function NominatingComposite(
             />
           )}
         </div>
-        {/* ROK-1297 round 5l: filter bar lives INSIDE the sticky wrapper.
-            Tapping Search while scrolled deep into Common Ground expands
-            the filters right there, not back at the panel header (which
-            could be off-screen). */}
-        {/* ROK-1297 round 5q: switch from grid-template-rows 0fr↔1fr to
-            max-height. Browsers transition max-height reliably on every
-            toggle; the grid-rows trick worked on first open but the
-            second cycle could skip the animation. 600px is a sane cap
-            for the four-control filter bar at our widest breakpoint —
-            the natural height never exceeds that, so the transition
-            visually completes at the natural size. */}
-        <div
-          className="overflow-hidden transition-[max-height] duration-300 ease-in-out"
-          style={{
-            maxHeight: commonGroundMode === 'search' ? '600px' : '0px',
-          }}
-        >
-          <div className="mt-2 px-1">
-            <div className="p-3 rounded-md border border-emerald-500/30 bg-surface shadow-lg">
-              <CommonGroundFilters
-                filters={filters}
-                onChange={setFilters}
-                search={search}
-                onSearchChange={setSearch}
-                participantCount={participantCount}
-                suppressAutoSeed={filtersRestored}
-                coopDataAvailable={coopDataAvailable}
-              />
-            </div>
-          </div>
+        {/* ROK-1659: the inline panel opens right under the toolbar from
+            1024px; below that this renders the Filters FAB + BottomSheet. */}
+        <div className={filtersOpen ? 'px-1 lg:mt-2' : 'px-1'}>
+          <CommonGroundFilterEntry
+            filters={filters}
+            onChange={setFilters}
+            participantCount={participantCount}
+            suppressAutoSeed={filtersRestored}
+            coopDataAvailable={coopDataAvailable}
+            isOpen={filtersOpen}
+            onOpenChange={setFiltersOpen}
+          />
         </div>
       </div>
       <CommonGroundHero
