@@ -143,7 +143,7 @@ describe("UserProfilePage — ActivitySection (ROK-443) — part 1", () => {
       expect(screen.getByText("Game Activity")).toBeInTheDocument();
     });
 
-    it("renders period selector buttons: This Week, This Month, All Time", () => {
+    it("renders the period selector radios: This Week (checked), This Month, All Time", () => {
       const profile = createMockProfile();
       vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
         data: profile,
@@ -154,15 +154,10 @@ describe("UserProfilePage — ActivitySection (ROK-443) — part 1", () => {
 
       renderUserProfilePage();
 
-      expect(
-        screen.getByRole("button", { name: "This Week" }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "This Month" }),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "All Time" }),
-      ).toBeInTheDocument();
+      // ROK-1648: a segmented RadioGroup — the current period is the one checked radio.
+      expect(screen.getByRole("radio", { name: "This Week" })).toBeChecked();
+      expect(screen.getByRole("radio", { name: "This Month" })).not.toBeChecked();
+      expect(screen.getByRole("radio", { name: "All Time" })).not.toBeChecked();
     });
   });
 
@@ -491,7 +486,7 @@ describe("UserProfilePage — ActivitySection (ROK-443) — part 6", () => {
       );
     });
 
-    it("changes period when a different button is clicked", async () => {
+    it("changes period when a different radio is picked", async () => {
       const user = userEvent.setup();
       const profile = createMockProfile();
       vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({
@@ -503,7 +498,7 @@ describe("UserProfilePage — ActivitySection (ROK-443) — part 6", () => {
 
       renderUserProfilePage();
 
-      await user.click(screen.getByRole("button", { name: "This Month" }));
+      await user.click(screen.getByRole("radio", { name: "This Month" }));
 
       expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(
         1,
@@ -523,7 +518,7 @@ describe("UserProfilePage — ActivitySection (ROK-443) — part 6", () => {
 
       renderUserProfilePage();
 
-      await user.click(screen.getByRole("button", { name: "All Time" }));
+      await user.click(screen.getByRole("radio", { name: "All Time" }));
 
       expect(useUserProfileHook.useUserActivity).toHaveBeenCalledWith(1, "all");
     });

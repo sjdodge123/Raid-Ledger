@@ -69,10 +69,14 @@ test.describe('User profile page', () => {
             page.getByRole('heading', { name: 'Game Activity' }),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Period selector buttons are always present
-        await expect(page.getByRole('button', { name: 'This Week' })).toBeVisible({ timeout: 5_000 });
-        await expect(page.getByRole('button', { name: 'This Month' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'All Time' })).toBeVisible();
+        // Period selector is a segmented RadioGroup (ROK-1648) — always present,
+        // with exactly one period checked (This Week by default).
+        const periods = page.getByRole('radiogroup', { name: 'Activity period' });
+        await expect(periods.getByRole('radio', { name: 'This Week' })).toBeVisible({ timeout: 5_000 });
+        await expect(periods.getByRole('radio', { name: 'This Month' })).toBeVisible();
+        await expect(periods.getByRole('radio', { name: 'All Time' })).toBeVisible();
+        await expect(periods.getByRole('radio', { checked: true })).toHaveCount(1);
+        await expect(periods.getByRole('radio', { name: 'This Week' })).toBeChecked();
     });
 
     test('Upcoming Events section is visible', async ({ page }) => {
