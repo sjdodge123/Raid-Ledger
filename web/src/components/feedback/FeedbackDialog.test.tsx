@@ -1,10 +1,11 @@
 /**
  * ROK-1651 AC3 — FeedbackDialog on the shared form primitives: Modal (focus
- * trap, Escape, role=dialog), RadioGroup segmented for the category (no
- * emoji), Field + Textarea with its counter, Checkbox for the logs opt-in,
+ * trap, Escape, role=dialog), RadioGroup for the category (no emoji;
+ * segmented from sm, a list below — 4 segments overflow a 375px phone),
+ * Field + Textarea with its counter, Checkbox for the logs opt-in,
  * a loading Button, and an inline role=alert error (operator ruling).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FeedbackDialog } from './FeedbackDialog';
@@ -40,6 +41,41 @@ describe('FeedbackDialog — category', () => {
         expect(within(group).getByRole('radio', { name: 'Bug' })).toBeChecked();
         await userEvent.click(within(group).getByRole('radio', { name: 'Feature' }));
         expect(props.onCategoryChange).toHaveBeenCalledWith('feature');
+    });
+});
+
+/** Force `useMediaQuery('(min-width: 640px)')` — the sm breakpoint the category layout switches at. */
+function stubViewport(wide: boolean): void {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+        matches: wide && query.includes('640'),
+        media: query, onchange: null,
+        addEventListener: vi.fn(), removeEventListener: vi.fn(),
+        addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
+    }));
+}
+
+function categoryLayout(): { hiddenRadios: boolean[]; stacked: boolean } {
+    const radios = within(screen.getByRole('radiogroup', { name: 'Category' })).getAllByRole('radio');
+    return {
+        hiddenRadios: radios.map((r) => r.classList.contains('sr-only')),
+        stacked: !!radios[0].closest('label')?.parentElement?.classList.contains('flex-col'),
+    };
+}
+
+describe('FeedbackDialog — category layout fits a phone', () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    // 4 segments need ~327px at 16px text; a 375px phone leaves ~287px, so the row scrolled sideways.
+    it('below sm (a 375px phone) stacks the 4 categories as a list of visible radios', () => {
+        stubViewport(false);
+        renderDialog();
+        expect(categoryLayout()).toEqual({ hiddenRadios: [false, false, false, false], stacked: true });
+    });
+
+    it('from sm up keeps the segmented control', () => {
+        stubViewport(true);
+        renderDialog();
+        expect(categoryLayout()).toEqual({ hiddenRadios: [true, true, true, true], stacked: false });
     });
 });
 

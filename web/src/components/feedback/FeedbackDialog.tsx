@@ -12,14 +12,23 @@ import { Field } from '../ui/field';
 import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { Button } from '../ui/button';
+import { useMediaQuery } from '../../hooks/use-media-query';
 
-/** Text-only labels: four segments must fit a 375px phone (ROK-1651 ruling 15). */
+/** Text-only labels (ROK-1651 ruling 15: the emoji is dropped). */
 const CATEGORIES: readonly RadioOption<FeedbackCategory>[] = [
     { value: 'bug', label: 'Bug' },
     { value: 'feature', label: 'Feature' },
     { value: 'improvement', label: 'Improvement' },
     { value: 'other', label: 'Other' },
 ];
+
+/**
+ * Where the four segments fit. Below sm they do not, even emoji-free: at 16px
+ * text they need ~327px and a 375px phone's dialog leaves ~287px, so the row
+ * scrolled sideways. Phones get the stacked list; the sm+ dialog (max-w-md)
+ * has room for the segmented row.
+ */
+const SEGMENTS_FIT = '(min-width: 640px)';
 
 const MIN_LENGTH = 10;
 const MAX_LENGTH = 2000;
@@ -97,9 +106,10 @@ function FeedbackForm({
     category, message, includeClientLogs, sentryError, submitError, isError,
     onCategoryChange, onMessageChange, onIncludeLogsChange,
 }: FormProps): JSX.Element {
+    const segmented = useMediaQuery(SEGMENTS_FIT);
     return (
         <div className="flex flex-col gap-4">
-            <RadioGroup<FeedbackCategory> label="Category" appearance="segmented" options={CATEGORIES}
+            <RadioGroup<FeedbackCategory> label="Category" appearance={segmented ? 'segmented' : 'list'} options={CATEGORIES}
                 value={category} onChange={onCategoryChange} />
             <MessageField message={message} onChange={onMessageChange} />
             {category === 'bug' && (
