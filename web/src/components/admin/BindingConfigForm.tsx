@@ -41,7 +41,6 @@ export function BindingConfigForm({
   const showGameField = f.purpose !== "general-lobby";
   const showVoiceFields =
     f.purpose === "game-voice-monitor" || f.purpose === "general-lobby";
-  const saveDisabled = isSaving || f.gameRequired;
   const purposeId = `binding-purpose-${binding.id}`;
   const gameFieldId = `binding-game-${binding.id}`;
 
@@ -101,12 +100,12 @@ export function BindingConfigForm({
         </p>
       )}
       {saveError && (
-        <p className="text-sm text-red-400" role="alert">
+        <p className="text-sm text-danger" role="alert">
           {saveError}
         </p>
       )}
       <FormActions
-        saveDisabled={saveDisabled}
+        saveDisabled={f.gameRequired}
         isSaving={isSaving}
         onCancel={onCancel}
       />
