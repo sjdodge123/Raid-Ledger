@@ -1,6 +1,9 @@
 import { useState } from 'react';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
 import { PasswordInput, TestResultBanner, CopyableInput, FormTextField } from './admin-form-helpers';
 
 /** Format ISO date as relative time (e.g., "5m ago") */
@@ -18,10 +21,10 @@ function formatRelativeTime(iso: string) {
 
 function IgdbSetupInstructions() {
     return (
-        <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4 mb-6">
+        <div className="bg-overlay/30 border border-edge rounded-lg p-4 mb-6">
             <p className="text-sm text-foreground"><strong>Setup Instructions:</strong></p>
             <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
-                <li>Go to <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-300">Twitch Developer Console</a></li>
+                <li>Go to <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">Twitch Developer Console</a></li>
                 <li>Register or select an application</li>
                 <li>Copy the Client ID and generate a Client Secret</li>
                 <li>These same credentials work for both IGDB and Twitch APIs</li>
@@ -32,15 +35,10 @@ function IgdbSetupInstructions() {
 
 function RedirectUriSection() {
     return (
-        <div className="mb-6">
-            <label className="block text-sm font-medium text-secondary mb-1.5">
-                Redirect URI <span className="text-dim">(paste into Twitch Developer Console)</span>
-            </label>
-            <CopyableInput value="http://localhost" onCopied="Redirect URI copied!" />
-            <p className="text-xs text-dim mt-1.5">
-                Twitch requires a redirect URI when registering your app. IGDB uses client credentials, so this value isn't used — but it must be set.
-            </p>
-        </div>
+        <Field label="Redirect URI" className="mb-6"
+            hint="Paste into the Twitch Developer Console. Twitch requires a redirect URI when registering your app. IGDB uses client credentials, so this value isn't used — but it must be set.">
+            <CopyableInput value="http://localhost" onCopied="Redirect URI copied!" label="Redirect URI" />
+        </Field>
     );
 }
 
@@ -87,20 +85,18 @@ function IgdbActionButtons({ configured, isPending, onTest, onClear }: {
 }) {
     return (
         <div className="flex flex-wrap gap-3 pt-2">
-            <button type="submit" disabled={isPending.save}
-                className="flex-1 py-3 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
-                {isPending.save ? 'Saving...' : 'Save Configuration'}
-            </button>
+            <Button type="submit" variant="primary" size="lg" className="flex-1"
+                loading={isPending.save} loadingLabel="Saving...">
+                Save Configuration
+            </Button>
             {configured && (
                 <>
-                    <button type="button" onClick={onTest} disabled={isPending.test}
-                        className="py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors">
-                        {isPending.test ? 'Testing...' : 'Test Connection'}
-                    </button>
-                    <button type="button" onClick={onClear} disabled={isPending.clear}
-                        className="py-3 px-4 bg-red-600/20 hover:bg-red-600/30 text-red-400 font-semibold rounded-lg transition-colors border border-red-600/50">
+                    <Button variant="secondary" size="lg" onClick={onTest} loading={isPending.test} loadingLabel="Testing...">
+                        Test Connection
+                    </Button>
+                    <Button variant="destructive-soft" size="lg" onClick={onClear} loading={isPending.clear}>
                         Clear
-                    </button>
+                    </Button>
                 </>
             )}
         </div>
@@ -108,9 +104,9 @@ function IgdbActionButtons({ configured, isPending, onTest, onClear }: {
 }
 
 function tokenStatusDotClass(status: string) {
-    if (status === 'valid') return 'bg-emerald-400';
-    if (status === 'expired') return 'bg-yellow-400';
-    return 'bg-gray-400';
+    if (status === 'valid') return 'bg-success';
+    if (status === 'expired') return 'bg-warning';
+    return 'bg-dim';
 }
 
 function tokenStatusLabel(status: string) {
@@ -131,7 +127,7 @@ function HealthInfo({ health }: { health: { tokenStatus: string; tokenExpiresAt?
             </div>
             {health.lastApiCallAt && (
                 <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${health.lastApiCallSuccess ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                    <div className={`w-2 h-2 rounded-full ${health.lastApiCallSuccess ? 'bg-success' : 'bg-danger'}`} />
                     <span className="text-secondary">Last API call: {formatRelativeTime(health.lastApiCallAt)}</span>
                 </div>
             )}
@@ -139,15 +135,10 @@ function HealthInfo({ health }: { health: { tokenStatus: string; tokenExpiresAt?
     );
 }
 
-const SyncSpinner = (
-    <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-);
-
 function SyncStatusBar({ igdbSyncStatus, syncIgdb }: { igdbSyncStatus: ReturnType<typeof useAdminSettings>['igdbSyncStatus']; syncIgdb: ReturnType<typeof useAdminSettings>['syncIgdb'] }) {
-    const isSyncing = syncIgdb.isPending || igdbSyncStatus.data?.syncInProgress;
+    // A server-side sync already running is a validation-style block (native disabled);
+    // our own pending request is Button `loading` (ROK-1652 ruling 7).
+    const inProgress = !!igdbSyncStatus.data?.syncInProgress;
 
     const handleSync = () => {
         syncIgdb.mutateAsync().then((r) => {
@@ -165,11 +156,11 @@ function SyncStatusBar({ igdbSyncStatus, syncIgdb }: { igdbSyncStatus: ReturnTyp
                     <span className="text-dim ml-2">&middot; Last sync {formatRelativeTime(igdbSyncStatus.data.lastSyncAt)}</span>
                 )}
             </div>
-            <button type="button" onClick={handleSync} disabled={!!isSyncing}
-                className="px-4 py-2.5 min-h-[44px] text-sm bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors flex items-center gap-2">
-                {isSyncing && SyncSpinner}
-                {syncIgdb.isPending ? 'Syncing...' : 'Sync Now'}
-            </button>
+            <Button variant="secondary" size="sm" onClick={handleSync} disabled={inProgress}
+                loading={syncIgdb.isPending} loadingLabel="Syncing...">
+                {inProgress && <ArrowPathIcon className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                Sync Now
+            </Button>
         </div>
     );
 }
@@ -185,12 +176,11 @@ export function IgdbForm() {
             <form onSubmit={h.handleSave} className="space-y-4">
                 <FormTextField id="igdbClientId" label="Client ID" value={h.clientId} onChange={h.setClientId}
                     placeholder={placeholder ?? 'Twitch Application Client ID'} />
-                <div>
-                    <label htmlFor="igdbClientSecret" className="block text-sm font-medium text-secondary mb-1.5">Client Secret</label>
+                <Field id="igdbClientSecret" label="Client Secret">
                     <PasswordInput id="igdbClientSecret" value={h.clientSecret} onChange={h.setClientSecret}
                         placeholder={placeholder ?? 'Twitch Application Client Secret'}
                         showPassword={h.showSecret} onToggleShow={() => h.setShowSecret(!h.showSecret)} />
-                </div>
+                </Field>
                 <TestResultBanner result={h.testResult} />
                 <IgdbActionButtons configured={!!h.igdbStatus.data?.configured} isPending={h.isPending}
                     onTest={h.handleTest} onClear={h.handleClear} />
