@@ -21,16 +21,22 @@ const SUGGESTION: DiscoveryCategorySuggestionDto = {
     createdAt: '2026-04-22T00:00:00.000Z',
 };
 
+function renderModal(onSave = vi.fn(), isSaving = false) {
+    render(
+        <DynamicCategoryEditModal
+            isOpen
+            suggestion={SUGGESTION}
+            onClose={() => {}}
+            onSave={onSave}
+            isSaving={isSaving}
+        />,
+    );
+    return onSave;
+}
+
 describe('DynamicCategoryEditModal', () => {
     it('prefills inputs from the suggestion', () => {
-        render(
-            <DynamicCategoryEditModal
-                isOpen
-                suggestion={SUGGESTION}
-                onClose={() => {}}
-                onSave={() => {}}
-            />,
-        );
+        renderModal();
         expect(screen.getByLabelText(/name/i)).toHaveValue('Original Name');
         expect(screen.getByLabelText(/description/i)).toHaveValue(
             'Original description',
@@ -39,14 +45,7 @@ describe('DynamicCategoryEditModal', () => {
 
     it('blocks save and shows validation errors when name is empty', async () => {
         const onSave = vi.fn();
-        render(
-            <DynamicCategoryEditModal
-                isOpen
-                suggestion={SUGGESTION}
-                onClose={() => {}}
-                onSave={onSave}
-            />,
-        );
+        renderModal(onSave);
         fireEvent.change(screen.getByLabelText(/name/i), {
             target: { value: '' },
         });
@@ -57,14 +56,7 @@ describe('DynamicCategoryEditModal', () => {
 
     it('calls onSave with patched fields when valid', async () => {
         const onSave = vi.fn();
-        render(
-            <DynamicCategoryEditModal
-                isOpen
-                suggestion={SUGGESTION}
-                onClose={() => {}}
-                onSave={onSave}
-            />,
-        );
+        renderModal(onSave);
         fireEvent.change(screen.getByLabelText(/name/i), {
             target: { value: 'Renamed' },
         });
@@ -100,19 +92,6 @@ describe('DynamicCategoryEditModal', () => {
  * native `disabled`).
  */
 describe('DynamicCategoryEditModal — Field + Button (ROK-1653)', () => {
-    const renderModal = (onSave = vi.fn(), isSaving = false) => {
-        render(
-            <DynamicCategoryEditModal
-                isOpen
-                suggestion={SUGGESTION}
-                onClose={() => {}}
-                onSave={onSave}
-                isSaving={isSaving}
-            />,
-        );
-        return onSave;
-    };
-
     it('an empty name on Save marks Name aria-invalid, described by a role=alert "Name is required"', async () => {
         renderModal();
         // Exact label, mirroring the smoke's getByLabel(/^Name$/i): no asterisk.
