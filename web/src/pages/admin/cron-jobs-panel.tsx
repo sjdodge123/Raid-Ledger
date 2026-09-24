@@ -4,7 +4,10 @@ import { SparklesIcon } from '@heroicons/react/24/outline';
 import type { CronJobDto } from '@raid-ledger/contract';
 import { useCronJobs } from '../../hooks/use-cron-jobs';
 import { useTimezoneStore } from '../../stores/timezone-store';
-import { formatJobName, THEME_COLORS } from '../cron-jobs/cron-utils';
+import { Button } from '../../components/ui/button';
+import { RadioGroup } from '../../components/ui/radio-group';
+import { Select } from '../../components/ui/select';
+import { formatJobName } from '../cron-jobs/cron-utils';
 import { JobCard } from '../cron-jobs/CronJobCard';
 import { ExecutionHistoryModal, EditScheduleModal } from '../cron-jobs/CronJobModals';
 
@@ -98,64 +101,47 @@ function FilterToolbar({ data, allThemes, activeTheme, onThemeChange, aiOnly, on
 
     return (
         <div className="flex flex-wrap items-center gap-3">
-            <FilterThemeButtons data={data} allThemes={allThemes} activeTheme={activeTheme} onThemeChange={onThemeChange} />
+            <ThemeFilter data={data} allThemes={allThemes} activeTheme={activeTheme} onThemeChange={onThemeChange} />
             {aiCount > 0 && (
-                <button
-                    type="button"
-                    onClick={() => onAiToggle(!aiOnly)}
-                    className={`inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                        aiOnly
-                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                            : 'bg-surface/50 text-muted border-edge hover:text-foreground'
-                    }`}
-                    title="Show only jobs that issue LLM calls"
-                >
-                    <SparklesIcon className="h-3 w-3" aria-hidden />
+                <Button size="sm" variant={aiOnly ? 'secondary' : 'ghost'} aria-pressed={aiOnly}
+                    onClick={() => onAiToggle(!aiOnly)} title="Show only jobs that issue LLM calls">
+                    <SparklesIcon className="h-4 w-4" aria-hidden />
                     AI ({aiCount})
-                </button>
+                </Button>
             )}
             <div className="flex-1" />
-            <select value={sortBy} onChange={(e) => onSortChange(e.target.value as SortOption)}
-                className="px-3 py-1.5 text-xs bg-surface/50 border border-edge rounded-lg text-muted focus:text-foreground focus:outline-none focus:ring-2 focus:ring-success/80">
+            <Select fieldSize="sm" aria-label="Sort jobs" wrapperClassName="w-auto" value={sortBy}
+                onChange={(e) => onSortChange(e.target.value as SortOption)}>
                 <option value="name">Sort: Name</option>
                 <option value="theme">Sort: Theme</option>
                 <option value="status">Sort: Status</option>
-            </select>
+            </Select>
         </div>
     );
 }
 
-function FilterThemeButtons({ data, allThemes, activeTheme, onThemeChange }: {
+/** The radio value standing for "no theme filter" (activeTheme === null). */
+const ALL_THEMES = '__all__';
+
+/**
+ * Theme filter — a segmented RadioGroup (ROK-1653 ruling 6). 'All' is the
+ * reset, so re-clicking the checked theme no longer clears it. The row
+ * scrolls sideways inside its own box when the themes outgrow a phone.
+ */
+function ThemeFilter({ data, allThemes, activeTheme, onThemeChange }: {
     data: CronJobDto[]; allThemes: string[]; activeTheme: string | null; onThemeChange: (theme: string | null) => void;
-}) {
-    return (
-        <div className="flex items-center gap-2 flex-wrap">
-            <ThemeButton label={`All (${data.length})`} isActive={activeTheme === null} activeClass="bg-success/20 text-success border-success/40" onClick={() => onThemeChange(null)} />
-            {allThemes.map((theme) => (
-                <ThemeButton key={theme} label={`${theme} (${data.filter((j: CronJobDto) => j.category === theme).length})`}
-                    isActive={activeTheme === theme} activeClass={THEME_COLORS[theme] || THEME_COLORS['Other']}
-                    onClick={() => onThemeChange(activeTheme === theme ? null : theme)} />
-            ))}
-        </div>
-    );
-}
-
-/** Theme filter pill button */
-function ThemeButton({ label, isActive, activeClass, onClick }: {
-    label: string;
-    isActive: boolean;
-    activeClass: string;
-    onClick: () => void;
 }): JSX.Element {
+    const count = (theme: string) => data.filter((j) => j.category === theme).length;
+    const options = [
+        { value: ALL_THEMES, label: `All (${data.length})` },
+        ...allThemes.map((theme) => ({ value: theme, label: `${theme} (${count(theme)})` })),
+    ];
     return (
-        <button
-            onClick={onClick}
-            className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-colors ${
-                isActive ? activeClass : 'bg-surface/50 text-muted border-edge hover:text-foreground'
-            }`}
-        >
-            {label}
-        </button>
+        <div className="max-w-full overflow-x-auto">
+            <RadioGroup appearance="segmented" label="Filter by theme" hideLabel options={options}
+                className="[&_label]:whitespace-nowrap" value={activeTheme ?? ALL_THEMES}
+                onChange={(v) => onThemeChange(v === ALL_THEMES ? null : v)} />
+        </div>
     );
 }
 
@@ -170,7 +156,7 @@ function CronJobStates({ isLoading, isError, isEmpty }: {
     }
     if (isError) {
         return (
-            <div className="py-12 text-center text-red-400 text-sm">
+            <div className="py-12 text-center text-danger text-sm">
                 Failed to load scheduled jobs. Please try again.
             </div>
         );
