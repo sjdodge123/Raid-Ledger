@@ -39,10 +39,19 @@ function resetMocks() {
     mockClearItad.mutateAsync = vi.fn();
 }
 
-describe('ItadForm', () => {
-    beforeEach(resetMocks);
+/**
+ * ROK-1652 ruling 7: a pending button is Button `loading` — aria-disabled +
+ * aria-busy (focus stays), and it swallows clicks. Listed in the PR as the
+ * equivalent of the old native toBeDisabled(), not a weakening: each case
+ * below also clicks the button and proves the mutation never fires.
+ */
+function expectLoading(btn: HTMLElement) {
+    expect(btn).toHaveAttribute('aria-disabled', 'true');
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+}
 
-    // -- Setup instructions ------------------------------------------------
+describe('ItadForm — setup instructions and API key', () => {
+    beforeEach(resetMocks);
 
     it('renders setup instructions', () => {
         render(<ItadForm />);
@@ -61,11 +70,14 @@ describe('ItadForm', () => {
         );
     });
 
-    // -- API key input -----------------------------------------------------
-
     it('renders API key input field', () => {
         render(<ItadForm />);
         expect(screen.getByLabelText('ITAD API Key')).toBeInTheDocument();
+    });
+
+    it('keeps the #itadApiKey id the smoke spec targets', () => {
+        render(<ItadForm />);
+        expect(screen.getByLabelText('ITAD API Key')).toHaveAttribute('id', 'itadApiKey');
     });
 
     it('API key input is type=password by default', () => {
@@ -87,8 +99,10 @@ describe('ItadForm', () => {
         fireEvent.click(toggleBtn);
         expect(input.type).toBe('text');
     });
+});
 
-    // -- Save Configuration button -----------------------------------------
+describe('ItadForm — Save Configuration', () => {
+    beforeEach(resetMocks);
 
     it('shows Save Configuration button', () => {
         render(<ItadForm />);
@@ -97,15 +111,19 @@ describe('ItadForm', () => {
         ).toBeInTheDocument();
     });
 
-    it('Save Configuration button is disabled when save is pending', () => {
+    it('Save Configuration button is loading and swallows the submit when save is pending', () => {
         mockUpdateItad.isPending = true;
         render(<ItadForm />);
-        expect(
-            screen.getByRole('button', { name: 'Saving...' }),
-        ).toBeDisabled();
+        fireEvent.change(screen.getByLabelText('ITAD API Key'), { target: { value: 'itad-key' } });
+        const btn = screen.getByRole('button', { name: 'Saving...' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockUpdateItad.mutateAsync).not.toHaveBeenCalled();
     });
+});
 
-    // -- Configured state: Test Connection and Clear -----------------------
+describe('ItadForm — configured state', () => {
+    beforeEach(resetMocks);
 
     it('shows Test Connection button when configured', () => {
         mockItadStatus.data = { configured: true };
@@ -123,16 +141,29 @@ describe('ItadForm', () => {
         ).toBeInTheDocument();
     });
 
-    it('Test Connection button is disabled when test is pending', () => {
+    it('Test Connection button is loading and swallows the click when test is pending', () => {
         mockItadStatus.data = { configured: true };
         mockTestItad.isPending = true;
         render(<ItadForm />);
-        expect(
-            screen.getByRole('button', { name: 'Testing...' }),
-        ).toBeDisabled();
+        const btn = screen.getByRole('button', { name: 'Testing...' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockTestItad.mutateAsync).not.toHaveBeenCalled();
     });
 
-    // -- Unconfigured state ------------------------------------------------
+    it('Clear button is loading and swallows the click when clear is pending', () => {
+        mockItadStatus.data = { configured: true };
+        mockClearItad.isPending = true;
+        render(<ItadForm />);
+        const btn = screen.getByRole('button', { name: 'Clear' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockClearItad.mutateAsync).not.toHaveBeenCalled();
+    });
+});
+
+describe('ItadForm — unconfigured state', () => {
+    beforeEach(resetMocks);
 
     it('hides Test Connection button when not configured', () => {
         mockItadStatus.data = { configured: false };
