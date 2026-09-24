@@ -31,7 +31,7 @@ import {
 import { resolveLfgCaller, type LfgCaller } from '../commands/lfg.command';
 import { buildLfgJoinConfirmation } from '../listeners/lfg-join-confirmation.helpers';
 import { LFG_COMPOSER_COPY, LFG_COMPOSER_IDS } from './lfg-composer.constants';
-import { buildComposerModal } from './lfg-composer-card.helpers';
+import { buildComposerModal, gamesPageUrl } from './lfg-composer-card.helpers';
 import {
   buildCandidatesReply,
   buildNoMatchReply,
@@ -112,15 +112,16 @@ export async function renderComposerSearch(
 ): Promise<LfgComposerReply> {
   const term = normalizeComposerTerm(rawTerm);
   const clientUrl = await deps.settingsService.getClientUrl();
-  if (!term) return buildNoMatchReply(term, clientUrl);
+  const gamesUrl = gamesPageUrl(clientUrl, term);
+  if (!term) return buildNoMatchReply(term, gamesUrl);
   const matches = await searchComposerGames(deps.db, term);
   const fuzzy = matches.length
     ? []
     : await searchComposerGamesFuzzy(deps.db, term);
   const match = classifyComposerMatch(term, matches, fuzzy);
-  if (match.kind === 'none') return buildNoMatchReply(term, clientUrl);
+  if (match.kind === 'none') return buildNoMatchReply(term, gamesUrl);
   const games = match.kind === 'single' ? [match.game] : match.games;
-  return buildCandidatesReply(term, games, match.kind === 'fuzzy', clientUrl);
+  return buildCandidatesReply(term, games, match.kind === 'fuzzy', gamesUrl);
 }
 
 /**
@@ -173,7 +174,9 @@ export async function pickComposerGame(
     : null;
   const clientUrl = await deps.settingsService.getClientUrl();
   if (!game) {
-    await interaction.editReply(buildNoMatchReply(term, clientUrl));
+    await interaction.editReply(
+      buildNoMatchReply(term, gamesPageUrl(clientUrl, term)),
+    );
     return;
   }
   await interaction.editReply(

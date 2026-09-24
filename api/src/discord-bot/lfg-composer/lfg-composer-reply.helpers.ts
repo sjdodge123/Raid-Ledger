@@ -33,7 +33,7 @@ import {
   normalizeComposerTerm,
   type LfgComposerOrigin,
 } from './lfg-composer-state.helpers';
-import { buildViewGamesButton } from './lfg-composer-card.helpers';
+import { buildViewGamesLinkButton } from './lfg-composer-card.helpers';
 import type { LfgComposerGame } from './lfg-composer-search.helpers';
 import {
   buildUrgencyRow,
@@ -60,17 +60,17 @@ function buildBackButton(backId: string): ButtonBuilder {
 /**
  * The `← Back` / `View games ↗` tail every results message ends with.
  *
- * @param term - Typed text, carried so Back can reopen the modal prefilled and
- *   so `View games ↗` opens /games already searching for it.
- * @param clientUrl - Deployment client URL; absent drops the link button.
+ * @param term - Typed text, carried so Back can reopen the modal prefilled.
+ * @param gamesUrl - The finished `View games ↗` link, already searching for
+ *   the term (`?q=`); null drops the link button.
  * @returns One action row of one or two buttons.
  */
 export function buildComposerTailRow(
   term: string,
-  clientUrl?: string | null,
+  gamesUrl: string | null,
 ): ActionRowBuilder<ButtonBuilder> {
   const back = buildBackButton(buildBackCustomId(term));
-  const view = buildViewGamesButton(clientUrl, term);
+  const view = buildViewGamesLinkButton(gamesUrl);
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     view ? [back, view] : [back],
   );
@@ -86,14 +86,14 @@ export function buildComposerTailRow(
  * @param term - What was typed.
  * @param games - Ranked candidates, already capped at 25 by the classifier.
  * @param fuzzy - True when these came from the trigram re-query.
- * @param clientUrl - Deployment client URL.
+ * @param gamesUrl - The finished `View games ↗` link, or null for none.
  * @returns The ephemeral reply.
  */
 export function buildCandidatesReply(
   term: string,
   games: LfgComposerGame[],
   fuzzy: boolean,
-  clientUrl?: string | null,
+  gamesUrl: string | null,
 ): LfgComposerReply {
   const shown = normalizeComposerTerm(term);
   const select = new StringSelectMenuBuilder()
@@ -106,7 +106,7 @@ export function buildCandidatesReply(
       : composerCandidatesHeading(games.length, shown),
     components: [
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select),
-      buildComposerTailRow(term, clientUrl),
+      buildComposerTailRow(term, gamesUrl),
     ],
   };
 }
@@ -163,15 +163,15 @@ export function buildUrgencyReply(
  * `View games ↗`. The prototype has no separate `Try again` (ROK-1658).
  *
  * @param term - What was typed and found nothing.
- * @param clientUrl - Deployment client URL.
+ * @param gamesUrl - The finished `View games ↗` link, or null for none.
  * @returns The ephemeral reply.
  */
 export function buildNoMatchReply(
   term: string,
-  clientUrl?: string | null,
+  gamesUrl: string | null,
 ): LfgComposerReply {
   return {
     content: composerNoMatchHeading(normalizeComposerTerm(term)),
-    components: [buildComposerTailRow(term, clientUrl)],
+    components: [buildComposerTailRow(term, gamesUrl)],
   };
 }
