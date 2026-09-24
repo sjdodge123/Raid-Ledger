@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type { UserManagementDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../test/render-helpers';
 import { RoleManagementCard } from './RoleManagementCard';
@@ -88,5 +88,54 @@ describe('RoleManagementCard — moderation flows', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Actions for Kate' }));
         fireEvent.click(screen.getByRole('menuitem', { name: 'Unkick user' }));
         await waitFor(() => expect(mgmt.unkickUser.mutateAsync).toHaveBeenCalledWith(3));
+    });
+});
+
+describe('RoleManagementCard — search (ROK-1653)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    function setupFiltering(items: UserManagementDto[]) {
+        vi.mocked(useUserManagement).mockImplementation((opts) => {
+            const q = opts?.search?.toLowerCase();
+            const shown = q ? items.filter((u) => u.username.toLowerCase().includes(q)) : items;
+            return makeMgmt(shown) as unknown as ReturnType<typeof useUserManagement>;
+        });
+        return renderWithProviders(<RoleManagementCard />);
+    }
+
+    it('renders a searchbox named "Search users" (smoke keys off its placeholder) and typing filters the rows', async () => {
+        setupFiltering([makeUser({ id: 1, username: 'Alice' }), makeUser({ id: 2, username: 'Bob' })]);
+        const search = screen.getByRole('searchbox', { name: 'Search users' });
+        expect(search).toHaveAttribute('placeholder', 'Search users...');
+        expect(screen.getByText('Alice')).toBeInTheDocument();
+        fireEvent.change(search, { target: { value: 'bo' } });
+        await waitFor(() => expect(screen.queryByText('Alice')).not.toBeInTheDocument());
+        expect(screen.getByText('Bob')).toBeInTheDocument();
+    });
+});
+
+describe('RoleManagementCard — Remove modal pending state (ruling 7)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('marks the Remove confirm aria-busy + aria-disabled while pending and swallows the click', () => {
+        const { rerender } = setup([makeUser({ id: 1, username: 'Alice' })]);
+        fireEvent.click(screen.getByRole('button', { name: 'Actions for Alice' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Remove user' }));
+        mgmt.removeUser.isPending = true;
+        rerender(<RoleManagementCard />);
+        const confirm = within(screen.getByRole('dialog')).getByRole('button', { name: /^Removing/ });
+        expect(confirm).toHaveAttribute('aria-busy', 'true');
+        expect(confirm).toHaveAttribute('aria-disabled', 'true');
+        fireEvent.click(confirm);
+        expect(mgmt.removeUser.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('the red callout uses the danger token, not a raw red hue (ruling 9)', () => {
+        setup([makeUser({ id: 1, username: 'Alice' })]);
+        fireEvent.click(screen.getByRole('button', { name: 'Actions for Alice' }));
+        fireEvent.click(screen.getByRole('menuitem', { name: 'Remove user' }));
+        const callout = screen.getByText(/This action cannot be undone/);
+        expect(callout).toHaveClass('text-danger');
+        expect(callout.className).not.toMatch(/red-\d/);
     });
 });
