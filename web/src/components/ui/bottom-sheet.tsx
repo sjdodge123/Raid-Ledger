@@ -20,6 +20,11 @@ interface BottomSheetProps {
     initiallyExpanded?: boolean;
     /** Accessible name when the sheet draws its own header instead of a `title`. */
     ariaLabel?: string;
+    /**
+     * Pinned action row (ROK-1655): a shrink-0 sibling after the scrolling
+     * body, so the body shrinks and scrolls while the footer stays in view.
+     */
+    footer?: React.ReactNode;
 }
 
 const DEFAULT_MAX_HEIGHT = '60vh';
@@ -132,7 +137,7 @@ function useSheetHeights(cap: string) {
 const PANEL_CLASS = 'absolute bottom-0 inset-x-0 flex flex-col bg-surface rounded-t-2xl shadow-2xl '
     + 'pb-[env(safe-area-inset-bottom)] transition-all duration-300 ease-out';
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel }: BottomSheetProps) {
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer }: BottomSheetProps) {
     const sheetRef = useRef<HTMLDivElement>(null);
     const [expanded, setExpanded] = useState(initiallyExpanded);
 
@@ -159,6 +164,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
                 {title && <SheetHeader title={title} onClose={onClose} />}
                 {/* Content-sized; shrinks and scrolls only once the sheet hits its cap. */}
                 <div className="min-h-0 overflow-y-auto px-4 py-4">{children}</div>
+                {footer ? <div className="shrink-0 border-t border-edge px-4 py-3" data-testid="bottom-sheet-footer">{footer}</div> : null}
             </div>
         </div>,
         document.body,
