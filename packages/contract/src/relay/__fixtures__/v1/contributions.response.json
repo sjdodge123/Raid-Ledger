@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "results": [
+    { "clientRef": "101", "result": "created", "rlGameId": "01J8Z3K5QX7H2M4N6P8R9T0V1W" },
+    { "clientRef": "102", "result": "matched", "rlGameId": "01J8Z3K5QX7H2M4N6P8R9T0V1X" }
+  ]
+}
