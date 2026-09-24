@@ -39,7 +39,7 @@ describe('FeedbackWidget — floating trigger', () => {
         render(<FeedbackWidget />);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Send Feedback' }));
-        expect(screen.getByRole('dialog', { name: 'Send Feedback' })).toBeInTheDocument();
+        expect(screen.queryAllByRole('dialog', { name: 'Send Feedback' })).toHaveLength(1);
     });
 });
 
@@ -51,6 +51,6 @@ describe('FeedbackWidget — mobile open path', () => {
         const openFn = onRegisterOpen.mock.calls.at(-1)?.[0] as () => void;
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         act(() => openFn());
-        expect(screen.getByRole('dialog', { name: 'Send Feedback' })).toBeInTheDocument();
+        expect(screen.queryAllByRole('dialog', { name: 'Send Feedback' })).toHaveLength(1);
     });
 });
