@@ -4,13 +4,16 @@
  * to Wed Sep 16 2026 12:00 LOCAL so every assertion is TZ-agnostic.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RescheduleModal } from './RescheduleModal';
 import { useAggregateGameTime } from '../../hooks/use-reschedule';
 
 const mockMutateAsync = vi.fn();
+const mockPollMutateAsync = vi.hoisted(() => vi.fn());
+/** ROK-1649 B8: flip a mutation's `isPending` per test (reset in `setup`). */
+const pending = vi.hoisted(() => ({ reschedule: false, poll: false }));
 vi.mock('../../hooks/use-reschedule', () => ({
     useAggregateGameTime: vi.fn(() => ({
         data: {
@@ -25,12 +28,12 @@ vi.mock('../../hooks/use-reschedule', () => ({
     })),
     useRescheduleEvent: vi.fn(() => ({
         mutateAsync: mockMutateAsync,
-        isPending: false,
+        isPending: pending.reschedule,
     })),
 }));
 
 vi.mock('../../hooks/use-standalone-poll', () => ({
-    useCreateSchedulingPoll: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+    useCreateSchedulingPoll: vi.fn(() => ({ mutateAsync: mockPollMutateAsync, isPending: pending.poll })),
 }));
 
 vi.mock('../../hooks/use-game-time', () => ({
@@ -109,6 +112,8 @@ const NOW = new Date(2026, 8, 16, 12, 0);
 function setup() {
     vi.clearAllMocks();
     media.phone = false;
+    pending.reschedule = false;
+    pending.poll = false;
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(NOW);
 }
@@ -201,13 +206,13 @@ describe('RescheduleModal — picking a cell', () => {
         renderModal();
         fireEvent.click(cell(4, 21));
         expect(screen.getByRole('button', { name: 'Move to Thu Sep 24, 9 PM' })).toBeInTheDocument();
-        expect(screen.getByText('Clear')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
     });
 
     it('Clear resets the selection', () => {
         renderModal();
         fireEvent.click(cell(4, 21));
-        fireEvent.click(screen.getByText('Clear'));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
         expect(screen.queryByRole('button', { name: /^Move to/ })).not.toBeInTheDocument();
         expect(cell(4, 21)).not.toHaveAttribute('data-picked');
     });
@@ -254,34 +259,99 @@ describe('RescheduleModal — duration and manual input', () => {
     beforeEach(setup);
     afterEach(teardown);
 
-    it('renders duration preset buttons', () => {
+    it('renders the duration presets as radios in a group named Duration', () => {
         renderModal();
-        const presetLabels = screen.getAllByRole('button').map(b => b.textContent?.trim());
-        for (const label of ['1h', '1.5h', '2h', '3h', '4h', 'Custom']) expect(presetLabels).toContain(label);
+        const group = screen.getByRole('radiogroup', { name: 'Duration' });
+        for (const label of ['1h', '1.5h', '2h', '3h', '4h', 'Custom']) {
+            expect(within(group).getByRole('radio', { name: label })).toBeInTheDocument();
+        }
+        expect(within(group).getAllByRole('radio')).toHaveLength(6);
     });
 
-    it('original duration preset is highlighted by default', () => {
+    it('original duration preset is checked by default', () => {
         renderModal();
-        expect(screen.getByText('2h').className).toContain('bg-emerald-600');
+        expect(screen.getByRole('radio', { name: '2h' })).toBeChecked();
+        expect(screen.getByRole('radio', { name: 'Custom' })).not.toBeChecked();
     });
 
     it('clicking a different preset changes the active selection', () => {
         renderModal();
-        fireEvent.click(screen.getByText('3h'));
-        expect(screen.getByText('3h').className).toContain('bg-emerald-600');
-        expect(screen.getByText('2h').className).not.toContain('bg-emerald-600');
+        fireEvent.click(screen.getByRole('radio', { name: '3h' }));
+        expect(screen.getByRole('radio', { name: '3h' })).toBeChecked();
+        expect(screen.getByRole('radio', { name: '2h' })).not.toBeChecked();
     });
 
-    it('clicking Custom shows hour/minute inputs', () => {
+    it('clicking Custom shows named hour/minute spinbuttons', () => {
         renderModal();
-        fireEvent.click(screen.getByText('Custom'));
+        expect(screen.queryByRole('spinbutton', { name: 'Duration hours' })).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+        expect(screen.getByRole('radio', { name: 'Custom' })).toBeChecked();
+        expect(screen.getByRole('spinbutton', { name: 'Duration hours' })).toHaveValue(2);
+        expect(screen.getByRole('spinbutton', { name: 'Duration minutes' })).toHaveValue(0);
         expect(screen.getByText('hr')).toBeInTheDocument();
         expect(screen.getByText('min')).toBeInTheDocument();
+    });
+
+    it('a custom duration sets the rescheduled end', () => {
+        mockMutateAsync.mockResolvedValueOnce({});
+        renderModal();
+        fireEvent.click(cell(4, 21));
+        fireEvent.click(screen.getByRole('radio', { name: 'Custom' }));
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Duration hours' }), { target: { value: '3' } });
+        fireEvent.change(screen.getByRole('spinbutton', { name: 'Duration minutes' }), { target: { value: '30' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Move to Thu Sep 24, 9 PM' }));
+        expect(mockMutateAsync).toHaveBeenCalledWith({
+            startTime: new Date(2026, 8, 24, 21).toISOString(),
+            endTime: new Date(2026, 8, 25, 0, 30).toISOString(),
+        });
     });
 
     it('renders datetime-local input for manual start time', () => {
         renderModal();
         expect(startInput().type).toBe('datetime-local');
+        expect(startInput()).toHaveAttribute('id', 'reschedule-start');
+    });
+});
+
+describe('RescheduleModal — buttons and messages (ROK-1649 B8)', () => {
+    beforeEach(setup);
+    afterEach(teardown);
+
+    it('Poll for Best Time shows Converting... while pending and swallows the click', () => {
+        pending.poll = true;
+        renderModal({ gameId: 7 });
+        const btn = screen.getByRole('button', { name: 'Converting...' });
+        expect(btn).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(btn);
+        expect(mockPollMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('Poll for Best Time stays disabled without a game', () => {
+        renderModal();
+        expect(screen.getByRole('button', { name: 'Poll for Best Time' })).toBeDisabled();
+    });
+
+    it('the confirm button shows Rescheduling... while pending and swallows the click', () => {
+        pending.reschedule = true;
+        renderModal();
+        fireEvent.click(cell(4, 21));
+        const btn = screen.getByRole('button', { name: 'Rescheduling...' });
+        expect(btn).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(btn);
+        expect(mockMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('a past start disables Move to and explains in the danger token', () => {
+        renderModal();
+        fireEvent.change(startInput(), { target: { value: '2026-09-10T20:00' } });
+        expect(screen.getByText('Start time must be in the future')).toHaveClass('text-danger');
+        expect(screen.getByRole('button', { name: 'Move to Thu Sep 10, 8 PM' })).toBeDisabled();
+    });
+
+    it('the picked time reads in the success token', () => {
+        renderModal();
+        fireEvent.click(cell(4, 21));
+        expect(screen.getByText('Raid Night').nextElementSibling).toHaveClass('text-success');
     });
 });
 
