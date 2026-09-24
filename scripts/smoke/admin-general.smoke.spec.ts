@@ -70,8 +70,9 @@ test.describe('Admin General panel', () => {
             page.getByRole('heading', { name: 'Community Name', level: 3 }),
         ).toBeVisible({ timeout: 15_000 });
 
-        // Community name input is present
-        const nameInput = page.getByRole('textbox', { name: 'Raid Ledger' });
+        // Community name input is present — named by its Field label (ROK-1653),
+        // no longer by its "Raid Ledger" placeholder.
+        const nameInput = page.getByRole('textbox', { name: 'Community name' });
         await expect(nameInput).toBeVisible({ timeout: 5_000 });
 
         await expect(
