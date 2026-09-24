@@ -38,7 +38,7 @@ export function BotInviteLink(): React.ReactElement {
     return (
         <div className="flex flex-wrap items-center gap-3 mt-2">
             <a href={data.url} target="_blank" rel="noopener noreferrer"
-                className="text-xs underline text-blue-300 hover:text-blue-200 break-all">
+                className="text-xs underline text-success hover:opacity-80 break-all">
                 Invite URL
             </a>
             <Button variant="secondary" size="sm" onClick={() => copyInviteUrl(data.url as string)}>
