@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminGames } from '../../hooks/use-admin-games';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
+import { SearchInput } from '../ui/search-input';
 import { GameActionButtons } from './GameLibraryActions';
 
 interface GameLibraryTableProps {
@@ -145,11 +146,6 @@ export function GameLibraryTable({ showHidden }: GameLibraryTableProps) {
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
 
-    useEffect(() => {
-        const timer = setTimeout(() => setDebouncedSearch(search), 300);
-        return () => clearTimeout(timer);
-    }, [search]);
-
     const h = useGameHandlers(debouncedSearch, showHidden);
     const { items, isLoading, total, isFetchingNextPage, hasNextPage, sentinelRef } = h.games;
 
@@ -158,8 +154,8 @@ export function GameLibraryTable({ showHidden }: GameLibraryTableProps) {
             <h2 className="text-xl font-semibold text-foreground mb-4">Manage Library</h2>
             <div className="sticky md:top-0 z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1"
                 style={{ top: isHeaderHidden ? 75 : 140, transition: 'top 300ms ease-in-out' }}>
-                <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search games..."
-                    className="w-full px-4 py-2.5 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" />
+                <SearchInput label="Search games" placeholder="Search games..." value={search} onChange={setSearch}
+                    onSearch={setDebouncedSearch} debounceMs={300} />
             </div>
             {isLoading && <div className="text-center py-8 text-muted">Loading games...</div>}
             {!isLoading && items.length === 0 && <div className="text-center py-8 text-muted">{emptyMessage(showHidden, !!debouncedSearch)}</div>}
