@@ -4,14 +4,20 @@
  * v1 scope: name + description only. Validated with Zod on submit;
  * errors surface inline below each field through the shared `Field`
  * (aria-invalid + a role=alert message, ROK-1653).
+ *
+ * ROK-1655 (ROK-1653 G5c): an edit is guarded — Escape, the backdrop, × and
+ * Cancel ask "Discard your changes?" — and Cancel / Save sit in the Modal's
+ * pinned footer, Save submitting the form through `form=`. A successful save
+ * closes via the parent nulling `suggestion`, which bypasses the guard.
  */
-import { useId, useState, type JSX } from 'react';
+import { useId, useState, type FormEvent, type JSX } from 'react';
 import { z } from 'zod';
 import type {
     AdminCategoryPatchDto,
     DiscoveryCategorySuggestionDto,
 } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
+import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Input } from '../ui/input';
@@ -22,6 +28,8 @@ const EditSchema = z.object({
     description: z.string().min(1, 'Description is required'),
 });
 
+const FORM_ID = 'dynamic-category-edit-form';
+
 interface DynamicCategoryEditModalProps {
     isOpen: boolean;
     suggestion: DiscoveryCategorySuggestionDto | null;
@@ -30,19 +38,9 @@ interface DynamicCategoryEditModalProps {
     isSaving?: boolean;
 }
 
-function useEditForm(suggestion: DiscoveryCategorySuggestionDto) {
-    const [name, setName] = useState(suggestion.name);
-    const [description, setDescription] = useState(suggestion.description);
-    const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
-    return { name, setName, description, setDescription, errors, setErrors };
-}
-
-interface EditFormBodyProps {
+type EditCategoryModalProps = Omit<DynamicCategoryEditModalProps, 'suggestion'> & {
     suggestion: DiscoveryCategorySuggestionDto;
-    onClose: () => void;
-    onSave: (id: string, patch: AdminCategoryPatchDto) => Promise<void> | void;
-    isSaving?: boolean;
-}
+};
 
 function parseFieldErrors(zodErrors: z.ZodIssue[]) {
     const fieldErrors: { name?: string; description?: string } = {};
@@ -53,22 +51,23 @@ function parseFieldErrors(zodErrors: z.ZodIssue[]) {
     return fieldErrors;
 }
 
-/** Cancel / Save row of the edit modal (ROK-1530 D7; shared Buttons, ROK-1653). */
+/**
+ * Cancel / Save for the pinned footer (ROK-1530 D7; shared Buttons, ROK-1653).
+ * Cancel goes through the guard; Save submits the form it sits outside of.
+ */
 function EditFormActions({
-    onClose,
-    onSave,
+    onCancel,
     isSaving = false,
 }: {
-    onClose: () => void;
-    onSave: () => void;
+    onCancel: () => void;
     isSaving?: boolean;
 }): JSX.Element {
     return (
-        <div className="flex justify-end gap-2 pt-2">
-            <Button variant="secondary" onClick={onClose}>
+        <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={onCancel}>
                 Cancel
             </Button>
-            <Button onClick={onSave} loading={isSaving} loadingLabel="Saving…">
+            <Button type="submit" form={FORM_ID} loading={isSaving} loadingLabel="Saving…">
                 Save
             </Button>
         </div>
@@ -92,7 +91,7 @@ async function validateThenSave(
     await save(parsed.data);
 }
 
-/** The two edit controls, grouped so `EditFormBody` stays short (ROK-1530 D7). */
+/** The two edit controls, grouped so the modal stays short (ROK-1530 D7). */
 interface EditFieldsProps {
     ids: { name: string; description: string };
     values: { name: string; description: string };
@@ -127,56 +126,55 @@ function EditFields({
     );
 }
 
-function EditFormBody({
-    suggestion,
-    onClose,
-    onSave,
-    isSaving,
-}: EditFormBodyProps): JSX.Element {
-    const { name, setName, description, setDescription, errors, setErrors } =
-        useEditForm(suggestion);
-    const nameId = useId();
-    const descId = useId();
-
-    const handleSave = () =>
-        validateThenSave({ name, description }, setErrors, (patch) =>
+/** Draft state, field ids, dirtiness and the submit handler (ROK-1655). */
+function useDynamicCategoryEditForm(
+    suggestion: DiscoveryCategorySuggestionDto,
+    onSave: DynamicCategoryEditModalProps['onSave'],
+) {
+    const [name, setName] = useState(suggestion.name);
+    const [description, setDescription] = useState(suggestion.description);
+    const [errors, setErrors] = useState<{ name?: string; description?: string }>({});
+    const ids = { name: useId(), description: useId() };
+    const isDirty = name !== suggestion.name || description !== suggestion.description;
+    const submit = (e: FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        void validateThenSave({ name, description }, setErrors, (patch) =>
             onSave(suggestion.id, patch),
         );
-
-    return (
-        <div className="space-y-4">
-            <EditFields
-                ids={{ name: nameId, description: descId }}
-                values={{ name, description }}
-                onChange={{ name: setName, description: setDescription }}
-                errors={errors}
-            />
-            <EditFormActions
-                onClose={onClose}
-                onSave={() => void handleSave()}
-                isSaving={isSaving}
-            />
-        </div>
-    );
+    };
+    return { ids, values: { name, description }, onChange: { name: setName, description: setDescription },
+        errors, isDirty, submit };
 }
 
-export function DynamicCategoryEditModal({
+/** Keyed per suggestion, so the draft and the guard start fresh for each one. */
+function EditCategoryModal({
     isOpen,
     suggestion,
     onClose,
     onSave,
     isSaving,
-}: DynamicCategoryEditModalProps): JSX.Element | null {
-    if (!suggestion) return null;
+}: EditCategoryModalProps): JSX.Element {
+    const form = useDynamicCategoryEditForm(suggestion, onSave);
+    const guard = useDirtyCloseGuard(form.isDirty, onClose);
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Edit Category">
-            <EditFormBody
-                key={suggestion.id}
-                suggestion={suggestion}
-                onClose={onClose}
-                onSave={onSave}
-                isSaving={isSaving}
-            />
+        <Modal
+            isOpen={isOpen}
+            onClose={onClose}
+            title="Edit Category"
+            closeGuard={guard}
+            footer={<EditFormActions onCancel={guard.requestClose} isSaving={isSaving} />}
+        >
+            <form id={FORM_ID} noValidate onSubmit={form.submit} className="space-y-4">
+                <EditFields ids={form.ids} values={form.values} onChange={form.onChange} errors={form.errors} />
+            </form>
         </Modal>
     );
+}
+
+export function DynamicCategoryEditModal({
+    suggestion,
+    ...props
+}: DynamicCategoryEditModalProps): JSX.Element | null {
+    if (!suggestion) return null;
+    return <EditCategoryModal key={suggestion.id} suggestion={suggestion} {...props} />;
 }
