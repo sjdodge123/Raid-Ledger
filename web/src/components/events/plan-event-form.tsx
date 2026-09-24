@@ -163,7 +163,7 @@ export function PlanEventForm() {
     const alreadySelected = new Set(s.form.selectedTimeSlots.map((sl) => sl.date));
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-8">
+        <form noValidate onSubmit={handleSubmit} className="space-y-4 sm:space-y-8">
             <PlanGameSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors} />
             <div className="border-t border-edge-subtle" />
             <PlanTimeSlotsFormSection s={s} ts={ts} alreadySelected={alreadySelected} />
