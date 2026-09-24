@@ -19,8 +19,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={defaultFilters}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         expect(screen.getByText('Min owners')).toBeInTheDocument();
@@ -31,8 +29,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: 5 }}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         const slider = screen.getByRole('slider', { name: /min owners/i });
@@ -44,8 +40,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: undefined }}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         const slider = screen.getByRole('slider', { name: /min owners/i });
@@ -57,8 +51,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: 8 }}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         expect(screen.getByText('8')).toBeInTheDocument();
@@ -70,8 +62,6 @@ describe('CommonGroundFilters — min owners slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, minOwners: 2 }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         const slider = screen.getByRole('slider', { name: /min owners/i });
@@ -101,8 +91,6 @@ describe('CommonGroundFilters — players slider', () => {
             <CommonGroundFilters
                 filters={defaultFilters}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         expect(screen.getByText('Players')).toBeInTheDocument();
@@ -113,8 +101,6 @@ describe('CommonGroundFilters — players slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         expect(screen.getByText('Any')).toBeInTheDocument();
@@ -125,8 +111,6 @@ describe('CommonGroundFilters — players slider', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 4 }}
                 onChange={vi.fn()}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         const slider = screen.getByRole('slider', { name: /players/i });
@@ -141,8 +125,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={3}
             />,
         );
@@ -158,8 +140,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={3}
             />,
         );
@@ -175,8 +155,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 5 }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={3}
             />,
         );
@@ -188,8 +166,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 5 }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={7}
             />,
         );
@@ -202,8 +178,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={0}
             />,
         );
@@ -217,8 +191,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
             />,
         );
         expect(onChange).not.toHaveBeenCalled();
@@ -233,8 +205,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={2}
             />,
         );
@@ -253,8 +223,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={1}
             />,
         );
@@ -268,8 +236,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: 4 }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={3}
             />,
         );
@@ -282,8 +248,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={0}
             />,
         );
@@ -294,8 +258,6 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
             <CommonGroundFilters
                 filters={{ ...defaultFilters, maxPlayers: undefined }}
                 onChange={onChange}
-                search=""
-                onSearchChange={vi.fn()}
                 participantCount={4}
             />,
         );

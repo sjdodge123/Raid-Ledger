@@ -1,9 +1,12 @@
 /**
  * ROK-1525 — the Library filter row and the clickable card badges.
  *
- * Surfaces driven, as the admin viewer, on BOTH projects:
- *   • /games Discover tab — the 2 / 3 / 4 / 5+ chip row and the owners chip
- *   • a preset click → `?players=<key>` + a narrowed Discover grid + the
+ * Surfaces driven, as the admin viewer, on EVERY project:
+ *   • /games Discover tab — the Players segments (Any / 2 / 3 / 4 / 5+) and
+ *     the owners checkbox, which since ROK-1659 sit behind the ONE Filters
+ *     entry (`games-filters.ts`: the toolbar funnel + inline panel at 1024px
+ *     and up, the Filters FAB + BottomSheet below)
+ *   • a preset pick → `?players=<key>` + a narrowed Discover grid + the
  *     null-semantics hint line
  *   • a reload of that URL → the same narrowed view (the URL-persistence AC)
  *   • a card's player badge → the same filter, WITHOUT the card's own click
@@ -99,18 +102,26 @@
  * below therefore asserts the click on mobile and asserts the DELIBERATE
  * ABSENCE on desktop, so the scope boundary is pinned rather than assumed.
  *
- * TDD: every assertion here fails on the pre-ROK-1525 tree — the chip testids,
- * the `players` param and the activatable badges do not exist there.
+ * TDD: every assertion here fails on the pre-ROK-1525 tree — the preset
+ * control, the `players` param and the activatable badges do not exist there —
+ * and the Filters-entry ones fail on the pre-ROK-1659 chip row, which had no
+ * Filters opener, no `radio` segments and no owners `checkbox`.
  */
 import { test, expect } from './base';
-import type { Page, Response } from '@playwright/test';
+import type { Locator, Page, Response } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
+import {
+    closeGamesFilters,
+    lfgSwitch,
+    openGamesFilters,
+    ownersCheckbox,
+    pickPlayers,
+    playersRadio,
+} from './games-filters';
 
 const HOOK_TIMEOUT_MS = 60_000;
 
 const HINT = 'library-filter-hint';
-const OWNERS_CHIP = 'owners-filter-chip';
-const LFG_CHIP = 'lfg-filter-chip';
 /** The Discover grid container — `DISCOVER_GRID_TESTID` in the page module. */
 const DISCOVER_GRID = 'discover-grid';
 
@@ -131,7 +142,7 @@ const PRESETS = [
 
 type Preset = (typeof PRESETS)[number];
 
-/** Every preset key, in the order the chip row renders them. */
+/** Every preset key, in the order the Players segments render them. */
 const CHIP_KEYS = ['2', '3', '4', '5plus'] as const;
 
 interface DiscoverGame {
@@ -429,8 +440,19 @@ async function expectFilteredGridSupports(page: Page, corpus: Corpus): Promise<v
     ).toEqual([]);
 }
 
-function chip(page: Page, key: string) {
-    return page.getByTestId(`player-count-chip-${key}`);
+/** A preset key's label (`5plus` → `5+`) — the segment's accessible name. */
+function presetLabel(key: string): string {
+    return PRESETS.find((p) => p.key === key)?.label ?? key;
+}
+
+/** The Players segment for a preset key, inside the OPEN Filters surface. */
+function presetRadio(filters: Locator, key: string): Locator {
+    return playersRadio(filters, presetLabel(key));
+}
+
+/** The segment the user sees — the radio itself is `sr-only`. */
+function presetSegment(filters: Locator, key: string): Locator {
+    return presetRadio(filters, key).locator('xpath=..');
 }
 
 /** `?players=<key>` present, whatever else the query string carries. */
@@ -499,29 +521,34 @@ test('fixture: the discover corpus can prove a player preset narrows it', () => 
 });
 
 // ---------------------------------------------------------------------------
-// The chip row
+// The Players segments + owners checkbox, behind the Filters entry
 // ---------------------------------------------------------------------------
 
-test.describe('Game Library — the player-count chip row', () => {
-    test('a preset click writes the URL, narrows the grid and discloses the drop', async ({
+test.describe('Game Library — the player-count filter', () => {
+    test('a preset pick writes the URL, narrows the grid and discloses the drop', async ({
         page,
     }) => {
         const corpus = await openWithCorpus(page, '/games', pickCorpus);
         await expectCardShown(page, corpus.dropped);
 
-        for (const key of CHIP_KEYS) await expect(chip(page, key)).toBeVisible();
-        await expect(page.getByTestId(OWNERS_CHIP)).toBeVisible();
-        await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'false');
+        const filters = await openGamesFilters(page);
+        for (const key of CHIP_KEYS) await expect(presetSegment(filters, key)).toBeVisible();
+        await expect(ownersCheckbox(filters)).toBeVisible();
+        await expect(playersRadio(filters, 'Any')).toBeChecked();
+        await expect(presetRadio(filters, corpus.preset.key)).not.toBeChecked();
         // The hint discloses a narrowing; with nothing narrowed it must be absent.
         await expect(page.getByTestId(HINT)).toHaveCount(0);
 
-        await chip(page, corpus.preset.key).click();
+        await pickPlayers(filters, corpus.preset.label);
 
         await expect(page).toHaveURL(playersParam(corpus.preset.key), { timeout: 10_000 });
-        await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'true');
+        await expect(presetRadio(filters, corpus.preset.key)).toBeChecked();
+        await expect(playersRadio(filters, 'Any')).not.toBeChecked();
         // NULL semantics are disclosed, never silent (the ROK-1402 precedent).
-        await expect(page.getByTestId(HINT)).toContainText('player-count');
+        await expect(filters.getByTestId(HINT)).toContainText('player-count');
 
+        // Judge the grid the user sees once the surface is out of the way.
+        await closeGamesFilters(page);
         await expectCardShown(page, corpus.kept);
         await expectCardGone(page, corpus.dropped);
         await expectFilteredGridSupports(page, corpus);
@@ -536,8 +563,10 @@ test.describe('Game Library — the player-count chip row', () => {
             corpusFor(games, preset),
         );
 
-        await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'true');
-        await expect(page.getByTestId(HINT)).toBeVisible();
+        const filters = await openGamesFilters(page);
+        await expect(presetRadio(filters, corpus.preset.key)).toBeChecked();
+        await expect(filters.getByTestId(HINT)).toBeVisible();
+        await closeGamesFilters(page);
         await expectCardShown(page, corpus.kept);
         await expectCardGone(page, corpus.dropped);
         await expectFilteredGridSupports(page, corpus);
@@ -545,9 +574,12 @@ test.describe('Game Library — the player-count chip row', () => {
 
     test('the preset composes with "Players are looking" in one URL', async ({ page }) => {
         const corpus = await openWithCorpus(page, '/games', pickCorpus);
-        await expect(page.getByTestId(LFG_CHIP)).toBeVisible({ timeout: 20_000 });
+        const filters = await openGamesFilters(page);
+        const looking = lfgSwitch(filters);
+        await expect(looking).toBeVisible({ timeout: 20_000 });
+        await expect(looking).toHaveAttribute('aria-checked', 'false');
 
-        // Two chip writes back-to-back with NO barrier between them. Both
+        // Two filter writes back-to-back with NO barrier between them. Both
         // writers now resolve their patch against the params most recently
         // WRITTEN (`use-search-param-write.ts`), so a second click landing
         // before React has committed the first is no longer handed a stale
@@ -555,28 +587,31 @@ test.describe('Game Library — the player-count chip row', () => {
         // (`players=5plus` → `?lfg=1`, the preset silently gone) was that race,
         // and it is fixed rather than stepped around. The barrier that used to
         // sit here would hide the very regression this test exists to catch.
-        await chip(page, corpus.preset.key).click();
-        await page.getByTestId(LFG_CHIP).click();
+        await pickPlayers(filters, corpus.preset.label);
+        await looking.click();
 
         // Both narrowings live in the URL at once.
         await expect(page).toHaveURL(/[?&]lfg=1(&|$)/, { timeout: 10_000 });
         await expect(page).toHaveURL(playersParam(corpus.preset.key));
-        await expect(page.getByTestId(LFG_CHIP)).toHaveAttribute('aria-pressed', 'true');
+        await expect(looking).toHaveAttribute('aria-checked', 'true');
 
-        // ROK-1525 B1: the `lfg=1` view is built from LFG group rows, which
-        // carry neither player-count nor ownership data, so the library row is
-        // HIDDEN there rather than left rendering pressed chips (and a
-        // "showing only games with player-count data" hint) over a grid they
-        // cannot narrow.
-        await expect(chip(page, corpus.preset.key)).toHaveCount(0);
-        await expect(page.getByTestId(OWNERS_CHIP)).toHaveCount(0);
+        // ROK-1525 B1, as ROK-1659 reshaped it: the `lfg=1` view is built from
+        // LFG group rows, which carry neither player-count nor ownership data,
+        // so the library fields PAUSE there — disabled under the switch
+        // ("the filters below pause while it is on") — rather than staying live
+        // over a grid they cannot narrow. The null-semantics hint goes with
+        // them: "showing only games with player-count data" would be false.
+        await expect(presetRadio(filters, corpus.preset.key)).toBeDisabled();
+        await expect(ownersCheckbox(filters)).toBeDisabled();
         await expect(page.getByTestId(HINT)).toHaveCount(0);
 
-        // Leaving the view brings the row back, still pressed: the param was
-        // never dropped, only unrepresented while it could not apply.
-        await page.getByTestId(LFG_CHIP).click();
+        // Leaving the view brings the fields back, still selected: the param
+        // was never dropped, only paused while it could not apply.
+        await looking.click();
         await expect(page).not.toHaveURL(/[?&]lfg=1(&|$)/, { timeout: 10_000 });
-        await expect(chip(page, corpus.preset.key)).toHaveAttribute('aria-pressed', 'true');
+        await expect(presetRadio(filters, corpus.preset.key)).toBeEnabled();
+        await expect(presetRadio(filters, corpus.preset.key)).toBeChecked();
+        await expect(filters.getByTestId(HINT)).toContainText('player-count');
     });
 });
 
@@ -584,7 +619,7 @@ test.describe('Game Library — the player-count chip row', () => {
 // The clickable card badge (DrawerCard only — see the module note)
 // ---------------------------------------------------------------------------
 
-/** `Filter to games for 5+ players` → the `5plus` chip key. */
+/** `Filter to games for 5+ players` → the `5plus` preset key. */
 function keyFromBadgeLabel(label: string): string {
     const shown = label.slice(PLAYER_BADGE_PREFIX.length).replace(/ players$/, '');
     return PRESETS.find((p) => p.label === shown)?.key ?? shown;
@@ -603,8 +638,9 @@ test.describe('Game Library — the card player badge as a filter', () => {
             // inert. Pinned rather than assumed — if activation ever spreads to
             // that surface, this line is the one that says so.
             await expect(badges).toHaveCount(0);
-            // The desktop viewer is not stranded: the chip row is the control.
-            await expect(chip(page, corpus.preset.key)).toBeVisible();
+            // The viewer is not stranded: the Players segments are the control.
+            const filters = await openGamesFilters(page);
+            await expect(presetSegment(filters, corpus.preset.key)).toBeVisible();
             return;
         }
 
@@ -619,7 +655,8 @@ test.describe('Game Library — the card player badge as a filter', () => {
         // The card's own click target routes to /games/:id — it must NOT have
         // fired (`e.stopPropagation()` + `preventDefault()`, slice 4).
         await expect(page).not.toHaveURL(/\/games\/\d+/);
-        await expect(chip(page, key)).toHaveAttribute('aria-pressed', 'true');
-        await expect(page.getByTestId(HINT)).toBeVisible();
+        const filters = await openGamesFilters(page);
+        await expect(presetRadio(filters, key)).toBeChecked();
+        await expect(filters.getByTestId(HINT)).toBeVisible();
     });
 });

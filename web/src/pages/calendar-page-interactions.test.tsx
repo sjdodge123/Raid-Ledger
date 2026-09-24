@@ -22,8 +22,13 @@ vi.mock('../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: mockRegistryGames, isLoading: false, error: null }),
 }));
 
+let mockIsDesktop = true;
+vi.mock('../hooks/use-media-query', () => ({ useMediaQuery: () => mockIsDesktop }));
+
 vi.mock('../components/calendar', () => ({
-    CalendarView: () => <div data-testid="calendar-view" />,
+    // ROK-1662: the page hands the Filters funnel + inline panel to CalendarView's toolbar slots.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    CalendarView: (props: any) => <div data-testid="calendar-view">{props.toolbarAction}{props.belowToolbar}</div>,
     MiniCalendar: () => <div data-testid="mini-calendar" />,
 }));
 
@@ -33,15 +38,6 @@ vi.mock('../components/calendar/calendar-mobile-toolbar', () => ({
 
 vi.mock('../components/calendar/calendar-mobile-nav', () => ({
     CalendarMobileNav: () => <div data-testid="mobile-nav" />,
-}));
-
-vi.mock('../components/ui/fab', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    FAB: (props: any) => (
-        <button data-testid="fab" onClick={props.onClick} aria-label={props.label}>
-            FAB
-        </button>
-    ),
 }));
 
 vi.mock('../components/ui/bottom-sheet', () => ({
@@ -86,47 +82,66 @@ function deliver(games: ReturnType<typeof makeGame>[]) {
     deliverGames(games, useGameFilterStore.getState().reportGames);
 }
 
-/** Click the desktop [Filter: …] chip to open the modal.
- * The mobile FAB also has aria-label "Filter by Game"; disambiguate via class. */
-function getChip(): HTMLElement {
-    const chip = document.querySelector('.calendar-filter-chip') as HTMLElement | null;
-    if (!chip) throw new Error('CalendarFilterChip not rendered');
-    return chip;
+/** The desktop toolbar funnel (1024px and up). */
+function getFunnel(): HTMLElement {
+    return screen.getByTestId('filter-panel-trigger');
 }
 
-function openModalViaChip() {
-    fireEvent.click(getChip());
+function openFilters() {
+    fireEvent.click(getFunnel());
 }
 
-/** Return the currently-open modal dialog. */
+/** The desktop inline filter panel. */
 function getDialog() {
-    return screen.getByRole('dialog');
+    return screen.getByTestId('filter-panel');
 }
+
+/** A checkbox row's accessible name: its aria-labelledby text minus aria-hidden decoration (the emoji). */
+function nameOf(cb: HTMLElement): string {
+    const label = document.getElementById(cb.getAttribute('aria-labelledby') ?? '')?.cloneNode(true) as HTMLElement | undefined;
+    label?.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove());
+    return label?.textContent ?? '';
+}
+
+/** A game's row checkbox in the open panel, by the game's accessible name. */
+function gameCheckbox(name: string | RegExp): HTMLInputElement {
+    return within(getDialog()).getByRole('checkbox', { name }) as HTMLInputElement;
+}
+
+const SIX_GAMES = () => [
+    makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma'),
+    makeGame('d', 'Delta'), makeGame('e', 'Epsilon'), makeGame('f', 'Foxtrot'),
+];
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
+function resetStore() {
+    vi.clearAllMocks();
+    useGameFilterStore.getState()._reset();
+    mockRegistryGames = [];
+}
+
 describe('CalendarPage — game toggle', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
+        mockIsDesktop = true;
+        resetStore();
     });
 
     afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('unchecking a game in the modal deselects it', () => {
+    it('unchecking a game in the panel deselects it', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        openModalViaChip();
-        const checkbox = within(getDialog()).getByRole('checkbox');
+        openFilters();
+        const checkbox = gameCheckbox('World of Warcraft');
         expect(checkbox).toBeChecked();
 
-        fireEvent.change(checkbox, { target: { checked: false } });
+        fireEvent.click(checkbox);
         expect(checkbox).not.toBeChecked();
     });
 
@@ -134,122 +149,97 @@ describe('CalendarPage — game toggle', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft')]);
 
-        openModalViaChip();
-        const checkbox = within(getDialog()).getByRole('checkbox');
-        fireEvent.change(checkbox, { target: { checked: false } });
+        openFilters();
+        const checkbox = gameCheckbox('World of Warcraft');
+        fireEvent.click(checkbox);
         expect(checkbox).not.toBeChecked();
 
-        fireEvent.change(checkbox, { target: { checked: true } });
+        fireEvent.click(checkbox);
         expect(checkbox).toBeChecked();
     });
 
-    it('toggling in modal updates chip label', () => {
+    it('toggling a game updates the funnel badge to the hidden count', () => {
         render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-            makeGame('f', 'Foxtrot'),
-        ]);
+        deliver(SIX_GAMES());
 
-        openModalViaChip();
-        const dialog = getDialog();
+        openFilters();
+        expect(gameCheckbox('Alpha')).toBeChecked();
+        expect(screen.queryByTestId('filter-count-badge')).not.toBeInTheDocument();
 
-        const alphaLabel = Array.from(dialog.querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent === 'Alpha',
-        ) as HTMLElement | undefined;
-        expect(alphaLabel).toBeDefined();
+        fireEvent.click(gameCheckbox('Alpha'));
+        expect(gameCheckbox('Alpha')).not.toBeChecked();
 
-        const alphaCheckboxBefore = alphaLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-        expect(alphaCheckboxBefore).toBeChecked();
-
-        fireEvent.click(alphaLabel!);
-
-        const alphaCheckboxAfter = alphaLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-        expect(alphaCheckboxAfter).not.toBeChecked();
-
-        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
-
-        // The chip now reflects the partial selection (5 of 6).
-        expect(getChip()).toHaveTextContent(/Filter: 5 games/);
+        // Close with the funnel; the badge = games hidden (1 of 6).
+        fireEvent.click(getFunnel());
+        expect(getFunnel()).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('1');
+        expect(getFunnel()).toHaveAccessibleDescription('1 game hidden');
     });
 });
 
-describe('CalendarPage — All / None buttons', () => {
+describe('CalendarPage — Clear all / None buttons', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
+        mockIsDesktop = true;
+        resetStore();
     });
 
     afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('"All" button in modal selects all known games', () => {
+    it('"Clear all" in the panel header selects all known games', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
-        openModalViaChip();
+        openFilters();
         const dialog = getDialog();
+        expect(within(dialog).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument();
 
-        const checkboxes = within(dialog).getAllByRole('checkbox');
-        fireEvent.change(checkboxes[0], { target: { checked: false } });
-        expect(checkboxes[0]).not.toBeChecked();
+        fireEvent.click(gameCheckbox('Alpha'));
+        expect(gameCheckbox('Alpha')).not.toBeChecked();
 
-        const allBtn = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'All')!;
-        fireEvent.click(allBtn);
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Clear all' }));
 
         within(dialog).getAllByRole('checkbox').forEach((cb) => expect(cb).toBeChecked());
+        expect(within(dialog).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument();
     });
 
-    it('"None" button in modal deselects all games', () => {
+    it('"None" button in the panel deselects all games', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
 
-        openModalViaChip();
+        openFilters();
         const dialog = getDialog();
 
-        const noneBtn = Array.from(dialog.querySelectorAll('button')).find((b) => b.textContent === 'None')!;
-        fireEvent.click(noneBtn);
+        fireEvent.click(within(dialog).getByRole('button', { name: 'None' }));
 
         within(dialog).getAllByRole('checkbox').forEach((cb) => expect(cb).not.toBeChecked());
     });
 
-    it('"All" in modal selects all games including those scrolled off the inline list', () => {
+    it('"Clear all" restores every game after "None", badge = total hidden in between', () => {
         render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-            makeGame('f', 'Foxtrot'),
-        ]);
+        deliver(SIX_GAMES());
 
-        openModalViaChip();
+        openFilters();
         const dialog = getDialog();
+        fireEvent.click(within(dialog).getByRole('button', { name: 'None' }));
 
-        const noneBtns = Array.from(dialog.querySelectorAll('button')).filter((b) => b.textContent === 'None');
-        fireEvent.click(noneBtns[0]);
+        const checkboxes = within(dialog).getAllByRole('checkbox');
+        expect(checkboxes).toHaveLength(6);
+        checkboxes.forEach((cb) => expect(cb).not.toBeChecked());
+        expect(screen.getByTestId('filter-count-badge')).toHaveTextContent('6');
 
-        const modalCheckboxes = Array.from(dialog.querySelectorAll('input[type="checkbox"]'));
-        modalCheckboxes.forEach((cb) => expect(cb as HTMLInputElement).not.toBeChecked());
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Clear all' }));
 
-        const allBtns = Array.from(dialog.querySelectorAll('button')).filter((b) => b.textContent === 'All');
-        fireEvent.click(allBtns[0]);
-
-        modalCheckboxes.forEach((cb) => expect(cb as HTMLInputElement).toBeChecked());
+        checkboxes.forEach((cb) => expect(cb).toBeChecked());
+        expect(screen.queryByTestId('filter-count-badge')).not.toBeInTheDocument();
     });
 });
 
 describe('CalendarPage — filter persistence when view changes — part 1', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
+        mockIsDesktop = true;
+        resetStore();
     });
     afterEach(() => {
         activeQueryClient?.clear();
@@ -259,20 +249,12 @@ describe('CalendarPage — filter persistence when view changes — part 1', () 
         const { rerender } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openModalViaChip();
-        const dialog = getDialog();
+        openFilters();
+        fireEvent.click(gameCheckbox(/World/));
+        expect(gameCheckbox(/World/)).not.toBeChecked();
 
-        const wowLabel = Array.from(dialog.querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
-        ) as HTMLElement | undefined;
-        expect(wowLabel).toBeTruthy();
-        fireEvent.click(wowLabel!);
-
-        const wowCb = wowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-        expect(wowCb).not.toBeChecked();
-
-        // Close modal before rerender so the modal-open state doesn't carry through.
-        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
+        // Close the panel (funnel) before rerender so the open state doesn't carry through.
+        fireEvent.click(getFunnel());
 
         const rerenderQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         rerender(
@@ -283,24 +265,17 @@ describe('CalendarPage — filter persistence when view changes — part 1', () 
             </QueryClientProvider>,
         );
 
-        // The store retained the deselection — verify by opening the modal again.
-        openModalViaChip();
-        const newDialog = getDialog();
-        const updatedWowLabel = Array.from(newDialog.querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
-        ) as HTMLElement | undefined;
-        if (updatedWowLabel) {
-            const updatedWowCb = updatedWowLabel.querySelector('input[type="checkbox"]') as HTMLInputElement;
-            expect(updatedWowCb).not.toBeChecked();
-        }
+        // The store retained the deselection — verify by opening the panel again.
+        openFilters();
+        expect(gameCheckbox(/World/)).not.toBeChecked();
+        expect(gameCheckbox(/Apex/)).toBeChecked();
     });
 });
 
 describe('CalendarPage — filter persistence when view changes — part 2', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
+        mockIsDesktop = true;
+        resetStore();
     });
     afterEach(() => {
         activeQueryClient?.clear();
@@ -310,64 +285,38 @@ describe('CalendarPage — filter persistence when view changes — part 2', () 
         const { unmount } = render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openModalViaChip();
-        const wowLabel = Array.from(getDialog().querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
-        ) as HTMLElement | undefined;
-        expect(wowLabel).toBeTruthy();
-        fireEvent.click(wowLabel!);
-
-        const wowCb = wowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-        expect(wowCb).not.toBeChecked();
+        openFilters();
+        fireEvent.click(gameCheckbox(/World/));
+        expect(gameCheckbox(/World/)).not.toBeChecked();
 
         unmount();
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openModalViaChip();
-        const newDialog = getDialog();
-        const updatedWowLabel = Array.from(newDialog.querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
-        ) as HTMLElement | undefined;
-        expect(updatedWowLabel).toBeTruthy();
-        const updatedWowCb = updatedWowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-        expect(updatedWowCb).not.toBeChecked();
-
-        const updatedApexLabel = Array.from(newDialog.querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('Apex'),
-        ) as HTMLElement | undefined;
-        expect(updatedApexLabel).toBeTruthy();
-        const updatedApexCb = updatedApexLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-        expect(updatedApexCb).toBeChecked();
+        openFilters();
+        expect(gameCheckbox(/World/)).not.toBeChecked();
+        expect(gameCheckbox(/Apex/)).toBeChecked();
     });
 
     it('filter selections persist when same games are re-reported (month change scenario)', () => {
         render_page();
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        openModalViaChip();
-        const wowLabel = Array.from(getDialog().querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
-        ) as HTMLElement | undefined;
-        fireEvent.click(wowLabel!);
+        openFilters();
+        fireEvent.click(gameCheckbox(/World/));
 
         deliver([]);
         deliver([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
-        // Modal is still open and re-renders with same data.
-        const updatedWowLabel = Array.from(getDialog().querySelectorAll('label.game-filter-item')).find(
-            (lbl) => lbl.querySelector('.game-filter-name')?.textContent?.includes('World'),
-        ) as HTMLElement | undefined;
-        const updatedWowCb = updatedWowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-        expect(updatedWowCb).not.toBeChecked();
+        // Panel is still open and re-renders with same data.
+        expect(gameCheckbox(/World/)).not.toBeChecked();
     });
 });
 
 describe('CalendarPage — filter persistence when view changes — part 3', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
+        mockIsDesktop = true;
+        resetStore();
     });
     afterEach(() => {
         activeQueryClient?.clear();
@@ -378,88 +327,81 @@ describe('CalendarPage — filter persistence when view changes — part 3', () 
         deliver([makeGame('wow', 'World of Warcraft')]);
         deliver([makeGame('apex', 'Apex Legends')]);
 
-        openModalViaChip();
-        const dialog = getDialog();
-        const names = within(dialog).getAllByRole('checkbox').map(
-            (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
-        );
-        expect(names).toContain('Apex Legends');
-        expect(names).toContain('World of Warcraft');
+        openFilters();
+        expect(gameCheckbox('Apex Legends')).toBeInTheDocument();
+        expect(gameCheckbox('World of Warcraft')).toBeInTheDocument();
     });
 });
 
-describe('CalendarPage — FAB and BottomSheet', () => {
+describe('CalendarPage — Filters FAB and BottomSheet (below 1024px)', () => {
     beforeEach(() => {
-        vi.clearAllMocks();
-        useGameFilterStore.getState()._reset();
-        mockRegistryGames = [];
+        mockIsDesktop = false;
+        resetStore();
     });
 
     afterEach(() => {
         activeQueryClient?.clear();
     });
 
-    it('FAB is not visible before any games arrive', () => {
+    it('Filters FAB is not rendered before any games arrive', () => {
         render_page();
-        expect(screen.queryByTestId('fab')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('filter-fab')).not.toBeInTheDocument();
     });
 
-    it('FAB appears after games arrive', () => {
+    it('Filters FAB appears after games arrive, and there is no toolbar funnel', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
-        expect(screen.getByTestId('fab')).toBeInTheDocument();
+        expect(screen.getByTestId('filter-fab')).toHaveAccessibleName('Filters');
+        expect(screen.queryByTestId('filter-panel-trigger')).not.toBeInTheDocument();
     });
 
-    it('clicking FAB opens bottom sheet', () => {
+    it('clicking the Filters FAB opens the bottom sheet', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
 
-        const fab = screen.getByTestId('fab');
-        fireEvent.click(fab);
+        fireEvent.click(screen.getByTestId('filter-fab'));
 
-        const sheet = screen.getByTestId('bottom-sheet');
-        expect(sheet).toHaveAttribute('data-open', 'true');
+        expect(screen.getByTestId('bottom-sheet')).toHaveAttribute('data-open', 'true');
+        expect(screen.getByTestId('filter-fab')).toHaveAttribute('aria-expanded', 'true');
     });
 
     it('bottom sheet is initially closed', () => {
         mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         render_page();
 
-        const sheet = screen.getByTestId('bottom-sheet');
-        expect(sheet).toHaveAttribute('data-open', 'false');
+        expect(screen.getByTestId('bottom-sheet')).toHaveAttribute('data-open', 'false');
     });
 
-    it('bottom sheet contains all games', () => {
+    it('bottom sheet lists every game as a pressed tap row', () => {
         render_page();
-        deliver([
-            makeGame('a', 'Alpha'),
-            makeGame('b', 'Beta'),
-            makeGame('c', 'Gamma'),
-            makeGame('d', 'Delta'),
-            makeGame('e', 'Epsilon'),
-            makeGame('f', 'Foxtrot'),
-        ]);
+        deliver(SIX_GAMES());
+        // A closed sheet's body is inert + aria-hidden (ROK-1659), so open it first.
+        fireEvent.click(screen.getByTestId('filter-fab'));
 
         const sheet = screen.getByTestId('bottom-sheet');
-        expect(sheet).toHaveTextContent('Alpha');
-        expect(sheet).toHaveTextContent('Beta');
-        expect(sheet).toHaveTextContent('Gamma');
-        expect(sheet).toHaveTextContent('Delta');
-        expect(sheet).toHaveTextContent('Epsilon');
-        expect(sheet).toHaveTextContent('Foxtrot');
+        for (const name of ['Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Foxtrot']) {
+            expect(within(sheet).getByRole('button', { name })).toHaveAttribute('aria-pressed', 'true');
+        }
     });
 
-    it('bottom sheet shows count of selected vs total games', () => {
+    it('bottom sheet shows count of selected vs total games; FAB badge = games hidden', () => {
         render_page();
         deliver([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
+        fireEvent.click(screen.getByTestId('filter-fab'));
 
         const sheet = screen.getByTestId('bottom-sheet');
         expect(sheet).toHaveTextContent(/3 of 3 selected/i);
+
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Beta' }));
+        expect(sheet).toHaveTextContent(/2 of 3 selected/i);
+        expect(within(screen.getByTestId('filter-fab')).getByTestId('filter-count-badge')).toHaveTextContent('1');
+        expect(screen.getByTestId('filter-fab')).toHaveAccessibleDescription('1 game hidden');
     });
 });
 
 describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
     beforeEach(() => {
+        mockIsDesktop = true;
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
         mockRegistryGames = [];
@@ -477,10 +419,10 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         ];
         render_page();
 
-        openModalViaChip();
+        openFilters();
         const dialog = getDialog();
         const gameNames = within(dialog).getAllByRole('checkbox').map(
-            (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
+            nameOf,
         );
         expect(gameNames).toContain('World of Warcraft');
         expect(gameNames).toContain('Final Fantasy XIV');
@@ -496,7 +438,7 @@ describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
         ];
         render_page();
 
-        openModalViaChip();
+        openFilters();
         const dialog = getDialog();
         const checkboxes = within(dialog).getAllByRole('checkbox');
         expect(checkboxes).toHaveLength(3);

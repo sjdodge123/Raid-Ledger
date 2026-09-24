@@ -8,7 +8,7 @@
  * ordinary page rather than a blank grid, and that typing keeps the URL in step.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GamesPage } from './games-page';
@@ -167,6 +167,17 @@ describe('GamesPage — lfg=1 and q are one view or the other (AC2)', () => {
         });
         expect(liveParams().get('lfg')).toBeNull();
         expect(liveParams().get('q')).toBe('deep');
+    });
+});
+
+describe('GamesPage — "Clear all" drops the filter params and keeps q (ROK-1659)', () => {
+    it('leaves q as the only param after clearing lfg, players, owners and genres', () => {
+        renderPage('/games?q=wa&lfg=1&players=4&owners=2&genres=rpg');
+
+        fireEvent.click(screen.getByRole('button', { name: /^filters$/i }));
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Clear all' }));
+
+        expect([...liveParams().entries()]).toEqual([['q', 'wa']]);
     });
 });
 

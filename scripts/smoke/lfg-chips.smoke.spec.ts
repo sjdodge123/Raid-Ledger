@@ -56,6 +56,7 @@ import {
     apiDelete,
     pollForCondition,
 } from './api-helpers';
+import { lfgSwitch, openGamesFilters } from './games-filters';
 import { isPhoneLayout } from './helpers';
 
 const HOOK_TIMEOUT_MS = 90_000;
@@ -390,12 +391,13 @@ test.describe('Events page — the LFG summary banner (AC3)', () => {
         // C has no intent, so it is not one of those rows.
         await expect(page.locator(`a[href="/games/${gameC}"]`)).toHaveCount(0);
         // The filter is a two-way toggle since ROK-1478 — the ✕ that used to
-        // sit beside this chip is gone, absorbed into the control itself. Its
-        // presence is what lets the user leave the filtered view; the round
-        // trip is driven in `lfg-discoverability.smoke.spec.ts` §6.3.
-        await expect(page.getByTestId('lfg-filter-chip')).toBeVisible({
-            timeout: 15_000,
-        });
+        // sit beside it is gone, absorbed into the control itself — and since
+        // ROK-1659 it is the `switch` inside the Filters entry. Its presence,
+        // ON, is what lets the user leave the filtered view; the round trip is
+        // driven in `lfg-discoverability.smoke.spec.ts` §6.3.
+        const looking = lfgSwitch(await openGamesFilters(page));
+        await expect(looking).toBeVisible({ timeout: 15_000 });
+        await expect(looking).toHaveAttribute('aria-checked', 'true');
     });
 });
 

@@ -192,6 +192,38 @@ describe('CalendarView — part 2', () => {
 
 });
 
+// ROK-1662: a page loaded phone-width (Schedule default) and widened past 1024px
+// had NO filter at all — the schedule branch dropped both toolbar slots.
+describe('CalendarView — schedule view keeps the Filters slots (ROK-1662)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        useCalendarViewStore.setState({ viewPref: 'week' });
+    });
+
+    it('still renders the Filters funnel and the inline panel in schedule view', () => {
+        renderWithProviders(
+            <CalendarView calendarView="schedule"
+                toolbarAction={<button type="button" data-testid="funnel-slot">Filters</button>}
+                belowToolbar={<div data-testid="panel-slot" />} />,
+        );
+        expect(screen.getByTestId('funnel-slot')).toBeInTheDocument();
+        expect(screen.getByTestId('panel-slot')).toBeInTheDocument();
+    });
+
+    it('schedule view puts the funnel above the panel, and both above the schedule list', () => {
+        renderWithProviders(
+            <CalendarView calendarView="schedule"
+                toolbarAction={<button type="button" data-testid="funnel-slot">Filters</button>}
+                belowToolbar={<div data-testid="panel-slot" />} />,
+        );
+        const funnel = screen.getByTestId('funnel-slot');
+        const panel = screen.getByTestId('panel-slot');
+        const list = screen.getByText('No events scheduled');
+        expect(funnel.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        expect(panel.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+});
+
 describe('CalendarView — schedule event navigation (ROK-691)', () => {
     let originalInnerWidth: number;
 
