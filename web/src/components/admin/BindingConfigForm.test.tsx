@@ -98,7 +98,7 @@ describe("BindingConfigForm — voice monitor fields", () => {
     renderBindingForm({ bindingPurpose: "game-voice-monitor" });
     expect(screen.getByText(minPlayersLabel("game-voice-monitor"))).toBeInTheDocument();
     expect(
-      screen.getByLabelText(autoCloseLabel()),
+      screen.getByRole("checkbox", { name: autoCloseLabel() }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Grace Period/)).toBeInTheDocument();
   });
@@ -124,9 +124,7 @@ describe("BindingConfigForm — voice monitor fields", () => {
       bindingPurpose: "game-voice-monitor",
       config: { minPlayers: 2, autoClose: false, gracePeriod: 5 },
     });
-    const checkbox = screen.getByLabelText(
-      autoCloseLabel(),
-    ) as HTMLInputElement;
+    const checkbox = screen.getByRole("checkbox", { name: autoCloseLabel() }) as HTMLInputElement;
     expect(checkbox.checked).toBe(false);
   });
 });
@@ -148,9 +146,7 @@ describe("BindingConfigForm — voice monitor defaults", () => {
 
   it("defaults autoClose to true when config is null", () => {
     renderBindingForm({ bindingPurpose: "game-voice-monitor", config: null });
-    const checkbox = screen.getByLabelText(
-      autoCloseLabel(),
-    ) as HTMLInputElement;
+    const checkbox = screen.getByRole("checkbox", { name: autoCloseLabel() }) as HTMLInputElement;
     expect(checkbox.checked).toBe(true);
   });
 
@@ -173,7 +169,7 @@ describe("BindingConfigForm — non-voice-monitor mode", () => {
     expect(screen.queryByText(minPlayersLabel("game-voice-monitor"))).not.toBeInTheDocument();
     expect(screen.queryByText(/Grace Period/)).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText(autoCloseLabel()),
+      screen.queryByRole("checkbox", { name: autoCloseLabel() }),
     ).not.toBeInTheDocument();
   });
 
@@ -251,7 +247,7 @@ describe("BindingConfigForm — form submission", () => {
       config: { minPlayers: 2, autoClose: true, gracePeriod: 5 },
     });
     fireEvent.click(
-      screen.getByLabelText(autoCloseLabel()),
+      screen.getByRole("checkbox", { name: autoCloseLabel() }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     const callArg = onSave.mock.calls[0][1] as {
@@ -278,9 +274,17 @@ describe("BindingConfigForm — cancel & saving state", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 
-  it("disables Save button when isSaving is true", () => {
+  // ROK-1652 ruling 7: a pending Save is Button `loading` — aria-disabled +
+  // aria-busy (focus stays) and it swallows the click, so the form never
+  // submits. Equivalent strength to the old native toBeDisabled(): the click
+  // below proves onSave never fires.
+  it("marks Save pending and swallows the click when isSaving is true", () => {
     renderBindingForm({}, true);
-    expect(screen.getByRole("button", { name: "Saving..." })).toBeDisabled();
+    const save = screen.getByRole("button", { name: "Saving..." });
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    expect(save).toHaveAttribute("aria-busy", "true");
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it('shows "Saving..." text when isSaving is true', () => {
@@ -290,7 +294,10 @@ describe("BindingConfigForm — cancel & saving state", () => {
 
   it('shows "Save" text when isSaving is false', () => {
     renderBindingForm();
-    expect(screen.getByRole("button", { name: "Save" })).not.toBeDisabled();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).not.toBeDisabled();
+    expect(save).not.toHaveAttribute("aria-disabled");
+    expect(save).not.toHaveAttribute("aria-busy");
   });
 });
 
@@ -398,14 +405,14 @@ describe("BindingConfigForm — ROK-1416 local-state conditionals (AC6)", () => 
       gameName: "Valheim",
     });
     // Monitor with a game: no allowJustChatting toggle yet.
-    expect(screen.queryByLabelText(/just chatting/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /just chatting/i })).not.toBeInTheDocument();
     const select = purposeSelect();
     await userEvent.selectOptions(
       select,
       within(select).getByRole("option", { name: /general lobby/i }),
     );
     // Driven off LOCAL purpose state — appears without any reload.
-    expect(screen.getByLabelText(/just chatting/i)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /just chatting/i })).toBeInTheDocument();
   });
 
   it("auto-derives the purpose to General Lobby when the selected game is cleared", async () => {
@@ -576,7 +583,7 @@ describe("BindingConfigForm — ROK-1448 purpose-aware settings copy", () => {
 
   it("keeps the auto-close toggle and says closing is per event group", async () => {
     renderLobby();
-    const toggle = screen.getByLabelText(autoCloseLabel());
+    const toggle = screen.getByRole("checkbox", { name: autoCloseLabel() });
     expect(toggle).toBeInTheDocument();
     expect(toggle).toBeChecked();
     expect(screen.getByText(AUTO_CLOSE_HELP)).toBeInTheDocument();
@@ -585,5 +592,75 @@ describe("BindingConfigForm — ROK-1448 purpose-aware settings copy", () => {
     ).not.toBeInTheDocument();
     await userEvent.click(toggle);
     expect(toggle).not.toBeChecked();
+  });
+});
+
+/**
+ * ROK-1652 (AC3) — the binding fields sit on the shared Field / Input /
+ * Checkbox / Select / Button primitives: every control is named by its label
+ * and described by its help text, ids survive, and the inert-heal banner and
+ * save error use the danger token instead of raw red.
+ */
+describe("BindingConfigForm — ROK-1652 shared form primitives", () => {
+  beforeEach(resetGameSearchMock);
+
+  function renderInert(saveError?: string) {
+    return render(
+      <BindingConfigForm
+        binding={makeBinding({
+          id: "inert-9",
+          channelType: "voice",
+          bindingPurpose: "game-voice-monitor",
+          gameId: null,
+          gameName: null,
+        })}
+        onSave={onSave}
+        onCancel={onCancel}
+        isSaving={false}
+        saveError={saveError}
+      />,
+    );
+  }
+
+  it("describes the monitor threshold and auto-close controls by their help text", () => {
+    renderBindingForm({ channelType: "voice", bindingPurpose: "game-voice-monitor", gameId: 3 });
+    const min = screen.getByRole("spinbutton", { name: minPlayersLabel("game-voice-monitor") });
+    expect(min).toHaveAttribute("id", "minPlayers");
+    expect(min).toHaveAccessibleDescription(MIN_PLAYERS_HELP["game-voice-monitor"]);
+    const autoClose = screen.getByRole("checkbox", { name: autoCloseLabel() });
+    expect(autoClose).toHaveAttribute("id", "autoClose");
+    expect(autoClose).toHaveAccessibleDescription(AUTO_CLOSE_HELP);
+    const grace = screen.getByRole("spinbutton", { name: /minutes before closing/i });
+    expect(grace).toHaveAttribute("id", "gracePeriod");
+  });
+
+  it("adds the different-games consequence to the lobby threshold's description", () => {
+    renderBindingForm({ channelType: "voice", bindingPurpose: "general-lobby" });
+    const min = screen.getByRole("spinbutton", { name: minPlayersLabel("general-lobby") });
+    expect(min).toHaveAccessibleDescription(expect.stringContaining(MIN_PLAYERS_CONSEQUENCE));
+    const chat = screen.getByRole("checkbox", { name: /just chatting/i });
+    expect(chat).toHaveAttribute("id", "allowJustChatting");
+  });
+
+  it("describes the Purpose select by its save-rule hint", () => {
+    renderBindingForm({ channelType: "voice", bindingPurpose: "general-lobby" });
+    expect(purposeSelect()).toHaveAccessibleDescription(/won't let you save an invalid combination/);
+  });
+
+  it("paints the inert-heal banner with the danger token and a 44px Convert button", () => {
+    renderInert();
+    const title = screen.getByText(/This voice monitor has no game/);
+    expect(title).toHaveClass("text-danger");
+    expect(title.parentElement).toHaveClass("border-danger/40", "bg-danger/10");
+    expect(screen.getByRole("button", { name: "Convert to General Lobby" })).toHaveClass("min-h-[44px]");
+  });
+
+  it("uses no raw red hue or emerald focus ring anywhere in the form", () => {
+    const { container } = renderInert("Binding rejected");
+    expect(screen.getByText("Binding rejected")).toHaveClass("text-danger");
+    const raw = Array.from(container.querySelectorAll("[class]"))
+      .map((el) => el.getAttribute("class") ?? "")
+      .filter((c) => /\b(?:text|bg|border)-red-\d|focus:ring-emerald/.test(c));
+    expect(raw).toEqual([]);
   });
 });
