@@ -46,10 +46,27 @@ export async function resolveComposerGamesUrl(
   if (!clientUrl || !plain) return null;
   const caller = await resolveLfgCaller(deps.db, discordUserId);
   if (!caller || caller.deactivatedAt || caller.bannedAt) return plain;
-  const link = await deps.magicLinkService.generateLink(
-    caller.id,
-    '/games',
-    clientUrl,
-  );
+  const link = await mintOrNull(deps, caller.id, clientUrl);
   return (link && fitGamesLink(link, term)) ?? plain;
+}
+
+/**
+ * Mint the magic link, or null if minting fails: the search results must never
+ * depend on it — the clicker still gets the plain link. The error itself is
+ * dropped unlogged (a JWT error can carry token material).
+ */
+async function mintOrNull(
+  deps: ComposerLinkDeps,
+  userId: number,
+  clientUrl: string,
+): Promise<string | null> {
+  try {
+    return await deps.magicLinkService.generateLink(
+      userId,
+      '/games',
+      clientUrl,
+    );
+  } catch {
+    return null;
+  }
 }

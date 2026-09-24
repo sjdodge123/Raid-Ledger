@@ -67,6 +67,13 @@ describe('resolveComposerGamesUrl (ROK-1685)', () => {
     expect(url).toBe(`${BASE}/games?q=deep+rock`);
   });
 
+  it('falls back to plain /games when minting throws — search results never depend on magic links', async () => {
+    const d = deps();
+    d.generateLink.mockRejectedValue(new Error('jwt sign failed'));
+    const url = await resolveComposerGamesUrl(d, 'discord-1', 'deep rock');
+    expect(url).toBe(`${BASE}/games?q=deep+rock`);
+  });
+
   it('falls back to plain /games when the bare minted link is over the cap', async () => {
     const d = deps(BASE, 'x'.repeat(DISCORD_LINK_URL_MAX));
     const url = await resolveComposerGamesUrl(d, 'discord-1', 'deep rock');
