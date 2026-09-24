@@ -294,6 +294,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `AvatarWithFallback.tsx`, `RoleIcon.tsx`, `journey-hero/`, `submit-bar/` | `components/shared/` | Avatars, role glyphs, the journey hero and the sticky submit bar |
 | `LineupEmptyState.tsx` | `components/lineups/` | The empty-state shape (see §4.5) |
 | `player-filters.tsx`, `pages/games/coop-filter-controls.tsx` | filter bodies | Reference implementations of `FilterPanel` children |
+| `DurationPresetGroup` (`duration-preset-group.tsx`), `DurationSection` | `components/events/shared/` | Picking an event duration: a segmented `RadioGroup` 'Duration' of the presets you pass in (two lists exist: `shared/event-form-constants.ts` and `reschedule-utils.ts`) plus 'Custom'; value is minutes or `'custom'`, with an `error` slot (`role="alert"`). No asterisk — it always holds a value. `DurationSection` adds the named hr/min number fields for Custom (ROK-1649). |
 
 ### 3.3 Shared hooks
 

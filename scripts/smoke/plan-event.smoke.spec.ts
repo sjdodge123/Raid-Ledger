@@ -198,12 +198,15 @@ test.describe('Plan event poll and duration settings', () => {
         await expect(page.getByRole('heading', { name: 'Event Duration' })).toBeVisible({ timeout: 15_000 });
 
         // Duration presets — use exact: true to avoid matching 12h/72h etc.
-        await expect(page.getByRole('button', { name: '1h', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: '2h', exact: true })).toBeVisible();
-        await expect(page.getByRole('button', { name: '4h', exact: true })).toBeVisible();
+        // ROK-1649: a segmented radiogroup; the native radio is sr-only, so
+        // visibility is asserted on its segment <label>.
+        await expect(page.getByRole('radio', { name: '1h', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: '2h', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: '4h', exact: true }).locator('xpath=..')).toBeVisible();
 
         // Click 3h — no crash
-        await page.getByRole('button', { name: '3h', exact: true }).click();
+        await page.getByRole('radio', { name: '3h', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: '3h', exact: true })).toBeChecked();
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 });
