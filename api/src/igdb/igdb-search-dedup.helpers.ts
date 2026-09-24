@@ -3,40 +3,14 @@
  * Removes duplicate entries when the same game exists in both sources
  * with slightly different names (e.g., "Slay the Spire II" vs "Slay the Spire 2").
  */
-import type { GameDetailDto } from '@raid-ledger/contract';
-import { ROMAN_ARABIC_PAIRS } from '../common/search.util';
+import { normalizeForDedup, type GameDetailDto } from '@raid-ledger/contract';
 
 /**
- * Roman numeral replacements, derived from the canonical pair list in
- * `search.util` (ROK-1053) so the two modules cannot drift. The list is
- * already ordered longest-first, which is what keeps "VIII" from being
- * matched as "VII" + a stray "I".
+ * `normalizeForDedup` moved to `@raid-ledger/contract` (ROK-1668) so every
+ * service shares one implementation; re-exported here so existing importers
+ * keep their path.
  */
-const ROMAN_REPLACEMENTS: [RegExp, string][] = ROMAN_ARABIC_PAIRS.map(
-  ([roman, arabic]) => [new RegExp(`\\b${roman}\\b`, 'gi'), arabic],
-);
-
-/**
- * Normalize a game name for deduplication comparison.
- * - Lowercase
- * - Replace Roman numerals at word boundaries with Arabic equivalents
- * - Strip subtitle separator punctuation (colons, dashes surrounded by space)
- * - Collapse whitespace
- */
-export function normalizeForDedup(name: string): string {
-  if (!name) return '';
-  let result = name.toLowerCase();
-  for (const [pattern, replacement] of ROMAN_REPLACEMENTS) {
-    result = result.replace(pattern, replacement);
-  }
-  // Strip colons (subtitle separators)
-  result = result.replace(/\s*:\s*/g, ' ');
-  // Strip dashes acting as subtitle separators (surrounded by whitespace)
-  result = result.replace(/\s+-\s+/g, ' ');
-  // Collapse whitespace
-  result = result.replace(/\s+/g, ' ').trim();
-  return result;
-}
+export { normalizeForDedup };
 
 /** Fields to copy from donor where winner has null/empty (IGDB metadata). */
 const IGDB_NULL_FIELDS: (keyof GameDetailDto)[] = [

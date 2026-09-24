@@ -1,4 +1,5 @@
 import { or, sql, type Column, type SQL } from 'drizzle-orm';
+import { ROMAN_ARABIC_PAIRS } from '@raid-ledger/contract';
 
 /**
  * Strip punctuation from a search query, leaving only alphanumeric
@@ -96,24 +97,13 @@ function normalizedIlike(column: Column, word: string): SQL {
 }
 
 /**
- * Canonical Roman/Arabic numeral pairs for game titles (ROK-1053).
- *
- * Single source of truth: search alternation (`romanArabicAlt`, below) and
- * dedup normalization (`normalizeForDedup` in `igdb/igdb-search-dedup.helpers`)
- * both derive their lookup from this list rather than restating it.
- *
- * Ordered longest Roman numeral first so a regex pass built from it matches
- * "VIII" before "VII" before "VI"; "IV" precedes "V" for the same reason.
+ * Canonical Roman/Arabic numeral pairs (ROK-1053) live in `@raid-ledger/contract`
+ * (`packages/contract/src/game-identity/roman-numerals.ts`, moved there in
+ * ROK-1668) — the one list that both `romanArabicAlt` (below) and the
+ * contract's `normalizeForDedup` derive from. Re-exported here so existing
+ * importers keep their path.
  */
-export const ROMAN_ARABIC_PAIRS: ReadonlyArray<readonly [string, string]> = [
-  ['VIII', '8'],
-  ['VII', '7'],
-  ['VI', '6'],
-  ['IV', '4'],
-  ['V', '5'],
-  ['III', '3'],
-  ['II', '2'],
-];
+export { ROMAN_ARABIC_PAIRS };
 
 const ARABIC_TO_ROMAN: Record<string, string> = Object.fromEntries(
   ROMAN_ARABIC_PAIRS.map(([roman, arabic]) => [arabic, roman]),

@@ -186,3 +186,5 @@ export * from './scheduling-slot-order.js';
 
 // Relay hub v1 wire shapes: envelope, instance lifecycle, crosswalk (ROK-1667)
 export * from './relay/index.js';
+// Game-name identity helpers shared by api and the relay hub (ROK-1668)
+export * from './game-identity/index.js';
