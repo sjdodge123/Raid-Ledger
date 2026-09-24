@@ -279,7 +279,7 @@ describe('EditProfessionsModal — shared primitives (ROK-1654 H3)', () => {
         renderWithProviders(
             <EditProfessionsModal {...baseProps} initial={null} />,
         );
-        const save = screen.getByRole('button', { name: /saving/i });
+        const save = screen.getByRole('button', { name: /^sav(e|ing)/i });
         expect(save).toHaveAttribute('aria-busy', 'true');
 
         await user.click(save);
