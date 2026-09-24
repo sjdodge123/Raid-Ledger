@@ -4,6 +4,10 @@
  */
 import { useState, type JSX } from 'react';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 import { useUpdateLineupMetadata } from '../../hooks/use-lineups';
 import { toast } from '../../lib/toast';
 
@@ -15,26 +19,26 @@ interface Props {
 }
 
 const DESCRIPTION_MAX = 500;
+const TITLE_REQUIRED = 'Title is required';
 
-function TitleField({ value, onChange }: {
+/** Required title. The blank-title error is inline (ROK-1650 AC2), shown once the field is left. */
+function TitleField({ value, onChange, error, onBlur }: {
     value: string;
     onChange: (v: string) => void;
+    error?: string;
+    onBlur: () => void;
 }): JSX.Element {
     return (
-        <div>
-            <label htmlFor="edit-lineup-title" className="block text-sm font-medium text-secondary mb-1">
-                Title <span className="text-rose-400">*</span>
-            </label>
-            <input
-                id="edit-lineup-title"
+        <Field label="Title" id="edit-lineup-title" required error={error}>
+            <Input
                 type="text"
                 required
                 maxLength={100}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                onBlur={onBlur}
             />
-        </div>
+        </Field>
     );
 }
 
@@ -43,47 +47,52 @@ function DescriptionField({ value, onChange }: {
     onChange: (v: string) => void;
 }): JSX.Element {
     return (
-        <div>
-            <div className="flex items-center justify-between mb-1">
-                <label htmlFor="edit-lineup-description" className="block text-sm font-medium text-secondary">
-                    Description
-                </label>
-                <span className="text-xs text-muted tabular-nums">
-                    {value.length} / {DESCRIPTION_MAX}
-                </span>
-            </div>
-            <textarea
-                id="edit-lineup-description"
+        <Field label="Description" id="edit-lineup-description">
+            <Textarea
                 rows={4}
+                showCount
                 maxLength={DESCRIPTION_MAX}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder="Optional markdown — **bold**, *italic*, `code`, [link](https://example.com)"
-                className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
             />
+        </Field>
+    );
+}
+
+/** Cancel + Save row. Save is disabled while the title is blank and busy while saving (ruling 7). */
+function EditActions({ onCancel, onSave, saveDisabled, isPending }: {
+    onCancel: () => void;
+    onSave: () => void;
+    saveDisabled: boolean;
+    isPending: boolean;
+}): JSX.Element {
+    return (
+        <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button variant="primary" onClick={onSave} disabled={saveDisabled} loading={isPending} loadingLabel="Saving…">
+                Save
+            </Button>
         </div>
     );
 }
 
-export function EditLineupMetadataModal({ lineupId, initialTitle, initialDescription, onClose }: Props): JSX.Element {
+/** Form state + save. A blank title surfaces inline; only server errors toast. */
+function useEditLineupForm({ lineupId, initialTitle, initialDescription, onClose }: Props) {
     const [title, setTitle] = useState(initialTitle);
     const [description, setDescription] = useState(initialDescription ?? '');
+    const [titleTouched, setTitleTouched] = useState(false);
     const update = useUpdateLineupMetadata();
+    const titleBlank = title.trim() === '';
 
-    async function handleSave() {
-        const trimmed = title.trim();
-        if (!trimmed) {
-            toast.error('Title is required');
+    async function save() {
+        if (titleBlank) {
+            setTitleTouched(true);
             return;
         }
         try {
-            await update.mutateAsync({
-                lineupId,
-                body: {
-                    title: trimmed,
-                    description: description.trim() === '' ? null : description,
-                },
-            });
+            const body = { title: title.trim(), description: description.trim() === '' ? null : description };
+            await update.mutateAsync({ lineupId, body });
             toast.success('Lineup updated');
             onClose();
         } catch (err) {
@@ -91,28 +100,24 @@ export function EditLineupMetadataModal({ lineupId, initialTitle, initialDescrip
         }
     }
 
+    const titleError = titleTouched && titleBlank ? TITLE_REQUIRED : undefined;
+    return { title, setTitle, description, setDescription, titleBlank, titleError,
+        touchTitle: () => setTitleTouched(true), isPending: update.isPending, save };
+}
+
+export function EditLineupMetadataModal(props: Props): JSX.Element {
+    const form = useEditLineupForm(props);
     return (
-        <Modal isOpen={true} onClose={onClose} title="Edit Lineup">
+        <Modal isOpen={true} onClose={props.onClose} title="Edit Lineup">
             <div className="space-y-4">
-                <TitleField value={title} onChange={setTitle} />
-                <DescriptionField value={description} onChange={setDescription} />
-                <div className="flex justify-end gap-3 pt-2">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 text-sm font-medium text-secondary bg-panel border border-edge rounded-lg hover:bg-overlay transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => void handleSave()}
-                        disabled={update.isPending || title.trim() === ''}
-                        className="px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
-                    >
-                        {update.isPending ? 'Saving...' : 'Save'}
-                    </button>
-                </div>
+                <TitleField value={form.title} onChange={form.setTitle} error={form.titleError} onBlur={form.touchTitle} />
+                <DescriptionField value={form.description} onChange={form.setDescription} />
+                <EditActions
+                    onCancel={props.onClose}
+                    onSave={() => void form.save()}
+                    saveDisabled={form.titleBlank}
+                    isPending={form.isPending}
+                />
             </div>
         </Modal>
     );
