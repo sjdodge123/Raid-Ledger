@@ -2,7 +2,8 @@
  * Edit modal for a pending discovery-category suggestion (ROK-567).
  *
  * v1 scope: name + description only. Validated with Zod on submit;
- * errors surface inline below each field.
+ * errors surface inline below each field through the shared `Field`
+ * (aria-invalid + a role=alert message, ROK-1653).
  */
 import { useId, useState, type JSX } from 'react';
 import { z } from 'zod';
@@ -11,6 +12,10 @@ import type {
     DiscoveryCategorySuggestionDto,
 } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { Textarea } from '../ui/textarea';
 
 const EditSchema = z.object({
     name: z.string().min(1, 'Name is required').max(120, 'Name is too long'),
@@ -32,11 +37,6 @@ function useEditForm(suggestion: DiscoveryCategorySuggestionDto) {
     return { name, setName, description, setDescription, errors, setErrors };
 }
 
-function FieldError({ message }: { message?: string }) {
-    if (!message) return null;
-    return <p className="text-xs text-red-400 mt-1">{message}</p>;
-}
-
 interface EditFormBodyProps {
     suggestion: DiscoveryCategorySuggestionDto;
     onClose: () => void;
@@ -53,68 +53,7 @@ function parseFieldErrors(zodErrors: z.ZodIssue[]) {
     return fieldErrors;
 }
 
-const FIELD_CLASSES =
-    'w-full px-3 py-2 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500';
-
-/**
- * Label + control + inline error, shared by the name input and the
- * description textarea (ROK-1530 D7). `multiline` picks the control.
- */
-interface LabelledInputProps {
-    id: string;
-    label: string;
-    value: string;
-    onChange: (next: string) => void;
-    error?: string;
-    multiline?: boolean;
-}
-
-/** Uppercase field caption shared by both edit-modal controls (ROK-1530 D7). */
-function FieldLabel({
-    htmlFor,
-    label,
-}: {
-    htmlFor: string;
-    label: string;
-}): JSX.Element {
-    return (
-        <label
-            htmlFor={htmlFor}
-            className="block text-xs uppercase tracking-wider text-muted mb-1"
-        >
-            {label}
-        </label>
-    );
-}
-
-function LabelledInput({
-    id,
-    label,
-    value,
-    onChange,
-    error,
-    multiline,
-}: LabelledInputProps): JSX.Element {
-    const shared = {
-        id,
-        value,
-        onChange: (e: { target: { value: string } }) => onChange(e.target.value),
-        className: FIELD_CLASSES,
-    };
-    return (
-        <div>
-            <FieldLabel htmlFor={id} label={label} />
-            {multiline ? (
-                <textarea {...shared} rows={4} />
-            ) : (
-                <input {...shared} type="text" />
-            )}
-            <FieldError message={error} />
-        </div>
-    );
-}
-
-/** Cancel / Save footer of the edit modal (ROK-1530 D7). */
+/** Cancel / Save row of the edit modal (ROK-1530 D7; shared Buttons, ROK-1653). */
 function EditFormActions({
     onClose,
     onSave,
@@ -126,21 +65,12 @@ function EditFormActions({
 }): JSX.Element {
     return (
         <div className="flex justify-end gap-2 pt-2">
-            <button
-                type="button"
-                onClick={onClose}
-                className="px-3 py-1.5 text-sm bg-overlay hover:bg-faint text-foreground border border-edge rounded-lg transition-colors"
-            >
+            <Button variant="secondary" onClick={onClose}>
                 Cancel
-            </button>
-            <button
-                type="button"
-                onClick={onSave}
-                disabled={isSaving}
-                className="px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-foreground rounded-lg transition-colors"
-            >
-                {isSaving ? 'Saving…' : 'Save'}
-            </button>
+            </Button>
+            <Button onClick={onSave} loading={isSaving} loadingLabel="Saving…">
+                Save
+            </Button>
         </div>
     );
 }
@@ -178,21 +108,21 @@ function EditFields({
 }: EditFieldsProps): JSX.Element {
     return (
         <>
-            <LabelledInput
-                id={ids.name}
-                label="Name"
-                value={values.name}
-                onChange={onChange.name}
-                error={errors.name}
-            />
-            <LabelledInput
-                id={ids.description}
-                label="Description"
-                value={values.description}
-                onChange={onChange.description}
-                error={errors.description}
-                multiline
-            />
+            {/* Name is not marked `required`: the asterisk would break the smoke's getByLabel(/^Name$/i). */}
+            <Field id={ids.name} label="Name" error={errors.name}>
+                <Input
+                    type="text"
+                    value={values.name}
+                    onChange={(e) => onChange.name(e.target.value)}
+                />
+            </Field>
+            <Field id={ids.description} label="Description" error={errors.description}>
+                <Textarea
+                    rows={4}
+                    value={values.description}
+                    onChange={(e) => onChange.description(e.target.value)}
+                />
+            </Field>
         </>
     );
 }
