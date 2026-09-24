@@ -43,21 +43,41 @@ const DEFAULT_MAX_HEIGHT = '60vh';
 const EXPANDED_HEIGHT = '95vh';
 
 /**
+ * True when focus now sits in a dialog other than this sheet — e.g. a sheet row
+ * closed the sheet and opened a Modal whose `autoFocus` already landed. Handing
+ * focus back to the sheet's opener then would yank it out of that dialog
+ * (ROK-1650: Advance's confirm lost focus to the header Close at 375px).
+ */
+function focusMovedToAnotherDialog(sheet: HTMLElement | null): boolean {
+    const active = document.activeElement;
+    if (!active || sheet?.contains(active)) return false;
+    const dialog = active.closest('[role="dialog"], [role="alertdialog"]');
+    // A dialog that CONTAINS the sheet is its host (a sheet opened inside a
+    // Modal), not a new dialog — the opener inside it should get focus back.
+    return dialog != null && dialog !== sheet && !(sheet && dialog.contains(sheet));
+}
+
+/**
  * Move focus into the sheet on open and give it back on close (ROK-1574 review:
  * the check is the first BLOCKING flow in a sheet, and `aria-modal` alone does
- * not move a keyboard user off the page). A full focus trap is TECH-DEBT.
+ * not move a keyboard user off the page) — unless another dialog took it.
+ * A full focus trap is TECH-DEBT.
  */
 function useSheetFocus(isOpen: boolean, sheetRef: React.RefObject<HTMLDivElement | null>) {
     useEffect(() => {
         if (!isOpen) return;
         const previous = document.activeElement as HTMLElement | null;
+        const sheet = sheetRef.current;
         const id = window.setTimeout(() => {
             const first = sheetRef.current?.querySelector<HTMLElement>(
                 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
             );
             first?.focus();
         }, 0);
-        return () => { window.clearTimeout(id); previous?.focus?.(); };
+        return () => {
+            window.clearTimeout(id);
+            if (!focusMovedToAnotherDialog(sheet)) previous?.focus?.();
+        };
     }, [isOpen, sheetRef]);
 }
 

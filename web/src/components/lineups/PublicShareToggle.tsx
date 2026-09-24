@@ -9,6 +9,8 @@
  */
 import type { JSX } from 'react';
 import { copyWithToast } from '../../lib/clipboard';
+import { Button } from '../ui/button';
+import { Switch } from '../ui/switch';
 
 interface PublicShareToggleProps {
     enabled: boolean;
@@ -27,6 +29,49 @@ function copyLink(slug: string): void {
     });
 }
 
+/** Visible title + state line; the Switch carries the same name as its label. */
+function ShareSummary({ enabled }: { enabled: boolean }): JSX.Element {
+    return (
+        <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium">Public share link</p>
+            <p className="text-xs text-muted mt-0.5">
+                {enabled
+                    ? 'Anyone with the link can view this lineup.'
+                    : 'Lineup is private to members.'}
+            </p>
+        </div>
+    );
+}
+
+/** Copy link (when a slug exists and sharing is on) beside the on/off Switch. */
+function ShareControls({ enabled, onChange, slug, disabled }: Required<Omit<PublicShareToggleProps, 'slug'>> & {
+    slug?: string;
+}): JSX.Element {
+    return (
+        <div className="flex items-center gap-2 flex-shrink-0">
+            {slug && enabled && (
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => copyLink(slug)}
+                    disabled={disabled}
+                    data-testid="public-share-copy"
+                    aria-label="Copy public link"
+                >
+                    Copy link
+                </Button>
+            )}
+            <Switch
+                checked={enabled}
+                onChange={onChange}
+                label="Public share link"
+                disabled={disabled}
+                testId="public-share-switch"
+            />
+        </div>
+    );
+}
+
 export function PublicShareToggle({
     enabled,
     onChange,
@@ -38,46 +83,8 @@ export function PublicShareToggle({
             data-testid="public-share-toggle"
             className="flex items-center justify-between gap-3 p-3 rounded border border-edge/40 bg-overlay/30"
         >
-            <div className="flex-1 min-w-0">
-                <label className="block text-sm font-medium">
-                    Public share link
-                </label>
-                <p className="text-xs text-muted mt-0.5">
-                    {enabled
-                        ? 'Anyone with the link can view this lineup.'
-                        : 'Lineup is private to members.'}
-                </p>
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-                {slug && enabled && (
-                    <button
-                        type="button"
-                        onClick={() => copyLink(slug)}
-                        disabled={disabled}
-                        data-testid="public-share-copy"
-                        className="px-2.5 py-1.5 text-xs rounded border border-edge/50 hover:bg-overlay/50 disabled:opacity-50"
-                        aria-label="Copy public link"
-                    >
-                        Copy link
-                    </button>
-                )}
-                <label className="inline-flex items-center cursor-pointer select-none">
-                    <input
-                        type="checkbox"
-                        checked={enabled}
-                        onChange={(e) => onChange(e.target.checked)}
-                        disabled={disabled}
-                        className="sr-only peer"
-                    />
-                    <span className="w-9 h-5 bg-zinc-700 peer-checked:bg-emerald-500 rounded-full relative transition-colors peer-disabled:opacity-50">
-                        <span
-                            className={`absolute top-0.5 left-0.5 h-4 w-4 bg-white rounded-full transition-transform ${
-                                enabled ? 'translate-x-4' : ''
-                            }`}
-                        />
-                    </span>
-                </label>
-            </div>
+            <ShareSummary enabled={enabled} />
+            <ShareControls enabled={enabled} onChange={onChange} slug={slug} disabled={disabled} />
         </div>
     );
 }

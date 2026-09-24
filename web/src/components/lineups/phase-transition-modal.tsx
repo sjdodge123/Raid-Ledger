@@ -8,6 +8,7 @@
 import { type FormEvent, type JSX } from 'react';
 import type { LineupStatusDto } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
 import { PHASE_LABELS } from './lineup-phases';
 
 interface Props {
@@ -81,27 +82,10 @@ function ModalFooter({
 }): JSX.Element {
     return (
         <div className="flex justify-end gap-3 pt-2">
-            <button
-                type="button"
-                onClick={onCancel}
-                className="px-4 py-2 text-sm font-medium text-secondary bg-panel border border-edge rounded-lg hover:bg-overlay transition-colors"
-            >
-                Cancel
-            </button>
-            <button
-                type="submit"
-                autoFocus
-                disabled={isPending}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
-            >
-                {isPending && (
-                    <span
-                        aria-hidden="true"
-                        className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin"
-                    />
-                )}
-                {isPending ? pendingLabel : confirmLabel}
-            </button>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button variant="primary" type="submit" autoFocus loading={isPending} loadingLabel={pendingLabel}>
+                {confirmLabel}
+            </Button>
         </div>
     );
 }

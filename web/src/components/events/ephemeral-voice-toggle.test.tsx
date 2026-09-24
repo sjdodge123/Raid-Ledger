@@ -3,6 +3,9 @@
  * system status (master flag) with a force-ephemeral on+disabled mode.
  * ROK-1386: nested private (roster-only) checkbox, shown only when ephemeral
  * voice is effectively on.
+ * ROK-1649 (ruling 12): both are the shared Checkbox, named by their visible
+ * text — the old hidden aria-label strings are gone, so the queries below go
+ * by role + accessible name.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -15,7 +18,13 @@ vi.mock('../../hooks/use-system-status', () => ({
     useSystemStatus: () => status,
 }));
 
-const PRIVATE_LABEL = 'Private event — only rostered members can join';
+const VOICE_LABEL = 'Create a temporary voice channel for this event';
+const FORCED_LABEL =
+    'A temporary voice channel will be created for this event (enabled by admin)';
+const PRIVATE_LABEL = 'Private — only rostered members can join';
+
+const box = (name: string) => screen.getByRole('checkbox', { name });
+const queryBox = (name: string) => screen.queryByRole('checkbox', { name });
 
 describe('EphemeralVoiceToggle (ROK-1352)', () => {
     beforeEach(() => {
@@ -45,9 +54,7 @@ describe('EphemeralVoiceToggle (ROK-1352)', () => {
                 onPrivateChange={vi.fn()}
             />,
         );
-        expect(
-            screen.getByLabelText('Ephemeral voice channel for this event'),
-        ).toBeInTheDocument();
+        expect(box(VOICE_LABEL)).toBeInTheDocument();
     });
 
     it('emits true when checked and null when unchecked (inherit)', () => {
@@ -61,9 +68,7 @@ describe('EphemeralVoiceToggle (ROK-1352)', () => {
                 onPrivateChange={vi.fn()}
             />,
         );
-        fireEvent.click(
-            screen.getByLabelText('Ephemeral voice channel for this event'),
-        );
+        fireEvent.click(box(VOICE_LABEL));
         expect(onChange).toHaveBeenCalledWith(true);
     });
 
@@ -77,11 +82,9 @@ describe('EphemeralVoiceToggle (ROK-1352)', () => {
                 onPrivateChange={vi.fn()}
             />,
         );
-        const box = screen.getByLabelText(
-            'Ephemeral voice channel for this event',
-        ) as HTMLInputElement;
-        expect(box.checked).toBe(true);
-        expect(box.disabled).toBe(true);
+        const forcedBox = box(FORCED_LABEL) as HTMLInputElement;
+        expect(forcedBox.checked).toBe(true);
+        expect(forcedBox.disabled).toBe(true);
     });
 });
 
@@ -100,7 +103,7 @@ describe('EphemeralVoiceToggle — private checkbox (ROK-1386)', () => {
                 onPrivateChange={vi.fn()}
             />,
         );
-        expect(screen.queryByLabelText(PRIVATE_LABEL)).not.toBeInTheDocument();
+        expect(queryBox(PRIVATE_LABEL)).not.toBeInTheDocument();
     });
 
     it('shows the private checkbox when ephemeral voice is on', () => {
@@ -113,7 +116,7 @@ describe('EphemeralVoiceToggle — private checkbox (ROK-1386)', () => {
                 onPrivateChange={vi.fn()}
             />,
         );
-        expect(screen.getByLabelText(PRIVATE_LABEL)).toBeInTheDocument();
+        expect(box(PRIVATE_LABEL)).toBeInTheDocument();
     });
 
     it('shows the private checkbox when force-ephemeral is enabled', () => {
@@ -126,7 +129,7 @@ describe('EphemeralVoiceToggle — private checkbox (ROK-1386)', () => {
                 onPrivateChange={vi.fn()}
             />,
         );
-        expect(screen.getByLabelText(PRIVATE_LABEL)).toBeInTheDocument();
+        expect(box(PRIVATE_LABEL)).toBeInTheDocument();
     });
 
     it('emits true/null from the private checkbox', () => {
@@ -140,7 +143,7 @@ describe('EphemeralVoiceToggle — private checkbox (ROK-1386)', () => {
                 onPrivateChange={onPrivateChange}
             />,
         );
-        fireEvent.click(screen.getByLabelText(PRIVATE_LABEL));
+        fireEvent.click(box(PRIVATE_LABEL));
         expect(onPrivateChange).toHaveBeenCalledWith(true);
     });
 
@@ -155,9 +158,7 @@ describe('EphemeralVoiceToggle — private checkbox (ROK-1386)', () => {
                 onPrivateChange={onPrivateChange}
             />,
         );
-        fireEvent.click(
-            screen.getByLabelText('Ephemeral voice channel for this event'),
-        );
+        fireEvent.click(box(VOICE_LABEL));
         expect(onPrivateChange).toHaveBeenCalledWith(null);
     });
 });

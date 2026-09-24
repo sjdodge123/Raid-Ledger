@@ -11,6 +11,9 @@
  */
 import { useState, type JSX } from 'react';
 import { suggestButtonLabel } from './scheduling-availability';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
+import { Button } from '../../ui/button';
 
 export interface SchedulingSuggestFormProps {
   prefillTime?: string;
@@ -35,16 +38,14 @@ export function SchedulingSuggestForm({
 
   return (
     <div className="flex flex-wrap items-end gap-2">
-      <label className="flex flex-col gap-1 text-xs text-muted">
-        Suggest another time
-        <input
+      <Field label="Suggest another time">
+        <Input
           type="datetime-local"
           data-testid="slot-datetime-picker"
           value={value}
           onChange={(e) => setLocalValue(e.target.value)}
-          className="px-3 py-2 bg-panel border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none"
         />
-      </label>
+      </Field>
       <SuggestButton value={value} disabled={!value || isSuggesting} onClick={handleSubmit} />
     </div>
   );
@@ -55,13 +56,8 @@ function SuggestButton({ value, disabled, onClick }: {
   value: string; disabled: boolean; onClick: () => void;
 }): JSX.Element {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="min-h-[36px] px-4 py-2 rounded-md border border-emerald-500 bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-    >
+    <Button variant="primary" size="sm" onClick={onClick} disabled={disabled}>
       {suggestButtonLabel(value)}
-    </button>
+    </Button>
   );
 }

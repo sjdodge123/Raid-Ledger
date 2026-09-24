@@ -70,10 +70,11 @@ describe('AbortLineupModal', () => {
             <AbortLineupModal lineupId={1} onClose={vi.fn()} />,
         );
 
-        expect(screen.getByText('0 / 500')).toBeInTheDocument();
+        // ROK-1650: ReasonField's counter is the shared Textarea `showCount` one.
+        expect(screen.getByTestId('textarea-count')).toHaveTextContent(/^0\/500$/);
 
         await user.type(screen.getByRole('textbox'), 'wrong scope');
-        expect(screen.getByText('11 / 500')).toBeInTheDocument();
+        expect(screen.getByTestId('textarea-count')).toHaveTextContent(/^11\/500$/);
     });
 
     it('confirm submits trimmed reason', async () => {

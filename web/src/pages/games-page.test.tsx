@@ -456,7 +456,9 @@ describe('GamesPage — ROK-565: community-playing discover row', () => {
 //     "Filters" — distinct from the existing "Genre Filter" FAB) rendered on
 //     the discover tab, wired to a `FilterPanel` whose children are the co-op
 //     controls.
-//   • Numeric input        — aria-label "Min online players"
+//   • Online minimum       — the shared `Slider`, named by its visible label
+//                            "Online co-op" (ROK-1650 ruling 12; the old
+//                            aria-label "Min online players" is gone), "Any" at 0
 //   • Toggles (checkboxes) — "Couch co-op", "LAN co-op", "Split-screen",
 //                            "Co-op campaign"
 //   • Hint line            — data-testid "coop-filter-hint", copy
@@ -527,9 +529,17 @@ function openCoopPanel() {
  * '' back to its midpoint, which would silently assert the wrong thing.
  */
 function setOnlineMin(value: string) {
-    fireEvent.change(screen.getByLabelText(/min online players/i), {
-        target: { value },
-    });
+    fireEvent.change(onlineSlider(), { target: { value } });
+}
+
+/** The online-minimum Slider, named by its visible "Online co-op" label (ROK-1650 ruling 12). */
+function onlineSlider(): HTMLElement {
+    return screen.getByRole('slider', { name: 'Online co-op' });
+}
+
+/** The Slider's own `<output for>` readout (not a page-wide text match). */
+function readoutOf(slider: HTMLElement): Element | undefined {
+    return Array.from(document.querySelectorAll('output')).find((o) => o.getAttribute('for') === slider.id);
 }
 
 /** How many times a discover row category appears across desktop + mobile paths. */
@@ -554,7 +564,7 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
         renderPage();
         openCoopPanel();
 
-        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
+        expect(onlineSlider()).toBeInTheDocument();
         expect(screen.getByRole('checkbox', { name: /couch co-op/i })).toBeInTheDocument();
         expect(screen.getByRole('checkbox', { name: /lan co-op/i })).toBeInTheDocument();
         expect(screen.getByRole('checkbox', { name: /split-screen/i })).toBeInTheDocument();
@@ -584,7 +594,7 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
 
         const sheet = screen.getByRole('dialog');
         expect(sheet.querySelector('h3')?.textContent).toBe('Filters');
-        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
+        expect(within(sheet).getByRole('slider', { name: 'Online co-op' })).toBeInTheDocument();
     });
 
     it('excludes rows whose games have no co-op data when the numeric predicate is active', () => {
@@ -610,24 +620,44 @@ describe('GamesPage — ROK-1402: co-op FilterPanel', () => {
         expect(rowCount('Solo Row')).toBeGreaterThan(0);
         expect(screen.queryByTestId(COOP_HINT)).not.toBeInTheDocument();
     });
+});
 
-    it('renders the online minimum as a slider showing "Any" at 0', () => {
+describe('GamesPage — ROK-1650: co-op controls are the shared Slider and Checkbox', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        isDesktopViewport = true;
+        mockCoopDiscover();
+        mockSearch();
+    });
+
+    it('renders the online minimum as a Slider named "Online co-op" whose readout says "Any" at 0', () => {
         renderPage();
         openCoopPanel();
 
-        const slider = screen.getByRole('slider', { name: /min online players/i });
+        const slider = onlineSlider();
         expect(slider).toHaveAttribute('type', 'range');
-        // Scoped to the slider's own readout: ROK-1659's Players group has an
-        // "Any" segment too, so a page-wide getByText is ambiguous.
-        expect(slider.closest('label')).toHaveTextContent('Any');
+        // Ruling 12: the visible text is the name; the hidden aria-label is dropped.
+        expect(screen.queryByLabelText(/min online players/i)).not.toBeInTheDocument();
+        // The Slider's own readout: ROK-1659's Players group has an "Any"
+        // segment and ROK-1525's player-count chips a bare "4", so a
+        // page-wide getByText is ambiguous. aria-valuetext speaks the same.
+        expect(readoutOf(slider)).toHaveTextContent(/^Any$/);
+        expect(slider).toHaveAttribute('aria-valuetext', 'Any');
 
         setOnlineMin('4');
-        // Scoped to the slider's OWN readout: ROK-1525's player-count chips put
-        // a bare "4" elsewhere on the page, so a page-wide getByText is now
-        // ambiguous. Asserting through the control is the stronger check.
-        expect(slider.closest('label')).toHaveTextContent('4');
+        expect(readoutOf(slider)).toHaveTextContent(/^4$/);
+        expect(slider).toHaveAttribute('aria-valuetext', '4');
     });
 
+    it('renders each co-op mode as a Checkbox whose visible label row is the 44px target', () => {
+        renderPage();
+        openCoopPanel();
+
+        for (const name of ['Couch co-op', 'LAN co-op', 'Split-screen', 'Co-op campaign']) {
+            const box = screen.getByRole('checkbox', { name });
+            expect(box.closest('label')).toHaveClass('min-h-[44px]');
+        }
+    });
 });
 
 describe('GamesPage — ROK-1402: co-op FilterPanel — part 2', () => {
@@ -774,7 +804,7 @@ describe('GamesPage — ROK-1402: the whole section is dormant without co-op dat
         openCoopPanel();
         expect(screen.getByTestId('genre-filter-group')).toBeInTheDocument();
         expect(screen.queryByTestId('coop-filter-group')).not.toBeInTheDocument();
-        expect(screen.queryByLabelText(/min online players/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('slider', { name: 'Online co-op' })).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/couch co-op/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/lan co-op/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/split-screen/i)).not.toBeInTheDocument();
@@ -787,7 +817,7 @@ describe('GamesPage — ROK-1402: the whole section is dormant without co-op dat
 
         expect(screen.getByRole('button', { name: /^filters$/i })).toBeInTheDocument();
         openCoopPanel();
-        expect(screen.getByLabelText(/min online players/i)).toBeInTheDocument();
+        expect(onlineSlider()).toBeInTheDocument();
         expect(screen.getByLabelText(/couch co-op/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/co-op campaign/i)).toBeInTheDocument();
     });
@@ -836,7 +866,7 @@ describe('GamesPage — ROK-1402: co-op filters persist across remount', () => {
         expect(rowCount('Coop Row')).toBeGreaterThan(0);
         expect(screen.getByTestId(COOP_HINT)).toBeInTheDocument();
         openCoopPanel();
-        expect(screen.getByRole('slider', { name: /min online players/i })).toHaveValue('4');
+        expect(onlineSlider()).toHaveValue('4');
     });
 
     it('persists a mode toggle and clears the store on "Clear all"', () => {

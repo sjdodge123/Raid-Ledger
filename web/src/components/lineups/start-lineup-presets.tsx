@@ -7,7 +7,9 @@
  * phase-duration values into the modal's form state. The resolved values are
  * what gets sent to the API — no preset enum is persisted.
  */
-import type { JSX, ReactNode } from 'react';
+import type { JSX, KeyboardEvent, ReactNode } from 'react';
+import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import type { PresetKey } from './start-lineup-config';
 
 /**
@@ -15,15 +17,74 @@ import type { PresetKey } from './start-lineup-config';
  * an orphaned trailing cell (ROK-1441): mobile is a 2-col grid with Custom
  * spanning both, desktop a 6-col grid laid out 3-then-2.
  */
-const PRESET_OPTIONS: ReadonlyArray<
-  readonly [PresetKey, string, string, string]
-> = [
+/**
+ * Preset card skin on the ghost Button (ROK-1650, ruling 6: the cards stay
+ * Button role=radio rather than a new RadioGroup appearance). The checked paint
+ * is keyed off `aria-checked`, so it outranks the ghost variant's base and
+ * hover classes without a tailwind-merge; `*:w-full` stretches the Button's
+ * label wrapper so the label + hint sit flush left.
+ */
+const CARD_CLS =
+  'w-full border border-edge bg-panel text-left *:w-full ' +
+  'aria-checked:border-success/50 aria-checked:bg-success/20 aria-checked:text-success';
+
+type PresetOption = readonly [PresetKey, string, string, string];
+
+const PRESET_OPTIONS: ReadonlyArray<PresetOption> = [
   ['lan', 'LAN', 'Everyone here now · ~30 min', 'sm:col-span-2'],
   ['tonight', 'Tonight', 'Play later today · 5h a phase', 'sm:col-span-2'],
   ['thisWeek', 'This Week', 'Plan the weekly session', 'sm:col-span-2'],
   ['series', 'Series', 'Long-range, many games', 'sm:col-span-3'],
   ['custom', 'Custom', 'Set everything manually', 'col-span-2 sm:col-span-3'],
 ];
+
+/** Arrow keys → index step (ARIA radio group: Right/Down next, Left/Up previous). */
+const ARROW_STEP: Readonly<Record<string, number>> = {
+  ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1,
+};
+
+/**
+ * Radio-group arrow handling for the card Buttons: move AND select the
+ * neighbouring card, wrapping at both ends, and move focus with it.
+ */
+function handlePresetArrow(e: KeyboardEvent<HTMLDivElement>, value: PresetKey, onChange: (key: PresetKey) => void): void {
+  const step = ARROW_STEP[e.key];
+  if (!step) return;
+  e.preventDefault();
+  const count = PRESET_OPTIONS.length;
+  const current = PRESET_OPTIONS.findIndex(([key]) => key === value);
+  const next = PRESET_OPTIONS[(Math.max(current, 0) + step + count) % count][0];
+  onChange(next);
+  e.currentTarget.querySelector<HTMLElement>(`[data-testid="preset-${next}"]`)?.focus();
+}
+
+/** One preset option: a ghost Button acting as a radio, label over hint. */
+function PresetCard({ option, checked, tabbable, onSelect }: {
+  option: PresetOption;
+  checked: boolean;
+  /** Roving tabindex: the checked card, or the first when none is. */
+  tabbable: boolean;
+  onSelect: (key: PresetKey) => void;
+}): JSX.Element {
+  const [presetKey, label, hint, spanClass] = option;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      role="radio"
+      aria-checked={checked}
+      tabIndex={tabbable ? 0 : -1}
+      data-testid={`preset-${presetKey}`}
+      onClick={() => onSelect(presetKey)}
+      className={`${CARD_CLS} ${spanClass}`}
+    >
+      <span className="flex flex-col items-start">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="text-[10px] leading-tight text-muted">{hint}</span>
+      </span>
+    </Button>
+  );
+}
 
 /** Match-shape preset chooser (LAN / Tonight / This Week / Series / Custom). */
 export function PresetChooser({
@@ -33,33 +94,21 @@ export function PresetChooser({
   value: PresetKey;
   onChange: (key: PresetKey) => void;
 }): JSX.Element {
+  const hasChecked = PRESET_OPTIONS.some(([key]) => key === value);
   return (
     <div>
-      <span className="block text-sm font-medium text-emerald-300 mb-2">
+      <span className="block text-sm font-medium text-success mb-2">
         Match shape
       </span>
       <div
         role="radiogroup"
         aria-label="Lineup preset"
         className="grid grid-cols-2 gap-2 sm:grid-cols-6"
+        onKeyDown={(e) => handlePresetArrow(e, value, onChange)}
       >
-        {PRESET_OPTIONS.map(([key, label, hint, spanClass]) => (
-          <button
-            key={key}
-            type="button"
-            role="radio"
-            aria-checked={value === key}
-            data-testid={`preset-${key}`}
-            onClick={() => onChange(key)}
-            className={`flex flex-col items-start rounded-lg border px-3 py-2 text-left transition-colors ${spanClass} ${
-              value === key
-                ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-300'
-                : 'bg-panel border-edge text-muted hover:text-foreground'
-            }`}
-          >
-            <span className="text-sm font-medium">{label}</span>
-            <span className="text-[10px] leading-tight text-muted">{hint}</span>
-          </button>
+        {PRESET_OPTIONS.map((option, i) => (
+          <PresetCard key={option[0]} option={option} checked={value === option[0]}
+            tabbable={hasChecked ? value === option[0] : i === 0} onSelect={onChange} />
         ))}
       </div>
     </div>
@@ -70,7 +119,7 @@ export function PresetChooser({
 export function PlayerCapsNote(): JSX.Element {
   return (
     <p className="text-xs text-muted">
-      <span className="text-emerald-400">Player caps</span> come from each
+      <span className="text-success">Player caps</span> come from each
       game&apos;s metadata once games are nominated.
     </p>
   );
@@ -88,21 +137,13 @@ export function SchedulingPhaseToggle({
   onChange: (next: boolean) => void;
 }): JSX.Element {
   return (
-    <label className="flex items-start gap-2 cursor-pointer">
-      <input
-        type="checkbox"
-        data-testid="include-scheduling-phase"
-        checked={enabled}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 accent-emerald-500"
-      />
-      <span className="text-sm text-secondary">
-        Include scheduling phase after game is decided
-        <span className="block text-xs text-muted">
-          Off = the lineup just picks a game; no time-scheduling poll is created.
-        </span>
-      </span>
-    </label>
+    <Checkbox
+      data-testid="include-scheduling-phase"
+      checked={enabled}
+      onChange={(e) => onChange(e.target.checked)}
+      label="Include scheduling phase after game is decided"
+      description="Off = the lineup just picks a game; no time-scheduling poll is created."
+    />
   );
 }
 
@@ -110,7 +151,7 @@ export function SchedulingPhaseToggle({
 export function MoreOptions({ children }: { children: ReactNode }): JSX.Element {
   return (
     <details className="border-t border-edge/30 pt-2">
-      <summary className="cursor-pointer text-sm font-medium text-emerald-300 list-none flex items-center gap-1">
+      <summary className="cursor-pointer text-sm font-medium text-success list-none flex items-center gap-1">
         <span aria-hidden>▶</span> More options
         <span className="text-xs text-muted font-normal">
           (match threshold, votes per player, scheduling, channel, phase

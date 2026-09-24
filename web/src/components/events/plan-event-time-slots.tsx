@@ -1,4 +1,9 @@
+import { useId } from 'react';
 import type { PollOption, TimeSuggestionsResponse } from '@raid-ledger/contract';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { RadioGroup } from '../ui/radio-group';
 
 const POLL_DURATION_PRESETS = [
     { label: '6h', hours: 6 },
@@ -7,6 +12,20 @@ const POLL_DURATION_PRESETS = [
     { label: '48h', hours: 48 },
     { label: '72h', hours: 72 },
 ] as const;
+
+type PollMode = 'standard' | 'all_or_nothing';
+
+const POLL_MODE_OPTIONS: { value: PollMode; label: string }[] = [
+    { value: 'standard', label: 'Standard' },
+    { value: 'all_or_nothing', label: 'All or Nothing' },
+];
+
+/**
+ * Selected chip: a success tint on tokens, at full opacity. `!` because these
+ * override the secondary variant's own bg / text / border and the shared
+ * disabled fade (a picked slot is disabled so it can't be added twice).
+ */
+const SELECTED_CHIP_CLS = 'bg-success/10! text-success! border-success/40! disabled:opacity-100! disabled:cursor-default!';
 
 interface TimeSlotsProps {
     suggestions: TimeSuggestionsResponse | undefined;
@@ -27,15 +46,11 @@ function SuggestionButton({ s, isSelected, onAdd, disabled }: {
     s: TimeSuggestionsResponse['suggestions'][number]; isSelected: boolean; onAdd: () => void; disabled: boolean;
 }) {
     return (
-        <button key={s.date} type="button" onClick={onAdd} disabled={isSelected || disabled}
-            className={`px-3 py-2 rounded-lg text-sm transition-colors ${
-                isSelected
-                    ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/40 cursor-default'
-                    : 'bg-panel border border-edge text-secondary hover:text-foreground hover:border-emerald-500 disabled:opacity-40'
-            }`}>
+        <Button variant="secondary" size="sm" onClick={onAdd} disabled={isSelected || disabled}
+            className={isSelected ? SELECTED_CHIP_CLS : undefined}>
             {s.label}
-            {s.availableCount > 0 && <span className="ml-1.5 text-xs text-emerald-400">({s.availableCount})</span>}
-        </button>
+            {s.availableCount > 0 && <span className="text-xs text-success">({s.availableCount})</span>}
+        </Button>
     );
 }
 
@@ -46,7 +61,7 @@ function SuggestionsList({ suggestions, alreadySelected, selectedCount, onAddTim
     return (
         <div className="space-y-2">
             {suggestions.source === 'game-interest' && (
-                <p className="text-xs text-emerald-400">
+                <p className="text-xs text-success">
                     Based on {suggestions.interestedPlayerCount} interested player{suggestions.interestedPlayerCount !== 1 ? 's' : ''}' game time
                 </p>
             )}
@@ -68,14 +83,15 @@ function CustomTimeEntry({ customDate, customTime, disabled, onDateChange, onTim
         <div className="bg-panel/50 border border-edge-subtle rounded-lg p-4 space-y-3">
             <p className="text-sm font-medium text-secondary">Add Custom Time</p>
             <div className="flex flex-col sm:flex-row gap-3">
-                <input type="date" value={customDate} onChange={(e) => onDateChange(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                <input type="time" value={customTime} onChange={(e) => onTimeChange(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-                <button type="button" onClick={onAdd} disabled={!customDate || !customTime || disabled}
-                    className="px-4 py-2 bg-violet-600 hover:bg-violet-500 disabled:bg-overlay disabled:text-muted text-white text-sm font-medium rounded-lg transition-colors">
+                <Field label="Custom date" hideLabel className="flex-1">
+                    <Input type="date" value={customDate} onChange={(e) => onDateChange(e.target.value)} />
+                </Field>
+                <Field label="Custom time" hideLabel className="flex-1">
+                    <Input type="time" value={customTime} onChange={(e) => onTimeChange(e.target.value)} />
+                </Field>
+                <Button onClick={onAdd} disabled={!customDate || !customTime || disabled}>
                     Add
-                </button>
+                </Button>
             </div>
         </div>
     );
@@ -88,13 +104,13 @@ function SelectedSlotsList({ slots, onRemove }: { slots: PollOption[]; onRemove:
             <p className="text-sm font-medium text-secondary">Selected ({slots.length}/9)</p>
             <div className="space-y-1">
                 {slots.map((slot) => (
-                    <div key={slot.date} className="flex items-center justify-between px-3 py-2 bg-emerald-600/10 border border-emerald-500/20 rounded-lg">
+                    <div key={slot.date} className="flex items-center justify-between pl-3 pr-1 py-1 bg-success/10 border border-success/20 rounded-lg">
                         <span className="text-sm text-foreground">{slot.label}</span>
-                        <button type="button" onClick={() => onRemove(slot.date)} className="p-1 text-muted hover:text-red-400 transition-colors" aria-label="Remove time slot">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <Button variant="ghost" size="sm" iconOnly aria-label="Remove time slot" onClick={() => onRemove(slot.date)}>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                             </svg>
-                        </button>
+                        </Button>
                     </div>
                 ))}
             </div>
@@ -121,49 +137,33 @@ export function TimeSlotsSection({
             <CustomTimeEntry customDate={customDate} customTime={customTime} disabled={selectedTimeSlots.length >= 9}
                 onDateChange={onCustomDateChange} onTimeChange={onCustomTimeChange} onAdd={onAddCustomTime} />
             <SelectedSlotsList slots={selectedTimeSlots} onRemove={onRemoveTimeSlot} />
-            {timeSlotsError && <p className="text-sm text-red-400">{timeSlotsError}</p>}
+            {timeSlotsError && <p role="alert" className="text-sm text-danger">{timeSlotsError}</p>}
         </>
     );
 }
 
 interface PollSettingsProps {
     pollDurationHours: number;
-    pollMode: 'standard' | 'all_or_nothing';
+    pollMode: PollMode;
     onPollDurationChange: (hours: number) => void;
-    onPollModeChange: (mode: 'standard' | 'all_or_nothing') => void;
+    onPollModeChange: (mode: PollMode) => void;
 }
 
 function PollDurationButtons({ pollDurationHours, onChange }: { pollDurationHours: number; onChange: (h: number) => void }) {
+    const options = POLL_DURATION_PRESETS.map((p) => ({ value: String(p.hours), label: p.label }));
     return (
-        <div>
-            <label className="block text-sm font-medium text-secondary mb-2">Poll Duration</label>
-            <div className="flex flex-wrap gap-2">
-                {POLL_DURATION_PRESETS.map((preset) => (
-                    <button key={preset.hours} type="button" onClick={() => onChange(preset.hours)}
-                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                            pollDurationHours === preset.hours
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle'
-                        }`}>
-                        {preset.label}
-                    </button>
-                ))}
-            </div>
-        </div>
+        <RadioGroup label="Poll Duration" appearance="segmented" options={options}
+            value={String(pollDurationHours)} onChange={(v) => onChange(Number(v))} />
     );
 }
 
-function PollModeToggle({ pollMode, onChange }: { pollMode: 'standard' | 'all_or_nothing'; onChange: (m: 'standard' | 'all_or_nothing') => void }) {
-    const btnClass = (active: boolean, color: string) =>
-        `flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${active ? `${color} text-white` : 'bg-panel border border-edge text-secondary hover:text-foreground'}`;
+function PollModeToggle({ pollMode, onChange }: { pollMode: PollMode; onChange: (m: PollMode) => void }) {
+    const descId = useId();
     return (
         <div>
-            <label className="block text-sm font-medium text-secondary mb-2">Poll Mode</label>
-            <div className="flex gap-2">
-                <button type="button" onClick={() => onChange('standard')} className={btnClass(pollMode === 'standard', 'bg-emerald-600')}>Standard</button>
-                <button type="button" onClick={() => onChange('all_or_nothing')} className={btnClass(pollMode === 'all_or_nothing', 'bg-violet-600')}>All or Nothing</button>
-            </div>
-            <p className="mt-2 text-xs text-dim">
+            <RadioGroup label="Poll Mode" appearance="segmented" options={POLL_MODE_OPTIONS}
+                value={pollMode} onChange={onChange} aria-describedby={descId} />
+            <p id={descId} className="mt-2 text-xs text-dim">
                 {pollMode === 'standard'
                     ? '"None of these work" only wins if it gets the most votes. Otherwise, the top time wins.'
                     : 'If ANY voter picks "None of these work", the poll re-sends with new time suggestions until everyone agrees.'}

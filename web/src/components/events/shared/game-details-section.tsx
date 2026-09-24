@@ -5,6 +5,10 @@ import { useGameRegistry, useEventTypes } from '../../../hooks/use-game-registry
 import { PluginSlot } from '../../../plugins';
 import { getWowVariant, getContentType } from '../../../plugins/wow/utils';
 import { applyEventTypeDefaults, type SlotState } from './event-form-constants';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
+import { Select } from '../../ui/select';
+import { Textarea } from '../../ui/textarea';
 
 export interface GameDetailsSectionProps {
     game: IgdbGameDto | null;
@@ -103,10 +107,13 @@ function InterestStat({ game, interestCount, interestLoading }: { game: IgdbGame
     if (!game || interestLoading || interestCount == null || interestCount <= 0) return null;
     return (
         <p className="text-xs text-muted -mt-2">
-            <span className="text-emerald-400 font-medium">{interestCount}</span> player{interestCount !== 1 ? 's' : ''} interested
+            <span className="text-success font-medium">{interestCount}</span> player{interestCount !== 1 ? 's' : ''} interested
         </p>
     );
 }
+
+const EVENT_TYPE_HINT = 'Auto-fills duration and roster slots based on content type';
+const AUTO_SUGGESTED_HINT = 'Auto-suggested from your selections';
 
 function EventTypeDropdown({ eventTypeSelectId, eventTypeId, eventTypes, onEventTypeChange }: {
     eventTypeSelectId: string; eventTypeId: number | null;
@@ -114,34 +121,28 @@ function EventTypeDropdown({ eventTypeSelectId, eventTypeId, eventTypes, onEvent
     onEventTypeChange: (raw: string) => void;
 }) {
     return (
-        <div>
-            <label htmlFor={eventTypeSelectId} className="block text-sm font-medium text-secondary mb-2">Event Type</label>
-            <select id={eventTypeSelectId} value={eventTypeId != null ? String(eventTypeId) : 'custom'}
-                onChange={(e) => onEventTypeChange(e.target.value)}
-                className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors">
+        <Field id={eventTypeSelectId} label="Event Type" hint={EVENT_TYPE_HINT}>
+            <Select value={eventTypeId != null ? String(eventTypeId) : 'custom'} onChange={(e) => onEventTypeChange(e.target.value)}>
                 <option value="custom">Custom</option>
                 {eventTypes.map((et) => (
                     <option key={et.id} value={et.id}>{et.name}{et.defaultPlayerCap ? ` (${et.defaultPlayerCap}-player)` : ''}</option>
                 ))}
-            </select>
-            <p className="mt-1 text-xs text-dim">Auto-fills duration and roster slots based on content type</p>
-        </div>
+            </Select>
+        </Field>
     );
 }
 
+/** Title: the form's first native `required` control — the <form>s are `noValidate` so the inline error wins. */
 function TitleField({ titleInputId, title, titleError, titleIsAutoSuggested, placeholder, onTitleChange }: {
     titleInputId: string; title: string; titleError?: string; titleIsAutoSuggested: boolean;
     placeholder: string; onTitleChange: (v: string, auto: boolean) => void;
 }) {
     return (
-        <div>
-            <label htmlFor={titleInputId} className="block text-sm font-medium text-secondary mb-2">Event Title <span className="text-red-400">*</span></label>
-            <input id={titleInputId} type="text" value={title} onChange={(e) => onTitleChange(e.target.value, false)}
-                placeholder={placeholder} maxLength={200}
-                className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${titleError ? 'border-red-500' : 'border-edge'}`} />
-            {titleIsAutoSuggested && <p className="mt-1 text-xs text-dim">Auto-suggested from your selections</p>}
-            {titleError && <p className="mt-1 text-sm text-red-400">{titleError}</p>}
-        </div>
+        <Field id={titleInputId} label="Event Title" required error={titleError}
+            hint={titleIsAutoSuggested ? AUTO_SUGGESTED_HINT : undefined}>
+            <Input type="text" required value={title} onChange={(e) => onTitleChange(e.target.value, false)}
+                placeholder={placeholder} maxLength={200} />
+        </Field>
     );
 }
 
@@ -150,13 +151,11 @@ function DescriptionField({ titleInputId, description, descriptionIsAutoSuggeste
     placeholder: string; onDescriptionChange: (v: string, auto: boolean) => void;
 }) {
     return (
-        <div>
-            <label htmlFor={`${titleInputId}-description`} className="block text-sm font-medium text-secondary mb-2">Description</label>
-            <textarea id={`${titleInputId}-description`} value={description} onChange={(e) => onDescriptionChange(e.target.value, false)}
-                placeholder={placeholder} maxLength={2000} rows={3}
-                className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors resize-none" />
-            {descriptionIsAutoSuggested && <p className="mt-1 text-xs text-dim">Auto-suggested from your selections</p>}
-        </div>
+        <Field id={`${titleInputId}-description`} label="Description"
+            hint={descriptionIsAutoSuggested ? AUTO_SUGGESTED_HINT : undefined}>
+            <Textarea value={description} onChange={(e) => onDescriptionChange(e.target.value, false)}
+                placeholder={placeholder} maxLength={2000} rows={3} resize="none" />
+        </Field>
     );
 }
 
