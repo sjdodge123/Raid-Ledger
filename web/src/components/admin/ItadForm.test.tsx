@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ItadForm } from './ItadForm';
+import { expectIntegrationActionTriad } from './integration-form-actions.test-utils';
 
 // Mock toast
 vi.mock('../../lib/toast', () => ({
@@ -190,5 +191,15 @@ describe('ItadForm — unconfigured state', () => {
         expect(
             screen.queryByRole('button', { name: 'Clear' }),
         ).not.toBeInTheDocument();
+    });
+});
+
+describe('ItadForm — action triad layout (ROK-1652 B)', () => {
+    beforeEach(resetMocks);
+
+    it('renders Save as a full-width primary row, then Test and Clear', () => {
+        mockItadStatus.data = { configured: true };
+        render(<ItadForm />);
+        expectIntegrationActionTriad();
     });
 });

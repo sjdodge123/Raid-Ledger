@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { IgdbForm } from './IgdbForm';
+import { expectIntegrationActionTriad } from './integration-form-actions.test-utils';
 
 // Mock toast
 vi.mock('../../lib/toast', () => ({
@@ -312,5 +313,15 @@ describe('IgdbForm — Health dots (ROK-1652)', () => {
         };
         const { container } = render(<IgdbForm />);
         expect(container.querySelectorAll('.w-2.h-2.rounded-full')[1]).toHaveClass(cls);
+    });
+});
+
+describe('IgdbForm — action triad layout (ROK-1652 B)', () => {
+    beforeEach(resetMocks);
+
+    it('renders Save as a full-width primary row, then Test and Clear', () => {
+        mockIgdbStatus.data = { configured: true };
+        render(<IgdbForm />);
+        expectIntegrationActionTriad();
     });
 });

@@ -77,4 +77,13 @@ describe('DiscordBotInvitePanel (ROK-1471)', () => {
         expect(screen.queryByRole('link', { name: /invite url/i })).not.toBeInTheDocument();
         expect(screen.getByText(/client id/i)).toBeInTheDocument();
     });
+
+    // ROK-1652 (verify C): the copy action is the shared secondary Button — 44px, focus ring, no raw blue.
+    it('renders "Copy invite URL" as the shared secondary Button', () => {
+        render(<DiscordBotInvitePanel />);
+        const btn = screen.getByRole('button', { name: 'Copy invite URL' });
+        expect(btn).toHaveAttribute('type', 'button');
+        expect(btn).toHaveClass('bg-panel', 'border-edge', 'min-h-[44px]', 'focus-visible:ring-2');
+        expect(btn).not.toHaveClass('bg-blue-600');
+    });
 });

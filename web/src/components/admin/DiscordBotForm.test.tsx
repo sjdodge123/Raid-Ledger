@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { DiscordBotForm } from './DiscordBotForm';
+import { expectIntegrationActionTriad } from './integration-form-actions.test-utils';
 
 // Mock toast
 vi.mock('../../lib/toast', () => ({
@@ -623,5 +624,15 @@ describe('DiscordBotForm — permission result tokens (ROK-1652)', () => {
         expect(panel).toHaveClass('bg-warning/10', 'border-warning/30');
         expect(within(panel).getByText(/Missing permissions/)).toHaveClass('text-warning');
         expect(within(panel).getByText('Manage Threads').closest('ul')).toHaveClass('text-danger');
+    });
+});
+
+describe('DiscordBotForm — action triad layout (ROK-1652 B)', () => {
+    beforeEach(resetMocks);
+
+    it('renders Save as a full-width primary row, then Test and Clear', () => {
+        mockDiscordBotStatus.data = { configured: true, connected: false };
+        render(<DiscordBotForm />);
+        expectIntegrationActionTriad();
     });
 });

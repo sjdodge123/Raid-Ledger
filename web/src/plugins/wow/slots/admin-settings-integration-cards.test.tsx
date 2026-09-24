@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BlizzardIntegrationSlot } from './admin-settings-integration-cards';
+import { expectIntegrationActionTriad } from '../../../components/admin/integration-form-actions.test-utils';
 
 vi.mock('../../../lib/toast', () => ({
     toast: { success: vi.fn(), error: vi.fn() },
@@ -182,5 +183,14 @@ describe('BlizzardIntegrationSlot — test result and theme tokens', () => {
             .filter((el) => el.closest('button') === null)
             .map((el) => el.getAttribute('class') ?? '').join(' ');
         expect(bodyClasses).not.toMatch(/-(blue|emerald|red)-\d{3}/);
+    });
+});
+
+describe('BlizzardIntegrationSlot — action triad layout (ROK-1652 B)', () => {
+    beforeEach(resetMocks);
+
+    it('renders Save as a full-width primary row, then Test and Clear', () => {
+        renderConfigured();
+        expectIntegrationActionTriad();
     });
 });
