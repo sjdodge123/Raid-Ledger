@@ -125,11 +125,11 @@ export function SaveTemplateBar({ show, name, isPending, onNameChange, onSave, o
 
 export function FormFooter({ isEditMode, isPending, onShowSaveTemplate, onCancel }: { isEditMode: boolean; isPending: boolean; onShowSaveTemplate: () => void; onCancel: () => void }) {
     return (
-        <div className="flex items-center justify-between pt-2">
-            <Button variant="ghost" onClick={onShowSaveTemplate}>Save as Template</Button>
-            <div className="flex items-center gap-4">
-                <Button variant="ghost" size="lg" onClick={onCancel}>Cancel</Button>
-                <Button type="submit" size="lg" loading={isPending} loadingLabel={isEditMode ? 'Saving...' : 'Creating...'}>
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 pt-2">
+            <Button variant="ghost" className="whitespace-nowrap" onClick={onShowSaveTemplate}>Save as Template</Button>
+            <div className="ml-auto flex items-center gap-4">
+                <Button variant="ghost" size="lg" className="whitespace-nowrap" onClick={onCancel}>Cancel</Button>
+                <Button type="submit" size="lg" className="whitespace-nowrap" loading={isPending} loadingLabel={isEditMode ? 'Saving...' : 'Creating...'}>
                     {isEditMode ? 'Save Changes' : 'Create Event'}
                 </Button>
             </div>
