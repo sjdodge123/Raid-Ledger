@@ -291,3 +291,74 @@ describe('POST /games/lookup-by-name — both sources miss', () => {
     expect(row).toBeUndefined();
   });
 });
+
+// ─── ROK-1680: ITAD path tags steam_app_id_source ──────────────────────────
+
+describe('POST /games/lookup-by-name — ITAD steam_app_id_source (ROK-1680)', () => {
+  const ITAD_ID = 'itad-source-tag';
+  const TITLE = 'Provenance Tagged Game';
+
+  /** ITAD returns `TITLE`; its Steam-id lookup returns `steamAppId`. */
+  function stubItad(steamAppId: number | null): void {
+    const itad = testApp.app.get(ItadService);
+    jest
+      .spyOn(itad, 'searchGames')
+      .mockResolvedValue([fakeItadGame({ id: ITAD_ID, title: TITLE })]);
+    jest
+      .spyOn(itad, 'lookupSteamAppIds')
+      .mockResolvedValue(
+        new Map(steamAppId == null ? [] : [[ITAD_ID, steamAppId]]),
+      );
+  }
+
+  /** `q` shares no token with `TITLE`, so step 1 misses and ITAD runs. */
+  async function lookup(): Promise<void> {
+    const res = await testApp.request
+      .post('/games/lookup-by-name')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ q: 'zzqx unrelated query' });
+    expect(res.status).toBe(200);
+  }
+
+  async function seedNamed(
+    fields: Partial<typeof schema.games.$inferInsert>,
+  ): Promise<void> {
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: TITLE, slug: 'provenance-seeded', ...fields });
+  }
+
+  it("tags a fresh ITAD insert that carries a Steam id as 'itad'", async () => {
+    stubItad(4242001);
+    await lookup();
+    const row = await findGameRowByName(TITLE);
+    expect(row?.steamAppId).toBe(4242001);
+    expect(row?.steamAppIdSource).toBe('itad');
+  });
+
+  it("tags 'itad' when merging a Steam id into a name-matched row that had none", async () => {
+    await seedNamed({ steamAppId: null, steamAppIdSource: null });
+    stubItad(4242002);
+    await lookup();
+    const row = await findGameRowByName(TITLE);
+    expect(row?.steamAppId).toBe(4242002);
+    expect(row?.steamAppIdSource).toBe('itad');
+  });
+
+  it('leaves the stored source alone when ITAD has no Steam id', async () => {
+    await seedNamed({ steamAppId: 4242003, steamAppIdSource: 'steam' });
+    stubItad(null);
+    await lookup();
+    const row = await findGameRowByName(TITLE);
+    expect(row?.steamAppId).toBe(4242003);
+    expect(row?.steamAppIdSource).toBe('steam');
+  });
+
+  it('keeps the stored source when ITAD agrees with the stored Steam id', async () => {
+    await seedNamed({ steamAppId: 4242004, steamAppIdSource: 'steam' });
+    stubItad(4242004);
+    await lookup();
+    const row = await findGameRowByName(TITLE);
+    expect(row?.steamAppIdSource).toBe('steam');
+  });
+});
