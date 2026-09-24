@@ -43,3 +43,16 @@ export const HubErrorSchema = z.object({
 });
 
 export type HubError = z.infer<typeof HubErrorSchema>;
+
+/**
+ * Body of `GET /api/v1/health` (§3.2). Not in the §3.3 sketch: added with
+ * the RH-1a golden fixtures. `schemaVersions` lists every version the hub
+ * serves (N and N-1, §3.1); `status` is a reader-side enum.
+ */
+export const HubHealthResponseSchema = z.object({
+  status: z.enum(['ok', 'unknown']).catch('unknown'),
+  schemaVersions: z.array(z.number().int().positive()).min(1),
+  epoch: z.string(),
+});
+
+export type HubHealthResponse = z.infer<typeof HubHealthResponseSchema>;

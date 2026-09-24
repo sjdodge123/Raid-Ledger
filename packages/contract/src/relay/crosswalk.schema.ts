@@ -94,3 +94,17 @@ export const CrosswalkContributionResultSchema = z.object({
 export type CrosswalkContributionResult = z.infer<
   typeof CrosswalkContributionResultSchema
 >;
+
+/**
+ * Body of a successful `POST /api/v1/crosswalk/contributions`: one result
+ * per item sent, keyed by `clientRef`. Not in the §3.3 sketch: added with
+ * the RH-1a golden fixtures. Carries no name or title (D6).
+ */
+export const CrosswalkContributionResponseSchema = z.object({
+  schemaVersion: z.number().int(),
+  results: z.array(CrosswalkContributionResultSchema),
+});
+
+export type CrosswalkContributionResponse = z.infer<
+  typeof CrosswalkContributionResponseSchema
+>;

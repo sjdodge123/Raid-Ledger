@@ -47,7 +47,13 @@ const FIXTURE_SCHEMAS: Record<string, FixtureSchema> = {
 };
 
 /** Every v1 M1 response (§3.2) needs a golden fixture (AC5). */
-const M1_RESPONSES = ['health', 'register', 'heartbeat', 'contributions', 'error'];
+const M1_RESPONSES = [
+  'health',
+  'register',
+  'heartbeat',
+  'contributions',
+  'error',
+];
 
 const RESPONSE_FIXTURES = Object.keys(FIXTURE_SCHEMAS).filter((f) =>
   f.endsWith('.response.json'),
@@ -117,9 +123,11 @@ describe('relay hub v1 client request fixtures (RH-5 smoke bodies)', () => {
     expect(Object.keys(body).sort()).toEqual(
       [...STATS, 'instanceId', 'version'].sort(),
     );
-    expect(Object.keys(HubRegisterRequestSchema.parse(body)).sort()).toEqual(
-      ['instanceId', 'schemaVersion', 'version'],
-    );
+    expect(Object.keys(HubRegisterRequestSchema.parse(body)).sort()).toEqual([
+      'instanceId',
+      'schemaVersion',
+      'version',
+    ]);
   });
 
   it("heartbeat body is today's exact client body; the hub drops the stats", () => {
