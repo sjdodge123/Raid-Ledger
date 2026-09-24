@@ -30,7 +30,7 @@ const ARMORY_TITLE = 'This field is synced from the Blizzard Armory';
 
 function ArmorySyncBanner() {
     return (
-        <div className="flex items-center gap-2 px-3 py-2 bg-indigo-500/10 border border-indigo-500/30 rounded-lg text-secondary text-sm">
+        <div className="flex items-center gap-2 px-3 py-2 bg-overlay/30 border border-edge rounded-lg text-secondary text-sm">
             <InformationCircleIcon className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
             <span>This character is synced from the Blizzard Armory. Some fields are read-only.</span>
         </div>

@@ -602,3 +602,18 @@ describe('AddCharacterModal — pinned footer (ROK-1655)', () => {
         expect(screen.queryByTestId('modal-footer')).toBeNull();
     });
 });
+
+describe('AddCharacterModal — armory sync banner tokens (ROK-1648 ruling 9)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('paints the armory sync banner as a neutral panel, not a raw blue/indigo callout (ruling 9)', () => {
+        renderModal({ editingCharacter: createArmorySyncedCharacter() });
+        const banner = screen.getByText(/This character is synced from the Blizzard Armory/i).parentElement!;
+        expect(banner.className, 'the banner should wear the neutral bg-overlay/30 panel').toContain('bg-overlay/30');
+        expect(banner.className, 'the banner border should be the edge token').toContain('border-edge');
+        expect(banner.className, 'the banner must not hardcode a blue/indigo/purple/violet hue')
+            .not.toMatch(/(blue|indigo|purple|violet)-\d/);
+    });
+});
