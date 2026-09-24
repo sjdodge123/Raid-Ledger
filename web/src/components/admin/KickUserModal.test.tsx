@@ -72,8 +72,14 @@ describe('KickUserModal — confirm payload', () => {
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-    it('disables the confirm button and shows a busy label while pending', () => {
-        renderModal(REAL_TARGET, vi.fn(), vi.fn(), true);
-        expect(screen.getByRole('button', { name: 'Kicking...' })).toBeDisabled();
+    // Ruling 7: Button `loading` never sets native `disabled` (focus stays), so the
+    // equivalent-strength proof is aria-disabled + aria-busy + a swallowed click.
+    it('marks the confirm button busy, names it "Kicking..." and swallows the click while pending', () => {
+        const { onConfirm } = renderModal(REAL_TARGET, vi.fn(), vi.fn(), true);
+        const confirm = screen.getByRole('button', { name: 'Kicking...' });
+        expect(confirm).toHaveAttribute('aria-disabled', 'true');
+        expect(confirm).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(confirm);
+        expect(onConfirm).not.toHaveBeenCalled();
     });
 });

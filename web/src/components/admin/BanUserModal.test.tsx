@@ -27,6 +27,15 @@ describe('BanUserModal — rendering', () => {
         expect(wipe.checked).toBe(false);
     });
 
+    it('links the wipe checkbox to its danger-toned irreversibility warning', () => {
+        renderModal(REAL_TARGET);
+        const wipe = screen.getByLabelText(WIPE_LABEL);
+        expect(wipe).toHaveAttribute('aria-describedby');
+        const description = document.getElementById(wipe.getAttribute('aria-describedby') ?? '');
+        expect(description).toHaveTextContent(/This cannot be undone/);
+        expect(description?.querySelector('.text-danger')).toHaveTextContent(/Permanently deletes their characters/);
+    });
+
     it('shows the Discord checkbox for a real id and hides it for a placeholder id', () => {
         const { unmount } = render(<BanUserModal target={REAL_TARGET} onClose={vi.fn()} onConfirm={vi.fn()} isPending={false} />);
         expect(screen.getByLabelText(DISCORD_LABEL)).toBeInTheDocument();
@@ -54,8 +63,14 @@ describe('BanUserModal — confirm payload', () => {
         expect(onConfirm).toHaveBeenCalledWith({ reason: 'cheating', wipeData: true, kickFromDiscord: true });
     });
 
-    it('disables the confirm button and shows a busy label while pending', () => {
-        renderModal(REAL_TARGET, vi.fn(), vi.fn(), true);
-        expect(screen.getByRole('button', { name: 'Banning...' })).toBeDisabled();
+    // Ruling 7: Button `loading` never sets native `disabled` (focus stays), so the
+    // equivalent-strength proof is aria-disabled + aria-busy + a swallowed click.
+    it('marks the confirm button busy, names it "Banning..." and swallows the click while pending', () => {
+        const { onConfirm } = renderModal(REAL_TARGET, vi.fn(), vi.fn(), true);
+        const confirm = screen.getByRole('button', { name: 'Banning...' });
+        expect(confirm).toHaveAttribute('aria-disabled', 'true');
+        expect(confirm).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(confirm);
+        expect(onConfirm).not.toHaveBeenCalled();
     });
 });
