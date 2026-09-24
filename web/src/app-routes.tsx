@@ -32,7 +32,7 @@ import {
   SimplifyWireframesPage,
   BindingAdminWireframesPage,
   DesignSystemPage,
-  SchedulingWireframesPage,
+  SchedulingWireframesPage, ViewportProbePage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -104,6 +104,7 @@ function DevWireframeRoutes() {
       <Route path="/dev/wireframes/binding-admin" element={<BindingAdminWireframesPage />} />
       <Route path="/dev/design-system" element={<DesignSystemPage />} />
       <Route path="/dev/wireframes/scheduling" element={<SchedulingWireframesPage />} />
+      <Route path="/dev/viewport-probe" element={<ViewportProbePage />} />
     </>
   );
 }

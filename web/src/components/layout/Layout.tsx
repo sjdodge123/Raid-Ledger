@@ -16,10 +16,18 @@ import { usePluginHydration } from '../../hooks/use-plugins';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { useShellHeight } from './use-shell-height';
-import { resolveVpDebug } from '../../dev/vpdebug-flag';
+import { resolveVpDebug, wantsNoShellFloor } from '../../dev/vpdebug-flag';
 
 /** ROK-1661 diagnostic; checks DEMO_MODE itself. Lazy, so it costs nothing without `?vpdebug=1`. */
 const ViewportReadout = lazy(() => import('../../dev/ViewportReadout').then((m) => ({ default: m.ViewportReadout })));
+/** ROK-1661 experiment gate for `?noshellfloor=1`; checks DEMO_MODE. Lazy, so it loads only with the flag. */
+const NoShellFloorGate = lazy(() => import('../../dev/NoShellFloorGate').then((m) => ({ default: m.NoShellFloorGate })));
+
+/**
+ * ROK-1661 DEMO-only probe (`dev/ViewportProbePage.tsx`): rendered with no shell,
+ * chrome or `useShellHeight` at all. The page gates itself on DEMO_MODE.
+ */
+const BARE_PATHS: ReadonlySet<string> = new Set(['/dev/viewport-probe']);
 
 /**
  * ROK-1067: routes under /p/* are public, chrome-less surfaces meant
@@ -68,19 +76,33 @@ function useChromelessCanvas(chromeless: boolean) {
  * DEMO_MODE-only viewport readout (`dev/ViewportReadout.tsx`), positioned inside
  * this shell just above the footer, so the shell is `relative` only while it shows.
  */
+/**
+ * ROK-1661 `?noshellfloor=1` experiment: true only once the lazy gate has seen
+ * DEMO_MODE, so production is untouched. Returns the gate element to render.
+ */
+function useNoShellFloor(search: string) {
+    const wanted = useMemo(() => wantsNoShellFloor(search), [search]);
+    const [demoMode, setDemoMode] = useState(false);
+    const gate = wanted && <Suspense fallback={null}><NoShellFloorGate onDemoMode={setDemoMode} /></Suspense>;
+    return [wanted && demoMode, gate] as const;
+}
+
 function ViewportShell({ children, chromeless = false }: LayoutProps & { chromeless?: boolean }) {
     useChromelessCanvas(chromeless);
-    const shellHeight = useShellHeight();
     const { search } = useLocation();
+    const [floorOff, floorGate] = useNoShellFloor(search);
+    const shellHeight = useShellHeight(!floorOff);
     const showReadout = useMemo(() => resolveVpDebug(search), [search]);
     const minHeight = shellHeight > 0 ? `${shellHeight}px` : undefined;
+    const floor = floorOff ? '' : 'min-h-dvh ';
     const position = showReadout ? ' relative' : '';
     return (
-        <div className={`min-h-dvh flex flex-col bg-backdrop${position}`} style={{ overflowX: 'clip', minHeight }}>
+        <div className={`${floor}flex flex-col bg-backdrop${position}`} style={{ overflowX: 'clip', minHeight }}>
             {children}
+            {floorGate}
             {showReadout && (
                 <Suspense fallback={null}>
-                    <ViewportReadout shellHeight={shellHeight} />
+                    <ViewportReadout shellHeight={floorOff ? null : shellHeight} />
                 </Suspense>
             )}
         </div>
@@ -116,6 +138,8 @@ export function Layout({ children }: LayoutProps) {
     const closeMoreDrawer = useCallback(() => setMoreDrawerOpen(false), []);
     const { registerFeedbackOpen, handleFeedbackClick } = useFeedbackRef();
     const { pathname } = useLocation();
+
+    if (BARE_PATHS.has(pathname)) return <>{children}</>;
 
     if (isChromelessPath(pathname)) {
         return (

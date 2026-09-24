@@ -27,3 +27,13 @@ export function resolveVpDebug(search: string): boolean {
     }
     return withStorage((s) => s.getItem(STORAGE_KEY) === '1') ?? false;
 }
+
+/**
+ * ROK-1661 experiment flag: `?noshellfloor=1` asks the shell (`Layout.tsx`) to
+ * drop its floor, both `min-h-dvh` and the `useShellHeight` min-height, so it is
+ * plain flow. Not remembered: it lives in the test URL. `Layout.tsx` honours it
+ * only once the lazy `NoShellFloorGate` has seen DEMO_MODE.
+ */
+export function wantsNoShellFloor(search: string): boolean {
+    return new URLSearchParams(search).get('noshellfloor') === '1';
+}

@@ -12,8 +12,16 @@ import { useSystemStatus } from '../hooks/use-system-status';
 import { type LastEvent, type Reading, readSignals, watchViewportEvents } from './viewport-signals';
 
 interface ViewportReadoutProps {
-    /** The shell's min-height in px from `useShellHeight` (0 = not measured, `min-h-dvh` applies). */
-    shellHeight: number;
+    /**
+     * The shell's min-height in px from `useShellHeight` (0 = not measured, `min-h-dvh` applies;
+     * null = no floor: `?noshellfloor=1`, or the shell-less `/dev/viewport-probe`).
+     */
+    shellHeight: number | null;
+}
+
+function formatShellFloor(shellHeight: number | null): string {
+    if (shellHeight === null) return 'off';
+    return shellHeight > 0 ? `${shellHeight}px` : 'min-h-dvh';
 }
 
 type Listener = readonly [EventTarget | null | undefined, string];
@@ -47,7 +55,7 @@ function readProbe(probe: HTMLElement | null): string {
     return probe ? round(probe.getBoundingClientRect().top) : '-';
 }
 
-function readViewport(shellHeight: number, probe: HTMLElement | null, lastEvent: LastEvent | null): Reading[] {
+function readViewport(shellHeight: number | null, probe: HTMLElement | null, lastEvent: LastEvent | null): Reading[] {
     const vv = window.visualViewport;
     const root = document.documentElement;
     return [
@@ -61,7 +69,7 @@ function readViewport(shellHeight: number, probe: HTMLElement | null, lastEvent:
         ['max scroll', round(root.scrollHeight - window.innerHeight)],
         ['scrollHeight', round(root.scrollHeight)],
         ['fixed probe bottom', readProbe(probe)],
-        ['shell minHeight', shellHeight > 0 ? `${shellHeight}px` : 'min-h-dvh'],
+        ['shell minHeight', formatShellFloor(shellHeight)],
         ['footer bottom', readFooterBottom()],
         ['html bg', readBackground(root)],
         ['body bg', readBackground(document.body)],
@@ -79,7 +87,7 @@ function nudgeScroll(): void {
     window.scrollTo(window.scrollX, Math.min(window.scrollY, maxScroll));
 }
 
-function useLiveReadings(shellHeight: number, probeRef: RefObject<HTMLElement | null>) {
+function useLiveReadings(shellHeight: number | null, probeRef: RefObject<HTMLElement | null>) {
     const lastEventRef = useRef<LastEvent | null>(null);
     const [readings, setReadings] = useState(() => readViewport(shellHeight, null, null));
     const reread = useCallback(
@@ -124,7 +132,11 @@ function ReadingList({ readings }: { readings: Reading[] }) {
     );
 }
 
-function ReadoutPanel({ shellHeight }: ViewportReadoutProps) {
+/**
+ * The readout itself, with no DEMO_MODE check: callers gate it. `placement` is its
+ * positioning; the default sits in the shell just above the footer.
+ */
+export function ReadoutPanel({ shellHeight, placement = 'absolute bottom-20 right-2' }: ViewportReadoutProps & { placement?: string }) {
     const probeRef = useRef<HTMLDivElement>(null);
     const [readings, reread] = useLiveReadings(shellHeight, probeRef);
     const nudge = () => {
@@ -134,7 +146,7 @@ function ReadoutPanel({ shellHeight }: ViewportReadoutProps) {
     return (
         <div
             data-testid="viewport-readout"
-            className="absolute bottom-20 right-2 z-[100] flex flex-col items-end gap-1 pointer-events-none font-mono text-[10px] leading-tight text-foreground"
+            className={`${placement} z-[100] flex flex-col items-end gap-1 pointer-events-none font-mono text-[10px] leading-tight text-foreground`}
         >
             <div ref={probeRef} aria-hidden="true" className="fixed bottom-0 left-0 h-0 w-0" />
             <ReadingList readings={readings} />
