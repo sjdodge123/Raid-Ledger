@@ -5,8 +5,8 @@
  * buttons are the `Button` primitive's secondary + destructive pair (ROK-1646).
  */
 import { useRef, type JSX } from 'react';
-import { Modal } from '../../ui/modal';
-import { Button } from '../../ui/button';
+import { Modal } from './modal';
+import { Button } from './button';
 
 export interface DiscardChangesConfirmProps {
     isOpen: boolean;

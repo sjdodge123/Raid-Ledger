@@ -40,8 +40,8 @@ import { StepOneDoneContext } from './game-time-check-step';
 import { SheetTitleRow } from './SheetTitleRow';
 import { SheetHeaderContext, type SheetHeaderOverride } from './sheet-header-context';
 import { SheetDirtyContext, useSheetDirtySources } from '../../components/features/game-time/sheet-dirty-context';
-import { useDirtyCloseGuard } from '../../components/features/game-time/use-dirty-close-guard';
-import { DiscardChangesConfirm } from '../../components/features/game-time/DiscardChangesConfirm';
+import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
+import { DiscardChangesConfirm } from '../../components/ui/discard-changes-confirm';
 
 /** The sheet's default title — the question itself is the body's prompt line. */
 const TITLE = 'Your game time';
