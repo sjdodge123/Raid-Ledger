@@ -9,13 +9,12 @@
  */
 import { type RefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { useSystemStatus } from '../hooks/use-system-status';
+import { type LastEvent, type Reading, readSignals, watchViewportEvents } from './viewport-signals';
 
 interface ViewportReadoutProps {
     /** The shell's min-height in px from `useShellHeight` (0 = not measured, `min-h-dvh` applies). */
     shellHeight: number;
 }
-
-type Reading = readonly [label: string, value: string];
 
 type Listener = readonly [EventTarget | null | undefined, string];
 
@@ -48,7 +47,7 @@ function readProbe(probe: HTMLElement | null): string {
     return probe ? round(probe.getBoundingClientRect().top) : '-';
 }
 
-function readViewport(shellHeight: number, probe: HTMLElement | null): Reading[] {
+function readViewport(shellHeight: number, probe: HTMLElement | null, lastEvent: LastEvent | null): Reading[] {
     const vv = window.visualViewport;
     const root = document.documentElement;
     return [
@@ -67,6 +66,7 @@ function readViewport(shellHeight: number, probe: HTMLElement | null): Reading[]
         ['html bg', readBackground(root)],
         ['body bg', readBackground(document.body)],
         ['orientation', readOrientation()],
+        ...readSignals(lastEvent),
     ];
 }
 
@@ -80,24 +80,31 @@ function nudgeScroll(): void {
 }
 
 function useLiveReadings(shellHeight: number, probeRef: RefObject<HTMLElement | null>) {
-    const [readings, setReadings] = useState(() => readViewport(shellHeight, null));
-    const reread = useCallback(() => setReadings(readViewport(shellHeight, probeRef.current)), [shellHeight, probeRef]);
+    const lastEventRef = useRef<LastEvent | null>(null);
+    const [readings, setReadings] = useState(() => readViewport(shellHeight, null, null));
+    const reread = useCallback(
+        () => setReadings(readViewport(shellHeight, probeRef.current, lastEventRef.current)),
+        [shellHeight, probeRef],
+    );
     useEffect(() => {
         let frame = 0;
         const refresh = () => {
             cancelAnimationFrame(frame);
             frame = requestAnimationFrame(reread);
         };
-        const vv = window.visualViewport;
-        const listeners: Listener[] = [
-            [window, 'scroll'], [window, 'resize'], [window, 'orientationchange'], [vv, 'resize'], [vv, 'scroll'],
-        ];
+        // Resize, focus and lifecycle events come through the watcher, which also records the last one.
+        const stopWatching = watchViewportEvents((name) => {
+            lastEventRef.current = { name, at: Date.now() };
+            refresh();
+        });
+        const listeners: Listener[] = [[window, 'scroll'], [window, 'orientationchange']];
         const poll = setInterval(refresh, POLL_MS);
         refresh();
         for (const [target, type] of listeners) target?.addEventListener(type, refresh);
         return () => {
             cancelAnimationFrame(frame);
             clearInterval(poll);
+            stopWatching();
             for (const [target, type] of listeners) target?.removeEventListener(type, refresh);
         };
     }, [reread]);
