@@ -220,9 +220,11 @@ test.describe('Plan event roster configuration', () => {
         await page.goto('/events/plan');
         await expect(page.getByRole('heading', { name: 'Roster' })).toBeVisible({ timeout: 15_000 });
 
-        // Slot type toggle
-        await expect(page.getByRole('button', { name: 'MMO Roles' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Generic Slots' })).toBeVisible();
+        // Slot type: a segmented radiogroup (ROK-1649). The native radio is
+        // sr-only, so visibility is asserted on its segment <label>.
+        await expect(page.getByRole('radiogroup', { name: 'Slot Type', exact: true })).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'Generic Slots', exact: true })).toBeChecked();
 
         // Player count controls — scope to main content to avoid matching nav links
         const mainContent = page.locator('main');
@@ -239,8 +241,9 @@ test.describe('Plan event roster configuration', () => {
         await page.goto('/events/plan');
         await expect(page.getByRole('heading', { name: 'Roster' })).toBeVisible({ timeout: 15_000 });
 
-        // Click MMO Roles
-        await page.getByRole('button', { name: 'MMO Roles' }).click();
+        // Tap the MMO Roles segment — its sr-only radio becomes checked
+        await page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true })).toBeChecked();
 
         // MMO-specific labels should appear (Tank, Healer, DPS)
         await expect(page.getByText('Tank', { exact: true })).toBeVisible({ timeout: 5_000 });

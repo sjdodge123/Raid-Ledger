@@ -91,12 +91,16 @@ test.describe('Create event form', () => {
     test('MMO Roles slot type shows Tank/Healer/DPS composition', async ({ page }) => {
         await waitForForm(page);
 
-        // Default view shows "Generic Slots" with single "Players" spinbutton
-        await expect(page.getByRole('button', { name: 'MMO Roles' })).toBeVisible();
-        await expect(page.getByRole('button', { name: 'Generic Slots' })).toBeVisible();
+        // Default view shows "Generic Slots" with single "Players" spinbutton.
+        // Slot Type is a segmented radiogroup (ROK-1649); the native radio is
+        // sr-only, so visibility and taps go to its segment <label>.
+        await expect(page.getByRole('radiogroup', { name: 'Slot Type', exact: true })).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..')).toBeVisible();
+        await expect(page.getByRole('radio', { name: 'Generic Slots', exact: true })).toBeChecked();
 
-        // Click MMO Roles
-        await page.getByRole('button', { name: 'MMO Roles' }).click();
+        // Tap MMO Roles — its radio becomes the checked one
+        await page.getByRole('radio', { name: 'MMO Roles', exact: true }).locator('xpath=..').click();
+        await expect(page.getByRole('radio', { name: 'MMO Roles', exact: true })).toBeChecked();
 
         // Role composition fields should appear
         await expect(page.getByText('Tank')).toBeVisible({ timeout: 5_000 });
