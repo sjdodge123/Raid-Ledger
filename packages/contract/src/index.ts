@@ -183,3 +183,6 @@ export * from './lfg-bridge.schema.js';
 
 // One slot order across web, Discord and lock-in (ROK-1548)
 export * from './scheduling-slot-order.js';
+
+// Relay hub v1 wire shapes: envelope, instance lifecycle, crosswalk (ROK-1667)
+export * from './relay/index.js';
