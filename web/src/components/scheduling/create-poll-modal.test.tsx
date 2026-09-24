@@ -13,7 +13,7 @@
  * picker through `useCreatePollForm` into the mutation payload.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { IgdbGameDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../test/render-helpers';
@@ -228,5 +228,93 @@ describe('CreatePollModal — Create Poll loading state (ROK-1650, ruling 7)', (
     expect(button).not.toHaveAttribute('aria-busy');
     await pickFakeGame(user);
     expect(button).toBeEnabled();
+  });
+});
+
+/*
+ * ROK-1655 (ROK-1650 C4b): closing with a picked game, members, a moved
+ * threshold or a changed voting window must ask "Discard your changes?"
+ * instead of silently dropping the draft. A clean form still closes at once.
+ */
+const CONFIRM = 'Discard your changes?';
+/** Let the guard's one-macrotask Escape latch clear. */
+const settle = (): Promise<void> => act(() => new Promise((r) => { setTimeout(r, 0); }));
+const pollDialog = (): HTMLElement => screen.getByRole('dialog', { name: 'Schedule a Game' });
+
+describe('CreatePollModal — dirty-close guard (ROK-1655)', () => {
+  it('a clean Escape closes at once with no confirm', async () => {
+    const onClose = vi.fn();
+    renderWithProviders(<CreatePollModal isOpen={true} onClose={onClose} />);
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
+  });
+
+  it('after picking a game, Escape asks; Keep editing leaves the modal open with its state', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<CreatePollModal isOpen={true} onClose={onClose} />);
+    await pickFakeGame(user);
+    await user.keyboard('{Escape}');
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText(CONFIRM)).toBeInTheDocument();
+
+    await user.click(screen.getByTestId('discard-changes-keep'));
+    await settle();
+    expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(pollDialog()).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create Poll' }), 'the picked game must survive Keep').toBeEnabled();
+  });
+
+  it('Discard calls onClose and resets the form for the next open', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(<CreatePollModal isOpen={true} onClose={onClose} />);
+    await pickFakeGame(user);
+    await user.click(within(votingWindow()).getByRole('radio', { name: '7 days' }));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByText(CONFIRM), 'a dirty Escape must ask before discarding').toBeInTheDocument();
+    await user.click(screen.getByTestId('discard-changes-discard'));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
+
+    rerender(<CreatePollModal isOpen={false} onClose={onClose} />);
+    rerender(<CreatePollModal isOpen={true} onClose={onClose} />);
+    expect(screen.getByRole('button', { name: 'Create Poll' }), 'the picked game must be cleared').toBeDisabled();
+    expect(screen.getByRole('radio', { name: '72 hours' })).toBeChecked();
+  });
+
+  it('a changed voting window alone counts as dirty (the × button asks)', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<CreatePollModal isOpen={true} onClose={onClose} />);
+    await user.click(within(votingWindow()).getByRole('radio', { name: '24 hours' }));
+    await user.click(within(pollDialog()).getByRole('button', { name: 'Close modal' }));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByText(CONFIRM)).toBeInTheDocument();
+  });
+
+  it('Create Poll does not ask — a successful submit closes without the confirm', async () => {
+    const onClose = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<CreatePollModal isOpen={true} onClose={onClose} />);
+    await pickFakeGame(user);
+    await user.click(screen.getByRole('button', { name: 'Create Poll' }));
+    expect(mutateAsync).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(CONFIRM)).not.toBeInTheDocument();
+  });
+});
+
+describe('CreatePollModal — pinned footer (ROK-1655)', () => {
+  it('Create Poll sits in the modal-footer, outside the scrolling body', () => {
+    renderWithProviders(<CreatePollModal isOpen={true} onClose={vi.fn()} />);
+    const button = screen.getByRole('button', { name: 'Create Poll' });
+    const footer = screen.getByTestId('modal-footer');
+    expect(footer, 'Create Poll must be in the pinned footer').toContainElement(button);
+    const body = footer.previousElementSibling as HTMLElement;
+    expect(body).toContainElement(screen.getByTestId('poll-duration-picker'));
+    expect(body, 'the scroll body must not hold Create Poll').not.toContainElement(button);
   });
 });
