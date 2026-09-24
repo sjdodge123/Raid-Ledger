@@ -77,9 +77,10 @@ function ColorPresets({ value, onChange }: { value: string; onChange: (hex: stri
         <div className="flex flex-wrap gap-2">
             {PRESET_COLORS.map(({ name, hex }) => {
                 const pressed = sameHex(value, hex);
-                // The swatch fill is the preset's own colour (brand data), not a theme colour.
+                // The fill is the preset's own colour (candidate user data), not a theme colour, so it stays an
+                // inline style; brandColor is reserved for provider fills (design-system.md, ruling 3).
                 return (
-                    <Button key={hex} iconOnly aria-label={name} aria-pressed={pressed} brandColor={hex} onClick={() => onChange(hex)}
+                    <Button key={hex} variant="ghost" iconOnly aria-label={name} aria-pressed={pressed} style={{ backgroundColor: hex }} onClick={() => onChange(hex)}
                         className={`border-2 ${pressed ? 'border-foreground' : 'border-transparent hover:border-edge'}`} />
                 );
             })}
