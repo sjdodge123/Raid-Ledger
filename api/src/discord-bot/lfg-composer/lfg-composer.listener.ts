@@ -15,6 +15,7 @@ import type {
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import { MagicLinkService } from '../../auth/magic-link.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { LfgService } from '../../lfg/lfg.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -109,8 +110,9 @@ export class LfgComposerListener {
     private readonly clientService: DiscordBotClientService,
     lfgService: LfgService,
     settingsService: SettingsService,
+    magicLinkService: MagicLinkService,
   ) {
-    this.deps = { db, lfgService, settingsService };
+    this.deps = { db, lfgService, settingsService, magicLinkService };
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)

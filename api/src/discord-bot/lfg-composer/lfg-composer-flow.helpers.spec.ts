@@ -333,7 +333,7 @@ describe('goComposer (AC4 — the one write path)', () => {
   });
 });
 
-describe('View games carries the clicker\'s own magic link (ROK-1685 AC1/AC4)', () => {
+describe("View games carries the clicker's own magic link (ROK-1685 AC1/AC4)", () => {
   const MINTED = 'https://rl.test/games?q=deep+rock#token=FAKE-42';
 
   it('the match list links a token minted for the clicker', async () => {
@@ -342,7 +342,11 @@ describe('View games carries the clicker\'s own magic link (ROK-1685 AC1/AC4)', 
     const i = submit('deep rock');
     await submitComposerSearch(d, i as never);
     expect(viewUrl(edited(i))).toBe(MINTED);
-    expect(d.generateLink).toHaveBeenCalledWith(42, '/games', 'https://rl.test');
+    expect(d.generateLink).toHaveBeenCalledWith(
+      42,
+      '/games',
+      'https://rl.test',
+    );
   });
 
   it('"no games match" links a token minted for the clicker', async () => {
@@ -360,7 +364,7 @@ describe('View games carries the clicker\'s own magic link (ROK-1685 AC1/AC4)', 
     expect(viewUrl(edited(i))).toBe(MINTED);
   });
 
-  it('the pick fallback\'s no-match links a token minted for the clicker', async () => {
+  it("the pick fallback's no-match links a token minted for the clicker", async () => {
     findGame.mockResolvedValue(null);
     const i = fake('lfgc:pick:deep rock', { values: ['7'] });
     await pickComposerGame(deps(), i as never);
