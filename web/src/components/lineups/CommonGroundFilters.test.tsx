@@ -1,6 +1,7 @@
 /**
- * Tests for CommonGroundFilters (ROK-934).
- * Validates slider, genre dropdown, and max players input behavior.
+ * Tests for CommonGroundFilters (ROK-934, ROK-1659).
+ * Validates the min owners and players sliders (co-op: `.coop.test.tsx`).
+ * Common Ground has no genre filter (operator ruling 2026-09-24).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
