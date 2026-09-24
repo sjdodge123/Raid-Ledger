@@ -36,6 +36,25 @@ import {
 } from './lfg-composer-flow.helpers';
 import type { Db } from './lfg-composer-search.db-helpers';
 import { parseTermCustomId } from './lfg-composer-state.helpers';
+import { viewComposerGames } from './lfg-composer-view.helpers';
+
+/**
+ * A failure as one token-safe line: message and code, never the error object.
+ *
+ * A `DiscordAPIError` carries `requestBody` — the components we sent, and so
+ * the clicker's magic link — and Nest prints every own property of an object
+ * it is handed (ROK-1685 AC4). Same idea as `lfg-composer-pin.service`'s
+ * `describe`, plus the Discord code.
+ */
+function describeFailure(error: unknown): string {
+  if (!(error instanceof Error)) return 'non-Error rejection';
+  const code = (error as { code?: unknown }).code;
+  const suffix =
+    typeof code === 'string' || typeof code === 'number'
+      ? ` (code ${code})`
+      : '';
+  return `${error.message}${suffix}`;
+}
 
 /** A composer interaction discord.js can dispatch. */
 type ComposerInteraction =
@@ -85,6 +104,7 @@ function routeButton(
   if (id === LFG_COMPOSER_IDS.OPEN) {
     return openComposerModal(deps, interaction, '');
   }
+  if (id === LFG_COMPOSER_IDS.VIEW) return viewComposerGames(deps, interaction);
   const back = parseTermCustomId(id, LFG_COMPOSER_IDS.BACK);
   if (back !== null) return openComposerModal(deps, interaction, back);
   if (id.startsWith(`${LFG_COMPOSER_IDS.BACK_TO_CANDIDATES}:`)) {
@@ -141,8 +161,7 @@ export class LfgComposerListener {
       await (step ?? this.stale(interaction));
     } catch (error) {
       this.logger.error(
-        `LFG composer step ${interaction.customId} failed:`,
-        error,
+        `LFG composer step ${interaction.customId} failed: ${describeFailure(error)}`,
       );
       await this.fail(interaction);
     }
