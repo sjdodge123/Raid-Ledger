@@ -160,3 +160,46 @@ describe('Modal closeGuard — Modal over Modal', () => {
             'focus must return inside the parent dialog after Keep').toBe(true));
     });
 });
+
+/*
+ * ROK-1655 review: the parent can close the Modal without the guard (a route
+ * change, a programmatic close). The next open must start fresh — no confirm
+ * left over, and no latch swallowing the first close.
+ */
+function Controlled({ open, dirty, onClose }: { open: boolean; dirty: boolean; onClose: () => void }) {
+    const guard = useDirtyCloseGuard(dirty, onClose);
+    return (
+        <Modal isOpen={open} onClose={onClose} title={TITLE} closeGuard={guard} discardMessage={MESSAGE}>
+            <input aria-label="Name" />
+        </Modal>
+    );
+}
+
+/** Dirty Escape (confirm up), then the parent closes and reopens it; `dirtyAfter` = the reopened draft. */
+function closeExternallyWhileConfirming(dirtyAfter: boolean) {
+    const onClose = vi.fn();
+    const view = render(<Controlled open dirty onClose={onClose} />);
+    openConfirm();
+    view.rerender(<Controlled open={false} dirty onClose={onClose} />);
+    expect(confirmBody(), 'an external close must take the confirm with it').toBeNull();
+    view.rerender(<Controlled open dirty={dirtyAfter} onClose={onClose} />);
+    return { onClose };
+}
+
+describe('Modal closeGuard — closed by another route', () => {
+    it('reopening after an external close shows no confirm; one dirty Escape asks afresh', () => {
+        const { onClose } = closeExternallyWhileConfirming(true);
+        expect(confirmBody(), 'a reopened Modal must not start in the confirming state').toBeNull();
+        expect(parentDialog()).not.toBeNull();
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(confirmBody(), 'the first dirty Escape after reopening must ask to discard').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('reopening clean after an external close: one × closes at once (no stuck latch)', () => {
+        const { onClose } = closeExternallyWhileConfirming(false);
+        fireEvent.click(within(parentDialog()!).getByRole('button', { name: 'Close modal' }));
+        expect(onClose, 'the first clean close after reopening must not be swallowed').toHaveBeenCalledTimes(1);
+        expect(confirmBody()).toBeNull();
+    });
+});

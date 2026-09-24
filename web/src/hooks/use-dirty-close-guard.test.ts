@@ -63,4 +63,14 @@ describe('useDirtyCloseGuard', () => {
         act(() => hook.result.current.requestClose());
         expect(hook.result.current.confirming).toBe(true);
     });
+
+    it('reset drops the confirm and the latch at once (closed by another route)', () => {
+        const { onClose, hook } = setup(true);
+        act(() => hook.result.current.requestClose());
+        act(() => hook.result.current.reset());
+        expect(hook.result.current.confirming, 'reset must dismiss the confirm').toBe(false);
+        hook.rerender({ dirty: false });
+        act(() => hook.result.current.requestClose());
+        expect(onClose, 'no stale latch: the first close after reset must go through').toHaveBeenCalledTimes(1);
+    });
 });

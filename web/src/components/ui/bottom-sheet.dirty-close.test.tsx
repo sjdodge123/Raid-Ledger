@@ -125,3 +125,46 @@ describe('BottomSheet closeGuard — swipes that are not closes', () => {
         expect(onClose).not.toHaveBeenCalled();
     });
 });
+
+/*
+ * ROK-1655 review: the parent can close the sheet without the guard (a route
+ * change, a programmatic close). The next open must start fresh — no confirm
+ * left over, and no latch swallowing the first close.
+ */
+function Controlled({ open, dirty, onClose }: { open: boolean; dirty: boolean; onClose: () => void }) {
+    const guard = useDirtyCloseGuard(dirty, onClose);
+    return (
+        <BottomSheet isOpen={open} onClose={onClose} title={TITLE} closeGuard={guard} discardMessage={MESSAGE}>
+            <p>Sheet body</p>
+        </BottomSheet>
+    );
+}
+
+/** Dirty Escape (confirm up), then the parent closes and reopens it; `dirtyAfter` = the reopened draft. */
+function closeExternallyWhileConfirming(dirtyAfter: boolean) {
+    const onClose = vi.fn();
+    const view = render(<Controlled open dirty onClose={onClose} />);
+    pressEscape();
+    expect(confirm(), 'a dirty Escape must open the confirm').not.toBeNull();
+    view.rerender(<Controlled open={false} dirty onClose={onClose} />);
+    expect(confirm(), 'an external close must take the confirm with it').toBeNull();
+    view.rerender(<Controlled open dirty={dirtyAfter} onClose={onClose} />);
+    return { onClose };
+}
+
+describe('BottomSheet closeGuard — closed by another route', () => {
+    it('reopening after an external close shows no confirm; one dirty Escape asks afresh', () => {
+        const { onClose } = closeExternallyWhileConfirming(true);
+        expect(confirm(), 'a reopened sheet must not start in the confirming state').toBeNull();
+        pressEscape();
+        expect(confirm(), 'the first dirty Escape after reopening must ask to discard').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('reopening clean after an external close: one × closes at once (no stuck latch)', () => {
+        const { onClose } = closeExternallyWhileConfirming(false);
+        fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+        expect(onClose, 'the first clean close after reopening must not be swallowed').toHaveBeenCalledTimes(1);
+        expect(confirm()).toBeNull();
+    });
+});

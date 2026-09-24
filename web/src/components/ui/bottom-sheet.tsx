@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
-import type { DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
+import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 import { DiscardChangesConfirm } from './discard-changes-confirm';
 import { OVERLAY_FOOTER_CLASS } from './overlay-footer';
@@ -32,6 +32,7 @@ interface BottomSheetProps {
      * Dirty-close layer (ROK-1655): from `useDirtyCloseGuard(isDirty, onClose)`.
      * When set, Escape, the backdrop, the header × and swipe-down all call
      * `closeGuard.requestClose`, and the sheet renders "Discard your changes?".
+     * A close by another route (`isOpen` → false, unmount) resets the guard.
      */
     closeGuard?: DirtyCloseGuard;
     /** What is unsaved, in the caller's words (the confirm's message). */
@@ -165,6 +166,7 @@ function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: 
 
 export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage }: BottomSheetProps) {
     const requestClose = closeGuard?.requestClose ?? onClose;
+    useResetGuardOnClose(isOpen, closeGuard);
     const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
 
     const sheet = createPortal(

@@ -8,9 +8,10 @@
  * consumer owns `useDirtyCloseGuard(isDirty, onClose)` (web/src/hooks), so it
  * guards an explicit Cancel with `onClick={guard.requestClose}` and leaves
  * Save/submit unguarded. Browser back is out of scope (ROK-1655 ruling 4).
+ * A close by another route (the parent flips `isOpen`) resets the guard.
  */
 import type { JSX } from 'react';
-import type { DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
+import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { ModalFrame, type ModalFrameProps } from './modal-frame';
 import { DiscardChangesConfirm } from './discard-changes-confirm';
 
@@ -23,6 +24,7 @@ export interface ModalProps extends ModalFrameProps {
 
 /** See file docstring. */
 export function Modal({ closeGuard, discardMessage, onClose, ...frame }: ModalProps): JSX.Element {
+    useResetGuardOnClose(frame.isOpen, closeGuard);
     return (
         <>
             <ModalFrame {...frame} onClose={closeGuard?.requestClose ?? onClose} />

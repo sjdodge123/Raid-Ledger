@@ -296,7 +296,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Hook | Path | Use when |
 |---|---|---|
 | `use-body-scroll-lock.ts` → a ref-counted body scroll lock (ROK-1640, PR #1314) | `web/src/hooks/` | Any modal/sheet that locks background scroll; ref-counted so nested/stacked sheets don't unlock each other early. `Modal` and `BottomSheet` already use it |
-| `use-dirty-close-guard.ts` → `useDirtyCloseGuard(isDirty, onClose)` (ROK-1640, shared by ROK-1655) | `web/src/hooks/` | Any overlay that edits data. Returns `{ requestClose, confirming, keep, discard }`: pass it as `closeGuard` to `Modal` / `BottomSheet` and wire an explicit Cancel to `requestClose` (§4.4). A one-macrotask latch stops the Escape that closed the confirm from re-opening it |
+| `use-dirty-close-guard.ts` → `useDirtyCloseGuard(isDirty, onClose)` (ROK-1640, shared by ROK-1655) | `web/src/hooks/` | Any overlay that edits data. Returns `{ requestClose, confirming, keep, discard, reset }`: pass it as `closeGuard` to `Modal` / `BottomSheet` and wire an explicit Cancel to `requestClose` (§4.4). A one-macrotask latch stops the Escape that closed the confirm from re-opening it. `Modal` / `BottomSheet` call `reset` (via `useResetGuardOnClose`) when they close by another route or unmount, so the next open never starts mid-confirm |
 
 Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105`; call `toast.success(...)`
 / `toast.error(...)` from `sonner` directly.
