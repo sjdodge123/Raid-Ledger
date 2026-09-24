@@ -15,28 +15,69 @@ import { execFileP } from './runner-git.js';
 // then omits ADMIN_PASSWORD and global-setup keeps today's fallback behavior
 // (fail-safe, never blocks the dispatch). slug is regex-gated [a-z0-9-]+ at the
 // MCP boundary, so interpolation into the remote string is safe.
+/** Remote shell for the re-seed. `requireFixed` swaps the random fallback for a hard fail. */
+export function buildSeedRemote(slug: string, requireFixed = false): string {
+  const container = `rl-env-${slug}-allinone`;
+  const fallback = requireFixed
+    ? `[ -z "$PW" ] && { printf 'RL_NO_FIXED_PW'; exit 3; }; `
+    : `[ -z "$PW" ] && PW="rl-ci-$(openssl rand -hex 8)"; `;
+  return (
+    `PW="$(grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2-)"; ` +
+    fallback +
+    `DOCKER_HOST=tcp://127.0.0.1:2375 docker exec ` +
+    `-e ADMIN_PASSWORD="$PW" -e RESET_PASSWORD=true ${container} ` +
+    `node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 && ` +
+    `printf 'RL_SEEDED_PW=%s' "$PW"`
+  );
+}
+
+async function runSeed(sshUser: string, sshHost: string, remote: string): Promise<string> {
+  const { stdout } = await execFileP(
+    'ssh',
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`, remote],
+    { maxBuffer: 1024 * 1024, timeout: 30_000 },
+  );
+  return stdout;
+}
+
 export async function seedEnvAdminPassword(
   sshUser: string,
   sshHost: string,
   slug: string,
 ): Promise<string | null> {
-  const container = `rl-env-${slug}-allinone`;
-  const remote =
-    `PW="$(grep -E '^RL_ADMIN_PASSWORD=' /srv/rl-infra/.env 2>/dev/null | head -1 | cut -d= -f2-)"; ` +
-    `[ -z "$PW" ] && PW="rl-ci-$(openssl rand -hex 8)"; ` +
-    `DOCKER_HOST=tcp://127.0.0.1:2375 docker exec ` +
-    `-e ADMIN_PASSWORD="$PW" -e RESET_PASSWORD=true ${container} ` +
-    `node /app/dist/scripts/bootstrap-admin.js >/dev/null 2>&1 && ` +
-    `printf 'RL_SEEDED_PW=%s' "$PW"`;
   try {
-    const { stdout } = await execFileP(
-      'ssh',
-      ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=5', `${sshUser}@${sshHost}`, remote],
-      { maxBuffer: 1024 * 1024, timeout: 30_000 },
-    );
+    const stdout = await runSeed(sshUser, sshHost, buildSeedRemote(slug));
     const m = stdout.match(/RL_SEEDED_PW=(.+)$/m);
     return m ? m[1].trim() : null;
   } catch {
     return null;
   }
+}
+
+export type FixedSeedResult =
+  | { ok: true; password: string }
+  | { ok: false; reason: 'no_fixed_password' | 'seed_failed' };
+
+/**
+ * rl_env_signin_link variant: re-assert admin@local ONLY to the stable
+ * RL_ADMIN_PASSWORD. When it is unset on the VM this refuses (never rotates
+ * admin@local to a random rl-ci-<hex>, which would break a concurrent
+ * rl_validate_ci re-login and any tester holding the stable password).
+ */
+export async function seedFixedEnvAdminPassword(
+  sshUser: string,
+  sshHost: string,
+  slug: string,
+  run: typeof runSeed = runSeed,
+): Promise<FixedSeedResult> {
+  let stdout: string;
+  try {
+    stdout = await run(sshUser, sshHost, buildSeedRemote(slug, true));
+  } catch (err) {
+    const out = (err as { stdout?: unknown }).stdout;
+    const noFixed = typeof out === 'string' && out.includes('RL_NO_FIXED_PW');
+    return { ok: false, reason: noFixed ? 'no_fixed_password' : 'seed_failed' };
+  }
+  const m = stdout.match(/RL_SEEDED_PW=(.+)$/m);
+  return m ? { ok: true, password: m[1].trim() } : { ok: false, reason: 'seed_failed' };
 }

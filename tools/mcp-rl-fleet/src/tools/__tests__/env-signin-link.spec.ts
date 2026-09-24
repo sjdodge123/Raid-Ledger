@@ -2,6 +2,7 @@
 // and the redaction contract (admin password + admin token never in output).
 import { describe, it, expect, vi } from 'vitest';
 import { execute, scrub, type SigninLinkDeps } from '../env-signin-link.js';
+import type { FixedSeedResult } from '../env-admin-seed.js';
 
 const PASSWORD = 'pw-SECRET-7f3a9c';
 const ADMIN_TOKEN = 'eyJADMIN.admin-token-payload.sig';
@@ -20,7 +21,7 @@ function makeDeps(opts: {
   login?: Reply;
   link?: Reply;
   envs?: Array<{ slug: string | null; slot: string | null }>;
-  password?: string | null;
+  seed?: FixedSeedResult;
 }): { deps: SigninLinkDeps; fetchMock: ReturnType<typeof vi.fn> } {
   const fetchMock = vi.fn(async (url: string) => {
     if (url.endsWith('/api/auth/local')) {
@@ -30,7 +31,7 @@ function makeDeps(opts: {
   });
   const deps: SigninLinkDeps = {
     listEnvs: async () => ({ ok: true, envs: opts.envs ?? [{ slug: 'rok-1', slot: '2' }] }),
-    seedPassword: async () => (opts.password === undefined ? PASSWORD : opts.password),
+    seedPassword: async () => opts.seed ?? { ok: true, password: PASSWORD },
     fetch: fetchMock as unknown as typeof fetch,
     publicDomain: 'example.test',
   };
@@ -76,11 +77,33 @@ describe('rl_env_signin_link — happy path', () => {
     for (const c of fetchMock.mock.calls) expect(String(c[0])).not.toContain('rok-1test');
   });
 
-  it('warns when another env shares the slot', async () => {
-    const { deps } = makeDeps({ envs: [{ slug: 'rok-1', slot: '2' }, { slug: 'other', slot: '2' }] });
+  it('fails closed, naming the envs, when another env shares the slot', async () => {
+    const { deps, fetchMock } = makeDeps({ envs: [{ slug: 'rok-1', slot: '2' }, { slug: 'other', slot: '2' }] });
     const result = await execute({ slug: 'rok-1' }, deps);
-    expect(result.ok).toBe(true);
-    expect(result.warning).toMatch(/slot 2 hosts 1 other env/);
+    expect(result).toEqual({
+      ok: false,
+      error: 'slot_shared',
+      message: 'slot 2 hosts 2 envs (rok-1, other); destroy the others so the slot URL routes to "rok-1"',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('ignores envs on other slots', async () => {
+    const { deps } = makeDeps({ envs: [{ slug: 'rok-1', slot: '2' }, { slug: 'other', slot: '1' }] });
+    expect((await execute({ slug: 'rok-1' }, deps)).ok).toBe(true);
+  });
+
+  it('refuses a link whose origin is not the slot base_url, without returning it', async () => {
+    const offOrigin = 'https://evil.example/#token=eyJUSER.magic.sig';
+    const { deps } = makeDeps({ link: { status: 200, body: { url: offOrigin, userId: 1, expiresInSeconds: 900 } } });
+    const result = await execute({ slug: 'rok-1' }, deps);
+    expect(result).toEqual({
+      ok: false,
+      error: 'signin_link_wrong_origin',
+      status: 200,
+      message: 'endpoint returned a link off https://slot-2.example.test',
+    });
+    expect(JSON.stringify(result)).not.toContain('magic.sig');
   });
 });
 
@@ -152,9 +175,17 @@ describe('rl_env_signin_link — admin login failure is redacted', () => {
   });
 
   it('reports admin_seed_failed when the password cannot be re-asserted', async () => {
-    const { deps, fetchMock } = makeDeps({ password: null });
+    const { deps, fetchMock } = makeDeps({ seed: { ok: false, reason: 'seed_failed' } });
     const result = await execute({ slug: 'rok-1' }, deps);
     expect(result).toMatchObject({ ok: false, error: 'admin_seed_failed' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses (no login attempt) when the VM has no stable RL_ADMIN_PASSWORD', async () => {
+    const { deps, fetchMock } = makeDeps({ seed: { ok: false, reason: 'no_fixed_password' } });
+    const result = await execute({ slug: 'rok-1' }, deps);
+    expect(result).toMatchObject({ ok: false, error: 'admin_seed_failed' });
+    expect(result.message).toContain('set RL_ADMIN_PASSWORD in /srv/rl-infra/.env');
     expect(fetchMock).not.toHaveBeenCalled();
   });
 

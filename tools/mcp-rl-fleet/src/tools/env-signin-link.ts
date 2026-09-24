@@ -6,9 +6,11 @@
 //   1. slug -> slot via `rl status` (the rl_env_list source) -> the slot-stable
 //      https://slot-N.<RL_PUBLIC_DOMAIN> URL. Never the per-slug public_url
 //      (Discord OAuth and the magic-link redirect are registered on the slot).
-//   2. admin@local password via the ROK-1368 re-seed (env-admin-seed.ts — the
-//      same path rl_validate_ci uses). It prefers RL_ADMIN_PASSWORD, so on a
-//      configured VM the env admin password does not change.
+//   2. admin@local password via the ROK-1368 re-seed (env-admin-seed.ts), in
+//      its requireFixed form: ONLY the stable RL_ADMIN_PASSWORD is re-asserted.
+//      When the VM has none, the tool fails with admin_seed_failed rather than
+//      rotating admin@local to a random password (which would break a
+//      concurrent rl_validate_ci re-login and any tester's session).
 //   3. POST <base>/api/auth/local as admin@local -> bearer token.
 //   4. POST <base>/api/admin/test/sign-in-link (JWT admin + DEMO_MODE).
 //
@@ -17,12 +19,12 @@
 // admin password and the admin access token are scrubbed from every message.
 
 import { getSshTarget } from '../exec.js';
-import { seedEnvAdminPassword } from './env-admin-seed.js';
+import { seedFixedEnvAdminPassword, type FixedSeedResult } from './env-admin-seed.js';
 import * as envList from './env-list.js';
 
 export const TOOL_NAME = 'rl_env_signin_link';
 export const TOOL_DESCRIPTION =
-  'For agent browser-verification lanes: mint a 15-minute magic sign-in link for a fleet env so you can load the app as a real user WITHOUT typing a password (never type one into a form). Signs in as the env admin (admin@local) by default; pass user_id OR username to sign in as someone else, and path (same-origin, default "/") to land on a specific page. Resolves the slot-stable https://slot-N URL itself and returns {ok, url, user_id, expires_in_seconds, base_url}. Open `url` in a FRESH browser context (new incognito/profile/tab group) so no other session cookie interferes. The token in `url` is a 15-minute, env-only credential: NEVER paste `url` into reports, PR bodies, test plans or Linear — hand out base_url + path instead. The env must run an image with POST /admin/test/sign-in-link and DEMO_MODE=true; a 404 on an existing user means the image predates it. Side effect: re-asserts the admin@local password (RL_ADMIN_PASSWORD when set, so normally unchanged). The admin password and admin token are never returned or logged.';
+  'For agent browser-verification lanes: mint a 15-minute magic sign-in link for a fleet env so you can load the app as a real user WITHOUT typing a password (never type one into a form). Signs in as the env admin (admin@local) by default; pass user_id OR username (exact, case-sensitive match on users.username; lowest id wins on duplicates) to sign in as someone else, and path (same-origin, default "/") to land on a specific page. Resolves the slot-stable https://slot-N URL itself and returns {ok, url, user_id, expires_in_seconds, base_url}. Open `url` in a FRESH browser context (new incognito/profile/tab group) so no other session cookie interferes. The token in `url` is a 15-minute, env-only credential: NEVER paste `url` into reports, PR bodies, test plans or Linear — hand out base_url + path instead. The env must run an image with POST /admin/test/sign-in-link and DEMO_MODE=true; a 404 on an existing user means the image predates it. Side effect: re-asserts admin@local to the stable RL_ADMIN_PASSWORD (unchanged); if the VM has no RL_ADMIN_PASSWORD it fails with admin_seed_failed instead of rotating it. Fails closed if another env shares the slot. The admin password and admin token are never returned or logged.';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 const ADMIN_EMAIL = 'admin@local';
@@ -47,12 +49,11 @@ export interface SigninLinkResult {
   error?: string;
   status?: number;
   message?: string;
-  warning?: string;
 }
 
 export interface SigninLinkDeps {
   listEnvs: () => Promise<{ ok: boolean; envs: Array<{ slug: string | null; slot: string | null }>; error?: string }>;
-  seedPassword: (slug: string) => Promise<string | null>;
+  seedPassword: (slug: string) => Promise<FixedSeedResult>;
   fetch: typeof fetch;
   publicDomain: string;
 }
@@ -63,7 +64,7 @@ export function defaultDeps(): SigninLinkDeps {
     listEnvs: envList.execute,
     seedPassword: async (slug) => {
       const { user, host } = await getSshTarget();
-      return seedEnvAdminPassword(user, host, slug);
+      return seedFixedEnvAdminPassword(user, host, slug);
     },
     fetch: globalThis.fetch,
     publicDomain: process.env.RL_PUBLIC_DOMAIN ?? 'gamernight.net',
@@ -93,7 +94,7 @@ function validate(p: SigninLinkParams): string | null {
   return null;
 }
 
-type BaseResolution = { baseUrl: string; warning?: string } | SigninLinkResult;
+type BaseResolution = { baseUrl: string } | SigninLinkResult;
 
 async function resolveBaseUrl(slug: string, deps: SigninLinkDeps): Promise<BaseResolution> {
   const listed = await deps.listEnvs();
@@ -102,13 +103,14 @@ async function resolveBaseUrl(slug: string, deps: SigninLinkDeps): Promise<BaseR
   if (!env) return fail('env_not_found', `no running env with slug "${slug}" (see rl_env_list)`);
   if (!env.slot || !/^\d+$/.test(env.slot)) return fail('slot_unknown', `env "${slug}" has no slot label`);
   const baseUrl = `https://slot-${env.slot}.${deps.publicDomain}`;
-  const siblings = listed.envs.filter((e) => e.slot === env.slot && e.slug !== slug).length;
-  return siblings > 0
-    ? {
-        baseUrl,
-        warning: `slot ${env.slot} hosts ${siblings} other env(s); the slot URL routes to whichever owns it — confirm it is "${slug}".`,
-      }
-    : { baseUrl };
+  // Fail closed: the slot URL routes to whichever env owns the slot, so with a
+  // sibling present the link could land on (and sign into) the wrong env.
+  const onSlot = listed.envs.filter((e) => e.slot === env.slot);
+  if (onSlot.length !== 1) {
+    const names = onSlot.map((e) => e.slug ?? '(unnamed)').join(', ');
+    return fail('slot_shared', `slot ${env.slot} hosts ${onSlot.length} envs (${names}); destroy the others so the slot URL routes to "${slug}"`);
+  }
+  return { baseUrl };
 }
 
 async function postJson(
@@ -157,6 +159,14 @@ function linkBody(p: SigninLinkParams, adminId: number): Record<string, unknown>
   return p.path !== undefined ? { ...target, path: p.path } : target;
 }
 
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 function endpointMessage(json: Record<string, unknown> | null, status: number): string {
   const m = json?.message;
   if (typeof m === 'string') return m;
@@ -184,6 +194,11 @@ async function mintLink(
   if (typeof json?.url !== 'string') {
     return fail('signin_link_malformed', 'endpoint returned 2xx without a url', status);
   }
+  if (originOf(json.url) !== new URL(baseUrl).origin) {
+    // The env's CLIENT_URL disagrees with the slot URL; never hand out a link
+    // to another origin. The url itself is withheld (it carries a token).
+    return fail('signin_link_wrong_origin', `endpoint returned a link off ${baseUrl}`, status);
+  }
   return {
     ok: true,
     url: json.url,
@@ -191,6 +206,12 @@ async function mintLink(
     expires_in_seconds: typeof json.expiresInSeconds === 'number' ? json.expiresInSeconds : undefined,
     base_url: baseUrl,
   };
+}
+
+function seedFailureMessage(reason: 'no_fixed_password' | 'seed_failed', slug: string): string {
+  return reason === 'no_fixed_password'
+    ? `RL_ADMIN_PASSWORD is not set on the VM; set RL_ADMIN_PASSWORD in /srv/rl-infra/.env (refusing to rotate ${ADMIN_EMAIL} to a random password)`
+    : `could not re-assert ${ADMIN_EMAIL} on env "${slug}"`;
 }
 
 /**
@@ -208,13 +229,13 @@ export async function execute(
   try {
     const base = await resolveBaseUrl(params.slug, deps);
     if (!('baseUrl' in base)) return base;
-    password = await deps.seedPassword(params.slug);
-    if (!password) return fail('admin_seed_failed', `could not re-assert ${ADMIN_EMAIL} on env "${params.slug}"`);
+    const seeded = await deps.seedPassword(params.slug);
+    if (!seeded.ok) return fail('admin_seed_failed', seedFailureMessage(seeded.reason, params.slug));
+    password = seeded.password;
     const session = await loginAdmin(deps, base.baseUrl, password);
     if (!('token' in session)) return session;
     token = session.token;
-    const result = await mintLink(deps, base.baseUrl, params, session, password);
-    return base.warning && result.ok ? { ...result, warning: base.warning } : result;
+    return await mintLink(deps, base.baseUrl, params, session, password);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return fail('request_failed', scrub(msg, [password, token]));
