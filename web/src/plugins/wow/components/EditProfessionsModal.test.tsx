@@ -13,7 +13,7 @@
  *     leaves an empty string (not "0"). Use `userEvent`, not `fireEvent`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
     CharacterProfessionsDto,
@@ -297,5 +297,83 @@ describe('EditProfessionsModal — shared primitives (ROK-1654 H3)', () => {
             .map((el) => el.getAttribute('class') ?? '')
             .filter((c) => /indigo-|hover:text-red-/.test(c));
         expect(offending).toEqual([]);
+    });
+});
+
+describe('EditProfessionsModal — dirty-close guard + pinned footer (ROK-1655 AC1/AC2)', () => {
+    const CONFIRM_TITLE = 'Discard your changes?';
+    const confirmDialog = () => screen.queryByRole('dialog', { name: CONFIRM_TITLE });
+
+    function renderModal(onClose = vi.fn()) {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <EditProfessionsModal {...baseProps} onClose={onClose} initial={null} />,
+        );
+        return { user, onClose };
+    }
+
+    async function makeDirty(user: ReturnType<typeof userEvent.setup>) {
+        await user.click(screen.getByRole('button', { name: /add primary/i }));
+        await user.selectOptions(screen.getByRole('combobox', { name: /profession/i }), 'Tailoring');
+    }
+
+    /** The guard latches for one macrotask after Keep so the same Escape cannot re-open it. */
+    const flushGuardLatch = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    it('Save and Cancel sit in the pinned modal footer, outside the scroll body', () => {
+        renderModal();
+        const footer = screen.queryByTestId('modal-footer');
+        expect(footer, 'Save/Cancel must render in the pinned Modal footer').not.toBeNull();
+        expect(within(footer as HTMLElement).getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+        expect(within(footer as HTMLElement).getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
+        expect((footer as HTMLElement).contains(screen.getByRole('button', { name: /add primary/i }))).toBe(false);
+    });
+
+    it('clean form: Escape closes at once, with no discard confirm', async () => {
+        const { user, onClose } = renderModal();
+        await user.keyboard('{Escape}');
+        expect(confirmDialog()).toBeNull();
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('dirty form: Escape asks first; Keep editing keeps the draft, Discard closes once', async () => {
+        const { user, onClose } = renderModal();
+        await makeDirty(user);
+
+        await user.keyboard('{Escape}');
+        expect(confirmDialog(), 'Escape on a dirty form must ask "Discard your changes?"').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+
+        await user.click(screen.getByTestId('discard-changes-keep'));
+        expect(confirmDialog()).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        expect((screen.getByRole('combobox', { name: /profession/i }) as HTMLSelectElement).value).toBe('Tailoring');
+
+        await flushGuardLatch();
+        await user.keyboard('{Escape}');
+        expect(confirmDialog(), 'a second Escape must ask again').not.toBeNull();
+        await user.click(screen.getByTestId('discard-changes-discard'));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['Cancel', () => screen.getByRole('button', { name: /^cancel$/i })],
+        ['the × close button', () => screen.getByRole('button', { name: 'Close modal' })],
+    ])('dirty form: %s asks before closing', async (_label, target) => {
+        const { user, onClose } = renderModal();
+        await makeDirty(user);
+        await user.click(target());
+        expect(confirmDialog(), 'a dirty close must ask "Discard your changes?"').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('Save on a dirty form never prompts: mutate runs and onSuccess closes', async () => {
+        mutate.mockImplementation((_vars: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+        const { user, onClose } = renderModal();
+        await makeDirty(user);
+        await user.click(screen.getByRole('button', { name: /^save$/i }));
+        expect(mutate).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirmDialog()).toBeNull();
     });
 });
