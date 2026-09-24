@@ -16,7 +16,6 @@
     "components/admin/UpdateBanner.tsx": 1,
     "components/admin/UserManagementRow.tsx": 3,
     "components/admin/admin-settings-layout.tsx": 1,
-    "components/admin/discord-bot-invite-panel.tsx": 1,
     "components/admin/onboarding/PluginCard.tsx": 2,
     "components/admin/onboarding/connect-plugins-step.tsx": 5,
     "components/admin/onboarding/done-step.tsx": 2,
