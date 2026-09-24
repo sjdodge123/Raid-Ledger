@@ -10,7 +10,6 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import { SkipThrottle, Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
-import type { Server } from 'http';
 import * as supertest from 'supertest';
 import {
   applyTrustProxy,
@@ -56,7 +55,7 @@ async function buildApp(
 
 function get(app: NestExpressApplication, path: string, xff: string) {
   return supertest
-    .default(app.getHttpServer() as Server)
+    .default(app.getHttpServer())
     .get(path)
     .set('X-Forwarded-For', xff);
 }
