@@ -200,4 +200,47 @@ describe('useGameSearch — ROK-1682 cancel is scoped to this instance', () => {
         expect(signals[0].aborted).toBe(false);
         await vi.waitFor(() => expect(page.result.current.data).toEqual(response));
     });
+
+    // A second instance (open NominateModal, or another GameSearchInput row)
+    // joins the page's in-flight term, then moves off it: closing resets it
+    // to '' (NominateModal handleClose), or the user types on. The page is
+    // still observing that query, so it must not be cancelled.
+    it.each([
+        ['closes (query reset to empty)', ''],
+        ['types on to a longer term', 'monster hunter w'],
+    ])('an instance sharing the page\'s term that %s does not cancel it', async (_label, nextTerm) => {
+        const signals: AbortSignal[] = [];
+        const resolvers: Array<(value: unknown) => void> = [];
+        mockSearchGames.mockImplementation((_q: string, signal: AbortSignal) => {
+            signals.push(signal);
+            return new Promise((resolve) => { resolvers.push(resolve); });
+        });
+        const response = {
+            data: [{ id: 1, name: 'Monster Hunter Wilds' }],
+            meta: { total: 1, cached: false, source: 'igdb' },
+        };
+        const wrapper = createWrapper(); // one QueryClient shared by both hooks
+
+        const page = renderHook(() => useGameSearch('monster hunter', true), { wrapper });
+        await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+        await vi.waitFor(() => expect(mockSearchGames).toHaveBeenCalledTimes(1));
+
+        // Second instance joins the same in-flight query (deduped: no new fetch)...
+        const modal = renderHook(
+            ({ q }: { q: string }) => useGameSearch(q, true),
+            { wrapper, initialProps: { q: 'monster hunter' } },
+        );
+        await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+        // ...then its debounced term moves off it.
+        modal.rerender({ q: nextTerm });
+        await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+
+        await act(async () => {
+            resolvers[0](response);
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(signals[0].aborted).toBe(false);
+        await vi.waitFor(() => expect(page.result.current.data).toEqual(response));
+    });
 });
