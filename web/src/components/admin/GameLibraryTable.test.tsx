@@ -108,10 +108,6 @@ describe('GameLibraryTable — Loading & empty states', () => {
         mockUnhideGame.mutateAsync = vi.fn();
     });
 
-    afterEach(() => {
-        vi.useRealTimers();
-    });
-
     // ── Loading & empty states ──────────────────────────────────
 
     it('shows loading indicator when isLoading is true', () => {
@@ -126,6 +122,30 @@ describe('GameLibraryTable — Loading & empty states', () => {
         expect(
             screen.getByText('No games in library yet. Run a sync to populate.'),
         ).toBeInTheDocument();
+    });
+
+    // ── Mobile card layout (<768px, rendered via md:hidden) ─────
+
+    it('renders game name in mobile card', () => {
+        mockGames.items = [makeGame()];
+        mockGames.total = 1;
+        render(<GameLibraryTable />);
+        // Name appears in both mobile and desktop, but we verify at least one instance
+        expect(screen.getAllByText('World of Warcraft').length).toBeGreaterThanOrEqual(1);
+    });
+
+});
+
+describe('GameLibraryTable — Search (SearchInput owns the debounce)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGames.items = [];
+        mockGames.total = 0;
+        mockGames.isLoading = false;
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('shows search-specific empty message when search yields no results', () => {
@@ -182,17 +202,6 @@ describe('GameLibraryTable — Loading & empty states', () => {
         expect(searchInput.value).toBe('');
         expect(lastQueriedSearch()).toBe('');
     });
-
-    // ── Mobile card layout (<768px, rendered via md:hidden) ─────
-
-    it('renders game name in mobile card', () => {
-        mockGames.items = [makeGame()];
-        mockGames.total = 1;
-        render(<GameLibraryTable />);
-        // Name appears in both mobile and desktop, but we verify at least one instance
-        expect(screen.getAllByText('World of Warcraft').length).toBeGreaterThanOrEqual(1);
-    });
-
 });
 
 describe('GameLibraryTable — Mobile delete button — 44×44px touch target', () => {
