@@ -2,10 +2,13 @@
  * Slider + text-field subcomponents extracted from StartLineupModal to keep
  * the main file under the 300-line limit (ROK-1064).
  */
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { JSX } from 'react';
+import { Field } from '../ui/field';
 import { Input } from '../ui/input';
+import { RadioGroup, type RadioOption } from '../ui/radio-group';
 import { Slider } from '../ui/slider';
+import { Textarea } from '../ui/textarea';
 import { formatDurationHours } from './start-lineup-config';
 
 const MIN_HOURS = 1;
@@ -202,7 +205,7 @@ export function ThresholdSlider({
   );
 }
 
-/** Title text field (required). */
+/** Title text field (required). The error shows inline once the field is left empty (ROK-1650, ruling 8). */
 export function TitleField({
   value,
   onChange,
@@ -210,29 +213,24 @@ export function TitleField({
   value: string;
   onChange: (v: string) => void;
 }): JSX.Element {
+  const [touched, setTouched] = useState(false);
+  const error = touched && value.trim() === '' ? 'Title is required' : undefined;
   return (
-    <div>
-      <label
-        htmlFor="lineup-title"
-        className="block text-sm font-medium text-secondary mb-1"
-      >
-        Title <span className="text-rose-400">*</span>
-      </label>
-      <input
-        id="lineup-title"
+    <Field label="Title" id="lineup-title" required error={error}>
+      <Input
         type="text"
         required
         maxLength={100}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setTouched(true)}
         placeholder="Lineup — April 2026"
-        className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
       />
-    </div>
+    </Field>
   );
 }
 
-/** Description textarea with a character counter. */
+/** Description textarea with the shared `n/500` counter. */
 export function DescriptionField({
   value,
   onChange,
@@ -241,68 +239,50 @@ export function DescriptionField({
   onChange: (v: string) => void;
 }): JSX.Element {
   return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <label
-          htmlFor="lineup-description"
-          className="block text-sm font-medium text-secondary"
-        >
-          Description
-        </label>
-        <span className="text-xs text-muted tabular-nums">
-          {value.length} / {DESCRIPTION_MAX}
-        </span>
-      </div>
-      <textarea
-        id="lineup-description"
+    <Field label="Description" id="lineup-description">
+      <Textarea
         rows={3}
+        showCount
         maxLength={DESCRIPTION_MAX}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Optional markdown — **bold**, *italic*, `code`, [link](https://example.com)"
-        className="w-full px-3 py-2 text-sm bg-panel border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
       />
-    </div>
+    </Field>
   );
 }
 
-/** Three-way toggle for tiebreaker mode. */
+type TiebreakerMode = 'bracket' | 'veto' | null;
+
+/** `null` (no tiebreaker) rides the radio group as the string 'none' (ruling 6). */
+const TIEBREAKER_OPTIONS: readonly RadioOption<'bracket' | 'veto' | 'none'>[] = [
+  { value: 'bracket', label: 'Bracket' },
+  { value: 'veto', label: 'Veto' },
+  { value: 'none', label: 'None' },
+];
+
+/** Three-way segmented toggle for tiebreaker mode. */
 export function TiebreakerPicker({
   value,
   onChange,
 }: {
-  value: 'bracket' | 'veto' | null;
-  onChange: (v: 'bracket' | 'veto' | null) => void;
+  value: TiebreakerMode;
+  onChange: (v: TiebreakerMode) => void;
 }): JSX.Element {
-  const opts: ReadonlyArray<readonly [('bracket' | 'veto' | null), string]> = [
-    ['bracket', 'Bracket'],
-    ['veto', 'Veto'],
-    [null, 'None'],
-  ];
+  const hintId = useId();
   return (
     <div className="border-t border-edge/30 pt-4">
-      <label className="text-sm font-medium text-secondary">
-        Tiebreaker Mode
-      </label>
-      <p className="text-xs text-muted mb-2">
+      <RadioGroup
+        label="Tiebreaker Mode"
+        appearance="segmented"
+        options={TIEBREAKER_OPTIONS}
+        value={value ?? 'none'}
+        onChange={(v) => onChange(v === 'none' ? null : v)}
+        aria-describedby={hintId}
+      />
+      <p id={hintId} className="mt-1 text-xs text-muted">
         Used when voting produces tied games at deadline.
       </p>
-      <div className="flex gap-2">
-        {opts.map(([val, label]) => (
-          <button
-            key={String(val)}
-            type="button"
-            onClick={() => onChange(val)}
-            className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border transition-colors ${
-              value === val
-                ? 'bg-emerald-600/20 border-emerald-500/50 text-emerald-400'
-                : 'bg-panel border-edge text-muted hover:text-foreground'
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
