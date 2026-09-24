@@ -385,9 +385,9 @@ describe('AddCharacterModal — general edit behavior', () => {
     });
 });
 
-describe('AddCharacterModal — form primitives (ROK-1648)', () => {
-    const defaultCreate = () => ({ mutate: vi.fn(), isPending: false });
+const defaultCreate = () => ({ mutate: vi.fn(), isPending: false });
 
+describe('AddCharacterModal — form primitives (ROK-1648)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         vi.mocked(useCreateCharacter).mockImplementation(defaultCreate as never);
@@ -429,8 +429,7 @@ describe('AddCharacterModal — form primitives (ROK-1648)', () => {
         vi.mocked(useCreateCharacter).mockImplementation((() => ({ mutate: vi.fn(), isPending: true })) as never);
         renderModal();
         const submit = document.querySelector('button[type="submit"]') as HTMLElement;
-        expect(submit, 'the form keeps one submit button').not.toBeNull();
-        expect(submit).toHaveAttribute('aria-busy', 'true');
+        expect(submit, 'the form keeps one submit button').toHaveAttribute('aria-busy', 'true');
         expect(submit).toHaveAccessibleName('Saving…');
         expect(submit).toHaveAttribute('aria-disabled', 'true');
             });
