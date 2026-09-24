@@ -23,13 +23,20 @@ const DISCORD_BRAND = '#5865F2';
 /** Stands in for a community's saved accent (BrandingSection) — caller data, not a theme value. */
 const DEMO_ACCENT = '#10b981';
 
+interface Picks { name: string; count: number }
+
+/** "Picked <name> · <n> picks" — the count moves on every onFiles, so a same-file re-pick shows. */
+const picksText = (p: Picks | null): string =>
+    (p ? `Picked ${p.name} · ${p.count} pick${p.count === 1 ? '' : 's'}` : 'No file picked');
+
 function FilePickerDemo(): JSX.Element {
-    const [picked, setPicked] = useState<string | null>(null);
+    const [picks, setPicks] = useState<Picks | null>(null);
+    const onFiles = (files: File[]): void => setPicks((p) => ({ name: files[0].name, count: (p?.count ?? 0) + 1 }));
     return (
-        <StateFrame label="FilePicker — idle / loading" note="A secondary Button opens a hidden native input; onFiles gets File[] and the same file can be picked twice.">
-            <FilePicker accept="image/png,image/jpeg" onFiles={(files) => setPicked(files[0].name)}>Upload logo</FilePicker>
+        <StateFrame label="FilePicker — idle / loading" note="A secondary Button opens a hidden native input; onFiles gets File[] and the same file can be picked twice — the pick counter moves each time.">
+            <FilePicker accept="image/png,image/jpeg" onFiles={onFiles}>Upload logo</FilePicker>
             <FilePicker onFiles={() => undefined} loading loadingLabel="Uploading…">Upload logo</FilePicker>
-            <span className="text-xs text-muted">{picked ?? 'No file picked'}</span>
+            <span className="text-xs text-muted" aria-live="polite">{picksText(picks)}</span>
         </StateFrame>
     );
 }
