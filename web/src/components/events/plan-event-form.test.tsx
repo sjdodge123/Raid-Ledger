@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -147,10 +147,11 @@ describe('PlanEventForm — rendering', () => {
         expect(screen.getByRole('button', { name: 'Start Poll' })).toBeTruthy();
     });
 
-    it('should render both poll mode buttons', () => {
+    it('should render both poll mode options as radios in a Poll Mode group', () => {
         renderForm();
-        expect(screen.getByRole('button', { name: 'Standard' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'All or Nothing' })).toBeTruthy();
+        const group = screen.getByRole('radiogroup', { name: 'Poll Mode' });
+        expect(within(group).getByRole('radio', { name: 'Standard' })).toBeChecked();
+        expect(within(group).getByRole('radio', { name: 'All or Nothing' })).not.toBeChecked();
     });
 
     it('should show suggestions from useTimeSuggestions', () => {
@@ -206,8 +207,9 @@ describe('PlanEventForm — poll mode selector', () => {
 
     it('should show all_or_nothing description when that mode is selected', () => {
         renderForm();
-        const aonBtn = screen.getByRole('button', { name: 'All or Nothing' });
-        fireEvent.click(aonBtn);
+        const aonRadio = screen.getByRole('radio', { name: 'All or Nothing' });
+        fireEvent.click(aonRadio);
+        expect(aonRadio).toBeChecked();
 
         expect(
             screen.getByText(/If ANY voter picks.*None of these work/i),
@@ -370,7 +372,15 @@ describe('PlanEventForm — pending state', () => {
             isPending: true,
         });
         renderForm();
-        expect(screen.getByRole('button', { name: 'Posting Poll...' })).toBeDisabled();
+        fillTitleAndSelectSlots();
+        // ROK-1649 ruling 7: a loading Button is aria-disabled + aria-busy (not
+        // native disabled, so focus survives) and swallows the click — a valid
+        // form still never submits while the poll is posting.
+        const submit = screen.getByRole('button', { name: 'Posting Poll...' });
+        expect(submit).toHaveAttribute('aria-disabled', 'true');
+        expect(submit).toHaveAttribute('aria-busy', 'true');
+        fireEvent.click(submit);
+        expect(mockMutate).not.toHaveBeenCalled();
     });
 });
 
@@ -381,7 +391,7 @@ describe('PlanEventForm — pollMode & navigation', () => {
     it('should include pollMode in submitted DTO', () => {
         renderForm();
         fillTitleAndSelectSlots();
-        fireEvent.click(screen.getByRole('button', { name: 'All or Nothing' }));
+        fireEvent.click(screen.getByRole('radio', { name: 'All or Nothing' }));
         fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
 
         expect(mockMutate).toHaveBeenCalledWith(
@@ -490,5 +500,45 @@ describe('PlanEventForm — Game details fields (ROK-1649 AC1)', () => {
         const title = screen.getByRole('textbox', { name: 'Event Title' });
         expect(title).toHaveAttribute('aria-invalid', 'true');
         expect(title).toHaveAccessibleDescription(/Title is required/);
+    });
+});
+
+// ─── ROK-1649 B7: poll settings, custom time and slot error on the primitives ─
+describe('PlanEventForm — poll settings + custom time primitives (ROK-1649)', () => {
+    beforeEach(setupDefaultMocks);
+    afterEach(() => { activeQueryClient?.clear(); });
+
+    it('Poll Duration is a radiogroup: 24h by default, 48h once picked, and 48 is submitted', () => {
+        renderForm();
+        const group = screen.getByRole('radiogroup', { name: 'Poll Duration' });
+        expect(within(group).getByRole('radio', { name: '24h' })).toBeChecked();
+        fireEvent.click(within(group).getByRole('radio', { name: '48h' }));
+        expect(within(group).getByRole('radio', { name: '48h' })).toBeChecked();
+        expect(within(group).getByRole('radio', { name: '24h' })).not.toBeChecked();
+        fillTitleAndSelectSlots();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        expect(mockMutate).toHaveBeenCalledWith(
+            expect.objectContaining({ pollDurationHours: 48 }), expect.any(Object),
+        );
+    });
+
+    it('names the custom date and time inputs through Field labels', () => {
+        renderForm();
+        expect(screen.getByLabelText('Custom date')).toHaveAttribute('type', 'date');
+        expect(screen.getByLabelText('Custom time')).toHaveAttribute('type', 'time');
+    });
+
+    it('announces the time-slot error as an alert', () => {
+        renderForm();
+        fireEvent.click(screen.getByRole('button', { name: 'Start Poll' }));
+        const alerts = screen.getAllByRole('alert').map((el) => el.textContent);
+        expect(alerts).toContain('Select at least 2 time options');
+    });
+
+    it('the remove control is a named button that drops the slot', () => {
+        renderForm();
+        fireEvent.click(screen.getByText('Monday Mar 10, 6:00 PM').closest('button')!);
+        fireEvent.click(screen.getByRole('button', { name: 'Remove time slot' }));
+        expect(screen.queryByText('Selected (1/9)')).toBeNull();
     });
 });
