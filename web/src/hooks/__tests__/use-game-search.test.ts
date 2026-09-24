@@ -159,3 +159,45 @@ describe('useGameSearch — ROK-1233 cancel superseded requests', () => {
         expect(signals[signals.length - 1].aborted).toBe(false);
     });
 });
+
+describe('useGameSearch — ROK-1682 cancel is scoped to this instance', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        mockSearchGames.mockReset();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('a newly mounted instance does not cancel another instance\'s in-flight search', async () => {
+        const signals: AbortSignal[] = [];
+        let resolveSearch: (value: unknown) => void = () => {};
+        mockSearchGames.mockImplementation((_q: string, signal: AbortSignal) => {
+            signals.push(signal);
+            return new Promise((resolve) => { resolveSearch = resolve; });
+        });
+        const response = {
+            data: [{ id: 1, name: 'Monster Hunter Wilds' }],
+            meta: { total: 1, cached: false, source: 'igdb' },
+        };
+        const wrapper = createWrapper(); // one QueryClient shared by both hooks
+
+        // /games page search: debounce settles, the slow request is in flight.
+        const page = renderHook(() => useGameSearch('monster hunter', true), { wrapper });
+        await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+        await vi.waitFor(() => expect(mockSearchGames).toHaveBeenCalledTimes(1));
+
+        // LineupBanner lands and mounts a closed NominateModal on the same client.
+        renderHook(() => useGameSearch('', false), { wrapper });
+        await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+
+        await act(async () => {
+            resolveSearch(response);
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(signals[0].aborted).toBe(false);
+        await vi.waitFor(() => expect(page.result.current.data).toEqual(response));
+    });
+});
