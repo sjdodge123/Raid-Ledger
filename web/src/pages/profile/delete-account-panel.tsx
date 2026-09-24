@@ -4,6 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, isImpersonating } from '../../hooks/use-auth';
 import { deleteMyAccount } from '../../lib/api-client';
 import { Modal } from '../../components/ui/modal';
+import { Button } from '../../components/ui/button';
+import { Field } from '../../components/ui/field';
+import { Input } from '../../components/ui/input';
 import { toast } from '../../lib/toast';
 
 /**
@@ -22,13 +25,13 @@ function useDeleteAccount(confirmName: string) {
 
 function DangerZoneCard({ onDelete }: { onDelete: () => void }) {
     return (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+        <div className="bg-danger/10 border border-danger/20 rounded-lg p-4">
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <h3 className="text-sm font-semibold text-foreground">Delete My Account</h3>
                     <p className="text-sm text-muted mt-1">Permanently delete your account, characters, event signups, and all associated data. This cannot be undone.</p>
                 </div>
-                <button onClick={onDelete} className="flex-shrink-0 px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-medium text-sm rounded-lg transition-colors">Delete My Account</button>
+                <Button variant="destructive" onClick={onDelete} className="flex-shrink-0">Delete My Account</Button>
             </div>
         </div>
     );
@@ -39,23 +42,18 @@ function DeleteConfirmModalBody({ expectedName, confirmName, setConfirmName, onC
 }) {
     return (
         <div className="space-y-4">
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                <p className="text-sm text-red-400 font-medium mb-1">This action is permanent and cannot be undone.</p>
-                <p className="text-sm text-red-400/80">This will permanently delete your account, characters, event signups, and all associated data.</p>
+            <div className="bg-danger/10 border border-danger/30 rounded-lg p-3">
+                <p className="text-sm text-danger font-medium mb-1">This action is permanent and cannot be undone.</p>
+                <p className="text-sm text-danger/80">This will permanently delete your account, characters, event signups, and all associated data.</p>
             </div>
-            <div>
-                <label htmlFor="confirm-name" className="block text-sm text-secondary mb-1.5">
-                    Type <strong className="text-foreground">{expectedName}</strong> to confirm
-                </label>
-                <input id="confirm-name" type="text" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} placeholder={expectedName}
-                    className="w-full px-3 py-2 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent transition-all" autoComplete="off" />
-            </div>
+            <Field id="confirm-name" label={`Type ${expectedName} to confirm`}>
+                <Input type="text" value={confirmName} onChange={(e) => setConfirmName(e.target.value)} placeholder={expectedName} autoComplete="off" />
+            </Field>
             <div className="flex justify-end gap-3 pt-2">
-                <button onClick={onCancel} className="px-4 py-2 text-sm bg-overlay hover:bg-faint text-foreground rounded-lg transition-colors">Cancel</button>
-                <button onClick={onConfirm} disabled={!isValid || isPending}
-                    className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
-                    {isPending ? 'Deleting...' : 'Delete My Account'}
-                </button>
+                <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+                <Button variant="destructive" onClick={onConfirm} disabled={!isValid} loading={isPending} loadingLabel="Deleting…">
+                    Delete My Account
+                </Button>
             </div>
         </div>
     );
@@ -73,8 +71,8 @@ export function DeleteAccountPanel() {
 
     return (
         <div className="space-y-6">
-            <div className="bg-red-500/5 border border-red-500/30 rounded-xl p-6">
-                <h2 className="text-xl font-semibold text-red-400 mb-1">Danger Zone</h2>
+            <div className="bg-danger/5 border border-danger/30 rounded-xl p-6">
+                <h2 className="text-xl font-semibold text-danger mb-1">Danger Zone</h2>
                 <p className="text-sm text-muted mb-6">Irreversible actions that permanently affect your account.</p>
                 <DangerZoneCard onDelete={() => setShowModal(true)} />
             </div>

@@ -1,6 +1,7 @@
 /**
- * Extracted hooks from identity-panel.tsx for reuse across
- * avatar, integrations, preferences, and watched-games panels (ROK-548).
+ * Profile hooks shared by the avatar, integrations, preferences and
+ * watched-games panels (ROK-548). First extracted from identity-panel.tsx,
+ * which was deleted as dead code in ROK-1648.
  */
 import { useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';

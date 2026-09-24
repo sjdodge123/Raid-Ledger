@@ -6,24 +6,24 @@ import {
     TIMEZONE_GROUPS,
     getBrowserTimezone,
 } from '../../constants/timezones';
+import { Field } from '../ui/field';
+import { Select } from '../ui/select';
 
+/** The section's h2 is the visible caption, so the Field label is visually hidden. */
 function TimezoneSelect({ value, onChange, browserAbbr }: { value: string; onChange: (v: string) => void; browserAbbr: string }) {
     return (
-        <select
-            aria-label="Timezone"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
-        >
-            <option value={TIMEZONE_AUTO}>Auto — detect from browser ({browserAbbr})</option>
-            {TIMEZONE_GROUPS.map((group) => (
-                <optgroup key={group} label={group}>
-                    {TIMEZONE_OPTIONS.filter((o) => o.group === group).map((o) => (
-                        <option key={o.id} value={o.id}>{o.label} ({getTimezoneAbbr(o.id)})</option>
-                    ))}
-                </optgroup>
-            ))}
-        </select>
+        <Field label="Timezone" hideLabel>
+            <Select fieldSize="lg" value={value} onChange={(e) => onChange(e.target.value)}>
+                <option value={TIMEZONE_AUTO}>Auto — detect from browser ({browserAbbr})</option>
+                {TIMEZONE_GROUPS.map((group) => (
+                    <optgroup key={group} label={group}>
+                        {TIMEZONE_OPTIONS.filter((o) => o.group === group).map((o) => (
+                            <option key={o.id} value={o.id}>{o.label} ({getTimezoneAbbr(o.id)})</option>
+                        ))}
+                    </optgroup>
+                ))}
+            </Select>
+        </Field>
     );
 }
 
@@ -38,7 +38,7 @@ export function TimezoneSection() {
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">
             <h2 className="text-xl font-semibold text-foreground mb-1">Timezone</h2>
             <p className="text-sm text-muted mb-4">
-                Choose how event times are displayed. Currently showing times in <span className="text-emerald-400 font-medium">{abbr}</span>
+                Choose how event times are displayed. Currently showing times in <span className="text-success font-medium">{abbr}</span>
             </p>
             <TimezoneSelect value={timezoneId} onChange={setTimezone} browserAbbr={browserAbbr} />
         </div>

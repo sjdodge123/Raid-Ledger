@@ -51,11 +51,7 @@ const mockIsImpersonating = isImpersonating as ReturnType<typeof vi.fn>;
 describe('AccountPanel (ROK-548)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        mockUseAuth.mockReturnValue({
-            user: { id: 1, username: 'TestUser', displayName: 'TestUser' },
-            isAuthenticated: true,
-            logout: vi.fn(),
-        });
+        mockUseAuth.mockReturnValue({ user: { id: 1, username: 'TestUser', displayName: 'TestUser' }, isAuthenticated: true, logout: vi.fn() });
         mockIsImpersonating.mockReturnValue(false);
     });
 
