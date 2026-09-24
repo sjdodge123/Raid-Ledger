@@ -200,6 +200,17 @@ describe('useGameSearch — ROK-1682 cancel is scoped to this instance', () => {
         expect(signals[0].aborted).toBe(false);
         await vi.waitFor(() => expect(page.result.current.data).toEqual(response));
     });
+});
+
+describe('useGameSearch — ROK-1682 shared term is not cancelled by one observer', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        mockSearchGames.mockReset();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
 
     // A second instance (open NominateModal, or another GameSearchInput row)
     // joins the page's in-flight term, then moves off it: closing resets it
