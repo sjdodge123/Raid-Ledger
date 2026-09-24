@@ -481,12 +481,23 @@ the body loads (layout jump on mobile).
 (`ConnectivityBanner`, `DiscordJoinBanner`) live in the layout and are dismissible where they are not
 blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
 
+- **Status banners use the tokens**: `bg-success/10 border-success/30 text-success`, the same for `warning` and
+  `danger` (`TestResultBanner` in `components/admin/admin-form-helpers.tsx`; ROK-1652 ruling 9 maps red →
+  `danger`, emerald → `success`, amber → `warning` 1:1).
+- **Instruction callouts are the neutral panel**: `bg-overlay/30 border border-edge rounded-lg p-4`, with
+  `text-foreground` headings and `text-secondary` body. Set-up steps are not a status, so they take no hue.
+  The admin integration forms use it (IGDB, ITAD, Steam, Co-Optimus, Discord Bot/OAuth, Blizzard; ROK-1652
+  ruling 9). A provider's brand appears only as a logo tile (`admin-settings-integration-cards.tsx`'s
+  `bg-[#148EFF]`), never as a callout fill.
+
 **DON'T** stack per-phase banners. `/dev/wireframes/simplify` §U1 documents exactly this failure ("Same
 job · 4 different shapes") as the thing Cycle 4 removes.
 
 **Light / Dark** — the `-500/10` + `-500/30` pair is remapped for light, but only for `red`, `amber`,
-`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:713-735`) — a `blue` or `purple` banner gets none. Keep
-body copy in `text-foreground` / `text-secondary`.
+`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:713-735`) — a `blue` or `purple` banner gets none, which
+is why instruction callouts use the neutral `bg-overlay/30 border-edge` panel rather than a blue or purple
+tint. The token banners and the neutral panel flip with the theme. Keep body copy in `text-foreground` /
+`text-secondary`.
 
 ### 4.8 Toasts
 
@@ -557,6 +568,15 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `label` naming the toggle ("Show Password" / "Hide Password"). Several fields revealed together → one
   "Show passwords" `Checkbox` driving each field's controlled `revealed`. Never `Input type="password"`
   plus a hand-rolled eye button.
+- **Admin integration forms** (IGDB, ITAD, Steam, Co-Optimus, Discord Bot/OAuth, Blizzard, AI providers;
+  ROK-1652) use the thin adapters in `components/admin/admin-form-helpers.tsx`. Secrets go through
+  `PasswordInput`, which wraps the ui `PasswordInput` at `fieldSize="lg"` and names its toggle "Show API key" /
+  "Show password". Copyable values (Redirect URI, callback URLs) use `CopyableInput`: a `readOnly` `Input` with
+  a trailing ghost icon `Button` named "Copy <label>". Enter and a click on the field also copy. The action row is
+  Save `primary` (`lg`, `flex-1`; Co-Optimus keeps `md`), Test `secondary`, and Clear `destructive-soft`, all
+  with `loading`. Secondary actions use `secondary`, not a brand or ring hue (ruling 10): Sync Now (IGDB),
+  Test Permissions (Discord Bot) and Set as Active (AI providers). No per-integration `ringColor` or `*_RING`
+  constant remains.
 - **File uploads are `FilePicker`** (ruling 1): the trigger is a `Button` named by `children`; the native
   input stays hidden in the DOM (tests drive it with `userEvent.upload`). A drop zone reuses the picker's
   ref to open the same dialog instead of rendering a second `<input type="file">`. A raw file input gets
