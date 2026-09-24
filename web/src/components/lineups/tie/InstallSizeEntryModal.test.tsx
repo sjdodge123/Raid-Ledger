@@ -142,7 +142,8 @@ describe('InstallSizeEntryModal — pinned footer (ROK-1655)', () => {
         await user.type(sizeField(), '0');
         await user.click(saveButton());
         const alert = screen.getByRole('alert');
-        expect(alert.textContent).not.toBe('');
+        expect(alert).toHaveTextContent('Enter a size in GB greater than 0');
+        expect(alert.textContent, 'no raw schema field names').not.toMatch(/installSizeBytes|downloadSizeBytes/);
         expect(alert).toHaveClass('text-danger');
         expect(sizeField()).toHaveAttribute('aria-invalid', 'true');
         expect(onClose, 'an invalid size must not close').not.toHaveBeenCalled();

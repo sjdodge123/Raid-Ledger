@@ -51,17 +51,19 @@ function toBytes(raw: string): number | null {
     return Math.round(gb * 1_000_000_000);
 }
 
+const INVALID_SIZE_MESSAGE = 'Enter a size in GB greater than 0';
+
 /** Validate the typed GB figure and save it; the error is shown inline on the field. */
 function useSizeSubmit(lineupId: number, gameId: number, value: string, onSaved: () => void) {
     const [error, setError] = useState<string | null>(null);
     const save = useSetInstallSize(lineupId);
     const submit = (): void => {
-        const parsed = SetInstallSizeSchema.safeParse({
-            installSizeBytes: toBytes(value),
-            downloadSizeBytes: null,
-        });
-        if (!parsed.success) {
-            setError(parsed.error.issues[0]?.message ?? 'Enter a size in GB');
+        // The schema's messages name wire fields (installSizeBytes/…), so the
+        // user only ever sees this one line.
+        const installSizeBytes = toBytes(value);
+        const parsed = SetInstallSizeSchema.safeParse({ installSizeBytes, downloadSizeBytes: null });
+        if (installSizeBytes === null || !parsed.success) {
+            setError(INVALID_SIZE_MESSAGE);
             return;
         }
         save.mutate({ gameId, body: parsed.data }, { onSuccess: onSaved });
