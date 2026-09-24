@@ -241,3 +241,61 @@ describe('EditProfessionsModal — backspace-past-zero (regression for commit b3
         expect(skillInput.value).toBe('');
     });
 });
+
+describe('EditProfessionsModal — shared primitives (ROK-1654 H3)', () => {
+    const TWO_PRIMARY: CharacterProfessionsDto = {
+        primary: [
+            { id: 1, name: 'Tailoring', slug: 'tailoring', skillLevel: 250, maxSkillLevel: 525, tiers: [] },
+            { id: 2, name: 'Mining', slug: 'mining', skillLevel: 100, maxSkillLevel: 525, tiers: [] },
+        ],
+        secondary: [],
+        syncedAt: '2026-04-28T00:00:00.000Z',
+    };
+
+    it('Remove profession is a named button with a decorative icon, and removes its row', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <EditProfessionsModal {...baseProps} initial={TWO_PRIMARY} />,
+        );
+        expect(screen.getAllByRole('combobox', { name: /profession/i })).toHaveLength(2);
+        const removeButtons = screen.getAllByRole('button', { name: 'Remove profession' });
+        expect(removeButtons).toHaveLength(2);
+        expect(removeButtons[0].querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+        expect(removeButtons[0].textContent).not.toContain('✕');
+
+        await user.click(removeButtons[0]);
+
+        const remaining = screen.getAllByRole('combobox', { name: /profession/i });
+        expect(remaining).toHaveLength(1);
+        expect((remaining[0] as HTMLSelectElement).value).toBe('Mining');
+    });
+
+    it('Save is a loading button while the mutation is pending: aria-busy, and a click does not call mutate', async () => {
+        vi.mocked(useUpdateCharacter).mockReturnValue({
+            mutate,
+            isPending: true,
+        } as unknown as ReturnType<typeof useUpdateCharacter>);
+        const user = userEvent.setup();
+        renderWithProviders(
+            <EditProfessionsModal {...baseProps} initial={null} />,
+        );
+        const save = screen.getByRole('button', { name: /saving/i });
+        expect(save).toHaveAttribute('aria-busy', 'true');
+
+        await user.click(save);
+
+        expect(mutate).not.toHaveBeenCalled();
+    });
+
+    it('carries no hardcoded indigo / red hover colours (tokens and primitive defaults only)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <EditProfessionsModal {...baseProps} initial={TWO_PRIMARY} />,
+        );
+        await user.click(screen.getByRole('button', { name: /add secondary/i }));
+        const offending = Array.from(document.body.querySelectorAll('[class]'))
+            .map((el) => el.getAttribute('class') ?? '')
+            .filter((c) => /indigo-|hover:text-red-/.test(c));
+        expect(offending).toEqual([]);
+    });
+});
