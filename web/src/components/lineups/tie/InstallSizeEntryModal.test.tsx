@@ -99,8 +99,10 @@ describe('InstallSizeEntryModal — dirty-close guard (ROK-1655)', () => {
         const { onClose } = renderSize();
         await user.type(sizeField(), '12.5');
         await user.click(saveButton());
-        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-        expect(screen.queryByText(CONFIRM), 'a save must not ask to discard').not.toBeInTheDocument();
+        // Wait for the save to settle either way (closed, or wrongly asking), then name the outcome.
+        await waitFor(() => expect(onClose.mock.calls.length + screen.queryAllByText(CONFIRM).length).toBeGreaterThan(0));
+        expect(screen.queryByText(CONFIRM), 'a successful save must close unguarded, not ask to discard').not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(1);
     });
 });
 
