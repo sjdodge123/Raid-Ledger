@@ -1,7 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
-import { Redis, type RedisOptions } from 'ioredis';
+import { Redis } from 'ioredis';
 import { QueueHealthService } from './queue-health.service';
 
 // ROK-1268: in integration tests (BULLMQ_KEY_PREFIX set) every spec boots
@@ -21,11 +21,8 @@ let sharedTestConnection: Redis | undefined;
  * lacks it. The bullmq key prefix stays in the bullmq `prefix` option (never as
  * an ioredis `keyPrefix`, which BullMQ rejects on a shared connection).
  */
-export function getTestSharedRedis(options: RedisOptions): Redis {
-  sharedTestConnection ??= new Redis({
-    ...options,
-    maxRetriesPerRequest: null,
-  });
+export function getTestSharedRedis(url: string): Redis {
+  sharedTestConnection ??= new Redis(url, { maxRetriesPerRequest: null });
   return sharedTestConnection;
 }
 
@@ -41,40 +38,41 @@ export async function closeTestSharedRedis(): Promise<void> {
   }
 }
 
+/**
+ * BullMQ root options for a REDIS_URL. ROK-1058: `prefix` (e.g.
+ * `test-<pid>-<ts>-`) keeps integration tests off the shared `bull:*` keyspace;
+ * prod leaves it unset so BullMQ's default `bull` applies.
+ *
+ * ROK-1664: a TCP URL goes to BullMQ WHOLE (`connection: { url }` → ioredis
+ * parses it), so `rediss://` TLS, the ACL username, the db index, percent-
+ * decoded passwords and query options all survive — same as the cache client.
+ */
+export function buildBullRootOptions(url: string, prefix?: string) {
+  const prefixOpt = prefix ? { prefix } : {};
+  // Unix socket path (e.g. /tmp/redis.sock) vs TCP URL
+  if (url.startsWith('/')) {
+    return { connection: { path: url }, ...prefixOpt };
+  }
+  // ROK-1268: integration tests share ONE base connection (see top of
+  // file); prod (no BULLMQ_KEY_PREFIX) uses per-queue config.
+  if (prefix) {
+    return { connection: getTestSharedRedis(url), ...prefixOpt };
+  }
+  return { connection: { url }, ...prefixOpt };
+}
+
 @Global()
 @Module({
   imports: [
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => {
-        const url = config.get<string>('REDIS_URL', 'redis://localhost:6379');
-        // ROK-1058: optional key prefix (e.g. `test-<pid>-<ts>-`) keeps
-        // integration tests off the shared `bull:*` keyspace in dev/prod.
-        // Production leaves this unset → BullMQ default prefix `bull` applies.
-        // Read straight from process.env so per-suite re-exports take effect
-        // without depending on ConfigModule's load order or expandVariables.
-        const prefix = process.env.BULLMQ_KEY_PREFIX;
-        const prefixOpt = prefix ? { prefix } : {};
-
-        // Unix socket path (e.g. /tmp/redis.sock) vs TCP URL
-        if (url.startsWith('/')) {
-          return { connection: { path: url }, ...prefixOpt };
-        }
-
-        const parsed = new URL(url);
-        const connection = {
-          host: parsed.hostname,
-          port: Number(parsed.port) || 6379,
-          ...(parsed.password ? { password: parsed.password } : {}),
-        };
-
-        // ROK-1268: integration tests share ONE base connection (see top of
-        // file); prod (no BULLMQ_KEY_PREFIX) uses per-queue config, unchanged.
-        if (prefix) {
-          return { connection: getTestSharedRedis(connection), ...prefixOpt };
-        }
-        return { connection, ...prefixOpt };
-      },
+      useFactory: (config: ConfigService) =>
+        buildBullRootOptions(
+          config.get<string>('REDIS_URL', 'redis://localhost:6379'),
+          // Read straight from process.env so per-suite re-exports take effect
+          // without depending on ConfigModule's load order or expandVariables.
+          process.env.BULLMQ_KEY_PREFIX,
+        ),
     }),
   ],
   providers: [QueueHealthService],
