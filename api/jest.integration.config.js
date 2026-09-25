@@ -44,6 +44,11 @@ module.exports = {
   // Runs in the worker process (where the TestApp singleton lives) so
   // afterAll can actually close the app and Testcontainers instance.
   setupFilesAfterEnv: ['<rootDir>/common/testing/integration-setup.ts'],
+  // ROK-1527: off-CI, start ONE Postgres Testcontainer per jest process in the
+  // OUTER realm (a per-file container pinned every file's sandbox realm) and
+  // stop it after the run. No-op on CI, which brings its own DATABASE_URL.
+  globalSetup: '<rootDir>/common/testing/integration-global-setup.ts',
+  globalTeardown: '<rootDir>/common/testing/integration-global-teardown.ts',
   // Safety net for open handles (postgres-js connection pool)
   forceExit: true,
   // ROK-1331 M11 — emit per-suite + per-shard perf events alongside jest's
