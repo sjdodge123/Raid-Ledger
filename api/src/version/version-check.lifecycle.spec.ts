@@ -47,20 +47,13 @@ describe('VersionCheckService — startup timer lifecycle (ROK-1527)', () => {
   });
 
   it('does not keep the event loop alive for the startup check', () => {
+    jest.useRealTimers();
     const service = createService();
-    const unref = jest.fn();
-    const realSetTimeout = global.setTimeout;
-    const spy = jest.spyOn(global, 'setTimeout').mockImplementation(((
-      fn: () => void,
-      ms?: number,
-    ) => {
-      const handle = realSetTimeout(fn, ms);
-      handle.unref = unref.mockReturnValue(handle);
-      return handle;
-    }) as unknown as typeof setTimeout);
+    const spy = jest.spyOn(global, 'setTimeout');
     service.onModuleInit();
+    const handle: NodeJS.Timeout = spy.mock.results[0].value;
     spy.mockRestore();
     service.onModuleDestroy();
-    expect(unref).toHaveBeenCalledTimes(1);
+    expect(handle.hasRef()).toBe(false);
   });
 });
