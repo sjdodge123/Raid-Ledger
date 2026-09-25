@@ -72,7 +72,8 @@ function describeSteamNudgeModeration() {
     });
     const kickedId = await createUnlinkedUser('kicked', { kickedAt: now });
     const bannedId = await createUnlinkedUser('banned', { bannedAt: now });
-    // Unique lineup id so the Redis dedup cache can't leak across runs.
+    // Any id works: truncateAllTables clears the dedup table and the
+    // `lineup-*` mock-Redis keys between specs.
     const lineupId = 1_000_000 + (Date.now() % 1_000_000);
 
     await service.nudgeUnlinkedMembers(lineupId);
