@@ -118,3 +118,85 @@ for (const [id, k] of idIndex) {
     console.log(`  ${edgeLabel(e)} -> ${ntype(to)} "${v}" @${nodes[to * NF + 2]}`);
   }
 }
+
+// TIMERS=1 → every strongly-reachable Timeout: its _onTimeout owner
+// (function name + script + line via the snapshot's `locations`), grouped,
+// plus whether its async-context store reaches a jest describeBlock.
+if (process.env.TIMERS) {
+  const LF = (meta.location_fields || []).length;
+  const locByNode = new Map();
+  if (LF) {
+    let i = buf.indexOf('"locations":[') + 13;
+    const vals = [];
+    let cur = 0, inNum = false;
+    for (; i < buf.length; i++) {
+      const c = buf[i];
+      if (c >= 48 && c <= 57) { cur = cur * 10 + (c - 48); inNum = true; }
+      else if (inNum) { vals.push(cur); cur = 0; inNum = false; if (c === 93) break; }
+      else if (c === 93) break;
+    }
+    for (let j = 0; j + LF <= vals.length; j += LF) locByNode.set(vals[j] / NF, [vals[j + 1], vals[j + 2] + 1, vals[j + 3]]);
+  }
+  const edgeTo = (k, label) => {
+    for (let e = firstEdge[k]; e < firstEdge[k + 1]; e += EF) {
+      const t = edgeTypes[edges[e + eT]];
+      if (t !== 'element' && t !== 'hidden' && strings[edges[e + eN]] === label) return edges[e + eTo] / NF;
+    }
+    return -1;
+  };
+  const edgeToMatch = (k, re) => {
+    for (let e = firstEdge[k]; e < firstEdge[k + 1]; e += EF) {
+      const t = edgeTypes[edges[e + eT]];
+      if (t !== 'element' && t !== 'hidden' && re.test(strings[edges[e + eN]])) return edges[e + eTo] / NF;
+    }
+    return -1;
+  };
+  function describeFn(f) {
+    if (f < 0) return '(none)';
+    let s = `${ntype(f)} "${name(f)}"`;
+    const tgt = edgeTo(f, 'bound_function') >= 0 ? edgeTo(f, 'bound_function') : edgeTo(f, 'bound_target_function');
+    if (tgt >= 0) {
+      const bt = edgeTo(f, 'bound_this');
+      s += ` bound(this=${bt >= 0 ? ntype(bt) + ' "' + name(bt) + '"' : '?'}) -> ${describeFn(tgt)}`;
+      return s;
+    }
+    const sh = edgeTo(f, 'shared');
+    const scr = sh >= 0 ? edgeTo(sh, 'script') : -1;
+    const sn = scr >= 0 ? (edgeTo(scr, 'name') >= 0 ? name(edgeTo(scr, 'name')) : name(scr)) : '?';
+    const loc = locByNode.get(f);
+    return `${s} @ ${String(sn).slice(-110)}:${loc ? loc[1] + ':' + loc[2] : '?'}`;
+  }
+  // Does the Timeout's async store lead (≤4 hops) to a describeBlock?
+  function storeHasDescribe(t) {
+    const st = edgeToMatch(t, /kResourceStore|AsyncContextFrame/i);
+    if (st < 0) return 'no-store';
+    const q = [[st, 0]]; const vis = new Set([st]);
+    while (q.length) {
+      const [k, d] = q.shift();
+      for (let e = firstEdge[k]; e < firstEdge[k + 1]; e += EF) {
+        const t2 = edgeTypes[edges[e + eT]];
+        if (t2 === 'weak') continue;
+        const lbl = t2 === 'element' || t2 === 'hidden' ? '' : strings[edges[e + eN]];
+        if (lbl === 'describeBlock' || lbl === 'parent' && name(edges[e + eTo] / NF) === 'Object' && d > 0) return `store->${lbl}@depth${d}`;
+        const to = edges[e + eTo] / NF;
+        if (d < 6 && !vis.has(to)) { vis.add(to); q.push([to, d + 1]); }
+      }
+    }
+    return 'store(no describeBlock)';
+  }
+  const groups = new Map();
+  for (let k = 0; k < N; k++) {
+    if (ntype(k) !== 'object' || name(k) !== 'Timeout' || !seen[k]) continue;
+    const key = `${describeFn(edgeTo(k, '_onTimeout'))} | ${storeHasDescribe(k)}`;
+    const g = groups.get(key) || { n: 0, ids: [] };
+    g.n++; if (g.ids.length < 3) g.ids.push(nodes[k * NF + 2]);
+    groups.set(key, g);
+  }
+  console.log('\n=== TIMERS (strongly reachable Timeout objects, grouped by _onTimeout)');
+  for (const [key, g] of [...groups].sort((a, b) => b[1].n - a[1].n)) console.log(`  x${g.n} ${key} ids=${g.ids.join(',')}`);
+  for (const k of hits.slice(0, 12)) {
+    for (let c = k; c > 0; c = parentNode[c]) {
+      if (name(c) === 'Timeout' && ntype(c) === 'object') { console.log(`\n=== chain Timeout for hit @${nodes[k * NF + 2]}:`); dumpNode(c, 30); console.log('  _onTimeout: ' + describeFn(edgeTo(c, '_onTimeout'))); break; }
+    }
+  }
+}
