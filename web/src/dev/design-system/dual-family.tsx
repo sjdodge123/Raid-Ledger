@@ -18,8 +18,9 @@
  *    docs/design-system.md §6.
  *
  * Root-only either way — check these at the root, not here: `color-scheme`
- * (`:576-590`, native form controls and scrollbars), the page background on
- * `body` (ROK-1661 dropped `#root`'s), quest-log's parchment on
+ * (`:576-590`, native form controls and scrollbars), the root canvas colour on
+ * `html` (`--color-surface`; ROK-1661: body is transparent and only the Layout
+ * shell paints `--color-backdrop`), quest-log's parchment on
  * `[data-variant="quest-log"] body::before` / `body::after` (`:1228`, `:1241`), and
  * `ThemeParticles` (mounted app-level).
  */

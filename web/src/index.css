@@ -618,6 +618,14 @@ a:active,
 /* Base Styles */
 html {
     color-scheme: dark;
+    background-color: var(--color-surface);
+}
+
+/* ROK-1661: a chromeless /p/* page has no footer and ends on --color-backdrop,
+   so there the canvas stays backdrop too, or the run-out shows a surface strip.
+   Layout.tsx sets the attribute while a chromeless page renders. */
+html[data-chromeless] {
+    background-color: var(--color-backdrop);
 }
 
 html:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
@@ -632,14 +640,19 @@ html[data-scheme="underwater"] {
     color-scheme: dark;
 }
 
-/* ROK-1661: no `min-height: 100vh` floor on body / #root. iOS Safari's `vh` is
-   the LARGE viewport, so that floor always made a short page scroll by the
-   toolbar's height; the shell (Layout.tsx) floors itself on the visible
-   viewport instead. The canvas stays covered without it: `html` sets no
-   background in any theme, so body's background propagates to the whole canvas. */
+/* ROK-1661: the root canvas is the footer's colour, and body stays transparent.
+   iPad Safari lets a page scroll or pan past the document's end (past its
+   scroll height or the layout viewport's edge), and WebKit fills that area with
+   one flat colour: html's background-color with body's blended over it
+   (background images don't count). A body colour would win there, so body sets
+   none and the area reads as --color-surface, flush with the footer. The Layout
+   shell (Layout.tsx) is the only element that paints --color-backdrop (a
+   chromeless page's canvas aside, html[data-chromeless] above).
+   No `min-height: 100vh` floor on body / #root either: iOS Safari's `vh` is the
+   LARGE viewport, so that floor always made a short page scroll by the
+   toolbar's height; the shell floors itself on the visible viewport instead. */
 body {
     margin: 0;
-    background-color: var(--color-backdrop);
     font-family: 'Inter', system-ui, sans-serif;
 }
 
@@ -1256,7 +1269,6 @@ body {
 
 [data-variant="quest-log"] body {
     font-family: 'MedievalSharp', 'Cinzel', serif;
-    background-color: var(--color-backdrop);
     background-image:
         /* Dark edge vignette — aged/burned parchment edges */
         radial-gradient(ellipse at center, transparent 50%, rgba(139, 100, 50, 0.15) 100%),

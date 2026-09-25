@@ -189,8 +189,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
                         if (slotInfo.action === 'doubleClick' || (window.innerWidth < 768 && slotInfo.action === 'click' && s.view === Views.MONTH)) {
                             s.setCurrentDate(slotInfo.start); s.setView(Views.DAY); onCalendarViewChange?.('day');
                         }
-                    }}
-                    style={{ minHeight: '500px' }} />
+                    }} />
             </div>
             {!s.isLoading && !s.isFetching && s.calendarEvents.length === 0 && <CalendarEmptyState view={s.view} />}
         </div>

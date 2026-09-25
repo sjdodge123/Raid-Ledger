@@ -150,6 +150,10 @@ export const DesignSystemPage = lazyWithRetry(() =>
 export const SchedulingWireframesPage = lazyWithRetry(() =>
     import('./dev/scheduling-wireframes/SchedulingWireframesPage').then((m) => ({ default: m.SchedulingWireframesPage })),
 );
+/** ROK-1661 bare viewport probe; `Layout.tsx` renders it with no shell. */
+export const ViewportProbePage = lazyWithRetry(() =>
+    import('./dev/ViewportProbePage').then((m) => ({ default: m.ViewportProbePage })),
+);
 
 // -- Lazy loaded admin panels --
 export const AdminSettingsLayout = lazyWithRetry(() =>

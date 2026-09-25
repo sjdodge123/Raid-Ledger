@@ -146,6 +146,31 @@
     position: relative;
 }
 
+/* Grid floor (was an inline style, which cannot take a media query). */
+.calendar-grid-wrapper .rbc-calendar {
+    min-height: 500px;
+}
+
+/*
+ * ROK-1661: portrait tablets (768–1023px, below the lg split). Chrome on iPad
+ * lets the document scroll to the ICB height (100lvh, 1180px on a portrait
+ * iPad) even when the page is shorter, and a 500px grid leaves /calendar
+ * ~1050px tall, so a blank strip showed under the footer. The grid fills the
+ * remainder instead. --calendar-chrome is everything on the page that is not
+ * the grid at this band: header 65 + page py-6 24 + h1 block 88 + container
+ * border/padding 25 + toolbar 44 + its margin 24 (above); container
+ * padding/border 25 + page pb 24 + FAB clearance md:pb-40 160 + footer 69
+ * (below) = 548. Rounded DOWN on purpose: an underestimate only makes the
+ * page a few px taller than the screen (like /games), an overestimate would
+ * leave a strip. A wrapped toolbar or a banner also only adds height.
+ */
+@media (min-width: 768px) and (max-width: 1023px) {
+    .calendar-grid-wrapper .rbc-calendar {
+        --calendar-chrome: 540px;
+        min-height: max(500px, calc(100lvh - var(--calendar-chrome)));
+    }
+}
+
 /* React Big Calendar Overrides */
 .rbc-calendar {
     background: transparent;

@@ -21,9 +21,10 @@ import { useEffect, useRef, useState } from 'react';
  *   floor on the keyboard-shrunk height.
  *
  * Scrolling past the end is NOT this floor's job: iPad Safari lets any page
- * scroll to the bottom of its larger layout viewport, so no min-height can keep
- * the footer on screen at rest AND leave nothing below it at the end of that
- * scroll. `Footer.tsx` paints that run-out instead (`FOOTER_RUNOUT_SHADOW`).
+ * scroll or pan past the document's end, so no min-height can keep the footer
+ * on screen at rest AND leave nothing below it at the end of that scroll. That
+ * run-out shows the root canvas colour, which `index.css` sets to the footer's
+ * `--color-surface` (html) with body left transparent.
  */
 
 /**
@@ -187,12 +188,19 @@ function subscribeKeyboardScrollRestore(getFloor: () => number): () => void {
     };
 }
 
-/** The shell's min-height in CSS px, kept current on viewport resize and rotation. */
-export function useShellHeight(): number {
+/**
+ * The shell's min-height in CSS px, kept current on viewport resize and rotation.
+ * `enabled: false` (the DEMO-only `?noshellfloor=1` experiment) returns 0 and
+ * runs no listener or sentinel at all.
+ */
+export function useShellHeight(enabled = true): number {
     const [floor, setFloor] = useState<ShellFloor>(() => nextShellFloor(EMPTY, true));
     const floorRef = useRef(floor.height);
     useEffect(() => { floorRef.current = floor.height; }, [floor.height]);
-    useEffect(() => subscribeToViewport((final) => setFloor((prev) => nextShellFloor(prev, final))), []);
-    useEffect(() => subscribeKeyboardScrollRestore(() => floorRef.current), []);
-    return floor.height;
+    useEffect(() => {
+        if (!enabled) return undefined;
+        return subscribeToViewport((final) => setFloor((prev) => nextShellFloor(prev, final)));
+    }, [enabled]);
+    useEffect(() => (enabled ? subscribeKeyboardScrollRestore(() => floorRef.current) : undefined), [enabled]);
+    return enabled ? floor.height : 0;
 }

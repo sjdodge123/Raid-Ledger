@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
-import { act, render } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter } from 'react-router-dom';
 import { Layout } from './Layout';
 import { SHELL_LATE_SETTLE_MS, SHELL_SETTLE_MS } from './use-shell-height';
 
@@ -328,5 +328,34 @@ describe('Regression: ROK-1661 — a short page scrolls back once the keyboard c
 
         typeAndDismiss(950);
         expect(scrollTo).toHaveBeenCalledWith(0, 40);
+    });
+});
+
+/**
+ * ROK-1661: a chromeless /p/* page has no footer and ends on --color-backdrop,
+ * so the root canvas must stay backdrop there (`html[data-chromeless]` in
+ * index.css) or iPad Safari shows a --color-surface strip past its end.
+ */
+describe('Regression: ROK-1661 — a chromeless page keeps the root canvas on --color-backdrop', () => {
+    const html = document.documentElement;
+    afterEach(() => html.removeAttribute('data-chromeless'));
+
+    it('marks <html> data-chromeless while a /p/* page renders, and clears it on unmount', () => {
+        const { unmount } = renderLayout('/p/test-lineup');
+        expect(html).toHaveAttribute('data-chromeless');
+        unmount();
+        expect(html).not.toHaveAttribute('data-chromeless');
+    });
+
+    it('clears data-chromeless on leaving /p/* for a chrome path', () => {
+        render(
+            <MemoryRouter initialEntries={['/p/test-lineup']}>
+                <Link to="/events">leave</Link>
+                <Layout><p>page</p></Layout>
+            </MemoryRouter>,
+        );
+        expect(html).toHaveAttribute('data-chromeless');
+        fireEvent.click(screen.getByText('leave'));
+        expect(html).not.toHaveAttribute('data-chromeless');
     });
 });
