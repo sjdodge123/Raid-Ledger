@@ -32,12 +32,18 @@ describe('Input — frame and sizes', () => {
         expect(screen.getByRole('textbox', { name: 'N' })).not.toHaveAttribute('size');
     });
 
-    it('ROK-1690: date and time inputs opt out of the native width so they fit a grid cell', () => {
-        render(<><Input type="date" aria-label="Date" /><Input type="time" aria-label="Time" /><Input aria-label="Name" /></>);
-        for (const name of ['Date', 'Time']) {
-            const el = screen.getByLabelText(name);
-            expect(el).toHaveClass('min-w-0', 'appearance-none', 'w-full');
-        }
+    it.each(['date', 'time', 'datetime-local', 'month', 'week'])(
+        'ROK-1690: type=%s opts out of the native width so it fits a grid cell',
+        (type) => {
+            render(<Input type={type} aria-label="When" />);
+            expect(screen.getByLabelText('When')).toHaveClass(
+                'min-w-0', 'appearance-none', 'w-full', '[&::-webkit-date-and-time-value]:text-left',
+            );
+        },
+    );
+
+    it('ROK-1690: other input types keep their native appearance', () => {
+        render(<Input aria-label="Name" />);
         expect(screen.getByLabelText('Name')).not.toHaveClass('appearance-none');
     });
 
