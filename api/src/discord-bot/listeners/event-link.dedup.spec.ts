@@ -42,10 +42,10 @@ describe('event-link dedup (ROK-1527 lazy expiry)', () => {
     expect(hasRecentlyProcessed('msg:new')).toBe(true);
   });
 
-  it('starts no timer when the module is evaluated', async () => {
+  it('starts no timer when the module is evaluated', () => {
     const spy = jest.spyOn(global, 'setInterval');
-    await jest.isolateModulesAsync(async () => {
-      await import('./event-link.dedup');
+    jest.isolateModules(() => {
+      jest.requireActual('./event-link.dedup');
     });
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
