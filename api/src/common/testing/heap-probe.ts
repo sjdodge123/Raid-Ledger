@@ -94,7 +94,10 @@ export async function heapProbeAfterFile(app: object | null): Promise<void> {
   );
   if (n === SNAP_AT && (process.env.JEST_SHARD_ID ?? '1') === '1') {
     fs.mkdirSync(OUT_DIR, { recursive: true });
-    const file = path.join(OUT_DIR, `after-file-${n}-${process.pid}.heapsnapshot`);
+    const file = path.join(
+      OUT_DIR,
+      `after-file-${n}-${process.pid}.heapsnapshot`,
+    );
     v8.writeHeapSnapshot(file);
     log(`snapshot=${file}`);
   }
