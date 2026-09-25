@@ -24,10 +24,21 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
     mono?: boolean;
 }
 
-function inputClass(p: Pick<InputProps, 'fieldSize' | 'leading' | 'trailing' | 'mono' | 'className'>): string {
+const DATE_TIME_TYPES = new Set(['date', 'time', 'datetime-local', 'month', 'week']);
+
+/**
+ * ROK-1690: iPadOS draws date/time inputs as native controls with their own
+ * minimum width, which can spill out of a half-width grid cell into its
+ * neighbour. Opting out of the native appearance lets `w-full` hold; the
+ * value is left-aligned like every other field (iOS centres it).
+ */
+const DATE_TIME_GUARD = 'min-w-0 appearance-none [&::-webkit-date-and-time-value]:text-left';
+
+function inputClass(p: Pick<InputProps, 'type' | 'fieldSize' | 'leading' | 'trailing' | 'mono' | 'className'>): string {
     return [
         FIELD_FRAME_BASE,
         FIELD_PAD[p.fieldSize ?? 'md'],
+        p.type && DATE_TIME_TYPES.has(p.type) ? DATE_TIME_GUARD : '',
         p.leading ? 'pl-10' : '',
         p.trailing ? 'pr-14' : '',
         p.mono ? 'font-mono' : '',
@@ -59,7 +70,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(pro
         id, invalid, 'aria-describedby': describedBy, 'aria-invalid': ariaInvalid, 'aria-required': ariaRequired,
     });
     const input = (
-        <input ref={ref} {...rest} {...a11y} className={inputClass({ fieldSize, leading, trailing, mono, className })} />
+        <input ref={ref} {...rest} {...a11y} className={inputClass({ type: rest.type, fieldSize, leading, trailing, mono, className })} />
     );
     if (!leading && !trailing) return input;
     return <Adorned leading={leading} trailing={trailing}>{input}</Adorned>;
