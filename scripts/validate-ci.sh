@@ -1402,6 +1402,64 @@ _discord_lock_required() {
   [[ -z "$set" || -z "$identity" ]]
 }
 
+# ROK-1689 — fleet Discord smoke runs the way GitHub CI does.
+#
+# discord-smoke.yml's job-level env: runs the companion bot with concurrency 1,
+# 2 retries, a 90s per-test timeout, a 15s Discord API timeout and voice-join
+# skipped. The fleet ran on test-bot defaults (concurrency 5, 0 retries, 60s)
+# and saw 14–16 failures CI never did. The values are READ from the workflow
+# at run time, so the two can't drift. Pinned by
+# scripts/validate-ci-smoke-ci-parity.spec.mjs.
+CI_SMOKE_WORKFLOW_REL=".github/workflows/discord-smoke.yml"
+CI_SMOKE_ENV_KEYS="SMOKE_CONCURRENCY SMOKE_RETRY_COUNT SMOKE_TIMEOUT_MS DISCORD_API_TIMEOUT_MS SMOKE_SKIP_VOICE_JOIN"
+
+# First `  KEY: value` line in a workflow, quotes and trailing comment stripped.
+# Empty output (never a failure) when the key is absent.
+_ci_workflow_env_value() {
+  local file="$1" key="$2"
+  sed -n -E "s/^[[:space:]]+${key}:[[:space:]]*['\"]?([^'\"#[:space:]]*)['\"]?[[:space:]]*(#.*)?\$/\\1/p" "$file" | head -n 1
+}
+
+_print_ci_smoke_env() {
+  local src="$1"
+  echo "Discord smoke CI parity: concurrency=${SMOKE_CONCURRENCY:-default}" \
+    "retries=${SMOKE_RETRY_COUNT:-default} timeout=${SMOKE_TIMEOUT_MS:-default}ms" \
+    "api_timeout=${DISCORD_API_TIMEOUT_MS:-default}ms" \
+    "skip_voice_join=${SMOKE_SKIP_VOICE_JOIN:-0} (from ${src})"
+}
+
+# Export the five keys from the workflow. A value the caller already exported
+# wins (operator override). An unreadable workflow or a missing key is a yellow
+# warning, never a failure — smoke still runs, on test-bot defaults for it.
+_export_ci_smoke_env() {
+  local file="${CI_SMOKE_WORKFLOW:-$REPO_ROOT/$CI_SMOKE_WORKFLOW_REL}" key val
+  if [ ! -r "$file" ]; then
+    echo -e "${YELLOW}[smoke-ci-parity] cannot read ${file} — Discord smoke runs on test-bot defaults${NC}" >&2
+    return 0
+  fi
+  for key in $CI_SMOKE_ENV_KEYS; do
+    [ -n "${!key:-}" ] && continue
+    val="$(_ci_workflow_env_value "$file" "$key")"
+    if [ -z "$val" ]; then
+      echo -e "${YELLOW}[smoke-ci-parity] ${key} not found in ${file} — left at the test-bot default${NC}" >&2
+      continue
+    fi
+    export "${key}=${val}"
+  done
+  _print_ci_smoke_env "$file"
+}
+
+# Scope: the fleet runner only — the SAME predicate the Redis sidecar and
+# smoke_channel_set_for_slot use (/workspace bind-mount OR RL_TARGET=remote).
+# A laptop run keeps the test-bot defaults: it can make real voice
+# connections, so skipping voice-join there would drop coverage CI can't give.
+_apply_ci_smoke_parity() {
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  _export_ci_smoke_env
+}
+
 _check_container_security_headers() {
   local host_port="${1:-8080}" cname="${2-}"
   local headers
@@ -1674,6 +1732,10 @@ run_discord_smoke() {
   # (slot-N-*) so it never discovers a sibling's channels or an orphaned
   # ephemeral voice channel. Local runs stay on whole-guild discovery.
   _export_smoke_channel_set
+
+  # ROK-1689: on the fleet, run with discord-smoke.yml's concurrency / retries
+  # / timeouts / voice-join skip so a fleet gate agrees with GitHub CI.
+  _apply_ci_smoke_parity
 
   _ensure_test_bot_deps || return 1
 
