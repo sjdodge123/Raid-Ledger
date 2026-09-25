@@ -1,10 +1,11 @@
 import { useAiFeatures, useUpdateAiFeatures } from '../../../hooks/admin/use-ai-settings';
+import { Switch } from '../../../components/ui/switch';
 
 interface AiFeatureTogglesProps {
     disabled: boolean;
 }
 
-/** Toggle for a single AI feature. */
+/** One AI feature row: label + description beside the shared Switch. */
 function FeatureToggle({
     label,
     description,
@@ -18,16 +19,13 @@ function FeatureToggle({
     disabled: boolean;
     onChange: (v: boolean) => void;
 }) {
-    const btnCls = `relative w-11 h-6 rounded-full transition-colors ${enabled ? 'bg-purple-600' : 'bg-overlay'} ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`;
     return (
-        <div className="flex items-center justify-between py-2">
+        <div className="flex items-center justify-between gap-4 py-2">
             <div>
                 <p className="text-sm font-medium text-foreground">{label}</p>
                 <p className="text-xs text-muted">{description}</p>
             </div>
-            <button type="button" role="switch" aria-checked={enabled} disabled={disabled} onClick={() => onChange(!enabled)} className={btnCls}>
-                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-foreground transition-transform ${enabled ? 'translate-x-5' : ''}`} />
-            </button>
+            <Switch checked={enabled} onChange={onChange} label={label} disabled={disabled} />
         </div>
     );
 }

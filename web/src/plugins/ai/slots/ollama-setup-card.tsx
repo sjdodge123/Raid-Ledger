@@ -7,6 +7,7 @@ import {
     useActivateProvider,
 } from '../../../hooks/admin/use-ai-settings';
 import type { AiProviderInfoDto } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
 
 interface OllamaSetupCardProps {
     provider: AiProviderInfoDto;
@@ -91,11 +92,13 @@ function SetupProgress({ step }: { step?: string }) {
     const info = (step && STEP_LABELS[step]) || DEFAULT_STEP;
     return (
         <div className="space-y-2">
-            <div className="h-2 bg-dim/30 rounded-full overflow-hidden">
-                <div className="h-full bg-purple-500 rounded-full transition-all duration-1000"
+            <div className="h-2 bg-dim/30 rounded-full overflow-hidden" role="progressbar"
+                aria-label="Ollama setup progress" aria-valuemin={0} aria-valuemax={100}
+                aria-valuenow={info.pct} aria-valuetext={info.label}>
+                <div className="h-full bg-success rounded-full transition-all duration-1000"
                     style={{ width: `${info.pct}%` }} />
             </div>
-            <p className="text-xs text-purple-400 animate-pulse">{info.label}</p>
+            <p className="text-xs text-secondary animate-pulse">{info.label}</p>
         </div>
     );
 }
@@ -107,16 +110,15 @@ function OllamaActions({ provider, onSetup, onStop, onActivate, stopPending, act
 }) {
     const hasContainer = provider.setupStep === 'container_exists';
     const needsSetup = !provider.available && !hasContainer;
-    const btnBase = 'py-2 px-4 font-semibold rounded-lg transition-colors text-sm';
     return (
         <div className="flex flex-wrap gap-2">
-            {needsSetup && <button type="button" onClick={onSetup} className={`${btnBase} bg-purple-600 hover:bg-purple-500 text-foreground`}>Setup Ollama</button>}
-            {hasContainer && !provider.available && <button type="button" onClick={onSetup} className={`${btnBase} bg-blue-600 hover:bg-blue-500 text-foreground`}>Start Ollama</button>}
+            {needsSetup && <Button variant="primary" onClick={onSetup}>Setup Ollama</Button>}
+            {hasContainer && !provider.available && <Button variant="primary" onClick={onSetup}>Start Ollama</Button>}
             {provider.available && (
-                <button type="button" onClick={onStop} disabled={stopPending} className={`${btnBase} bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/50`}>{stopPending ? 'Stopping...' : 'Stop'}</button>
+                <Button variant="destructive-soft" onClick={onStop} loading={stopPending} loadingLabel="Stopping...">Stop</Button>
             )}
             {provider.available && !provider.active && (
-                <button type="button" onClick={onActivate} disabled={activatePending} className={`${btnBase} bg-emerald-600 hover:bg-emerald-500 text-foreground`}>{activatePending ? 'Activating...' : 'Set as Active'}</button>
+                <Button variant="secondary" onClick={onActivate} loading={activatePending} loadingLabel="Activating...">Set as Active</Button>
             )}
         </div>
     );
@@ -147,10 +149,12 @@ function OllamaInstructions() {
     );
 }
 
+const PILL = 'text-xs px-2 py-0.5 rounded-full';
+
 function OllamaBadge({ provider, setting }: { provider: AiProviderInfoDto; setting: boolean }) {
-    if (setting) return <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 animate-pulse">Setting up...</span>;
-    if (provider.active && provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Active</span>;
-    if (provider.active && !provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Selected · Offline</span>;
-    if (provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">Running</span>;
-    return <span className="text-xs px-2 py-0.5 rounded-full bg-dim/20 text-muted">Offline</span>;
+    if (setting) return <span className={`${PILL} bg-overlay text-secondary animate-pulse`}>Setting up...</span>;
+    if (provider.active && provider.available) return <span className={`${PILL} bg-success/10 text-success`}>Active</span>;
+    if (provider.active && !provider.available) return <span className={`${PILL} bg-warning/10 text-warning`}>Selected · Offline</span>;
+    if (provider.available) return <span className={`${PILL} bg-blue-500/20 text-blue-400`}>Running</span>;
+    return <span className={`${PILL} bg-dim/20 text-muted`}>Offline</span>;
 }

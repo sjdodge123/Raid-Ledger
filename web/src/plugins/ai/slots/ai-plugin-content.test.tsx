@@ -247,3 +247,21 @@ describe('ROK-1000: TestChatSection error message', () => {
         fetchSpy.mockRestore();
     });
 });
+
+// --- ROK-1687: the Send Test Message action is the shared Button ---
+
+describe('ROK-1687: TestChatSection button', () => {
+    beforeEach(() => {
+        mockAiStatus(true);
+        mockAiProviders();
+        mockAiUsage();
+        mockAiFeatures();
+    });
+
+    it('renders Send Test Message as the shared Button with no raw purple', async () => {
+        renderWithProviders(<AiPluginContent />);
+        const button = await screen.findByRole('button', { name: /send test message/i });
+        expect(button.querySelector('[data-button-label]')).not.toBeNull();
+        expect(button.className).not.toMatch(/-(purple|violet|fuchsia)-\d{3}/);
+    });
+});

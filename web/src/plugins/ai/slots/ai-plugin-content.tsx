@@ -8,6 +8,7 @@ import { AiFeatureToggles } from './ai-feature-toggles';
 import { AiUsageStats } from './ai-usage-stats';
 import { DynamicCategoriesPanel } from '../../../pages/admin-settings/dynamic-categories-panel';
 import type { AiProviderInfoDto } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
 
 /** Polling interval used during active setup/test operations (10s). */
 const ACTIVE_POLL_INTERVAL = 10_000;
@@ -99,10 +100,9 @@ function TestChatSection() {
         <div className="space-y-2">
             <h3 className="text-sm font-medium text-secondary">Test LLM</h3>
             <div className="flex items-center gap-3">
-                <button type="button" onClick={handleTest} disabled={testChat.isPending}
-                    className="py-2 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 text-foreground font-semibold rounded-lg transition-colors text-sm">
-                    {testChat.isPending ? 'Testing...' : 'Send Test Message'}
-                </button>
+                <Button variant="secondary" onClick={handleTest} loading={testChat.isPending} loadingLabel="Testing...">
+                    Send Test Message
+                </Button>
                 {display && <span className={`text-xs ${display.success ? 'text-emerald-400' : 'text-red-400'}`}>{display.latencyMs > 0 ? `${display.latencyMs}ms` : ''}</span>}
             </div>
             {display && <div className={`text-sm p-3 rounded-lg border ${resCls}`}>{display.response}</div>}

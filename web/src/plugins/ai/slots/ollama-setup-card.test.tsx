@@ -222,3 +222,36 @@ describe('OllamaSetupCard', () => {
         });
     });
 });
+
+// --- ROK-1687: theme tokens + shared primitives, no hardcoded purple ---
+
+const RAW_HUE = /-(purple|violet|fuchsia)-\d{3}/;
+
+describe('OllamaSetupCard — theme tokens (ROK-1687)', () => {
+    it('Setup Ollama is the shared Button primitive', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        const button = screen.getByRole('button', { name: /setup ollama/i });
+        expect(button.querySelector('[data-button-label]')).not.toBeNull();
+    });
+
+    it('exposes setup progress as a progressbar at the step percentage', () => {
+        renderWithProviders(
+            <OllamaSetupCard provider={createOllamaProvider({ setupInProgress: true, setupStep: 'starting' })} />,
+        );
+        const bar = screen.getByRole('progressbar', { name: /ollama setup progress/i });
+        expect(bar).toHaveAttribute('aria-valuenow', '50');
+    });
+
+    it('renders no raw purple/violet/fuchsia hue when idle', () => {
+        const { container } = renderWithProviders(<OllamaSetupCard provider={createOllamaProvider()} />);
+        expect(container.innerHTML).not.toMatch(RAW_HUE);
+    });
+
+    it('renders no raw purple/violet/fuchsia hue while setting up', () => {
+        const { container } = renderWithProviders(
+            <OllamaSetupCard provider={createOllamaProvider({ setupInProgress: true, setupStep: 'pulling_model' })} />,
+        );
+        expect(screen.getByText('Setting up...')).toBeInTheDocument();
+        expect(container.innerHTML).not.toMatch(RAW_HUE);
+    });
+});
