@@ -96,7 +96,9 @@ test('isEphemeralChannelName matches ⏰ and smoke-*-ephemeral only', () => {
 
 test('selectChannelSet drops ephemeral channels even when no set is configured', () => {
   const list = MIXED.slice(0, 4);
-  assert.deepEqual(selectChannelSet(list, undefined).map((c) => c.id), ['t1', 'v1']);
+  // No set → slot channels are excluded too (ROK-1623), so add a shared one.
+  const unscoped = [...list, { id: 't9', name: 'general' }];
+  assert.deepEqual(selectChannelSet(unscoped, undefined).map((c) => c.id), ['t9']);
   assert.deepEqual(selectChannelSet(list, 'slot-1').map((c) => c.id), ['t1', 'v1']);
 });
 

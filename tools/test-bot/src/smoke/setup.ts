@@ -246,9 +246,12 @@ async function fetchChannels(api: ApiClient) {
   const set = channelSetPrefix();
   const textChannels = selectChannelSet(pools.textChannels, set);
   const voiceChannels = selectChannelSet(pools.voiceChannels, set);
+  // ROK-1623: name the bound channels so a CI log proves no `slot-*` is used.
+  const names = (cs: { name: string }[]) => cs.map((c) => `#${c.name}`).join(', ');
   console.log(
     `  Found ${textChannels.length} text, ${voiceChannels.length} voice channels` +
-      (set ? ` (channel set "${set}")` : ''),
+      (set ? ` (channel set "${set}")` : ' (no set: slot-* excluded)') +
+      `: text ${names(textChannels)}; voice ${names(voiceChannels)}`,
   );
   if (textChannels.length === 0) throw new Error('No text channels found');
   if (voiceChannels.length === 0) throw new Error('No voice channels found');
