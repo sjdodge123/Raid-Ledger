@@ -778,12 +778,14 @@ if [[ -n "${RL_PUBLIC_DOMAIN:-}" ]]; then
     )
 fi
 
+# DISCORD_API_TIMEOUT_MS mirrors .github/workflows/discord-smoke.yml (ROK-1689).
 docker run -d \
     --name "$APP_CONTAINER" \
     --network "$NET" \
     --restart unless-stopped \
     -e DATABASE_URL="postgresql://user:password@${PG_CONTAINER}:5432/raid_ledger" \
     -e DEMO_MODE=true \
+    -e DISCORD_API_TIMEOUT_MS=15000 \
     -e FLEET_FIRST_DISCORD_LOGIN_ADMIN=true \
     -e FLEET_ADMIN_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}" \
     -e NODE_ENV=production \
