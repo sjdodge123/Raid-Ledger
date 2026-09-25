@@ -11,9 +11,12 @@ function resolveIoredisOptions(url: string): RedisOptions {
   const { url: connUrl, ...rest } = connection as {
     url?: string;
   } & RedisOptions;
+  // BullMQ's RedisConnection seeds these defaults before init() hands
+  // `(url, rest)` to ioredis — the URL must still win over them.
+  const withDefaults = { port: 6379, host: '127.0.0.1', ...rest };
   const client = connUrl
-    ? new Redis(connUrl, { ...rest, lazyConnect: true })
-    : new Redis({ ...rest, lazyConnect: true });
+    ? new Redis(connUrl, { ...withDefaults, lazyConnect: true })
+    : new Redis({ ...withDefaults, lazyConnect: true });
   const { options } = client;
   client.disconnect();
   return options;
