@@ -9,6 +9,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { ACTIVE_MEMBER_SQL_AND } from '../users/users-active.helpers';
 
 /** Shape of an eligible nudge recipient. */
 interface NudgeRecipient {
@@ -40,12 +41,17 @@ export class LineupSteamNudgeService {
     }
   }
 
-  /** Find users with Discord linked but no Steam. */
+  /**
+   * Find reachable users with Discord linked but no Steam. Deactivated,
+   * kicked and banned users are excluded (ROK-1684) — `kicked_at` is cleared
+   * when a kicked user signs back in after the cooldown, so `IS NULL` is right.
+   */
   private async findNudgeRecipients(): Promise<NudgeRecipient[]> {
     return (await this.db.execute(sql`
       SELECT u.id, COALESCE(u.display_name, u.username) AS "displayName"
       FROM users u
       WHERE u.discord_id IS NOT NULL AND u.steam_id IS NULL
+      ${sql.raw(ACTIVE_MEMBER_SQL_AND)}
     `)) as unknown as NudgeRecipient[];
   }
 
