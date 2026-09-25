@@ -33,7 +33,8 @@ export const SHARED_TEST_DB_OWNER = 'jest-global-setup';
 
 /** The shared URL, but only when this process's globalSetup created it. */
 export function ownedSharedTestDbUrl(): string | undefined {
-  if (process.env[SHARED_TEST_DB_OWNER_ENV] !== SHARED_TEST_DB_OWNER) return undefined;
+  if (process.env[SHARED_TEST_DB_OWNER_ENV] !== SHARED_TEST_DB_OWNER)
+    return undefined;
   return process.env[SHARED_TEST_DB_URL_ENV] || undefined;
 }
 

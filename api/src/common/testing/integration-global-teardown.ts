@@ -3,7 +3,10 @@
  * container `integration-global-setup.ts` started (a no-op on CI, where none
  * was). ROK-1527.
  */
-import { CONTAINER_KEY, type GlobalWithContainer } from './integration-global-setup';
+import {
+  CONTAINER_KEY,
+  type GlobalWithContainer,
+} from './integration-global-setup';
 
 export default async function integrationGlobalTeardown(): Promise<void> {
   const g = globalThis as GlobalWithContainer;
