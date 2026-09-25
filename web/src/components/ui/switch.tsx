@@ -16,6 +16,8 @@ export interface SwitchProps {
     disabled?: boolean;
     className?: string;
     testId?: string;
+    /** Id(s) of visible text that describes the setting (e.g. its row's helper line). */
+    'aria-describedby'?: string;
 }
 
 const TRACK =
@@ -27,13 +29,16 @@ const TRACK =
 const KNOB = 'pointer-events-none inline-block h-5 w-5 rounded-full bg-surface shadow transition-transform';
 
 /** An accessible, token-coloured on/off switch. */
-export function Switch({ checked, onChange, label, disabled = false, className = '', testId }: SwitchProps) {
+export function Switch({
+    checked, onChange, label, disabled = false, className = '', testId, 'aria-describedby': describedBy,
+}: SwitchProps) {
     return (
         <button
             type="button"
             role="switch"
             aria-checked={checked}
             aria-label={label}
+            aria-describedby={describedBy}
             disabled={disabled}
             data-testid={testId}
             onClick={() => onChange(!checked)}

@@ -24,18 +24,9 @@ vi.mock('../../../hooks/use-auth', () => ({
 
 const API = 'http://localhost:3000';
 
-/**
- * The toggle button has no accessible name (label/description sit in
- * sibling <p>'s) so we locate it by walking up from the label text to
- * the row container, then querying the row's switch.
- */
+/** Each toggle is the shared Switch, named by its row label (ROK-1687). */
 async function findToggleFor(label: RegExp): Promise<HTMLElement> {
-    const labelEl = await screen.findByText(label);
-    const row = labelEl.closest('div.flex.items-center');
-    if (!row) throw new Error(`row for label ${label} not found`);
-    const switchEl = row.querySelector('[role="switch"]');
-    if (!switchEl) throw new Error(`switch for label ${label} not found`);
-    return switchEl as HTMLElement;
+    return screen.findByRole('switch', { name: label });
 }
 
 function mockFeatures(overrides: Partial<{
@@ -93,5 +84,25 @@ describe('AiFeatureToggles — AI Nomination Suggestions toggle (ROK-1114 round 
         await waitFor(() => {
             expect(seen).toContainEqual({ aiSuggestionsEnabled: false });
         });
+    });
+});
+
+describe('AiFeatureToggles — shared Switch (ROK-1687)', () => {
+    it.each(['AI Chat', 'Dynamic Discovery Categories', 'AI Nomination Suggestions'])(
+        'names the %s switch by its label and paints it with theme tokens',
+        async (label) => {
+            mockFeatures({ chatEnabled: true, dynamicCategoriesEnabled: true, aiSuggestionsEnabled: true });
+            renderWithProviders(<AiFeatureToggles disabled={false} />);
+            const toggle = await screen.findByRole('switch', { name: label });
+            await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+            expect(toggle.className).not.toMatch(/-(purple|violet|fuchsia)-\d{3}/);
+        },
+    );
+
+    it('describes each switch with its row description via aria-describedby', async () => {
+        mockFeatures();
+        renderWithProviders(<AiFeatureToggles disabled={false} />);
+        const toggle = await screen.findByRole('switch', { name: 'AI Chat' });
+        expect(toggle).toHaveAccessibleDescription('Enable AI chat assistant for community members');
     });
 });

@@ -44,13 +44,18 @@ describe('RadioGroup — semantics', () => {
         expect(radio).toHaveAccessibleDescription('A typical raid night.');
     });
 
-    it('segmented: radios are visually hidden, the segment shows ON with bg-overlay', () => {
+    // ROK-1688: bg-overlay alone on the bg-panel track is 1.13:1 in default-light,
+    // so ON also paints a full-strength `success` border (>= 4.06:1 on bg-panel in
+    // every theme, WCAG 1.4.11). OFF keeps a transparent border so nothing shifts.
+    it('segmented: radios are visually hidden, the segment shows ON with bg-overlay + a success border', () => {
         render(<Harness appearance="segmented" />);
         const radio = screen.getByRole('radio', { name: '2 hours' });
         expect(radio).toHaveClass('sr-only');
         const seg = radio.closest('label');
-        expect(seg).toHaveClass('min-h-[44px]', 'text-muted', 'has-[:checked]:bg-overlay', 'has-[:checked]:text-foreground');
-        expect(seg).toHaveClass('has-[:focus-visible]:ring-success/80');
+        expect(seg).toHaveClass('min-h-[44px]', 'text-muted', 'border', 'border-transparent');
+        expect(seg).toHaveClass('has-[:checked]:bg-overlay', 'has-[:checked]:border-success', 'has-[:checked]:text-foreground');
+        expect(seg?.className).not.toMatch(/has-\[:checked\]:border-success\//);
+        expect(seg).toHaveClass('has-[:focus-visible]:ring-success/80', 'has-[:focus-visible]:ring-offset-2', 'has-[:focus-visible]:ring-offset-panel');
     });
 
     // ROK-1649 review: six duration segments (~327px of labels + padding) are

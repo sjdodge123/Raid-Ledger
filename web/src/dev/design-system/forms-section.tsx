@@ -145,7 +145,7 @@ function ChoiceStates(): JSX.Element {
                     <Checkbox label="Locked" disabled />
                 </div>
             </StateFrame>
-            <StateFrame label="RadioGroup — segmented / list" note="Native radios: Tab to the checked one, arrows move and select.">
+            <StateFrame label="RadioGroup — segmented / list" note="Native radios: Tab to the checked one, arrows move and select. ON = bg-overlay + a full success border (the 3:1 indicator in light themes, ROK-1688).">
                 <RadioGroup label="Duration" appearance="segmented" options={DURATIONS} value={duration} onChange={setDuration} className="w-full" />
                 <RadioGroup label="Apply to" options={SCOPES} value={scope} onChange={setScope} className="w-full" />
             </StateFrame>
