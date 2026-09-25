@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, 'validate-ci.sh');
 const REAL_WORKFLOW = join(HERE, '..', '.github', 'workflows', 'discord-smoke.yml');
+const ENV_SPIN = join(HERE, '..', 'rl-infra', 'orchestrator', 'bin', 'env-spin');
 const KEYS = [
   'SMOKE_CONCURRENCY',
   'SMOKE_RETRY_COUNT',
@@ -123,7 +124,7 @@ test('fleet run: all five values are parsed from the workflow, quoting and comme
   assert.equal(got(r.out, 'SMOKE_SKIP_VOICE_JOIN'), '1');
   assert.match(
     r.out,
-    /Discord smoke CI parity: concurrency=3 retries=4 timeout=77777ms api_timeout=11111ms skip_voice_join=1 \(from .*discord-smoke\.yml\)/,
+    /Discord smoke CI parity: concurrency=3 retries=4 timeout=77777ms api_timeout=11111ms\(env container, via env-spin\) skip_voice_join=1 \(from .*discord-smoke\.yml\)/,
   );
 });
 
@@ -131,7 +132,7 @@ test('the real discord-smoke.yml still carries all five keys', () => {
   const r = runParity({ workflow: readFileSync(REAL_WORKFLOW, 'utf8') });
   assert.equal(r.code, 0, r.out);
   for (const k of KEYS) assert.notEqual(got(r.out, k), '<unset>', `${k} missing from discord-smoke.yml`);
-  assert.doesNotMatch(r.out, /not found in/);
+  assert.doesNotMatch(r.out, /not found or unparseable in/);
 });
 
 test('a value the caller already exported wins over the workflow', () => {
@@ -146,7 +147,7 @@ test('a key missing from the workflow warns (naming it) and does not abort', () 
   const wf = FIXTURE.replace(/^\s+SMOKE_RETRY_COUNT:.*\n/m, '');
   const r = runParity({ workflow: wf });
   assert.equal(r.code, 0, r.out);
-  assert.match(r.out, /SMOKE_RETRY_COUNT not found in .*discord-smoke\.yml/);
+  assert.match(r.out, /SMOKE_RETRY_COUNT not found or unparseable in .*discord-smoke\.yml/);
   assert.equal(got(r.out, 'SMOKE_RETRY_COUNT'), '<unset>');
   assert.equal(got(r.out, 'SMOKE_CONCURRENCY'), '3', 'the other keys still apply');
 });
@@ -168,3 +169,27 @@ test(
     assert.doesNotMatch(r.out, /Discord smoke CI parity:/);
   },
 );
+
+test('run_discord_smoke calls _apply_ci_smoke_parity (the helpers are wired in)', () => {
+  const body = extractFunction('run_discord_smoke');
+  const code = body
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('#'))
+    .join('\n');
+  assert.match(code, /^\s*_apply_ci_smoke_parity\s*$/m, 'run_discord_smoke never calls _apply_ci_smoke_parity');
+});
+
+test("env-spin gives the env's API container discord-smoke.yml's DISCORD_API_TIMEOUT_MS", () => {
+  // DISCORD_API_TIMEOUT_MS is read by the API, not the companion bot, so the
+  // runner-shell export can't reach it — env-spin must set it on the env
+  // container, and to the SAME value CI uses.
+  const wfValue = execFileSync(
+    'bash',
+    ['-c', `${extractFunction('_ci_workflow_env_value')}\n_ci_workflow_env_value "$1" DISCORD_API_TIMEOUT_MS`, '_', REAL_WORKFLOW],
+    { encoding: 'utf8' },
+  ).trim();
+  assert.match(wfValue, /^\d+$/, `discord-smoke.yml DISCORD_API_TIMEOUT_MS unparseable: "${wfValue}"`);
+  const m = readFileSync(ENV_SPIN, 'utf8').match(/^\s*-e\s+DISCORD_API_TIMEOUT_MS=(\S+)\s*\\\s*$/m);
+  assert.ok(m, 'env-spin does not pass -e DISCORD_API_TIMEOUT_MS=<n> to the env container');
+  assert.equal(m[1], wfValue, 'env-spin DISCORD_API_TIMEOUT_MS drifted from discord-smoke.yml');
+});

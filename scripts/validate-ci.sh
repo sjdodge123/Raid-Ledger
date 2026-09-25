@@ -1408,8 +1408,9 @@ _discord_lock_required() {
 # 2 retries, a 90s per-test timeout, a 15s Discord API timeout and voice-join
 # skipped. The fleet ran on test-bot defaults (concurrency 5, 0 retries, 60s)
 # and saw 14–16 failures CI never did. The values are READ from the workflow
-# at run time, so the two can't drift. Pinned by
-# scripts/validate-ci-smoke-ci-parity.spec.mjs.
+# at run time, so the two can't drift. DISCORD_API_TIMEOUT_MS is read by the
+# API, so the runner export is informational — env-spin sets it on the env
+# container. Pinned by scripts/validate-ci-smoke-ci-parity.spec.mjs.
 CI_SMOKE_WORKFLOW_REL=".github/workflows/discord-smoke.yml"
 CI_SMOKE_ENV_KEYS="SMOKE_CONCURRENCY SMOKE_RETRY_COUNT SMOKE_TIMEOUT_MS DISCORD_API_TIMEOUT_MS SMOKE_SKIP_VOICE_JOIN"
 
@@ -1424,7 +1425,7 @@ _print_ci_smoke_env() {
   local src="$1"
   echo "Discord smoke CI parity: concurrency=${SMOKE_CONCURRENCY:-default}" \
     "retries=${SMOKE_RETRY_COUNT:-default} timeout=${SMOKE_TIMEOUT_MS:-default}ms" \
-    "api_timeout=${DISCORD_API_TIMEOUT_MS:-default}ms" \
+    "api_timeout=${DISCORD_API_TIMEOUT_MS:-default}ms(env container, via env-spin)" \
     "skip_voice_join=${SMOKE_SKIP_VOICE_JOIN:-0} (from ${src})"
 }
 
@@ -1441,7 +1442,7 @@ _export_ci_smoke_env() {
     [ -n "${!key:-}" ] && continue
     val="$(_ci_workflow_env_value "$file" "$key")"
     if [ -z "$val" ]; then
-      echo -e "${YELLOW}[smoke-ci-parity] ${key} not found in ${file} — left at the test-bot default${NC}" >&2
+      echo -e "${YELLOW}[smoke-ci-parity] ${key} not found or unparseable in ${file} — left at the test-bot default${NC}" >&2
       continue
     fi
     export "${key}=${val}"
@@ -1756,15 +1757,16 @@ run_discord_smoke() {
   local lock_dir="${RL_DISCORD_LOCK_DIR:-/state-locks}"
   if [[ -d "$lock_dir" ]] && _discord_lock_required; then
     local lock_file="$lock_dir/discord.lock"
-    echo "Acquiring fleet Discord lock at $lock_file (up to 10 min)..."
+    echo "Acquiring fleet Discord lock at $lock_file (up to 45 min)..."
     local wait_start=$(date +%s)
-    # flock fd 9 against the lock file. -w 600 waits up to 10 min before
-    # timing out (typical smoke is 2-3 min). Subshell scopes the fd so the
-    # lock auto-releases when smoke exits.
+    # flock fd 9 against the lock file. -w 2700 waits up to 45 min before
+    # timing out. Subshell scopes the fd so the lock auto-releases when smoke
+    # exits. ROK-1689: CI parity (concurrency 1, 2 retries, 90s timeouts) makes
+    # a sibling slot's ~126-test run hold the lock far longer than 10 min.
     (
       exec 9>"$lock_file"
-      if ! flock -w 600 9; then
-        echo -e "${RED}Timed out (10 min) waiting for Discord lock. Another slot is hogging it.${NC}" >&2
+      if ! flock -w 2700 9; then
+        echo -e "${RED}Timed out (45 min) waiting for Discord lock. Another slot is hogging it.${NC}" >&2
         echo -e "${RED}  Check: docker exec <runner> cat /state-locks/discord.lock — empty file but a flock holder.${NC}" >&2
         exit 75   # sysexits.h EX_TEMPFAIL — signals lock-acquisition failure to outer shell
       fi
