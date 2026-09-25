@@ -1884,3 +1884,4 @@ same day (#1278, #1279, #1280).
 - **[low]** `web/src/components/admin/GameLibraryActions.tsx:53,83` — row buttons 36px on desktop, no focus ring, raw red/yellow classes (still on the form-primitives baseline). Suggested: `Button` ghost/danger variants.
 - **[low — a11y]** `web/src/pages/cron-jobs/CronJobModals.tsx:35,144`, `web/src/pages/admin/backup-panel-modals.tsx:23` — hand-rolled overlays (out of ROK-1653 scope by the story): no `role="dialog"`/`aria-modal`, no focus trap, and full-bleed at 375px (no side gutter). Suggested: move onto the shared `Modal`.
 - **[nit]** `web/src/pages/cron-jobs/cron-utils.ts:172,175` — category chips use raw `amber-`/`green-` hues. Suggested: tokens.
+- **[low — a11y, shared primitive]** `web/src/components/ui/modal-frame.tsx:63` — the Modal × close button has hover styles but no `focus-visible:` ring. Suggested: add the standard focus ring classes so every Modal inherits it.
