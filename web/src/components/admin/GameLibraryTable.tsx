@@ -16,8 +16,8 @@ interface GameItem {
 }
 
 function GameStatusBadge({ game }: { game: GameItem }) {
-    if (game.banned) return <span className="text-xs px-1.5 py-0.5 bg-red-500/10 text-red-400 border border-red-500/30 rounded flex-shrink-0">Banned</span>;
-    if (game.hidden) return <span className="text-xs px-1.5 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/30 rounded flex-shrink-0">Hidden</span>;
+    if (game.banned) return <span className="text-xs px-1.5 py-0.5 bg-danger/10 text-danger border border-danger/30 rounded flex-shrink-0">Banned</span>;
+    if (game.hidden) return <span className="text-xs px-1.5 py-0.5 bg-warning/10 text-warning border border-warning/30 rounded flex-shrink-0">Hidden</span>;
     return null;
 }
 
