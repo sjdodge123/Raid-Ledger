@@ -15,6 +15,3 @@ export interface ModerationTarget {
 export function isRealDiscordId(discordId: string | null | undefined): discordId is string {
     return !!discordId && !discordId.startsWith('local:') && !discordId.startsWith('unlinked:');
 }
-
-/** Canonical checkbox styling reused across moderation modals. */
-export const CHECKBOX_CLASS = 'rounded border-edge bg-panel text-emerald-500 focus:ring-emerald-500/40';

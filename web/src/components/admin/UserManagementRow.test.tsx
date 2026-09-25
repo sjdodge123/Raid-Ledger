@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { UserRow, type RowHandlers } from './UserManagementRow';
 import type { UserManagementDto } from '@raid-ledger/contract';
 
@@ -159,5 +159,41 @@ describe('UserRow — menu item callbacks', () => {
         openMenu('Bob');
         fireEvent.click(screen.getByRole('menuitem', { name: 'Ban user' }));
         expect(handlers.onBan).toHaveBeenCalledWith(expect.objectContaining({ id: 5 }));
+    });
+});
+
+describe('UserRow — menu items are Buttons (ROK-1653 ruling 10)', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    const DESTRUCTIVE = ['Kick user', 'Ban user', 'Remove user'];
+
+    it('every item in the menu is a menuitem, and Kick / Ban / Remove wear destructive-soft (danger token), not ghost', () => {
+        renderRow(makeUser(), makeHandlers());
+        openMenu('Alice');
+        const menu = screen.getByRole('menu');
+        expect(within(menu).queryAllByRole('button')).toHaveLength(0);
+        expect(within(menu).getAllByRole('menuitem').map((el) => el.textContent)).toEqual(DESTRUCTIVE);
+        for (const name of DESTRUCTIVE) {
+            const item = screen.getByRole('menuitem', { name });
+            expect(item).toHaveClass('text-danger', 'bg-danger/10');
+            expect(item).not.toHaveClass('text-muted');
+        }
+    });
+
+    it('Unkick is a ghost menuitem with no raw hue (the GREEN tone is gone)', () => {
+        renderRow(makeUser({ kickedAt: '2026-07-01T00:00:00Z' }), makeHandlers());
+        openMenu('Alice');
+        const unkick = screen.getByRole('menuitem', { name: 'Unkick user' });
+        expect(unkick).toHaveClass('text-muted');
+        expect(unkick.className).not.toMatch(/(emerald|red|amber)-\d/);
+    });
+
+    it('the kebab is disabled while a moderation action is pending', () => {
+        render(<UserRow user={makeUser()} currentUserId={undefined} onRoleChange={vi.fn()}
+            handlers={makeHandlers()} isUpdating={false} isBusy />);
+        const kebab = screen.getByRole('button', { name: 'Actions for Alice' });
+        expect(kebab).toBeDisabled();
+        expect(kebab).toHaveAttribute('aria-haspopup', 'menu');
+        expect(kebab).toHaveAttribute('aria-expanded', 'false');
     });
 });

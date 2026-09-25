@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import { ReasonField } from '../lineups/shared/ReasonField';
-import { isRealDiscordId, CHECKBOX_CLASS, type ModerationTarget } from './moderation-shared';
+import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
+import { isRealDiscordId, type ModerationTarget } from './moderation-shared';
 import type { BanUserDto } from '@raid-ledger/contract';
 
 interface BanUserModalProps {
@@ -11,21 +14,47 @@ interface BanUserModalProps {
     isPending: boolean;
 }
 
+/** The wipe option's irreversibility warning, danger-toned (ruling 9: was text-red-400). */
+const WIPE_WARNING = (
+    <span className="text-danger">
+        Permanently deletes their characters, signups, and preferences. This cannot be undone.
+    </span>
+);
+
+/** Cancel (guarded — ruling 4) and the destructive Ban, in the Modal's pinned footer. */
+function BanFooter({ onCancel, onConfirm, isPending }: { onCancel: () => void; onConfirm: () => void; isPending: boolean }) {
+    return (
+        <>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button variant="destructive" onClick={onConfirm} loading={isPending} loadingLabel="Banning...">
+                Ban
+            </Button>
+        </>
+    );
+}
+
 /**
  * Confirm modal for admin "ban" (permanent lockout, ROK-313 §6d). Ban blocks all
  * future logins, drops the user from the Players list, and cancels upcoming
  * signups. Optional data wipe permanently deletes their content. Optional
  * Discord guild kick. The parent keys this by target id for fresh local state.
+ *
+ * ROK-1655: once a reason is typed, Escape, the backdrop, × and Cancel ask
+ * "Discard your changes?" first. A completed ban closes through the parent
+ * nulling `target` (an unguarded `isOpen` flip), so it never asks.
  */
 export function BanUserModal({ target, onClose, onConfirm, isPending }: BanUserModalProps) {
     const [reason, setReason] = useState('');
     const [wipeData, setWipeData] = useState(false);
     const [kickFromDiscord, setKickFromDiscord] = useState(false);
+    const guard = useDirtyCloseGuard(reason.trim() !== '', onClose);
 
     const handleConfirm = () => onConfirm({ reason: reason.trim() || undefined, wipeData, kickFromDiscord });
 
     return (
-        <Modal isOpen={!!target} onClose={onClose} title={`Ban ${target?.username ?? ''}`}>
+        <Modal isOpen={!!target} onClose={onClose} title={`Ban ${target?.username ?? ''}`} closeGuard={guard}
+            discardMessage="The reason you typed hasn't been recorded yet."
+            footer={<BanFooter onCancel={guard.requestClose} onConfirm={handleConfirm} isPending={isPending} />}>
             <div className="space-y-4">
                 <p className="text-secondary">
                     Ban <strong className="text-foreground">{target?.username}</strong>? They will be permanently
@@ -33,31 +62,12 @@ export function BanUserModal({ target, onClose, onConfirm, isPending }: BanUserM
                 </p>
                 <ReasonField id="ban-reason" value={reason} onChange={setReason}
                     placeholder="Optional note recorded in the moderation log" />
-                <label className="flex items-start gap-2 text-sm text-foreground">
-                    <input type="checkbox" checked={wipeData} onChange={(e) => setWipeData(e.target.checked)}
-                        className={`mt-0.5 ${CHECKBOX_CLASS}`} />
-                    <span>
-                        Wipe user data
-                        <span className="block text-xs text-red-400">
-                            Permanently deletes their characters, signups, and preferences. This cannot be undone.
-                        </span>
-                    </span>
-                </label>
+                <Checkbox label="Wipe user data" description={WIPE_WARNING} checked={wipeData}
+                    onChange={(e) => setWipeData(e.target.checked)} />
                 {isRealDiscordId(target?.discordId) && (
-                    <label className="flex items-center gap-2 text-sm text-foreground">
-                        <input type="checkbox" checked={kickFromDiscord}
-                            onChange={(e) => setKickFromDiscord(e.target.checked)} className={CHECKBOX_CLASS} />
-                        Also kick from Discord server
-                    </label>
+                    <Checkbox label="Also kick from Discord server" checked={kickFromDiscord}
+                        onChange={(e) => setKickFromDiscord(e.target.checked)} />
                 )}
-                <div className="flex justify-end gap-3 pt-2">
-                    <button onClick={onClose}
-                        className="px-4 py-2 text-sm bg-overlay hover:bg-faint text-foreground rounded-lg transition-colors">Cancel</button>
-                    <button onClick={handleConfirm} disabled={isPending}
-                        className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors">
-                        {isPending ? 'Banning...' : 'Ban'}
-                    </button>
-                </div>
             </div>
         </Modal>
     );

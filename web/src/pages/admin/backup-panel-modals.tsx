@@ -2,6 +2,9 @@ import { useState } from 'react';
 import type { BackupFileDto } from '@raid-ledger/contract';
 import { copyWithToast } from '../../lib/clipboard';
 import { formatSize } from './backup-panel-utils';
+import { Button } from '../../components/ui/button';
+import { Field } from '../../components/ui/field';
+import { Input } from '../../components/ui/input';
 
 export function DeleteModal({ backup, onClose, onConfirm, isPending }: {
     backup: BackupFileDto; onClose: () => void; onConfirm: () => void; isPending: boolean;
@@ -30,11 +33,10 @@ function ModalActions({ onClose, onConfirm, isPending, confirmLabel, pendingLabe
 }) {
     return (
         <div className="flex justify-end gap-3 mt-6">
-            <button onClick={onClose} disabled={isPending} className="px-4 py-2 text-sm text-muted hover:text-foreground border border-edge rounded-lg transition-colors disabled:opacity-50">Cancel</button>
-            <button onClick={onConfirm} disabled={(disabled ?? false) || isPending}
-                className="px-4 py-2 text-sm bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                {isPending ? pendingLabel : confirmLabel}
-            </button>
+            <Button variant="secondary" onClick={onClose} disabled={isPending}>Cancel</Button>
+            <Button variant="destructive-soft" onClick={onConfirm} disabled={disabled} loading={isPending} loadingLabel={pendingLabel}>
+                {confirmLabel}
+            </Button>
         </div>
     );
 }
@@ -76,7 +78,7 @@ export function ResetModal({ onClose, onConfirm, isPending, result }: {
 
     return (
         <ModalOverlay maxWidth="max-w-lg">
-            <h3 className="text-lg font-semibold text-red-400">Reset Instance</h3>
+            <h3 className="text-lg font-semibold text-danger">Reset Instance</h3>
             <DestructiveWarning title="This will permanently delete ALL data"
                 message="All users, events, characters, settings, and integrations will be wiped. A safety backup will be created automatically before the reset." />
             <ConfirmTextInput value={confirmText} onChange={setConfirmText} keyword="RESET" disabled={isPending} />
@@ -88,9 +90,9 @@ export function ResetModal({ onClose, onConfirm, isPending, result }: {
 
 function DestructiveWarning({ title, message }: { title: string; message: string }) {
     return (
-        <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-            <p className="text-sm text-red-400 font-medium">{title}</p>
-            <p className="text-sm text-red-400/80 mt-1">{message}</p>
+        <div className="mt-4 p-4 bg-danger/10 border border-danger/30 rounded-lg">
+            <p className="text-sm text-danger font-medium">{title}</p>
+            <p className="text-sm text-danger/80 mt-1">{message}</p>
         </div>
     );
 }
@@ -99,11 +101,10 @@ function ConfirmTextInput({ value, onChange, keyword, disabled }: {
     value: string; onChange: (v: string) => void; keyword: string; disabled?: boolean;
 }) {
     return (
-        <div className="mt-4">
-            <label className="block text-sm text-muted mb-1">Type <span className="font-mono text-foreground">{keyword}</span> to confirm</label>
-            <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={keyword} autoFocus disabled={disabled}
-                className="w-full px-3 py-2 text-sm bg-backdrop border border-edge rounded-lg text-foreground placeholder-muted focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent" />
-        </div>
+        <Field label="Type the confirmation keyword" className="mt-4"
+            hint={<>Type <span className="font-mono text-foreground">{keyword}</span> to confirm</>}>
+            <Input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder={keyword} autoFocus disabled={disabled} />
+        </Field>
     );
 }
 
@@ -127,12 +128,12 @@ function ResetResultView({ result, copied, onCopy }: { result: { password: strin
                     <span className="text-sm text-muted">Password</span>
                     <div className="flex items-center gap-2">
                         <span className="font-mono text-sm text-foreground">{result.password}</span>
-                        <button onClick={onCopy} className="text-xs text-success hover:text-success/80">{copied ? 'Copied!' : 'Copy'}</button>
+                        <Button variant="ghost" size="sm" onClick={onCopy}>{copied ? 'Copied!' : 'Copy'}</Button>
                     </div>
                 </div>
             </div>
             <div className="flex justify-end mt-6">
-                <button onClick={handleGoToLogin} className="px-4 py-2 text-sm font-medium bg-success/10 text-success border border-success/40 rounded-lg hover:bg-success/20 transition-colors">Go to Login</button>
+                <Button variant="secondary" onClick={handleGoToLogin}>Go to Login</Button>
             </div>
         </ModalOverlay>
     );

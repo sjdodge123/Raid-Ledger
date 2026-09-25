@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { useCommunityInsightsSettings } from '../../hooks/admin/use-community-insights-settings';
 import { useRefreshCommunityInsights } from '../../hooks/use-community-insights';
 import { toast } from '../../lib/toast';
+import { Button } from '../ui/button';
+import { Slider } from '../ui/slider';
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -13,9 +15,9 @@ const SAVE_DEBOUNCE_MS = 500;
  * debounced (500ms) and saved server-side; the next snapshot — manual or
  * the 06:30 UTC cron — uses the new value.
  */
-export function CommunityInsightsSection() {
+/** Local edits win over server data; each change saves after a 500ms debounce. */
+function useThresholdAutosave() {
     const { settings, updateSettings } = useCommunityInsightsSettings();
-    const refresh = useRefreshCommunityInsights();
     const [localThreshold, setLocalThreshold] = useState<number | null>(null);
     const dirty = useRef(false);
     const saveTimer = useRef<number | null>(null);
@@ -44,6 +46,13 @@ export function CommunityInsightsSection() {
         }, SAVE_DEBOUNCE_MS);
     };
 
+    return { threshold, handleSliderChange, saving: updateSettings.isPending, loading: settings.isLoading };
+}
+
+export function CommunityInsightsSection() {
+    const { threshold, handleSliderChange, saving, loading } = useThresholdAutosave();
+    const refresh = useRefreshCommunityInsights();
+
     const handleRefresh = () => {
         refresh.mutate(undefined, {
             onSuccess: () => toast.success('Community insights refresh queued'),
@@ -57,8 +66,8 @@ export function CommunityInsightsSection() {
             <ThresholdSlider
                 threshold={threshold}
                 onChange={handleSliderChange}
-                saving={updateSettings.isPending}
-                disabled={settings.isLoading}
+                saving={saving}
+                disabled={loading}
             />
             <RefreshButton onClick={handleRefresh} pending={refresh.isPending} />
         </div>
@@ -80,48 +89,48 @@ function SectionHeader() {
     );
 }
 
-function ThresholdSlider({
-    threshold,
-    onChange,
-    saving,
-    disabled,
-}: {
-    threshold: number;
-    onChange: (v: number) => void;
-    saving: boolean;
-    disabled: boolean;
+function ThresholdSlider({ threshold, onChange, saving, disabled }: {
+    threshold: number; onChange: (v: number) => void; saving: boolean; disabled: boolean;
 }) {
     return (
         <div>
-            <label htmlFor="community-insights-threshold" className="text-sm text-foreground block mb-1">
-                Churn risk threshold: <span className="font-semibold">{threshold}%</span>
-                {saving && <span className="ml-2 text-xs text-muted italic">saving…</span>}
-            </label>
-            <input
-                id="community-insights-threshold"
-                type="range"
-                min={1}
-                max={100}
-                value={threshold}
-                disabled={disabled}
-                onChange={(e) => onChange(Number(e.target.value))}
-                className="w-full sm:max-w-md disabled:opacity-50"
-                aria-describedby="community-insights-threshold-help"
-            />
-            <div id="community-insights-threshold-help" className="text-xs text-muted mt-2 space-y-1">
-                <p>
-                    A player is flagged "at risk" when their <strong className="text-secondary">recent
-                    activity</strong> (last 4 weeks) drops by at least <strong className="text-secondary">{threshold}%</strong>
-                    {' '}vs their <strong className="text-secondary">baseline</strong> (prior 12 weeks).
-                </p>
-                <p>
-                    Lower threshold → more candidates flagged. Higher threshold → only the most extreme drop-offs.
-                </p>
-                <p>
-                    The new value applies to the <em>next snapshot</em>. Press <strong className="text-secondary">"Refresh insights now"</strong>
-                    {' '}below to regenerate immediately, or wait for the 06:30 UTC nightly cron.
-                </p>
+            {/* Slider.label is a string, so the pending note sits beside it in a
+                polite live region (always mounted, so the change is announced). */}
+            <div className="flex flex-wrap items-center gap-x-3">
+                <Slider
+                    id="community-insights-threshold"
+                    label="Churn risk threshold"
+                    min={1}
+                    max={100}
+                    value={threshold}
+                    onChange={onChange}
+                    formatValue={(v) => `${v}%`}
+                    disabled={disabled}
+                    wrapperClassName="w-full sm:max-w-md"
+                    aria-describedby="community-insights-threshold-help"
+                />
+                <span aria-live="polite" className="text-xs text-muted italic">{saving ? 'saving…' : ''}</span>
             </div>
+            <ThresholdHelp threshold={threshold} />
+        </div>
+    );
+}
+
+function ThresholdHelp({ threshold }: { threshold: number }) {
+    return (
+        <div id="community-insights-threshold-help" className="text-xs text-muted mt-2 space-y-1">
+            <p>
+                A player is flagged "at risk" when their <strong className="text-secondary">recent
+                activity</strong> (last 4 weeks) drops by at least <strong className="text-secondary">{threshold}%</strong>
+                {' '}vs their <strong className="text-secondary">baseline</strong> (prior 12 weeks).
+            </p>
+            <p>
+                Lower threshold → more candidates flagged. Higher threshold → only the most extreme drop-offs.
+            </p>
+            <p>
+                The new value applies to the <em>next snapshot</em>. Press <strong className="text-secondary">"Refresh insights now"</strong>
+                {' '}below to regenerate immediately, or wait for the 06:30 UTC nightly cron.
+            </p>
         </div>
     );
 }
@@ -129,14 +138,9 @@ function ThresholdSlider({
 function RefreshButton({ onClick, pending }: { onClick: () => void; pending: boolean }) {
     return (
         <div>
-            <button
-                type="button"
-                onClick={onClick}
-                disabled={pending}
-                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors disabled:opacity-50"
-            >
-                {pending ? 'Refreshing...' : 'Refresh insights now'}
-            </button>
+            <Button type="button" onClick={onClick} loading={pending} loadingLabel="Refreshing…">
+                Refresh insights now
+            </Button>
             <p className="text-xs text-muted mt-2">
                 Recomputes all 6 sections of today's snapshot from current player data. Useful
                 after changing the churn threshold, seeding test data, or whenever a metric

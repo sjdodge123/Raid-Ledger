@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { GameLibraryTable } from './GameLibraryTable';
 
 // Mock toast
@@ -53,8 +53,17 @@ const mockGames = {
     refetch: vi.fn(),
 };
 
+/** Records every (search, limit, showHidden) the component hands the query hook. */
+const mockUseAdminGamesArgs = vi.fn();
+
+/** The search term of the most recent query-hook call. */
+function lastQueriedSearch(): string {
+    const calls = mockUseAdminGamesArgs.mock.calls;
+    return calls[calls.length - 1][0];
+}
+
 vi.mock('../../hooks/use-admin-games', () => ({
-    useAdminGames: () => ({
+    useAdminGames: (...args: unknown[]) => (mockUseAdminGamesArgs(...args), {
         games: mockGames,
         banGame: mockDeleteGame,
         unbanGame: mockUnbanGame,
@@ -115,14 +124,44 @@ describe('GameLibraryTable — Loading & empty states', () => {
         ).toBeInTheDocument();
     });
 
-    it('shows search-specific empty message when search yields no results', async () => {
+    // ── Mobile card layout (<768px, rendered via md:hidden) ─────
+
+    it('renders game name in mobile card', () => {
+        mockGames.items = [makeGame()];
+        mockGames.total = 1;
+        render(<GameLibraryTable />);
+        // Name appears in both mobile and desktop, but we verify at least one instance
+        expect(screen.getAllByText('World of Warcraft').length).toBeGreaterThanOrEqual(1);
+    });
+
+});
+
+describe('GameLibraryTable — Search (SearchInput owns the debounce)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockGames.items = [];
+        mockGames.total = 0;
+        mockGames.isLoading = false;
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('shows search-specific empty message when search yields no results', () => {
+        vi.useFakeTimers();
         mockGames.items = [];
         render(<GameLibraryTable />);
 
-        // Verify the no-search empty message is shown and search-specific is not
+        // No search yet: the library-empty message, not the search-specific one
         expect(
             screen.queryByText('No games match your search.'),
         ).not.toBeInTheDocument();
+
+        // Typing a term and letting the SearchInput debounce settle drives the query
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search games' }), { target: { value: 'zzz' } });
+        act(() => { vi.advanceTimersByTime(300); });
+        expect(screen.getByText('No games match your search.')).toBeInTheDocument();
     });
 
     // ── Search input ────────────────────────────────────────────
@@ -134,21 +173,35 @@ describe('GameLibraryTable — Loading & empty states', () => {
 
     it('updates search input value on change', () => {
         render(<GameLibraryTable />);
-        const searchInput = screen.getByRole('textbox') as HTMLInputElement;
+        const searchInput = screen.getByRole('searchbox', { name: 'Search games' }) as HTMLInputElement;
         fireEvent.change(searchInput, { target: { value: 'Warcraft' } });
         expect(searchInput.value).toBe('Warcraft');
     });
 
-    // ── Mobile card layout (<768px, rendered via md:hidden) ─────
-
-    it('renders game name in mobile card', () => {
-        mockGames.items = [makeGame()];
-        mockGames.total = 1;
+    it('hands the query hook the search term only after the 300ms debounce', () => {
+        vi.useFakeTimers();
         render(<GameLibraryTable />);
-        // Name appears in both mobile and desktop, but we verify at least one instance
-        expect(screen.getAllByText('World of Warcraft').length).toBeGreaterThanOrEqual(1);
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Search games' }), { target: { value: 'Warcraft' } });
+
+        act(() => { vi.advanceTimersByTime(299); });
+        expect(lastQueriedSearch()).toBe('');
+
+        act(() => { vi.advanceTimersByTime(1); });
+        expect(lastQueriedSearch()).toBe('Warcraft');
     });
 
+    it('Clear search empties the box and re-queries the whole library at once', () => {
+        vi.useFakeTimers();
+        render(<GameLibraryTable />);
+        const searchInput = screen.getByRole('searchbox', { name: 'Search games' }) as HTMLInputElement;
+        fireEvent.change(searchInput, { target: { value: 'Warcraft' } });
+        act(() => { vi.advanceTimersByTime(300); });
+        expect(lastQueriedSearch()).toBe('Warcraft');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+        expect(searchInput.value).toBe('');
+        expect(lastQueriedSearch()).toBe('');
+    });
 });
 
 describe('GameLibraryTable — Mobile delete button — 44×44px touch target', () => {

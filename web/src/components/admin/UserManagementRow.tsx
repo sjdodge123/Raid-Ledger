@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react';
 import { RoleBadge } from '../ui/role-badge';
+import { Button } from '../ui/button';
+import { Select } from '../ui/select';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { UserRole, UserManagementDto } from '@raid-ledger/contract';
 import type { ModerationTarget } from './moderation-shared';
@@ -72,8 +74,8 @@ function StatusBadge({ label, tone }: { label: string; tone: string }) {
     );
 }
 
-const DEACTIVATED_TONE = 'bg-amber-500/15 text-amber-300 border-amber-400/30';
-const BANNED_TONE = 'bg-red-500/15 text-red-300 border-red-400/30';
+const DEACTIVATED_TONE = 'bg-warning/15 text-warning border-warning/30';
+const BANNED_TONE = 'bg-danger/15 text-danger border-danger/30';
 
 /** Precedence: banned (red) > kicked (amber) > deactivated (amber). */
 function UserStatusBadge({ user }: { user: UserManagementDto }) {
@@ -94,22 +96,19 @@ export interface RowHandlers {
     onUnkick: (t: ModerationTarget) => void;
     onUnban: (t: ModerationTarget) => void;
 }
-interface MenuItemSpec { key: string; icon: JSX.Element; label: string; tone: string; onClick: () => void; }
-
-const RED = 'text-red-400 hover:bg-red-500/10';
-const AMBER = 'text-amber-300 hover:bg-amber-500/10';
-const GREEN = 'text-emerald-300 hover:bg-emerald-500/10';
+/** `destructive` items render `destructive-soft`; the rest `ghost` (ruling 10 — no per-item hue). */
+interface MenuItemSpec { key: string; icon: JSX.Element; label: string; destructive?: boolean; onClick: () => void; }
 
 /** Build the ordered menu items for a row's current moderation state. */
 function buildMenuItems(s: RowState, bound: Record<keyof RowHandlers, () => void>): MenuItemSpec[] {
-    const remove: MenuItemSpec = { key: 'remove', icon: TrashIcon, label: 'Remove user', tone: RED, onClick: bound.onRemove };
+    const remove: MenuItemSpec = { key: 'remove', icon: TrashIcon, label: 'Remove user', destructive: true, onClick: bound.onRemove };
     if (s.isBanned) {
-        return [{ key: 'unban', icon: UnbanIcon, label: 'Unban user', tone: GREEN, onClick: bound.onUnban }, remove];
+        return [{ key: 'unban', icon: UnbanIcon, label: 'Unban user', onClick: bound.onUnban }, remove];
     }
     if (s.isKicked) {
         return [
-            { key: 'unkick', icon: UnkickIcon, label: 'Unkick user', tone: GREEN, onClick: bound.onUnkick },
-            { key: 'ban', icon: BanIcon, label: 'Ban user', tone: RED, onClick: bound.onBan },
+            { key: 'unkick', icon: UnkickIcon, label: 'Unkick user', onClick: bound.onUnkick },
+            { key: 'ban', icon: BanIcon, label: 'Ban user', destructive: true, onClick: bound.onBan },
             remove,
         ];
     }
@@ -119,15 +118,36 @@ function buildMenuItems(s: RowState, bound: Record<keyof RowHandlers, () => void
         // ROK-1353 re-mint hole if they rejoin (spec §9.5). Ban is admin-UI-only,
         // so the deactivated branch must offer it alongside Reactivate.
         return [
-            { key: 'reactivate', icon: ReactivateIcon, label: 'Reactivate user', tone: GREEN, onClick: bound.onReactivate },
-            { key: 'ban', icon: BanIcon, label: 'Ban user', tone: RED, onClick: bound.onBan },
+            { key: 'reactivate', icon: ReactivateIcon, label: 'Reactivate user', onClick: bound.onReactivate },
+            { key: 'ban', icon: BanIcon, label: 'Ban user', destructive: true, onClick: bound.onBan },
         ];
     }
     return [
-        { key: 'kick', icon: KickIcon, label: 'Kick user', tone: AMBER, onClick: bound.onKick },
-        { key: 'ban', icon: BanIcon, label: 'Ban user', tone: RED, onClick: bound.onBan },
+        { key: 'kick', icon: KickIcon, label: 'Kick user', destructive: true, onClick: bound.onKick },
+        { key: 'ban', icon: BanIcon, label: 'Ban user', destructive: true, onClick: bound.onBan },
         remove,
     ];
+}
+
+/**
+ * Button centres its label (`justify-center`, no tailwind-merge), so a menu row
+ * stretches the label span to the full width instead: its own `inline-flex`
+ * then packs icon + text from the left.
+ */
+const MENU_ITEM_LEFT = '[&>[data-button-label]]:w-full';
+
+/** The open menu: ghost rows, destructive-soft for Kick / Ban / Remove (ruling 10). */
+function ActionMenuList({ items }: { items: MenuItemSpec[] }) {
+    return (
+        <div role="menu" className="absolute right-0 top-full mt-1 z-10 min-w-[12rem] bg-panel border border-edge rounded-lg shadow-lg p-1 flex flex-col gap-1">
+            {items.map((it) => (
+                <Button key={it.key} role="menuitem" variant={it.destructive ? 'destructive-soft' : 'ghost'} size="sm" fullWidth
+                    className={MENU_ITEM_LEFT} onClick={it.onClick}>
+                    {it.icon}{it.label}
+                </Button>
+            ))}
+        </div>
+    );
 }
 
 function useMenuDismiss(open: boolean, close: () => void) {
@@ -161,21 +181,11 @@ function UserActionMenu({ target, state, handlers, isCurrentUser, isPending }: {
 
     return (
         <div ref={rootRef} className="relative">
-            <button type="button" onClick={() => setOpen((v) => !v)} disabled={isPending}
-                aria-haspopup="menu" aria-expanded={open} aria-label={`Actions for ${target.username}`}
-                className="p-1.5 text-dim hover:text-foreground rounded-lg hover:bg-overlay transition-colors disabled:opacity-50">
+            <Button variant="ghost" size="sm" iconOnly aria-label={`Actions for ${target.username}`}
+                aria-haspopup="menu" aria-expanded={open} disabled={isPending} onClick={() => setOpen((v) => !v)}>
                 {MoreVerticalIcon}
-            </button>
-            {open && (
-                <div role="menu" className="absolute right-0 top-full mt-1 z-10 min-w-[12rem] bg-panel border border-edge rounded-lg shadow-lg py-1">
-                    {items.map((it) => (
-                        <button key={it.key} role="menuitem" onClick={it.onClick}
-                            className={`w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors ${it.tone}`}>
-                            {it.icon}{it.label}
-                        </button>
-                    ))}
-                </div>
-            )}
+            </Button>
+            {open && <ActionMenuList items={items} />}
         </div>
     );
 }
@@ -198,12 +208,11 @@ function RowActions({ user, target, state, isCurrentUser, isAdmin, isDisabled, o
     if (isAdmin) return <span className="text-xs text-dim px-3 py-1.5">Protected</span>;
     return (
         <>
-            <select aria-label={`Role for ${user.username}`} value={user.role} disabled={isDisabled}
-                onChange={(e) => onRoleChange(user.id, user.username, e.target.value as Exclude<UserRole, 'admin'>)}
-                className="text-sm bg-surface border border-edge rounded-lg px-3 py-1.5 text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors">
+            <Select fieldSize="sm" wrapperClassName="w-auto" aria-label={`Role for ${user.username}`} value={user.role} disabled={isDisabled}
+                onChange={(e) => onRoleChange(user.id, user.username, e.target.value as Exclude<UserRole, 'admin'>)}>
                 <option value="member">Member</option>
                 <option value="operator">Operator</option>
-            </select>
+            </Select>
             <UserActionMenu target={target} state={state} handlers={handlers} isCurrentUser={isCurrentUser} isPending={isBusy} />
         </>
     );
@@ -219,7 +228,7 @@ export function UserRow({ user, currentUserId, onRoleChange, handlers, isUpdatin
     return (
         <div className="flex items-center gap-3 py-2.5">
             <UserAvatar username={user.username} avatarUrl={av.url} />
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 min-w-0">
                 <span className="text-sm text-foreground truncate">{user.username}</span>
                 <RoleBadge role={user.role} />
                 <UserStatusBadge user={user} />

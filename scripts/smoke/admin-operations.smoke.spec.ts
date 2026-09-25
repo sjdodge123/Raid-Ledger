@@ -67,8 +67,13 @@ test.describe('Admin — Cron Jobs panel', () => {
         const jobCount = await jobHeadings.count();
         expect(jobCount).toBeGreaterThan(0);
 
-        // Filter buttons should be rendered — "All" pill is always present
-        await expect(page.getByRole('button', { name: /^All \(\d+\)$/ })).toBeVisible();
+        // Theme filter is a segmented radiogroup (ROK-1653 ruling 6) — the "All"
+        // segment is always present and checked by default. The native radio is
+        // sr-only, so visibility is asserted on its <label> (the painted segment).
+        await expect(page.getByRole('radiogroup', { name: 'Filter by theme' })).toBeVisible();
+        const allTheme = page.getByRole('radio', { name: /^All \(\d+\)$/ });
+        await expect(allTheme).toBeChecked();
+        await expect(allTheme.locator('xpath=..')).toBeVisible();
 
         // No error boundary
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);

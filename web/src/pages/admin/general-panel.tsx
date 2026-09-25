@@ -12,6 +12,8 @@ import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { BrandingSection } from '../../components/admin/BrandingSection';
 import { CommunityInsightsSection } from '../../components/admin/CommunityInsightsSection';
 import { SessionLengthForm } from '../../components/admin/SessionLengthForm';
+import { Button } from '../../components/ui/button';
+import { Select } from '../../components/ui/select';
 
 /**
  * General > Site Settings panel (ROK-359 consolidated).
@@ -62,8 +64,8 @@ export function GeneralPanel() {
 
 function TimezoneSelect({ timezone, isPending, onChange }: { timezone: string; isPending: boolean; onChange: (v: string) => void }) {
     return (
-        <select aria-label="Default timezone" value={timezone} onChange={(e) => onChange(e.target.value)} disabled={isPending}
-            className="w-full sm:max-w-md px-4 py-3 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors text-sm disabled:opacity-50">
+        <Select fieldSize="lg" aria-label="Default timezone" wrapperClassName="w-full sm:max-w-md"
+            value={timezone} onChange={(e) => onChange(e.target.value)} disabled={isPending}>
             <option value="">Not set (UTC fallback)</option>
             {TIMEZONE_GROUPS.map((group) => (
                 <optgroup key={group} label={group}>
@@ -72,7 +74,7 @@ function TimezoneSelect({ timezone, isPending, onChange }: { timezone: string; i
                     ))}
                 </optgroup>
             ))}
-        </select>
+        </Select>
     );
 }
 
@@ -111,13 +113,9 @@ function SetupWizardSection({ isPending, onRerun }: { isPending: boolean; onReru
                 Re-run the initial setup wizard to reconfigure your community name,
                 branding, plugins, and integrations.
             </p>
-            <button
-                onClick={onRerun}
-                disabled={isPending}
-                className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50"
-            >
-                {isPending ? 'Resetting...' : 'Re-run Setup Wizard'}
-            </button>
+            <Button variant="secondary" onClick={onRerun} loading={isPending} loadingLabel="Resetting…">
+                Re-run Setup Wizard
+            </Button>
         </div>
     );
 }

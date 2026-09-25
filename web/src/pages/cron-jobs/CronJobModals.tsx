@@ -1,6 +1,10 @@
 import type { JSX } from 'react';
 import { useState } from 'react';
 import type { CronJobDto, CronJobExecutionDto } from '@raid-ledger/contract';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { Button } from '../../components/ui/button';
+import { Field } from '../../components/ui/field';
+import { Select } from '../../components/ui/select';
 import { useCronJobs, useCronJobExecutions } from '../../hooks/use-cron-jobs';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { formatJobName, formatTimestamp, formatDuration, normalizeCron, getCronLabel, INTERVAL_PRESETS } from './cron-utils';
@@ -8,10 +12,10 @@ import { formatJobName, formatTimestamp, formatDuration, normalizeCron, getCronL
 /** Execution status badge */
 function ExecutionStatusBadge({ status }: { status: string }): JSX.Element {
     const styles: Record<string, string> = {
-        completed: 'text-green-400',
-        failed: 'text-red-400',
-        skipped: 'text-yellow-400',
-        degraded: 'text-amber-400',
+        completed: 'text-success',
+        failed: 'text-danger',
+        skipped: 'text-warning',
+        degraded: 'text-warning',
     };
     return <span className={`text-xs font-medium ${styles[status] || 'text-muted'}`}>{status}</span>;
 }
@@ -47,8 +51,16 @@ function ExecutionHistoryHeader({ job, onClose }: { job: CronJobDto; onClose: ()
                 <h3 className="text-lg font-semibold text-foreground">Execution History</h3>
                 <p className="text-sm text-muted mt-0.5">{job.description || job.name}</p>
             </div>
-            <button type="button" aria-label="Close" onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">&#10005;</button>
+            <CloseButton onClose={onClose} />
         </div>
+    );
+}
+
+function CloseButton({ onClose }: { onClose: () => void }): JSX.Element {
+    return (
+        <Button variant="ghost" size="sm" iconOnly aria-label="Close" onClick={onClose}>
+            <XMarkIcon className="w-5 h-5" />
+        </Button>
     );
 }
 
@@ -86,7 +98,7 @@ function ExecutionTable({ executions, tz }: { executions: CronJobExecutionDto[];
                         </td>
                         <td className="py-2 pr-4 text-muted">{formatTimestamp(exec.startedAt, tz)}</td>
                         <td className="py-2 pr-4 text-muted">{formatDuration(exec.durationMs)}</td>
-                        <td className="py-2 text-red-400 text-xs truncate max-w-[200px]" title={exec.error || ''}>
+                        <td className="py-2 text-danger text-xs truncate max-w-[200px]" title={exec.error || ''}>
                             {exec.error || '\u2014'}
                         </td>
                     </tr>
@@ -145,9 +157,7 @@ function EditScheduleHeader({ job, onClose }: { job: CronJobDto; onClose: () => 
                 <p className="text-xs font-medium text-muted uppercase tracking-wide">Edit Schedule</p>
                 <h3 className="text-lg font-semibold text-foreground">{formatJobName(job.name)}</h3>
             </div>
-            <button onClick={onClose} aria-label="Close" className="text-muted hover:text-foreground transition-colors text-xl">
-                &#10005;
-            </button>
+            <CloseButton onClose={onClose} />
         </div>
     );
 }
@@ -194,21 +204,19 @@ function IntervalSelector({ selectedExpression, onExpressionChange, isCustomExpr
     isCustomExpression: boolean; jobExpression: string;
 }): JSX.Element {
     return (
-        <div>
-            <label className="block text-sm font-medium text-foreground mb-2">Interval</label>
-            <select value={selectedExpression} onChange={(e) => onExpressionChange(e.target.value)}
-                className="w-full px-3 py-2 bg-surface border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-success/80 focus:border-transparent">
+        <Field label="Interval">
+            <Select value={selectedExpression} onChange={(e) => onExpressionChange(e.target.value)}>
                 {isCustomExpression && <option value={jobExpression}>{getCronLabel(jobExpression)}</option>}
                 {INTERVAL_PRESETS.map((preset) => (<option key={preset.value} value={preset.value}>{preset.label}</option>))}
-            </select>
-        </div>
+            </Select>
+        </Field>
     );
 }
 
 function ScheduleRevertWarning(): JSX.Element {
     return (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-            <p className="text-xs text-yellow-400">
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+            <p className="text-xs text-warning">
                 Schedule changes take effect immediately but will revert to the original @Cron decorator schedule on application restart.
             </p>
         </div>
@@ -220,12 +228,10 @@ function ScheduleActions({ onClose, onSave, isSaving, disabled }: {
 }): JSX.Element {
     return (
         <div className="flex justify-end gap-3">
-            <button onClick={onClose}
-                className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors">Cancel</button>
-            <button onClick={onSave} disabled={isSaving || disabled}
-                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition-colors disabled:opacity-50">
-                {isSaving ? 'Saving...' : 'Save'}
-            </button>
+            <Button variant="secondary" onClick={onClose}>Cancel</Button>
+            <Button variant="primary" onClick={onSave} loading={isSaving} loadingLabel="Saving…" disabled={disabled}>
+                Save
+            </Button>
         </div>
     );
 }
