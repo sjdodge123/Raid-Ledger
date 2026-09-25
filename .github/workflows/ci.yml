@@ -362,7 +362,7 @@ jobs:
     # shards, which died on their 51st file with "JavaScript heap out of
     # memory". ~39 files per shard restores the headroom without touching the
     # heap size or the leak itself.
-    timeout-minutes: 25
+    timeout-minutes: 50
     needs: [detect-changes, lint]
     if: >-
       github.event_name == 'push' ||
@@ -421,6 +421,9 @@ jobs:
       JWT_SECRET: ci-test-secret
       CLIENT_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
+      # ROK-1527 measurement-only throwaway: per-file heap retention probe.
+      RL_HEAP_PROBE: '1'
+      RL_HEAP_PROBE_SNAP_AT: '3'
 
     steps:
       # ROK-1144: backup.integration.spec.ts shells out to pg_dump/pg_restore.
@@ -484,6 +487,16 @@ jobs:
 
       - name: Run integration tests (shard ${{ matrix.shard }}, run ${{ matrix.run }})
         run: npm run test:integration -w api -- --shard=${{ matrix.shard }} --randomize
+
+      - name: ROK-1527 heap probe summary + retainer chain
+        if: always()
+        run: |
+          grep -h '\[rl-heap-probe\]' /tmp/rl-heap-probe/probe-*.log 2>/dev/null | sed 's/^/[rl-sum] /' || echo "[rl-sum] no probe log"
+          for f in /tmp/rl-heap-probe/*.heapsnapshot; do
+            [ -f "$f" ] || continue
+            echo "[rl-chain] snapshot $f $(du -m "$f" | cut -f1) MB"
+            SKIP_EDGES=cppgc_wrapper_list AUTO_DUMP=5 node --max-old-space-size=12000 scripts/heap-retainer-path.cjs "$f" 2>&1 | sed 's/^/[rl-chain] /' || echo "[rl-chain] analyzer failed"
+          done
 
   integration-tests:
     runs-on: ubuntu-latest
