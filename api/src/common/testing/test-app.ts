@@ -42,7 +42,7 @@ import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
 import {
-  SHARED_TEST_DB_URL_ENV,
+  ownedSharedTestDbUrl,
   startTestPostgres,
 } from './test-postgres-container';
 import {
@@ -115,11 +115,11 @@ function setInstance(app: TestApp | null): void {
  */
 /**
  * Provision a PostgreSQL connection:
- *   1. CI (`CI=true` + `DATABASE_URL`) — the workflow's service container.
- *   2. Off-CI under jest.integration.config.js — the ONE container the jest
- *      `globalSetup` started in the outer realm (ROK-1527: a container started
- *      in here pins this file's sandbox realm via Testcontainers' log stream
- *      and Ryuk socket).
+ *   1. Off-CI under jest.integration.config.js — the ONE container the jest
+ *      `globalSetup` started in the outer realm, trusted only with its owner
+ *      marker (ROK-1527: a container started in here pins this file's sandbox
+ *      realm via Testcontainers' log stream and Ryuk socket).
+ *   2. CI (`CI=true` + `DATABASE_URL`) — the workflow's service container.
  *   3. Fallback when neither is set (a spec run under some other jest config,
  *      e.g. an IDE runner that skips globalSetup) — a per-file container, as
  *      before. Kept so such runs still work; its leak only matters across a
@@ -132,11 +132,13 @@ async function provisionDatabase(): Promise<{
   connectionString: string;
   container: StartedPostgreSqlContainer | null;
 }> {
+  // Setup-owned URI first: with it present, a local `CI=true` run can't fall
+  // through to an `api/.env` DATABASE_URL that points at the live DB.
+  const shared = ownedSharedTestDbUrl();
+  if (shared) return { connectionString: shared, container: null };
   if (process.env.CI === 'true' && process.env.DATABASE_URL) {
     return { connectionString: process.env.DATABASE_URL, container: null };
   }
-  const shared = process.env[SHARED_TEST_DB_URL_ENV];
-  if (shared) return { connectionString: shared, container: null };
   const container = await startTestPostgres();
   return { connectionString: container.getConnectionUri(), container };
 }

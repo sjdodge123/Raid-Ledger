@@ -17,6 +17,8 @@
  */
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import {
+  SHARED_TEST_DB_OWNER,
+  SHARED_TEST_DB_OWNER_ENV,
   SHARED_TEST_DB_URL_ENV,
   startTestPostgres,
 } from './test-postgres-container';
@@ -24,14 +26,17 @@ import {
 /** globalSetup and globalTeardown share the outer realm's globalThis. */
 export const CONTAINER_KEY = '__rl_integration_pg_container';
 
-type GlobalWithContainer = typeof globalThis & {
+export type GlobalWithContainer = typeof globalThis & {
   [CONTAINER_KEY]?: StartedPostgreSqlContainer;
 };
 
 export default async function integrationGlobalSetup(): Promise<void> {
+  // Never inherit a shared URL: only one this setup creates is trusted.
+  delete process.env[SHARED_TEST_DB_URL_ENV];
+  delete process.env[SHARED_TEST_DB_OWNER_ENV];
   if (process.env.CI === 'true' && process.env.DATABASE_URL) return;
-  if (process.env[SHARED_TEST_DB_URL_ENV]) return;
   const container = await startTestPostgres();
   (globalThis as GlobalWithContainer)[CONTAINER_KEY] = container;
   process.env[SHARED_TEST_DB_URL_ENV] = container.getConnectionUri();
+  process.env[SHARED_TEST_DB_OWNER_ENV] = SHARED_TEST_DB_OWNER;
 }

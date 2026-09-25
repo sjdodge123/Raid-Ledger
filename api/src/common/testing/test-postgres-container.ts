@@ -23,6 +23,20 @@ import {
  */
 export const SHARED_TEST_DB_URL_ENV = 'RL_INTEGRATION_DB_URL';
 
+/**
+ * Set ONLY by `integration-global-setup.ts`, alongside the URL. A shared URL
+ * without this marker (a shell export, an `api/.env` line) is never trusted —
+ * the suite truncates whatever database it is pointed at.
+ */
+export const SHARED_TEST_DB_OWNER_ENV = 'RL_INTEGRATION_DB_OWNER';
+export const SHARED_TEST_DB_OWNER = 'jest-global-setup';
+
+/** The shared URL, but only when this process's globalSetup created it. */
+export function ownedSharedTestDbUrl(): string | undefined {
+  if (process.env[SHARED_TEST_DB_OWNER_ENV] !== SHARED_TEST_DB_OWNER) return undefined;
+  return process.env[SHARED_TEST_DB_URL_ENV] || undefined;
+}
+
 export function startTestPostgres(): Promise<StartedPostgreSqlContainer> {
   return new PostgreSqlContainer('pgvector/pgvector:pg16')
     .withDatabase('raid_ledger_test')
