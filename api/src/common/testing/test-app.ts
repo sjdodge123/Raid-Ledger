@@ -6,9 +6,10 @@
  * reused across all integration test suites for performance.
  *
  * Dual-mode:
- *   - Local dev: Testcontainers spins up a fresh `pgvector/pgvector:pg16`
- *     container (same image as prod / CI / `raid-ledger-db`). Ephemeral —
- *     dies with the suite, never touches the operator's live local DB.
+ *   - Local dev / fleet: the jest `globalSetup` (integration-global-setup.ts)
+ *     starts ONE `pgvector/pgvector:pg16` Testcontainer per jest process
+ *     (same image as prod / CI / `raid-ledger-db`). Ephemeral — dies with the
+ *     suite, never touches the operator's live local DB. ROK-1527.
  *   - CI: Honors `DATABASE_URL` only when `CI=true` (GitHub Actions sets
  *     this) so the service container is reused. Locally, `DATABASE_URL`
  *     pointing at the live `raid-ledger-db` is IGNORED — otherwise
@@ -24,10 +25,7 @@
 import { Test } from '@nestjs/testing';
 import { type INestApplication } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
-import {
-  PostgreSqlContainer,
-  type StartedPostgreSqlContainer,
-} from '@testcontainers/postgresql';
+import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
@@ -43,6 +41,10 @@ import { closeTestSharedRedis } from '../../queue/queue.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 import { createRedisMock, type RedisMockHandle } from './redis-mock';
+import {
+  ownedSharedTestDbUrl,
+  startTestPostgres,
+} from './test-postgres-container';
 import {
   destroySocketsOnPort,
   extractPortFromConnectionString,
@@ -111,36 +113,33 @@ function setInstance(app: TestApp | null): void {
  * existing service in CI), runs migrations, and boots NestJS.
  * Subsequent calls return the cached instance.
  */
-/** Provision a PostgreSQL connection (Testcontainers locally, env var in CI). */
+/**
+ * Provision a PostgreSQL connection:
+ *   1. Off-CI under jest.integration.config.js — the ONE container the jest
+ *      `globalSetup` started in the outer realm, trusted only with its owner
+ *      marker (ROK-1527: a container started in here pins this file's sandbox
+ *      realm via Testcontainers' log stream and Ryuk socket).
+ *   2. CI (`CI=true` + `DATABASE_URL`) — the workflow's service container.
+ *   3. Fallback when neither is set (a spec run under some other jest config,
+ *      e.g. an IDE runner that skips globalSetup) — a per-file container, as
+ *      before. Kept so such runs still work; its leak only matters across a
+ *      whole suite, which always goes through (2).
+ * Never the bare `DATABASE_URL` off-CI: it points at the operator's live
+ * `raid-ledger-db` and truncateAllTables would erase app_settings /
+ * local_credentials / etc. See file-level comment + fix/batch-2026-05-14 audit.
+ */
 async function provisionDatabase(): Promise<{
   connectionString: string;
   container: StartedPostgreSqlContainer | null;
 }> {
-  // Honor DATABASE_URL ONLY in CI. Locally this env var points at the
-  // operator's live `raid-ledger-db` and truncateAllTables would erase
-  // app_settings / local_credentials / etc., breaking the clone-prod-to-local
-  // recovery flow. See file-level comment + fix/batch-2026-05-14 audit.
+  // Setup-owned URI first: with it present, a local `CI=true` run can't fall
+  // through to an `api/.env` DATABASE_URL that points at the live DB.
+  const shared = ownedSharedTestDbUrl();
+  if (shared) return { connectionString: shared, container: null };
   if (process.env.CI === 'true' && process.env.DATABASE_URL) {
     return { connectionString: process.env.DATABASE_URL, container: null };
   }
-  // Preload pg_stat_statements so the ROK-1333 + ROK-1156 regression
-  // specs can exercise the EXECUTE-grant path instead of self-skipping
-  // via isPgStatStatementsAvailable. The extension is preloaded in prod
-  // (Dockerfile.allinone:226) and the test container must mirror that
-  // shape to be a true regression guard.
-  const container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
-    .withDatabase('raid_ledger_test')
-    .withUsername('test')
-    .withPassword('test')
-    .withCommand([
-      'postgres',
-      '-c',
-      'shared_preload_libraries=pg_stat_statements',
-      '-c',
-      'pg_stat_statements.track=all',
-    ])
-    .withStartupTimeout(60_000)
-    .start();
+  const container = await startTestPostgres();
   return { connectionString: container.getConnectionUri(), container };
 }
 

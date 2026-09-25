@@ -148,3 +148,5 @@ build-state.yaml
 
 # ROK-1160: the drill report artefact is produced per run, never committed.
 restore-drill-report.json
+# ROK-1527: flag file that switches the opt-in integration heap probe on
+api/.rl-heap-probe

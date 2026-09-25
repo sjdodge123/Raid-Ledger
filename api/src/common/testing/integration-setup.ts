@@ -21,6 +21,10 @@ import { closeTestApp, getTestApp } from './test-app';
 import { truncateAllTables } from './integration-helpers';
 import { dumpFailureSnapshot } from './dump-failure-snapshot';
 import { listSocketHandles } from './socket-handle-audit';
+import { heapProbeAfterFile } from './heap-probe';
+
+// ROK-1527: app handle for the opt-in heap probe (no-op when disabled).
+let probedApp: object | null = null;
 
 // ROK-1250: empirical margin above the steady-state TCP-socket count after
 // closeTestApp(). Set to 5 because the audit filters by `remotePort` set
@@ -74,6 +78,7 @@ if (process.env.CI !== 'true') {
 // pair) without requiring per-spec edits across the integration suite.
 beforeAll(async () => {
   const testApp = await getTestApp();
+  probedApp = testApp.app;
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
@@ -108,4 +113,7 @@ afterAll(async () => {
       );
     }
   }
+  const app = probedApp;
+  probedApp = null;
+  await heapProbeAfterFile(app);
 });
