@@ -5,53 +5,58 @@
  *   with the note revealed on its own row underneath.
  * `AwaySubmit` is exported on its own so the phone drawer can pin it in its footer.
  */
-import { useId, type JSX, type ReactNode } from 'react';
-import { ANSWER_PRIMARY } from '../game-time-check-copy';
+import type { JSX, ReactNode } from 'react';
+import { Button } from '../../../ui/button';
+import { Field } from '../../../ui/field';
+import { Input } from '../../../ui/input';
 import { activePick } from './away-panel.helpers';
 import { AwayRangeChips } from './AwayRangeChips';
 import type { AbsenceSectionCtl } from './use-absence-section';
 
-const INPUT_CLS = 'min-h-[44px] w-full min-w-0 rounded-lg border border-edge-strong bg-surface px-3 text-base lg:text-sm text-foreground focus:border-transparent focus:outline-none focus:ring-2 focus:ring-success/80';
 const LABEL_CLS = 'text-xs font-medium text-muted';
-const SUBMIT_CLS = ANSWER_PRIMARY.replace('text-left', 'text-center');
+/** Matches the primitive Field label so the inline add line reads as one row of captions. */
+const CAPTION_CLS = 'mb-1.5 text-sm font-medium text-secondary';
 
 function submitLabel(ctl: AbsenceSectionCtl): string {
     if (ctl.isPending) return 'Adding…';
     return ctl.canSubmit ? `Add absence · ${ctl.spanText}` : 'Add absence';
 }
 
-/** The one primary: "Add absence" (disabled) / "Add absence · N days" / "Adding…". */
-export function AwaySubmit({ ctl, className = '' }: { ctl: AbsenceSectionCtl; className?: string }): JSX.Element {
+/**
+ * The one primary: "Add absence" (disabled) / "Add absence · N days" / "Adding…".
+ * Native `disabled`, not `loading`: the smoke asserts `toBeDisabled` while the range is invalid.
+ */
+export function AwaySubmit({ ctl, className }: { ctl: AbsenceSectionCtl; className?: string }): JSX.Element {
     return (
-        <button
-            type="button" data-testid="absence-submit" disabled={!ctl.canSubmit}
-            onClick={() => { void ctl.submit(); }} className={`${SUBMIT_CLS} ${className}`}
+        <Button
+            fullWidth data-testid="absence-submit" disabled={!ctl.canSubmit}
+            onClick={() => { void ctl.submit(); }} className={className}
         >
             {submitLabel(ctl)}
-        </button>
+        </Button>
     );
 }
 
-function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: ReactNode }): JSX.Element {
+/** A caption over the range chips — a group, not one control, so it is not a `<label>`. */
+function Captioned({ caption, children }: { caption: string; children: ReactNode }): JSX.Element {
     return (
-        <div className="flex min-w-0 flex-col gap-1">
-            {htmlFor ? <label htmlFor={htmlFor} className={LABEL_CLS}>{label}</label> : <span className={LABEL_CLS}>{label}</span>}
+        <div className="flex min-w-0 flex-col">
+            <span className={CAPTION_CLS}>{caption}</span>
             {children}
         </div>
     );
 }
 
 function DateFields({ ctl }: { ctl: AbsenceSectionCtl }): JSX.Element {
-    const id = useId();
     const { startDate, endDate } = ctl.form;
     return (
         <>
-            <Field label="From" htmlFor={`${id}-from`}>
-                <input id={`${id}-from`} type="date" data-testid="away-from" className={INPUT_CLS}
+            <Field label="From" className="min-w-0">
+                <Input type="date" data-testid="away-from" className="min-w-0"
                     value={startDate} onChange={(e) => ctl.patch({ startDate: e.target.value })} />
             </Field>
-            <Field label="To" htmlFor={`${id}-to`}>
-                <input id={`${id}-to`} type="date" data-testid="away-to" className={INPUT_CLS}
+            <Field label="To" className="min-w-0">
+                <Input type="date" data-testid="away-to" className="min-w-0"
                     value={endDate} min={startDate || undefined}
                     onChange={(e) => ctl.patch({ endDate: e.target.value })} />
             </Field>
@@ -61,22 +66,21 @@ function DateFields({ ctl }: { ctl: AbsenceSectionCtl }): JSX.Element {
 
 function NoteToggle({ ctl }: { ctl: AbsenceSectionCtl }): JSX.Element {
     return (
-        <button
-            type="button" data-testid="away-note-toggle" aria-expanded={ctl.form.noteOpen}
-            onClick={() => ctl.patch({ noteOpen: !ctl.form.noteOpen })}
-            className="min-h-[44px] self-start whitespace-nowrap text-sm font-medium text-emerald-400 hover:underline"
+        <Button
+            variant="ghost" size="sm" data-testid="away-note-toggle" aria-expanded={ctl.form.noteOpen}
+            onClick={() => ctl.patch({ noteOpen: !ctl.form.noteOpen })} className="self-start whitespace-nowrap"
         >
             + Add a note
-        </button>
+        </Button>
     );
 }
 
 function NoteInput({ ctl }: { ctl: AbsenceSectionCtl }): JSX.Element | null {
     if (!ctl.form.noteOpen) return null;
     return (
-        <input
-            type="text" data-testid="away-note" aria-label="Note" maxLength={255}
-            placeholder="Optional, e.g. Lake trip" className={`${INPUT_CLS} placeholder-dim`}
+        <Input
+            type="text" aria-label="Note" data-testid="away-note" maxLength={255}
+            placeholder="Optional, e.g. Lake trip"
             value={ctl.form.reason} onChange={(e) => ctl.patch({ reason: e.target.value })}
         />
     );
@@ -102,9 +106,9 @@ function InlineForm({ ctl, hideSubmit }: { ctl: AbsenceSectionCtl; hideSubmit: b
     return (
         <div className="flex flex-col gap-2.5">
             <div data-testid="away-add-line" className="grid items-end gap-2.5 lg:grid-cols-[auto_1fr_1fr_auto_auto]">
-                <Field label="Quick range">
+                <Captioned caption="Quick range">
                     <AwayRangeChips active={activePick(ctl.form.startDate, ctl.form.endDate, ctl.today)} onPick={ctl.pick} />
-                </Field>
+                </Captioned>
                 <DateFields ctl={ctl} />
                 <NoteToggle ctl={ctl} />
                 {!hideSubmit && <AwaySubmit ctl={ctl} className="whitespace-nowrap lg:w-auto" />}

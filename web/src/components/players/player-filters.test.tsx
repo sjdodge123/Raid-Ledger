@@ -98,3 +98,41 @@ describe('PlayerFilters — role dropdown', () => {
         expect(setFilter).toHaveBeenCalledWith('role', 'admin');
     });
 });
+
+describe('PlayerFilters — game-dependent filters (ROK-1651 AC1)', () => {
+    const HINT = 'Select a game first';
+
+    function describedByText(el: HTMLElement): string {
+        const ids = (el.getAttribute('aria-describedby') ?? '').split(' ').filter(Boolean);
+        return ids.map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+    }
+
+    it('disables Play history and Min hours with a visible "Select a game first" hint when no game is set', () => {
+        renderFilters();
+        const history = screen.getByRole('combobox', { name: 'Play history' });
+        const minHours = screen.getByRole('spinbutton', { name: 'Min hours' });
+        expect(history).toBeDisabled();
+        expect(minHours).toBeDisabled();
+        expect(screen.getAllByText(HINT)).toHaveLength(2);
+        expect(describedByText(history)).toBe(HINT);
+        expect(describedByText(minHours)).toBe(HINT);
+    });
+
+    it('enables Play history and Min hours with no hint once a game is set', () => {
+        renderFilters({ gameId: 1 });
+        expect(screen.getByRole('combobox', { name: 'Play history' })).toBeEnabled();
+        expect(screen.getByRole('spinbutton', { name: 'Min hours' })).toBeEnabled();
+        expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it('Min hours is a numeric input that converts typed hours to minutes', async () => {
+        const user = userEvent.setup();
+        const setFilter = vi.fn();
+        renderFilters({ gameId: 1 }, setFilter);
+        const minHours = screen.getByRole('spinbutton', { name: 'Min hours' });
+        expect(minHours).toHaveAttribute('type', 'number');
+        expect(minHours).toHaveAttribute('inputmode', 'numeric');
+        await user.type(minHours, '3');
+        expect(setFilter).toHaveBeenCalledWith('playtimeMin', 180);
+    });
+});

@@ -3,7 +3,7 @@
  * Covers UI states from the spec: open, loading, success, error.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { AbortLineupModal } from './AbortLineupModal';
@@ -131,14 +131,20 @@ describe('AbortLineupModal', () => {
         );
     });
 
-    it('disables confirm while mutation is pending', () => {
-        mockMutation({ isPending: true });
+    // Ruling 7 (ROK-1651): the loading Button is aria-disabled + aria-busy and
+    // swallows the click instead of native `disabled` — equivalent strength.
+    it('disables confirm while mutation is pending', async () => {
+        const user = userEvent.setup();
+        const mutation = mockMutation({ isPending: true });
         renderWithProviders(
             <AbortLineupModal lineupId={1} onClose={vi.fn()} />,
         );
 
         const confirm = screen.getByRole('button', { name: /Aborting/i });
-        expect(confirm).toBeDisabled();
+        expect(confirm).toHaveAttribute('aria-disabled', 'true');
+        expect(confirm).toHaveAttribute('aria-busy', 'true');
+        await user.click(confirm);
+        expect(mutation.mutateAsync).not.toHaveBeenCalled();
     });
 
     it('on success: shows toast, closes modal, mutation resolved', async () => {
@@ -189,5 +195,78 @@ describe('AbortLineupModal', () => {
         await user.click(screen.getByRole('button', { name: /^Cancel$/ }));
         expect(onClose).toHaveBeenCalledTimes(1);
         expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    });
+});
+
+const discardConfirm = () =>
+    screen.queryByRole('dialog', { name: 'Discard your changes?' });
+
+function renderModal(): ReturnType<typeof vi.fn> {
+    const onClose = vi.fn();
+    renderWithProviders(<AbortLineupModal lineupId={1} onClose={onClose} />);
+    return onClose;
+}
+
+function renderClean(): ReturnType<typeof vi.fn> {
+    mockMutation();
+    return renderModal();
+}
+
+describe('AbortLineupModal — dirty close (ROK-1655)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('asks before Escape discards a typed reason', async () => {
+        const user = userEvent.setup();
+        const onClose = renderClean();
+
+        await user.type(screen.getByRole('textbox'), 'wrong scope');
+        await user.keyboard('{Escape}');
+        expect(discardConfirm()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('guards the explicit Cancel too: confirm, then Discard closes', async () => {
+        const user = userEvent.setup();
+        const mutation = mockMutation();
+        const onClose = renderModal();
+
+        await user.type(screen.getByRole('textbox'), 'wrong scope');
+        await user.click(screen.getByRole('button', { name: /^Cancel$/ }));
+        expect(discardConfirm()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+
+        await user.click(screen.getByRole('button', { name: 'Discard' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(mutation.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('closes at once on Escape when the reason is whitespace only', async () => {
+        const user = userEvent.setup();
+        const onClose = renderClean();
+
+        await user.type(screen.getByRole('textbox'), '   ');
+        await user.keyboard('{Escape}');
+        expect(discardConfirm()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('a successful abort with a typed reason closes without the confirm', async () => {
+        const user = userEvent.setup();
+        const onClose = renderClean();
+
+        await user.type(screen.getByRole('textbox'), 'wrong scope');
+        await user.click(screen.getByRole('button', { name: /Abort Lineup/i }));
+        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        expect(discardConfirm()).not.toBeInTheDocument();
+    });
+
+    it('pins Cancel and the confirm in the modal footer', () => {
+        renderClean();
+
+        const footer = screen.getByTestId('modal-footer');
+        expect(within(footer).getByRole('button', { name: /^Cancel$/ })).toBeInTheDocument();
+        expect(within(footer).getByRole('button', { name: /Abort Lineup/i })).toBeInTheDocument();
     });
 });

@@ -2,11 +2,12 @@
  * Game nomination modal for Community Lineup (ROK-935).
  * Provides game search, preview with art, and optional note input.
  */
-import { type JSX, useState, useCallback, useEffect, useRef } from 'react';
+import { type JSX, useEffect, useRef } from 'react';
 import { Modal } from '../ui/modal';
+import { Button } from '../ui/button';
 import { SearchInput } from '../ui/search-input';
 import { useGameSearch } from '../../hooks/use-game-search';
-import { useNominateGame } from '../../hooks/use-lineups';
+import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { extractSteamAppId } from '../../hooks/use-steam-paste';
 import { getGameBySteamAppId } from '../../lib/api-client';
 import { toast } from '../../lib/toast';
@@ -14,12 +15,9 @@ import { PersonalSuggestionsRow } from './PersonalSuggestionsRow';
 import { CoopFitHints } from './CoopFitHints';
 import type { CoopCapacityFields } from './coop-fit';
 import { coverSrcSetProps } from '../../lib/igdb-image';
+import { useNominateDraft, type SelectedGame } from './use-nominate-draft';
 
-export interface SelectedGame {
-    id: number;
-    name: string;
-    coverUrl: string | null;
-}
+export type { SelectedGame } from './use-nominate-draft';
 
 interface NominateModalProps {
     isOpen: boolean;
@@ -93,28 +91,30 @@ function SearchResults({ results, onSelect, participantCount }: {
     );
 }
 
+/** Selected game's cover art, or a "No art" placeholder. */
+function PreviewCover({ game }: { game: SelectedGame }): JSX.Element {
+    if (!game.coverUrl) {
+        return <div className="w-24 h-32 bg-panel rounded-lg flex items-center justify-center text-dim">No art</div>;
+    }
+    return (
+        <img src={game.coverUrl} alt={game.name} className="w-24 h-32 object-cover rounded-lg"
+            width={96} height={128} loading="lazy" decoding="async"
+            {...coverSrcSetProps(game.coverUrl, '96px')} />
+    );
+}
+
 /** Preview card after a game is selected. */
-function PreviewCard({ game, note, onNoteChange, onSubmit, onBack, isPending }: {
+function PreviewCard({ game, note, onNoteChange, onBack }: {
     game: SelectedGame;
     note: string;
     onNoteChange: (v: string) => void;
-    onSubmit: () => void;
     onBack: () => void;
-    isPending: boolean;
 }): JSX.Element {
     return (
         <div className="space-y-4">
-            <button type="button" onClick={onBack} className="text-sm text-muted hover:text-foreground transition-colors">
-                &larr; Back to search
-            </button>
+            <Button variant="ghost" size="sm" onClick={onBack}>&larr; Back to search</Button>
             <div className="flex gap-4 items-start">
-                {game.coverUrl ? (
-                    <img src={game.coverUrl} alt={game.name} className="w-24 h-32 object-cover rounded-lg"
-                        width={96} height={128} loading="lazy" decoding="async"
-                        {...coverSrcSetProps(game.coverUrl, '96px')} />
-                ) : (
-                    <div className="w-24 h-32 bg-panel rounded-lg flex items-center justify-center text-dim">No art</div>
-                )}
+                <PreviewCover game={game} />
                 <div className="flex-1 min-w-0">
                     <h3 className="text-base font-semibold text-foreground mb-2">{game.name}</h3>
                     <textarea
@@ -129,16 +129,23 @@ function PreviewCard({ game, note, onNoteChange, onSubmit, onBack, isPending }: 
                     <span className="text-[10px] text-dim">{note.length}/200</span>
                 </div>
             </div>
-            <button
-                type="button"
-                onClick={onSubmit}
-                disabled={isPending}
-                className="w-full px-4 py-2.5 text-sm font-medium bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 transition-colors disabled:opacity-50"
-            >
-                {isPending ? 'Submitting...' : 'Submit Nomination'}
-            </button>
         </div>
     );
+}
+
+/** Pinned footer submit (ROK-1655): a loading Button keeps its name and swallows clicks (ruling 7). */
+function NominateFooter({ onSubmit, isPending }: { onSubmit: () => void; isPending: boolean }): JSX.Element {
+    return <Button fullWidth loading={isPending} onClick={onSubmit}>Submit Nomination</Button>;
+}
+
+/** Resolve one Steam appId to a library game; toast when it is not in the library. */
+async function resolveSteamApp(appId: number, onResolved: (game: SelectedGame) => void): Promise<void> {
+    try {
+        const game = await getGameBySteamAppId(appId);
+        onResolved({ id: game.id, name: game.name, coverUrl: game.coverUrl ?? null });
+    } catch {
+        toast.error('Game not found in library');
+    }
 }
 
 /**
@@ -166,109 +173,68 @@ function useSteamUrlAutoResolve(
         if (inFlightRef.current) return;
         lastTriedRef.current = appId;
         inFlightRef.current = true;
-        (async () => {
-            try {
-                const game = await getGameBySteamAppId(appId);
-                onResolved({
-                    id: game.id,
-                    name: game.name,
-                    coverUrl: game.coverUrl ?? null,
-                });
-            } catch {
-                toast.error('Game not found in library');
-            } finally {
-                inFlightRef.current = false;
-            }
-        })();
+        void resolveSteamApp(appId, onResolved).finally(() => { inFlightRef.current = false; });
     }, [query, isOpen, onResolved]);
 }
 
-/** Game nomination modal with search and preview. */
-export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, participantCount }: NominateModalProps): JSX.Element {
-    const [query, setQuery] = useState('');
-    const [selected, setSelected] = useState<SelectedGame | null>(null);
-    const [note, setNote] = useState('');
-    const isSteamUrl = extractSteamAppId(query) !== null;
+/** Search state: query input, results, empty/loading copy and personal suggestions. */
+function SearchPane({ query, onQueryChange, isOpen, lineupId, participantCount, onSelect }: {
+    query: string;
+    onQueryChange: (v: string) => void;
+    isOpen: boolean;
+    lineupId: number;
+    participantCount?: number;
+    onSelect: (g: SelectedGame) => void;
+}): JSX.Element {
     // When a Steam URL is in the input we don't want to run the name
     // search — it just wastes a request and renders "No games found".
-    const { data: searchData, isLoading: searchLoading } = useGameSearch(
-        isSteamUrl ? '' : query,
-        isOpen,
+    const isSteamUrl = extractSteamAppId(query) !== null;
+    const { data: searchData, isLoading: searchLoading } = useGameSearch(isSteamUrl ? '' : query, isOpen);
+    const results = searchData?.data ?? [];
+    return (
+        <>
+            <GameQueryInput value={query} onChange={onQueryChange} />
+            {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
+            {results.length > 0 && (
+                <SearchResults results={results} onSelect={onSelect} participantCount={participantCount} />
+            )}
+            {query.length >= 2 && !searchLoading && results.length === 0 && (
+                <p className="text-sm text-muted py-4 text-center">No games found</p>
+            )}
+            <PersonalSuggestionsRow
+                lineupId={lineupId}
+                onPickSuggestion={(s) => onSelect({ id: s.gameId, name: s.name, coverUrl: s.coverUrl })}
+            />
+        </>
     );
-    const nominate = useNominateGame();
+}
+
+/**
+ * Game nomination modal with search and preview. Esc, the backdrop and × ask
+ * before discarding a selected game or a note (ROK-1655, `use-nominate-draft`).
+ */
+export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, participantCount }: NominateModalProps): JSX.Element {
+    const draft = useNominateDraft({ isOpen, onClose, lineupId, preSelectedGame });
+    const closeGuard = useDirtyCloseGuard(draft.isDirty, draft.handleClose);
     // Resolve any Steam store URL pasted into the search input. The
     // page-level paste detector skips the modal (its global listener
     // bails when an input is focused), so the modal owns this flow.
-    useSteamUrlAutoResolve(query, isOpen, (game) => {
-        setSelected(game);
-        setQuery('');
+    useSteamUrlAutoResolve(draft.query, isOpen, (game) => {
+        draft.setSelected(game);
+        draft.setQuery('');
     });
-
-    // Sync pre-selected game when modal opens with one (ROK-945)
-    const [appliedPreSelect, setAppliedPreSelect] = useState<SelectedGame | null>(null);
-    if (isOpen && preSelectedGame && preSelectedGame !== appliedPreSelect) {
-        setAppliedPreSelect(preSelectedGame);
-        setSelected(preSelectedGame);
-    }
-    if (!isOpen && appliedPreSelect) setAppliedPreSelect(null);
-
-    const handleSelect = useCallback((game: SelectedGame) => {
-        setSelected(game);
-    }, []);
-
-    const handleBack = useCallback(() => {
-        setSelected(null);
-        setNote('');
-    }, []);
-
-    const handleSubmit = useCallback(() => {
-        if (!selected) return;
-        const body = note.trim() ? { gameId: selected.id, note: note.trim() } : { gameId: selected.id };
-        nominate.mutate(
-            { lineupId, body },
-            { onSuccess: () => { setSelected(null); setNote(''); setQuery(''); onClose(); } },
-        );
-    }, [selected, note, lineupId, nominate, onClose]);
-
-    const handleClose = useCallback(() => {
-        setSelected(null);
-        setNote('');
-        setQuery('');
-        onClose();
-    }, [onClose]);
-
-    const results = searchData?.data ?? [];
+    const footer = draft.selected
+        ? <NominateFooter onSubmit={draft.handleSubmit} isPending={draft.isPending} />
+        : undefined;
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Nominate a Game" maxWidth="max-w-4xl">
-            {selected ? (
-                <PreviewCard
-                    game={selected}
-                    note={note}
-                    onNoteChange={setNote}
-                    onSubmit={handleSubmit}
-                    onBack={handleBack}
-                    isPending={nominate.isPending}
-                />
+        <Modal isOpen={isOpen} onClose={draft.handleClose} closeGuard={closeGuard}
+            title="Nominate a Game" maxWidth="max-w-4xl" footer={footer}>
+            {draft.selected ? (
+                <PreviewCard game={draft.selected} note={draft.note} onNoteChange={draft.setNote} onBack={draft.handleBack} />
             ) : (
-                <>
-                    <GameQueryInput value={query} onChange={setQuery} />
-                    {searchLoading && <p className="text-sm text-muted py-4 text-center">Searching...</p>}
-                    {results.length > 0 && (
-                        <SearchResults
-                            results={results}
-                            onSelect={handleSelect}
-                            participantCount={participantCount}
-                        />
-                    )}
-                    {query.length >= 2 && !searchLoading && results.length === 0 && (
-                        <p className="text-sm text-muted py-4 text-center">No games found</p>
-                    )}
-                    <PersonalSuggestionsRow
-                        lineupId={lineupId}
-                        onPickSuggestion={(s) => handleSelect({ id: s.gameId, name: s.name, coverUrl: s.coverUrl })}
-                    />
-                </>
+                <SearchPane query={draft.query} onQueryChange={draft.setQuery} isOpen={isOpen} lineupId={lineupId}
+                    participantCount={participantCount} onSelect={draft.setSelected} />
             )}
         </Modal>
     );

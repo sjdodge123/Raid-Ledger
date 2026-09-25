@@ -625,3 +625,112 @@ describe('PublicShareToggle — Copy link (ROK-1650)', () => {
         expect(screen.getByTestId('public-share-copy')).toBeDisabled();
     });
 });
+
+// ROK-1655 (lane D6b): every close path asks before discarding an edit
+// (Cancel too, ruling 4); the actions sit in the pinned footer; a pending
+// create is a loading Button (ruling 7). LineupBanner keeps the modal mounted,
+// so a reopen must start from fresh defaults.
+describe('StartLineupModal — dirty close guard (ROK-1655)', () => {
+    const confirm = () => screen.queryByRole('dialog', { name: 'Discard your changes?' });
+    const title = () => screen.getByLabelText(/title/i) as HTMLInputElement;
+    const footerButton = (name: RegExp) =>
+        within(screen.getByTestId('modal-footer')).getByRole('button', { name });
+
+    async function editTitle(user: ReturnType<typeof userEvent.setup>): Promise<void> {
+        await user.clear(title());
+        await user.type(title(), 'Raid night');
+    }
+
+    it('asks before Escape discards an edited title; Keep editing keeps it', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await editTitle(user);
+        await user.keyboard('{Escape}');
+        expect(confirm()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        await user.click(screen.getByRole('button', { name: 'Keep editing' }));
+        expect(confirm()).not.toBeInTheDocument();
+        expect(title().value).toBe('Raid night');
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('guards the footer Cancel: an edited title asks first, Discard closes', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await editTitle(user);
+        await user.click(footerButton(/^cancel$/i));
+        expect(confirm()).toBeInTheDocument();
+        expect(onClose).not.toHaveBeenCalled();
+        await user.click(screen.getByRole('button', { name: 'Discard' }));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes at once on Escape when nothing was edited', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await user.keyboard('{Escape}');
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirm()).not.toBeInTheDocument();
+    });
+
+    it('reopens clean at the defaults after a Discard (the banner keeps it mounted)', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        const { rerender } = renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        await editTitle(user);
+        await user.keyboard('{Escape}');
+        await user.click(screen.getByRole('button', { name: 'Discard' }));
+        rerender(<StartLineupModal isOpen={false} onClose={onClose} />);
+        rerender(<StartLineupModal isOpen={true} onClose={onClose} />);
+        expect(title().value).toBe(`Lineup — ${currentMonthYear()}`);
+        await user.keyboard('{Escape}');
+        expect(confirm()).not.toBeInTheDocument();
+        expect(onClose).toHaveBeenCalledTimes(2);
+    });
+
+});
+
+describe('StartLineupModal — pinned footer actions (ROK-1655)', () => {
+    const confirm = () => screen.queryByRole('dialog', { name: 'Discard your changes?' });
+    const footerButton = (name: RegExp) =>
+        within(screen.getByTestId('modal-footer')).getByRole('button', { name });
+
+    it('puts Cancel and Create Lineup in the pinned modal footer', () => {
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={vi.fn()} />);
+        for (const name of [/^cancel$/i, /create lineup/i]) {
+            const button = screen.getByRole('button', { name });
+            expect(button.closest('[data-testid="modal-footer"]')).not.toBeNull();
+        }
+    });
+
+    it('a successful create closes without the confirm', async () => {
+        const user = userEvent.setup();
+        const onClose = vi.fn();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={onClose} />);
+        const title = screen.getByLabelText(/title/i);
+        await user.clear(title);
+        await user.type(title, 'Raid night');
+        await user.click(footerButton(/create lineup/i));
+        expect(mutateAsync).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirm()).not.toBeInTheDocument();
+    });
+
+    // Ruling 7: equivalent to the old `disabled` + "Creating..." text.
+    it('a pending create keeps its name: aria-busy, aria-disabled, click swallowed', async () => {
+        vi.mocked(useCreateLineup).mockReturnValue({
+            mutateAsync, isPending: true, isError: false, error: null,
+        } as unknown as ReturnType<typeof useCreateLineup>);
+        const user = userEvent.setup();
+        renderWithProviders(<StartLineupModal isOpen={true} onClose={vi.fn()} />);
+        const submit = footerButton(/create lineup/i);
+        expect(submit).toHaveAttribute('aria-busy', 'true');
+        expect(submit).toHaveAttribute('aria-disabled', 'true');
+        expect(screen.queryByText(/creating/i)).not.toBeInTheDocument();
+        await user.click(submit);
+        expect(mutateAsync).not.toHaveBeenCalled();
+    });
+});

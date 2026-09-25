@@ -4,9 +4,12 @@
  * scheduling poll. Mirrors the ROK-1062 abort modal via shared sub-components
  * (ReasonField + DestructiveModalFooter). Confirming dispatches the cancel
  * with a trimmed reason (null when empty); on success the caller navigates.
+ * ROK-1655: Escape, backdrop, × and the explicit Cancel ask before discarding
+ * a typed reason (whitespace-only is not dirty). Actions sit in the pinned footer.
  */
 import { useState, type JSX } from 'react';
 import { Modal } from '../../ui/modal';
+import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { ReasonField } from '../shared/ReasonField';
 import { DestructiveModalFooter } from '../shared/DestructiveModalFooter';
 
@@ -20,20 +23,27 @@ interface CancelPollModalProps {
     isPending: boolean;
 }
 
+function trimmedOrNull(reason: string): string | null {
+    const trimmed = reason.trim();
+    return trimmed === '' ? null : trimmed;
+}
+
 export function CancelPollModal({
     onClose,
     onConfirm,
     isPending,
 }: CancelPollModalProps): JSX.Element {
     const [reason, setReason] = useState('');
-    const submit = (): void => {
-        const trimmed = reason.trim();
-        onConfirm(trimmed === '' ? null : trimmed);
-    };
+    const guard = useDirtyCloseGuard(reason.trim() !== '', onClose);
+    const footer = (
+        <DestructiveModalFooter onCancel={guard.requestClose} onConfirm={() => onConfirm(trimmedOrNull(reason))}
+            isPending={isPending} confirmLabel="Cancel Poll" pendingLabel="Cancelling…" />
+    );
     return (
-        <Modal isOpen={true} onClose={onClose} title="Cancel poll?">
+        <Modal isOpen={true} onClose={onClose} closeGuard={guard}
+            title="Cancel poll?" footer={footer}>
             <div className="space-y-4">
-                <p className="text-sm font-medium text-rose-400">
+                <p className="text-sm font-medium text-danger">
                     {CONFIRM_COPY}
                 </p>
                 <ReasonField
@@ -41,13 +51,6 @@ export function CancelPollModal({
                     value={reason}
                     onChange={setReason}
                     placeholder="Why is this poll being cancelled?"
-                />
-                <DestructiveModalFooter
-                    onCancel={onClose}
-                    onConfirm={submit}
-                    isPending={isPending}
-                    confirmLabel="Cancel Poll"
-                    pendingLabel="Cancelling…"
                 />
             </div>
         </Modal>

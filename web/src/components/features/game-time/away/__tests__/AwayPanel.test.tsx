@@ -156,6 +156,15 @@ describe('AwayPanel (stacked) — note', () => {
         fireEvent.change(note, { target: { value: 'Vacation' } });
         expect(note.value).toBe('Vacation');
     });
+
+    it('the toggle reports aria-expanded (the smoke reads it) and reveals a textbox named "Note"', () => {
+        render(<AwayPanel layout="stacked" />);
+        const toggle = screen.getByTestId('away-note-toggle');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        fireEvent.click(toggle);
+        expect(toggle).toHaveAttribute('aria-expanded', 'true');
+        expect(screen.queryByRole('textbox', { name: 'Note' })).toBe(screen.getByTestId('away-note'));
+    });
 });
 
 describe('AwayPanel (stacked) — list', () => {

@@ -1,8 +1,10 @@
 /**
- * Role dropdown for player filters (ROK-821).
+ * Role dropdown for player filters (ROK-821; ROK-1651 moved it onto Field + Select).
  * Options: All / Member / Operator / Admin.
  */
 import type { JSX } from 'react';
+import { Field } from '../../ui/field';
+import { Select } from '../../ui/select';
 
 const ROLE_OPTIONS = [
     { value: '', label: 'All' },
@@ -19,18 +21,12 @@ interface RoleSelectProps {
 /** Role filter dropdown. */
 export function RoleSelect({ value, onChange }: RoleSelectProps): JSX.Element {
     return (
-        <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-muted">Role</span>
-            <select
-                aria-label="Role"
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className="px-2 py-1.5 bg-surface border border-edge rounded text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500"
-            >
+        <Field label="Role">
+            <Select value={value} onChange={(e) => onChange(e.target.value)}>
                 {ROLE_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
-            </select>
-        </label>
+            </Select>
+        </Field>
     );
 }

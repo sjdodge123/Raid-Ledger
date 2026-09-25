@@ -119,9 +119,9 @@ either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest
 **Success, warning and danger are tokens** (§2.1, ROK-1586). **Every other accent is still a raw Tailwind
 hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:681`, plus
 `.badge-overlay` for badges over imagery). As of ROK-1586 only the journey hero, the week strip and the
-week-cell marks use the tokens (plus `FeedbackDialog.tsx:129`'s inline `var(--color-danger, #ef4444)`,
-which predates the token and now resolves to it); the rest of the app is unmigrated (see `TECH-DEBT-BACKLOG.md`,
-2026-09-22).
+week-cell marks use the tokens (FeedbackDialog's inline `var(--color-danger, #ef4444)` fallback is gone —
+its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the app is unmigrated (see
+`TECH-DEBT-BACKLOG.md`, 2026-09-22).
 
 - **DO** use `bg-success` / `text-warning` / `border-danger` when the colour carries a *meaning*. A
   scheme repaints the token; it cannot repaint `bg-emerald-500`.
@@ -335,7 +335,8 @@ Toasts come from **`sonner`** — `<Toaster>` is mounted in `web/src/App.tsx:105
 - **Phone + tablet (<1024px)** — no toolbar trigger. A floating **Filters FAB** (56px round, `right-4`,
   `lg:hidden` — below 768px it sits above the bottom tab bar: `bottom: 72px` (`FAB_BOTTOM_ABOVE_TAB_BAR`)
   while it shows, `bottom: 16px` (`FAB_BOTTOM_NO_TAB_BAR`) once it hides on scroll. At 768–1023px there is
-  no tab bar but the feedback button (`FeedbackWidget.tsx`, `hidden md:flex bottom-6 right-6`, 48px) holds
+  no tab bar but the feedback button (`FeedbackWidget.tsx`, a `hidden md:block fixed bottom-6 right-6` wrapper
+  round a 48px `Button iconOnly`) holds
   the corner, so the FAB stacks above it: `bottom: 84px` (`FAB_BOTTOM_ABOVE_FEEDBACK` = 24 + 48 + the 12px
   gap) and `md:right-5`, which puts both circles' centres 48px from the edge — computed by
   `useFilterFabBottom`, `components/ui/fab-position.ts`. It is portaled to `document.body`, so a sticky
@@ -563,15 +564,22 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
 - **`fieldSize`, not `size`**, on `Input` and `Textarea` — the native `size` attribute is a number.
 - **Loading buttons stay focusable**: `Button loading` is `aria-disabled`, not `disabled`, and ignores clicks —
   never hand-roll `disabled={saving}` on top of it.
+- **A floating `Button` is positioned by a wrapper `<div>`**, never through its `className`: there is no
+  tailwind-merge, so `hidden`/`md:flex`/`rounded-full` on the button fight its own `inline-flex`/`rounded-lg`.
+  The wrapper owns `fixed`, the breakpoint display and the shape (`[&>button]:rounded-full [&>button]:p-0`,
+  which out-rank single-class utilities) — `FeedbackWidget.tsx`'s FAB (ROK-1651). Button has no FAB mode.
 - **`RadioGroup` validates like a field**: `error` / `invalid` put `aria-invalid` on the radiogroup and the
   inline alert under it.
 - **`Select`** stays native (`appearance-none` + chevron); `placeholder` is an empty-value first option.
-  **`Textarea`** counters come from `showCount` + `maxLength` — don't hand-roll one (ReasonField, FeedbackDialog).
+  **`Textarea`** counters come from `showCount` + `maxLength` — don't hand-roll one (ReasonField and
+  FeedbackDialog both use `showCount`).
 - **Checkboxes and radios are native**, `w-5 h-5 accent-success`, inside a `<label>` so the text is part of the
   44px target (`Checkbox`, `RadioGroup` list). A pill/segmented toggle is `RadioGroup appearance="segmented"` —
   real radios, so it has `radiogroup` semantics and arrow keys; never a row of buttons with no state. Its track
   wraps rather than overflowing a narrow card (six duration segments at 375px take two rows) — never give it
-  `flex-nowrap` or a fixed width.
+  `flex-nowrap` or a fixed width. Segments never shrink below their longest word, so when a wrapped row would
+  read badly, switch to `appearance="list"` below `sm` with `useMediaQuery('(min-width: 640px)')` (FeedbackDialog's
+  four categories need ~327px against ~287px) rather than a sideways-scrolling row.
 - **Sliders are `Slider`**: `appearance-none` with a painted `bg-edge` track, `success` fill and 20px thumb in a
   44px hit area, a `font-medium` label left and a `font-mono` readout right (`aria-live="off"`);
   `formatValue` doubles as `aria-valuetext`.
