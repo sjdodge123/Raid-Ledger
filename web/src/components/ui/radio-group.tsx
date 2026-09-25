@@ -9,8 +9,13 @@
  *   `aria-describedby`).
  * - `appearance="segmented"`: the pill toggle (RA-3's 9 sites, and the
  *   duration picker per the operator's ruling). The radio is `sr-only`; the
- *   segment paints ON as `bg-overlay text-foreground`, OFF as `text-muted`, and
- *   carries the focus ring through `has-[:focus-visible]`. Descriptions are
+ *   segment paints ON as `bg-overlay border-success text-foreground`, OFF as
+ *   `text-muted` with a transparent border (so nothing shifts). The `success`
+ *   border is the WCAG 1.4.11 indicator: bg-overlay alone is 1.13:1 on the
+ *   bg-panel track in default-light, full `success` is >= 4.06:1 on bg-panel
+ *   in every theme (ROK-1688). The focus ring (`has-[:focus-visible]`) sits
+ *   2px off the segment on `ring-offset-panel`, so focused-and-ON reads as two
+ *   separate green edges rather than one thick one. Descriptions are
  *   not shown in a segment — keep segment labels short. The track wraps: a
  *   set wider than its container (six duration segments in a 375px card)
  *   flows onto a second row instead of pushing out past the card (ROK-1649).
@@ -59,10 +64,11 @@ interface OptionProps<V extends string> {
 
 const RADIO = `w-5 h-5 shrink-0 accent-success cursor-pointer ${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${DISABLED}`;
 const SEGMENT = [
-    'relative flex flex-1 items-center justify-center min-h-[44px] px-3 rounded-md text-center',
+    'relative flex flex-1 items-center justify-center min-h-[44px] px-3 rounded-md text-center border border-transparent',
     'text-base lg:text-sm font-medium text-muted cursor-pointer transition-colors hover:text-foreground',
-    'has-[:checked]:bg-overlay has-[:checked]:text-foreground',
+    'has-[:checked]:bg-overlay has-[:checked]:border-success has-[:checked]:text-foreground',
     'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-success/80',
+    'has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-panel',
     'has-[:disabled]:opacity-50 has-[:disabled]:cursor-not-allowed',
 ].join(' ');
 
