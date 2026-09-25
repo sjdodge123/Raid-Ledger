@@ -383,8 +383,8 @@ export async function closeTestApp(): Promise<void> {
  * so destroying these sockets is a no-op for application correctness — it
  * just frees the kernel-side resources before the next spec file boots its
  * own 13×3 BullMQ worker connections. Skip if REDIS_URL targets a non-default
- * port (e.g. CI sidecar container). Match `queue.module.ts` semantics:
- * `Number(parsed.port) || 6379` — empty `parsed.port` resolves to 6379.
+ * port (e.g. CI sidecar container). An empty `parsed.port` resolves to
+ * 6379, matching ioredis's default for the URL BullMQ is handed.
  */
 function destroyBullmqRedisSocketsIfDefault(): void {
   const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
