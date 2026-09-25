@@ -12,10 +12,10 @@ import { formatJobName, formatTimestamp, formatDuration, normalizeCron, getCronL
 /** Execution status badge */
 function ExecutionStatusBadge({ status }: { status: string }): JSX.Element {
     const styles: Record<string, string> = {
-        completed: 'text-green-400',
-        failed: 'text-red-400',
-        skipped: 'text-yellow-400',
-        degraded: 'text-amber-400',
+        completed: 'text-success',
+        failed: 'text-danger',
+        skipped: 'text-warning',
+        degraded: 'text-warning',
     };
     return <span className={`text-xs font-medium ${styles[status] || 'text-muted'}`}>{status}</span>;
 }
@@ -98,7 +98,7 @@ function ExecutionTable({ executions, tz }: { executions: CronJobExecutionDto[];
                         </td>
                         <td className="py-2 pr-4 text-muted">{formatTimestamp(exec.startedAt, tz)}</td>
                         <td className="py-2 pr-4 text-muted">{formatDuration(exec.durationMs)}</td>
-                        <td className="py-2 text-red-400 text-xs truncate max-w-[200px]" title={exec.error || ''}>
+                        <td className="py-2 text-danger text-xs truncate max-w-[200px]" title={exec.error || ''}>
                             {exec.error || '\u2014'}
                         </td>
                     </tr>
@@ -215,8 +215,8 @@ function IntervalSelector({ selectedExpression, onExpressionChange, isCustomExpr
 
 function ScheduleRevertWarning(): JSX.Element {
     return (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3">
-            <p className="text-xs text-yellow-400">
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+            <p className="text-xs text-warning">
                 Schedule changes take effect immediately but will revert to the original @Cron decorator schedule on application restart.
             </p>
         </div>
