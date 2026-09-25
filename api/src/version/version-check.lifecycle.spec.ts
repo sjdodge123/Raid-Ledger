@@ -50,13 +50,14 @@ describe('VersionCheckService — startup timer lifecycle (ROK-1527)', () => {
     const service = createService();
     const unref = jest.fn();
     const realSetTimeout = global.setTimeout;
-    const spy = jest
-      .spyOn(global, 'setTimeout')
-      .mockImplementation(((fn: () => void, ms?: number) => {
-        const handle = realSetTimeout(fn, ms);
-        handle.unref = unref.mockReturnValue(handle);
-        return handle;
-      }) as unknown as typeof setTimeout);
+    const spy = jest.spyOn(global, 'setTimeout').mockImplementation(((
+      fn: () => void,
+      ms?: number,
+    ) => {
+      const handle = realSetTimeout(fn, ms);
+      handle.unref = unref.mockReturnValue(handle);
+      return handle;
+    }) as unknown as typeof setTimeout);
     service.onModuleInit();
     spy.mockRestore();
     service.onModuleDestroy();
