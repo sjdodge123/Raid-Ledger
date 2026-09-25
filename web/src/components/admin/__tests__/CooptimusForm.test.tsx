@@ -3,6 +3,8 @@
  * failure banner, clear, and the empty-input guard. ROK-1652 (E4): the prose
  * opt-in is the shared Checkbox named by its visible label, the triad is
  * Button primary/secondary/destructive-soft with `loading`, and no brand hex.
+ * ROK-1686: the buttons carry the shared integration copy — exact names
+ * 'Save Configuration' / 'Test Connection', like IntegrationFormActions.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
@@ -102,7 +104,7 @@ describe('CooptimusForm — user-agent save', () => {
         renderWithProviders(<CooptimusForm />);
 
         await user.type(screen.getByLabelText(/allowlisted user-agent/i), '  RaidLedger/1.0  ');
-        await user.click(screen.getByRole('button', { name: /^Save$/i }));
+        await user.click(screen.getByRole('button', { name: 'Save Configuration' }));
 
         await waitFor(() =>
             expect(updateAsync).toHaveBeenCalledWith({ userAgent: 'RaidLedger/1.0' }),
@@ -115,7 +117,7 @@ describe('CooptimusForm — user-agent save', () => {
         const user = userEvent.setup();
         renderWithProviders(<CooptimusForm />);
 
-        await user.click(screen.getByRole('button', { name: /^Save$/i }));
+        await user.click(screen.getByRole('button', { name: 'Save Configuration' }));
 
         expect(updateAsync).not.toHaveBeenCalled();
         expect(toastError).toHaveBeenCalledWith('User-agent is required');
@@ -123,7 +125,7 @@ describe('CooptimusForm — user-agent save', () => {
 
     it('lays Save out like the shared integration triad: a full-width row below lg', () => {
         renderWithProviders(<CooptimusForm />);
-        const save = screen.getByRole('button', { name: 'Save' });
+        const save = screen.getByRole('button', { name: 'Save Configuration' });
         expect(save).toHaveClass('w-full', 'lg:w-auto', 'lg:flex-1');
     });
 
@@ -152,7 +154,7 @@ describe('CooptimusForm — Test and Clear', () => {
         });
         const user = userEvent.setup();
         renderWithProviders(<CooptimusForm />);
-        await user.click(screen.getAllByRole('button', { name: /test connection/i })[0]);
+        await user.click(screen.getAllByRole('button', { name: 'Test Connection' })[0]);
 
         await waitFor(() => expect(screen.getByText(/HTTP 403/)).toBeInTheDocument());
         expect(toastError).toHaveBeenCalled();

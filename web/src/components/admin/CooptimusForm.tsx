@@ -92,6 +92,11 @@ function useCooptimusFormHandlers() {
         isPending: { save: updateCooptimus.isPending, test: testCooptimus.isPending, clear: clearCooptimus.isPending } };
 }
 
+/**
+ * ROK-1686: same copy as IntegrationFormActions ('Save Configuration' /
+ * 'Test Connection'). Kept as its own row because its loading labels
+ * (Saving… / Testing… / Clearing…) differ from the shared component's.
+ */
 function CooptimusActionButtons({ configured, isPending, onTest, onClear }: {
     configured: boolean; isPending: { save: boolean; test: boolean; clear: boolean };
     onTest: () => void; onClear: () => void;
@@ -100,13 +105,13 @@ function CooptimusActionButtons({ configured, isPending, onTest, onClear }: {
         <div className="flex flex-wrap gap-3 pt-2">
             <Button type="submit" variant="primary" size="lg" className="w-full lg:w-auto lg:flex-1"
                 loading={isPending.save} loadingLabel="Saving…">
-                Save
+                Save Configuration
             </Button>
             {configured && (
                 <>
                     <Button variant="secondary" size="lg" className="whitespace-nowrap" onClick={onTest}
                         loading={isPending.test} loadingLabel="Testing…">
-                        Test connection
+                        Test Connection
                     </Button>
                     <Button variant="destructive-soft" size="lg" className="whitespace-nowrap" onClick={onClear}
                         loading={isPending.clear} loadingLabel="Clearing…">

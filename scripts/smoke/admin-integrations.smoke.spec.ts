@@ -119,6 +119,6 @@ test.describe('Admin Integrations — Co-Optimus panel', () => {
         await expect(page.locator('#cooptimus-ua')).toBeVisible();
 
         // Save button
-        await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Save Configuration', exact: true })).toBeVisible();
     });
 });
