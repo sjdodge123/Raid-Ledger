@@ -42,10 +42,27 @@ const CHANNELS = [
 
 console.log('ROK-1469 channel sets');
 
-test('unset channel set → every channel is usable (unchanged behavior)', () => {
-  assert.deepEqual(selectChannelSet(CHANNELS, undefined), CHANNELS);
-  assert.deepEqual(selectChannelSet(CHANNELS, ''), CHANNELS);
-  assert.deepEqual(selectChannelSet(CHANNELS, '   '), CHANNELS);
+test('unset channel set → every non-slot channel is usable', () => {
+  const nonSlot = [{ id: '4', name: 'town-square' }];
+  assert.deepEqual(selectChannelSet(CHANNELS, undefined), nonSlot);
+  assert.deepEqual(selectChannelSet(CHANNELS, ''), nonSlot);
+  assert.deepEqual(selectChannelSet(CHANNELS, '   '), nonSlot);
+});
+
+test('ROK-1623: unset set excludes the fleet slot channels, keeps the shared ones', () => {
+  const guild = [
+    { id: 't1', name: 'slot-1-fleet' },
+    { id: 't2', name: 'slot-1-alt' },
+    { id: 'v1', name: 'slot-1-voice' },
+    { id: 'v4', name: 'SLOT-4-voice' },
+    { id: 't3', name: 'general' },
+    { id: 'v2', name: 'General' },
+    { id: 't4', name: 'slots-and-raids' },
+  ];
+  assert.deepEqual(
+    selectChannelSet(guild, undefined).map((c) => c.name),
+    ['general', 'General', 'slots-and-raids'],
+  );
 });
 
 test('slot-1 selects only its own channels', () => {
