@@ -50,6 +50,7 @@ function edgeLabel(e) {
   const v = edges[e + eN];
   return t === 'element' || t === 'hidden' ? `${t}[${v}]` : `${t}:${strings[v]}`;
 }
+const SKIP = new Set(['weak_refs_keep_during_job', ...(process.env.SKIP_EDGES || '').split(',').filter(Boolean)]);
 // BFS from root (node 0) over non-weak edges → shortest retainer path.
 const parentEdge = new Float64Array(N).fill(-1);
 const parentNode = new Int32Array(N).fill(-1);
@@ -62,6 +63,7 @@ while (qh < qt) {
   for (let e = firstEdge[k]; e < firstEdge[k + 1]; e += EF) {
     const t = edgeTypes[edges[e + eT]];
     if (t === 'weak' || t === 'shortcut') continue;
+    if (t !== 'element' && t !== 'hidden' && SKIP.has(strings[edges[e + eN]])) continue;
     const to = edges[e + eTo] / NF;
     if (seen[to]) continue;
     seen[to] = 1; parentEdge[to] = e; parentNode[to] = k; queue[qt++] = to;
