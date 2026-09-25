@@ -49,9 +49,17 @@ function outerState(): ProbeState {
   return state;
 }
 
-function outerWeakRef(target: object): WeakRef<object> {
-  const Ctor = vm.runInThisContext('WeakRef') as typeof WeakRef;
-  return new Ctor(target);
+/**
+ * Build the ref entry with an OUTER-realm factory. An object literal written
+ * here would be a SANDBOX-realm object whose __proto__ chain (Object.prototype
+ * -> Object -> NativeContext) pins this file's whole realm (seen in CI run
+ * 36183986959: the probe itself retained file 1 via state.refs[0]).
+ */
+function outerEntry(file: number, kind: string, target: object): ProbeRef {
+  const make = vm.runInThisContext(
+    '(f, k, t) => ({ file: f, kind: k, ref: new WeakRef(t) })',
+  ) as (f: number, k: string, t: object) => ProbeRef;
+  return make(file, kind, target);
 }
 
 function countAlive(state: ProbeState, kind: string, before: number): string {
@@ -79,9 +87,9 @@ export async function heapProbeAfterFile(app: object | null): Promise<void> {
   const n = state.file;
   if (app) {
     (app as Record<string, unknown>).__rlProbeTag = `rl-probe-file-${n}`;
-    state.refs.push({ file: n, kind: 'app', ref: outerWeakRef(app) });
+    state.refs.push(outerEntry(n, 'app', app));
   }
-  state.refs.push({ file: n, kind: 'realm', ref: outerWeakRef(globalThis) });
+  state.refs.push(outerEntry(n, 'realm', globalThis));
   // Let the current job end so earlier WeakRef targets are not kept alive.
   await new Promise<void>((r) => setImmediate(r));
   state.gc();
