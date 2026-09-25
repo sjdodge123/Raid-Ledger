@@ -23,7 +23,7 @@ import { dumpFailureSnapshot } from './dump-failure-snapshot';
 import { listSocketHandles } from './socket-handle-audit';
 import { heapProbeAfterFile } from './heap-probe';
 
-// ROK-1527 WIP: app handle for the opt-in heap probe (no-op when disabled).
+// ROK-1527: app handle for the opt-in heap probe (no-op when disabled).
 let probedApp: object | null = null;
 
 // ROK-1250: empirical margin above the steady-state TCP-socket count after

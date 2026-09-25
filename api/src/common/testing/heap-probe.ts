@@ -1,5 +1,5 @@
 /**
- * ROK-1527 WIP instrumentation — per-spec-file heap retention probe.
+ * ROK-1527 opt-in diagnostic — per-spec-file heap retention probe.
  *
  * STRICT no-op unless the flag file `api/.rl-heap-probe` exists (untracked,
  * never committed) or `RL_HEAP_PROBE=1`. When enabled, after each spec

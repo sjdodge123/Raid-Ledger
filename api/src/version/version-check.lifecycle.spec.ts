@@ -53,7 +53,8 @@ describe('VersionCheckService — startup timer lifecycle (ROK-1527)', () => {
     service.onModuleInit();
     const handle: NodeJS.Timeout = spy.mock.results[0].value;
     spy.mockRestore();
-    service.onModuleDestroy();
+    // Read before destroy: how Node reports a CLEARED timer varies by version.
     expect(handle.hasRef()).toBe(false);
+    service.onModuleDestroy();
   });
 });

@@ -36,6 +36,13 @@
  * Comments are stripped before scanning (ROK-1314): otherwise this file's
  * own prose, and explanatory comments in the files being scanned, would
  * trip the guard.
+ *
+ * Known limits (accepted): any `clearTimeout(` anywhere in a file exempts
+ * the whole file; brace matching for lifecycle bodies counts braces inside
+ * strings and default-parameter objects; and a self-completing sleep
+ * (`await new Promise((r) => setTimeout(r, n))`) inside a hook would be
+ * flagged even though it cannot outlive the hook. It is a tripwire, not a
+ * proof — the heap probe (`common/testing/heap-probe.ts`) is the proof.
  */
 import { readFileSync, readdirSync, statSync } from 'fs';
 import * as path from 'path';

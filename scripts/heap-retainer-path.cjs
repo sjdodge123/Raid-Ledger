@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/* ROK-1527 WIP — shortest non-weak retainer path from the GC root to target
+/* ROK-1527 opt-in diagnostic — shortest non-weak retainer path from the GC root to target
  * nodes in a V8 .heapsnapshot. Streams the numeric arrays out of a Buffer so
  * snapshots larger than V8's max string length still parse.
  * Usage: node --max-old-space-size=8000 scripts/heap-retainer-path.cjs <file> [name ...]
