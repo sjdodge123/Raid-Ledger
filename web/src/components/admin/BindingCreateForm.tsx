@@ -7,6 +7,9 @@ import type {
 } from '@raid-ledger/contract';
 import { classifyBindingTriple } from '@raid-ledger/contract';
 import { GameSearchInput } from '../events/game-search-input';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Select } from '../ui/select';
 
 export interface BindingChannelOption {
     id: string;
@@ -38,18 +41,15 @@ function ChannelSelect({ channels, value, onChange }: {
     channels: BindingChannelOption[]; value: string; onChange: (id: string) => void;
 }) {
     return (
-        <div>
-            <label htmlFor="new-binding-channel" className="block text-xs text-muted mb-1">Channel</label>
-            <select id="new-binding-channel" value={value} onChange={(e) => onChange(e.target.value)}
-                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40">
-                <option value="">Select a channel…</option>
+        <Field id="new-binding-channel" label="Channel">
+            <Select value={value} placeholder="Select a channel…" onChange={(e) => onChange(e.target.value)}>
                 {channels.map((c) => (
                     <option key={`${c.channelType}:${c.id}`} value={c.id}>
                         {c.channelType === 'voice' ? '🔊 ' : '#'}{c.name}
                     </option>
                 ))}
-            </select>
-        </div>
+            </Select>
+        </Field>
     );
 }
 
@@ -58,25 +58,22 @@ function PurposeSelect({ channelType, value, onChange }: {
 }) {
     const options = channelType ? PURPOSE_BY_TYPE[channelType] : [];
     return (
-        <div>
-            <label htmlFor="new-binding-purpose" className="block text-xs text-muted mb-1">Purpose</label>
-            <select id="new-binding-purpose" aria-label="Purpose" value={value} disabled={!channelType}
-                onChange={(e) => onChange(e.target.value as BindingPurpose)}
-                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-sm disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40">
+        <Field id="new-binding-purpose" label="Purpose">
+            <Select value={value} disabled={!channelType} onChange={(e) => onChange(e.target.value as BindingPurpose)}>
                 {options.map((p) => <option key={p} value={p}>{PURPOSE_LABELS[p]}</option>)}
-            </select>
-        </div>
+            </Select>
+        </Field>
     );
 }
 
+/** Create is disabled only by validation; a pending create is Button `loading` (ROK-1652 ruling 7). */
 function CreateActions({ canCreate, isCreating, onCancel }: { canCreate: boolean; isCreating: boolean; onCancel: () => void }) {
     return (
         <div className="flex gap-2 pt-1">
-            <button type="submit" disabled={!canCreate}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm transition-colors">
-                {isCreating ? 'Creating...' : 'Create binding'}
-            </button>
-            <button type="button" onClick={onCancel} className="px-4 py-2 bg-overlay hover:bg-faint text-foreground rounded-lg text-sm transition-colors">Cancel</button>
+            <Button type="submit" disabled={!canCreate} loading={isCreating} loadingLabel="Creating...">
+                Create binding
+            </Button>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
         </div>
     );
 }
@@ -102,32 +99,17 @@ function useCreateBindingForm(channels: BindingChannelOption[]) {
     return { channelId, purpose, setPurpose, game, setGame, channelType, gameId, violation, handleChannelChange, reset };
 }
 
-/**
- * Create a channel binding (ROK-1416, AC3) — wires the previously dead
- * createBinding hook behind the "…or add one below" copy. The same shared
- * classifier that gates the edit form gates Create, so the UI structurally
- * cannot mint the inert (voice monitor, no game) triple.
- */
-export function BindingCreateForm({ channels, onCreate, isCreating, createError }: BindingCreateFormProps) {
-    const [open, setOpen] = useState(false);
+/** The open form: channel, purpose, game (unless General Lobby), error and actions. */
+function CreateBindingFields({ channels, onCreate, isCreating, createError, onClose }: BindingCreateFormProps & {
+    onClose: () => void;
+}) {
     const f = useCreateBindingForm(channels);
-
-    if (!open) {
-        return (
-            <button type="button" onClick={() => setOpen(true)}
-                className="px-4 py-2 bg-overlay hover:bg-faint text-foreground rounded-lg text-sm transition-colors">
-                + Add binding
-            </button>
-        );
-    }
-
-    const showGameField = f.purpose !== 'general-lobby';
-    const canCreate = !!f.channelId && !!f.channelType && f.violation == null && !isCreating;
-    const close = () => { f.reset(); setOpen(false); };
+    const canCreate = !!f.channelId && !!f.channelType && f.violation == null;
+    const close = () => { f.reset(); onClose(); };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!f.channelType || !canCreate) return;
+        if (!f.channelType || !canCreate || isCreating) return;
         const dto: CreateChannelBindingDto = {
             channelId: f.channelId, channelType: f.channelType, bindingPurpose: f.purpose, gameId: f.gameId,
         };
@@ -139,12 +121,26 @@ export function BindingCreateForm({ channels, onCreate, isCreating, createError 
             <h4 className="text-sm font-medium text-foreground">New binding</h4>
             <ChannelSelect channels={channels} value={f.channelId} onChange={f.handleChannelChange} />
             <PurposeSelect channelType={f.channelType} value={f.purpose} onChange={f.setPurpose} />
-            {showGameField && (
+            {f.purpose !== 'general-lobby' && (
                 <GameSearchInput id="new-binding-game" value={f.game} onChange={f.setGame}
                     error={f.violation?.field === 'gameId' ? f.violation.message : undefined} />
             )}
-            {createError && <p className="text-sm text-red-400" role="alert">{createError}</p>}
+            {createError && <p className="text-sm text-danger" role="alert">{createError}</p>}
             <CreateActions canCreate={canCreate} isCreating={isCreating} onCancel={close} />
         </form>
     );
+}
+
+/**
+ * Create a channel binding (ROK-1416, AC3) — wires the previously dead
+ * createBinding hook behind the "…or add one below" copy. The same shared
+ * classifier that gates the edit form gates Create, so the UI structurally
+ * cannot mint the inert (voice monitor, no game) triple.
+ */
+export function BindingCreateForm(props: BindingCreateFormProps) {
+    const [open, setOpen] = useState(false);
+    if (!open) {
+        return <Button variant="secondary" onClick={() => setOpen(true)}>+ Add binding</Button>;
+    }
+    return <CreateBindingFields {...props} onClose={() => setOpen(false)} />;
 }

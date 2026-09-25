@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { SteamPanel } from './steam-panel';
+import { expectIntegrationActionTriad } from '../../components/admin/integration-form-actions.test-utils';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -122,5 +123,18 @@ describe('SteamPanel — configured state', () => {
         expect(
             await screen.findByText('Setup Instructions:'),
         ).toBeInTheDocument();
+    });
+});
+
+describe('SteamPanel — action triad layout (ROK-1652 B)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        setupSteamHandler(true);
+    });
+
+    it('renders Save as a full-width primary row, then Test and Clear', async () => {
+        renderWithProviders(<SteamPanel />);
+        await screen.findByRole('button', { name: 'Test Connection' });
+        expectIntegrationActionTriad();
     });
 });

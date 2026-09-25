@@ -11,10 +11,11 @@
  *     inline error shown).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { StartLineupModal } from './start-lineup-modal';
+import { PublicShareToggle } from './PublicShareToggle';
 
 vi.mock('../../hooks/use-lineups', () => ({
     useCreateLineup: vi.fn(),
@@ -522,5 +523,105 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
             buildingDurationHours: 96,
             votingDurationHours: 72,
         });
+    });
+});
+
+// ROK-1650 (lane C2): the preset cards stay the Button primitive with
+// role=radio (ruling 6); the scheduling toggle is a Checkbox; public share is a
+// Switch; the channel picker is a Field + Select; raw emerald → success tokens.
+describe('StartLineupModal — preset + scheduling primitives (ROK-1650)', () => {
+    function renderModal(): void {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+    }
+
+    it('preset cards are Button radios whose aria-checked follows the click', async () => {
+        const user = userEvent.setup();
+        renderModal();
+        const group = screen.getByRole('radiogroup', { name: /lineup preset/i });
+        const series = screen.getByTestId('preset-series');
+        expect(series).toHaveAttribute('role', 'radio');
+        expect(series).toHaveAttribute('aria-checked', 'false');
+        expect(series.querySelector('[data-button-label]')).not.toBeNull();
+        await user.click(series);
+        expect(series).toHaveAttribute('aria-checked', 'true');
+        expect(within(group).getAllByRole('radio', { checked: true })).toEqual([series]);
+    });
+
+    it('paints the presets, caption, caps note and More options with tokens, not raw emerald', () => {
+        renderModal();
+        const group = screen.getByRole('radiogroup', { name: /lineup preset/i });
+        expect(group.querySelector('[class*="emerald"]')).toBeNull();
+        expect(screen.getByText('Match shape').className).not.toMatch(/emerald/);
+        expect(screen.getByText('Player caps').className).not.toMatch(/emerald/);
+        const summary = screen.getByText(/more options/i).closest('summary');
+        expect(summary?.className).not.toMatch(/emerald/);
+    });
+
+    it('scheduling-phase toggle is a Checkbox named by its label and described by its hint', async () => {
+        const user = userEvent.setup();
+        renderModal();
+        await user.click(screen.getByText(/more options/i));
+        const box = screen.getByRole('checkbox', {
+            name: 'Include scheduling phase after game is decided',
+        });
+        expect(box).toBe(screen.getByTestId('include-scheduling-phase'));
+        expect(box).toHaveAccessibleDescription(
+            /no time-scheduling poll is created/i,
+        );
+    });
+
+});
+
+describe('StartLineupModal — share + channel primitives (ROK-1650)', () => {
+    function renderModal(): void {
+        renderWithProviders(
+            <StartLineupModal isOpen={true} onClose={vi.fn()} />,
+        );
+    }
+
+    it('public share is a Switch named "Public share link" that drives the submit', async () => {
+        const user = userEvent.setup();
+        renderModal();
+        const toggle = screen.getByRole('switch', { name: 'Public share link' });
+        expect(toggle).toBe(screen.getByTestId('public-share-switch'));
+        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        await user.click(toggle);
+        expect(toggle).toHaveAttribute('aria-checked', 'false');
+        await user.click(screen.getByRole('button', { name: /create lineup/i }));
+        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+            publicShareEnabled: false,
+        });
+    });
+
+    it('channel picker is a Field whose hint describes the select', () => {
+        renderModal();
+        const select = screen.getByLabelText(/post embeds to/i);
+        expect(select).toBe(screen.getByTestId('lineup-channel-override-select'));
+        expect(select).toHaveAccessibleDescription(
+            /optional\. when set, every lineup embed posts to this channel/i,
+        );
+    });
+});
+
+describe('PublicShareToggle — Copy link (ROK-1650)', () => {
+    it('renders Copy link as the shared Button beside the switch', () => {
+        renderWithProviders(
+            <PublicShareToggle enabled={true} onChange={vi.fn()} slug="abc123" />,
+        );
+        const copy = screen.getByRole('button', { name: 'Copy public link' });
+        expect(copy).toBe(screen.getByTestId('public-share-copy'));
+        expect(copy.querySelector('[data-button-label]')).not.toBeNull();
+        expect(screen.getByRole('switch', { name: 'Public share link' })).toBeInTheDocument();
+    });
+
+    it('disables the switch and Copy link while a mutation is pending', () => {
+        const onChange = vi.fn();
+        renderWithProviders(
+            <PublicShareToggle enabled={true} onChange={onChange} slug="abc123" disabled />,
+        );
+        expect(screen.getByRole('switch', { name: 'Public share link' })).toBeDisabled();
+        expect(screen.getByTestId('public-share-copy')).toBeDisabled();
     });
 });

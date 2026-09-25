@@ -7,6 +7,8 @@ export { RemindersSection } from './reminders-section';
 export type { RemindersSectionProps } from './reminders-section';
 export { DurationSection } from './duration-section';
 export type { DurationSectionProps } from './duration-section';
+export { DurationPresetGroup } from './duration-preset-group';
+export type { DurationPreset, DurationChoice, DurationPresetGroupProps } from './duration-preset-group';
 export { GameDetailsSection } from './game-details-section';
 export type { GameDetailsSectionProps } from './game-details-section';
 export { useRegistryGameId } from './use-registry-game-id';

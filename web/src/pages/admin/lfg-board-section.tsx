@@ -21,16 +21,16 @@ const DESCRIPTION =
 /** Missing-permission callout shown after a persisted-but-degraded write. */
 function MissingPermissionWarning({ missing }: { missing: string[] }) {
     return (
-        <div data-testid="lfg-board-warning" className="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-            <p className="text-sm text-amber-400">
+        <div data-testid="lfg-board-warning" className="mt-4 bg-warning/10 border border-warning/30 rounded-lg p-4">
+            <p className="text-sm text-warning">
                 Saved, but the bot is missing permissions the LFG board needs:
             </p>
-            <ul className="text-xs text-amber-300 mt-2 space-y-0.5 list-disc list-inside">
+            <ul className="text-xs text-warning mt-2 space-y-0.5 list-disc list-inside">
                 {missing.map((name) => (
                     <li key={name}>{name}</li>
                 ))}
             </ul>
-            <p className="text-xs text-amber-300 mt-2">
+            <p className="text-xs text-warning mt-2">
                 Re-authorise the bot with the invite URL on the{' '}
                 <Link to={BOT_CONNECTION_PATH} className="underline">Connection</Link> page.
             </p>

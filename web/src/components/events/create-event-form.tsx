@@ -158,7 +158,7 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
     const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent);
 
     return (
-        <form onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId); }} className="space-y-4 sm:space-y-8">
+        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
                 isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} />

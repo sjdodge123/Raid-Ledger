@@ -52,6 +52,15 @@ export const games = pgTable('games', {
   twitchGameId: text('twitch_game_id'),
   /** ROK-417: Steam AppID for library matching (from IGDB external_games category=1) */
   steamAppId: integer('steam_app_id'),
+  /**
+   * ROK-1680: provenance of steamAppId — steam | itad | igdb | manual; NULL = unknown.
+   * A BEFORE UPDATE trigger (migration 0192) NULLs it when steam_app_id changes
+   * without the same statement writing a different source.
+   */
+  steamAppIdSource: varchar('steam_app_id_source', {
+    length: 16,
+    enum: ['steam', 'itad', 'igdb', 'manual'],
+  }),
   /** Whether the game supports cross-platform play (inferred from IGDB or manual) */
   crossplay: boolean('crossplay'),
   /** ROK-231: Hidden games are excluded from user-facing search/discovery */
@@ -160,6 +169,11 @@ export const games = pgTable('games', {
    */
   cooptimusSyncedAt: timestamp('cooptimus_synced_at'),
 });
+
+/** ROK-1680: provenance tag for games.steam_app_id (NULL in the column = unknown). */
+export type SteamAppIdSource = NonNullable<
+  (typeof games.$inferSelect)['steamAppIdSource']
+>;
 
 /**
  * Event Types - Game-specific event type templates.

@@ -1,7 +1,8 @@
 /**
- * Tests for igdb.mappers.ts — mapDbRowToDetail pricing field mapping (ROK-818).
+ * Tests for igdb.mappers.ts — mapDbRowToDetail pricing field mapping (ROK-818)
+ * and mapApiGameToDbRow's steam_app_id provenance tag (ROK-1680).
  */
-import { mapDbRowToDetail } from './igdb.mappers';
+import { mapApiGameToDbRow, mapDbRowToDetail } from './igdb.mappers';
 import type { games } from '../drizzle/schema';
 
 type GameRow = typeof games.$inferSelect;
@@ -113,5 +114,49 @@ describe('mapDbRowToDetail — ITAD pricing fields (ROK-818)', () => {
     // '0.00' is falsy as a string — ensure it maps to 0 not null
     expect(result.itadCurrentPrice).toBe(0);
     expect(result.itadCurrentCut).toBe(100);
+  });
+});
+
+describe('mapApiGameToDbRow — steamAppIdSource (ROK-1680)', () => {
+  const base = { id: 4242, name: 'Tagged Game', slug: 'tagged-game' };
+
+  it("tags 'igdb' when IGDB carries a Steam external id", () => {
+    const row = mapApiGameToDbRow({
+      ...base,
+      external_games: [{ category: 1, uid: '632360' }],
+    });
+
+    expect(row.steamAppId).toBe(632360);
+    expect(row.steamAppIdSource).toBe('igdb');
+  });
+
+  it("tags 'igdb' for the external_game_source form of the Steam id", () => {
+    const row = mapApiGameToDbRow({
+      ...base,
+      external_games: [{ external_game_source: 1, uid: '251570' }],
+    });
+
+    expect(row.steamAppId).toBe(251570);
+    expect(row.steamAppIdSource).toBe('igdb');
+  });
+
+  it('leaves the source null when there is no Steam external id', () => {
+    const row = mapApiGameToDbRow({
+      ...base,
+      external_games: [{ category: 14, uid: 'twitch-1' }],
+    });
+
+    expect(row.steamAppId).toBeNull();
+    expect(row.steamAppIdSource).toBeNull();
+  });
+
+  it('leaves the source null when the Steam uid is not a number', () => {
+    const row = mapApiGameToDbRow({
+      ...base,
+      external_games: [{ category: 1, uid: 'not-a-number' }],
+    });
+
+    expect(row.steamAppId).toBeNull();
+    expect(row.steamAppIdSource).toBeNull();
   });
 });

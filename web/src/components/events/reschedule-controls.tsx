@@ -1,74 +1,71 @@
+/**
+ * Reschedule modal controls (ROK-1649 lane B8): the neutral poll callout
+ * (ruling 9), the shared Duration radiogroup, the New start field and the
+ * confirm bar — all on the ui primitives, tokens only.
+ */
+import type { JSX } from 'react';
+import { Button } from '../ui/button';
+import { Field } from '../ui/field';
+import { Input } from '../ui/input';
+import { DurationPresetGroup, type DurationChoice } from './shared/duration-preset-group';
 import { DURATION_PRESETS, moveToLabel } from './reschedule-utils';
 
-export function PollBanner({ onPoll, isPending, disabled }: { onPoll: () => void; isPending: boolean; disabled?: boolean }) {
+export function PollBanner({ onPoll, isPending, disabled }: { onPoll: () => void; isPending: boolean; disabled?: boolean }): JSX.Element {
     return (
-        <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5">
+        <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg border border-edge bg-overlay/30 px-3 py-2.5">
             <p className="text-sm text-foreground flex-1">Let your community decide -- post a Discord poll for the best time</p>
-            <button onClick={onPoll} disabled={isPending || disabled}
-                className="shrink-0 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-sm font-medium text-white transition-colors">
-                {isPending ? 'Converting...' : 'Poll for Best Time'}
-            </button>
+            <Button variant="primary" size="sm" className="shrink-0" onClick={onPoll} disabled={disabled}
+                loading={isPending} loadingLabel="Converting...">
+                Poll for Best Time
+            </Button>
         </div>
     );
 }
 
-export function DurationPresetButtons({ durationMinutes, customDuration, setDurationMinutes, setCustomDuration }: {
-    durationMinutes: number; customDuration: boolean;
-    setDurationMinutes: (v: number) => void; setCustomDuration: (v: boolean) => void;
-}) {
+/** One number box of the custom duration with its visible unit. */
+function DurationPart({ label, unit, value, max, step, onChange }: {
+    label: string; unit: string; value: number; max: number; step?: number; onChange: (v: number) => void;
+}): JSX.Element {
     return (
-        <div className="flex items-center gap-1.5 flex-wrap">
-            {DURATION_PRESETS.map((p) => (
-                <button key={p.minutes} type="button"
-                    onClick={() => { setDurationMinutes(p.minutes); setCustomDuration(false); }}
-                    className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${!customDuration && durationMinutes === p.minutes
-                        ? 'bg-emerald-600 text-white' : 'bg-panel border border-edge text-secondary hover:text-foreground'}`}>
-                    {p.label}
-                </button>
-            ))}
-            <button type="button" onClick={() => setCustomDuration(true)}
-                className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${customDuration
-                    ? 'bg-emerald-600 text-white' : 'bg-panel border border-edge text-secondary hover:text-foreground'}`}>
-                Custom
-            </button>
-        </div>
+        <>
+            <Input type="number" inputMode="numeric" fieldSize="sm" aria-label={label} min={0} max={max} step={step}
+                value={value} onChange={(e) => onChange(Number(e.target.value))} className="w-16 text-center" />
+            <span className="text-xs text-muted">{unit}</span>
+        </>
     );
 }
 
-export function CustomDurationInputs({ durationMinutes, setDurationMinutes }: { durationMinutes: number; setDurationMinutes: (v: number) => void }) {
+export function CustomDurationInputs({ durationMinutes, setDurationMinutes }: { durationMinutes: number; setDurationMinutes: (v: number) => void }): JSX.Element {
+    const hours = Math.floor(durationMinutes / 60);
+    const minutes = durationMinutes % 60;
     return (
         <div className="flex items-center gap-2 mt-1.5">
-            <input type="number" min={0} max={23} value={Math.floor(durationMinutes / 60)}
-                onChange={(e) => setDurationMinutes(Number(e.target.value) * 60 + (durationMinutes % 60))}
-                className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-2 focus:ring-success/80" />
-            <span className="text-xs text-muted">hr</span>
-            <input type="number" min={0} max={59} step={15} value={durationMinutes % 60}
-                onChange={(e) => setDurationMinutes(Math.floor(durationMinutes / 60) * 60 + Number(e.target.value))}
-                className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-2 focus:ring-success/80" />
-            <span className="text-xs text-muted">min</span>
+            <DurationPart label="Duration hours" unit="hr" value={hours} max={23} onChange={(h) => setDurationMinutes(h * 60 + minutes)} />
+            <DurationPart label="Duration minutes" unit="min" value={minutes} max={59} step={15} onChange={(m) => setDurationMinutes(hours * 60 + m)} />
         </div>
     );
 }
 
-export function StartTimeInput({ newStartTime, onStartChange }: { newStartTime: string | null; onStartChange: (v: string) => void }) {
+export function StartTimeInput({ newStartTime, onStartChange }: { newStartTime: string | null; onStartChange: (v: string) => void }): JSX.Element {
     return (
-        <div className="flex-1">
-            <label htmlFor="reschedule-start" className="block text-xs text-muted mb-1">New start</label>
-            <input id="reschedule-start" type="datetime-local" value={newStartTime ?? ''}
-                onChange={(e) => onStartChange(e.target.value)}
-                className="w-full bg-panel border border-edge rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-success/80" />
-        </div>
+        <Field label="New start" id="reschedule-start" className="flex-1">
+            <Input type="datetime-local" fieldSize="sm" value={newStartTime ?? ''} onChange={(e) => onStartChange(e.target.value)} />
+        </Field>
     );
 }
 
 export function DurationSelector(props: {
     durationMinutes: number; setDurationMinutes: (v: number) => void;
     customDuration: boolean; setCustomDuration: (v: boolean) => void;
-}) {
+}): JSX.Element {
+    const choose = (choice: DurationChoice) => {
+        if (choice === 'custom') { props.setCustomDuration(true); return; }
+        props.setDurationMinutes(choice);
+        props.setCustomDuration(false);
+    };
     return (
         <div className="flex-1">
-            <label className="block text-xs text-muted mb-1">Duration</label>
-            <DurationPresetButtons {...props} />
+            <DurationPresetGroup presets={DURATION_PRESETS} value={props.customDuration ? 'custom' : props.durationMinutes} onChange={choose} />
             {props.customDuration && <CustomDurationInputs durationMinutes={props.durationMinutes} setDurationMinutes={props.setDurationMinutes} />}
         </div>
     );
@@ -77,17 +74,17 @@ export function DurationSelector(props: {
 export function ConfirmationMessage({ eventTitle, isValid, parsedStart, parsedEnd, selectionSummary, signupCount }: {
     eventTitle: string; isValid: boolean; parsedStart: Date | null; parsedEnd: Date | null;
     selectionSummary: string | null; signupCount: number;
-}) {
+}): JSX.Element {
     if (!isValid) {
         return (
-            <span className="text-red-400">
+            <span className="text-danger">
                 {parsedStart && parsedEnd && parsedStart >= parsedEnd ? 'Start time must be before end time' : 'Start time must be in the future'}
             </span>
         );
     }
     return (
         <>Move <span className="font-semibold">{eventTitle}</span> to{' '}
-            <span className="font-semibold text-emerald-400">{selectionSummary}</span>?
+            <span className="font-semibold text-success">{selectionSummary}</span>?
             {signupCount > 0 && (
                 <span className="text-muted"> All {signupCount} signed-up member{signupCount !== 1 ? 's' : ''} will be notified.</span>
             )}
@@ -99,7 +96,7 @@ export function ConfirmationBar({ eventTitle, isValid, parsedStart, parsedEnd, s
     eventTitle: string; isValid: boolean; parsedStart: Date | null; parsedEnd: Date | null;
     selectionSummary: string | null; signupCount: number; isPending: boolean;
     onClear: () => void; onConfirm: () => void;
-}) {
+}): JSX.Element {
     return (
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
             <p className="text-sm text-foreground">
@@ -107,10 +104,11 @@ export function ConfirmationBar({ eventTitle, isValid, parsedStart, parsedEnd, s
                     parsedEnd={parsedEnd} selectionSummary={selectionSummary} signupCount={signupCount} />
             </p>
             <div className="flex gap-2 shrink-0">
-                <button onClick={onClear} className="btn btn-secondary btn-sm">Clear</button>
-                <button onClick={onConfirm} disabled={isPending || !isValid} className="btn btn-primary btn-sm">
-                    {isPending ? 'Rescheduling...' : moveToLabel(parsedStart)}
-                </button>
+                <Button variant="secondary" size="sm" onClick={onClear}>Clear</Button>
+                <Button variant="primary" size="sm" onClick={onConfirm} disabled={!isValid}
+                    loading={isPending} loadingLabel="Rescheduling...">
+                    {moveToLabel(parsedStart)}
+                </Button>
             </div>
         </div>
     );

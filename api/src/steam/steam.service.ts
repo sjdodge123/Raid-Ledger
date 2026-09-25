@@ -108,7 +108,7 @@ export class SteamService {
     let discovered = 0;
     for (const game of unmatched) {
       try {
-        const result = await discoverGameViaItad(game.appid, deps);
+        const result = await discoverGameViaItad(game.appid, deps, 'steam');
         if (result) discovered++;
       } catch (err) {
         const pg = extractPgErrorDetail(err);

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { IgdbForm } from './IgdbForm';
+import { expectIntegrationActionTriad } from './integration-form-actions.test-utils';
 
 // Mock toast
 vi.mock('../../lib/toast', () => ({
@@ -52,20 +53,33 @@ vi.mock('../../hooks/use-admin-settings', () => ({
     }),
 }));
 
+function resetMocks() {
+    vi.clearAllMocks();
+    mockIgdbStatus.data = null;
+    mockIgdbSyncStatus.data = null;
+    mockUpdateIgdb.isPending = false;
+    mockUpdateIgdb.mutateAsync = vi.fn();
+    mockTestIgdb.isPending = false;
+    mockTestIgdb.mutateAsync = vi.fn();
+    mockClearIgdb.isPending = false;
+    mockClearIgdb.mutateAsync = vi.fn();
+    mockSyncIgdb.isPending = false;
+    mockSyncIgdb.mutateAsync = vi.fn();
+}
+
+/**
+ * ROK-1652 ruling 7: a pending button is Button `loading` — aria-disabled +
+ * aria-busy (focus stays), and it swallows clicks. Listed in the PR as the
+ * equivalent of the old native toBeDisabled(), not a weakening: each case
+ * below also clicks the button and proves the mutation never fires.
+ */
+function expectLoading(btn: HTMLElement) {
+    expect(btn).toHaveAttribute('aria-disabled', 'true');
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+}
+
 describe('IgdbForm — Form rendering', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockIgdbStatus.data = null;
-        mockIgdbSyncStatus.data = null;
-        mockUpdateIgdb.isPending = false;
-        mockUpdateIgdb.mutateAsync = vi.fn();
-        mockTestIgdb.isPending = false;
-        mockTestIgdb.mutateAsync = vi.fn();
-        mockClearIgdb.isPending = false;
-        mockClearIgdb.mutateAsync = vi.fn();
-        mockSyncIgdb.isPending = false;
-        mockSyncIgdb.mutateAsync = vi.fn();
-    });
+    beforeEach(resetMocks);
 
     // ── Form rendering ───────────────────────────────────────────
 
@@ -94,10 +108,15 @@ describe('IgdbForm — Form rendering', () => {
 
     // ── Save Configuration button state ─────────────────────────
 
-    it('Save Configuration button is disabled when updateIgdb is pending', () => {
+    it('Save Configuration button is loading and swallows the submit when updateIgdb is pending', () => {
         mockUpdateIgdb.isPending = true;
         render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+        fireEvent.change(screen.getByLabelText('Client ID'), { target: { value: 'client-id' } });
+        fireEvent.change(screen.getByLabelText('Client Secret'), { target: { value: 'client-secret' } });
+        const btn = screen.getByRole('button', { name: 'Saving...' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockUpdateIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 
     // ── Unconfigured state ───────────────────────────────────────
@@ -125,19 +144,7 @@ describe('IgdbForm — Form rendering', () => {
 });
 
 describe('IgdbForm — Sync Now button', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockIgdbStatus.data = null;
-        mockIgdbSyncStatus.data = null;
-        mockUpdateIgdb.isPending = false;
-        mockUpdateIgdb.mutateAsync = vi.fn();
-        mockTestIgdb.isPending = false;
-        mockTestIgdb.mutateAsync = vi.fn();
-        mockClearIgdb.isPending = false;
-        mockClearIgdb.mutateAsync = vi.fn();
-        mockSyncIgdb.isPending = false;
-        mockSyncIgdb.mutateAsync = vi.fn();
-    });
+    beforeEach(resetMocks);
 
     it('shows Test Connection button when configured', () => {
         mockIgdbStatus.data = { configured: true };
@@ -151,29 +158,39 @@ describe('IgdbForm — Sync Now button', () => {
         expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
     });
 
-    it('Test Connection button is disabled when testIgdb is pending', () => {
+    it('Test Connection button is loading and swallows clicks when testIgdb is pending', () => {
         mockIgdbStatus.data = { configured: true };
         mockTestIgdb.isPending = true;
         render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
+        const btn = screen.getByRole('button', { name: 'Testing...' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(mockTestIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 
-    it('Clear button is disabled when clearIgdb is pending', () => {
+    it('Clear button is loading and swallows clicks when clearIgdb is pending', () => {
         mockIgdbStatus.data = { configured: true };
         mockClearIgdb.isPending = true;
+        const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
         render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
+        const btn = screen.getByRole('button', { name: 'Clear' });
+        expectLoading(btn);
+        fireEvent.click(btn);
+        expect(confirmSpy).not.toHaveBeenCalled();
+        expect(mockClearIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 
     // ── Sync Now button ──────────────────────────────────────────
 
-    it('Sync Now button is disabled when syncIgdb is pending', () => {
+    it('Sync Now button is loading and swallows clicks when syncIgdb is pending', () => {
         mockIgdbStatus.data = { configured: true };
         mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 0, syncInProgress: false };
         mockSyncIgdb.isPending = true;
         render(<IgdbForm />);
         const syncBtn = screen.getByRole('button', { name: 'Syncing...' });
-        expect(syncBtn).toBeDisabled();
+        expectLoading(syncBtn);
+        fireEvent.click(syncBtn);
+        expect(mockSyncIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 
     it('Sync Now button is disabled when syncInProgress is true', () => {
@@ -196,19 +213,7 @@ describe('IgdbForm — Sync Now button', () => {
 });
 
 describe('IgdbForm — Password visibility toggle', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockIgdbStatus.data = null;
-        mockIgdbSyncStatus.data = null;
-        mockUpdateIgdb.isPending = false;
-        mockUpdateIgdb.mutateAsync = vi.fn();
-        mockTestIgdb.isPending = false;
-        mockTestIgdb.mutateAsync = vi.fn();
-        mockClearIgdb.isPending = false;
-        mockClearIgdb.mutateAsync = vi.fn();
-        mockSyncIgdb.isPending = false;
-        mockSyncIgdb.mutateAsync = vi.fn();
-    });
+    beforeEach(resetMocks);
 
     it('shows Loading... when sync status data is null', () => {
         mockIgdbStatus.data = { configured: true };
@@ -261,4 +266,62 @@ describe('IgdbForm — Password visibility toggle', () => {
         expect(mockClearIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 
+});
+
+describe('IgdbForm — Fields and panels (ROK-1652)', () => {
+    beforeEach(resetMocks);
+
+    it('keeps the smoke ids on the Client ID and Client Secret fields', () => {
+        render(<IgdbForm />);
+        expect(screen.getByLabelText('Client ID')).toHaveAttribute('id', 'igdbClientId');
+        expect(screen.getByLabelText('Client Secret')).toHaveAttribute('id', 'igdbClientSecret');
+    });
+
+    it('names the Redirect URI field and its copy button', () => {
+        render(<IgdbForm />);
+        expect(screen.getByLabelText('Redirect URI')).toHaveValue('http://localhost');
+        expect(screen.getByRole('button', { name: 'Copy Redirect URI' })).toBeInTheDocument();
+    });
+
+    it('renders the setup instructions as a neutral token panel', () => {
+        render(<IgdbForm />);
+        const panel = screen.getByText(/Setup Instructions/).closest('p')!.parentElement!;
+        expect(panel).toHaveClass('bg-overlay/30', 'border-edge');
+    });
+});
+
+describe('IgdbForm — Health dots (ROK-1652)', () => {
+    beforeEach(resetMocks);
+
+    it.each([
+        ['valid', 'bg-success'],
+        ['expired', 'bg-warning'],
+        ['none', 'bg-dim'],
+    ])('paints the %s token-status dot with %s', (tokenStatus, cls) => {
+        mockIgdbStatus.data = { configured: true, health: { tokenStatus } };
+        const { container } = render(<IgdbForm />);
+        expect(container.querySelector('.w-2.h-2.rounded-full')).toHaveClass(cls);
+    });
+
+    it.each([
+        [true, 'bg-success'],
+        [false, 'bg-danger'],
+    ])('paints the last-API-call dot (success=%s) with %s', (lastApiCallSuccess, cls) => {
+        mockIgdbStatus.data = {
+            configured: true,
+            health: { tokenStatus: 'valid', lastApiCallAt: new Date().toISOString(), lastApiCallSuccess },
+        };
+        const { container } = render(<IgdbForm />);
+        expect(container.querySelectorAll('.w-2.h-2.rounded-full')[1]).toHaveClass(cls);
+    });
+});
+
+describe('IgdbForm — action triad layout (ROK-1652 B)', () => {
+    beforeEach(resetMocks);
+
+    it('renders Save as a full-width primary row, then Test and Clear', () => {
+        mockIgdbStatus.data = { configured: true };
+        render(<IgdbForm />);
+        expectIntegrationActionTriad();
+    });
 });

@@ -110,7 +110,7 @@ describe('discoverGameViaItad', () => {
       const deps = buildDeps();
       (deps.lookupBySteamAppId as jest.Mock).mockResolvedValue(null);
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toBeNull();
     });
@@ -126,7 +126,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toBeNull();
     });
@@ -144,7 +144,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(dlcGame),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toBeNull();
     });
@@ -160,7 +160,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(expansionGame),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toBeNull();
     });
@@ -177,7 +177,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).not.toBeNull();
       expect(result?.gameId).toBe(42);
@@ -196,7 +196,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(packageGame),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toBeNull();
       expect(mockDb.insert).not.toHaveBeenCalled();
@@ -210,7 +210,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(dlcGame),
       });
 
-      await discoverGameViaItad(STEAM_APP_ID, deps);
+      await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(mockDb.query.games.findFirst).not.toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();
@@ -244,7 +244,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toEqual({
         gameId: 42,
@@ -298,7 +298,7 @@ describe('discoverGameViaItad', () => {
         queryIgdb,
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toEqual({
         gameId: 55,
@@ -330,7 +330,7 @@ describe('discoverGameViaItad', () => {
         queryIgdb: undefined,
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.source).toBe('itad');
       expect(enrichFromIgdb).not.toHaveBeenCalled();
@@ -359,7 +359,7 @@ describe('discoverGameViaItad', () => {
         adultFilterEnabled: true,
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result).toEqual({
         gameId: 77,
@@ -387,7 +387,7 @@ describe('discoverGameViaItad', () => {
         adultFilterEnabled: false,
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.hidden).toBe(false);
     });
@@ -411,7 +411,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(100);
       // Should have called insert (not update) since merge was blocked
@@ -433,7 +433,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(50);
       expect(mockDb.update).toHaveBeenCalled();
@@ -453,7 +453,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(200);
       // Should update, not insert
@@ -477,7 +477,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(noItadIdGame),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(300);
       // Only 2 findFirst calls (isBannedBySlug + slug check), no itadGameId lookup
@@ -510,7 +510,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(101);
       expect(mockDb.insertValues).toHaveBeenCalledTimes(2);
@@ -531,7 +531,7 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(7);
       // The common path must not pay for the collision path — no probe SELECT,
@@ -577,7 +577,7 @@ describe('discoverGameViaItad', () => {
         queryIgdb,
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(102);
       expect(mockDb.insertValues).toHaveBeenLastCalledWith(
@@ -603,9 +603,9 @@ describe('discoverGameViaItad', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow(
-        'connection lost',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('connection lost');
     });
   });
 });
@@ -734,9 +734,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow(
-        'db connection lost during itad id lookup',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('db connection lost during itad id lookup');
       // Should not have reached insert or update
       expect(mockDb.insert).not.toHaveBeenCalled();
       expect(mockDb.update).not.toHaveBeenCalled();
@@ -761,9 +761,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow(
-        'update constraint violation',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('update constraint violation');
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
@@ -783,9 +783,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow(
-        'update deadlock',
-      );
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow('update deadlock');
     });
   });
 
@@ -808,7 +808,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
 
       // The caller indexes [0].id, so an empty array would surface as a
       // confusing `undefined.id` TypeError instead of the real cause.
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow(
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow(
         /Unresolvable unique collision inserting game "Elden Ring"/,
       );
       expect(mockDb.insertValues).toHaveBeenCalledTimes(2);
@@ -828,7 +830,9 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      await expect(discoverGameViaItad(STEAM_APP_ID, deps)).rejects.toThrow();
+      await expect(
+        discoverGameViaItad(STEAM_APP_ID, deps, 'steam'),
+      ).rejects.toThrow();
 
       expect(mockDb.insertValues).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -853,7 +857,7 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(700);
       expect(mockDb.update).toHaveBeenCalled();
@@ -877,7 +881,7 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(801);
       expect(mockDb.insert).toHaveBeenCalled();
@@ -907,7 +911,7 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(900);
       expect(mockDb.insertValues).toHaveBeenLastCalledWith(
@@ -935,7 +939,7 @@ describe('discoverGameViaItad — adversarial scenarios (ROK-855)', () => {
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
       });
 
-      const result = await discoverGameViaItad(STEAM_APP_ID, deps);
+      const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
 
       expect(result?.gameId).toBe(42);
       // All 3 lookups happened, then insert

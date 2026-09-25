@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { toast } from '../../../lib/toast';
 import { useConfigureProvider, useActivateProvider } from '../../../hooks/admin/use-ai-settings';
 import type { AiProviderInfoDto } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
+import { Field } from '../../../components/ui/field';
+import { PasswordInput } from '../../../components/ui/password-input';
 
 interface CloudProviderCardProps {
     provider: AiProviderInfoDto;
@@ -40,27 +44,30 @@ const PROVIDER_INSTRUCTIONS: Record<string, { url: string; steps: string[] }> = 
     },
 };
 
+const CONSOLE_NAME: Record<string, string> = { openai: 'OpenAI', claude: 'Anthropic', google: 'Google AI' };
+
 /** Collapsible setup instructions for a provider. */
 function Instructions({ providerKey }: { providerKey: string }) {
     const [open, setOpen] = useState(false);
+    const panelId = useId();
     const info = PROVIDER_INSTRUCTIONS[providerKey];
     if (!info) return null;
 
     return (
         <div className="border border-edge/50 rounded-lg overflow-hidden">
-            <button type="button" onClick={() => setOpen((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 text-xs text-secondary hover:text-foreground transition-colors">
-                <span>How to get an API key</span>
-                <span className="text-muted">{open ? '▲' : '▼'}</span>
-            </button>
+            <Button variant="ghost" size="sm" fullWidth aria-expanded={open} aria-controls={panelId}
+                onClick={() => setOpen((v) => !v)}>
+                How to get an API key
+                <ChevronDownIcon className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
+            </Button>
             {open && (
-                <div className="px-3 pb-3 space-y-2">
+                <div id={panelId} className="px-3 pb-3 space-y-2">
                     <ol className="list-decimal list-inside space-y-1 text-xs text-muted">
                         {info.steps.map((step, i) => <li key={i}>{step}</li>)}
                     </ol>
                     <a href={info.url} target="_blank" rel="noopener noreferrer"
-                        className="inline-block text-xs text-purple-400 hover:text-purple-300 underline">
-                        Open {providerKey === 'openai' ? 'OpenAI' : providerKey === 'claude' ? 'Anthropic' : 'Google AI'} Console →
+                        className="inline-block text-xs text-secondary underline hover:text-foreground">
+                        Open {CONSOLE_NAME[providerKey] ?? 'Provider'} Console →
                     </a>
                 </div>
             )}
@@ -68,47 +75,30 @@ function Instructions({ providerKey }: { providerKey: string }) {
     );
 }
 
-/** Masked API key input with eye toggle. */
-function ApiKeyInput({ value, onChange, show, onToggle }: {
-    value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void;
-}) {
+/** The API key field: the shared PasswordInput, toggle named "Show API key" / "Hide API key". */
+function ApiKeyInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
     return (
-        <div className="relative">
-            <input
-                type={show ? 'text' : 'password'}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                placeholder="Enter API key"
-                className="w-full px-4 py-3 pr-12 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-            />
-            <button
-                type="button"
-                onClick={onToggle}
-                aria-label={show ? 'Hide API key' : 'Show API key'}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
-            >
-                {show ? 'Hide' : 'Show'}
-            </button>
-        </div>
+        <Field label="API key">
+            <PasswordInput label="API key" fieldSize="lg" value={value}
+                onChange={(e) => onChange(e.target.value)} placeholder="Enter API key" />
+        </Field>
     );
 }
 
-/** Action buttons for saving and activating a provider. */
+/** Action buttons for saving and activating a provider (ruling 10: Set as Active is secondary). */
 function CardActions({ onSave, onActivate, savePending, activePending, isActive, isConfigured }: {
     onSave: () => void; onActivate: () => void;
     savePending: boolean; activePending: boolean; isActive: boolean; isConfigured: boolean;
 }) {
     return (
         <div className="flex flex-wrap gap-2 pt-2">
-            <button type="button" onClick={onSave} disabled={savePending}
-                className="py-2 px-4 bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors text-sm">
-                {savePending ? 'Saving...' : 'Save'}
-            </button>
+            <Button variant="primary" onClick={onSave} loading={savePending} loadingLabel="Saving...">
+                Save
+            </Button>
             {isConfigured && !isActive && (
-                <button type="button" onClick={onActivate} disabled={activePending}
-                    className="py-2 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors text-sm">
-                    {activePending ? 'Activating...' : 'Set as Active'}
-                </button>
+                <Button variant="secondary" onClick={onActivate} loading={activePending} loadingLabel="Activating...">
+                    Set as Active
+                </Button>
             )}
         </div>
     );
@@ -116,7 +106,6 @@ function CardActions({ onSave, onActivate, savePending, activePending, isActive,
 
 export function CloudProviderCard({ provider }: CloudProviderCardProps) {
     const [apiKey, setApiKey] = useState('');
-    const [showKey, setShowKey] = useState(false);
     const configure = useConfigureProvider();
     const activate = useActivateProvider();
 
@@ -137,7 +126,7 @@ export function CloudProviderCard({ provider }: CloudProviderCardProps) {
             </div>
             <ProviderError error={provider.error} />
             <Instructions providerKey={provider.key} />
-            <ApiKeyInput value={apiKey} onChange={setApiKey} show={showKey} onToggle={() => setShowKey((v) => !v)} />
+            <ApiKeyInput value={apiKey} onChange={setApiKey} />
             <CardActions onSave={handleSave} onActivate={handleActivate}
                 savePending={configure.isPending} activePending={activate.isPending}
                 isActive={provider.active} isConfigured={provider.configured} />
@@ -145,14 +134,16 @@ export function CloudProviderCard({ provider }: CloudProviderCardProps) {
     );
 }
 
+const PILL = 'text-xs px-2 py-0.5 rounded-full';
+
 function ProviderBadge({ provider }: { provider: AiProviderInfoDto }) {
-    if (provider.active && provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">Active</span>;
-    if (provider.active && !provider.available) return <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400">Selected · Offline</span>;
-    if (provider.configured) return <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-400">Configured</span>;
-    return <span className="text-xs px-2 py-0.5 rounded-full bg-dim/20 text-muted">Not Configured</span>;
+    if (provider.active && provider.available) return <span className={`${PILL} bg-success/10 text-success`}>Active</span>;
+    if (provider.active && !provider.available) return <span className={`${PILL} bg-warning/10 text-warning`}>Selected · Offline</span>;
+    if (provider.configured) return <span className={`${PILL} bg-overlay text-secondary`}>Configured</span>;
+    return <span className={`${PILL} bg-dim/20 text-muted`}>Not Configured</span>;
 }
 
 function ProviderError({ error }: { error?: string }) {
     if (!error) return null;
-    return <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded px-2 py-1">{error}</p>;
+    return <p className="text-xs text-warning bg-warning/10 border border-warning/30 rounded px-2 py-1">{error}</p>;
 }

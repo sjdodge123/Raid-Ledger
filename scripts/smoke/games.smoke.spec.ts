@@ -84,8 +84,8 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
 // /games Filters entry (`games-filters.ts`: the toolbar funnel + inline panel
 // at 1024px and up, the Filters FAB + BottomSheet below). The group is rendered
 // only while some loaded game carries Co-Optimus data (ROK-1402 dormancy):
-//   • Online-players predicate: a range slider, aria-label "Min online players"
-//     (0 = "Any"/inactive).
+//   • Online-players predicate: the shared Slider, named by its visible label
+//     "Online co-op" (ROK-1650 ruling 12; 0 = "Any"/inactive).
 //   • Boolean toggles: "Couch co-op", "LAN co-op", "Split-screen",
 //     "Co-op campaign".
 //   • Hint line `[data-testid="coop-filter-hint"]` reading
@@ -156,7 +156,7 @@ async function openCoopControls(page: Page): Promise<Locator> {
 }
 
 function onlineSlider(filters: Locator): Locator {
-    return filters.getByLabel(/min online players/i);
+    return filters.getByRole('slider', { name: 'Online co-op', exact: true });
 }
 
 /**

@@ -4,7 +4,7 @@
  * same gates, same testids, same modals; the desktop dropdown is unchanged.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, fireEvent } from '@testing-library/react';
+import { screen, fireEvent, act } from '@testing-library/react';
 import { renderWithProviders } from '../../test/render-helpers';
 import { createMockLineupDetail } from '../../test/lineup-factories';
 import { LineupOperatorMenu } from './LineupOperatorMenu';
@@ -101,5 +101,35 @@ describe('LineupOperatorMenu — phone sheet (ROK-1584)', () => {
         const menu = screen.getByTestId('lineup-operator-menu');
         expect(Array.from(menu.classList)).toContain('absolute');
         expect(screen.getByTestId('lineup-operator-menu-edit')).toBeInTheDocument();
+    });
+});
+
+describe('LineupOperatorMenu — phone sheet hands focus to the modal it opens (ROK-1650)', () => {
+    beforeEach(() => {
+        vi.mocked(useAuth).mockReturnValue({
+            user: { id: 99, role: 'operator' },
+        } as ReturnType<typeof useAuth>);
+        vi.mocked(isOperatorOrAdmin).mockReturnValue(true);
+    });
+    afterEach(() => vi.unstubAllGlobals());
+
+    it('keeps focus on the Advance confirm button when the sheet closes (fleet UI verify, 375px)', async () => {
+        stubViewport(false);
+        const lineup = createMockLineupDetail({
+            status: 'building',
+        } as Parameters<typeof createMockLineupDetail>[0]);
+        renderWithProviders(<LineupOperatorMenu lineup={lineup} />);
+        // A real tap focuses the trigger (jsdom's click does not), which is the
+        // element the sheet hands focus back to when it closes.
+        const trigger = screen.getByTestId('lineup-operator-menu-trigger');
+        trigger.focus();
+        fireEvent.click(trigger);
+        // The sheet moves focus into itself on a 0ms timer; let it land.
+        await act(() => new Promise<void>((r) => setTimeout(r, 0)));
+        fireEvent.click(screen.getByTestId('lineup-operator-menu-advance'));
+        // The modal's focus trap settles on the next animation frame.
+        await act(() => new Promise<void>((r) => requestAnimationFrame(() => r())));
+        const confirm = screen.getByRole('button', { name: 'Advance to Voting' });
+        expect(document.activeElement).toBe(confirm);
     });
 });

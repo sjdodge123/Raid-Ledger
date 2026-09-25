@@ -236,3 +236,67 @@ describe('sharing the ETA is its own switch, default OFF (operator ruling 2026-0
         expect(screen.getByText('Measure or enter a speed first')).toBeInTheDocument();
     });
 });
+
+describe('ROK-1650 — the size field, share row and SteamDB link use the shared primitives', () => {
+    function renderSize(over: Partial<TieReadinessGameDto> = {}) {
+        return renderWithProviders(
+            <InstallSizeEntryModal lineupId={7} game={makeGame(over)} isOpen onClose={() => undefined} />,
+        );
+    }
+
+    it('an unusable size shows an inline alert on the field, not an amber note', async () => {
+        renderSize();
+        const field = screen.getByLabelText(/Install size \(GB\)/);
+        await userEvent.type(field, '0');
+        await userEvent.click(screen.getByRole('button', { name: 'Save size' }));
+        const alert = screen.getByRole('alert');
+        expect(alert.textContent).not.toBe('');
+        expect(alert.className).not.toMatch(/amber/);
+        expect(alert).toHaveClass('text-danger');
+        expect(field).toHaveAttribute('aria-invalid', 'true');
+        expect(field).toHaveAccessibleDescription(alert.textContent ?? '');
+    });
+
+    it('Save size reports busy while the size is saving (ruling 7: aria-busy + aria-disabled)', async () => {
+        let release: (() => void) | undefined;
+        server.use(
+            http.put(`${API}/games/11/install-size`, () =>
+                new Promise<Response>((resolve) => {
+                    release = () => resolve(HttpResponse.json({ ok: true }));
+                }),
+            ),
+        );
+        renderSize();
+        await userEvent.type(screen.getByLabelText(/Install size \(GB\)/), '12.5');
+        await userEvent.click(screen.getByRole('button', { name: 'Save size' }));
+        const save = screen.getByRole('button', { name: 'Save size' });
+        await waitFor(() => expect(save).toHaveAttribute('aria-busy', 'true'));
+        expect(save).toHaveAttribute('aria-disabled', 'true');
+        release?.();
+    });
+
+    it('the SteamDB link wears the success token, not raw emerald (ruling 9)', () => {
+        renderSize({ steamAppId: 548430 });
+        const link = screen.getByRole('link', { name: /steamdb/i });
+        expect(link).toHaveClass('text-success');
+        expect(link.className).not.toMatch(/emerald/);
+    });
+
+    it('the share checkbox carries its explanation as its description (ruling 12: Checkbox)', () => {
+        renderWithProviders(
+            <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={measured} />,
+        );
+        expect(screen.getByRole('checkbox', { name: SHARE_LABEL })).toHaveAccessibleDescription(
+            /never your speed or how it was measured/,
+        );
+    });
+
+    it('a disabled share checkbox says why in its description', () => {
+        renderWithProviders(
+            <ConnectionSpeedConsentModal isOpen onClose={() => undefined} speed={speed} />,
+        );
+        expect(screen.getByRole('checkbox', { name: SHARE_LABEL })).toHaveAccessibleDescription(
+            /Measure or enter a speed first/,
+        );
+    });
+});

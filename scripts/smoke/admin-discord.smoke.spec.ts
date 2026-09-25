@@ -293,7 +293,7 @@ test.describe("Admin Discord — Features", () => {
     ) {
       await expect(quickPlayHeading).toBeVisible();
       await expect(
-        page.getByRole("checkbox", { name: "Enable Quick Play Events" }),
+        page.getByRole("switch", { name: "Enable Quick Play Events" }),
       ).toBeVisible();
     }
 
@@ -323,7 +323,7 @@ test.describe("Admin Discord — Features", () => {
     ) {
       await expect(ephemeralHeading).toBeVisible();
       await expect(
-        page.getByLabel("Enable ephemeral voice channels"),
+        page.getByRole("switch", { name: "Enable ephemeral voice channels" }),
       ).toBeVisible();
     }
   });

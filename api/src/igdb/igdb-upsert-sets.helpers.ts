@@ -5,10 +5,23 @@
  * limit (ROK-1438). Pure mapping — no queries, so nothing here needs the
  * find-then-insert name lock.
  */
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import type { SteamAppIdSource } from '../drizzle/schema';
 import type { mapApiGameToDbRow } from './igdb.mappers';
 import { keepSeedOwned } from '../games-lookup/seed-owned-games.helpers';
+
+/**
+ * SET expression for `games.steam_app_id_source` (ROK-1680). Writes `tag` only
+ * when the incoming Steam id is non-null AND differs from the stored one;
+ * otherwise it keeps the stored source. An agreeing id is corroboration, not a
+ * new provenance. `newId` is SQL (a cast param or `excluded.steam_app_id`) so
+ * the placeholder has a type Postgres can resolve.
+ */
+export function steamSourceOnChange(newId: SQL, tag: SteamAppIdSource): SQL {
+  const stored = schema.games.steamAppId;
+  return sql`CASE WHEN ${newId} IS NOT NULL AND ${newId} IS DISTINCT FROM ${stored} THEN ${tag}::varchar ELSE ${schema.games.steamAppIdSource} END`;
+}
 
 /**
  * Single-row upsert SET. COALESCE preserves existing twitch/steam ids when row
@@ -33,6 +46,10 @@ export function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
     playerCount: row.playerCount,
     twitchGameId: row.twitchGameId ?? sql`${schema.games.twitchGameId}`,
     steamAppId: row.steamAppId ?? sql`${schema.games.steamAppId}`,
+    steamAppIdSource:
+      row.steamAppId == null
+        ? sql`${schema.games.steamAppIdSource}`
+        : steamSourceOnChange(sql`${row.steamAppId}::integer`, 'igdb'),
     crossplay: row.crossplay,
     cachedAt: new Date(),
   };
@@ -58,6 +75,7 @@ export function buildBatchUpsertSet() {
     playerCount: sql`excluded.player_count`,
     twitchGameId: sql`COALESCE(excluded.twitch_game_id, ${schema.games.twitchGameId})`,
     steamAppId: sql`COALESCE(excluded.steam_app_id, ${schema.games.steamAppId})`,
+    steamAppIdSource: steamSourceOnChange(sql`excluded.steam_app_id`, 'igdb'),
     crossplay: sql`excluded.crossplay`,
     cachedAt: sql`now()`,
   };
