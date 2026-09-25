@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -13,6 +18,9 @@ import {
   shortSha,
 } from './commit-freshness';
 import { fetchLatestRelease, isNewer, normalizeVersion } from './release-check';
+
+/** Delay before the one-off startup check, so it doesn't block boot. */
+export const INITIAL_CHECK_DELAY_MS = 10_000;
 
 type FailedFetch =
   { kind: 'rate-limited' } | { kind: 'error'; status?: number };
@@ -33,10 +41,16 @@ type FailedFetch =
  * Each half writes only its own keys, and only on success — a failed half
  * (rate limit, network, air-gapped) keeps the previous values. Runs once on
  * startup (after 10 s) and daily at midnight.
+ *
+ * The startup timer is stored, `unref()`'d and cleared on module destroy
+ * (ROK-1527): left running, it fired after `app.close()` and its GitHub
+ * fetch inherited the finished integration spec's async context, pinning
+ * that spec file's whole Jest realm for the rest of the run.
  */
 @Injectable()
-export class VersionCheckService implements OnModuleInit {
+export class VersionCheckService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(VersionCheckService.name);
+  private initialCheckTimer: NodeJS.Timeout | null = null;
   private readonly currentVersion: string;
   private readonly commitSha: string | null = readCommitSha();
 
@@ -65,11 +79,18 @@ export class VersionCheckService implements OnModuleInit {
 
   onModuleInit() {
     // Run initial check after a short delay so it doesn't block startup
-    setTimeout(() => {
+    this.initialCheckTimer = setTimeout(() => {
+      this.initialCheckTimer = null;
       this.checkForUpdates().catch((err) => {
         this.logger.warn('Initial version check failed:', err);
       });
-    }, 10_000);
+    }, INITIAL_CHECK_DELAY_MS);
+    this.initialCheckTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.initialCheckTimer) clearTimeout(this.initialCheckTimer);
+    this.initialCheckTimer = null;
   }
 
   /** The running instance's semver (APP_VERSION or package.json). */
