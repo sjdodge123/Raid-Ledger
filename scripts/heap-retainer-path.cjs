@@ -1,0 +1,91 @@
+#!/usr/bin/env node
+/* ROK-1527 WIP — shortest non-weak retainer path from the GC root to target
+ * nodes in a V8 .heapsnapshot. Streams the numeric arrays out of a Buffer so
+ * snapshots larger than V8's max string length still parse.
+ * Usage: node --max-old-space-size=8000 scripts/heap-retainer-path.cjs <file> [name ...]
+ * Default targets: NestApplication. Also resolves `rl-probe-file-N` tag strings
+ * to the object that holds them. */
+'use strict';
+const fs = require('fs');
+const file = process.argv[2];
+const extra = process.argv.slice(3);
+const buf = fs.readFileSync(file);
+
+function parseIntArray(key, count) {
+  let i = buf.indexOf(`"${key}":[`) + key.length + 4;
+  const out = new Float64Array(count);
+  let n = 0, cur = 0, inNum = false;
+  for (; n < count && i < buf.length; i++) {
+    const c = buf[i];
+    if (c >= 48 && c <= 57) { cur = cur * 10 + (c - 48); inNum = true; }
+    else if (inNum) { out[n++] = cur; cur = 0; inNum = false; if (c === 93) break; }
+    else if (c === 93) break;
+  }
+  if (inNum && n < count) out[n++] = cur;
+  if (n !== count) throw new Error(`${key}: parsed ${n} of ${count}`);
+  return out;
+}
+
+const headEnd = buf.indexOf('"nodes":[');
+const head = buf.slice(0, headEnd).toString().trim().replace(/^\{"snapshot":/, '').replace(/,$/, '');
+const snap = JSON.parse(head);
+const meta = snap.meta;
+const NF = meta.node_fields.length, EF = meta.edge_fields.length;
+const nodeTypes = meta.node_types[0], edgeTypes = meta.edge_types[0];
+const nodes = parseIntArray('nodes', snap.node_count * NF);
+const edges = parseIntArray('edges', snap.edge_count * EF);
+const sStart = buf.indexOf('"strings":[') + 10;
+const strings = JSON.parse(buf.slice(sStart, buf.lastIndexOf(']') + 1).toString());
+const nT = meta.node_fields.indexOf('type'), nN = meta.node_fields.indexOf('name');
+const nE = meta.node_fields.indexOf('edge_count'), nS = meta.node_fields.indexOf('self_size');
+const eT = meta.edge_fields.indexOf('type'), eN = meta.edge_fields.indexOf('name_or_index');
+const eTo = meta.edge_fields.indexOf('to_node');
+const N = snap.node_count;
+const firstEdge = new Float64Array(N + 1);
+for (let k = 0; k < N; k++) firstEdge[k + 1] = firstEdge[k] + nodes[k * NF + nE] * EF;
+const name = (k) => strings[nodes[k * NF + nN]];
+const ntype = (k) => nodeTypes[nodes[k * NF + nT]];
+function edgeLabel(e) {
+  const t = edgeTypes[edges[e + eT]];
+  const v = edges[e + eN];
+  return t === 'element' || t === 'hidden' ? `${t}[${v}]` : `${t}:${strings[v]}`;
+}
+// BFS from root (node 0) over non-weak edges → shortest retainer path.
+const parentEdge = new Float64Array(N).fill(-1);
+const parentNode = new Int32Array(N).fill(-1);
+const seen = new Uint8Array(N);
+const queue = new Int32Array(N);
+let qh = 0, qt = 0;
+queue[qt++] = 0; seen[0] = 1;
+while (qh < qt) {
+  const k = queue[qh++];
+  for (let e = firstEdge[k]; e < firstEdge[k + 1]; e += EF) {
+    const t = edgeTypes[edges[e + eT]];
+    if (t === 'weak' || t === 'shortcut') continue;
+    const to = edges[e + eTo] / NF;
+    if (seen[to]) continue;
+    seen[to] = 1; parentEdge[to] = e; parentNode[to] = k; queue[qt++] = to;
+  }
+}
+function pathTo(k) {
+  if (!seen[k]) return '  (unreachable via strong edges)';
+  const steps = [];
+  for (let c = k; c > 0; c = parentNode[c]) {
+    steps.push(`  <- [${edgeLabel(parentEdge[c])}] of ${ntype(parentNode[c])} "${String(name(parentNode[c])).slice(0, 90)}"`);
+  }
+  return steps.join('\n');
+}
+const targets = new Set(['NestApplication', 'NestContainer', ...extra]);
+const counts = {};
+const hits = [];
+for (let k = 0; k < N; k++) {
+  const nm = name(k);
+  if (ntype(k) === 'object' && targets.has(nm)) { counts[nm] = (counts[nm] || 0) + 1; hits.push(k); }
+  if (ntype(k) === 'string' && /^rl-probe-file-\d+$/.test(nm)) hits.push(k);
+  if (ntype(k) === 'hidden' && nm === 'system / NativeContext') counts.NativeContext = (counts.NativeContext || 0) + 1;
+}
+console.log('counts', JSON.stringify(counts), 'nodes', N);
+for (const k of hits.slice(0, 12)) {
+  console.log(`\n### ${ntype(k)} "${name(k)}" id=${nodes[k * NF + 2]} self=${nodes[k * NF + nS]}`);
+  console.log(pathTo(k));
+}
