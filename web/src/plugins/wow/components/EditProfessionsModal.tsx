@@ -233,7 +233,8 @@ function ProfessionRowEditor({
             </div>
             <span className="text-muted">/</span>
             <span className="shrink-0 min-w-[3ch] text-center text-muted font-mono" aria-label="Max skill">{maxSkill}</span>
-            <Button variant="ghost" iconOnly aria-label="Remove profession" onClick={onRemove}>
+            <Button variant="ghost" iconOnly onClick={onRemove}
+                aria-label={draft.name ? `Remove ${draft.name}` : 'Remove profession'}>
                 <XMarkIcon aria-hidden="true" className="w-5 h-5" />
             </Button>
         </div>

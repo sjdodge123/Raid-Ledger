@@ -252,18 +252,18 @@ describe('EditProfessionsModal — shared primitives (ROK-1654 H3)', () => {
         syncedAt: '2026-04-28T00:00:00.000Z',
     };
 
-    it('Remove profession is a named button with a decorative icon, and removes its row', async () => {
+    it('each Remove button is named after its profession, has a decorative icon, and removes its row', async () => {
         const user = userEvent.setup();
         renderWithProviders(
             <EditProfessionsModal {...baseProps} initial={TWO_PRIMARY} />,
         );
         expect(screen.getAllByRole('combobox', { name: /profession/i })).toHaveLength(2);
-        const removeButtons = screen.getAllByRole('button', { name: 'Remove profession' });
-        expect(removeButtons).toHaveLength(2);
-        expect(removeButtons[0].querySelector('svg[aria-hidden="true"]')).not.toBeNull();
-        expect(removeButtons[0].textContent).not.toContain('✕');
+        const removeTailoring = screen.getByRole('button', { name: 'Remove Tailoring' });
+        expect(screen.getByRole('button', { name: 'Remove Mining' })).toBeInTheDocument();
+        expect(removeTailoring.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+        expect(removeTailoring.textContent).not.toContain('✕');
 
-        await user.click(removeButtons[0]);
+        await user.click(removeTailoring);
 
         const remaining = screen.getAllByRole('combobox', { name: /profession/i });
         expect(remaining).toHaveLength(1);
