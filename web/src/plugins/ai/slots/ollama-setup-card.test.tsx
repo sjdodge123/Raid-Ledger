@@ -57,6 +57,14 @@ describe('OllamaSetupCard', () => {
         expect(screen.getByText('Running')).toBeInTheDocument();
     });
 
+    it('paints the Running badge with the neutral theme tokens, like the cloud "Configured" pill', () => {
+        renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ available: true })} />);
+        const pill = screen.getByText('Running');
+        expect(pill.className).toContain('bg-overlay');
+        expect(pill.className).toContain('text-secondary');
+        expect(pill.className).not.toMatch(/-blue-\d{3}/);
+    });
+
     it('shows Active badge when active', () => {
         renderWithProviders(<OllamaSetupCard provider={createOllamaProvider({ active: true, available: true })} />);
         expect(screen.getByText('Active')).toBeInTheDocument();

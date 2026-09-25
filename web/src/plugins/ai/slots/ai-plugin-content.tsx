@@ -25,8 +25,8 @@ function AiIcon() {
 function ActiveIndicator({ providers }: { providers: AiProviderInfoDto[] }) {
     const active = providers.find((p) => p.active);
     if (!active) return <span className="text-xs text-muted">No provider selected</span>;
-    if (!active.available) return <span className="text-xs text-amber-400">{active.displayName} (Offline)</span>;
-    return <span className="text-xs text-emerald-400">{active.displayName}</span>;
+    if (!active.available) return <span className="text-xs text-warning">{active.displayName} (Offline)</span>;
+    return <span className="text-xs text-success">{active.displayName}</span>;
 }
 
 /** Grid of provider cards — Ollama first, then cloud providers. */
@@ -95,7 +95,7 @@ function TestChatSection() {
     };
     // Fallback: show mutation error if catch block didn't fire (e.g. network failure)
     const display = result ?? (testChat.isError ? { success: false, response: testChat.error.message, latencyMs: 0 } : null);
-    const resCls = display?.success ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300' : 'bg-red-500/5 border-red-500/20 text-red-300';
+    const resCls = display?.success ? 'bg-success/10 border-success/30 text-success' : 'bg-danger/10 border-danger/30 text-danger';
     return (
         <div className="space-y-2">
             <h3 className="text-sm font-medium text-secondary">Test LLM</h3>
@@ -103,7 +103,7 @@ function TestChatSection() {
                 <Button variant="secondary" onClick={handleTest} loading={testChat.isPending} loadingLabel="Testing...">
                     Send Test Message
                 </Button>
-                {display && <span className={`text-xs ${display.success ? 'text-emerald-400' : 'text-red-400'}`}>{display.latencyMs > 0 ? `${display.latencyMs}ms` : ''}</span>}
+                {display && <span className={`text-xs ${display.success ? 'text-success' : 'text-danger'}`}>{display.latencyMs > 0 ? `${display.latencyMs}ms` : ''}</span>}
             </div>
             {display && <div className={`text-sm p-3 rounded-lg border ${resCls}`}>{display.response}</div>}
         </div>

@@ -1,3 +1,4 @@
+import { useId } from 'react';
 import { useAiFeatures, useUpdateAiFeatures } from '../../../hooks/admin/use-ai-settings';
 import { Switch } from '../../../components/ui/switch';
 
@@ -19,13 +20,14 @@ function FeatureToggle({
     disabled: boolean;
     onChange: (v: boolean) => void;
 }) {
+    const descriptionId = useId();
     return (
         <div className="flex items-center justify-between gap-4 py-2">
             <div>
                 <p className="text-sm font-medium text-foreground">{label}</p>
-                <p className="text-xs text-muted">{description}</p>
+                <p id={descriptionId} className="text-xs text-muted">{description}</p>
             </div>
-            <Switch checked={enabled} onChange={onChange} label={label} disabled={disabled} />
+            <Switch checked={enabled} onChange={onChange} label={label} disabled={disabled} aria-describedby={descriptionId} />
         </div>
     );
 }

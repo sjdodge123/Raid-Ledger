@@ -142,7 +142,7 @@ function OllamaInstructions() {
                         <li>The Docker image (~3 GB) and default model (~2 GB) will be downloaded automatically</li>
                         <li>First setup takes 5-10 minutes depending on your connection</li>
                     </ol>
-                    <p className="text-xs text-amber-400/80">Requires ~4 GB RAM and ~5 GB disk space.</p>
+                    <p className="text-xs text-warning">Requires ~4 GB RAM and ~5 GB disk space.</p>
                 </div>
             )}
         </div>
@@ -155,6 +155,6 @@ function OllamaBadge({ provider, setting }: { provider: AiProviderInfoDto; setti
     if (setting) return <span className={`${PILL} bg-overlay text-secondary animate-pulse`}>Setting up...</span>;
     if (provider.active && provider.available) return <span className={`${PILL} bg-success/10 text-success`}>Active</span>;
     if (provider.active && !provider.available) return <span className={`${PILL} bg-warning/10 text-warning`}>Selected · Offline</span>;
-    if (provider.available) return <span className={`${PILL} bg-blue-500/20 text-blue-400`}>Running</span>;
+    if (provider.available) return <span className={`${PILL} bg-overlay text-secondary`}>Running</span>;
     return <span className={`${PILL} bg-dim/20 text-muted`}>Offline</span>;
 }

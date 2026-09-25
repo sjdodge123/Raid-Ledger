@@ -98,4 +98,11 @@ describe('AiFeatureToggles — shared Switch (ROK-1687)', () => {
             expect(toggle.className).not.toMatch(/-(purple|violet|fuchsia)-\d{3}/);
         },
     );
+
+    it('describes each switch with its row description via aria-describedby', async () => {
+        mockFeatures();
+        renderWithProviders(<AiFeatureToggles disabled={false} />);
+        const toggle = await screen.findByRole('switch', { name: 'AI Chat' });
+        expect(toggle).toHaveAccessibleDescription('Enable AI chat assistant for community members');
+    });
 });
