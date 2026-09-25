@@ -25,6 +25,7 @@ import {
   isGroupThread,
   JOIN_CUSTOM_ID,
   readGroup,
+  type LfgGroupDetail,
   type Run,
 } from './lfg-board-shared.js';
 
@@ -103,14 +104,23 @@ async function assertArmed(run: Run): Promise<void> {
   run.starterMessageId = thread?.starterMessage?.id;
 }
 
-/** Fail with "never spawned" when that is the truth, not a poll timeout. */
+/**
+ * Fail with "never spawned" when that is the truth, not a poll timeout. The
+ * session spawns asynchronously after the second now-hand, so a single read
+ * raced it (TECH-DEBT 2026-09-24: `playingNow is null (activeCount=2)`).
+ */
 async function assertSpawned(run: Run): Promise<void> {
-  const group = await readGroup(run.ctx, run.game.id);
-  if (!group.playingNow) {
+  let group: LfgGroupDetail | null = null;
+  try {
+    await pollForCondition(async () => {
+      group = await readGroup(run.ctx, run.game.id);
+      return group.playingNow ? true : null;
+    }, run.ctx.config.timeoutMs);
+  } catch {
     throw new Error(
       `ROK-1619 AC3 precondition: two now-hands did NOT spawn a session on ` +
         `"${run.game.name}" — playingNow is null ` +
-        `(activeCount=${String(group.activeCount)})`,
+        `(activeCount=${String((group as LfgGroupDetail | null)?.activeCount)})`,
     );
   }
 }
