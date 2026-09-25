@@ -1874,3 +1874,7 @@ same day (#1278, #1279, #1280).
 
 ### 2026-09-25 — feat/rok-1654-wow-plugin-forms (surfaced during fleet UI verification, plan `2026-09-25-0029-fb11`)
 - **[low]** `web/src/plugins/wow/components/EditProfessionsModal.tsx` (`ProfessionRowEditor`) — at 375px the profession `Select` is 110px wide and truncates names ("Herbalis…", "Alchemy" clipped) because the row also holds the 80px Skill input, the "/ max" span and the 44px Remove button on one line. Same single-row layout existed before the ROK-1654 migration (pre-existing). Suggested: below `sm`, wrap the row so the Select takes the full width and Skill / max / Remove sit on a second line.
+
+### 2026-09-25 — feat/rok-1651-filters-feedback-forms (surfaced during fleet UI verification, plan `2026-09-25-0136-d6b4`)
+- **[low — a11y, pre-existing, outside ROK-1651's files]** `web/src/components/lineups/VisibilityToggle.tsx:32,46` — the Start-lineup modal's Public/Private buttons are 38px tall at 375px (`px-3 py-2 text-sm`, no min-height) and hard-code `bg-emerald-600 text-white` (raw hue; the design system forbids it). Still in `form-primitives.baseline.json` (2) and in no M1–M9 batch. Suggested: `RadioGroup appearance="segmented"` (44px, tokens).
+- **[low — a11y, shared primitive]** `web/src/components/ui/switch.tsx:22` — the `Switch` tap target is the 44×24 track itself (`h-6 w-11`); nothing (e.g. `PublicShareToggle.tsx`) pads it to 44px tall. Suggested: give the Switch a ≥44px hit area (padded label/wrapper or `before:` inset) in the primitive so every adopter inherits it.
