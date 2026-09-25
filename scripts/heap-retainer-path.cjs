@@ -87,9 +87,23 @@ for (let k = 0; k < N; k++) {
   if (ntype(k) === 'hidden' && nm === 'system / NativeContext') counts.NativeContext = (counts.NativeContext || 0) + 1;
 }
 console.log('counts', JSON.stringify(counts), 'nodes', N);
+const AUTO_DUMP = Number(process.env.AUTO_DUMP || 0);
+function dumpNode(k, max) {
+  console.log(`  === dump @${nodes[k * NF + 2]} ${ntype(k)} "${String(name(k)).slice(0, 90)}"`);
+  let i = 0;
+  for (let e = firstEdge[k]; e < firstEdge[k + 1] && i < max; e += EF, i++) {
+    const to = edges[e + eTo] / NF;
+    console.log(`    ${edgeLabel(e)} -> ${ntype(to)} "${String(name(to)).slice(0, 120)}" @${nodes[to * NF + 2]}`);
+  }
+}
 for (const k of hits.slice(0, 12)) {
   console.log(`\n### ${ntype(k)} "${name(k)}" id=${nodes[k * NF + 2]} self=${nodes[k * NF + nS]}`);
   console.log(pathTo(k));
+  if (AUTO_DUMP && seen[k]) {
+    const chain = [];
+    for (let c = k; c > 0; c = parentNode[c]) chain.push(parentNode[c]);
+    for (const c of chain.slice(-AUTO_DUMP - 1, -1)) dumpNode(c, 40);
+  }
 }
 
 // DUMP_IDS=id,id → one level of outgoing edges (strings/numbers shown inline).
