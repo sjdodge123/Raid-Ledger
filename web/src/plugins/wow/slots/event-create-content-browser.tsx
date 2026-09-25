@@ -1,5 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useId, useState, useMemo } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import type { WowInstanceDetailDto, WowInstanceDto } from '@raid-ledger/contract';
+import { Button } from '../../../components/ui/button';
+import { Checkbox } from '../../../components/ui/checkbox';
+import { SearchInput } from '../../../components/ui/search-input';
 import { useWowInstances } from '../hooks/use-wow-instances';
 import { fetchWowInstanceDetail } from '../api-client';
 import { useSystemStatus } from '../../../hooks/use-system-status';
@@ -41,17 +45,23 @@ async function toggleInstance(
     } finally { setLoadingId(null); }
 }
 
+/** "Lv15-21", or "Lv15+" when there is no ceiling. */
+function levelRange(min: number, max?: number | null): string {
+    return `Lv${min}${max ? `-${max}` : '+'}`;
+}
+
+/** Selected-instance chips: fixed 44px chip geometry (design-system §4.3); the Remove target sits flush right. */
 function SelectedChips({ instances, onRemove }: { instances: WowInstanceDetailDto[]; onRemove: (id: number) => void }) {
     if (instances.length === 0) return null;
     return (
         <div className="flex flex-wrap gap-2 mb-3">
             {instances.map((inst) => (
-                <span key={inst.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600/20 border border-emerald-500/30 text-xs text-emerald-300">
+                <span key={inst.id} className="inline-flex items-center gap-2 pl-3 min-h-[44px] rounded-full bg-success/10 border border-success/30 text-sm font-medium text-success">
                     {inst.shortName || inst.name}
-                    {inst.minimumLevel != null && <span className="text-emerald-500/60">Lv{inst.minimumLevel}{inst.maximumLevel ? `-${inst.maximumLevel}` : '+'}</span>}
-                    <button type="button" onClick={() => onRemove(inst.id)} className="ml-0.5 text-emerald-400 hover:text-white transition-colors">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    {inst.minimumLevel != null && <span className="text-xs text-muted">{levelRange(inst.minimumLevel, inst.maximumLevel)}</span>}
+                    <Button variant="ghost" iconOnly aria-label={`Remove ${inst.name}`} onClick={() => onRemove(inst.id)}>
+                        <XMarkIcon className="w-4 h-4" aria-hidden="true" />
+                    </Button>
                 </span>
             ))}
         </div>
@@ -61,26 +71,21 @@ function SelectedChips({ instances, onRemove }: { instances: WowInstanceDetailDt
 function InstanceListItem({ inst, isSelected, isLoading, onToggle }: {
     inst: WowInstanceDto; isSelected: boolean; isLoading: boolean; onToggle: () => void;
 }) {
+    const range = inst.minimumLevel != null ? ` · ${levelRange(inst.minimumLevel, inst.maximumLevel)}` : '';
     return (
-        <button key={inst.id} type="button" disabled={isLoading} onClick={onToggle}
-            className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${isSelected ? 'bg-emerald-600/10 text-emerald-300' : 'text-secondary hover:bg-panel hover:text-foreground'} ${isLoading ? 'opacity-50' : ''}`}>
-            <div>
-                <span className="font-medium">{inst.name}</span>
-                <span className="ml-2 text-xs text-dim">{inst.expansion}</span>
-                {inst.minimumLevel != null && <span className="ml-2 text-xs text-muted">Lv{inst.minimumLevel}{inst.maximumLevel ? `-${inst.maximumLevel}` : '+'}</span>}
-            </div>
-            {isSelected && <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>}
-            {isLoading && <span className="text-xs text-dim animate-pulse">Loading...</span>}
-        </button>
+        <div className="px-4">
+            <Checkbox label={inst.name} description={isLoading ? 'Loading…' : `${inst.expansion}${range}`}
+                checked={isSelected} disabled={isLoading} onChange={onToggle} />
+        </div>
     );
 }
 
-function InstanceList({ filteredInstances, selectedInstances, loadingInstanceId, onToggle, contentType, contentSearch }: {
+function InstanceList({ filteredInstances, selectedInstances, loadingInstanceId, onToggle, contentType, contentSearch, headingId }: {
     filteredInstances: WowInstanceDto[]; selectedInstances: WowInstanceDetailDto[]; loadingInstanceId: number | null;
-    onToggle: (inst: WowInstanceDto) => void; contentType: string; contentSearch: string;
+    onToggle: (inst: WowInstanceDto) => void; contentType: string; contentSearch: string; headingId: string;
 }) {
     return (
-        <div className="max-h-48 overflow-y-auto rounded-lg border border-edge bg-panel/50 divide-y divide-edge-subtle">
+        <div role="group" aria-labelledby={headingId} className="max-h-48 overflow-y-auto rounded-lg border border-edge bg-panel/50 divide-y divide-edge-subtle">
             {filteredInstances.length === 0 ? (
                 <p className="text-xs text-dim px-4 py-3">{contentSearch ? 'No matches found' : `No ${contentType}s available`}</p>
             ) : filteredInstances.map((inst) => (
@@ -101,35 +106,44 @@ function useFilteredInstances(instancesData: ReturnType<typeof useWowInstances>[
     }, [instancesData?.data, contentSearch]);
 }
 
+/** The Dungeons/Raids heading; its id names the instance group. */
+function ContentHeading({ id, contentType }: { id: string; contentType: 'dungeon' | 'raid' }) {
+    return <h4 id={id} className="block text-sm font-medium text-secondary mb-2">{contentType === 'dungeon' ? 'Dungeons' : 'Raids'}</h4>;
+}
+
+function UnconfiguredNotice() {
+    return (
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-4">
+            <p className="text-sm text-warning">Blizzard API not configured — ask an admin to set it up in Plugins.</p>
+        </div>
+    );
+}
+
 export function EventCreateContentBrowser({ wowVariant, contentType, selectedInstances, onInstancesChange }: EventCreateContentBrowserProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? true;
+    const headingId = useId();
     const [contentSearch, setContentSearch] = useState('');
     const [loadingInstanceId, setLoadingInstanceId] = useState<number | null>(null);
     const { data: instancesData, isLoading: instancesLoading } = useWowInstances(wowVariant, contentType);
     const filteredInstances = useFilteredInstances(instancesData, contentSearch);
+    const chips = <SelectedChips instances={selectedInstances} onRemove={(id) => onInstancesChange(selectedInstances.filter((i) => i.id !== id))} />;
 
-    const label = contentType === 'dungeon' ? 'Dungeons' : 'Raids';
     if (!blizzardConfigured) {
-        return (
-            <div>
-                <label className="block text-sm font-medium text-secondary mb-2">{label}</label>
-                <SelectedChips instances={selectedInstances} onRemove={(id) => onInstancesChange(selectedInstances.filter((i) => i.id !== id))} />
-                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4"><p className="text-sm text-amber-400">Blizzard API not configured — ask an admin to set it up in Plugins.</p></div>
-            </div>
-        );
+        return <div><ContentHeading id={headingId} contentType={contentType} />{chips}<UnconfiguredNotice /></div>;
     }
 
     return (
         <div>
-            <label className="block text-sm font-medium text-secondary mb-2">{label}</label>
-            <SelectedChips instances={selectedInstances} onRemove={(id) => onInstancesChange(selectedInstances.filter((i) => i.id !== id))} />
-            <input type="text" value={contentSearch} onChange={(e) => setContentSearch(e.target.value)} placeholder={`Search ${contentType}s...`}
-                className="w-full px-4 py-2.5 bg-panel border border-edge rounded-lg text-foreground placeholder-dim text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors mb-2" />
+            <ContentHeading id={headingId} contentType={contentType} />
+            {chips}
+            <div className="mb-2">
+                <SearchInput value={contentSearch} onChange={setContentSearch} label={`Search ${contentType}s`} placeholder={`Search ${contentType}s...`} />
+            </div>
             {instancesLoading ? <p className="text-xs text-dim py-2">Loading {contentType}s...</p>
                 : <InstanceList filteredInstances={filteredInstances} selectedInstances={selectedInstances} loadingInstanceId={loadingInstanceId}
                     onToggle={(inst) => toggleInstance(inst, selectedInstances, onInstancesChange, contentType, wowVariant, setLoadingInstanceId)}
-                    contentType={contentType} contentSearch={contentSearch} />}
+                    contentType={contentType} contentSearch={contentSearch} headingId={headingId} />}
         </div>
     );
 }

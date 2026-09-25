@@ -13,7 +13,7 @@
  *     leaves an empty string (not "0"). Use `userEvent`, not `fireEvent`.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
     CharacterProfessionsDto,
@@ -239,5 +239,143 @@ describe('EditProfessionsModal — backspace-past-zero (regression for commit b3
         expect(skillInput.value).toBe('250');
         await user.clear(skillInput);
         expect(skillInput.value).toBe('');
+    });
+});
+
+describe('EditProfessionsModal — shared primitives (ROK-1654 H3)', () => {
+    const TWO_PRIMARY: CharacterProfessionsDto = {
+        primary: [
+            { id: 1, name: 'Tailoring', slug: 'tailoring', skillLevel: 250, maxSkillLevel: 525, tiers: [] },
+            { id: 2, name: 'Mining', slug: 'mining', skillLevel: 100, maxSkillLevel: 525, tiers: [] },
+        ],
+        secondary: [],
+        syncedAt: '2026-04-28T00:00:00.000Z',
+    };
+
+    it('each Remove button is named after its profession, has a decorative icon, and removes its row', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <EditProfessionsModal {...baseProps} initial={TWO_PRIMARY} />,
+        );
+        expect(screen.getAllByRole('combobox', { name: /profession/i })).toHaveLength(2);
+        const removeTailoring = screen.getByRole('button', { name: 'Remove Tailoring' });
+        expect(screen.getByRole('button', { name: 'Remove Mining' })).toBeInTheDocument();
+        expect(removeTailoring.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+        expect(removeTailoring.textContent).not.toContain('✕');
+
+        await user.click(removeTailoring);
+
+        const remaining = screen.getAllByRole('combobox', { name: /profession/i });
+        expect(remaining).toHaveLength(1);
+        expect((remaining[0] as HTMLSelectElement).value).toBe('Mining');
+    });
+
+    it('Save is a loading button while the mutation is pending: aria-busy, and a click does not call mutate', async () => {
+        vi.mocked(useUpdateCharacter).mockReturnValue({
+            mutate,
+            isPending: true,
+        } as unknown as ReturnType<typeof useUpdateCharacter>);
+        const user = userEvent.setup();
+        renderWithProviders(
+            <EditProfessionsModal {...baseProps} initial={null} />,
+        );
+        const save = screen.getByRole('button', { name: /^sav(e|ing)/i });
+        expect(save).toHaveAttribute('aria-busy', 'true');
+
+        await user.click(save);
+
+        expect(mutate).not.toHaveBeenCalled();
+    });
+
+    it('carries no hardcoded indigo / red hover colours (tokens and primitive defaults only)', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(
+            <EditProfessionsModal {...baseProps} initial={TWO_PRIMARY} />,
+        );
+        await user.click(screen.getByRole('button', { name: /add secondary/i }));
+        const offending = Array.from(document.body.querySelectorAll('[class]'))
+            .map((el) => el.getAttribute('class') ?? '')
+            .filter((c) => /indigo-|hover:text-red-/.test(c));
+        expect(offending).toEqual([]);
+    });
+});
+
+const CONFIRM_TITLE = 'Discard your changes?';
+const confirmDialog = () => screen.queryByRole('dialog', { name: CONFIRM_TITLE });
+
+function renderModal(onClose = vi.fn()) {
+    const user = userEvent.setup();
+    renderWithProviders(
+        <EditProfessionsModal {...baseProps} onClose={onClose} initial={null} />,
+    );
+    return { user, onClose };
+}
+
+async function makeDirty(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: /add primary/i }));
+    await user.selectOptions(screen.getByRole('combobox', { name: /profession/i }), 'Tailoring');
+}
+
+/** The guard latches for one macrotask after Keep so the same Escape cannot re-open it. */
+const flushGuardLatch = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe('EditProfessionsModal — pinned footer (ROK-1655 AC2)', () => {
+    it('Save and Cancel sit in the pinned modal footer, outside the scroll body', () => {
+        renderModal();
+        const footer = screen.queryByTestId('modal-footer');
+        expect(footer, 'Save/Cancel must render in the pinned Modal footer').not.toBeNull();
+        expect(within(footer as HTMLElement).getByRole('button', { name: /^save$/i })).toBeInTheDocument();
+        expect(within(footer as HTMLElement).getByRole('button', { name: /^cancel$/i })).toBeInTheDocument();
+        expect((footer as HTMLElement).contains(screen.getByRole('button', { name: /add primary/i }))).toBe(false);
+    });
+});
+
+describe('EditProfessionsModal — dirty-close guard (ROK-1655 AC1)', () => {
+    it('clean form: Escape closes at once, with no discard confirm', async () => {
+        const { user, onClose } = renderModal();
+        await user.keyboard('{Escape}');
+        expect(confirmDialog()).toBeNull();
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('dirty form: Escape asks first; Keep editing keeps the draft, Discard closes once', async () => {
+        const { user, onClose } = renderModal();
+        await makeDirty(user);
+
+        await user.keyboard('{Escape}');
+        expect(confirmDialog(), 'Escape on a dirty form must ask "Discard your changes?"').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+
+        await user.click(screen.getByTestId('discard-changes-keep'));
+        expect(confirmDialog()).toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        expect((screen.getByRole('combobox', { name: /profession/i }) as HTMLSelectElement).value).toBe('Tailoring');
+
+        await flushGuardLatch();
+        await user.keyboard('{Escape}');
+        expect(confirmDialog(), 'a second Escape must ask again').not.toBeNull();
+        await user.click(screen.getByTestId('discard-changes-discard'));
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        ['Cancel', () => screen.getByRole('button', { name: /^cancel$/i })],
+        ['the × close button', () => screen.getByRole('button', { name: 'Close modal' })],
+    ])('dirty form: %s asks before closing', async (_label, target) => {
+        const { user, onClose } = renderModal();
+        await makeDirty(user);
+        await user.click(target());
+        expect(confirmDialog(), 'a dirty close must ask "Discard your changes?"').not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('Save on a dirty form never prompts: mutate runs and onSuccess closes', async () => {
+        mutate.mockImplementation((_vars: unknown, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+        const { user, onClose } = renderModal();
+        await makeDirty(user);
+        await user.click(screen.getByRole('button', { name: /^save$/i }));
+        expect(mutate).toHaveBeenCalledTimes(1);
+        expect(onClose).toHaveBeenCalledTimes(1);
+        expect(confirmDialog()).toBeNull();
     });
 });

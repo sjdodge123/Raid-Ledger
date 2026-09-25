@@ -234,13 +234,9 @@
     "plugins/ai/slots/ai-plugin-content.tsx": 1,
     "plugins/ai/slots/ollama-setup-card.tsx": 5,
     "plugins/wow/components/CharacterProfessionsPanel.tsx": 2,
-    "plugins/wow/components/EditProfessionsModal.tsx": 6,
     "plugins/wow/components/character-preview-card.tsx": 3,
     "plugins/wow/components/item-detail-modal.tsx": 3,
-    "plugins/wow/components/realm-autocomplete.tsx": 1,
-    "plugins/wow/components/wow-armory-import-form.tsx": 3,
     "plugins/wow/slots/boss-loot-body.tsx": 1,
-    "plugins/wow/slots/event-create-content-browser.tsx": 3,
     "plugins/wow/slots/profile-character-actions.tsx": 1,
     "plugins/wow/slots/quest-card.tsx": 2
 }

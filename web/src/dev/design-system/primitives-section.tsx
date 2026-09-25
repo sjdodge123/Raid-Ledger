@@ -1,6 +1,6 @@
 /**
  * Primitive inventory for /dev/design-system (ROK-1539) — the flat pieces:
- * badges, chips, buttons, inputs, empty and loading states. Overlays and
+ * badges, chips (toggle + removable), buttons, inputs, empty and loading states. Overlays and
  * containers live in `overlays-section.tsx` so both files stay small.
  *
  * Every example mounts the REAL component from `web/src/components/ui` (or
@@ -8,7 +8,9 @@
  * If an example here stops matching production, production changed and this
  * page is the early warning.
  */
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
+import { XMarkIcon } from '@heroicons/react/24/outline';
+import { Button } from '../../components/ui/button';
 import { LoadingSpinner } from '../../components/ui/loading-spinner';
 import { NewBadge } from '../../components/ui/new-badge';
 import { RoleBadge } from '../../components/ui/role-badge';
@@ -20,6 +22,9 @@ import { Section, StateFrame, StateGrid } from './design-system-bits';
 const CHIP_BASE = 'inline-flex items-center gap-2 px-3 py-1.5 min-h-[44px] rounded-full text-sm font-medium transition-colors';
 const CHIP_ON = 'bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20';
 const CHIP_OFF = 'bg-panel border border-edge text-secondary hover:bg-overlay';
+/** Removable selection chip per §4.3 — the class string of event-create-content-browser.tsx::SelectedChips (ROK-1654). */
+const REMOVABLE_CHIP = 'inline-flex items-center gap-2 pl-3 min-h-[44px] rounded-full bg-success/10 border border-success/30 text-sm font-medium text-success';
+const DEMO_PICKS = [{ name: 'Deadmines', levels: 'Lv17-26' }, { name: 'Shadowfang Keep', levels: 'Lv22-30' }];
 
 function BadgeStates(): JSX.Element {
     return (
@@ -44,6 +49,25 @@ function BadgeStates(): JSX.Element {
     );
 }
 
+/** A span pill, not a button: its only control is the real 44px ghost iconOnly Button named 'Remove <name>'. */
+function RemovableChipDemo(): JSX.Element {
+    const [picks, setPicks] = useState(DEMO_PICKS);
+    return (
+        <StateFrame label="Removable chip — selection" note="success tokens; no aria-pressed; the flush Remove button is the only control. Remove both to see Reset.">
+            {picks.map((pick) => (
+                <span key={pick.name} className={REMOVABLE_CHIP}>
+                    {pick.name}
+                    <span className="text-xs text-muted">{pick.levels}</span>
+                    <Button variant="ghost" iconOnly aria-label={`Remove ${pick.name}`} onClick={() => setPicks((p) => p.filter((x) => x.name !== pick.name))}>
+                        <XMarkIcon className="w-4 h-4" aria-hidden="true" />
+                    </Button>
+                </span>
+            ))}
+            {picks.length === 0 && <Button variant="secondary" size="sm" onClick={() => setPicks(DEMO_PICKS)}>Reset</Button>}
+        </StateFrame>
+    );
+}
+
 function ChipStates(): JSX.Element {
     return (
         <>
@@ -57,6 +81,7 @@ function ChipStates(): JSX.Element {
             <StateFrame label="Filter chip — hover" note="Hover the live chips above; hover is a token swap, not a shadow.">
                 <span className={`${CHIP_BASE} bg-overlay border border-edge text-secondary`}>hover fill = bg-overlay</span>
             </StateFrame>
+            <RemovableChipDemo />
         </>
     );
 }

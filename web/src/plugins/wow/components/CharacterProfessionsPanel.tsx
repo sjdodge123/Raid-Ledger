@@ -31,8 +31,10 @@ export function CharacterProfessionsPanel({
                 <PanelHeader showEdit={isOwner && hasData} onEdit={openEdit} />
                 {hasData ? <ProfessionsBody professions={professions} /> : <AddProfessionsCta onAdd={openEdit} />}
             </div>
-            {isOwner && (
-                <EditProfessionsModal isOpen={isEditing} onClose={() => setIsEditing(false)}
+            {/* Mounted only while editing: the drafts are useState initialisers, so
+                every open (after Discard, or after Save + refetch) starts from `professions`. */}
+            {isOwner && isEditing && (
+                <EditProfessionsModal isOpen onClose={() => setIsEditing(false)}
                     characterId={characterId} gameId={gameId} initial={professions} />
             )}
         </>

@@ -28,6 +28,17 @@ function contextVariantClient(eventId: number, gameVariant: string) {
     return queryClient;
 }
 
+/**
+ * The Game Version <select>. ROK-1654 made the realm field a combobox too, so a bare
+ * getByRole('combobox') matches two. The select has no accessible name until ROK-1655 A5
+ * wraps it in a Field; then this can become getByRole('combobox', { name: /game version/i }).
+ */
+function gameVersionSelect(): HTMLSelectElement {
+    const selects = screen.getAllByRole('combobox').filter((el): el is HTMLSelectElement => el instanceof HTMLSelectElement);
+    expect(selects).toHaveLength(1);
+    return selects[0];
+}
+
 function Harness({ gameSlug, initial, eventId }: { gameSlug: string; initial: 'manual' | 'import'; eventId?: number }) {
     const [tab, setTab] = useState(initial);
     return (
@@ -59,7 +70,7 @@ describe('CharacterCreateImportForm — Armory gating (ROK-1636)', () => {
         await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('import'));
         expect(importTab()).not.toHaveAttribute('aria-disabled');
         expect(screen.queryByText(ARMORY_UNAVAILABLE_NOTE)).not.toBeInTheDocument();
-        const options = Array.from(screen.getByRole('combobox').querySelectorAll('option')).map((o) => o.value);
+        const options = Array.from(gameVersionSelect().querySelectorAll('option')).map((o) => o.value);
         expect(options).toEqual(['classic_anniversary', 'classic_era', 'classic']);
     });
 
@@ -69,7 +80,7 @@ describe('CharacterCreateImportForm — Armory gating (ROK-1636)', () => {
         renderWithProviders(<Harness gameSlug="world-of-warcraft-classic" initial="manual" eventId={41} />, { queryClient });
         expect(importTab()).not.toHaveAttribute('aria-disabled');
         await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('import'));
-        expect(screen.getByRole('combobox')).toHaveValue('classic_anniversary');
+        expect(gameVersionSelect()).toHaveValue('classic_anniversary');
         expect(screen.queryByText(ARMORY_UNAVAILABLE_NOTE)).not.toBeInTheDocument();
     });
 });
@@ -97,7 +108,7 @@ describe('CharacterCreateInlineImport — Armory gating (ROK-1636)', () => {
         const queryClient = contextVariantClient(42, 'wow_forever');
         renderWithProviders(<CharacterCreateInlineImport gameSlug="world-of-warcraft-classic" eventId={42} />, { queryClient });
         expect(importTab()).not.toHaveAttribute('aria-disabled');
-        expect(screen.getByRole('combobox')).toHaveValue('classic_anniversary');
+        expect(gameVersionSelect()).toHaveValue('classic_anniversary');
         expect(screen.queryByText(ARMORY_UNAVAILABLE_NOTE)).not.toBeInTheDocument();
     });
 });

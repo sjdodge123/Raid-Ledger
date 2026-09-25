@@ -3,8 +3,13 @@ import type {
     CharacterProfessionsDto,
     ProfessionEntryDto,
 } from '@raid-ledger/contract';
+import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Modal } from '../../../components/ui/modal';
+import { Button } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
+import { Select } from '../../../components/ui/select';
 import { useUpdateCharacter } from '../../../hooks/use-character-mutations';
+import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { professionNameToSlug } from '../lib/profession-icons';
 import { getMaxProfessionSkill } from '../lib/profession-max-skill';
@@ -79,6 +84,16 @@ function buildProfessionsPayload(
     };
 }
 
+function sameDrafts(a: DraftEntry[], b: DraftEntry[]): boolean {
+    return a.length === b.length
+        && a.every((d, i) => d.name === b[i].name && d.skillLevel === b[i].skillLevel);
+}
+
+/**
+ * The drafts start from `baseline`, captured once at mount (the panel mounts
+ * this modal only while editing, so every open starts fresh). `isDirty` is a
+ * structural compare against it, and drives the ROK-1655 dirty-close guard.
+ */
 function useEditProfessionsState(
     gameId: number,
     initial: CharacterProfessionsDto | null,
@@ -86,28 +101,42 @@ function useEditProfessionsState(
     const { games } = useGameRegistry();
     const gameSlug = games.find((g) => g.id === gameId)?.slug ?? null;
     const maxSkill = getMaxProfessionSkill(gameSlug);
-    const [primary, setPrimary] = useState<DraftEntry[]>(
-        () => entriesToDraft(initial?.primary ?? []),
+    const [baseline] = useState(() => ({
+        primary: entriesToDraft(initial?.primary ?? []),
+        secondary: entriesToDraft(initial?.secondary ?? []),
+    }));
+    const [primary, setPrimary] = useState<DraftEntry[]>(baseline.primary);
+    const [secondary, setSecondary] = useState<DraftEntry[]>(baseline.secondary);
+    const isDirty = !sameDrafts(primary, baseline.primary) || !sameDrafts(secondary, baseline.secondary);
+    return { gameSlug, maxSkill, primary, setPrimary, secondary, setSecondary, isDirty };
+}
+
+/** Save closes through the plain `onClose` (never the guard), so it never prompts. */
+function useSaveProfessions(
+    characterId: string,
+    s: ReturnType<typeof useEditProfessionsState>,
+    onClose: () => void,
+) {
+    const update = useUpdateCharacter();
+    const run = () => update.mutate(
+        { id: characterId, dto: { professions: buildProfessionsPayload(s.primary, s.secondary, s.maxSkill) } },
+        { onSuccess: onClose },
     );
-    const [secondary, setSecondary] = useState<DraftEntry[]>(
-        () => entriesToDraft(initial?.secondary ?? []),
-    );
-    return { gameSlug, maxSkill, primary, setPrimary, secondary, setSecondary };
+    return { run, isPending: update.isPending };
 }
 
 export function EditProfessionsModal({
     isOpen, onClose, characterId, gameId, initial,
 }: EditProfessionsModalProps) {
     const s = useEditProfessionsState(gameId, initial);
-    const update = useUpdateCharacter();
-
-    const handleSave = () => update.mutate(
-        { id: characterId, dto: { professions: buildProfessionsPayload(s.primary, s.secondary, s.maxSkill) } },
-        { onSuccess: onClose },
-    );
+    const save = useSaveProfessions(characterId, s, onClose);
+    // Escape, the backdrop, × and Cancel ask first on a dirty form; Save's
+    // onSuccess closes through the plain onClose, so a Save never prompts.
+    const guard = useDirtyCloseGuard(s.isDirty, onClose);
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Edit Professions">
+        <Modal isOpen={isOpen} onClose={onClose} title="Edit Professions" closeGuard={guard}
+            footer={<ModalActions onCancel={guard.requestClose} onSave={save.run} isPending={save.isPending} />}>
             <div className="space-y-6">
                 <p className="text-xs text-muted">
                     Skill cap for this game variant: <span className="font-mono">{s.maxSkill}</span>
@@ -122,15 +151,12 @@ export function EditProfessionsModal({
                     maxEntries={getMaxEntriesForCategory('secondary', s.gameSlug)}
                     maxSkill={s.maxSkill} gameSlug={s.gameSlug}
                     siblingNames={s.secondary.map((d) => d.name)} />
-                <ModalActions onCancel={onClose} onSave={handleSave} isPending={update.isPending} />
             </div>
         </Modal>
     );
 }
 
-function ProfessionSection({
-    heading, category, drafts, onChange, maxEntries, maxSkill, gameSlug, siblingNames,
-}: {
+interface ProfessionSectionProps {
     heading: string;
     category: ProfessionCategory;
     drafts: DraftEntry[];
@@ -139,7 +165,11 @@ function ProfessionSection({
     maxSkill: number;
     gameSlug: string | null;
     siblingNames: string[];
-}) {
+}
+
+function ProfessionSection({
+    heading, category, drafts, onChange, maxEntries, maxSkill, gameSlug, siblingNames,
+}: ProfessionSectionProps) {
     const allOptions = getProfessionOptions(category, gameSlug);
     return (
         <section>
@@ -156,10 +186,9 @@ function ProfessionSection({
                     />
                 ))}
                 {drafts.length < maxEntries && (
-                    <button type="button" onClick={() => onChange([...drafts, emptyEntry()])}
-                        className="text-sm text-indigo-400 hover:text-indigo-300">
+                    <Button variant="ghost" size="sm" onClick={() => onChange([...drafts, emptyEntry()])}>
                         + Add {heading.toLowerCase()}
-                    </button>
+                    </Button>
                 )}
             </div>
         </section>
@@ -176,34 +205,38 @@ function availableFor(
     return all.filter((opt) => !taken.has(opt));
 }
 
-function ProfessionRowEditor({
-    draft, onChange, onRemove, maxSkill, availableOptions,
-}: {
+interface ProfessionRowEditorProps {
     draft: DraftEntry;
     onChange: (next: DraftEntry) => void;
     onRemove: () => void;
     maxSkill: number;
     availableOptions: readonly string[];
-}) {
+}
+
+function ProfessionRowEditor({
+    draft, onChange, onRemove, maxSkill, availableOptions,
+}: ProfessionRowEditorProps) {
     return (
         <div className="flex items-center gap-2">
-            <select value={draft.name}
-                onChange={(e) => onChange({ ...draft, name: e.target.value })}
-                aria-label="Profession"
-                className="flex-1 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground">
-                <option value="">Select profession…</option>
-                {availableOptions.map((name) => (
-                    <option key={name} value={name}>{name}</option>
-                ))}
-            </select>
-            <input type="number" inputMode="numeric" min="0" max={maxSkill} value={draft.skillLevel}
-                aria-label="Skill" placeholder="0"
-                onChange={(e) => onChange({ ...draft, skillLevel: e.target.value })}
-                className="w-20 bg-overlay border border-edge rounded-md px-2 py-1 text-foreground" />
+            <div className="flex-1 min-w-0">
+                <Select aria-label="Profession" placeholder="Select profession…" value={draft.name}
+                    onChange={(e) => onChange({ ...draft, name: e.target.value })}>
+                    {availableOptions.map((name) => (
+                        <option key={name} value={name}>{name}</option>
+                    ))}
+                </Select>
+            </div>
+            <div className="w-20 shrink-0">
+                <Input type="number" inputMode="numeric" min={0} max={maxSkill} value={draft.skillLevel}
+                    aria-label="Skill" placeholder="0"
+                    onChange={(e) => onChange({ ...draft, skillLevel: e.target.value })} />
+            </div>
             <span className="text-muted">/</span>
-            <span className="w-16 text-center text-muted font-mono" aria-label="Max skill">{maxSkill}</span>
-            <button type="button" onClick={onRemove} aria-label="Remove profession"
-                className="text-muted hover:text-red-400">✕</button>
+            <span className="shrink-0 min-w-[3ch] text-center text-muted font-mono" aria-label="Max skill">{maxSkill}</span>
+            <Button variant="ghost" iconOnly onClick={onRemove}
+                aria-label={draft.name ? `Remove ${draft.name}` : 'Remove profession'}>
+                <XMarkIcon aria-hidden="true" className="w-5 h-5" />
+            </Button>
         </div>
     );
 }
@@ -211,13 +244,11 @@ function ProfessionRowEditor({
 function ModalActions({ onCancel, onSave, isPending }: {
     onCancel: () => void; onSave: () => void; isPending: boolean;
 }) {
+    // The Modal footer (OVERLAY_FOOTER_CLASS) already lays these out right-aligned.
     return (
-        <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onCancel} className="px-4 py-2 text-secondary hover:text-foreground transition-colors">Cancel</button>
-            <button type="button" onClick={onSave} disabled={isPending}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors">
-                {isPending ? 'Saving...' : 'Save'}
-            </button>
-        </div>
+        <>
+            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
+            <Button onClick={onSave} loading={isPending} loadingLabel="Saving…">Save</Button>
+        </>
     );
 }

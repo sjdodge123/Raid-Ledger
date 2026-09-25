@@ -134,9 +134,8 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         await expect(chips.filter({ hasText: 'TDA' })).toBeVisible({ timeout: 5_000 });
         await expect(chips.filter({ hasText: 'TDB' })).toBeVisible({ timeout: 5_000 });
 
-        // Click the remove button on the first dungeon chip (the X icon)
-        const chipRemoveBtn = chips.filter({ hasText: 'TDA' }).getByRole('button');
-        await chipRemoveBtn.click();
+        // Click the named remove button on the first dungeon chip (the X icon)
+        await page.getByRole('button', { name: 'Remove Test Dungeon Alpha' }).click();
 
         // TDA chip should be removed
         await expect(chips.filter({ hasText: 'TDA' })).not.toBeVisible({ timeout: 5_000 });
@@ -157,11 +156,19 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         const searchInput = page.getByPlaceholder('Search dungeons...');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // The existing selected dungeons should show checkmarks in the list
-        const selectedItems = page.locator('button').filter({ hasText: 'Test Dungeon Alpha' });
-        if (await selectedItems.count() > 0) {
-            await expect(selectedItems.first()).toBeVisible();
-        }
+        // ROK-1654: the instance list is a checkbox group named by the heading.
+        // Checking an unchecked instance ticks it and adds one chip.
+        const group = page.getByRole('group', { name: 'Dungeons' });
+        const browserChips = group.locator('xpath=..').locator('span.rounded-full');
+        const chipsBefore = await browserChips.count();
+        const firstUnchecked = group.getByRole('checkbox', { checked: false }).first();
+        await expect(firstUnchecked).toBeVisible({ timeout: 10_000 });
+        const labelId = await firstUnchecked.getAttribute('aria-labelledby');
+        expect(labelId, 'instance checkbox must be named by its label').toBeTruthy();
+        const target = group.locator(`input[type="checkbox"][aria-labelledby="${labelId}"]`);
+        await target.click();
+        await expect(target).toBeChecked({ timeout: 10_000 });
+        await expect(browserChips).toHaveCount(chipsBefore + 1, { timeout: 5_000 });
     });
 
     test('content browser stays visible after removing all selections', async ({ page }) => {
@@ -172,12 +179,10 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
 
         // Remove both dungeon chips
         const chips = page.locator('span.rounded-full');
-        const chipRemoveBtnA = chips.filter({ hasText: 'TDA' }).getByRole('button');
-        await chipRemoveBtnA.click();
+        await page.getByRole('button', { name: 'Remove Test Dungeon Alpha' }).click();
         await expect(chips.filter({ hasText: 'TDA' })).not.toBeVisible({ timeout: 5_000 });
 
-        const chipRemoveBtnB = chips.filter({ hasText: 'TDB' }).getByRole('button');
-        await chipRemoveBtnB.click();
+        await page.getByRole('button', { name: 'Remove Test Dungeon Beta' }).click();
         await expect(chips.filter({ hasText: 'TDB' })).not.toBeVisible({ timeout: 5_000 });
 
         // ROK-1147: Content browser section should STILL be visible even
@@ -259,8 +264,7 @@ test.describe('ROK-1005: Content browser in edit mode (mobile)', () => {
 
         // Remove the first dungeon
         const chips = page.locator('span.rounded-full');
-        const chipRemoveBtn = chips.filter({ hasText: 'TDA' }).getByRole('button');
-        await chipRemoveBtn.click();
+        await page.getByRole('button', { name: 'Remove Test Dungeon Alpha' }).click();
 
         // TDA should be removed, TDB should remain
         await expect(chips.filter({ hasText: 'TDA' })).not.toBeVisible({ timeout: 5_000 });
