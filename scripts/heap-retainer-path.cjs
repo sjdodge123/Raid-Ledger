@@ -73,7 +73,7 @@ function pathTo(k) {
   if (!seen[k]) return '  (unreachable via strong edges)';
   const steps = [];
   for (let c = k; c > 0; c = parentNode[c]) {
-    steps.push(`  <- [${edgeLabel(parentEdge[c])}] of ${ntype(parentNode[c])} "${String(name(parentNode[c])).slice(0, 90)}"`);
+    steps.push(`  <- [${edgeLabel(parentEdge[c])}] of ${ntype(parentNode[c])} "${String(name(parentNode[c])).slice(0, 90)}" @${nodes[parentNode[c] * NF + 2]}`);
   }
   return steps.join('\n');
 }
@@ -90,4 +90,17 @@ console.log('counts', JSON.stringify(counts), 'nodes', N);
 for (const k of hits.slice(0, 12)) {
   console.log(`\n### ${ntype(k)} "${name(k)}" id=${nodes[k * NF + 2]} self=${nodes[k * NF + nS]}`);
   console.log(pathTo(k));
+}
+
+// DUMP_IDS=id,id → one level of outgoing edges (strings/numbers shown inline).
+const idIndex = new Map();
+const want = new Set((process.env.DUMP_IDS || '').split(',').filter(Boolean).map(Number));
+if (want.size) for (let k = 0; k < N; k++) if (want.has(nodes[k * NF + 2])) idIndex.set(nodes[k * NF + 2], k);
+for (const [id, k] of idIndex) {
+  console.log(`\n=== dump @${id} ${ntype(k)} "${name(k)}"`);
+  for (let e = firstEdge[k]; e < firstEdge[k + 1]; e += EF) {
+    const to = edges[e + eTo] / NF;
+    const v = String(name(to)).slice(0, 120);
+    console.log(`  ${edgeLabel(e)} -> ${ntype(to)} "${v}" @${nodes[to * NF + 2]}`);
+  }
 }
