@@ -46,15 +46,36 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { runDeployChain, type ChainCtx } from '../env-deploy-steps.js';
+import { countSharedKeys } from '../env-settings-overlay.js';
+
+// What rl-infra/orchestrator/bin/env-settings-overlay ALWAYS writes, bundle or
+// not: the slot's Discord identity (_bot_identity.sh) plus the demo_mode flag
+// (merged unconditionally since #1123). Fixtures must carry these, or they
+// model an overlay the VM never produces — which is how ROK-1339's safety net
+// sat dead behind a green suite.
+const ALWAYS_SEEDED = [
+  'discord_bot_token',
+  'discord_bot_enabled',
+  'discord_client_id',
+  'discord_client_secret',
+  'demo_mode',
+];
 
 interface Captured {
   steps: Array<{ name: string; ok: boolean }>;
+  details: Record<string, string | undefined>;
 }
 function makeCtx(): { ctx: ChainCtx; cap: Captured } {
-  const cap: Captured = { steps: [] };
+  const cap: Captured = { steps: [], details: {} };
   return {
     cap,
-    ctx: { setCurrent: () => {}, recordStep: (name, ok) => cap.steps.push({ name, ok }) },
+    ctx: {
+      setCurrent: () => {},
+      recordStep: (name, ok, _s, detail) => {
+        cap.steps.push({ name, ok });
+        cap.details[name] = detail;
+      },
+    },
   };
 }
 
@@ -77,13 +98,18 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
     envSyncExecute.mockResolvedValue({ ok: false, stderr: 'docker: daemon not running' });
     overlayRun.mockResolvedValue({
       ok: true,
-      applied: ['itad_api_key', 'discord_bot_token'],
+      applied: ['itad_api_key', ...ALWAYS_SEEDED],
     });
     const { ctx, cap } = makeCtx();
     const res = await runDeployChain(PARAMS as never, ctx);
     expect(res.ok).toBe(true);
     expect(cap.steps).toContainEqual({ name: 'settings_overlay', ok: true });
     expect(res.message).toMatch(/bundle|overlay/i);
+  });
+
+  it('counts neither the slot identity nor demo_mode as shared bundle keys', () => {
+    expect(countSharedKeys(ALWAYS_SEEDED)).toBe(0);
+    expect(countSharedKeys([...ALWAYS_SEEDED, 'itad_api_key'])).toBe(1);
   });
 
   it('still FAILS when sync_settings fails and the overlay applied nothing', async () => {
@@ -97,12 +123,25 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
 
   it('runs the overlay after a SUCCESSFUL sync so the slot identity wins', async () => {
     envSyncExecute.mockResolvedValue({ ok: true });
-    overlayRun.mockResolvedValue({ ok: true, applied: ['discord_bot_token'] });
+    overlayRun.mockResolvedValue({ ok: true, applied: ALWAYS_SEEDED });
     const { ctx, cap } = makeCtx();
     const res = await runDeployChain(PARAMS as never, ctx);
     expect(res.ok).toBe(true);
     const order = cap.steps.map((s) => s.name);
     expect(order.indexOf('settings_overlay')).toBeGreaterThan(order.indexOf('sync_settings'));
+  });
+
+  it('surfaces the bundle warning on a GREEN deploy (message and step detail)', async () => {
+    // A healthy laptop sync masks an absent/undecryptable bundle; the warning
+    // must still reach the caller, or the next laptop-less deploy is a surprise.
+    const warning = 'settings bundle absent at /srv/rl-infra/settings/bundle.enc';
+    envSyncExecute.mockResolvedValue({ ok: true });
+    overlayRun.mockResolvedValue({ ok: true, applied: ALWAYS_SEEDED, bundle_warning: warning });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.message).toContain(warning);
+    expect(cap.details.settings_overlay).toContain(warning);
   });
 
   it('records a failed overlay without failing an otherwise healthy deploy', async () => {
@@ -114,16 +153,14 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
     expect(cap.steps).toContainEqual({ name: 'settings_overlay', ok: false });
   });
 
-  it('an IDENTITY-ONLY overlay does not rescue a failed sync (no shared keys)', async () => {
-    // The overlay always writes the slot's Discord identity. Counting those
-    // keys as "settings seeded" would report a green deploy for an env with
-    // no ITAD/Blizzard/LLM credentials at all — the exact silent-failure this
-    // step exists to prevent.
+  it('an identity + demo_mode overlay does not rescue a failed sync (no shared keys)', async () => {
+    // The overlay always writes the slot's Discord identity AND demo_mode.
+    // Counting either as "settings seeded" would report a green deploy for an
+    // env with no IGDB/ITAD/Blizzard/LLM credentials at all — the exact
+    // silent-failure this step exists to prevent (dead 2026-09-09 → 09-26
+    // because demo_mode was counted as a shared key).
     envSyncExecute.mockResolvedValue({ ok: false, stderr: 'docker: daemon not running' });
-    overlayRun.mockResolvedValue({
-      ok: true,
-      applied: ['discord_bot_token', 'discord_bot_enabled', 'discord_client_id'],
-    });
+    overlayRun.mockResolvedValue({ ok: true, applied: ALWAYS_SEEDED });
     const { ctx } = makeCtx();
     const res = await runDeployChain(PARAMS as never, ctx);
     expect(res.ok).toBe(false);
@@ -135,7 +172,7 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
     envSyncExecute.mockResolvedValue({ ok: false, stderr: 'docker: daemon not running' });
     overlayRun.mockResolvedValue({
       ok: true,
-      applied: ['discord_bot_token'],
+      applied: ALWAYS_SEEDED,
       bundle_warning: 'settings bundle could not be decrypted (wrong RL_SETTINGS_BUNDLE_KEY)',
     });
     const { ctx } = makeCtx();
@@ -149,7 +186,7 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
     // app_settings from the laptop — running the overlay before it would
     // leave the env on the operator's shared bot identity.
     envSyncExecute.mockResolvedValue({ ok: true });
-    overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', 'discord_bot_token'] });
+    overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', ...ALWAYS_SEEDED] });
     const { ctx, cap } = makeCtx();
     const res = await runDeployChain({ ...PARAMS, clone_prod: true } as never, ctx);
     expect(res.ok).toBe(true);

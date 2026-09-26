@@ -49,11 +49,25 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
   ) {}
 
   onModuleDestroy(): void {
-    // Clear all pending timers on shutdown
+    this.clearAll();
+  }
+
+  /**
+   * Drop every pending entry and its timer without sending anything.
+   * Used on shutdown and by the test reset-to-seed, whose wipe deletes
+   * the events and users that stale entries point at.
+   */
+  clearAll(): void {
     for (const entry of this.buffer.values()) {
       clearTimeout(entry.timer);
     }
     this.buffer.clear();
+  }
+
+  private logFlushFailure(key: string, err: unknown): void {
+    this.logger.warn(
+      `Failed to flush buffered notification for ${key}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+    );
   }
 
   /**
@@ -69,11 +83,7 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
     }
 
     const timer = setTimeout(() => {
-      this.flush(key).catch((err) => {
-        this.logger.warn(
-          `Failed to flush buffered notification for ${key}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
+      this.flush(key).catch((err) => this.logFlushFailure(key, err));
     }, ROSTER_NOTIFY_GRACE_MS);
 
     // Prevent the timer from keeping the process alive
@@ -99,11 +109,7 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
     // Reset the timer so the flush re-evaluates net state after the join
     clearTimeout(existing.timer);
     const timer = setTimeout(() => {
-      this.flush(key).catch((err) => {
-        this.logger.warn(
-          `Failed to flush buffered notification for ${key}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
+      this.flush(key).catch((err) => this.logFlushFailure(key, err));
     }, ROSTER_NOTIFY_GRACE_MS);
 
     if (timer.unref) {
@@ -270,7 +276,10 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
     return this.buffer.size;
   }
 
-  /** Visible for testing — force-flush all pending entries immediately. */
+  /**
+   * Visible for testing — force-flush all pending entries immediately.
+   * A key that fails is logged and skipped so it cannot strand the rest.
+   */
   async flushAll(): Promise<void> {
     const keys = [...this.buffer.keys()];
     for (const key of keys) {
@@ -278,7 +287,7 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
       if (entry) {
         clearTimeout(entry.timer);
       }
-      await this.flush(key);
+      await this.flush(key).catch((err) => this.logFlushFailure(key, err));
     }
   }
 }

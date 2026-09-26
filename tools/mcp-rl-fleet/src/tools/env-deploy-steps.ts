@@ -207,11 +207,12 @@ export async function runDeployChain(
     overlayApplied = ov.applied.length;
     overlaySharedKeys = countSharedKeys(ov.applied);
     overlayBundleWarning = ov.bundle_warning ?? null;
+    const warnNote = overlayBundleWarning ? `; bundle warning: ${overlayBundleWarning}` : '';
     ctx.recordStep(
       'settings_overlay',
       ov.ok,
       now() - t,
-      ov.ok ? `${overlayApplied} key(s), ${overlaySharedKeys} shared` : undefined,
+      ov.ok ? `${overlayApplied} key(s), ${overlaySharedKeys} shared${warnNote}` : undefined,
       ov.ok ? undefined : (ov.error ?? ov.message),
     );
   }
@@ -231,8 +232,9 @@ export async function runDeployChain(
   }
 
   // A failed sync is only fatal when nothing seeded the env's SHARED keys.
-  // The slot identity is written on every overlay, so counting it would report
-  // a green deploy for an env with no ITAD/Blizzard/LLM credentials (Codex #2).
+  // The slot identity (and demo_mode) is written on every overlay, so counting
+  // it (see NON_CREDENTIAL_KEYS) would report a green deploy for an env with
+  // no ITAD/Blizzard/LLM credentials (Codex #2).
   const settingsFailed = !params.skip_sync && !syncedSettings && overlaySharedKeys === 0;
   const base = {
     slot,
@@ -255,5 +257,8 @@ export async function runDeployChain(
   const settingsSource = syncedSettings
     ? `${overlayApplied > 0 ? 'laptop sync + slot identity/bundle overlay' : 'laptop sync'}`
     : 'VM settings bundle overlay (laptop DB unavailable)';
-  return { ...base, ok: true, message: `Settings: ${settingsSource}. Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
+  // Surface the bundle warning on a green deploy too: a healthy laptop sync
+  // masks a missing/undecryptable bundle until the next laptop-less deploy.
+  const bundleNote = overlayBundleWarning ? ` Bundle warning: ${overlayBundleWarning}.` : '';
+  return { ...base, ok: true, message: `Settings: ${settingsSource}.${bundleNote} Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
 }

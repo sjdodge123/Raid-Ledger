@@ -24,20 +24,29 @@ export interface SettingsOverlayResult {
 }
 
 /**
- * app_settings keys the overlay ALWAYS writes when the slot has an identity.
- * They are not evidence that the env has usable API credentials, so callers
- * must not count them when deciding whether a failed sync was rescued.
+ * app_settings keys the VM overlay writes REGARDLESS of the shared bundle:
+ * the slot's Discord identity (rl-infra/orchestrator/bin/_bot_identity.sh)
+ * and the `demo_mode` flag, which bin/env-settings-overlay merges into every
+ * payload since #1123. None is evidence that the env has usable API
+ * credentials, so callers must not count them when deciding whether a failed
+ * sync was rescued.
+ *
+ * KEEP IN SYNC with that script: any key it seeds unconditionally belongs
+ * here. Missing `demo_mode` made every overlay look like it carried one
+ * shared key, which silently disabled the ROK-1339 safety net from
+ * 2026-09-09 until 2026-09-26.
  */
-export const IDENTITY_KEYS: ReadonlySet<string> = new Set([
+export const NON_CREDENTIAL_KEYS: ReadonlySet<string> = new Set([
   'discord_bot_token',
   'discord_bot_enabled',
   'discord_client_id',
   'discord_client_secret',
+  'demo_mode',
 ]);
 
-/** Count applied keys that came from the SHARED bundle, not the slot identity. */
+/** Count applied keys that came from the SHARED bundle (not always-seeded ones). */
 export function countSharedKeys(applied: string[]): number {
-  return applied.filter((k) => !IDENTITY_KEYS.has(k)).length;
+  return applied.filter((k) => !NON_CREDENTIAL_KEYS.has(k)).length;
 }
 
 const SLUG_RE = /^[a-z0-9-]+$/;

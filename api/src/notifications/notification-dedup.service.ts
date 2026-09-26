@@ -59,13 +59,18 @@ export class NotificationDedupService {
    * Used when the send the claim was made for failed: leaving the key in place
    * would suppress every retry for the key's whole TTL.
    *
+   * DB row first, Redis second: the other order opens a gap where a
+   * concurrent `checkAndMarkSent` misses Redis, hits the still-present row and
+   * re-warms Redis — leaving an orphan Redis key once the row is gone, which
+   * suppresses every retry for the whole TTL.
+   *
    * @param dedupKey - The key to un-claim, in both Redis and the DB.
    */
   async releaseKey(dedupKey: string): Promise<void> {
-    await this.redis.del(dedupKey);
     await this.db.execute(sql`
       DELETE FROM notification_dedup WHERE dedup_key = ${dedupKey}
     `);
+    await this.redis.del(dedupKey);
   }
 
   /**

@@ -37,41 +37,32 @@ import {
     apiGet,
     apiPatch,
     apiPost,
+    createLineupOrRetry,
     waitForLineupStatus,
 } from './api-helpers';
+
+// ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so this
+// spec only ever archives ITS OWN lineups — never a sibling worker's.
+const FILE_PREFIX = 'lineup-auto-advance';
+let workerPrefix: string;
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Cancel pending BullMQ phase-transition jobs for a lineup (ROK-1007). */
-async function cancelPhaseJobs(token: string, id: number): Promise<void> {
-    await apiPost(token, '/admin/test/cancel-lineup-phase-jobs', { lineupId: id });
-}
-
 /**
- * Drive any active lineup all the way to archived so the next create call
- * starts from a clean slate.
+ * Archive THIS worker's lineups so the next create starts clean.
+ *
+ * It used to read `/lineups/banner` and drive whatever it returned to
+ * `archived` — a sibling worker's lineup (e.g. lineup-empty-participation's)
+ * mid-test. The prefix-scoped reset leaves other workers' rows alone.
+ * `decided` is included because a finished run leaves our lineup there.
  */
 async function archiveActiveLineup(token: string): Promise<void> {
-    const banner = await apiGet(token, '/lineups/banner');
-    if (!banner || typeof banner.id !== 'number') return;
-    await cancelPhaseJobs(token, banner.id);
-    const detail = await apiGet(token, `/lineups/${banner.id}`);
-    if (!detail) return;
-    const transitions: Record<string, string[]> = {
-        building: ['voting', 'decided', 'archived'],
-        voting: ['decided', 'archived'],
-        decided: ['archived'],
-    };
-    const steps = transitions[detail.status] ?? [];
-    for (const status of steps) {
-        const body: Record<string, unknown> = { status };
-        if (status === 'decided' && detail.entries?.length > 0) {
-            body.decidedGameId = detail.entries[0].gameId;
-        }
-        await apiPatch(token, `/lineups/${banner.id}/status`, body);
-    }
+    await apiPost(token, '/admin/test/reset-lineups', {
+        titlePrefix: workerPrefix,
+        phases: ['building', 'voting', 'decided'],
+    });
 }
 
 /**
@@ -94,13 +85,16 @@ async function createVotingLineup(token: string): Promise<{
         throw new Error('Demo data missing — need at least 2 configured games');
     }
 
-    const created = (await apiPost(token, '/lineups', {
-        title: 'Auto Advance Smoke',
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-    })) as { id: number };
-    const lineupId = created.id;
+    const { id: lineupId } = await createLineupOrRetry(
+        token,
+        {
+            title: `${workerPrefix}Auto Advance Smoke`,
+            buildingDurationHours: 720,
+            votingDurationHours: 720,
+            decidedDurationHours: 720,
+        },
+        workerPrefix,
+    );
 
     for (const gid of gameIds) {
         await apiPost(token, `/lineups/${lineupId}/nominate`, { gameId: gid });
@@ -119,7 +113,8 @@ test.describe('Lineup live UI refresh (ROK-1118)', () => {
     let lineupId: number;
     let decidedGameId: number;
 
-    test.beforeAll(async () => {
+    test.beforeAll(async ({}, testInfo) => {
+        workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
         adminToken = await getAdminToken();
         const ctx = await createVotingLineup(adminToken);
         lineupId = ctx.lineupId;
