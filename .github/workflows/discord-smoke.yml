@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       discord: ${{ steps.filter.outputs.discord }}
+      deps: ${{ steps.filter.outputs.deps }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -32,47 +33,76 @@ jobs:
               - 'api/src/lineups/scheduling/**'
               - 'tools/test-bot/**'
               - 'packages/contract/**'
+              # ROK-1522: the smoke harness itself — a lease or workflow
+              # change must be exercised by the run it changes.
+              - '.github/workflows/discord-smoke.yml'
+              - 'scripts/ci/discord-smoke-lease.sh'
+            # ROK-1522 d1: push runs to main also smoke a dependency bump
+            # (e.g. discord.js). Dependabot PRs get no secrets, so the
+            # post-merge push run is their only live validation.
+            deps:
+              - 'package.json'
+              - 'package-lock.json'
+              - '**/package.json'
+              - '**/package-lock.json'
 
   discord-smoke:
     runs-on: ubuntu-latest
-    # One group for the WHOLE repo, not per ref: every run drives the same test
-    # guild with the same bot identity, and two runs at once fail each other's
-    # LFG/LFM tests (2026-09-06: three PR runs overlapped and each saw the
-    # other's posts as duplicate cards / extra hands).
+    # ONE RUN AT A TIME ON THE SHARED GUILD — via a lease, not `concurrency:`.
+    # Every run drives the same test guild with the same bot identity, and two
+    # runs at once fail each other's LFG/LFM tests (2026-09-06: three PR runs
+    # overlapped and each saw the other's posts as duplicate cards / extra
+    # hands). So the guild stays EXCLUSIVE.
     #
-    # ON THE JOB, NOT THE WORKFLOW (2026-09-08). It used to sit at workflow
-    # level, so EVERY run claimed the shared guild — including the majority
-    # where `detect-changes` reports discord == 'false' and this job is skipped
-    # outright. GitHub's queue for a concurrency group holds exactly ONE pending
-    # run, and a newer arrival REPLACES (cancels) the pending one;
-    # `cancel-in-progress: false` protects only the RUNNING run, never the
-    # queued one. So a dependabot bump touching just package.json would queue
-    # for a guild it never uses and evict a real PR's pending run. A cancelled
-    # run reports NO conclusion, so the required `discord-smoke` context simply
-    # vanishes and the PR sits BLOCKED with nothing red to explain it — which
-    # cost PR #1111 a full cycle on 2026-09-07 and blocked PR #1121 twice on
-    # 2026-09-08 (shas 171740bd, 2b712e03), every time evicted by a dependabot
-    # run whose smoke job was skipped anyway.
+    # ROK-1522: this used to be `concurrency: group: discord-smoke-shared-guild`.
+    # GitHub's queue for a concurrency group holds exactly ONE pending run and a
+    # newer arrival CANCELS it (`cancel-in-progress: false` protects only the
+    # running run). A cancelled run reports no conclusion, so the required
+    # `discord-smoke` context vanished and the PR sat BLOCKED with nothing red:
+    # 35 PR runs on 20 branches in 2026-09-11..25 (docs/spikes/rok-1522-discord-smoke-parallelism.md §1.1).
     #
-    # Scoping it here means only runs that ACTUALLY drive the guild contend.
-    # `cancel-in-progress` must stay false either way, or a push on one PR
-    # would kill another PR's in-flight run.
+    # Now `scripts/ci/discord-smoke-lease.sh` holds an exclusive lease as the
+    # git ref `refs/locks/discord-smoke/0` (pool size 1; Phase 2 grows it to
+    # 0..K-1 when there is one bot identity per slot):
+    #   - acquire: atomic ref create (422 = held). A waiter polls every 30s,
+    #     logs its wait and the holder's run URL, and the job shows IN
+    #     PROGRESS the whole time, so nothing is evicted. It takes over a lease
+    #     whose holder run is completed/gone, a lease left by an earlier
+    #     attempt of this same run, or one older than 155 min (longer than
+    #     timeout-minutes below, so a live holder is never taken over).
+    #   - release: `always()` final step deletes the ref ONLY if it still
+    #     points at this run's owner commit. The step before it stops the
+    #     API, so the bot has left the gateway before the next run connects.
+    # The lease is taken right before the first step that touches Discord
+    # (bot connect), not at job start: the bot token reaches the API only via
+    # that step's admin-settings PUT, so build/migrate/seed run unleased
+    # without touching the guild, and each run holds it ~5-8 min less.
     #
-    # NOTE this narrows the population, it does not deepen the queue: three
-    # genuinely Discord-touching PRs at once can still evict one another. That
-    # needs a lease/self-hosted queue, deliberately out of scope here.
-    concurrency:
-      group: discord-smoke-shared-guild
-      cancel-in-progress: false
+    # Read-only token (Dependabot, fork PRs): those runs get no Discord
+    # secrets, so every live step is skipped (see "Check for Discord secrets")
+    # and they never touch the guild — the lease is skipped with them. If a run
+    # ever HAS the secrets but a read-only token, the acquire step FAILS the
+    # job rather than drive the guild unleased next to a leased run.
+    #
+    # timeout-minutes bounds the whole job: lease wait (script gives up at
+    # 100 min) + ~17 min median smoke + build. Keep it BELOW the lease's
+    # LEASE_STALE_S (scripts/ci/discord-smoke-lease.sh, 9300s = 155 min).
+    timeout-minutes: 150
     # ROK-1352: pull CI service images from the private GHCR mirror.
+    # ROK-1522: contents: write creates/deletes the lease ref and its owner
+    # commit; actions: read lets a waiter see whether the holder run is done.
     permissions:
-      contents: read
+      contents: write
       packages: read
+      actions: read
     needs: detect-changes
+    # ROK-1522 d1: push runs use the same Discord path filter as PRs (plus
+    # package manifests); only 71 of 190 main commits touched a Discord path,
+    # yet every push held the guild. workflow_dispatch always runs.
     if: >-
-      github.event_name == 'push' ||
       github.event_name == 'workflow_dispatch' ||
-      needs.detect-changes.outputs.discord == 'true'
+      needs.detect-changes.outputs.discord == 'true' ||
+      (github.event_name == 'push' && needs.detect-changes.outputs.deps == 'true')
 
     services:
       postgres:
@@ -133,6 +163,12 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # ROK-1522: this job has contents: write (lease refs). Keep that
+          # token out of .git/config, where npm ci postinstall scripts and
+          # test code could read it. The lease script uses the REST API
+          # with an explicit GH_TOKEN env, never git credentials.
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -166,7 +202,11 @@ jobs:
         run: npm run db:seed:games -w api
 
       - name: Start API server
-        run: node api/dist/src/main.js &
+        # ROK-1522: record the PID so "Stop API server" can end it (and the
+        # bot's gateway session) before the lease is released.
+        run: |
+          node api/dist/src/main.js &
+          echo "API_PID=$!" >> "$GITHUB_ENV"
         env:
           PORT: '3000'
 
@@ -185,7 +225,8 @@ jobs:
       # Dependabot PRs don't have access to repository secrets. The
       # test-bot smoke tests require Discord credentials, so we short-circuit
       # the secret-dependent steps and report success when they're unavailable.
-      # Real validation runs on push to main.
+      # Real validation runs on push to main (a push touching a Discord path
+      # or a package manifest).
       - name: Check for Discord secrets
         id: secrets
         run: |
@@ -195,6 +236,15 @@ jobs:
           else
             echo "available=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Acquire shared-guild lease
+        id: lease
+        if: steps.secrets.outputs.available == 'true'
+        run: bash scripts/ci/discord-smoke-lease.sh acquire
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEASE_NAME: discord-smoke
+          LEASE_POOL_SIZE: '1'
 
       - name: Configure and connect Discord bot
         if: steps.secrets.outputs.available == 'true'
@@ -219,7 +269,7 @@ jobs:
             -d "{\"clientId\":\"$DISCORD_CLIENT_ID\",\"clientSecret\":\"$DISCORD_CLIENT_SECRET\"}" > /dev/null 2>&1 || true
 
           echo "Waiting for Discord bot to connect..."
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             STATUS=$(curl -sf http://localhost:3000/admin/settings/discord-bot \
               -H "Authorization: Bearer $TOKEN" \
               2>/dev/null || echo '{}')
@@ -276,3 +326,41 @@ jobs:
         working-directory: tools/test-bot
         env:
           SMOKE_CATEGORY: voice
+
+      # ROK-1522: the API holds the bot's gateway session. Stop it BEFORE the
+      # lease is released, or the next waiter connects the same bot while
+      # this one is still live. Never fails, so the release still runs.
+      - name: Stop API server
+        if: always()
+        continue-on-error: true
+        run: |
+          MAIN=api/dist/src/main.js
+          alive() {
+            if [ -n "${API_PID:-}" ]; then kill -0 "$API_PID" 2>/dev/null
+            else pgrep -f "node ${MAIN}" > /dev/null; fi
+          }
+          stop() {  # stop SIGNAL
+            if [ -n "${API_PID:-}" ]; then kill "-$1" "$API_PID" 2>/dev/null || true
+            else pkill "-$1" -f "node ${MAIN}" || true; fi
+          }
+          alive || { echo "API not running"; exit 0; }
+          stop TERM
+          for i in $(seq 1 30); do
+            alive || { echo "API stopped after ${i}s"; exit 0; }
+            sleep 1
+          done
+          echo "::warning::API still running after 30s — sending SIGKILL"
+          stop KILL
+          for _ in $(seq 1 10); do alive || exit 0; sleep 1; done
+          echo "::warning::API did not exit; releasing the lease anyway"
+
+      # ROK-1522: runs on success, failure, cancel and timeout. The script
+      # deletes the ref only if this run still owns it, and never fails.
+      - name: Release shared-guild lease
+        if: always() && steps.lease.outputs.ref != ''
+        run: bash scripts/ci/discord-smoke-lease.sh release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LEASE_REF: ${{ steps.lease.outputs.ref }}
+          LEASE_SHA: ${{ steps.lease.outputs.sha }}
+          LEASE_ACQUIRED_AT: ${{ steps.lease.outputs.acquired_at }}

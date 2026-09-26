@@ -94,6 +94,8 @@ import {
   threadIdOf,
 } from './lfg-board.mirror.js';
 import { withLfgSurface } from '../lfg-surface-lock.js';
+// ROK-1522: the scan windows (and why they are disjoint) live in one place.
+import { boardCandidates } from '../lfg-smoke-scope.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /**
@@ -122,16 +124,6 @@ const TOPIC_SENTINEL = '\u00b7 raid-ledger:lfg-board';
 const REFUSED_POST_TITLE = 'ROK-1493 smoke - must be refused';
 /** Provisioning a forum + intro post is several Discord round-trips. */
 const BOARD_READY_MS = 45_000;
-/** How many games to probe for an idle one before giving up. */
-const GAME_SCAN_LIMIT = 8;
-/**
- * `lfm-embed.test.ts` takes its candidates from the LAST 8 games in the
- * registry. This suite starts past that window so the two LFG suites never
- * contend for one group — they are serialised by the surface lock, but a game
- * the sibling suite has already CONVERTED is no longer idle for either of us.
- */
-const GAME_SCAN_OFFSET = 8;
-
 /** What the DEMO_MODE slash-command harness hands back. */
 interface HarnessReply {
   content?: string;
@@ -164,31 +156,6 @@ function isIdle(group: LfgGroupDetail): boolean {
 }
 
 /**
- * The candidate games, ordered so this suite and `lfm-embed.test.ts` collide
- * last rather than first.
- *
- * The offset window is the ideal: `lfm-embed.test.ts` scans the LAST
- * {@link GAME_SCAN_LIMIT} games in the registry, so starting past them keeps
- * the two suites off each other's groups entirely. It needs
- * `GAME_SCAN_OFFSET + 1` games to exist, and the CI seed creates SEVEN — so on
- * every CI run the offset branch is dead and both suites used to scan the
- * identical window in the identical order, handing this suite whatever game the
- * sibling suite had just finished with.
- *
- * The fallback therefore walks the same short registry from the OTHER end
- * (oldest first, where the sibling starts newest first). It cannot guarantee
- * disjointness — seven games cannot be split two ways eight at a time — but the
- * two suites now have to exhaust almost the whole registry before they meet,
- * and {@link isIdle} rejects the collision if they ever do.
- */
-function candidateGames<T>(games: T[]): T[] {
-  const reversed = games.slice().reverse();
-  return reversed.length > GAME_SCAN_OFFSET + 1
-    ? reversed.slice(GAME_SCAN_OFFSET, GAME_SCAN_OFFSET + GAME_SCAN_LIMIT)
-    : reversed.slice(0, GAME_SCAN_LIMIT).reverse();
-}
-
-/**
  * A game nobody is currently looking for and nobody is currently playing.
  *
  * Re-scanned every run so a leaked intent from a failed run costs the next run
@@ -200,7 +167,7 @@ async function pickIdleGame(
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
     "/admin/settings/games?limit=100",
   );
-  const window = candidateGames(res.data ?? []);
+  const window = boardCandidates(res.data ?? []);
   if (window.length === 0)
     throw new Error("LFG board: no games in the registry");
   for (const game of window) {

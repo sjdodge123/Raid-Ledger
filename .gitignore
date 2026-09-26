@@ -38,6 +38,7 @@ scripts/*
 !scripts/validate-migrations.sh
 !scripts/setup-branch-protection.sh
 !scripts/smoke/
+!scripts/ci/
 !scripts/playwright-global-setup.ts
 !scripts/auth-paths.ts
 !scripts/launch-discord.sh

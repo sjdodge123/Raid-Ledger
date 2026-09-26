@@ -55,6 +55,8 @@ import {
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import { withLfgSurface } from '../lfg-surface-lock.js';
+import { lfmCandidates } from '../lfg-smoke-scope.js';
+import { armForumSweep, sweepForumThreads } from '../lfg-forum-sweep.js';
 
 /**
  * `▸ PLAYING NOW · N in voice` — the sixth state's author line (D3).
@@ -76,8 +78,6 @@ const PLAYING_AUTHOR = /^▸ PLAYING NOW · (\d+) in voice$/u;
  * the channel id the companion bot joins.
  */
 const VOICE_LINK = /https:\/\/discord\.com\/channels\/\d+\/(\d+)/u;
-/** How many games to probe for an idle one before giving up. */
-const GAME_SCAN_LIMIT = 8;
 
 /** Everything the phases share. */
 interface Run {
@@ -126,10 +126,8 @@ async function pickIdleGame(
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
     '/admin/settings/games?limit=100',
   );
-  const candidates = (res.data ?? [])
-    .slice()
-    .reverse()
-    .slice(0, GAME_SCAN_LIMIT);
+  // ROK-1522: the shared LFM window, past the board's and the newest games.
+  const candidates = lfmCandidates(res.data ?? []);
   if (candidates.length === 0) throw new Error('AC7: no games in the registry');
   for (const game of candidates) {
     const group = await ctx.api.get<LfgGroupSummary>(`/lfg/${game.id}`);
@@ -350,6 +348,9 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
   );
   const run: Run = { ctx, channelId: ctx.defaultChannelId, game, preexisting };
+  // ROK-1522: armed BEFORE the board is pinned off, so a hand that still
+  // reached the forum is swept too.
+  const sweep = await armForumSweep(ctx.api, game.name);
   let bindingId: string | undefined;
   let joined = false;
   let boardWas: boolean | undefined;
@@ -395,6 +396,8 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     if (bindingId) await deleteBinding(ctx.api, bindingId);
     // Restore the toggle for whichever LFM test holds the surface lock next.
     if (boardWas !== undefined) await pinLfgBoard(ctx, boardWas);
+    // Last: after the restore, so a re-enable's repost is caught as well.
+    await sweepForumThreads(ctx.api, sweep);
     // NOT cleaned up: the ad-hoc event the spawn created and its temp voice
     // channel. Neither has a fixture on this branch, and the temp channel is
     // reaped by the ephemeral-voice lifecycle that owns it. Left deliberately
