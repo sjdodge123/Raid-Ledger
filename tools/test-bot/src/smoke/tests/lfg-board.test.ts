@@ -58,6 +58,7 @@ import {
   flushLfgBoard,
   forumExists,
   getLfgBoard,
+  listForumIds,
   readForumTagNames,
   readForumThreads,
   readForumTopic,
@@ -184,6 +185,10 @@ async function pickIdleGame(
 /** Enable the board and wait until its forum + intro post are provisioned. */
 async function enableBoard(run: Run): Promise<void> {
   const before = await getLfgBoard(run.ctx.api);
+  // ROK-1522: census the guild's forums BEFORE enabling. Settings alone are
+  // not enough — an API with no stored forum may adopt a marked forum that
+  // another pool run (or a fleet env) is still using.
+  const forumsBefore = await listForumIds();
   run.forumPreexisting = await forumExists(before.channelId);
   const put = await setLfgBoardEnabled(run.ctx.api, true);
   if (!put.enabled) {
@@ -196,6 +201,7 @@ async function enableBoard(run: Run): Promise<void> {
   // timeout far better than it predicts one.
   if (put.warning) run.warning = put.warning.missing.join(", ");
   run.forumChannelId = await waitForForum(run);
+  if (forumsBefore.has(run.forumChannelId)) run.forumPreexisting = true;
   await assertForumTags(run);
   // Waiting for the intro post also GUARANTEES it is in the pre-run snapshot,
   // which is what stops it satisfying T24's negative assertion.
@@ -611,7 +617,8 @@ async function cleanup(run: Run): Promise<void> {
     );
   });
   // Only a forum THIS run caused to exist is deleted. Deleting one that
-  // predates the run would destroy an operator's board.
+  // predates the run would destroy an operator's board — or, since ROK-1522's
+  // smoke pool, another concurrent run's (see the census in enableBoard).
   if (!run.forumPreexisting && run.forumChannelId) {
     await deleteForumChannel(run.forumChannelId);
   }

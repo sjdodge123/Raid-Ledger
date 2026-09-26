@@ -118,6 +118,23 @@ export async function forumExists(
   }
 }
 
+/**
+ * ROK-1522 — the id of every forum channel in the guild right now.
+ *
+ * The cleanup guard's census: the smoke pool runs two suites (plus any fleet
+ * env) against ONE guild, so a forum that existed before this run enabled the
+ * board may be another run's live board. Throws on a failed fetch — without
+ * the census a run cannot prove which forum is its own.
+ */
+export async function listForumIds(): Promise<Set<string>> {
+  const all = await getGuild().channels.fetch();
+  const ids = new Set<string>();
+  for (const channel of all.values()) {
+    if (channel?.type === ChannelType.GuildForum) ids.add(channel.id);
+  }
+  return ids;
+}
+
 /** The names of the tags the board's forum offers (AC: the 5 lifecycle tags). */
 export async function readForumTagNames(
   forumChannelId: string,
