@@ -638,11 +638,8 @@ const renderStep = (slug, plan, step, draft) => {
   // common verdict-buffer route because replaceChildren scroll-jumps to
   // top on mobile (operator-flagged 2026-05-19). In-place patch keeps
   // the existing DOM nodes + listeners; re-render is the safety net.
-  // Belt-and-suspenders for mobile sticky-state: blur the button after click
-  // so it doesn't carry :focus into the post-tap render. The hover state is
-  // gated separately via @media (hover: hover) in style.css.
   const onVerdict = (verdict) => (ev) => {
-    ev.currentTarget?.blur();
+    ev.currentTarget?.blur(); // mobile: drop :focus before the post-tap render (hover is @media-gated in style.css)
     bufferVerdict(slug, plan, step.id, verdict);
   };
   passBtn.addEventListener('click', onVerdict('pass'));
