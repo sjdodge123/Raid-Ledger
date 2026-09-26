@@ -162,7 +162,10 @@ else
 
     CURRENT_TEST_NAME="AC-M9-9: behavioral local — no docker invocations"
     : >"$docker_argv_file"
+    # Drop the caller's RL_SLOT/REDIS_URL: inside a fleet runner /workspace
+    # exists and the runner's own RL_SLOT would make this "local" case spawn.
     out=$(
+        env -u RL_SLOT -u REDIS_URL \
         PATH="$stub_bin:$PATH" \
         REPO_ROOT="$REPO_ROOT" \
         RL_TARGET="local" \

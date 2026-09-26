@@ -271,7 +271,10 @@ else
     # ----- AC-M10-5 behavioral: local mode ALSO shards, but never spawns the M9 sidecar -----
     CURRENT_TEST_NAME="AC-M10-5 behavioral: local mode shards 4 ways, no npm fallback, no Redis sidecar"
     : >"$docker_argv_file"; : >"$npx_argv_file"; : >"$npm_argv_file"
+    # Drop the caller's RL_SLOT/REDIS_URL: inside a fleet runner /workspace
+    # exists and the runner's own RL_SLOT would make this "local" case spawn.
     out=$(
+        env -u RL_SLOT -u REDIS_URL \
         PATH="$stub_bin:$PATH" \
         REPO_ROOT="$REPO_ROOT" \
         RL_TARGET="local" \
