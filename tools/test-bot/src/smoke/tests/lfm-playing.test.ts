@@ -27,24 +27,18 @@
  * shows up here as the join never landing, which is why the increment and the
  * decrement are asserted separately and each names the count it saw.
  *
- * Deterministic helpers only: `pollForEmbed`, `waitForEmbedUpdate`,
- * `pollForCondition`, plus `await-processing` / `flush-voice-sessions` drains.
- * No `sleep()` anywhere (`npm run lint:no-sleep`).
+ * Deterministic helpers only: `pollForEmbed`, `waitForEmbedUpdate`, plus
+ * `await-processing` / `flush-voice-sessions` drains. No `sleep()` anywhere
+ * (`npm run lint:no-sleep`).
  *
- * CANNOT GO GREEN ON `rok-1494-discord` ALONE. This branch carries only the
- * RENDER of `playing` — nothing on it emits `GROUP_CHANGED { reason:
- * 'playing' }`, because the spawn service and the voice-state re-render are
- * Lane A's, on `rok-1494`. Until the two merge, `awaitPlayingPost` times out
- * at the poll rather than at an assertion, which is exactly the "proves
- * nothing" failure mode — so do NOT read a red run here as a defect in the
- * render. Every string it asserts is quoted from
+ * Every string it asserts is quoted from
  * `api/src/discord-bot/lfm/lfm-embed.helpers.ts` (`stateAuthorLine`,
- * `playingDescription`) rather than guessed, so the first post-merge run is
- * the first run whose result means anything.
+ * `playingDescription`) rather than guessed.
  */
 import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import { readLastMessages } from '../../helpers/messages.js';
 import {
+  endLfgSession,
   lfgNowVoiceJoin,
   lfgNowVoiceLeave,
   type LfgNowVoiceResult,
@@ -390,6 +384,27 @@ async function driveHeadCount(
  * forum surface — `lfg-board.test.ts` / `lfg-board-spawn-indicator-phase.ts`.
  */
 
+/**
+ * Tear down the session this run spawned, if any (a no-op when none was).
+ *
+ * The ephemeral reaper only deletes the `⏰ … — Playing now` channel 30 min
+ * after the session ends, and a CI run's API and DB are gone long before
+ * that. Drained afterwards so the post's closing re-render lands before the
+ * binding it routes through is deleted. Errors are reported, not thrown, so a
+ * cleanup failure never replaces the test's real one.
+ */
+async function endSpawnedSession(run: Run): Promise<void> {
+  try {
+    await endLfgSession(run.ctx.api, run.game.id);
+    await awaitProcessing(run.ctx.api);
+  } catch (err) {
+    console.warn(
+      `[lfm-playing] end-session cleanup failed for game ${run.game.id} — ` +
+        `its temp voice channel may be orphaned: ${String(err)}`,
+    );
+  }
+}
+
 /** AC7 proper: join moves the count up, leave moves it back down. */
 async function runPlayingNow(ctx: TestContext): Promise<void> {
   const game = await pickIdleGame(ctx);
@@ -426,6 +441,10 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     // Closes its own roster row in its own `finally`.
     await driveHeadCount(run, run.first, eventId, playing);
   } finally {
+    // FIRST, while the binding still routes the post's closing re-render:
+    // ends the spawned session and force-destroys its temp voice channel,
+    // which a CI run would otherwise orphan in the shared guild.
+    await endSpawnedSession(run);
     // After a spawn both intents are already `converted`, so these 404 —
     // `withdrawLfgIntent` swallows that by design. They matter on the failure
     // path, where the spawn never happened and the hands are still live.
@@ -436,10 +455,6 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     if (boardWas !== undefined) await pinLfgBoard(ctx, boardWas);
     // Last: after the restore, so a re-enable's repost is caught as well.
     await sweepForumThreads(ctx.api, sweep);
-    // NOT cleaned up: the ad-hoc event the spawn created and its temp voice
-    // channel. Neither has a fixture on this branch, and the temp channel is
-    // reaped by the ephemeral-voice lifecycle that owns it. Left deliberately
-    // rather than deleted through a raw API call that would race that reaper.
   }
 }
 

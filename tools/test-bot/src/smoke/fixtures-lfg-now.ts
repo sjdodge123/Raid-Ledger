@@ -8,9 +8,12 @@
  * (`voice-state-join-dispatch.handlers.ts`, `isBotMember`), and CI cannot open
  * a voice connection at all (`SMOKE_SKIP_VOICE_JOIN=1`). These endpoints record
  * a SEEDED, Discord-linked human through the voice listener's own helpers
- * (`recordLfgNowVoiceJoin` / `recordLfgNowVoiceLeave`), so the roster write,
- * the PARTICIPANT_JOINED/LEFT emit and the post re-render are exactly what a
- * real join or leave produces.
+ * (`recordLfgNowVoiceJoin` / `recordLfgNowVoiceLeave`), so from
+ * `recordLfgNowVoiceJoin` down — the roster write, the PARTICIPANT_JOINED/LEFT
+ * emit and the post re-render — they match a real join or leave. What they
+ * SKIP is the gateway → unbound-channel routing above it (`isBotMember`,
+ * `resolveAllBindings`); that is pinned by `lfg-now-voice.helpers.spec.ts`,
+ * not by any smoke.
  */
 import { ApiClient } from "./api.js";
 
@@ -61,4 +64,35 @@ export function lfgNowVoiceLeave(
   target: LfgNowVoiceTarget,
 ): Promise<LfgNowVoiceResult> {
   return api.post<LfgNowVoiceResult>("/admin/test/lfg-now/voice-leave", target);
+}
+
+/** `POST /admin/test/lfg/end-session` response (ROK-1505 AC10b). */
+export interface LfgEndSessionResult {
+  /** False when the game had no open LFG-born session to end. */
+  ended: boolean;
+  eventId: number | null;
+}
+
+/**
+ * End the game's live LFG-born session and destroy its temp voice channel.
+ *
+ * A spawn creates a real `⏰ <game> — Playing now` channel in the shared test
+ * guild. The ordinary teardown is the ephemeral reaper, 30 min after the
+ * session ends — long after a CI run's API is gone — so a smoke that spawns
+ * must call this in its `finally` or leak that channel for good. It also
+ * closes the game's `lfg_group_messages` row, which would otherwise keep
+ * `uq_lfg_group_messages_game_open` taken and the game out of the idle pool.
+ * A no-op (`ended: false`) when nothing was spawned.
+ *
+ * @param api - An ADMIN client (the endpoint is admin-guarded, DEMO_MODE only).
+ * @param gameId - The game whose session to end.
+ * @returns Whether a session was ended, and which event.
+ */
+export function endLfgSession(
+  api: ApiClient,
+  gameId: number,
+): Promise<LfgEndSessionResult> {
+  return api.post<LfgEndSessionResult>("/admin/test/lfg/end-session", {
+    gameId,
+  });
 }
