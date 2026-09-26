@@ -11,6 +11,7 @@ import { ApiClient } from './api.js';
 import { SMOKE } from './config.js';
 import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
 import { setupChannelPool } from './channel-pool.js';
+import { rotateForPool, smokePoolIndex } from './pool-index.js';
 import type { TestContext, DiscordChannel } from './types.js';
 
 /** Connect the companion bot and return its Discord user ID. */
@@ -245,7 +246,12 @@ async function fetchChannels(api: ApiClient) {
   // falling back to the shared list.
   const set = channelSetPrefix();
   const textChannels = selectChannelSet(pools.textChannels, set);
-  const voiceChannels = selectChannelSet(pools.voiceChannels, set);
+  // ROK-1522 Phase 2: pool slot i binds voiceChannels[i % n] as ctx's first
+  // (= default) voice channel — one active scheduled event per channel.
+  const voiceChannels = rotateForPool(
+    selectChannelSet(pools.voiceChannels, set),
+    smokePoolIndex(),
+  );
   // ROK-1623: name the bound channels so a CI log proves no `slot-*` is used.
   const names = (cs: { name: string }[]) => cs.map((c) => `#${c.name}`).join(', ');
   console.log(

@@ -1,5 +1,6 @@
 import { ChannelType, type Message } from 'discord.js';
 import { getClient } from '../client.js';
+import { shouldAcceptMessage } from './bot-author.js';
 import { toSimpleMessage, type SimpleMessage } from './messages.js';
 
 /**
@@ -20,6 +21,9 @@ export async function waitForDM(
     function handler(msg: Message) {
       if (msg.channel.type !== ChannelType.DM) return;
       const simple = toSimpleMessage(msg);
+      // ROK-1522: the companion bot's inbox gets DMs from EVERY pooled run's
+      // app bot; only this run's bot may satisfy the wait.
+      if (!shouldAcceptMessage(simple)) return;
       try {
         if (predicate(simple)) {
           clearTimeout(timer);
