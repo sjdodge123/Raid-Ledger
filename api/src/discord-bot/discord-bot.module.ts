@@ -234,6 +234,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     // ROK-1370: lineups' poll-expiry path enqueues an embed re-sync after
     // clearing reschedulingPollId (heals the stuck RESCHEDULING card).
     EmbedSyncQueueService,
+    // The DEMO_MODE LFG-now voice endpoints (DemoTestLfgNowVoiceController)
+    // record a seeded join/leave through the listener's own roster helpers.
+    AdHocParticipantService,
   ],
 })
 export class DiscordBotModule {}

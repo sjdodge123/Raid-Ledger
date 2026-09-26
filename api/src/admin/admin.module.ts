@@ -11,6 +11,7 @@ import { NotificationModule } from '../notifications/notification.module';
 import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notification.constants';
 import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
+import { DemoTestLfgNowVoiceController } from './demo-test-lfg-now-voice.controller';
 import { DemoTestThreadMirrorController } from './demo-test-thread-mirror.controller';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
@@ -59,6 +60,7 @@ import { GamesDedupAuditController } from './games-dedup-audit.controller';
 import { GamesDedupAuditService } from './games-dedup-audit.service';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
 import { LfgModule } from '../lfg/lfg.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -86,6 +88,10 @@ import { LfgModule } from '../lfg/lfg.module';
     // a smoke user's behalf through LfgInviteService. forwardRef because
     // LfgModule → NotificationModule → … → AdminModule is the same cycle.
     forwardRef(() => LfgModule),
+    // DemoTestLfgNowVoiceController resolves a seeded user's Discord identity
+    // and hands UsersService to the listener's own LFG-now voice helpers.
+    // forwardRef: UsersModule → DiscordBotModule → … → AdminModule.
+    forwardRef(() => UsersModule),
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
   controllers: [
@@ -98,6 +104,7 @@ import { LfgModule } from '../lfg/lfg.module';
     DemoTestDeactivationController,
     DemoTestVoiceController,
     DemoTestLfgController,
+    DemoTestLfgNowVoiceController,
     DemoTestThreadMirrorController,
     DemoTestScheduledEventsController,
     DemoTestSignupsController,
