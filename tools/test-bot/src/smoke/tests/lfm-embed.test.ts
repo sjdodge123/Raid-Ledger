@@ -51,6 +51,8 @@ import { assertEmbedColor, assertEmbedRenderRules } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import { withLfgSurface } from '../lfg-surface-lock.js';
+import { lfmCandidates } from '../lfg-smoke-scope.js';
+import { armForumSweep, sweepForumThreads } from '../lfg-forum-sweep.js';
 
 /** `EMBED_COLORS.REMINDER` — chrome state `needs_you`, below viability. */
 const AMBER = 0xf59e0b;
@@ -70,8 +72,6 @@ const LFM_AUTHOR =
 
 /** AC1 says "≥ 10 s"; a little over, and no `sleep()` anywhere. */
 const QUIET_WINDOW_MS = 12_000;
-/** How many games to probe for an idle one before giving up. */
-const GAME_SCAN_LIMIT = 8;
 
 /** `GET /lfg/:gameId` — the summary plus the live roster. */
 interface LfgGroupDetail extends LfgGroupSummary {
@@ -136,7 +136,8 @@ async function pickIdleGame(
   const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
     '/admin/settings/games?limit=100',
   );
-  const candidates = (res.data ?? []).slice().reverse().slice(0, GAME_SCAN_LIMIT);
+  // ROK-1522: the shared LFM window, past the board's and the newest games.
+  const candidates = lfmCandidates(res.data ?? []);
   if (candidates.length === 0) throw new Error('LFM: no games in the registry');
   for (const game of candidates) {
     const group = await readGroup(ctx, game.id);
@@ -463,6 +464,8 @@ async function runLifecycle(ctx: TestContext): Promise<void> {
     game,
     preexisting,
   };
+  // ROK-1522: with the board on, every hand below opens a forum post.
+  const sweep = await armForumSweep(ctx.api, game.name);
   let bindingId: string | undefined;
   try {
     // Bind the game explicitly so `resolveLfmChannel`'s FIRST step decides
@@ -482,6 +485,7 @@ async function runLifecycle(ctx: TestContext): Promise<void> {
     await assertExactlyOneMessage(run);
   } finally {
     await cleanup(run, bindingId);
+    await sweepForumThreads(ctx.api, sweep);
   }
 }
 
@@ -571,6 +575,7 @@ async function runNowUrgency(ctx: TestContext): Promise<void> {
     (await readLastMessages(ctx.defaultChannelId, 100)).map((m) => m.id),
   );
   const run: Run = { ctx, channelId: ctx.defaultChannelId, game, preexisting };
+  const sweep = await armForumSweep(ctx.api, game.name);
   let bindingId: string | undefined;
   try {
     bindingId = await createBinding(ctx.api, {
@@ -616,6 +621,7 @@ async function runNowUrgency(ctx: TestContext): Promise<void> {
     if (run.fixture) await withdrawLfgIntent(run.fixture.api, run.game.id);
     if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
     if (bindingId) await deleteBinding(ctx.api, bindingId);
+    await sweepForumThreads(ctx.api, sweep);
     // NOTE: this test no longer spawns a session at all (see the week-hand
     // comment above), so there is nothing left live behind it. The paragraph
     // below is kept because it still describes the gap any test that DOES
