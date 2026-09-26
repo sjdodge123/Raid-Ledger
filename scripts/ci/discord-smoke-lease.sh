@@ -24,7 +24,11 @@
 #                 the same stale lease cannot both succeed (the loser gets 422).
 # A lease is stale when its holder's workflow run is `completed` or gone, when
 # it is an earlier attempt of THIS run (a re-run), or when it is older than
-# LEASE_STALE_S (default 90 min) — so a crashed run cannot wedge the queue.
+# LEASE_STALE_S (default 155 min) — so a crashed run cannot wedge the queue.
+# The run-status check is what catches a crashed holder; the age limit is only
+# a backstop, and it MUST exceed the job's `timeout-minutes` (150 in
+# .github/workflows/discord-smoke.yml) so a slow-but-alive holder, whose bot is
+# still connected, is never taken over.
 #
 # Needs job permissions `contents: write` (refs + commit objects) and
 # `actions: read` (holder run status). A read-only token (Dependabot, forks)
@@ -39,7 +43,7 @@ NS="${LEASE_REF_NAMESPACE:-locks}"
 NAME="${LEASE_NAME:-discord-smoke}"
 POOL_SIZE="${LEASE_POOL_SIZE:-1}"
 POLL_S="${LEASE_POLL_S:-30}"
-STALE_S="${LEASE_STALE_S:-5400}"
+STALE_S="${LEASE_STALE_S:-9300}"  # > timeout-minutes 150 (9000s); see header
 MAX_WAIT_S="${LEASE_MAX_WAIT_S:-6000}"
 RUN_CHECK_EVERY="${LEASE_RUN_CHECK_EVERY:-4}"
 RUN_ID="${GITHUB_RUN_ID:?GITHUB_RUN_ID is required}"

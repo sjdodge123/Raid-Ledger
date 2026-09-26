@@ -64,11 +64,25 @@ test('short registry keeps the pre-ROK-1522 fallbacks (LFM newest-first, board o
   assert.deepEqual(boardCandidates(CI), [1, 2, 3, 4, 5, 6, 7]);
 });
 
-test('a mid-size registry that fits only the board window stays disjoint', () => {
-  const twelve = Array.from({ length: 12 }, (_, i) => i + 1);
-  const board = boardCandidates(twelve);
-  const shared = lfmCandidates(twelve).filter((g) => board.includes(g));
+const seed = (n: number): number[] => Array.from({ length: n }, (_, i) => i + 1);
+
+test('7 games (CI seed): LFM keeps the newest-first fallback', () => {
+  assert.deepEqual(lfmCandidates(seed(7)), [7, 6, 5, 4, 3, 2, 1]);
+});
+
+test('12 games: LFM skips the newest game and the board window', () => {
+  const board = boardCandidates(seed(12));
+  const lfm = lfmCandidates(seed(12));
+  assert.deepEqual(board, [4, 3, 2, 1]);
+  assert.deepEqual(lfm, [11, 10, 9, 8, 7, 6, 5]);
+  assert.ok(!lfm.includes(12), `LFM must not hold the newest game, got [${lfm}]`);
+  const shared = lfm.filter((g) => board.includes(g));
   assert.deepEqual(shared, [], `windows overlap on [${shared}]`);
+});
+
+test('20 games: LFM uses its own window past the board', () => {
+  assert.deepEqual(boardCandidates(seed(20)), [12, 11, 10, 9, 8, 7, 6, 5]);
+  assert.deepEqual(lfmCandidates(seed(20)), [4, 3, 2, 1]);
 });
 
 const DISCORD_EPOCH_MS = 1_420_070_400_000;

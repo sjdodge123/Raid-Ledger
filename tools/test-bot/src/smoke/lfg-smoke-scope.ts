@@ -21,6 +21,10 @@
  * group (a game the sibling suite already converted is no longer idle for
  * either). Sharing the offset would reintroduce that collision.
  *
+ * On a mid-size registry (10..17 games) only the board window fits. The LFM
+ * suites then scan the games between the newest one and the board window
+ * (reversed [1 .. 8)), so they avoid both the board's games and Chao Chao.
+ *
  * On a short registry (the CI seed has seven games) neither window fits and
  * each suite keeps its pre-ROK-1522 fallback: LFM newest-first, the board
  * oldest-first, so the two meet as late as possible.
@@ -53,9 +57,13 @@ export function boardCandidates<T>(games: T[]): T[] {
 /** Candidate games for `lfm-embed.test.ts` / `lfm-playing.test.ts`. */
 export function lfmCandidates<T>(games: T[]): T[] {
   const reversed = games.slice().reverse();
-  return (
-    windowAt(reversed, LFM_SCAN_OFFSET) ?? reversed.slice(0, GAME_SCAN_LIMIT)
-  );
+  const lfm = windowAt(reversed, LFM_SCAN_OFFSET);
+  if (lfm) return lfm;
+  // Board window in use: take the games before it, skipping the newest.
+  if (windowAt(reversed, BOARD_SCAN_OFFSET)) {
+    return reversed.slice(1, BOARD_SCAN_OFFSET);
+  }
+  return reversed.slice(0, GAME_SCAN_LIMIT);
 }
 
 /** Discord's epoch (2015-01-01T00:00:00Z) — snowflakes count from it. */
