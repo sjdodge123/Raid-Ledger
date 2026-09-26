@@ -11,6 +11,12 @@
  * `SMOKE_BOT_USER_ID` unset, an API build predating `botUserId`), nothing is
  * filtered. A *wrong* filter id would hide every real message and surface as
  * a mass timeout with no clue why.
+ *
+ * EXCEPT in the CI smoke pool (ROK-1522): when `SMOKE_POOL_INDEX` is set, the
+ * companion bot shares its DM inbox and the guild with another pooled run's
+ * app bot, so "accept any author" is a false-PASS generator. A pooled run
+ * whose bot id cannot be resolved therefore FAILS CLOSED — it throws a clear
+ * error rather than accept every author.
  */
 
 /** Minimal shape of the message objects the filter inspects. */
@@ -27,13 +33,42 @@ export interface BotStatusReader {
 export const BOT_STATUS_PATH = '/admin/settings/discord-bot';
 
 let apiBotUserId: string | null = null;
+/** Set when a pooled run was left without a bot id: every author check throws. */
+let failClosed = false;
+
+/** True when this run holds a CI smoke pool slot (ROK-1522 Phase 2). */
+function isPooled(env: Record<string, string | undefined>): boolean {
+  return (env.SMOKE_POOL_INDEX ?? '').trim() !== '';
+}
+
+function unresolvedError(env: Record<string, string | undefined>): Error {
+  return new Error(
+    `SMOKE_POOL_INDEX=${String(env.SMOKE_POOL_INDEX)} is set but the API bot ` +
+      'user id could not be resolved (SMOKE_BOT_USER_ID unset and ' +
+      `${BOT_STATUS_PATH} returned no botUserId). A pooled run shares the ` +
+      "guild and DM inbox with another run's bot, so it refuses to accept " +
+      'messages from any author. Check the slot bot is connected.',
+  );
+}
 
 /**
  * Set (or clear, with null) the Discord user id every channel read is pinned
- * to. Called once at smoke startup after {@link resolveApiBotUserId}.
+ * to. Called once at smoke startup after {@link resolveApiBotUserId}. A null
+ * id in a pooled run arms fail-closed: every later author check throws.
  */
-export function setApiBotUserId(id: string | null): void {
+export function setApiBotUserId(
+  id: string | null,
+  env: Record<string, string | undefined> = process.env,
+): void {
   apiBotUserId = id && id.trim() !== '' ? id.trim() : null;
+  failClosed = apiBotUserId === null && isPooled(env);
+}
+
+/** Throw when a pooled run has no bot id pinned (fail closed, not open). */
+export function assertAuthorFilterReady(
+  env: Record<string, string | undefined> = process.env,
+): void {
+  if (failClosed) throw unresolvedError(env);
 }
 
 /** The currently pinned bot user id, or null when filtering is disabled. */
@@ -43,6 +78,7 @@ export function getApiBotUserId(): string | null {
 
 /** True when the message came from the pinned bot — or when none is pinned. */
 export function isFromApiBot(msg: AuthoredMessage): boolean {
+  assertAuthorFilterReady();
   if (apiBotUserId === null) return true;
   return msg.authorId === apiBotUserId;
 }
@@ -59,6 +95,7 @@ export function shouldAcceptMessage(msg: AuthoredMessage): boolean {
 
 /** Keep only messages authored by the pinned bot (all of them when unpinned). */
 export function filterByApiBot<T extends AuthoredMessage>(msgs: T[]): T[] {
+  assertAuthorFilterReady();
   if (apiBotUserId === null) return msgs;
   return msgs.filter((m) => m.authorId === apiBotUserId);
 }
@@ -66,12 +103,22 @@ export function filterByApiBot<T extends AuthoredMessage>(msgs: T[]): T[] {
 /**
  * Resolve the API's bot user id: the `SMOKE_BOT_USER_ID` env override first
  * (local runs against a bot the status endpoint can't see), then the bot
- * status endpoint. Never throws — an unreachable or older API yields null,
- * which disables filtering rather than breaking the run.
+ * status endpoint. Outside the smoke pool it never throws — an unreachable
+ * or older API yields null, which disables filtering rather than breaking the
+ * run. In the pool (`SMOKE_POOL_INDEX` set) an unresolved id THROWS.
  */
 export async function resolveApiBotUserId(
   api: BotStatusReader,
   env: Record<string, string | undefined> = process.env,
+): Promise<string | null> {
+  const id = await lookupBotUserId(api, env);
+  if (id === null && isPooled(env)) throw unresolvedError(env);
+  return id;
+}
+
+async function lookupBotUserId(
+  api: BotStatusReader,
+  env: Record<string, string | undefined>,
 ): Promise<string | null> {
   const override = (env.SMOKE_BOT_USER_ID ?? '').trim();
   if (override !== '') return override;
