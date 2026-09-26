@@ -30,6 +30,7 @@ const settings = { getDemoMode: jest.fn() };
 const invites = { decline: jest.fn() };
 const adHoc = { finalizeEvent: jest.fn() };
 const discordClient = { getGuild: jest.fn() };
+const ephemeralVoice = { destroyById: jest.fn() };
 
 function controller(): DemoTestLfgController {
   return new DemoTestLfgController(
@@ -39,6 +40,7 @@ function controller(): DemoTestLfgController {
     adHoc as never,
     {} as never,
     discordClient as never,
+    ephemeralVoice as never,
   );
 }
 
@@ -51,6 +53,7 @@ beforeEach(() => {
   emitter.emitAsync.mockResolvedValue([]);
   invites.decline.mockResolvedValue(true);
   adHoc.finalizeEvent.mockResolvedValue(undefined);
+  ephemeralVoice.destroyById.mockResolvedValue(undefined);
   jest.mocked(findOpenLfgNowEventId).mockResolvedValue(77);
   jest.mocked(setGracePeriodStatus).mockResolvedValue(undefined);
   jest.mocked(readBoardThreadMembers).mockResolvedValue({
@@ -129,6 +132,21 @@ describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
     expect(adHoc.finalizeEvent).toHaveBeenCalledWith(77);
   });
 
+  it("force-destroys the session's temp voice channel after the end", async () => {
+    await controller().endLfgSession({ gameId: 42 });
+
+    // `force`: a smoke run's seeded occupant must not keep the channel alive,
+    // or every CI spawn orphans a `⏰ … — Playing now` channel in the guild.
+    expect(ephemeralVoice.destroyById).toHaveBeenCalledWith(77, {
+      force: true,
+    });
+    // The reaper's order — end first, so the destroy's attendance flush and
+    // Scheduled Event re-point see the ended session.
+    expect(adHoc.finalizeEvent.mock.invocationCallOrder[0]).toBeLessThan(
+      ephemeralVoice.destroyById.mock.invocationCallOrder[0],
+    );
+  });
+
   it('is a no-op when the game has no open session', async () => {
     jest.mocked(findOpenLfgNowEventId).mockResolvedValue(null);
 
@@ -137,6 +155,7 @@ describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
       eventId: null,
     });
     expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
+    expect(ephemeralVoice.destroyById).not.toHaveBeenCalled();
   });
 
   it('rejects a body without a positive integer gameId', async () => {
