@@ -7,9 +7,10 @@
  * spec (and any future smoke spec that needs to drive UI as an invitee
  * rather than admin-as-creator → organizer).
  *
- * Idempotency: SELECT by `discord_id = 'smoke-invitee-fixture-001'`; if no
- * row exists, INSERT one. Either path mints a fresh JWT via `AuthService`.
- * Re-calling returns the same `userId` + `discordId` with a new JWT.
+ * Idempotency: a single INSERT ... ON CONFLICT (discord_id) DO UPDATE keyed
+ * on `discord_id = 'smoke-invitee-fixture-001'`, then a fresh JWT via
+ * `AuthService`. Re-calling (even concurrently) returns the same `userId` +
+ * `discordId` with a new JWT.
  *
  * Off in production (env + DB `DEMO_MODE` flag both required).
  */
@@ -25,7 +26,6 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
 import { AuthService } from '../auth/auth.service';
@@ -88,7 +88,7 @@ export class DemoTestFixtureUserController {
     private readonly authService: AuthService,
   ) {}
 
-  /** Idempotent: SELECT-or-INSERT by stable discord_id, return fresh JWT. */
+  /** Idempotent: upsert by stable discord_id, return fresh JWT. */
   @Post('seed-fixture-user')
   @HttpCode(HttpStatus.OK)
   async seedFixtureUser(
@@ -96,7 +96,7 @@ export class DemoTestFixtureUserController {
   ): Promise<SeedFixtureUserResponse> {
     await this.assertDemoMode();
     const identity = fixtureIdentity(parseFixtureSlot(body));
-    const user = await this.findOrCreateFixtureUser(identity);
+    const user = await this.upsertFixtureUser(identity);
     const { access_token } = this.authService.login({
       id: user.id,
       username: user.username,
@@ -109,32 +109,21 @@ export class DemoTestFixtureUserController {
     };
   }
 
-  private async findOrCreateFixtureUser(identity: {
+  /**
+   * One atomic upsert keyed on the UNIQUE `discord_id`, so two concurrent
+   * calls both land on the same row instead of the loser 500ing on the
+   * constraint (a SELECT-then-INSERT raced here).
+   *
+   * On conflict the row is re-marked onboarded (so the wizard never blocks
+   * the lineup detail view) and ACTIVE — the daily guild-membership cron
+   * deactivates this synthetic user (no real Discord membership), which then
+   * 404s invitee validation in `addInvitees` (activeUsersFilter).
+   */
+  private async upsertFixtureUser(identity: {
     discordId: string;
     username: string;
   }) {
-    const existing = await this.db
-      .select({
-        id: schema.users.id,
-        username: schema.users.username,
-        role: schema.users.role,
-      })
-      .from(schema.users)
-      .where(eq(schema.users.discordId, identity.discordId))
-      .limit(1);
-    if (existing[0]) {
-      // Ensure pre-existing fixture rows have onboarding completed so the
-      // wizard never blocks the lineup detail view, and are ACTIVE — the
-      // daily guild-membership cron deactivates this synthetic user (no real
-      // Discord membership), which then 404s invitee validation in
-      // `addInvitees` (activeUsersFilter). Idempotent.
-      await this.db
-        .update(schema.users)
-        .set({ onboardingCompletedAt: new Date(), deactivatedAt: null })
-        .where(eq(schema.users.id, existing[0].id));
-      return existing[0];
-    }
-    const [created] = await this.db
+    const [user] = await this.db
       .insert(schema.users)
       .values({
         discordId: identity.discordId,
@@ -142,12 +131,16 @@ export class DemoTestFixtureUserController {
         role: 'member',
         onboardingCompletedAt: new Date(),
       })
+      .onConflictDoUpdate({
+        target: schema.users.discordId,
+        set: { onboardingCompletedAt: new Date(), deactivatedAt: null },
+      })
       .returning({
         id: schema.users.id,
         username: schema.users.username,
         role: schema.users.role,
       });
-    return created;
+    return user;
   }
 
   private async assertDemoMode(): Promise<void> {

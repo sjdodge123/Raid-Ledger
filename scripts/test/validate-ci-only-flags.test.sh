@@ -147,8 +147,12 @@ INVOKE_OUT=""
 INVOKE_ERR=""
 INVOKE_RC=0
 # Set to a file path to fake a cgroup memory limit for the run (ROK-1451's
-# RL_CGROUP_MEMORY_MAX_FILE hook). Empty = no cgroup, i.e. a laptop.
-INVOKE_CGROUP_FILE=""
+# RL_CGROUP_MEMORY_MAX_FILE hook). The default is a path that never exists =
+# no cgroup, i.e. a laptop. NOT "": validate-ci.sh reads the hook with `:-`,
+# so an empty value falls back to the REAL /sys/fs/cgroup/memory.max, which
+# is readable inside a fleet runner and changes the heap/jest path.
+NO_CGROUP_FILE="${cgroup_file}.absent"
+INVOKE_CGROUP_FILE="$NO_CGROUP_FILE"
 
 # invoke <rl_target> [extra_node_options] -- <validate-ci flags...>
 # stdout and stderr are captured SEPARATELY (INVOKE_OUT / INVOKE_ERR) so the
@@ -251,7 +255,7 @@ CURRENT_TEST_NAME="F3: --no-coverage derives the heap from the cgroup limit"
 printf '2147483648' >"$cgroup_file"
 INVOKE_CGROUP_FILE="$cgroup_file"
 invoke local "" --only-unit --no-coverage
-INVOKE_CGROUP_FILE=""
+INVOKE_CGROUP_FILE="$NO_CGROUP_FILE"
 assert_rc 0 "--only-unit --no-coverage under a 2 GiB cgroup"
 assert_grep 'NODE_OPTIONS=--max-old-space-size=1536 .*jest' "$npx_argv_file" "a 2 GiB cgroup must yield 75% = 1536 MB, not the 3072 fallback"
 assert_absent 'max-old-space-size=3072' "$npx_argv_file" "the fallback must not override a resolvable cgroup limit"
@@ -260,7 +264,7 @@ CURRENT_TEST_NAME="F3: a sentinel cgroup value falls back to 3072"
 printf '9223372036854771712' >"$cgroup_file"
 INVOKE_CGROUP_FILE="$cgroup_file"
 invoke local "" --only-unit --no-coverage
-INVOKE_CGROUP_FILE=""
+INVOKE_CGROUP_FILE="$NO_CGROUP_FILE"
 assert_rc 0 "--only-unit --no-coverage with a PAGE_COUNTER_MAX sentinel"
 assert_grep 'NODE_OPTIONS=--max-old-space-size=3072 .*jest' "$npx_argv_file" "an unusable cgroup value must fall back to the 3072 default"
 

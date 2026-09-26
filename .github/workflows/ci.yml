@@ -71,6 +71,11 @@ jobs:
               # unfiltered: a vite config or index.html change got no build.
               - 'web/index.html'
               - 'web/vite.config.*'
+              # scripts/validate-ci-smoke-ci-parity.spec.mjs (run by the lint
+              # job) pins values read from these two files, so a PR editing
+              # only one of them must still run it to catch the drift.
+              - '.github/workflows/discord-smoke.yml'
+              - 'rl-infra/orchestrator/bin/env-spin'
             api:
               - 'api/package.json'
               - 'package-lock.json'
@@ -202,6 +207,13 @@ jobs:
       # and survived two backlog reports. The suite runs in ~5s.
       - name: Shell behavior tests (scripts/test)
         run: ./scripts/test/run-all.sh
+
+      # node:test specs for the CI/fleet scripts. validate-ci.sh runs them in
+      # both --static and --full, but until now no GitHub job did, so the real
+      # gate never exercised them. restore-drill-corruption.spec.mjs imports
+      # packages/contract/dist, built above.
+      - name: Script node:test specs (scripts/*.spec.mjs)
+        run: node --test scripts/*.spec.mjs
 
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:

@@ -3,6 +3,7 @@ import {
   ArgumentsHost,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import type { ExceptionFilter } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
@@ -26,6 +27,17 @@ import type { Response } from 'express';
  */
 @Catch()
 export class SentryExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(SentryExceptionFilter.name);
+
+  /** Log an unhandled error's stack so a 500 is visible in the API log too. */
+  private logUnhandled(exception: unknown): void {
+    if (exception instanceof Error) {
+      this.logger.error(exception.message, exception.stack);
+    } else {
+      this.logger.error(`Non-Error thrown: ${String(exception)}`);
+    }
+  }
+
   /** Handle an HTTP exception by sending the appropriate JSON response. */
   private handleHttpException(response: Response, exception: unknown): void {
     if (exception instanceof HttpException) {
@@ -41,6 +53,7 @@ export class SentryExceptionFilter implements ExceptionFilter {
         );
     } else {
       Sentry.captureException(exception);
+      this.logUnhandled(exception);
       response.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
         statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
         message: 'Internal server error',

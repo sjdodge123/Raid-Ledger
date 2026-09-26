@@ -12,6 +12,7 @@ import { SMOKE } from './config.js';
 import { linkDiscord, cleanupScheduledEvents, pauseReconciliation, disableScheduledEvents, resetToSeed } from './fixtures.js';
 import { setupChannelPool } from './channel-pool.js';
 import { rotateForPool, smokePoolIndex } from './pool-index.js';
+import { buildDemoData, pickOperatorUser } from './demo-data.js';
 import type { TestContext, DiscordChannel } from './types.js';
 
 /** Connect the companion bot and return its Discord user ID. */
@@ -62,15 +63,15 @@ async function setupOperatorIdentity(
   api: ApiClient,
   allUsers: { id: number; username: string }[],
   taken: number[],
-): Promise<string> {
-  const operator = allUsers.find((u) => !taken.includes(u.id));
+): Promise<{ discordId: string; userId: number }> {
+  const operator = pickOperatorUser(allUsers, taken);
   if (!operator) {
     throw new Error('Smoke setup needs a third demo user to act as operator');
   }
   console.log(`  Linking operator identity to demo user ${operator.id} (${operator.username})...`);
   await linkDiscord(api, operator.id, SMOKE_OPERATOR_DISCORD_ID, 'SmokeOperator');
   await api.patch(`/users/${operator.id}/role`, { role: 'operator' });
-  return SMOKE_OPERATOR_DISCORD_ID;
+  return { discordId: SMOKE_OPERATOR_DISCORD_ID, userId: operator.id };
 }
 
 /** Find the text channel that received the "Online" card posted after `postedAfter`. */
@@ -207,27 +208,6 @@ async function initApi(): Promise<{
   return { api, testUserId, allUsers };
 }
 
-/** Derive game list and demo user IDs from setup results. */
-function buildDemoData(
-  allUsers: { id: number; username: string }[],
-  testUserId: number,
-  dmRecipientUserId: number,
-  mmoGameId: number | undefined,
-) {
-  const gamesSet = new Set(
-    allUsers.length > 0
-      ? [mmoGameId].filter((id): id is number => id !== undefined)
-      : [],
-  );
-  const games = [...gamesSet].map((id) => ({ id, name: `Game ${id}` }));
-  const demoUserIds = allUsers
-    .map((u) => u.id)
-    .filter((id) => id !== testUserId && id !== dmRecipientUserId)
-    .slice(0, 8);
-  console.log(`  ${demoUserIds.length} demo users available for roster tests`);
-  return { games, demoUserIds };
-}
-
 /** Discover and validate guild channels (throws if none found). */
 async function fetchChannels(api: ApiClient) {
   console.log('  Discovering channels...');
@@ -273,7 +253,7 @@ export async function setup(): Promise<TestContext> {
   const dmRecipientUserId = await setupDmRecipient(
     api, testUserId, botDiscordId, allUsers,
   );
-  const operatorDiscordId = await setupOperatorIdentity(api, allUsers, [
+  const operator = await setupOperatorIdentity(api, allUsers, [
     testUserId,
     dmRecipientUserId,
   ]);
@@ -305,8 +285,10 @@ export async function setup(): Promise<TestContext> {
   await disableScheduledEvents(api);
 
   const { mmoGameId, testCharId, testCharRole } = await setupCharacters(api);
+  // The operator's synthetic Discord id gets it deactivated on the first DM
+  // (10013), so it must never be handed out as a roster/invitee user.
   const { games, demoUserIds } = buildDemoData(
-    allUsers, testUserId, dmRecipientUserId, mmoGameId,
+    allUsers, [testUserId, dmRecipientUserId, operator.userId], mmoGameId,
   );
 
   console.log('  Setting up channel pool...');
@@ -320,6 +302,7 @@ export async function setup(): Promise<TestContext> {
     testBotDiscordId: botDiscordId,
     defaultChannelId, textChannels, voiceChannels,
     games, mmoGameId, testCharId, testCharRole,
-    demoUserIds, dmRecipientUserId, operatorDiscordId, channelPool,
+    demoUserIds, dmRecipientUserId,
+    operatorDiscordId: operator.discordId, channelPool,
   };
 }
