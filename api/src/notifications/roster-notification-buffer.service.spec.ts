@@ -309,6 +309,48 @@ describe('RosterNotificationBufferService (ROK-534)', () => {
   });
 });
 
+describe('RosterNotificationBufferService — flushAll / clearAll', () => {
+  beforeEach(() => setupEach());
+
+  afterEach(() => {
+    service.onModuleDestroy();
+    jest.useRealTimers();
+  });
+
+  it('flushAll keeps flushing the remaining keys when one key throws', async () => {
+    const failing = makeSelectChain();
+    failing.limit.mockRejectedValue(new Error('event row wiped'));
+    selectChains = [
+      failing, // user1 assignment lookup throws
+      makeSelectChain([]), // user2 assignment
+      makeSelectChain([mmoEvent]), // user2 event
+    ];
+    service.bufferLeave({ ...baseAction, vacatedRole: 'tank' });
+    service.bufferLeave({
+      ...baseAction,
+      userId: 99,
+      displayName: 'TankBro',
+      vacatedRole: 'tank',
+    });
+
+    await expect(service.flushAll()).resolves.toBeUndefined();
+
+    expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+    expect(service.pendingCount).toBe(0);
+  });
+
+  it('clearAll drops pending entries without sending anything', async () => {
+    service.bufferLeave({ ...baseAction, vacatedRole: 'tank' });
+    expect(service.pendingCount).toBe(1);
+
+    service.clearAll();
+    await jest.runAllTimersAsync();
+
+    expect(service.pendingCount).toBe(0);
+    expect(mockNotificationService.create).not.toHaveBeenCalled();
+  });
+});
+
 // ── ROK-919: Relevance filter tests ──
 
 describe('RosterNotificationBufferService — relevance filter (ROK-919)', () => {

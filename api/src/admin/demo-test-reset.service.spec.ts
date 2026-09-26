@@ -3,6 +3,7 @@ import { ModuleRef } from '@nestjs/core';
 import { DemoTestResetService } from './demo-test-reset.service';
 import { DemoDataService } from './demo-data.service';
 import { QueueHealthService } from '../queue/queue-health.service';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
@@ -56,6 +57,10 @@ function buildMockSettings() {
   };
 }
 
+function buildMockRosterBuffer() {
+  return { clearAll: jest.fn() };
+}
+
 function buildMockRedis() {
   return {
     keys: jest.fn((): Promise<string[]> => Promise.resolve([])),
@@ -69,10 +74,14 @@ async function buildService(
   queue: ReturnType<typeof buildMockQueue>,
   settings: ReturnType<typeof buildMockSettings> = buildMockSettings(),
   redis: ReturnType<typeof buildMockRedis> = buildMockRedis(),
+  rosterBuffer: ReturnType<
+    typeof buildMockRosterBuffer
+  > = buildMockRosterBuffer(),
 ): Promise<DemoTestResetService> {
   const moduleRef = {
     get: jest.fn((token: unknown) => {
       if (token === QueueHealthService) return queue;
+      if (token === RosterNotificationBufferService) return rosterBuffer;
       throw new Error(`Unexpected ModuleRef.get(${String(token)})`);
     }),
   };
@@ -278,6 +287,28 @@ describe('DemoTestResetService', () => {
     expect(redis.del).toHaveBeenCalledWith(
       'lineup-reminder:1:99:24h',
       'lineup-poll-closing:1',
+    );
+  });
+});
+
+describe('DemoTestResetService — roster notification buffer', () => {
+  it('clears pending roster notifications before wiping the rows they point at', async () => {
+    const { db, executeMock } = buildExecMockDb(POPULATED_SNAPSHOT);
+    const rosterBuffer = buildMockRosterBuffer();
+    const svc = await buildService(
+      db,
+      buildMockDemoData(true),
+      buildMockQueue(),
+      buildMockSettings(),
+      buildMockRedis(),
+      rosterBuffer,
+    );
+
+    await svc.resetToSeed();
+
+    expect(rosterBuffer.clearAll).toHaveBeenCalledTimes(1);
+    expect(rosterBuffer.clearAll.mock.invocationCallOrder[0]).toBeLessThan(
+      executeMock.mock.invocationCallOrder[0],
     );
   });
 });

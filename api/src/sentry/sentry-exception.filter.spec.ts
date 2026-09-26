@@ -1,4 +1,9 @@
-import { ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import { SentryExceptionFilter } from './sentry-exception.filter';
 import * as Sentry from '@sentry/nestjs';
 
@@ -216,3 +221,36 @@ function describeSentryExceptionFilter() {
   describe('non-HTTP context', () => describeNonHTTPContext());
 }
 describe('SentryExceptionFilter', () => describeSentryExceptionFilter());
+
+describe('SentryExceptionFilter — unhandled error logging', () => {
+  let errorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    errorSpy = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+  });
+
+  afterEach(() => errorSpy.mockRestore());
+
+  it('logs the stack of a non-HttpException that becomes a 500', () => {
+    const { host } = createMockHttpHost();
+    const error = new Error('unexpected crash');
+
+    new SentryExceptionFilter().catch(error, host);
+
+    expect(errorSpy).toHaveBeenCalledWith('unexpected crash', error.stack);
+  });
+
+  it('does not log a 4xx HttpException', () => {
+    const { host } = createMockHttpHost();
+
+    new SentryExceptionFilter().catch(
+      new HttpException('Bad Request', HttpStatus.BAD_REQUEST),
+      host,
+    );
+
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+});

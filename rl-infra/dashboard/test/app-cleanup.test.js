@@ -134,7 +134,16 @@ test('AC-M6b-21: listener-attach comment explains GC + replaceChildren semantics
     (l) => /passBtn\.addEventListener\(['"]click['"]/.test(l),
   );
   assert.ok(idx > -1, 'expected passBtn click handler binding');
-  const preceding = lines.slice(Math.max(0, idx - 10), idx).join('\n');
+  // Anchor on the comment block itself, not a fixed `idx - N` window: scan
+  // back from the binding to the 'ROK-1326 fix-9' header (inclusive) or the
+  // previous blank line. A fixed window broke whenever a line was added
+  // between the comment and the binding.
+  let start = idx;
+  while (start > 0 && lines[start - 1].trim() !== '') {
+    start -= 1;
+    if (/ROK-1326 fix-9/.test(lines[start])) break;
+  }
+  const preceding = lines.slice(start, idx).join('\n');
   const mentionsGc = /(GC|garbage|gc handles)/i.test(preceding);
   const mentionsReplace = /(replaceChildren|discard|prior nodes)/i.test(preceding);
   assert.ok(

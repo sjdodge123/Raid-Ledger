@@ -22,7 +22,7 @@
  * pattern from `lineup-creation.smoke.spec.ts`, ROK-1147).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, apiGet } from './api-helpers';
+import { API_BASE, getAdminToken, createLineupOrRetry } from './api-helpers';
 
 // This file mutates a single lineup through abort and asserts on the
 // global "no active lineup" UI state on the detail page. Run serially
@@ -59,33 +59,25 @@ async function archiveActiveLineup(token: string): Promise<void> {
 /**
  * Ensure an active (non-archived) lineup exists for this worker. Returns
  * the lineup id.
+ *
+ * Always creates OUR OWN lineup. The old 409 fallback adopted whatever
+ * `/lineups/banner` returned — a sibling worker's lineup, which that worker
+ * could archive mid-test, so `/abort` then 409'd and the modal never closed.
+ * `createLineupOrRetry` resets only this worker's prefix and retries (ROK-1070).
  */
 async function ensureActiveLineup(token: string): Promise<number> {
     await archiveActiveLineup(token);
-
-    const createRes = await fetch(`${API_BASE}/lineups`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+    const { id } = await createLineupOrRetry(
+        token,
+        {
             title: lineupTitle,
             buildingDurationHours: 720,
             votingDurationHours: 720,
             decidedDurationHours: 720,
-        }),
-    });
-
-    if (createRes.ok) {
-        const data = (await createRes.json()) as { id: number };
-        return data.id;
-    }
-
-    // 409 — pick up an existing one
-    const banner = await apiGet(token, '/lineups/banner');
-    if (banner && typeof banner.id === 'number') return banner.id;
-    throw new Error('Failed to create or find an active lineup for abort smoke');
+        },
+        workerPrefix,
+    );
+    return id;
 }
 
 // ---------------------------------------------------------------------------
@@ -280,7 +272,7 @@ test.describe('Regression: ROK-1207 — aborted-lineup detail page banner + read
     test('invitee reload sees the banner and no Nominate CTA', async ({ page }) => {
         lineupId = await ensureActiveLineup(adminToken);
 
-        await fetch(`${API_BASE}/lineups/${lineupId}/abort`, {
+        const abortRes = await fetch(`${API_BASE}/lineups/${lineupId}/abort`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -288,6 +280,7 @@ test.describe('Regression: ROK-1207 — aborted-lineup detail page banner + read
             },
             body: JSON.stringify({ reason: abortReason }),
         });
+        expect(abortRes.status).toBe(200);
 
         // Anonymous reload — non-organizer perspective. Banner must still be
         // present and the Nominate button must not render at all.
