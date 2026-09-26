@@ -241,6 +241,10 @@ cannot recur because the lease is still exclusive.
 
 **Phase 2 (M, after the operator creates bots): buy throughput.**
 
+> **Status (2026-09-26):** Phase 1 shipped in #1372. Phase 2 = **a pool of 2**: lease slots
+> `refs/locks/discord-smoke/0..1`, slot 1 on its own app bot (`DISCORD_*_1` secrets; an empty one
+> shrinks the pool to 1), `SMOKE_POOL_INDEX` voice rotation in `tools/test-bot/src/smoke/pool-index.ts`.
+
 - Option c with a pool of 2 at first: one new CI application plus today's bot, which the lease
   generalises to.
 - `SMOKE_POOL_INDEX` voice-channel rotation.
