@@ -10,12 +10,16 @@
  * The mark now carries the owning bot's user id:
  * `· raid-ledger:lfg-board:<botUserId>`. Adoption takes only our own mark.
  *
- * **Legacy marks** (no id, written before this change) are still adopted, but
- * ONLY when no forum carries our own mark, and the adopted forum's mark is
- * upgraded to ours on the spot (`topicMarkedFor`). That keeps a restored real
- * install finding its pre-ROK-1522 board (one bot per production guild, so a
- * legacy mark there is ours), while a forum another instance has already
- * tagged is never taken: its id does not match.
+ * **Legacy marks** (no id, written before this change) are NEVER adopted by
+ * the guild-wide scan. The test guild is shared by every CI smoke slot, every
+ * fleet env and a dev instance, so an untagged forum found by scanning may
+ * belong to any of them — adopting (and re-tagging) it steals that board, and
+ * the thief's smoke cleanup then deletes it mid-run. A legacy forum is claimed
+ * only when it is THIS instance's stored or bound forum (settings already hold
+ * its id): `topicMarkedFor` then upgrades the mark to ours on the next
+ * reconcile. That is the production upgrade path — a one-bot guild keeps its
+ * existing board via the stored id — while a scan with no stored forum and no
+ * forum carrying our tag creates a new one.
  */
 import {
   LFG_BOARD_TOPIC,
@@ -43,8 +47,8 @@ export function ownedSentinel(ownerId: string): string {
 /**
  * The full topic a bot-created forum is born with.
  *
- * @param ownerId - The bot's own user id; null when the member cache cannot
- *   say, in which case the legacy (untagged) topic is written and upgraded on
+ * @param ownerId - The bot's own user id; null when the client user is not
+ *   known, in which case the legacy (untagged) topic is written and upgraded on
  *   the next resolve that knows the id.
  * @returns Guidelines + the (owned when possible) sentinel.
  */
@@ -98,18 +102,17 @@ export function topicMarkedFor(
 }
 
 /**
- * The marked channels this bot may adopt: its own, else the legacy ones.
+ * The marked channels the guild-wide scan may adopt: ONLY those carrying our
+ * own bot id. Legacy (untagged) and foreign marks are never adopted by a scan
+ * — see the file header for why a shared guild makes that unsafe.
  *
  * @param channels - Candidate channels (already narrowed to forums).
- * @param ownerId - The bot's own user id.
- * @returns Own-marked channels when any exist, otherwise legacy-marked ones;
- *   never a channel another bot has tagged.
+ * @param ownerId - The bot's own user id; null adopts nothing.
+ * @returns The channels whose mark is ours.
  */
 export function adoptableMarked<T extends { topic: string | null }>(
   channels: readonly T[],
   ownerId: string | null,
 ): T[] {
-  const own = channels.filter((c) => markOwner(c.topic, ownerId) === 'own');
-  if (own.length > 0) return own;
-  return channels.filter((c) => markOwner(c.topic, ownerId) === 'legacy');
+  return channels.filter((c) => markOwner(c.topic, ownerId) === 'own');
 }

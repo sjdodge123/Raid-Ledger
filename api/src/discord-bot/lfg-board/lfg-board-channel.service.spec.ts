@@ -141,6 +141,7 @@ function makeGuild(
   channels: Record<string, unknown>,
   createImpl?: () => Promise<unknown>,
   botId: string | null = BOT_ID,
+  clientUserId: string | null = botId,
 ): { guild: Guild; create: jest.Mock; fetch: jest.Mock } {
   const fetch = jest.fn((id?: string) =>
     Promise.resolve(
@@ -156,6 +157,7 @@ function makeGuild(
     id: GUILD_ID,
     roles: { everyone: { id: EVERYONE_ID } },
     members: { me: botId === null ? null : { id: botId } },
+    client: { user: clientUserId === null ? null : { id: clientUserId } },
     channels: { fetch, create },
   } as unknown as Guild;
   return { guild, create, fetch };
@@ -651,8 +653,9 @@ describe('LfgBoardChannelService', () => {
       expect(create).not.toHaveBeenCalled();
     });
 
-    // Backward compat: a pre-ROK-1522 board is still found, then claimed.
-    it('adopts a legacy mark when none is ours, upgrading it to our id', async () => {
+    // ROK-1522 review: the shared guild holds CI slots, fleet envs and a dev
+    // instance — an untagged forum found by SCANNING may be any of theirs.
+    it('never adopts or re-tags a legacy forum found by scanning, and creates its own', async () => {
       const legacy = markedForum('forum-100');
       legacy.topic = LFG_BOARD_TOPIC;
       const { guild, create } = makeGuild({
@@ -660,12 +663,51 @@ describe('LfgBoardChannelService', () => {
         'forum-150': foreignForum('forum-150'),
       });
 
+      expect((await makeService().resolveForum(guild))?.id).toBe(CREATED_ID);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(legacy.setTopic).not.toHaveBeenCalled();
+      expect(settingsStore.get(SETTING_KEYS.LFG_BOARD_CHANNEL_ID)).toBe(
+        CREATED_ID,
+      );
+    });
+
+    // The production upgrade path: a one-bot guild keeps its stored board.
+    it('re-tags and keeps a legacy forum that is its own STORED board', async () => {
+      const legacy = markedForum('forum-100');
+      legacy.topic = LFG_BOARD_TOPIC;
+      settingsStore.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, 'forum-100');
+      const { guild, create } = makeGuild({ 'forum-100': legacy });
+
       expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
       expect(create).not.toHaveBeenCalled();
       expect(legacy.setTopic).toHaveBeenCalledWith(
         expect.stringContaining(ownedSentinel(BOT_ID)),
         expect.anything(),
       );
+    });
+
+    it("keeps a stored forum carrying another bot's tag without rewriting it", async () => {
+      const foreign = foreignForum('forum-100');
+      settingsStore.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, 'forum-100');
+      const { guild, create } = makeGuild({ 'forum-100': foreign });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
+      expect(create).not.toHaveBeenCalled();
+      expect(foreign.setTopic).not.toHaveBeenCalled();
+    });
+
+    // ROK-1522 review: ownership comes from client.user, not the member cache.
+    it('finds its own forum when members.me is not cached', async () => {
+      const own = markedForum('forum-100');
+      const { guild, create } = makeGuild(
+        { 'forum-100': own },
+        undefined,
+        null,
+        BOT_ID,
+      );
+
+      expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
+      expect(create).not.toHaveBeenCalled();
     });
 
     // D5 — the marked check also sits inside the E6 single flight.

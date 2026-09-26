@@ -55,6 +55,15 @@ function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/**
+ * The id that owns our board mark: the logged-in client user. Unlike
+ * `guild.members.me` it does not depend on the member cache, so a cold cache
+ * cannot make a resolve miss our own forum and create a duplicate.
+ */
+function ownBotUserId(guild: Guild): string | null {
+  return guild.client.user?.id ?? null;
+}
+
 /** Fetch `id` and return it only if it is still a forum channel. */
 async function fetchForum(
   guild: Guild,
@@ -121,7 +130,7 @@ export class LfgBoardChannelService {
     forum: ForumChannel,
   ): Promise<ForumChannel> {
     await this.assertOverwrites(guild, forum);
-    await this.assertTopic(forum, guild.members.me?.id ?? null);
+    await this.assertTopic(forum, ownBotUserId(guild));
     return forum;
   }
 
@@ -229,9 +238,10 @@ export class LfgBoardChannelService {
 
   /**
    * Every forum in the guild carrying THIS bot's ownership sentinel, oldest
-   * first (snowflake order) — or, when none does, the legacy untagged ones.
-   * A forum tagged by another bot (a concurrent CI run, a fleet env, prod in
-   * a shared guild) is never returned: see `lfg-board-marker.helpers.ts`.
+   * first (snowflake order). A forum tagged by another bot (a concurrent CI
+   * run, a fleet env, a dev instance in the shared guild) or an untagged
+   * legacy one is never returned — a legacy board is only claimed through the
+   * stored/bound id: see `lfg-board-marker.helpers.ts`.
    *
    * Extracted from {@link resolveMarked} so the census and the adoption path
    * can never disagree about what "marked" means — a second copy of this
@@ -254,7 +264,7 @@ export class LfgBoardChannelService {
         c.type === ChannelType.GuildForum &&
         topicHasSentinel(c.topic),
     );
-    return adoptableMarked(marked, guild.members.me?.id ?? null).sort(
+    return adoptableMarked(marked, ownBotUserId(guild)).sort(
       (a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id),
     );
   }
@@ -377,7 +387,7 @@ export class LfgBoardChannelService {
         guild.roles.everyone.id,
         this.botUserIdForCreate(guild),
       ),
-      topic: boardTopic(guild.members.me?.id ?? null),
+      topic: boardTopic(ownBotUserId(guild)),
       reason: 'Raid Ledger LFG board',
     };
   }

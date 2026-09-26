@@ -61,8 +61,12 @@ describe('adoptableMarked', () => {
     expect(adoptableMarked([foreign], ME)).toEqual([]);
   });
 
-  it('prefers our own marks and falls back to legacy only when none exist', () => {
+  it('offers only our own marks, never a legacy (untagged) one', () => {
     expect(adoptableMarked([legacy, foreign, own], ME)).toEqual([own]);
-    expect(adoptableMarked([legacy, foreign], ME)).toEqual([legacy]);
+    expect(adoptableMarked([legacy, foreign], ME)).toEqual([]);
+  });
+
+  it('offers nothing when our own id is unknown', () => {
+    expect(adoptableMarked([legacy, own], null)).toEqual([]);
   });
 });
