@@ -628,7 +628,14 @@ run_typecheck() {
   # printed to stderr but the step's outer `$?` capture (run_step:195) saw
   # rc=0 from the web/ check and stamped "TypeScript (all): PASS".
   if [ "$effective_scope" != "web" ]; then npx tsc --noEmit -p api/tsconfig.json || return $?; fi
-  if [ "$effective_scope" != "api" ]; then npx tsc --noEmit -p web/tsconfig.json || return $?; fi
+  # web/tsconfig.json is a solution-style config (`files: []` + references):
+  # `tsc -p` on it compiles an empty file list and exits 0 without following
+  # the references, so the web half of this step checked nothing. Point at the
+  # two leaf projects instead (app source, then vite.config.ts).
+  if [ "$effective_scope" != "api" ]; then
+    npx tsc --noEmit -p web/tsconfig.app.json || return $?
+    npx tsc --noEmit -p web/tsconfig.node.json || return $?
+  fi
   # Playwright transpiles the smoke specs without typechecking them, so a type
   # error in scripts/smoke/**, scripts/*.ts or playwright.config.ts used to
   # surface only when a gate loaded the file. Skipped on an api-only gate (a
