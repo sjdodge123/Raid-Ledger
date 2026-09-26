@@ -59,7 +59,7 @@ jobs:
     # newer arrival CANCELS it (`cancel-in-progress: false` protects only the
     # running run). A cancelled run reports no conclusion, so the required
     # `discord-smoke` context vanished and the PR sat BLOCKED with nothing red:
-    # 35 PR runs on 20 branches in 2026-09-11..25 (SPIKE-ROK-1522 §1.1).
+    # 35 PR runs on 20 branches in 2026-09-11..25 (docs/spikes/rok-1522-discord-smoke-parallelism.md §1.1).
     #
     # Now `scripts/ci/discord-smoke-lease.sh` holds an exclusive lease as the
     # git ref `refs/locks/discord-smoke/0` (pool size 1; Phase 2 grows it to

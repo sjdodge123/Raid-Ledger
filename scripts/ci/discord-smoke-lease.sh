@@ -4,7 +4,7 @@
 #
 # Why not `concurrency:`: GitHub's queue for a concurrency group holds ONE
 # pending run and a newer arrival cancels it, so the required `discord-smoke`
-# context vanished from 35 PR runs in two weeks (SPIKE-ROK-1522 §1.1). A run
+# context vanished from 35 PR runs in two weeks (docs/spikes/rok-1522-discord-smoke-parallelism.md §1.1). A run
 # waiting on this lease shows "in progress" instead, and is never evicted.
 #
 #   acquire  Take slot 0..LEASE_POOL_SIZE-1 (Phase 1: pool of 1 = exclusive).
