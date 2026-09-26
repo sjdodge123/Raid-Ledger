@@ -173,6 +173,27 @@ done
 PORT="$(docker port "$CONTAINER_NAME" 5432 | head -1 | sed 's/.*://')"
 DBURL="postgresql://user:password@127.0.0.1:${PORT}/raid_ledger"
 
+# Published-port reachability gate. The readiness loop above runs INSIDE the
+# container (docker exec), so it passes even when THIS process can't reach the
+# published port — e.g. inside a fleet runner, where docker is the host's
+# daemon and 127.0.0.1 is the runner's own loopback, not the host's. Every case
+# then halted with `ECONNREFUSED 127.0.0.1:<port>` (2 pass / 9 fail). Probe the
+# exact host:port reconcile will dial, with the same node it runs under: skip
+# loudly locally, HARD-FAIL under CI (same convention as the Docker gate).
+if ! node -e '
+    const s = require("net").connect(Number(process.argv[1]), "127.0.0.1");
+    s.setTimeout(3000, () => process.exit(1));
+    s.on("connect", () => process.exit(0));
+    s.on("error", () => process.exit(1));
+' "$PORT" >/dev/null 2>&1; then
+    if [ -n "${CI:-}" ]; then
+        echo "FAIL [reconcile-migrations-trust-probe.test.sh] Postgres published on port ${PORT} is unreachable at 127.0.0.1 in CI — this suite must not be skipped here."
+        exit 1
+    fi
+    echo "SKIP [reconcile-migrations-trust-probe.test.sh] Postgres published on port ${PORT} is unreachable at 127.0.0.1 (docker daemon on another network namespace, e.g. a fleet runner) — run this probe where the published port is local."
+    exit 0
+fi
+
 psql_exec() {
     docker exec -i "$CONTAINER_NAME" psql -U user -d raid_ledger -v ON_ERROR_STOP=1 -q -t -A
 }
