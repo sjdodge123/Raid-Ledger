@@ -271,10 +271,18 @@ else
     # ----- AC-M10-5 behavioral: local mode ALSO shards, but never spawns the M9 sidecar -----
     CURRENT_TEST_NAME="AC-M10-5 behavioral: local mode shards 4 ways, no npm fallback, no Redis sidecar"
     : >"$docker_argv_file"; : >"$npx_argv_file"; : >"$npm_argv_file"
-    # Drop the caller's RL_SLOT/REDIS_URL: inside a fleet runner /workspace
-    # exists and the runner's own RL_SLOT would make this "local" case spawn.
+    # RL_SLOT=1 is passed EXPLICITLY so the ONLY thing that can stop the M9
+    # sidecar spawn is the RL_TARGET / /workspace guard. Unsetting RL_SLOT
+    # instead would let the RL_SLOT-empty early return mask a deleted guard.
+    # REDIS_URL is dropped so an inherited value can't leak in. Inside a fleet
+    # runner /workspace exists, so "local mode" does not apply there by design
+    # — skip loudly rather than assert something false.
+    if [ -d /workspace ]; then
+        echo "SKIP [$CURRENT_TEST_NAME] /workspace exists (fleet runner) — local-mode behaviour is only testable off-runner."
+    else
     out=$(
-        env -u RL_SLOT -u REDIS_URL \
+        env -u REDIS_URL \
+        RL_SLOT=1 \
         PATH="$stub_bin:$PATH" \
         REPO_ROOT="$REPO_ROOT" \
         RL_TARGET="local" \
@@ -299,6 +307,7 @@ else
         pass
     else
         fail "local mode must not spawn the M9 Redis sidecar, got $local_sidecar_count (docker argv: $(tr '\n' '|' <"$docker_argv_file"))"
+    fi
     fi
 
     rm -rf "$stub_bin" "$docker_argv_file" "$npx_argv_file" "$npm_argv_file"

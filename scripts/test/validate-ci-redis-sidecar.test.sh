@@ -162,10 +162,18 @@ else
 
     CURRENT_TEST_NAME="AC-M9-9: behavioral local — no docker invocations"
     : >"$docker_argv_file"
-    # Drop the caller's RL_SLOT/REDIS_URL: inside a fleet runner /workspace
-    # exists and the runner's own RL_SLOT would make this "local" case spawn.
+    # RL_SLOT=1 is passed EXPLICITLY so the ONLY thing that can stop the spawn
+    # is the RL_TARGET / /workspace guard under test. Unsetting RL_SLOT instead
+    # would let the RL_SLOT-empty early return mask a deleted guard. REDIS_URL
+    # is dropped so an inherited value can't fake the must-stay-unset check.
+    # Inside a fleet runner /workspace exists, so "local mode" semantics do not
+    # apply there by design — skip loudly rather than assert something false.
+    if [ -d /workspace ]; then
+        echo "SKIP [$CURRENT_TEST_NAME] /workspace exists (fleet runner) — local-mode sidecar guard is only testable off-runner."
+    else
     out=$(
-        env -u RL_SLOT -u REDIS_URL \
+        env -u REDIS_URL \
+        RL_SLOT=1 \
         PATH="$stub_bin:$PATH" \
         REPO_ROOT="$REPO_ROOT" \
         RL_TARGET="local" \
@@ -180,6 +188,7 @@ else
     fi
     # REDIS_URL must remain unset in local mode (laptop deploy_dev.sh's Redis takes over).
     if grep -E -q 'REDIS_URL_AFTER=UNSET|REDIS_URL_AFTER=redis://localhost' <<<"$out"; then pass; else fail "RL_TARGET=local must NOT export sidecar REDIS_URL (got: $(grep REDIS_URL_AFTER <<<"$out"))"; fi
+    fi
 
     rm -rf "$stub_bin" "$docker_argv_file"
 fi
