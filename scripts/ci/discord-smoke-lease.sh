@@ -183,10 +183,36 @@ try_slot() {
   esac
 }
 
+# release_earlier_attempts — delete every slot still held by an EARLIER
+# attempt of this same run (same run_id, lower run_attempt). Without it a
+# re-run that finds slot 0 free takes slot 0 and leaves slot 1 locked by its
+# own dead attempt until the age backstop — halving the pool for ~2.5h.
+release_earlier_attempts() {
+  local idx ref code holder msg hid hatt
+  for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
+    ref="${NS}/${NAME}/${idx}"
+    code="$(api GET "git/ref/${ref}")"
+    [ "$code" = 200 ] || continue
+    holder="$(jq -r '.object.sha' "$BODY")"
+    msg="$(holder_msg "$holder")" || continue
+    hid="$(field run_id <<< "$msg")"; hatt="$(field run_attempt <<< "$msg")"
+    [ "$hid" = "$RUN_ID" ] || continue
+    case "$hatt" in ""|*[!0-9]*) continue ;; esac
+    [ "$hatt" -lt "$RUN_ATTEMPT" ] || continue
+    code="$(api DELETE "git/refs/${ref}")"
+    if [ "$code" = 204 ]; then
+      echo "lease: released ${ref}, left by attempt ${hatt} of this run"
+    else
+      echo "::warning::lease: could not release ${ref} left by attempt ${hatt} (HTTP $code)"
+    fi
+  done
+}
+
 acquire() {
   local start polls=0 check idx waited holder
   start="$(now)"
   echo "lease: acquiring ${NS}/${NAME}/[0..$(( POOL_SIZE - 1 ))] for ${RUN_URL} (attempt ${RUN_ATTEMPT})"
+  release_earlier_attempts
   while :; do
     check=0; [ $(( polls % RUN_CHECK_EVERY )) -eq 0 ] && check=1
     for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
