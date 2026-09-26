@@ -629,6 +629,11 @@ run_typecheck() {
   # rc=0 from the web/ check and stamped "TypeScript (all): PASS".
   if [ "$effective_scope" != "web" ]; then npx tsc --noEmit -p api/tsconfig.json || return $?; fi
   if [ "$effective_scope" != "api" ]; then npx tsc --noEmit -p web/tsconfig.json || return $?; fi
+  # Playwright transpiles the smoke specs without typechecking them, so a type
+  # error in scripts/smoke/**, scripts/*.ts or playwright.config.ts used to
+  # surface only when a gate loaded the file. Skipped on an api-only gate (a
+  # scripts-only diff resolves to "all"). Mirrors the CI lint job's step.
+  if [ "$effective_scope" != "api" ]; then npm run typecheck:scripts || return $?; fi
 }
 
 run_lint() {
