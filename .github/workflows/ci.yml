@@ -195,6 +195,13 @@ jobs:
       - name: Shell behavior tests (scripts/test)
         run: ./scripts/test/run-all.sh
 
+      # node:test specs for the CI/fleet scripts. validate-ci.sh runs them in
+      # both --static and --full, but until now no GitHub job did, so the real
+      # gate never exercised them. restore-drill-corruption.spec.mjs imports
+      # packages/contract/dist, built above.
+      - name: Script node:test specs (scripts/*.spec.mjs)
+        run: node --test scripts/*.spec.mjs
+
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
     runs-on: ubuntu-latest
