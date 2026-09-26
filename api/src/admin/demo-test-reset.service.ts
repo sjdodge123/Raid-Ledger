@@ -14,6 +14,7 @@ import type Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { DemoDataService } from './demo-data.service';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
@@ -47,6 +48,7 @@ export class DemoTestResetService {
    */
   async resetToSeed(): Promise<ResetToSeedResult> {
     this.logger.log('reset-to-seed: wiping test data...');
+    this.clearRosterNotificationBuffer();
     const deleted = await wipeAllTestData(this.db);
     await this.flushDedupRedisCache();
     this.logger.log(
@@ -86,6 +88,18 @@ export class DemoTestResetService {
         await this.redis.del(...keys);
       }
     }
+  }
+
+  /**
+   * Drop pending roster notifications. Their entries point at events and
+   * users the wipe is about to delete, so a later flush (timer or the
+   * test flush endpoint) would fail against the reseeded DB.
+   */
+  private clearRosterNotificationBuffer(): void {
+    const buffer = this.moduleRef.get(RosterNotificationBufferService, {
+      strict: false,
+    });
+    buffer.clearAll();
   }
 
   /**
