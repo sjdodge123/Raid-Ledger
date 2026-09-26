@@ -1,6 +1,6 @@
 {
   "//": [
-    "Typecheck-only config (npm run typecheck:scripts) for the Playwright smoke specs + helpers, the tracked scripts/*.ts and playwright.config.ts. Nothing else typechecks them: Playwright transpiles without typechecking.",
+    "Typecheck-only config (`npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json`, run by validate-ci --static and the CI lint job) for the Playwright smoke specs + helpers, the tracked scripts/*.ts and playwright.config.ts. Nothing else typechecks them: Playwright transpiles without typechecking.",
     "Deliberately NOT named tsconfig.json: Playwright's per-file tsconfig lookup and the root vitest/esbuild transform would pick these compilerOptions up and change how the specs are transpiled.",
     "Lives in scripts/smoke/ because scripts/* is gitignored behind an allowlist. The two scripts/*.ts files are listed by name, not globbed, because that ignored directory holds operator-local .ts files that CI never sees."
   ],

@@ -14,8 +14,7 @@
     "prettier:check": "prettier --check \"src/**/*.{ts,tsx}\"",
     "preview": "vite preview",
     "test": "vitest --run",
-    "test:watch": "vitest",
-    "typecheck:tests": "tsc --noEmit -p tsconfig.test.json"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@m-lab/ndt7": "^0.1.5",

@@ -638,9 +638,9 @@ run_typecheck() {
   fi
   # Playwright transpiles the smoke specs without typechecking them, so a type
   # error in scripts/smoke/**, scripts/*.ts or playwright.config.ts used to
-  # surface only when a gate loaded the file. Skipped on an api-only gate (a
-  # scripts-only diff resolves to "all"). Mirrors the CI lint job's step.
-  if [ "$effective_scope" != "api" ]; then npm run typecheck:scripts || return $?; fi
+  # surface only when a gate loaded the file. Runs on every scope (~1.3s): an
+  # api-only diff can still carry a smoke spec. Mirrors the CI lint job's step.
+  npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json || return $?
 }
 
 run_lint() {

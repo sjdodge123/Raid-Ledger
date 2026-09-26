@@ -5,7 +5,7 @@
   // Deliberately NOT referenced from tsconfig.json (that would put it in
   // `tsc -b`, i.e. the web build) and NOT wired into validate-ci or CI yet:
   // the existing spec errors are cleared directory by directory first, then
-  // `npm run typecheck:tests -w web` joins run_typecheck and the CI lint job.
+  // `npx tsc --noEmit -p web/tsconfig.test.json` (ungated; ~291 spec errors at 2026-09-26) joins run_typecheck and the CI lint job.
   // vitest-axe 0.1.0's `extend-expect` augments the legacy global `Vi`
   // namespace, which vitest 5 no longer reads, so listing it here would not
   // type `toHaveNoViolations`; that needs a `declare module 'vitest'`

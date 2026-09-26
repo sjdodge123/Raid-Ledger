@@ -162,7 +162,7 @@ jobs:
       # playwright.config.* are in the `code` filter, so a smoke-only PR runs
       # this job. Same command validate-ci.sh's TypeScript step uses.
       - name: Typecheck (smoke specs + scripts)
-        run: npm run typecheck:scripts
+        run: npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json
 
       - name: Lint
         run: npm run lint --workspaces
