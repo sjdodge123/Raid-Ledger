@@ -14,6 +14,7 @@
  *
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
+import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import {
     API_BASE,
@@ -102,7 +103,7 @@ async function ensureLineupInPhase(token: string, targetPhase: string): Promise<
 // Navigate to detail page with retry for parallel worker races
 // ---------------------------------------------------------------------------
 
-async function gotoLineupDetail(page: ReturnType<typeof test.info>['_test'] extends never ? never : Parameters<Parameters<typeof test>[1]>[0]['page'], lineupId: number) {
+async function gotoLineupDetail(page: Page, lineupId: number) {
     await page.goto(`/community-lineup/${lineupId}`);
     // ROK-1323: legacy H1 title removed — the title now renders in the composite
     // JourneyHero (or the fallback header for no-composite states).
@@ -112,7 +113,7 @@ async function gotoLineupDetail(page: ReturnType<typeof test.info>['_test'] exte
 }
 
 /** Open the operator ⋮ menu (ROK-1323 — replaces the phase breadcrumb). */
-async function openOperatorMenu(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+async function openOperatorMenu(page: Page) {
     await page.getByTestId('lineup-operator-menu-trigger').click();
     await expect(page.getByTestId('lineup-operator-menu')).toBeVisible({ timeout: 5_000 });
 }

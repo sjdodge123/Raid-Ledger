@@ -1,0 +1,26 @@
+{
+  "//": [
+    "Typecheck-only config (npm run typecheck:scripts) for the Playwright smoke specs + helpers, the tracked scripts/*.ts and playwright.config.ts. Nothing else typechecks them: Playwright transpiles without typechecking.",
+    "Deliberately NOT named tsconfig.json: Playwright's per-file tsconfig lookup and the root vitest/esbuild transform would pick these compilerOptions up and change how the specs are transpiled.",
+    "Lives in scripts/smoke/ because scripts/* is gitignored behind an allowlist. The two scripts/*.ts files are listed by name, not globbed, because that ignored directory holds operator-local .ts files that CI never sees."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
+  },
+  "include": [
+    "./**/*.ts",
+    "../auth-paths.ts",
+    "../playwright-global-setup.ts",
+    "../../playwright.config.ts"
+  ]
+}

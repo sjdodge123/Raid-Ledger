@@ -19,7 +19,8 @@
         "lint": "npm run lint --workspaces",
         "test": "npm run test --workspaces",
         "db:migrate": "npm run migrate -w api",
-        "seed": "npm run seed -w api"
+        "seed": "npm run seed -w api",
+        "typecheck:scripts": "tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json"
     },
     "overrides": {
         "@nestjs/common": "^11.0.1",
