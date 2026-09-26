@@ -11,8 +11,13 @@
  *
  * They drive the listener's own path, not a copy of it: `recordLfgNowVoiceJoin`
  * / `recordLfgNowVoiceLeave` with deps narrowed by the same `lfgNowDeps` the
- * voice listener uses, so the roster write, the PARTICIPANT_JOINED/LEFT emit
- * and the post re-render are exactly what a real join/leave produces.
+ * voice listener uses, so from `recordLfgNowVoiceJoin` down — the roster
+ * write, the PARTICIPANT_JOINED/LEFT emit and the post re-render — they match
+ * a real join/leave. What they SKIP is the gateway → unbound-channel routing
+ * above it (`handleChannelJoin`, `trackScheduledEventJoin`, the "no binding"
+ * branch of `resolveAllBindings`, the `isBotMember` gate); that routing is
+ * pinned by `lfg-now-voice.helpers.spec.ts`, and this controller's module
+ * wiring by `demo-test-lfg-now-voice.integration.spec.ts`.
  */
 import {
   BadRequestException,
