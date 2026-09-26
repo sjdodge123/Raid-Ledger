@@ -30,6 +30,34 @@ const MAX_INTERVAL = 8000;
 const POLL_FALLBACK_INTERVAL = 3000;
 const DEFAULT_FETCH_COUNT = 100;
 
+/** Reads a channel's recent messages; `readLastMessages` outside unit specs. */
+type ChannelReader = (channelId: string, count: number) => Promise<SimpleMessage[]>;
+
+/**
+ * Read a channel for one poll tick. A Discord response cut off in transit
+ * fails inside discord.js's JSON.parse with a bare SyntaxError ("Unterminated
+ * string in JSON at position N") that names no channel — seen ~1 in 25 smoke
+ * runs on a ~140 KB `messages.fetch({ limit: 100 })`. That tick is logged with
+ * the channel id and counted as a miss (an empty read), so the caller polls
+ * again on its next tick. Any other error still propagates.
+ */
+export async function readOrMiss(
+  channelId: string,
+  count: number,
+  caller: string,
+  read: ChannelReader = readLastMessages,
+): Promise<SimpleMessage[]> {
+  try {
+    return await read(channelId, count);
+  } catch (err) {
+    if (!(err instanceof SyntaxError)) throw err;
+    console.warn(
+      `  [${caller}] channel ${channelId}: unparseable Discord response (${err.message}) — counted as a miss, polling again`,
+    );
+    return [];
+  }
+}
+
 /**
  * Poll a channel for a message matching a predicate.
  * Uses exponential backoff (2s -> 4s -> 8s cap) by default.
@@ -48,7 +76,7 @@ export async function pollForEmbed(
   let currentInterval = interval;
 
   while (Date.now() < deadline) {
-    const msgs = await readLastMessages(channelId, fetchCount);
+    const msgs = await readOrMiss(channelId, fetchCount, 'pollForEmbed');
     const match = msgs.find(predicate);
     if (match) return sweepRenderRules(match, opts);
 
@@ -90,12 +118,17 @@ export async function waitForEmbedUpdate(
       client.off('messageUpdate', onUpdate);
     };
 
-    const timer = setTimeout(() => {
+    const fail = (err: unknown) => {
+      if (settled) return;
+      clearTimeout(timer);
       cleanup();
-      reject(
-        new Error(`waitForEmbedUpdate timed out after ${timeoutMs}ms on ${channelId}`),
-      );
-    }, timeoutMs);
+      reject(err);
+    };
+
+    const timer = setTimeout(
+      () => fail(new Error(`waitForEmbedUpdate timed out after ${timeoutMs}ms on ${channelId}`)),
+      timeoutMs,
+    );
 
     const settle = (msg: SimpleMessage) => {
       if (settled) return;
@@ -114,8 +147,10 @@ export async function waitForEmbedUpdate(
     const onUpdate = buildUpdateHandler(channelId, predicate, settle, () => settled);
     client.on('messageUpdate', onUpdate);
 
-    // Poll as fallback (catches edits that arrived before listener)
-    void pollFallback(channelId, predicate, deadline, settle, () => settled);
+    // Poll as fallback (catches edits that arrived before listener). A read
+    // error that is not a truncated body rejects this wait with its real cause
+    // instead of floating as an unhandled rejection.
+    pollFallback(channelId, predicate, deadline, settle, () => settled).catch(fail);
   });
 }
 
@@ -175,7 +210,7 @@ async function pollFallback(
   isSettled: () => boolean,
 ): Promise<void> {
   while (Date.now() < deadline && !isSettled()) {
-    const msgs = await readLastMessages(channelId, DEFAULT_FETCH_COUNT);
+    const msgs = await readOrMiss(channelId, DEFAULT_FETCH_COUNT, 'waitForEmbedUpdate');
     const match = msgs.find((m) => m.editedAt !== null && predicate(m));
     if (match) {
       settle(match);

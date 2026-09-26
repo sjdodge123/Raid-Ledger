@@ -161,6 +161,14 @@ jobs:
       - name: Typecheck (full project, incl. tests)
         run: npx tsc --noEmit -p api/tsconfig.json
 
+      # Playwright transpiles the smoke specs without typechecking them, so a
+      # type error in scripts/smoke/**, scripts/*.ts or playwright.config.ts
+      # surfaced only when a smoke shard loaded the file. scripts/** and
+      # playwright.config.* are in the `code` filter, so a smoke-only PR runs
+      # this job. Same command validate-ci.sh's TypeScript step uses.
+      - name: Typecheck (smoke specs + scripts)
+        run: npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json
+
       - name: Lint
         run: npm run lint --workspaces
 

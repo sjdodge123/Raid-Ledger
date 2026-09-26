@@ -7,6 +7,7 @@
  *
  * Requires DEMO_MODE=true and an authenticated admin (global setup).
  */
+import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiGet, createLineupOrRetry } from './api-helpers';
 import { isMobile } from './helpers';
@@ -292,7 +293,7 @@ test.describe('Operator ⋮ menu — phase transitions', () => {
         lineupId = await ensureActiveLineup(adminToken);
     });
 
-    async function openMenu(page: Parameters<Parameters<typeof test>[1]>[0]['page']) {
+    async function openMenu(page: Page) {
         await page.getByTestId('lineup-operator-menu-trigger').click();
         await expect(page.getByTestId('lineup-operator-menu')).toBeVisible({ timeout: 5_000 });
     }
