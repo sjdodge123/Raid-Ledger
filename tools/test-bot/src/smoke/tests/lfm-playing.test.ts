@@ -5,8 +5,17 @@
  * the post is not a group advert any more: its author line is
  * `▸ PLAYING NOW · N in voice` and its description carries the temp voice
  * channel. This test drives the ONE thing no unit test can prove — that the
- * head-count is live: the companion bot joins the real voice channel, the post
- * must go up by one, it leaves, and the post must come back down.
+ * head-count is live: a seeded, Discord-linked human is recorded joining the
+ * session's voice channel, the post must go up by one, they leave, and the
+ * post must come back down.
+ *
+ * The join goes through `POST /admin/test/lfg-now/voice-join|leave`
+ * (`fixtures-lfg-now.ts`), which calls the voice listener's own
+ * `recordLfgNowVoiceJoin` / `recordLfgNowVoiceLeave`. It used to be the
+ * companion bot's real `joinVoice`, which could never move the count: the join
+ * dispatch drops bot members before the roster (`isBotMember`,
+ * `voice-state-join-dispatch.handlers.ts`), and CI cannot open a voice
+ * connection at all — so the test was gated off everywhere it ran.
  *
  * Why the baseline is READ rather than asserted as a constant: whether the two
  * now-hands are already ad-hoc participants at spawn time is Lane A's
@@ -18,29 +27,23 @@
  * shows up here as the join never landing, which is why the increment and the
  * decrement are asserted separately and each names the count it saw.
  *
- * Deterministic helpers only: `pollForEmbed`, `waitForEmbedUpdate`,
- * `pollForCondition`, plus `await-processing` / `flush-voice-sessions` drains.
- * No `sleep()` anywhere (`npm run lint:no-sleep`).
+ * Deterministic helpers only: `pollForEmbed`, `waitForEmbedUpdate`, plus
+ * `await-processing` / `flush-voice-sessions` drains. No `sleep()` anywhere
+ * (`npm run lint:no-sleep`).
  *
- * CANNOT GO GREEN ON `rok-1494-discord` ALONE. This branch carries only the
- * RENDER of `playing` — nothing on it emits `GROUP_CHANGED { reason:
- * 'playing' }`, because the spawn service and the voice-state re-render are
- * Lane A's, on `rok-1494`. Until the two merge, `awaitPlayingPost` times out
- * at the poll rather than at an assertion, which is exactly the "proves
- * nothing" failure mode — so do NOT read a red run here as a defect in the
- * render. Every string it asserts is quoted from
+ * Every string it asserts is quoted from
  * `api/src/discord-bot/lfm/lfm-embed.helpers.ts` (`stateAuthorLine`,
- * `playingDescription`) rather than guessed, so the first post-merge run is
- * the first run whose result means anything.
+ * `playingDescription`) rather than guessed.
  */
-import {
-  pollForCondition,
-  pollForEmbed,
-  waitForEmbedUpdate,
-} from '../../helpers/polling.js';
+import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
 import { readLastMessages } from '../../helpers/messages.js';
-import { joinVoice, leaveVoice } from '../../helpers/voice.js';
-import { getGuild } from '../../client.js';
+import {
+  endLfgSession,
+  lfgNowVoiceJoin,
+  lfgNowVoiceLeave,
+  type LfgNowVoiceResult,
+  type LfgNowVoiceTarget,
+} from '../fixtures-lfg-now.js';
 import {
   awaitProcessing,
   createBinding,
@@ -75,7 +78,7 @@ const PLAYING_AUTHOR = /^▸ PLAYING NOW · (\d+) in voice$/u;
  * The temp voice channel, as `playingDescription` masks it —
  * `[Join voice ↗](https://discord.com/channels/<guild>/<channel>)`. Matched
  * unanchored so the mask's brackets do not have to be modelled; the capture is
- * the channel id the companion bot joins.
+ * the channel id the seeded user is recorded joining.
  */
 const VOICE_LINK = /https:\/\/discord\.com\/channels\/\d+\/(\d+)/u;
 
@@ -250,23 +253,6 @@ async function awaitHeadCount(
 }
 
 /**
- * The channel must be in the gateway cache before the bot can join it.
- *
- * `joinVoice` goes through `getVoiceChannel`, which reads the cache and throws
- * on a miss — and the temp channel is created by the API mid-spawn, so the
- * `channelCreate` gateway event can land after the post does.
- */
-async function awaitChannelInCache(
-  channelId: string,
-  timeoutMs: number,
-): Promise<void> {
-  await pollForCondition(
-    () => Promise.resolve(getGuild().channels.cache.has(channelId)),
-    timeoutMs,
-  );
-}
-
-/**
  * Pin the board toggle for the duration of this test, returning its prior value.
  *
  * `withLfgSurface` only SERIALISES the global toggle — it never sets it, so
@@ -319,8 +305,9 @@ async function pinLfgBoard(ctx: TestContext, enabled: boolean): Promise<boolean>
  * of an assertion that has to survive a red run being triaged by someone else.
  *
  * @param run - The active run.
+ * @returns The spawned event's id, which every voice record must land on.
  */
-async function assertSpawned(run: Run): Promise<void> {
+async function assertSpawned(run: Run): Promise<number> {
   const group = await run.ctx.api.get<LfgGroupSummary>(
     `/lfg/${run.game.id}`,
   );
@@ -332,6 +319,62 @@ async function assertSpawned(run: Run): Promise<void> {
         'The post is not the problem; nothing was spawned to post about.',
     );
   }
+  return group.playingNow.eventId;
+}
+
+/**
+ * Fail unless a voice record landed on the spawned event.
+ *
+ * `recorded: false` means no OPEN LFG-born event owns the channel the post
+ * links — the head-count poll after it would then time out on a join that
+ * never happened, which reads as a re-render bug it is not.
+ */
+function assertRecorded(
+  res: LfgNowVoiceResult,
+  action: 'join' | 'leave',
+  target: LfgNowVoiceTarget,
+  eventId: number,
+): void {
+  if (res.recorded && res.eventId === eventId) return;
+  throw new Error(
+    `AC7 ${action}: expected voice-${action} for user ${target.userId} on ` +
+      `channel ${target.channelId} to be recorded against spawned event ` +
+      `${eventId}, got recorded=${res.recorded} eventId=${res.eventId ?? 'null'}`,
+  );
+}
+
+/**
+ * AC7's delta: a seeded human joins and the count goes up; leaves, back down.
+ *
+ * The joiner is one of the two now-hands — the real flow, someone who asked to
+ * play walking into the channel. The spawn signs them up (`event_signups`) but
+ * writes no `ad_hoc_participants` row, so this join is a fresh roster row and
+ * fires the PARTICIPANT_JOINED that re-renders the post. ONE join and ONE leave
+ * per run: a re-join updates the existing row and does not re-announce.
+ */
+async function driveHeadCount(
+  run: Run,
+  joiner: FixtureUser,
+  eventId: number,
+  playing: { voiceChannelId: string; count: number },
+): Promise<void> {
+  const target = { userId: joiner.userId, channelId: playing.voiceChannelId };
+  // Claimed BEFORE the call: the leave is idempotent, and a join that wrote
+  // its row and then failed must still have that row closed.
+  let open = true;
+  try {
+    const joined = await lfgNowVoiceJoin(run.ctx.api, target);
+    assertRecorded(joined, 'join', target, eventId);
+    await awaitHeadCount(run, playing.count + 1, 'AC7 join');
+    const left = await lfgNowVoiceLeave(run.ctx.api, target);
+    open = false;
+    assertRecorded(left, 'leave', target, eventId);
+    await awaitHeadCount(run, playing.count, 'AC7 leave');
+  } finally {
+    // An open roster row reads as "still in voice" to the session lifecycle.
+    // Swallowed so a cleanup error never replaces the test's real failure.
+    if (open) await lfgNowVoiceLeave(run.ctx.api, target).catch(() => null);
+  }
 }
 
 /*
@@ -340,6 +383,27 @@ async function assertSpawned(run: Run): Promise<void> {
  * posted to TEXT, and text posts carry no buttons. Both checks now live on the
  * forum surface — `lfg-board.test.ts` / `lfg-board-spawn-indicator-phase.ts`.
  */
+
+/**
+ * Tear down the session this run spawned, if any (a no-op when none was).
+ *
+ * The ephemeral reaper only deletes the `⏰ … — Playing now` channel 30 min
+ * after the session ends, and a CI run's API and DB are gone long before
+ * that. Drained afterwards so the post's closing re-render lands before the
+ * binding it routes through is deleted. Errors are reported, not thrown, so a
+ * cleanup failure never replaces the test's real one.
+ */
+async function endSpawnedSession(run: Run): Promise<void> {
+  try {
+    await endLfgSession(run.ctx.api, run.game.id);
+    await awaitProcessing(run.ctx.api);
+  } catch (err) {
+    console.warn(
+      `[lfm-playing] end-session cleanup failed for game ${run.game.id} — ` +
+        `its temp voice channel may be orphaned: ${String(err)}`,
+    );
+  }
+}
 
 /** AC7 proper: join moves the count up, leave moves it back down. */
 async function runPlayingNow(ctx: TestContext): Promise<void> {
@@ -352,7 +416,6 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
   // reached the forum is swept too.
   const sweep = await armForumSweep(ctx.api, game.name);
   let bindingId: string | undefined;
-  let joined = false;
   let boardWas: boolean | undefined;
   try {
     // Deterministic surface: this test polls a TEXT channel, so the board must
@@ -372,22 +435,16 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     await awaitProcessing(ctx.api);
 
     // Separate "never spawned" from "spawned but posted out of view".
-    await assertSpawned(run);
+    const eventId = await assertSpawned(run);
 
     const playing = await awaitPlayingPost(run);
-    await awaitChannelInCache(playing.voiceChannelId, ctx.config.timeoutMs);
-
-    await joinVoice(playing.voiceChannelId);
-    joined = true;
-    await awaitHeadCount(run, playing.count + 1, 'AC7 join');
-
-    leaveVoice();
-    joined = false;
-    await awaitHeadCount(run, playing.count, 'AC7 leave');
+    // Closes its own roster row in its own `finally`.
+    await driveHeadCount(run, run.first, eventId, playing);
   } finally {
-    // Voice FIRST: a bot left connected to a channel the next cleanup step may
-    // delete wedges the gateway for every later voice test in this process.
-    if (joined) leaveVoice();
+    // FIRST, while the binding still routes the post's closing re-render:
+    // ends the spawned session and force-destroys its temp voice channel,
+    // which a CI run would otherwise orphan in the shared guild.
+    await endSpawnedSession(run);
     // After a spawn both intents are already `converted`, so these 404 —
     // `withdrawLfgIntent` swallows that by design. They matter on the failure
     // path, where the spawn never happened and the hands are still live.
@@ -398,10 +455,6 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     if (boardWas !== undefined) await pinLfgBoard(ctx, boardWas);
     // Last: after the restore, so a re-enable's repost is caught as well.
     await sweepForumThreads(ctx.api, sweep);
-    // NOT cleaned up: the ad-hoc event the spawn created and its temp voice
-    // channel. Neither has a fixture on this branch, and the temp channel is
-    // reaped by the ephemeral-voice lifecycle that owns it. Left deliberately
-    // rather than deleted through a raw API call that would race that reaper.
   }
 }
 
@@ -415,24 +468,10 @@ const lfmEmbedPlayingNow: SmokeTest = {
 };
 
 /**
- * AC7 asserts a LIVE voice head-count, so it needs real UDP connectivity to a
- * Discord voice server: the companion bot joins the spawned temp channel, the
- * post must go up by one, it leaves, and the post must come back down. GitHub
- * runners cannot establish those connections, which is why CI sets
- * `SMOKE_SKIP_VOICE_JOIN=1` (`discord-smoke.yml:126`, ROK-969) and why
- * `voice-activity.test.ts:1171` and `series-dual-binding.test.ts:377` gate the
- * same way.
- *
- * NOTHING is weakened here — every assertion in this file is unchanged, and the
- * test runs in full on the fleet and locally, where voice works. Gating it is
- * the difference between a test that cannot run in an environment and a test
- * that runs and lies. Left ungated it fails on the environment, not on the
- * product: the first CI runs (`34306463766`, `34310783201`) both went red at
- * the poll BEFORE the join, which reports as "no PLAYING NOW post" and reads
- * like a render regression it never was.
+ * NOT gated on `SMOKE_SKIP_VOICE_JOIN`. The head-count is driven through the
+ * DEMO_MODE voice-join/leave endpoints, not a UDP voice connection, so the
+ * test needs nothing a GitHub runner lacks and runs in CI like every other
+ * embed test. `voice-activity.test.ts` and `series-dual-binding.test.ts` still
+ * gate their REAL voice joins — only this test's gate is gone.
  */
-const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
-
-export const lfmPlayingTests: SmokeTest[] = canJoinVoice
-  ? [lfmEmbedPlayingNow]
-  : [];
+export const lfmPlayingTests: SmokeTest[] = [lfmEmbedPlayingNow];

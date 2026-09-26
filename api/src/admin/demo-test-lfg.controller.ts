@@ -23,6 +23,7 @@ import {
   HttpCode,
   HttpStatus,
   Inject,
+  Optional,
   Post,
   Query,
   UseGuards,
@@ -41,6 +42,7 @@ import { LfgInviteService } from '../lfg/lfg-invite.service';
 import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
 import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
+import { EphemeralVoiceService } from '../discord-bot/services/ephemeral-voice.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import {
   readBoardThreadMembers,
@@ -83,6 +85,9 @@ export class DemoTestLfgController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly discordClient: DiscordBotClientService,
+    @Optional()
+    @Inject(EphemeralVoiceService)
+    private readonly ephemeralVoice: EphemeralVoiceService | null,
   ) {}
 
   private async assertDemoMode(): Promise<void> {
@@ -169,6 +174,13 @@ export class DemoTestLfgController {
    * session end via the shared helper — no second copy of the emit lives here.
    * `setGracePeriodStatus` first because `claimAndEndEvent` only claims an
    * event already in `grace_period`; that is the same hand-off the queue makes.
+   *
+   * Then the session's `⏰ … — Playing now` channel is FORCE-destroyed. The
+   * ordinary path leaves it to the ephemeral reaper, 30 min after the end —
+   * but a CI run's API and DB are gone long before that, so every spawn a
+   * smoke run made would orphan a channel in the shared test guild for good.
+   * Same order as the reaper (end, then destroy); `force` because a smoke is
+   * the only occupant and must not be able to keep the channel alive.
    */
   @Post('lfg/end-session')
   @HttpCode(HttpStatus.OK)
@@ -181,6 +193,7 @@ export class DemoTestLfgController {
     if (eventId === null) return { ended: false, eventId: null };
     await setGracePeriodStatus(this.db, eventId);
     await this.adHocEventService.finalizeEvent(eventId);
+    await this.ephemeralVoice?.destroyById(eventId, { force: true });
     return { ended: true, eventId };
   }
 }
