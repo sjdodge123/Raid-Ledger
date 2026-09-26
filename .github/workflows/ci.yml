@@ -71,6 +71,11 @@ jobs:
               # unfiltered: a vite config or index.html change got no build.
               - 'web/index.html'
               - 'web/vite.config.*'
+              # scripts/validate-ci-smoke-ci-parity.spec.mjs (run by the lint
+              # job) pins values read from these two files, so a PR editing
+              # only one of them must still run it to catch the drift.
+              - '.github/workflows/discord-smoke.yml'
+              - 'rl-infra/orchestrator/bin/env-spin'
             api:
               - 'api/package.json'
               - 'package-lock.json'
