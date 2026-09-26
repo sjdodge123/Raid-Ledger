@@ -36,6 +36,7 @@ import {
   LFG_BOARD_TOPIC_SENTINEL,
   boardOverwrites,
 } from './lfg-board-permissions.helpers';
+import { boardTopic, ownedSentinel } from './lfg-board-marker.helpers';
 
 jest.mock('./lfg-board-channel.db-helpers');
 
@@ -140,6 +141,7 @@ function makeGuild(
   channels: Record<string, unknown>,
   createImpl?: () => Promise<unknown>,
   botId: string | null = BOT_ID,
+  clientUserId: string | null = botId,
 ): { guild: Guild; create: jest.Mock; fetch: jest.Mock } {
   const fetch = jest.fn((id?: string) =>
     Promise.resolve(
@@ -155,6 +157,7 @@ function makeGuild(
     id: GUILD_ID,
     roles: { everyone: { id: EVERYONE_ID } },
     members: { me: botId === null ? null : { id: botId } },
+    client: { user: clientUserId === null ? null : { id: clientUserId } },
     channels: { fetch, create },
   } as unknown as Guild;
   return { guild, create, fetch };
@@ -192,7 +195,8 @@ describe('LfgBoardChannelService', () => {
           availableTags: LFG_BOARD_TAGS.map((name) => ({ name })),
           // ROK-1493 AC1 + ROK-1492 AC1: locked and marked in the SAME call.
           permissionOverwrites: boardOverwrites(EVERYONE_ID, BOT_ID),
-          topic: LFG_BOARD_TOPIC,
+          // ROK-1522: the mark names THIS bot, so no other instance adopts it.
+          topic: boardTopic(BOT_ID),
         }),
       );
       expect(settingsStore.get(SETTING_KEYS.LFG_BOARD_CHANNEL_ID)).toBe(
@@ -398,7 +402,7 @@ describe('LfgBoardChannelService', () => {
     // AC2 second half — re-flipping the toggle must not churn the audit log.
     it('makes no edit and no setTopic call when both are already in place', async () => {
       const bound = withBoardOverwrites(taggedForum('forum-bound'));
-      bound.topic = LFG_BOARD_TOPIC;
+      bound.topic = boardTopic(BOT_ID);
 
       await resolveBound(bound);
 
@@ -409,7 +413,7 @@ describe('LfgBoardChannelService', () => {
     // Review blocker: a null `members.me` must not half-apply the lock.
     it('asserts nothing and warns when the bot member is not cached', async () => {
       const bound = taggedForum('forum-bound');
-      bound.topic = LFG_BOARD_TOPIC;
+      bound.topic = boardTopic(BOT_ID);
       const { guild } = makeGuild({ [bound.id]: bound }, undefined, null);
       jest
         .mocked(bindings.findLfgBoardBindingChannelId)
@@ -424,7 +428,7 @@ describe('LfgBoardChannelService', () => {
     // Review warning: a refused lock is not retried on every LFM post.
     it('remembers a refused lock and issues no further edits on the next resolve', async () => {
       const bound = taggedForum('forum-bound');
-      bound.topic = LFG_BOARD_TOPIC;
+      bound.topic = boardTopic(BOT_ID);
       bound.permissionOverwrites.edit.mockRejectedValue(
         new Error('Missing Permissions'),
       );
@@ -445,7 +449,7 @@ describe('LfgBoardChannelService', () => {
     // AC2 first half — one missing half, exactly one call.
     it('writes exactly one overwrite when only the bot half is missing', async () => {
       const bound = taggedForum('forum-bound');
-      bound.topic = LFG_BOARD_TOPIC;
+      bound.topic = boardTopic(BOT_ID);
       bound.permissionOverwrites.cache.set(EVERYONE_ID, {
         allow: new PermissionsBitField(),
         deny: new PermissionsBitField([...LFG_BOARD_DENY_FLAGS]),
@@ -463,7 +467,7 @@ describe('LfgBoardChannelService', () => {
 
     it('writes both halves when the forum has no overwrites at all', async () => {
       const bound = taggedForum('forum-bound');
-      bound.topic = LFG_BOARD_TOPIC;
+      bound.topic = boardTopic(BOT_ID);
 
       await resolveBound(bound);
 
@@ -478,7 +482,7 @@ describe('LfgBoardChannelService', () => {
     // AC6 "refused → warning, forum returned" + D10 (advisory, never fatal).
     it('warns naming Manage Roles and still returns the forum when refused', async () => {
       const bound = taggedForum('forum-bound');
-      bound.topic = LFG_BOARD_TOPIC;
+      bound.topic = boardTopic(BOT_ID);
       bound.permissionOverwrites.edit.mockRejectedValue(
         new Error('Missing Permissions'),
       );
@@ -546,7 +550,14 @@ describe('LfgBoardChannelService', () => {
           LFG_BOARD_TAGS.map((name, i) => ({ id: `t${String(i)}`, name })),
         ),
       );
-      forum.topic = LFG_BOARD_TOPIC;
+      forum.topic = boardTopic(BOT_ID);
+      return forum;
+    }
+
+    /** A forum as another Raid Ledger instance (another bot) marks its board. */
+    function foreignForum(id: string): FakeForum {
+      const forum = markedForum(id);
+      forum.topic = boardTopic('other-bot');
       return forum;
     }
 
@@ -612,6 +623,90 @@ describe('LfgBoardChannelService', () => {
       expect((await makeService().resolveForum(guild))?.id).toBe(
         'forum-stored',
       );
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    // ROK-1522 — concurrent smoke runs / fleet envs share one guild: run B's
+    // API adopting run A's forum let run B's cleanup delete it mid-test.
+    it('never adopts a forum marked by another bot, and creates its own', async () => {
+      const foreign = foreignForum('forum-100');
+      const { guild, create } = makeGuild({ 'forum-100': foreign });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe(CREATED_ID);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(foreign.setTopic).not.toHaveBeenCalled();
+      expect(settingsStore.get(SETTING_KEYS.LFG_BOARD_CHANNEL_ID)).toBe(
+        CREATED_ID,
+      );
+    });
+
+    it('adopts its own mark over an older legacy or foreign one', async () => {
+      const legacy = markedForum('forum-100');
+      legacy.topic = LFG_BOARD_TOPIC;
+      const { guild, create } = makeGuild({
+        'forum-100': legacy,
+        'forum-150': foreignForum('forum-150'),
+        'forum-200': markedForum('forum-200'),
+      });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe('forum-200');
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    // ROK-1522 review: the shared guild holds CI slots, fleet envs and a dev
+    // instance — an untagged forum found by SCANNING may be any of theirs.
+    it('never adopts or re-tags a legacy forum found by scanning, and creates its own', async () => {
+      const legacy = markedForum('forum-100');
+      legacy.topic = LFG_BOARD_TOPIC;
+      const { guild, create } = makeGuild({
+        'forum-100': legacy,
+        'forum-150': foreignForum('forum-150'),
+      });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe(CREATED_ID);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(legacy.setTopic).not.toHaveBeenCalled();
+      expect(settingsStore.get(SETTING_KEYS.LFG_BOARD_CHANNEL_ID)).toBe(
+        CREATED_ID,
+      );
+    });
+
+    // The production upgrade path: a one-bot guild keeps its stored board.
+    it('re-tags and keeps a legacy forum that is its own STORED board', async () => {
+      const legacy = markedForum('forum-100');
+      legacy.topic = LFG_BOARD_TOPIC;
+      settingsStore.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, 'forum-100');
+      const { guild, create } = makeGuild({ 'forum-100': legacy });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
+      expect(create).not.toHaveBeenCalled();
+      expect(legacy.setTopic).toHaveBeenCalledWith(
+        expect.stringContaining(ownedSentinel(BOT_ID)),
+        expect.anything(),
+      );
+    });
+
+    it("keeps a stored forum carrying another bot's tag without rewriting it", async () => {
+      const foreign = foreignForum('forum-100');
+      settingsStore.set(SETTING_KEYS.LFG_BOARD_CHANNEL_ID, 'forum-100');
+      const { guild, create } = makeGuild({ 'forum-100': foreign });
+
+      expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
+      expect(create).not.toHaveBeenCalled();
+      expect(foreign.setTopic).not.toHaveBeenCalled();
+    });
+
+    // ROK-1522 review: ownership comes from client.user, not the member cache.
+    it('finds its own forum when members.me is not cached', async () => {
+      const own = markedForum('forum-100');
+      const { guild, create } = makeGuild(
+        { 'forum-100': own },
+        undefined,
+        null,
+        BOT_ID,
+      );
+
+      expect((await makeService().resolveForum(guild))?.id).toBe('forum-100');
       expect(create).not.toHaveBeenCalled();
     });
 

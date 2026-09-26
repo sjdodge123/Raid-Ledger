@@ -48,11 +48,11 @@ jobs:
 
   discord-smoke:
     runs-on: ubuntu-latest
-    # ONE RUN AT A TIME ON THE SHARED GUILD — via a lease, not `concurrency:`.
-    # Every run drives the same test guild with the same bot identity, and two
-    # runs at once fail each other's LFG/LFM tests (2026-09-06: three PR runs
-    # overlapped and each saw the other's posts as duplicate cards / extra
-    # hands). So the guild stays EXCLUSIVE.
+    # AT MOST TWO RUNS ON THE SHARED GUILD — via a lease pool, not `concurrency:`.
+    # Two runs under the SAME bot identity fail each other's LFG/LFM tests
+    # (2026-09-06: three PR runs overlapped and each saw the other's posts as
+    # duplicate cards / extra hands). ROK-1522 Phase 2: each lease slot has its
+    # OWN Discord app bot, so concurrent runs are told apart by author id.
     #
     # ROK-1522: this used to be `concurrency: group: discord-smoke-shared-guild`.
     # GitHub's queue for a concurrency group holds exactly ONE pending run and a
@@ -61,10 +61,15 @@ jobs:
     # `discord-smoke` context vanished and the PR sat BLOCKED with nothing red:
     # 35 PR runs on 20 branches in 2026-09-11..25 (docs/spikes/rok-1522-discord-smoke-parallelism.md §1.1).
     #
-    # Now `scripts/ci/discord-smoke-lease.sh` holds an exclusive lease as the
-    # git ref `refs/locks/discord-smoke/0` (pool size 1; Phase 2 grows it to
-    # 0..K-1 when there is one bot identity per slot):
-    #   - acquire: atomic ref create (422 = held). A waiter polls every 30s,
+    # Now `scripts/ci/discord-smoke-lease.sh` holds a lease as the git ref
+    # `refs/locks/discord-smoke/<i>`, i in 0..1 (Phase 2: a pool of 2):
+    #   - slot i = one bot identity: 0 → DISCORD_BOT_TOKEN / _CLIENT_ID /
+    #     _CLIENT_SECRET, 1 → the same names suffixed `_1`. The lease exports
+    #     SMOKE_POOL_INDEX=i; "Configure and connect Discord bot" picks that
+    #     slot's secrets, and the test-bot rotates its default voice channel
+    #     by it (one active scheduled event per voice channel). An empty `_1`
+    #     secret shrinks the pool to 1 — slot 1 NEVER falls back to bot 0.
+    #   - acquire: first free slot, atomic ref create (422 = held). A waiter polls every 30s,
     #     logs its wait and the holder's run URL, and the job shows IN
     #     PROGRESS the whole time, so nothing is evicted. It takes over a lease
     #     whose holder run is completed/gone, a lease left by an earlier
@@ -148,6 +153,10 @@ jobs:
       DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
       DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
       DISCORD_CLIENT_SECRET: ${{ secrets.DISCORD_CLIENT_SECRET }}
+      # ROK-1522 Phase 2: lease pool slot 1's own app bot (app 1553219870743601232)
+      DISCORD_BOT_TOKEN_1: ${{ secrets.DISCORD_BOT_TOKEN_1 }}
+      DISCORD_CLIENT_ID_1: ${{ secrets.DISCORD_CLIENT_ID_1 }}
+      DISCORD_CLIENT_SECRET_1: ${{ secrets.DISCORD_CLIENT_SECRET_1 }}
       # Companion test bot (channels auto-discovered from API)
       TEST_BOT_TOKEN: ${{ secrets.TEST_BOT_TOKEN }}
       TEST_GUILD_ID: ${{ secrets.TEST_GUILD_ID }}
@@ -240,15 +249,34 @@ jobs:
       - name: Acquire shared-guild lease
         id: lease
         if: steps.secrets.outputs.available == 'true'
-        run: bash scripts/ci/discord-smoke-lease.sh acquire
+        # Slot 1 exists only when ALL of its secrets do; otherwise the pool is 1.
+        run: |
+          if [ -n "$DISCORD_BOT_TOKEN_1" ] && [ -n "$DISCORD_CLIENT_ID_1" ] && [ -n "$DISCORD_CLIENT_SECRET_1" ]; then
+            export LEASE_POOL_SIZE=2
+          else
+            export LEASE_POOL_SIZE=1
+            echo "::warning::DISCORD_*_1 secrets missing: lease pool shrunk to 1 (slot 0 only)"
+          fi
+          bash scripts/ci/discord-smoke-lease.sh acquire
         env:
           GH_TOKEN: ${{ github.token }}
           LEASE_NAME: discord-smoke
-          LEASE_POOL_SIZE: '1'
 
       - name: Configure and connect Discord bot
         if: steps.secrets.outputs.available == 'true'
         run: |
+          # ROK-1522 Phase 2: the bot identity belongs to the lease slot. Never
+          # fall back to slot 0's bot — two runs under one bot collide.
+          case "${SMOKE_POOL_INDEX:-}" in
+            0) BOT_TOKEN="$DISCORD_BOT_TOKEN"; CLIENT_ID="$DISCORD_CLIENT_ID"; CLIENT_SECRET="$DISCORD_CLIENT_SECRET" ;;
+            1) BOT_TOKEN="$DISCORD_BOT_TOKEN_1"; CLIENT_ID="$DISCORD_CLIENT_ID_1"; CLIENT_SECRET="$DISCORD_CLIENT_SECRET_1" ;;
+            *) echo "::error::no bot identity for SMOKE_POOL_INDEX='${SMOKE_POOL_INDEX:-}'"; exit 1 ;;
+          esac
+          if [ -z "$BOT_TOKEN" ] || [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ]; then
+            echo "::error::lease slot ${SMOKE_POOL_INDEX} has an empty bot secret; refusing to run under another slot's bot"
+            exit 1
+          fi
+          echo "Using lease slot ${SMOKE_POOL_INDEX}'s bot identity"
           echo "Authenticating..."
           TOKEN=$(curl -sf http://localhost:3000/auth/local \
             -H 'Content-Type: application/json' \
@@ -259,14 +287,14 @@ jobs:
           curl -sf -X PUT http://localhost:3000/admin/settings/discord-bot \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
-            -d "{\"botToken\":\"$DISCORD_BOT_TOKEN\",\"enabled\":true}" \
+            -d "{\"botToken\":\"$BOT_TOKEN\",\"enabled\":true}" \
             | python3 -c 'import sys,json; print(json.load(sys.stdin).get("message",""))'
 
           echo "Configuring Discord OAuth..."
           curl -sf -X PUT http://localhost:3000/admin/settings/oauth \
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
-            -d "{\"clientId\":\"$DISCORD_CLIENT_ID\",\"clientSecret\":\"$DISCORD_CLIENT_SECRET\"}" > /dev/null 2>&1 || true
+            -d "{\"clientId\":\"$CLIENT_ID\",\"clientSecret\":\"$CLIENT_SECRET\"}" > /dev/null 2>&1 || true
 
           echo "Waiting for Discord bot to connect..."
           for _ in $(seq 1 30); do

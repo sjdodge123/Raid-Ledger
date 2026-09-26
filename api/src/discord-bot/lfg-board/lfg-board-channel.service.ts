@@ -33,13 +33,16 @@ import {
 import { timedDiscordCall } from '../services/scheduled-event.helpers';
 import { findLfgBoardBindingChannelId } from './lfg-board-channel.db-helpers';
 import {
-  LFG_BOARD_TOPIC,
   boardOverwriteEdit,
   boardOverwrites,
   overwritesUpToDate,
   topicHasSentinel,
-  topicWithSentinel,
 } from './lfg-board-permissions.helpers';
+import {
+  adoptableMarked,
+  boardTopic,
+  topicMarkedFor,
+} from './lfg-board-marker.helpers';
 import {
   DISCORD_FORUM_TAG_CAP,
   LFG_BOARD_CHANNEL_NAME,
@@ -50,6 +53,15 @@ import {
 /** Best-effort message for a caught `unknown`, never a bare cast. */
 function describeError(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * The id that owns our board mark: the logged-in client user. Unlike
+ * `guild.members.me` it does not depend on the member cache, so a cold cache
+ * cannot make a resolve miss our own forum and create a duplicate.
+ */
+function ownBotUserId(guild: Guild): string | null {
+  return guild.client.user?.id ?? null;
 }
 
 /** Fetch `id` and return it only if it is still a forum channel. */
@@ -118,7 +130,7 @@ export class LfgBoardChannelService {
     forum: ForumChannel,
   ): Promise<ForumChannel> {
     await this.assertOverwrites(guild, forum);
-    await this.assertTopic(forum);
+    await this.assertTopic(forum, ownBotUserId(guild));
     return forum;
   }
 
@@ -225,8 +237,11 @@ export class LfgBoardChannelService {
   }
 
   /**
-   * Every forum in the guild carrying the board's ownership sentinel, oldest
-   * first (snowflake order).
+   * Every forum in the guild carrying THIS bot's ownership sentinel, oldest
+   * first (snowflake order). A forum tagged by another bot (a concurrent CI
+   * run, a fleet env, a dev instance in the shared guild) or an untagged
+   * legacy one is never returned — a legacy board is only claimed through the
+   * stored/bound id: see `lfg-board-marker.helpers.ts`.
    *
    * Extracted from {@link resolveMarked} so the census and the adoption path
    * can never disagree about what "marked" means — a second copy of this
@@ -243,14 +258,15 @@ export class LfgBoardChannelService {
    */
   async findMarkedForums(guild: Guild): Promise<ForumChannel[]> {
     const all = await guild.channels.fetch().catch(() => null);
-    return [...(all?.values() ?? [])]
-      .filter(
-        (c): c is ForumChannel =>
-          c !== null &&
-          c.type === ChannelType.GuildForum &&
-          topicHasSentinel(c.topic),
-      )
-      .sort((a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id));
+    const marked = [...(all?.values() ?? [])].filter(
+      (c): c is ForumChannel =>
+        c !== null &&
+        c.type === ChannelType.GuildForum &&
+        topicHasSentinel(c.topic),
+    );
+    return adoptableMarked(marked, ownBotUserId(guild)).sort(
+      (a, b) => a.id.length - b.id.length || a.id.localeCompare(b.id),
+    );
   }
 
   /** R3 / AC2: at most one `edit` per half, and none when both are in place. */
@@ -311,12 +327,19 @@ export class LfgBoardChannelService {
     );
   }
 
-  /** A4: the topic must CONTAIN the sentinel — operator text is preserved. */
-  private async assertTopic(forum: ForumChannel): Promise<void> {
-    if (topicHasSentinel(forum.topic)) return;
+  /**
+   * A4: the topic must CONTAIN our sentinel — operator text is preserved. A
+   * legacy (untagged) mark is upgraded to ours; another bot's is left alone.
+   */
+  private async assertTopic(
+    forum: ForumChannel,
+    ownerId: string | null,
+  ): Promise<void> {
+    const next = topicMarkedFor(forum.topic, ownerId);
+    if (next === (forum.topic ?? '')) return;
     try {
       await timedDiscordCall('lfgBoard.topic', () =>
-        forum.setTopic(topicWithSentinel(forum.topic), 'Raid Ledger LFG board'),
+        forum.setTopic(next, 'Raid Ledger LFG board'),
       );
     } catch (err) {
       this.logger.warn(
@@ -364,7 +387,7 @@ export class LfgBoardChannelService {
         guild.roles.everyone.id,
         this.botUserIdForCreate(guild),
       ),
-      topic: LFG_BOARD_TOPIC,
+      topic: boardTopic(ownBotUserId(guild)),
       reason: 'Raid Ledger LFG board',
     };
   }

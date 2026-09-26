@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ROK-1522 Phase 1 — exclusive lease on the shared Discord test guild, held as a
+# ROK-1522 — lease on the shared Discord test guild, held as a
 # git ref (refs/locks/<name>/<index>) through the GitHub REST API.
 #
 # Why not `concurrency:`: GitHub's queue for a concurrency group holds ONE
@@ -7,8 +7,10 @@
 # context vanished from 35 PR runs in two weeks (docs/spikes/rok-1522-discord-smoke-parallelism.md §1.1). A run
 # waiting on this lease shows "in progress" instead, and is never evicted.
 #
-#   acquire  Take slot 0..LEASE_POOL_SIZE-1 (Phase 1: pool of 1 = exclusive).
-#            Writes `ref`, `sha`, `index`, `acquired_at` to $GITHUB_OUTPUT.
+#   acquire  Take the first free slot in 0..LEASE_POOL_SIZE-1 (Phase 2: a
+#            pool of 2, one Discord app bot per slot). Writes `ref`, `sha`,
+#            `index`, `acquired_at` to $GITHUB_OUTPUT and exports
+#            SMOKE_POOL_INDEX=<index> to $GITHUB_ENV for every later step.
 #   release  Delete the ref named by $LEASE_REF, ONLY if it still points at
 #            $LEASE_SHA (i.e. this run still owns it). Never fails the job.
 #
@@ -42,6 +44,7 @@ TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
 NS="${LEASE_REF_NAMESPACE:-locks}"
 NAME="${LEASE_NAME:-discord-smoke}"
 POOL_SIZE="${LEASE_POOL_SIZE:-1}"
+case "$POOL_SIZE" in ""|*[!0-9]*|0) echo "::error::lease: LEASE_POOL_SIZE must be a positive integer"; exit 1 ;; esac
 POLL_S="${LEASE_POLL_S:-30}"
 STALE_S="${LEASE_STALE_S:-9300}"  # > timeout-minutes 150 (9000s); see header
 MAX_WAIT_S="${LEASE_MAX_WAIT_S:-6000}"
@@ -146,6 +149,7 @@ own() {  # own REF SHA INDEX
   {
     echo "ref=$1"; echo "sha=$2"; echo "index=$3"; echo "acquired_at=$(now)"
   } >> "$OUT"
+  if [ -n "${GITHUB_ENV:-}" ]; then echo "SMOKE_POOL_INDEX=$3" >> "$GITHUB_ENV"; fi
 }
 
 # try_slot INDEX CHECK_RUN — 0 when this run now holds the slot.
@@ -179,10 +183,36 @@ try_slot() {
   esac
 }
 
+# release_earlier_attempts — delete every slot still held by an EARLIER
+# attempt of this same run (same run_id, lower run_attempt). Without it a
+# re-run that finds slot 0 free takes slot 0 and leaves slot 1 locked by its
+# own dead attempt until the age backstop — halving the pool for ~2.5h.
+release_earlier_attempts() {
+  local idx ref code holder msg hid hatt
+  for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
+    ref="${NS}/${NAME}/${idx}"
+    code="$(api GET "git/ref/${ref}")"
+    [ "$code" = 200 ] || continue
+    holder="$(jq -r '.object.sha' "$BODY")"
+    msg="$(holder_msg "$holder")" || continue
+    hid="$(field run_id <<< "$msg")"; hatt="$(field run_attempt <<< "$msg")"
+    [ "$hid" = "$RUN_ID" ] || continue
+    case "$hatt" in ""|*[!0-9]*) continue ;; esac
+    [ "$hatt" -lt "$RUN_ATTEMPT" ] || continue
+    code="$(api DELETE "git/refs/${ref}")"
+    if [ "$code" = 204 ]; then
+      echo "lease: released ${ref}, left by attempt ${hatt} of this run"
+    else
+      echo "::warning::lease: could not release ${ref} left by attempt ${hatt} (HTTP $code)"
+    fi
+  done
+}
+
 acquire() {
   local start polls=0 check idx waited holder
   start="$(now)"
   echo "lease: acquiring ${NS}/${NAME}/[0..$(( POOL_SIZE - 1 ))] for ${RUN_URL} (attempt ${RUN_ATTEMPT})"
+  release_earlier_attempts
   while :; do
     check=0; [ $(( polls % RUN_CHECK_EVERY )) -eq 0 ] && check=1
     for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
@@ -195,8 +225,10 @@ acquire() {
     if [ "$waited" -ge "$MAX_WAIT_S" ]; then
       echo "::error::lease: gave up after waiting $(mins "$waited") for ${NS}/${NAME}"; exit 1
     fi
-    holder="$(cat "$CACHE/holder-0" 2>/dev/null || true)"
-    echo "lease: waited $(mins "$waited"); slot 0 held by $( [ -n "$holder" ] && holder_msg "$holder" | field run_url)"
+    for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
+      holder="$(cat "$CACHE/holder-$idx" 2>/dev/null || true)"
+      echo "lease: waited $(mins "$waited"); slot ${idx} held by $( [ -n "$holder" ] && holder_msg "$holder" | field run_url)"
+    done
     sleep "$POLL_S"
   done
 }

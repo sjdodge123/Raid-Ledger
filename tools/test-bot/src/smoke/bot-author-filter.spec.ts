@@ -17,6 +17,7 @@
 import assert from 'node:assert/strict';
 
 import {
+  assertAuthorFilterReady,
   filterByApiBot,
   getApiBotUserId,
   isFromApiBot,
@@ -130,7 +131,36 @@ async function main(): Promise<void> {
     assert.equal(shouldAcceptMessage(msg('222')), true, 'fail-open unchanged');
   });
 
-  setApiBotUserId(null);
+  // ROK-1522 review: pooled runs share the guild + DM inbox with another
+  // run's bot, so an unresolved id must fail CLOSED there.
+  const POOL = { SMOKE_POOL_INDEX: '1' };
+
+  await test('pooled run: an unresolved bot id makes resolve THROW', async () => {
+    const api = { get: () => Promise.resolve({ connected: false }) };
+    await assert.rejects(resolveApiBotUserId(api, POOL), /SMOKE_POOL_INDEX=1/);
+    const down = { get: () => Promise.reject(new Error('500')) };
+    await assert.rejects(resolveApiBotUserId(down, POOL), /could not be resolved/);
+  });
+
+  await test('pooled run: a resolved bot id is returned as before', async () => {
+    const api = { get: () => Promise.resolve({ botUserId: '888' }) };
+    assert.equal(await resolveApiBotUserId(api, POOL), '888');
+  });
+
+  await test('pooled run left unpinned: every author check throws', () => {
+    setApiBotUserId(null, POOL);
+    assert.throws(() => assertAuthorFilterReady(POOL), /SMOKE_POOL_INDEX=1/);
+    assert.throws(() => shouldAcceptMessage(msg('anyone')), /could not be resolved/);
+    assert.throws(() => filterByApiBot([msg('a')]), /could not be resolved/);
+  });
+
+  await test('unpooled run left unpinned: still fail-open', () => {
+    setApiBotUserId(null, {});
+    assert.doesNotThrow(() => assertAuthorFilterReady({}));
+    assert.equal(shouldAcceptMessage(msg('anyone')), true);
+  });
+
+  setApiBotUserId(null, {});
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }
