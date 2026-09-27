@@ -64,13 +64,12 @@
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
-  <!-- ROK-1366: third-party scripts go AFTER the module entry and use `defer`
-       (never `async`). Deferred classic scripts and module scripts run in
-       document order once parsing ends, so main.tsx's first import
-       (magic-link-capture) strips the #token= fragment before any
-       third-party code can read location.hash. magic-link-capture.test.ts
-       pins this ordering. -->
-  <script src="https://wow.zamimg.com/js/tooltips.js" defer></script>
+  <!-- ROK-1366: no third-party <script> tag in this file. tooltips.js is
+       injected async by src/lib/wowhead-tooltips-loader.ts, which main.tsx
+       imports straight after the magic-link fragment strip, so no third-party
+       code can read #token= and DOMContentLoaded does not wait on the CDN.
+       The whTooltips config above stays inline so it precedes the script.
+       magic-link-capture.test.ts pins this. -->
 </body>
 
 </html>

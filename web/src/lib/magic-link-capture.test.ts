@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -56,12 +56,15 @@ describe('ROK-1366: magic-link fragment is captured before Sentry initialises', 
 
 /**
  * ROK-1366 review fix: a classic script that executes before the module
- * entry can read `location.hash` before the strip. A sync or `defer` external
- * script ahead of the entry runs first; an `async` one runs whenever it
- * arrives — even when it sits after the entry. So every external script must
- * come after the entry and be `defer` (same ordered list, runs after it).
+ * entry can read `location.hash` before the strip, and an `async` one runs
+ * whenever it arrives — even when it sits after the entry. A `defer` one after
+ * the entry was safe but held DOMContentLoaded and changed the boot order
+ * (PR #1384 CI). So index.html carries NO external script besides the entry:
+ * third-party code is injected by the entry itself, after the strip.
  */
 const SCRIPT_RE = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+const ENTRY_SRC = '/src/main.tsx';
+const TOOLTIPS_URL_RE = /zamimg\.com\/js\/tooltips\.js/;
 
 interface ScriptTag {
     attrs: string;
@@ -77,9 +80,18 @@ const srcOf = (tag: ScriptTag): string | null => /\bsrc\s*=\s*["']([^"']+)["']/i
 const hasAttr = (tag: ScriptTag, name: string): boolean => new RegExp(`(^|\\s)${name}(\\s|=|$)`, 'i').test(tag.attrs);
 const stripJsComments = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
+/** Non-test source files under web/src that mention the tooltips.js URL (comments stripped). */
+function srcFilesLoadingTooltips(): string[] {
+    const srcRoot = join(here, '..');
+    return (readdirSync(srcRoot, { recursive: true }) as string[])
+        .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.(test|spec)\.tsx?$/.test(f))
+        .filter((f) => TOOLTIPS_URL_RE.test(stripJsComments(readFileSync(join(srcRoot, f), 'utf8'))))
+        .map((f) => f.split('\\').join('/'));
+}
+
 describe('ROK-1366: index.html runs nothing that can read the fragment before the strip', () => {
     const scripts = indexHtmlScripts();
-    const entry = scripts.findIndex((tag) => srcOf(tag) === '/src/main.tsx');
+    const entry = scripts.findIndex((tag) => srcOf(tag) === ENTRY_SRC);
 
     it('loads no external script ahead of the module entry, and no inline one that reads the URL', () => {
         expect(entry, 'index.html must load /src/main.tsx').toBeGreaterThanOrEqual(0);
@@ -93,17 +105,23 @@ describe('ROK-1366: index.html runs nothing that can read the fragment before th
         }
     });
 
-    it('loads every third-party script deferred and after the module entry', () => {
-        const thirdParty = scripts
-            .map((tag, index) => ({ tag, index, src: srcOf(tag) }))
-            .filter(({ src }) => src !== null && /^(https?:)?\/\//i.test(src));
-        for (const { tag, index, src } of thirdParty) {
-            expect({ src, afterEntry: index > entry, defer: hasAttr(tag, 'defer'), async: hasAttr(tag, 'async') }).toEqual({
-                src,
-                afterEntry: true,
-                defer: true,
-                async: false,
-            });
-        }
+    it('loads no external script at all besides the module entry', () => {
+        const external = scripts.map(srcOf).filter((src) => src !== null && src !== ENTRY_SRC);
+        expect(external, 'inject third-party scripts from the entry, after the strip').toEqual([]);
+        expect(scripts.some((tag) => TOOLTIPS_URL_RE.test(stripJsComments(tag.body)))).toBe(false);
+    });
+});
+
+describe('ROK-1366: tooltips.js is injected by the entry, only after the strip', () => {
+    it("is injected by main.tsx's second import, straight after ./lib/magic-link-capture", () => {
+        expect(importsOf('../main.tsx').slice(0, 2)).toEqual(['./lib/magic-link-capture', './lib/wowhead-tooltips-loader']);
+    });
+
+    it('the loader imports nothing, so it cannot evaluate anything ahead of the strip', () => {
+        expect(importsOf('./wowhead-tooltips-loader.ts')).toEqual([]);
+    });
+
+    it('no other source file loads tooltips.js', () => {
+        expect(srcFilesLoadingTooltips()).toEqual(['lib/wowhead-tooltips-loader.ts']);
     });
 });

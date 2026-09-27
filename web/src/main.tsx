@@ -2,6 +2,9 @@
 // initialises, so it never reaches breadcrumbs, tracing or replay. This MUST
 // stay the very first import (magic-link-capture.test.ts pins it).
 import './lib/magic-link-capture';
+// ROK-1366: third-party tooltips.js is injected (async) only now, after the
+// strip above — never from index.html (magic-link-capture.test.ts pins it).
+import './lib/wowhead-tooltips-loader';
 // Sentry next — before any other modules.
 // ROK-306: Maintainer telemetry for error tracking.
 import { Sentry } from './sentry';
