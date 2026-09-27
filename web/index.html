@@ -19,7 +19,6 @@
        entirely — no eval attempt, no violation, no behavior change. -->
   <script>globalThis.__zod_globalConfig = { jitless: true };</script>
   <script>var whTooltips = { colorLinks: true, iconizeLinks: false, renameLinks: false };</script>
-  <script src="https://wow.zamimg.com/js/tooltips.js" async></script>
   <script>
     // No-flash theme script — sets data-scheme (+ data-variant) before first paint
     // (ROK-280, ROK-228, ROK-291)
@@ -65,6 +64,13 @@
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
+  <!-- ROK-1366: third-party scripts go AFTER the module entry and use `defer`
+       (never `async`). Deferred classic scripts and module scripts run in
+       document order once parsing ends, so main.tsx's first import
+       (magic-link-capture) strips the #token= fragment before any
+       third-party code can read location.hash. magic-link-capture.test.ts
+       pins this ordering. -->
+  <script src="https://wow.zamimg.com/js/tooltips.js" defer></script>
 </body>
 
 </html>
