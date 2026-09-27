@@ -621,6 +621,21 @@ run_build() {
   if [ "$effective_scope" != "api" ]; then npm run build -w web || return $?; fi
 }
 
+# ROK-1154: gzip budget per web chunk class (entry / vendor / lazy), measured on
+# the web/dist the build step above just produced. The budgets, and the reason
+# for each, live in scripts/bundle-budget.config.mjs. An overrun exits 1, which
+# run_step records as a FAIL row. Runs in BOTH the static and full gates: it
+# needs no database and takes about a second. Skipped only when scope=api,
+# because run_build did not build web and there is no bundle to measure.
+run_bundle_budget() {
+  if [ "$effective_scope" = "api" ]; then
+    echo "scope=api — web was not built, no bundle to measure"
+    skip_step
+    return 0
+  fi
+  (cd "$REPO_ROOT" && node scripts/check-bundle-size.mjs)
+}
+
 run_typecheck() {
   # ROK-1336 #5 — propagate failure of the FIRST tsc invocation. The script
   # doesn't set -e, so without `|| return $?` the function reports the exit
@@ -1890,6 +1905,7 @@ run_narrowed_gate() {
   local selected="$1" flag="--only-$1" entry name selector
   for entry in \
     "Build (all workspaces)|" \
+    "Bundle size budget|" \
     "TypeScript (all)|" \
     "Lint (all)|" \
     "Shell parse check (scripts/*.sh)|" \
@@ -1914,6 +1930,8 @@ run_narrowed_gate() {
 run_default_gate() {
   if ! $only_e2e; then
     run_step "Build (all workspaces)" run_build
+    # Static, deterministic check on the build output — BOTH static and full.
+    run_step "Bundle size budget" run_bundle_budget
     run_step "TypeScript (all)" run_typecheck
     run_step "Lint (all)" run_lint
     # Static, deterministic check — runs in BOTH static and full gates.

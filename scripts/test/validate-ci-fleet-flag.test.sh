@@ -148,7 +148,20 @@ EOF
 [[ "${1:-}" == "fetch" ]] && exit 0
 exec "${REAL_GIT:-/usr/bin/git}" "$@"
 EOF
-    chmod +x "$stub_dir/docker" "$stub_dir/npm" "$stub_dir/npx" "$stub_dir/curl" "$stub_dir/git"
+    # ROK-1154: the bundle budget measures web/dist, which the stubbed `npm run
+    # build` never produces, so a real run would read a missing or stale bundle.
+    # Record that one call; every other node call (the node:test specs) is real.
+    # The real node path is baked in: `command -v node` inside the stub would
+    # find the stub itself.
+    cat >"$stub_dir/node" <<EOF
+#!/usr/bin/env bash
+if [[ "\${1:-}" == *check-bundle-size.mjs ]]; then
+  [[ -n "\${STUB_NODE_ARGV_FILE:-}" ]] && echo "\$*" >>"\$STUB_NODE_ARGV_FILE"
+  exit 0
+fi
+exec "$(command -v node)" "\$@"
+EOF
+    chmod +x "$stub_dir/docker" "$stub_dir/npm" "$stub_dir/npx" "$stub_dir/curl" "$stub_dir/git" "$stub_dir/node"
     echo "$stub_dir"
 }
 
@@ -156,11 +169,12 @@ stub_bin=$(make_stub_bin)
 docker_argv_file=$(mktemp -t rl-fleet-docker.XXXXXX)
 npx_argv_file=$(mktemp -t rl-fleet-npx.XXXXXX)
 npm_argv_file=$(mktemp -t rl-fleet-npm.XXXXXX)
+node_argv_file=$(mktemp -t rl-fleet-node.XXXXXX)
 curl_argv_file=$(mktemp -t rl-fleet-curl.XXXXXX)
 perf_log=$(mktemp -t rl-fleet-perf.XXXXXX)
 err_file=$(mktemp -t rl-fleet-stderr.XXXXXX)
 cleanup() {
-    rm -rf "$stub_bin" "$docker_argv_file" "$npx_argv_file" "$npm_argv_file" \
+    rm -rf "$stub_bin" "$docker_argv_file" "$npx_argv_file" "$npm_argv_file" "$node_argv_file" \
         "$curl_argv_file" "$perf_log" "${perf_log}.errors" "$err_file"
 }
 trap cleanup EXIT
@@ -183,7 +197,7 @@ INVOKE_UNIT_HEAP=""
 invoke() {
     local target="$1" base_url="$2"; shift 2
     : >"$docker_argv_file"; : >"$npx_argv_file"; : >"$npm_argv_file"
-    : >"$curl_argv_file"; : >"$err_file"
+    : >"$curl_argv_file"; : >"$node_argv_file"; : >"$err_file"
     INVOKE_RC=0
     if [ -n "$base_url" ]; then
         INVOKE_OUT=$(
@@ -195,6 +209,7 @@ invoke() {
             STUB_NPX_ARGV_FILE="$npx_argv_file" \
             STUB_NPM_ARGV_FILE="$npm_argv_file" \
             STUB_CURL_ARGV_FILE="$curl_argv_file" \
+            STUB_NODE_ARGV_FILE="$node_argv_file" \
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
             RL_WORKSPACE_ROOT="$INVOKE_WORKSPACE_ROOT" \
             PLAYWRIGHT_AUTH_DIR="$INVOKE_AUTH_DIR" \
@@ -239,6 +254,8 @@ CURRENT_TEST_NAME="AC2: --fleet runs the full gate with a no-coverage unit step"
 invoke remote "$ENV_URL" --fleet
 assert_rc 0 "--fleet"
 assert_grep 'run build' "$npm_argv_file" "--fleet must build"
+assert_grep 'scripts/check-bundle-size\.mjs' "$node_argv_file" "--fleet must run the bundle size budget (ROK-1154)"
+assert_out_matches 'Bundle size budget.*PASS' "Bundle size budget row"
 assert_grep 'tsc --noEmit' "$npx_argv_file" "--fleet must typecheck"
 assert_grep '(^| )lint( |$)' "$npm_argv_file" "--fleet must lint"
 assert_grep '--shard=[0-9]+/4' "$npx_argv_file" "--fleet must run the sharded integration suite"
