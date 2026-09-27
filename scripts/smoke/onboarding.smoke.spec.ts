@@ -335,16 +335,34 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
         ).toBeVisible();
     });
 
-    test('Steam step Connect Steam button links to correct auth URL', async ({ page }) => {
+    // ROK-1630: the button POSTs /auth/steam/link/start (Bearer header, returnTo in
+    // the JSON body), then navigates to the single-use `?nonce=` hop — the session
+    // JWT never rides in a URL. The hop itself is fulfilled with a 204 so the page
+    // stays put instead of following the 302 out to steamcommunity.com; the
+    // nonce → provider redirect is covered by link-start.integration.spec.ts.
+    test('Steam step Connect Steam button starts a nonce link with returnTo in the POST body', async ({ page }) => {
         const steamShows = await willSteamStepShow(page);
         test.skip(!steamShows, 'Steam not configured or admin already has Steam linked — step is hidden');
 
+        const isHop = (url: URL) => url.pathname.endsWith('/auth/steam/link') && url.search !== '';
+        await page.route(isHop, (route) => route.fulfill({ status: 204 }));
+        const startRequest = page.waitForRequest(
+            (req) => req.url().includes('/auth/steam/link/start') && req.method() === 'POST',
+        );
+        const hopRequest = page.waitForRequest((req) => isHop(new URL(req.url())));
+
         const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
-        const linkOrBtn = dialog.locator('a[href*="/auth/steam/link"]');
-        await expect(linkOrBtn).toBeVisible({ timeout: 5_000 });
-        const href = await linkOrBtn.getAttribute('href');
-        expect(href).toContain('returnTo=');
-        expect(href).toContain('%2Fonboarding');
+        await dialog.getByRole('button', { name: /Connect Steam/i }).click();
+
+        const start = await startRequest;
+        expect(start.postDataJSON(), 'returnTo rides in the start POST body').toEqual({ returnTo: '/onboarding' });
+        expect(await start.headerValue('authorization'), 'start authenticates by Bearer header').toMatch(/^Bearer \S+/);
+        expect(start.url(), 'the start URL carries no token').not.toContain('token=');
+
+        const hop = new URL((await hopRequest).url());
+        expect(hop.searchParams.get('nonce'), 'the hop carries a nonce').toBeTruthy();
+        expect(hop.searchParams.has('token'), 'the hop never carries the session token').toBe(false);
+        expect(hop.search, 'returnTo is bound inside the nonce, not the URL').not.toContain('returnTo');
     });
 
     test('Skip button on Steam step advances to Games step', async ({ page }) => {
@@ -367,7 +385,7 @@ test.describe('Onboarding wizard Steam step (ROK-941)', () => {
 
         const dialog = page.getByRole('dialog', { name: 'Onboarding wizard' });
         // exact:true so the "Steam" breadcrumb step button doesn't also match
-        // the "Connect Steam" action link (role=button), which trips strict mode.
+        // the "Connect Steam" action button, which trips strict mode.
         await expect(dialog.getByRole('button', { name: 'Steam', exact: true })).toBeVisible({ timeout: 5_000 });
         await expect(dialog.getByRole('button', { name: 'Games', exact: true })).toBeVisible({ timeout: 5_000 });
         await expect(dialog.getByText(/Step 1 of \d+/)).toBeVisible();
