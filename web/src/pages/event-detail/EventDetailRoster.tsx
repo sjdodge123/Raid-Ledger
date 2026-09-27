@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
 import { UserLink } from '../../components/common/UserLink';
+import { AnonymousDiscordName } from '../../components/common/AnonymousDiscordName';
 import { toAvatarUser } from '../../lib/avatar';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
 import { RoleIcon } from '../../components/shared/RoleIcon';
@@ -62,12 +63,7 @@ function RunningLateBadge({ signup }: { signup: Pick<SignupItem, 'runningLate' |
 }
 
 function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
-    return (
-        <span className="flex items-center gap-1.5 text-sm text-muted">
-            <span>{signup.discordUsername ?? signup.user.username}</span>
-            <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
-        </span>
-    );
+    return <AnonymousDiscordName name={signup.discordUsername ?? signup.user.username} />;
 }
 
 /** An anonymous Discord signup has no member row (API sends user.id 0) — never link it to a profile. */
