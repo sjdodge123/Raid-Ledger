@@ -5,6 +5,11 @@
  */
 import * as Sentry from '@sentry/react';
 import { scrubBreadcrumb, scrubTokenFromUrl } from './lib/sentry-scrub';
+import {
+    scrubRecordingEvent,
+    scrubReplayEventUrls,
+    scrubTransactionEvent,
+} from './lib/sentry-scrub-events';
 
 const SENTRY_DSN =
     'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
@@ -26,9 +31,13 @@ if (!telemetryDisabled) {
         tracesSampleRate: isProduction ? 0.1 : 1.0,
         replaysSessionSampleRate: 0,
         replaysOnErrorSampleRate: isProduction ? 1.0 : 0,
+        // ROK-1366: the navigation PerformanceEntry keeps the pre-strip URL
+        // (fragment included) — scrub it from spans, replay and replay urls.
+        beforeSendTransaction: (event) => scrubTransactionEvent(event),
         integrations: [
             Sentry.browserTracingIntegration(),
-            Sentry.replayIntegration(),
+            Sentry.replayIntegration({ beforeAddRecordingEvent: scrubRecordingEvent }),
+            { name: 'ScrubReplayUrls', processEvent: scrubReplayEventUrls },
         ],
         // ROK-1162: drop AbortError noise (TanStack Query cancels in-flight
         // fetches on unmount / refetch; the cancellation surfaces as
