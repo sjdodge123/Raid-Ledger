@@ -113,7 +113,8 @@ function activityTokens(room: RoomRecap): string[] {
   const shown = room.activities
     .slice(0, MAX_RECAP_ACTIVITIES)
     .map(
-      (a) => `${sanitizeName(a.name)} (${formatRecapDurationMs(a.seconds * 1000)})`,
+      (a) =>
+        `${sanitizeName(a.name)} (${formatRecapDurationMs(a.seconds * 1000)})`,
     );
   const hidden = room.activities.length - shown.length;
   return hidden > 0 ? [...shown, `+${String(hidden)} more`] : shown;
