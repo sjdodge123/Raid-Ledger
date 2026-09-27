@@ -83,10 +83,15 @@ function loginButton(page: Page) {
 /** Open the link in a fresh, unauthenticated context; return the page + its redeem response. */
 async function openLinkInFreshContext(browser: Browser, target: string) {
     const context = await browser.newContext({ storageState: undefined });
-    const page = await context.newPage();
-    const redeem = page.waitForResponse(isRedeem, { timeout: 15_000 });
-    await page.goto(target, { waitUntil: 'domcontentloaded' });
-    return { context, page, redeemStatus: (await redeem).status() };
+    try {
+        const page = await context.newPage();
+        const redeem = page.waitForResponse(isRedeem, { timeout: 15_000 });
+        await page.goto(target, { waitUntil: 'domcontentloaded' });
+        return { context, page, redeemStatus: (await redeem).status() };
+    } catch (err) {
+        await context.close();
+        throw err;
+    }
 }
 
 test.describe('Magic sign-in link is single-use (ROK-1366)', () => {
