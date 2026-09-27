@@ -1,5 +1,5 @@
 import type { User } from '../../hooks/use-auth';
-import { useDiscordLink } from '../../hooks/use-discord-link';
+import { useDiscordLinkAction } from '../../hooks/use-discord-link';
 import { resolveAvatar, toAvatarUser, isDiscordLinked } from '../../lib/avatar';
 import { RoleBadge } from '../ui/role-badge';
 
@@ -46,9 +46,9 @@ function UserDetails({ user, hasDiscordLinked }: { user: User; hasDiscordLinked:
     );
 }
 
-function LinkDiscordButton({ onClick }: { onClick: () => void }) {
+function LinkDiscordButton({ onClick, pending }: { onClick: () => void; pending: boolean }) {
     return (
-        <button onClick={onClick} className="inline-flex items-center gap-2 px-4 py-2 bg-[#5865F2] hover:bg-[#4752C4] text-foreground font-medium rounded-lg transition-colors">
+        <button onClick={onClick} disabled={pending} className="inline-flex items-center gap-2 px-4 py-2 bg-[#5865F2] hover:bg-[#4752C4] text-foreground font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d={DISCORD_SVG_PATH} /></svg>
             Link Discord
         </button>
@@ -57,7 +57,7 @@ function LinkDiscordButton({ onClick }: { onClick: () => void }) {
 
 export function UserInfoCard({ user }: UserInfoCardProps) {
     const hasDiscordLinked = isDiscordLinked(user.discordId);
-    const handleLinkDiscord = useDiscordLink();
+    const { linkDiscord: handleLinkDiscord, isPending: linkPending } = useDiscordLinkAction();
     const avatarUrl = resolveAvatar(toAvatarUser(user)).url;
 
     return (
@@ -67,7 +67,7 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
                     <UserAvatar user={user} avatarUrl={avatarUrl} />
                     <UserDetails user={user} hasDiscordLinked={hasDiscordLinked} />
                 </div>
-                {!hasDiscordLinked && <LinkDiscordButton onClick={handleLinkDiscord} />}
+                {!hasDiscordLinked && <LinkDiscordButton onClick={handleLinkDiscord} pending={linkPending} />}
             </div>
         </div>
     );

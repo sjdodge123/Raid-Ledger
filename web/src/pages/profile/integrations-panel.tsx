@@ -5,7 +5,7 @@
 import type { JSX } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
-import { useDiscordLink } from '../../hooks/use-discord-link';
+import { useDiscordLinkAction } from '../../hooks/use-discord-link';
 import { useSteamLink } from '../../hooks/use-steam-link';
 import { isDiscordLinked, buildDiscordAvatarUrl } from '../../lib/avatar';
 import { DiscordLinkCta, SteamSection } from './identity-sections';
@@ -35,7 +35,7 @@ export function IntegrationsPanel(): JSX.Element | null {
     useSteamRedirectFeedback();
     const { user } = useAuth();
     const { data: systemStatus } = useSystemStatus();
-    const handleLinkDiscord = useDiscordLink();
+    const { linkDiscord: handleLinkDiscord, isPending: linkPending } = useDiscordLinkAction();
     const { linkSteam, isLinkPending, steamStatus, unlinkSteam, syncLibrary, syncWishlist } = useSteamLink();
 
     if (!user) return null;
@@ -52,7 +52,7 @@ export function IntegrationsPanel(): JSX.Element | null {
                 {showDiscord && (
                     hasDiscord
                         ? <DiscordLinkedStatus user={user} />
-                        : <DiscordLinkCta onLink={handleLinkDiscord} />
+                        : <DiscordLinkCta onLink={handleLinkDiscord} pending={linkPending} />
                 )}
                 {showSteam && (
                     <SteamSection steamStatus={steamStatus} linkSteam={linkSteam} linkPending={isLinkPending}

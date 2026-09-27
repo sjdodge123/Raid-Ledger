@@ -30,6 +30,7 @@ vi.mock('../../hooks/use-system-status', () => ({
 
 vi.mock('../../hooks/use-discord-link', () => ({
     useDiscordLink: () => vi.fn().mockResolvedValue(undefined),
+    useDiscordLinkAction: () => ({ linkDiscord: vi.fn().mockResolvedValue(undefined), isPending: false }),
 }));
 
 vi.mock('../../hooks/use-steam-link', () => ({
