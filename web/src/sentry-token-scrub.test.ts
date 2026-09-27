@@ -89,7 +89,7 @@ describe('ROK-1366: Replay beforeAddRecordingEvent scrubs recorded URLs', () => 
         expect(out.data.payload.description).toBe(PAGE_SCRUBBED);
     });
 
-    it('scrubs a history push (name + previous) and the rrweb meta href', () => {
+    it('scrubs a history push (name + previous)', () => {
         const push = recordingHook({
             type: 5,
             timestamp: 1,
@@ -102,10 +102,16 @@ describe('ROK-1366: Replay beforeAddRecordingEvent scrubs recorded URLs', () => 
                 },
             },
         });
-        const meta = recordingHook({ type: 4, timestamp: 1, data: { href: PAGE, width: 1, height: 1 } });
         expectNoSecret(push);
-        expectNoSecret(meta);
     });
+
+    // No rrweb Meta (type 4) case on purpose. At runtime Replay hands
+    // beforeAddRecordingEvent only type-5 custom events, so a synthetic Meta
+    // event scrubbed here would pass while the real Meta `href` ships as-is.
+    // The Meta href is clean only if the URL is clean when recording starts:
+    // the magic-link fragment relies on being stripped before Sentry.init
+    // (magic-link-capture.test.ts), and the join page's intent `?token=` is
+    // not stripped at all (TECH-DEBT-BACKLOG.md, 2026-09-27).
 
     it('passes an unrelated rrweb event through unchanged', () => {
         const event = { type: 2, timestamp: 1, data: { node: { id: 1 } } };

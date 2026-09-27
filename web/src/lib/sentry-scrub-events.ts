@@ -44,8 +44,9 @@ export function scrubTransactionEvent<T extends ScrubbableTransaction>(event: T)
 }
 
 /**
- * Replay beforeAddRecordingEvent: the rrweb meta `href`, and a custom
- * event's payload (performanceSpan / breadcrumb description, message, data).
+ * Replay beforeAddRecordingEvent: a custom (type-5) event's payload
+ * (performanceSpan / breadcrumb description, message, data). Replay passes
+ * only custom events to this hook, so the rrweb Meta `href` never reaches it.
  */
 export function scrubRecordingEvent<T>(event: T): T {
     const data = isRecord(event) ? event.data : undefined;
