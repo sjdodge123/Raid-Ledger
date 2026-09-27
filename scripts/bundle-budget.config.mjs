@@ -8,8 +8,10 @@
  * 100 KB) sat so far above the real sizes that moving recharts into the entry
  * would still have passed.
  *
- * Units: KB = 1024 bytes of `zlib.gzipSync(file, { level: 9 })` output. Only
- * `.js` chunks under `web/dist/assets` count (CSS and `.map` files do not).
+ * Units: KB = 1024 bytes of `zlib.gzipSync(file, { level: 9 })` output.
+ * Per-chunk budgets cover `.js` chunks under `web/dist/assets` only; the
+ * stylesheets index.html links count toward `totalInitial` alone. `.map`
+ * files never count.
  *
  * Baseline measured 2026-09-26 from `npm run build -w web` on origin/main
  * 542b542a2 (Vite 8 / rolldown, 175 JS chunks, 1041 KB gz in total).
@@ -31,10 +33,14 @@ export const BASELINE_KB = {
   // The `<script type="module">` chunk index.html loads (index-*.js).
   entry: 143.67,
   // Entry + every chunk index.html loads eagerly (57 files: the entry script
-  // plus every `<link rel="modulepreload">`). Catches growth that is spread
-  // across many small eager chunks, or moved from a vendor chunk into another
-  // eager chunk, which no per-chunk budget would notice.
-  totalInitial: 490.71,
+  // plus every `<link rel="modulepreload">`), plus the stylesheets it links
+  // (2 files: index-*.css + calendar-vendor-*.css, 39.59 KB) — they load and
+  // block render on every page. Catches growth that is spread across many
+  // small eager chunks, or moved from a vendor chunk into another eager chunk,
+  // which no per-chunk budget would notice.
+  // Recaptured 2026-09-26 when CSS joined the total: 490.70 JS + 39.59 CSS
+  // (the JS-only baseline was 490.71).
+  totalInitial: 530.29,
   // Keys are the output chunk names from VENDOR_CHUNKS in web/vite.config.ts.
   // Rolldown emits @sentry/react as TWO `sentry-*` chunks (53.8 + 34.5 KB);
   // every chunk sharing a vendor name is summed into one group.

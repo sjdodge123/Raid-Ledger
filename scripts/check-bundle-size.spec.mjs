@@ -51,6 +51,9 @@ const CLEAN = {
   'chunk-QWERTY12-EEEEEEEE.js': 2,
   'big-page-FFFFFFFF.js': 5,
   'small-page-GGGGGGGG.js': 1,
+  // CSS: index.html links index-*.css; the route stylesheet is lazy.
+  'index-ZZZZZZZZ.css': 1,
+  'lazy-route-YYYYYYYY.css': 1,
 };
 const EAGER = ['react-vendor-BBBBBBBB.js', 'sentry-CCCCCCCC.js', 'chunk-QWERTY12-EEEEEEEE.js'];
 
@@ -92,9 +95,10 @@ test('stableName strips the 8-char rolldown hash, including - and _ in it', () =
 });
 
 test('parseIndexHtml finds the module entry and modulepreloads only', () => {
-  const { entry, eager } = parseIndexHtml(indexHtml('index-AAAAAAAA.js', EAGER));
+  const { entry, eager, css } = parseIndexHtml(indexHtml('index-AAAAAAAA.js', EAGER));
   assert.equal(entry, 'index-AAAAAAAA.js');
   assert.deepEqual(eager, ['index-AAAAAAAA.js', ...EAGER]);
+  assert.deepEqual(css, ['index-ZZZZZZZZ.css'], 'the linked stylesheet is eager CSS');
 });
 
 test('an under-budget build exits 0 and prints the table', () => {
@@ -126,19 +130,33 @@ test('a missing dist, index.html or assets dir exits 1', () => {
   }
 });
 
-test('the eager total sums the entry plus every modulepreload, not lazy chunks', () => {
+test('the eager total sums the entry, every modulepreload and linked CSS, not lazy chunks', () => {
   const dist = makeDist();
   const result = checkBundle(dist, BUDGETS);
-  const expected = ['index-AAAAAAAA.js', ...EAGER].reduce((sum, f) => sum + gz(dist, f), 0);
-  assert.equal(result.eagerTotalBytes, expected, 'eager total must be entry + preloads only');
+  const eagerFiles = ['index-AAAAAAAA.js', ...EAGER, 'index-ZZZZZZZZ.css'];
+  const expected = eagerFiles.reduce((sum, f) => sum + gz(dist, f), 0);
+  assert.equal(result.eagerTotalBytes, expected, 'eager total must be entry + preloads + linked CSS only');
+  assert.equal(result.cssBytes, gz(dist, 'index-ZZZZZZZZ.css'), 'only the linked stylesheet counts as CSS');
   assert.equal(rowFor(result, 'total', 'initial load').bytes, expected);
-  assert.match(rowFor(result, 'total', 'initial load').chunk, /\[4 files\]/);
+  assert.match(rowFor(result, 'total', 'initial load').chunk, /\[4 js \+ 1 css\]/);
   assert.ok(!result.failures.length, `clean fixture failed: ${result.failures.map((r) => r.chunk)}`);
 });
 
 test('the total budget fails even when every chunk is within its own budget', () => {
   const result = checkBundle(makeDist(), { ...BUDGETS, totalInitialKB: 8 });
   assert.deepEqual(result.failures.map((r) => r.cls), ['total'], 'only the total row should fail');
+});
+
+test('linked CSS alone can push the initial load over budget; unlinked CSS never counts', () => {
+  // JS eager is 10 KB of the 20 KB total budget: a 12 KB linked stylesheet
+  // overruns it, while a 30 KB lazy route stylesheet (not linked) must not.
+  const overCss = checkBundle(makeDist({ ...CLEAN, 'index-ZZZZZZZZ.css': 12 }), BUDGETS);
+  assert.deepEqual(overCss.failures.map((r) => r.cls), ['total'], 'a 12 KB linked stylesheet must fail the total');
+  const bigLazyCss = checkBundle(makeDist({ ...CLEAN, 'lazy-route-YYYYYYYY.css': 30 }), BUDGETS);
+  assert.deepEqual(bigLazyCss.failures, [], 'an unlinked stylesheet must not count toward the initial load');
+  const noCss = { ...CLEAN };
+  delete noCss['index-ZZZZZZZZ.css'];
+  assert.throws(() => checkBundle(makeDist(noCss), BUDGETS), /missing asset\(s\): index-ZZZZZZZZ\.css/);
 });
 
 test('the two sentry-* chunks are summed and budgeted as one vendor group', () => {
@@ -157,13 +175,24 @@ test('lazy chunks use named/pattern budgets, else the default cap', () => {
   assert.equal(rowFor(result, 'shared', 'chunk-QWERTY12').budgetKB, 3);
   assert.equal(rowFor(result, 'lazy', 'small-page').budgetKB, 2);
   assert.deepEqual(result.failures.map((r) => r.chunk), ['brand-new-page-HHHHHHHH.js']);
+  assert.deepEqual(result.hints, [], 'every named entry matched, so there is no rename to suggest');
 });
 
-test('a budget entry that matches no chunk is reported as a stale note', () => {
+test('a budget entry that matches no chunk is reported as a warning', () => {
   const withoutBigPage = { ...CLEAN };
   delete withoutBigPage['big-page-FFFFFFFF.js'];
   const result = checkBundle(makeDist(withoutBigPage), BUDGETS);
-  assert.ok(result.notes.some((n) => n.includes('"big-page" matched no chunk')), result.notes.join('\n'));
+  assert.ok(result.warnings.some((n) => n.includes('"big-page" matched no chunk')), result.warnings.join('\n'));
+});
+
+test('a renamed named chunk: WARN names the stale entry and the FAIL says which entry to rename', () => {
+  const renamed = { ...CLEAN, 'big-page-v2-FFFFFFFF.js': 5 };
+  delete renamed['big-page-FFFFFFFF.js'];
+  const res = runCli(makeDist(renamed));
+  assert.equal(res.status, 1, `a 5 KB chunk on the 2 KB default cap must fail, got ${res.status}\n${res.stdout}`);
+  assert.match(res.stdout, /^WARN: budget entry "big-page" matched no chunk/m);
+  assert.match(res.stderr, /FAIL — 1 over budget: big-page-v2-FFFFFFFF\.js/);
+  assert.match(res.stderr, /^hint: big-page-v2-FFFFFFFF\.js is on the default lazy cap while "big-page" matched no chunk/m);
 });
 
 test('real budgets are the 2026-09-26 baseline + 15%, rounded up', () => {

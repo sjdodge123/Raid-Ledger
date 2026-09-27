@@ -13,13 +13,17 @@
  *   - shared — any other chunk index.html modulepreloads;
  *   - lazy   — everything else.
  * Shared and lazy chunks use their named budget, else the default lazy cap.
- * A `total` row sums the entry + every chunk index.html loads eagerly.
+ * A `total` row sums the entry + every chunk index.html loads eagerly, plus
+ * every stylesheet it links from `assets/` (render-blocking on every page, so
+ * it is part of the initial load even though no per-chunk budget covers CSS).
  *
  * Prints a table (chunk, class, gzip KB, budget, headroom). Exit 0 when every
  * row is within budget; exit 1 on any overrun, on a missing index.html /
  * assets dir / entry script, or on bad arguments — an empty build never passes.
  * `--all` lists every chunk; by default only budgeted rows, the five largest
- * default-cap chunks and any failure are listed.
+ * default-cap chunks and any failure are listed. A `WARN:` line names a budget
+ * entry that matched no chunk; if a default-cap chunk then fails, the FAIL
+ * names those entries so a renamed chunk's entry can be renamed with it.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,29 +53,33 @@ function attr(tag, name) {
   return m ? m[1] : null;
 }
 
-/** `/assets/x.js` (or `./assets/x.js`) → `x.js`; anything else → null. */
-function assetJs(ref) {
-  const m = ref?.match(/^(?:\.?\/)?assets\/([^/?#]+\.js)(?:[?#].*)?$/);
+/** `/assets/x.<ext>` (or `./assets/x.<ext>`) → `x.<ext>`; anything else → null. */
+function assetFile(ref, ext) {
+  const m = ref?.match(new RegExp(`^(?:\\.?/)?assets/([^/?#]+\\.${ext})(?:[?#].*)?$`));
   return m ? m[1] : null;
 }
 
 /**
- * Chunks index.html loads eagerly: the module entry script(s) and every
- * modulepreload link. External and inline scripts are ignored.
+ * What index.html loads eagerly: the module entry script(s) and every
+ * modulepreload link (`eager`), plus every `assets/` stylesheet (`css`).
+ * External and inline scripts are ignored.
  */
 export function parseIndexHtml(html) {
   let entry = null;
   const eager = new Set();
+  const css = new Set();
   for (const tag of html.match(/<(?:script|link)\b[^>]*>/gi) ?? []) {
     const isScript = /^<script/i.test(tag);
+    const rel = isScript ? null : attr(tag, 'rel');
+    const sheet = rel === 'stylesheet' ? assetFile(attr(tag, 'href'), 'css') : null;
+    if (sheet) css.add(sheet);
     const isModule = isScript && attr(tag, 'type') === 'module';
-    const isPreload = !isScript && attr(tag, 'rel') === 'modulepreload';
-    const file = assetJs(attr(tag, isScript ? 'src' : 'href'));
-    if (!file || !(isModule || isPreload)) continue;
+    const file = assetFile(attr(tag, isScript ? 'src' : 'href'), 'js');
+    if (!file || !(isModule || rel === 'modulepreload')) continue;
     if (isModule && !entry) entry = file;
     eager.add(file);
   }
-  return { entry, eager: [...eager] };
+  return { entry, eager: [...eager], css: [...css] };
 }
 
 /** Map of `.js` asset filename → gzip-9 bytes (source maps skipped). */
@@ -89,13 +97,15 @@ function readBuild(distDir) {
   const assetsDir = path.join(distDir, 'assets');
   if (!fs.existsSync(indexPath)) throw new BundleCheckError(`missing ${indexPath} — build web first`);
   if (!fs.existsSync(assetsDir)) throw new BundleCheckError(`missing ${assetsDir} — build web first`);
-  const { entry, eager } = parseIndexHtml(fs.readFileSync(indexPath, 'utf8'));
+  const { entry, eager, css } = parseIndexHtml(fs.readFileSync(indexPath, 'utf8'));
   const sizes = measureAssets(assetsDir);
   if (sizes.size === 0) throw new BundleCheckError(`no .js chunks in ${assetsDir}`);
   if (!entry) throw new BundleCheckError(`no <script type="module"> asset in ${indexPath}`);
-  const missing = eager.filter((f) => !sizes.has(f));
-  if (missing.length) throw new BundleCheckError(`index.html references missing chunk(s): ${missing.join(', ')}`);
-  return { entry, eager, sizes };
+  const cssPath = (f) => path.join(assetsDir, f);
+  const missing = [...eager.filter((f) => !sizes.has(f)), ...css.filter((f) => !fs.existsSync(cssPath(f)))];
+  if (missing.length) throw new BundleCheckError(`index.html references missing asset(s): ${missing.join(', ')}`);
+  const cssSizes = new Map(css.map((f) => [f, gzipSize(fs.readFileSync(cssPath(f)))]));
+  return { entry, eager, sizes, cssSizes };
 }
 
 function lazyBudget(name, budgets) {
@@ -133,37 +143,57 @@ function chunkRows({ entry, eager, sizes }, budgets, vendorFiles) {
   return rows.sort((a, b) => b.bytes - a.bytes);
 }
 
-function staleNotes(rows, budgets) {
+/** Budget entries (named lazy + vendor groups) that matched no chunk. */
+function unmatchedEntries(rows, budgets) {
   const used = new Set(rows.map((r) => r.named).filter(Boolean));
-  const notes = (budgets.lazyOverrides ?? [])
-    .filter((o) => !used.has(o))
-    .map((o) => `budget entry "${o.name ?? o.label}" matched no chunk — renamed or removed? prune it`);
+  const lazy = (budgets.lazyOverrides ?? []).filter((o) => !used.has(o)).map((o) => `"${o.name ?? o.label}"`);
   const groups = new Set(rows.filter((r) => r.cls === 'vendor').map((r) => stableName(r.files[0])));
-  for (const g of Object.keys(budgets.vendorGroupsKB ?? {})) {
-    if (!groups.has(g)) notes.push(`vendor group "${g}" matched no chunk`);
-  }
-  return notes;
+  const vendor = Object.keys(budgets.vendorGroupsKB ?? {})
+    .filter((g) => !groups.has(g))
+    .map((g) => `vendor group "${g}"`);
+  return [...lazy, ...vendor];
+}
+
+const warningFor = (entry) =>
+  `budget entry ${entry} matched no chunk — renamed or removed? rename it to the new chunk name, or prune it`;
+
+/**
+ * A chunk whose source module was renamed loses its named budget and falls to
+ * the small default cap, so it usually fails under its NEW name while the old
+ * entry goes unmatched. Name those entries on every default-cap failure.
+ */
+function renameHints(failures, unmatched) {
+  if (!unmatched.length) return [];
+  return failures
+    .filter((r) => (r.cls === 'lazy' || r.cls === 'shared') && !r.named)
+    .map((r) => `${r.chunk} is on the default lazy cap while ${unmatched.join(', ')} matched no chunk — ` +
+      'if it is that entry\'s chunk renamed, rename the entry in scripts/bundle-budget.config.mjs');
 }
 
 /**
  * Measure `distDir` against `budgets`. Returns `{ rows, eagerTotalBytes,
- * failures, notes }`; throws BundleCheckError when the build is unusable.
+ * cssBytes, failures, warnings, hints }`; throws BundleCheckError when the
+ * build is unusable. `eagerTotalBytes` includes the linked CSS (`cssBytes`).
  */
 export function checkBundle(distDir, budgets) {
   const build = readBuild(distDir);
-  const { entry, eager, sizes } = build;
+  const { entry, eager, sizes, cssSizes } = build;
   const vendors = vendorRows(sizes, budgets);
   const vendorFiles = new Set(vendors.flatMap((r) => r.files));
   const chunks = chunkRows(build, budgets, vendorFiles);
-  const eagerTotalBytes = eager.reduce((sum, f) => sum + sizes.get(f), 0);
+  const cssBytes = [...cssSizes.values()].reduce((sum, b) => sum + b, 0);
+  const eagerTotalBytes = eager.reduce((sum, f) => sum + sizes.get(f), 0) + cssBytes;
+  const totalLabel = `initial load [${eager.length} js + ${cssSizes.size} css]`;
   const rows = [
     row(entry, 'entry', sizes.get(entry), budgets.entryKB),
     ...vendors,
     ...chunks,
-    row(`initial load [${eager.length} files]`, 'total', eagerTotalBytes, budgets.totalInitialKB),
+    row(totalLabel, 'total', eagerTotalBytes, budgets.totalInitialKB),
   ];
   const failures = rows.filter((r) => !r.ok);
-  return { rows, eagerTotalBytes, failures, notes: staleNotes(rows, budgets) };
+  const unmatched = unmatchedEntries(rows, budgets);
+  const warnings = unmatched.map(warningFor);
+  return { rows, eagerTotalBytes, cssBytes, failures, warnings, hints: renameHints(failures, unmatched) };
 }
 
 const fmtKB = (bytes) => (bytes / KB).toFixed(1);
@@ -217,12 +247,13 @@ export async function main(argv) {
     const result = checkBundle(opts.dist, budgets);
     console.log(`Bundle size budget — ${opts.dist} (gzip -9, KB = 1024 B)\n`);
     console.log(formatTable(result.rows, { all: opts.all }));
-    for (const note of result.notes) console.log(`note: ${note}`);
+    for (const warning of result.warnings) console.log(`WARN: ${warning}`);
     if (!result.failures.length) {
       console.log('\nPASS — every chunk is within budget.');
       return 0;
     }
     console.error(`\nFAIL — ${result.failures.length} over budget: ${result.failures.map((r) => r.chunk).join(', ')}`);
+    for (const hint of result.hints) console.error(`hint: ${hint}`);
     console.error('Shrink the chunk, or raise its budget in scripts/bundle-budget.config.mjs and justify it in the PR.');
     return 1;
   } catch (err) {

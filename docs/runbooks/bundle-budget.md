@@ -6,8 +6,9 @@ dependency landing in the eager bundle fails the PR instead of reaching users.
 ## What is checked
 
 `node scripts/check-bundle-size.mjs` (from the repo root) reads `web/dist`,
-gzips every `.js` file under `web/dist/assets` at level 9 (`.map` and CSS do not
-count; 1 KB = 1024 bytes) and compares each against
+gzips every `.js` file under `web/dist/assets` at level 9 (`.map` files never
+count; CSS counts only toward the initial-load total; 1 KB = 1024 bytes) and
+compares each against
 `scripts/bundle-budget.config.mjs`. Chunks fall into four classes:
 
 | Class | What it is | Budget |
@@ -15,7 +16,7 @@ count; 1 KB = 1024 bytes) and compares each against
 | `entry` | The `<script type="module">` chunk `web/dist/index.html` loads | Its own |
 | `vendor` | Chunks named after a `VENDOR_CHUNKS` key in `web/vite.config.ts`. Chunks sharing a name are summed (rolldown emits `sentry` as two files) | One per group |
 | `lazy` / `shared` | Everything else: routes, charts, shared app code | Named entries for every chunk ≥ 10 KB today; a default cap for the rest, including new chunks |
-| `total` | Initial load: the entry plus every chunk `index.html` modulepreloads | One total |
+| `total` | Initial load: the entry, every chunk `index.html` modulepreloads, and every stylesheet it links (render-blocking on every page) | One total |
 
 Each budget is the size measured on 2026-09-26 plus 15% (`HEADROOM`). It is a
 ratchet against regressions, not a target. The check exits 1 on any overrun. It
@@ -47,15 +48,17 @@ initial load [57 files]     total      490.7      564.4  73.7 KB (13%)
 - **headroom** is budget minus size, with the percentage of the budget still
   free. A failing row reads `OVER by N KB`. The closing `FAIL —` line names every
   offending chunk.
-- `[N files]` marks a grouped row: a vendor group, or the initial-load total.
+- `[N files]` marks a grouped vendor row; the total row reads `[N js + M css]`.
 - Chunks under the default lazy cap are collapsed into one `… N more chunk(s)`
   line. Pass `--all` to list them.
-- A `note:` line flags a config entry that matched no chunk, for example a
+- A `WARN:` line names a config entry that matched no chunk, for example a
   vendor group that was renamed. It does not fail the check, but it means the
   config has drifted from the build, so fix the entry.
 
 A named chunk whose source module is renamed drops to the default cap, which
-is small, so the check usually fails on the new name. Rename its entry then.
+is small, so the check usually fails on the new name. The `WARN:` line names
+the old entry, and a `hint:` under the `FAIL —` line pairs the failing chunk
+with every unmatched entry. Rename that entry to the new chunk name.
 
 ## When the check fails
 
