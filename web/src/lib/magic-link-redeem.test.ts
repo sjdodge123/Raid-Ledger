@@ -101,6 +101,18 @@ describe('ROK-1366: startMagicLinkRedeem with no stored session', () => {
   });
 });
 
+/** A JWT-shaped fixture: only the (unverified) payload segment is read. */
+function jwtFor(sub: number, extra: Record<string, unknown> = {}): string {
+  const json = JSON.stringify({ sub, exp: 1, ...extra });
+  const payload = btoa(json).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+  return `hdr.${payload}.sig`;
+}
+
+const linkFor = (sub: number): string => jwtFor(sub, { magicLink: true });
+const USER_A = 1;
+const USER_B = 2;
+const ADMIN = 9;
+
 describe('ROK-1366 OQ6: a stored session decides whether to redeem', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -108,29 +120,96 @@ describe('ROK-1366 OQ6: a stored session decides whether to redeem', () => {
   });
 
   it('keeps a stored token that passes /auth/me and never redeems', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'still-valid');
-    localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-original');
+    const impersonated = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, impersonated);
+    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
     meReturns(200);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
-    await startMagicLinkRedeem(MAGIC);
+    await startMagicLinkRedeem(linkFor(ADMIN));
 
     expect(seen.calls).toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('still-valid');
-    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe('admin-original');
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(impersonated);
+    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe(jwtFor(ADMIN));
   });
 
-  it('redeems over a stored token that /auth/me rejects, ending any impersonation', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'expired');
-    localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-original');
+  it("redeems the admin's own link over an expired impersonation, ending it", async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
+    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
     meReturns(401);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
-    await startMagicLinkRedeem(MAGIC);
+    await startMagicLinkRedeem(linkFor(ADMIN));
 
     expect(seen.calls).toBe(1);
     expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
     expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBeNull();
+  });
+
+  it("redeems the same user's link over their own expired token", async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
+    meReturns(401);
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_A));
+
+    expect(seen.calls).toBe(1);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
+  });
+});
+
+describe('ROK-1366 review fix: a link never swaps the stored user for another (login-CSRF)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it("ignores user B's link over user A's expired token", async () => {
+    const stored = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+    meReturns(401);
+    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expect(seen.calls).toBe(0);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
+    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+  });
+
+  it("ignores another user's link when /auth/me is unreachable", async () => {
+    const stored = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+    server.use(http.get(`${API_BASE}/auth/me`, () => HttpResponse.error()));
+    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expect(seen.calls).toBe(0);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
+  });
+
+  it('ignores a link over a stored token whose user it cannot read', async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, 'not-a-jwt');
+    meReturns(401);
+    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expect(seen.calls).toBe(0);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('not-a-jwt');
+  });
+
+  it("ignores the impersonated user's link while an admin is impersonating", async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
+    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
+    meReturns(401);
+    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_A));
+
+    expect(seen.calls).toBe(0);
+    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe(jwtFor(ADMIN));
   });
 });
 

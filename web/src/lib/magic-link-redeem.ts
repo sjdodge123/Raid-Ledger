@@ -2,6 +2,7 @@ import { TokenResponseSchema, type RedeemMagicLinkDto } from '@raid-ledger/contr
 import { API_BASE_URL } from './config';
 import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './api/auth-storage-keys';
 import { clearSilentGuard, setAuthMethod } from './api/silent-reauth';
+import { readJwtSub } from './api/token-expiry';
 
 /**
  * ROK-1366: exchange a single-use magic-link token for a real session.
@@ -54,7 +55,24 @@ function adoptSession(accessToken: string): void {
   clearSilentGuard();
 }
 
+/**
+ * Review fix (login-CSRF): a link only ever signs in the person this browser
+ * already knows. That is the admin's own token while impersonating, else the
+ * stored access token, expired or not. With one stored, the link's
+ * unverified `sub` must match it — a stranger's link, or a stored token we
+ * cannot read, is ignored and `fetchCurrentUser` takes its normal refresh →
+ * login path, as main's `!getAuthToken()` guard did. The server still
+ * verifies the link; this only decides whether to try.
+ */
+function linkMatchesStoredUser(token: string): boolean {
+  const stored = localStorage.getItem(ORIGINAL_TOKEN_KEY) ?? localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (!stored) return true;
+  const storedSub = readJwtSub(stored);
+  return storedSub !== null && storedSub === readJwtSub(token);
+}
+
 async function runRedeem(token: string): Promise<void> {
+  if (!linkMatchesStoredUser(token)) return;
   if (await hasValidSession()) return;
   const accessToken = await postRedeem(token);
   if (accessToken) adoptSession(accessToken);

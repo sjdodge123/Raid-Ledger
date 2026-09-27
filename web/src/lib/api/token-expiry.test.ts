@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { isTokenStale } from './token-expiry';
+import { isTokenStale, readJwtSub } from './token-expiry';
 
 /** Encode an object as a base64url JWT segment (no padding). */
 function base64url(obj: Record<string, unknown>): string {
@@ -54,4 +54,20 @@ describe('isTokenStale (ROK-1409)', () => {
     it('treats a decodable token with no exp claim as NOT stale', () => {
         expect(isTokenStale(makeToken(undefined))).toBe(false);
     });
+});
+
+describe('readJwtSub (ROK-1366)', () => {
+  const seg = (o: unknown) => btoa(JSON.stringify(o)).replace(/=+$/, '');
+
+  it('reads a numeric or string sub as a string', () => {
+    expect(readJwtSub(`h.${seg({ sub: 7 })}.s`)).toBe('7');
+    expect(readJwtSub(`h.${seg({ sub: 'abc' })}.s`)).toBe('abc');
+  });
+
+  it('returns null for a missing sub or an undecodable token', () => {
+    expect(readJwtSub(`h.${seg({ exp: 1 })}.s`)).toBeNull();
+    expect(readJwtSub(`h.${seg(null)}.s`)).toBeNull();
+    expect(readJwtSub('not-a-jwt')).toBeNull();
+    expect(readJwtSub('h.!!!.s')).toBeNull();
+  });
 });
