@@ -16,7 +16,10 @@ interface SignupItem {
     status: string;
     confirmationStatus: string;
     isAnonymous?: boolean;
+    /** Anonymous Discord signups (ROK-137): the API fills these, and sends user.avatar as null */
+    discordUserId?: string | null;
     discordUsername?: string | null;
+    discordAvatarHash?: string | null;
     /** ROK-847: Preferred roles the player is willing to play */
     preferredRoles?: string[] | null;
     user: {
@@ -64,10 +67,17 @@ function RunningLateBadge({ signup }: { signup: Pick<SignupItem, 'runningLate' |
     );
 }
 
-/** Anonymous Discord signup → the ROK-381 guest profile, the same link its roster slot card uses (ROK-1694). */
+/**
+ * Anonymous Discord signup → the ROK-381 guest profile, the same link its roster slot card uses (ROK-1694).
+ * The API hardcodes `user.avatar: null` for these; the real hash is `discordAvatarHash` (the slot's `player.avatar`).
+ */
 function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
     const name = signup.discordUsername ?? signup.user.username;
-    const { to, state } = guestProfileLink({ username: name, discordId: signup.user.discordId, avatarHash: signup.user.avatar });
+    const { to, state } = guestProfileLink({
+        username: name,
+        discordId: signup.discordUserId ?? signup.user.discordId,
+        avatarHash: signup.discordAvatarHash ?? signup.user.avatar,
+    });
     return (
         <Link to={to} state={state} className="group inline-flex min-w-0 rounded">
             <AnonymousDiscordName name={name} className="flex items-center gap-1.5 text-sm text-muted group-hover:text-foreground transition-colors" />

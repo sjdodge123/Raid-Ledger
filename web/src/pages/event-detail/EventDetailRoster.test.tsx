@@ -224,13 +224,19 @@ describe('EventDetailRoster — running-late badge (ROK-1379 follow-up)', () => 
     });
 });
 
-/** ROK-1694: an anonymous Discord signup (user_id NULL) — the API sends user.id 0. */
+/**
+ * ROK-1694: an anonymous Discord signup (user_id NULL), shaped like the API sends it —
+ * user.id 0 and user.avatar hardcoded null, with the real Discord avatar hash in the
+ * sibling `discordAvatarHash` (signups-roster.helpers.ts / signup-response.helpers.ts).
+ */
 function createAnonymousSignup(overrides: Record<string, unknown> = {}) {
     return createSignup({
         id: 99,
         user: { id: 0, username: 'DiscordGuy', avatar: null, discordId: '999' },
         isAnonymous: true,
+        discordUserId: '999',
         discordUsername: 'DiscordGuy',
+        discordAvatarHash: 'abc123',
         ...overrides,
     });
 }
@@ -239,8 +245,11 @@ function profileLinksTo(container: HTMLElement, userId: number) {
     return container.querySelectorAll(`a[href="/users/${userId}"]`);
 }
 
-/** The ROK-381 guest route state a roster slot card passes for the same account-less signup. */
-const GUEST_STATE = { guest: true, username: 'DiscordGuy', discordId: '999', avatarHash: null };
+/**
+ * The ROK-381 guest route state a roster slot card passes for the same account-less signup —
+ * its `avatarHash` is the slot's `player.avatar`, which the API fills from `discordAvatarHash`.
+ */
+const GUEST_STATE = { guest: true, username: 'DiscordGuy', discordId: '999', avatarHash: 'abc123' };
 
 function ProfileProbe() {
     const location = useLocation();
