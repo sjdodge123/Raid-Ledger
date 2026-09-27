@@ -21,6 +21,7 @@ import {
   truncateAllTables,
 } from '../../common/testing/integration-helpers';
 import { SettingsService } from '../../settings/settings.service';
+import { verifyPurposeJwt } from '../../auth/purpose-jwt.helpers';
 import { LfgComposerListener } from './lfg-composer.listener';
 
 /** The wire id the pinned card sends — the smoke pins the same literal. */
@@ -166,6 +167,7 @@ interface MagicClaims {
   magicLink: boolean;
   iat: number;
   exp: number;
+  jti: string;
 }
 
 describe('LfgComposerListener lfgc:view against the database (ROK-1685 AC5)', () => {
@@ -180,10 +182,28 @@ describe('LfgComposerListener lfgc:view against the database (ROK-1685 AC5)', ()
 
     expect([linkA.path, linkB.path]).toEqual([gamesUrl, gamesUrl]);
     expect([linkA.token !== null, linkB.token !== null]).toEqual([true, true]);
-    const claimsA = jwt.verify<MagicClaims>(linkA.token ?? '');
-    const claimsB = jwt.verify<MagicClaims>(linkB.token ?? '');
-    expect(claimsA).toMatchObject({ sub: a.userId, magicLink: true });
-    expect(claimsB).toMatchObject({ sub: b.userId, magicLink: true });
+    // ROK-1366 D1: magic tokens are signed with the purpose-derived secret,
+    // so the plain JWT_SECRET `jwt.verify` would reject them by design.
+    const claimsA = verifyPurposeJwt<MagicClaims>(
+      jwt,
+      'magic-link',
+      linkA.token ?? '',
+    );
+    const claimsB = verifyPurposeJwt<MagicClaims>(
+      jwt,
+      'magic-link',
+      linkB.token ?? '',
+    );
+    expect(claimsA).toMatchObject({
+      sub: a.userId,
+      magicLink: true,
+      jti: expect.any(String),
+    });
+    expect(claimsB).toMatchObject({
+      sub: b.userId,
+      magicLink: true,
+      jti: expect.any(String),
+    });
     expect(claimsA.exp - claimsA.iat).toBe(15 * 60);
   });
 

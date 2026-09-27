@@ -46,9 +46,10 @@ function jwtSubject(jwt: string): number {
 
 /**
  * One distinct user per project. A targeted run starts the desktop, mobile and
- * tablet copies of this file at once, and a magic token carries no jti (D3):
- * two links minted for the same user in the same second are byte-identical,
- * so the first redeem would spend the others' link and they would 401.
+ * tablet copies of this file at once. Every magic token now carries a random
+ * jti, so same-second mints for one user no longer collide — distinct users
+ * are kept anyway, so each project's replay check (B) only ever sees its own
+ * user's single-use link spent.
  * Fixture slots 8 and 9 are used by no other smoke spec; the fixture upsert
  * keeps them active and onboarded, so AuthGuard never detours to /onboarding.
  */
