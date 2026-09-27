@@ -15,7 +15,6 @@
 
 interface JwtPayload {
   exp?: unknown;
-  sub?: unknown;
 }
 
 /** Decode a base64url segment to its UTF-8 string, or null if it can't. */
@@ -47,16 +46,6 @@ function readPayload(token: string): JwtPayload | null {
 function readExp(token: string): number | null {
   const exp = readPayload(token)?.exp;
   return typeof exp === 'number' ? exp : null;
-}
-
-/**
- * The UNVERIFIED `sub` of a JWT as a string, or null if it has none or can't
- * be decoded (ROK-1366). Only for deciding whether to try something the
- * server then verifies — never for authz.
- */
-export function readJwtSub(token: string): string | null {
-  const sub = readPayload(token)?.sub;
-  return typeof sub === 'number' || typeof sub === 'string' ? String(sub) : null;
 }
 
 /**

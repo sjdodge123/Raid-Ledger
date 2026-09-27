@@ -158,58 +158,62 @@ describe('ROK-1366 OQ6: a stored session decides whether to redeem', () => {
   });
 });
 
-describe('ROK-1366 review fix: a link never swaps the stored user for another (login-CSRF)', () => {
+/**
+ * OQ6 (operator ruling 2026-09-27): only a stored token that still passes
+ * /auth/me blocks a redeem. A missing, expired, unreadable or unverifiable one
+ * does not — whoever the link is for.
+ */
+describe('ROK-1366 OQ6: an expired or unverifiable stored token never blocks a redeem', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
   });
 
-  it("ignores user B's link over user A's expired token", async () => {
-    const stored = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+  it("redeems user B's link over user A's expired token", async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
     meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
-    expect(seen.calls).toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
-    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+    expect(seen.calls, "an expired session of another user must not block the link").toBe(1);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
+    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('magic');
   });
 
-  it("ignores another user's link when /auth/me is unreachable", async () => {
-    const stored = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+  it('redeems when /auth/me is unreachable (the stored session cannot be shown valid)', async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
     server.use(http.get(`${API_BASE}/auth/me`, () => HttpResponse.error()));
-    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
-    expect(seen.calls).toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
+    expect(seen.calls, 'an unverifiable stored session must not block the link').toBe(1);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
   });
 
-  it('ignores a link over a stored token whose user it cannot read', async () => {
+  it('redeems over a stored token whose user it cannot read', async () => {
     localStorage.setItem(ACCESS_TOKEN_KEY, 'not-a-jwt');
     meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
-    expect(seen.calls).toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('not-a-jwt');
+    expect(seen.calls, 'an unreadable, invalid stored token must not block the link').toBe(1);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
   });
 
-  it("ignores the impersonated user's link while an admin is impersonating", async () => {
+  it("redeems the impersonated user's link over an expired impersonation, ending it", async () => {
     localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
     localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
     meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'attacker.session.jwt' });
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_A));
 
-    expect(seen.calls).toBe(0);
-    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe(jwtFor(ADMIN));
+    expect(seen.calls, 'an expired impersonation must not block the link').toBe(1);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
+    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBeNull();
   });
 });
 
