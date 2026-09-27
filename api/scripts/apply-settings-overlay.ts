@@ -19,12 +19,13 @@
  *     env-spin injects into the container at `docker run` time.
  *
  * Flags:
- *   --identity-only  apply ONLY the slot identity (IDENTITY_KEYS) and skip
- *                    every other key. `rl_env_deploy` passes it when the
- *                    laptop `sync_settings` succeeded: a fresh sync wins over
- *                    the VM bundle for shared keys (operator ruling
- *                    2026-09-27). Without it every key is applied, which is
- *                    the laptop-less path (sync failed or was skipped).
+ *   --sync-wins  the laptop's app_settings just landed (sync_settings or
+ *                clone_prod succeeded), so they win over the VM bundle
+ *                (operator ruling 2026-09-27): IDENTITY_KEYS are UPSERTed,
+ *                every other key is INSERTed only if absent (ON CONFLICT DO
+ *                NOTHING) — a synced value is kept, and the bundle still fills
+ *                a key the laptop DB lacked. Without it every key is UPSERTed,
+ *                the laptop-less path (sync failed or was skipped).
  *
  * Output: ONE line of JSON on stdout — key NAMES only, never values. The
  * orchestrator captures this and it lands in agent transcripts.
@@ -61,7 +62,7 @@ const KNOWN_SETTING_KEYS: ReadonlySet<string> = new Set(
 );
 
 /**
- * Keys the overlay owns even over a fresh laptop sync: the slot's Discord
+ * Keys the overlay UPSERTs even over a fresh laptop sync: the slot's Discord
  * identity plus `demo_mode`, which every fleet env needs. KEEP IN SYNC with
  * NON_CREDENTIAL_KEYS in tools/mcp-rl-fleet/src/tools/env-settings-overlay.ts.
  */
@@ -72,14 +73,14 @@ export const IDENTITY_KEYS: ReadonlySet<string> = new Set([
 ]);
 
 export interface OverlayArgs {
-  identityOnly: boolean;
+  syncWins: boolean;
 }
 
 /** Parse the script's argv (after `node <script>`). Unknown flags throw. */
 export function parseOverlayArgs(argv: string[]): OverlayArgs {
-  const args: OverlayArgs = { identityOnly: false };
+  const args: OverlayArgs = { syncWins: false };
   for (const arg of argv) {
-    if (arg === '--identity-only') args.identityOnly = true;
+    if (arg === '--sync-wins') args.syncWins = true;
     else throw new Error(`unknown argument: ${arg}`);
   }
   return args;
@@ -144,68 +145,109 @@ export function buildOverlayFromEnv(
 
 export interface OverlaySummary {
   ok: true;
+  /** UPSERTed: the value now in the env is the overlay's. */
   applied: string[];
   count: number;
-  skipped: string[];
-  skipped_count: number;
-  identity_only: boolean;
+  /** --sync-wins only: bundle keys the synced DB lacked, so the bundle filled them. */
+  inserted_if_absent: string[];
+  inserted_count: number;
+  /** --sync-wins only: bundle keys the sync had already written, left as synced. */
+  kept_synced: string[];
+  kept_count: number;
+  sync_wins: boolean;
 }
 
-/**
- * Summarize an overlay run as key NAMES only — never the values. `skipped`
- * names the keys an identity-only run left to the laptop sync.
- */
+export interface SummaryOptions {
+  insertedIfAbsent?: string[];
+  keptSynced?: string[];
+  syncWins?: boolean;
+}
+
+/** Summarize an overlay run as key NAMES only — never the values. */
 export function summarizeOverlay(
   overlay: OverlayMap,
-  opts: { skipped?: string[]; identityOnly?: boolean } = {},
+  opts: SummaryOptions = {},
 ): OverlaySummary {
-  const skipped = opts.skipped ?? [];
-  const applied = Object.keys(overlay).filter((k) => !skipped.includes(k));
+  const inserted = opts.insertedIfAbsent ?? [];
+  const kept = opts.keptSynced ?? [];
+  const applied = Object.keys(overlay).filter(
+    (k) => !inserted.includes(k) && !kept.includes(k),
+  );
   return {
     ok: true,
     applied,
     count: applied.length,
-    skipped,
-    skipped_count: skipped.length,
-    identity_only: opts.identityOnly === true,
+    inserted_if_absent: inserted,
+    inserted_count: inserted.length,
+    kept_synced: kept,
+    kept_count: kept.length,
+    sync_wins: opts.syncWins === true,
   };
 }
 
 export interface ApplyOverlayResult {
   applied: string[];
-  skipped: string[];
+  inserted_if_absent: string[];
+  kept_synced: string[];
+}
+
+type OverlayDb = ReturnType<typeof drizzle<typeof schema>>;
+
+async function upsertSetting(db: OverlayDb, key: string, value: string) {
+  const encryptedValue = encrypt(value);
+  await db
+    .insert(appSettings)
+    .values({ key, encryptedValue, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: { encryptedValue, updatedAt: new Date() },
+    });
+}
+
+/** INSERT … ON CONFLICT DO NOTHING; true when the row was absent and written. */
+async function insertIfAbsent(
+  db: OverlayDb,
+  key: string,
+  value: string,
+): Promise<boolean> {
+  const rows = await db
+    .insert(appSettings)
+    .values({ key, encryptedValue: encrypt(value), updatedAt: new Date() })
+    .onConflictDoNothing({ target: appSettings.key })
+    .returning({ key: appSettings.key });
+  return rows.length > 0;
 }
 
 /**
- * UPSERT each overlay entry into `app_settings`, encrypting with the same
+ * Write each overlay entry into `app_settings`, encrypting with the same
  * `encrypt()` the SettingsService uses (JWT_SECRET-derived key), so the
- * running API can decrypt the rows it just received. With `identityOnly`,
- * every key outside IDENTITY_KEYS is skipped so a stale VM bundle cannot
- * overwrite the fresher values a successful laptop sync just copied.
+ * running API can decrypt the rows it just received.
+ *
+ * With `syncWins`, only IDENTITY_KEYS are UPSERTed; every other key is
+ * inserted only where the synced DB has no row, so a stale VM bundle cannot
+ * overwrite a fresher synced value but still fills a key the laptop lacked.
  */
 export async function applyOverlay(
-  db: ReturnType<typeof drizzle<typeof schema>>,
+  db: OverlayDb,
   overlay: OverlayMap,
-  opts: { identityOnly?: boolean } = {},
+  opts: { syncWins?: boolean } = {},
 ): Promise<ApplyOverlayResult> {
-  const applied: string[] = [];
-  const skipped: string[] = [];
+  const res: ApplyOverlayResult = {
+    applied: [],
+    inserted_if_absent: [],
+    kept_synced: [],
+  };
   for (const [key, value] of Object.entries(overlay)) {
-    if (opts.identityOnly && !IDENTITY_KEYS.has(key)) {
-      skipped.push(key);
-      continue;
+    if (!opts.syncWins || IDENTITY_KEYS.has(key)) {
+      await upsertSetting(db, key, value);
+      res.applied.push(key);
+    } else if (await insertIfAbsent(db, key, value)) {
+      res.inserted_if_absent.push(key);
+    } else {
+      res.kept_synced.push(key);
     }
-    const encryptedValue = encrypt(value);
-    await db
-      .insert(appSettings)
-      .values({ key, encryptedValue, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: appSettings.key,
-        set: { encryptedValue, updatedAt: new Date() },
-      });
-    applied.push(key);
   }
-  return { applied, skipped };
+  return res;
 }
 
 /** Read all of stdin. Returns '' when stdin is a TTY or closed immediately. */
@@ -231,24 +273,34 @@ export function mergeOverlays(
   return { ...fromEnv, ...fromPayload };
 }
 
-async function main(): Promise<void> {
+/**
+ * The script body. `argv` and `readInput` are parameters so the argv → mode
+ * wiring is testable without a container or a real stdin.
+ */
+export async function main(
+  argv: string[] = process.argv.slice(2),
+  readInput: () => Promise<string> = readStdin,
+): Promise<void> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
     console.error('DATABASE_URL is required');
     process.exit(1);
   }
-  const { identityOnly } = parseOverlayArgs(process.argv.slice(2));
+  const { syncWins } = parseOverlayArgs(argv);
   const overlay = mergeOverlays(
     buildOverlayFromEnv(process.env),
-    parseOverlayPayload(await readStdin()),
+    parseOverlayPayload(await readInput()),
   );
   const client = postgres(databaseUrl, { max: 1 });
   try {
     const db = drizzle(client, { schema });
-    const { skipped } = await applyOverlay(db, overlay, { identityOnly });
-    console.log(
-      JSON.stringify(summarizeOverlay(overlay, { skipped, identityOnly })),
-    );
+    const res = await applyOverlay(db, overlay, { syncWins });
+    const summary = summarizeOverlay(overlay, {
+      insertedIfAbsent: res.inserted_if_absent,
+      keptSynced: res.kept_synced,
+      syncWins,
+    });
+    console.log(JSON.stringify(summary));
   } finally {
     await client.end({ timeout: 5 });
   }
