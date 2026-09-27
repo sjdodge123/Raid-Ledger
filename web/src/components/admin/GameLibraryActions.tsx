@@ -20,11 +20,11 @@ interface GameActionButtonsProps {
 
 type ButtonSize = 'sm' | 'md';
 
-/** Ghost icon Button tinted by a semantic token (no warning/success variant exists). */
-const TONE = {
-    success: 'text-success hover:text-success',
-    warning: 'text-warning hover:text-warning',
-} as const;
+/**
+ * Soft icon tiles: Hide is `warning-soft`, Unban/Unhide `success-soft`, so they match the
+ * `destructive-soft` Remove tile beside them in shape (a bordered tint, not a bare ghost icon).
+ */
+const TONE = { success: 'success-soft', warning: 'warning-soft' } as const;
 
 const ICON_PATHS = {
     unban: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
@@ -49,7 +49,7 @@ function ToneButton({ label, tone, size, onClick, disabled, paths }: {
     label: string; tone: keyof typeof TONE; size: ButtonSize; onClick: () => void; disabled: boolean; paths: readonly string[];
 }) {
     return (
-        <Button iconOnly variant="ghost" size={size} className={TONE[tone]} onClick={onClick} disabled={disabled}
+        <Button iconOnly variant={TONE[tone]} size={size} onClick={onClick} disabled={disabled}
             title={label} aria-label={label}>
             <Icon paths={paths} />
         </Button>

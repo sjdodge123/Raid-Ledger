@@ -100,17 +100,13 @@ export function JobCard({ job, tz, onViewHistory, onEditSchedule, onRun, onPause
     );
 }
 
-/** Warning-/success-soft on the ghost Button (no such variants exist): token tints, flip with the scheme. */
-const WARNING_SOFT = 'text-warning hover:text-warning bg-warning/10 hover:bg-warning/20 border border-warning/30';
-const SUCCESS_SOFT = 'text-success hover:text-success bg-success/10 hover:bg-success/20 border border-success/30';
-
 function PauseResumeButton({ paused, onPause, onResume, isPausing, isResuming }: {
     paused: boolean; onPause: () => void; onResume: () => void; isPausing: boolean; isResuming: boolean;
 }) {
     if (paused) {
-        return <Button size="sm" variant="ghost" className={SUCCESS_SOFT} onClick={onResume} disabled={isResuming}>Resume</Button>;
+        return <Button size="sm" variant="success-soft" onClick={onResume} disabled={isResuming}>Resume</Button>;
     }
-    return <Button size="sm" variant="ghost" className={WARNING_SOFT} onClick={onPause} disabled={isPausing}>Pause</Button>;
+    return <Button size="sm" variant="warning-soft" onClick={onPause} disabled={isPausing}>Pause</Button>;
 }
 
 /** Action buttons row for a job card */
@@ -119,7 +115,7 @@ function JobCardActions({ job, onViewHistory, onEditSchedule, onRun, onPause, on
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-edge/30">
             <Button size="sm" variant="secondary" onClick={onViewHistory}>History</Button>
             <Button size="sm" variant="secondary" onClick={onEditSchedule}>Schedule</Button>
-            <Button size="sm" variant="ghost" className={SUCCESS_SOFT} onClick={onRun} disabled={isRunning}>
+            <Button size="sm" variant="success-soft" onClick={onRun} disabled={isRunning}>
                 {isRunning ? 'Running...' : 'Run Now'}
             </Button>
             <div className="flex-1" />

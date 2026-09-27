@@ -153,9 +153,6 @@ function BackupTable({ filtered, tz, onRestore, onDelete }: {
     );
 }
 
-/** Warning-soft on the ghost Button (no warning variant exists): token tint, flips with the scheme. */
-const WARNING_SOFT = 'text-warning hover:text-warning bg-warning/10 hover:bg-warning/20 border border-warning/30';
-
 function BackupRow({ backup, tz, onRestore, onDelete }: { backup: BackupFileDto; tz: string; onRestore: (b: BackupFileDto) => void; onDelete: (b: BackupFileDto) => void }): JSX.Element {
     return (
         <tr className="hover:bg-surface/30 transition-colors">
@@ -168,7 +165,7 @@ function BackupRow({ backup, tz, onRestore, onDelete }: { backup: BackupFileDto;
             <td className="px-4 py-3 text-muted hidden md:table-cell">{formatSize(backup.sizeBytes)}</td>
             <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                    <Button size="sm" variant="ghost" className={WARNING_SOFT} onClick={() => onRestore(backup)}>Restore</Button>
+                    <Button size="sm" variant="warning-soft" onClick={() => onRestore(backup)}>Restore</Button>
                     <Button size="sm" variant="destructive-soft" onClick={() => onDelete(backup)}>Delete</Button>
                 </div>
             </td>
