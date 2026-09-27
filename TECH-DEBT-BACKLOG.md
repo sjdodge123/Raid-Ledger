@@ -1924,3 +1924,9 @@ same day (#1278, #1279, #1280).
   - **Why it's pre-existing:** the branch doesn't touch Playwright, and the slot-1 gate on the old `node_modules` passed the same suite that night.
   - **Current state:** slot 3's runner is in the drifted state now.
   - **Suggested:** bump the runner image's baked Playwright to the repo's pinned minor as an rl-infra image update. Until then, run `npx playwright install chromium` on a runner right after any `npm ci` there.
+
+### 2026-09-27 — feat/rok-1366-magic-link-hardening (surfaced during fleet gate 8ed3cb1dfed3)
+- **[med, time-of-day flake, pre-existing]** `scripts/smoke/calendar.smoke.spec.ts:282-290`: the ROK-1315 test "gameless event remains visible after the user picks \"None\"" failed on desktop and tablet with `expect(locator).toBeVisible() failed — .week-event-block … element not found`.
+  - Cause: `sundayOf()` computes the week with `getUTC*`, but the calendar renders in the browser's local timezone (`CalendarView.tsx:52-56`, `calendar-view.utils.ts:49`), and the fleet runners set `TZ: America/Denver` (`rl-infra/docker-compose.yml:59,360`). Every week it fails Sun 04:00–06:00Z (05:00–07:00Z in winter) and Sat 22:00–24:00Z. Main CI runs in UTC and stays green.
+  - Investigation: `planning-artifacts/INV-rok-1366-calendar.md`.
+  - Suggested: compute the week in the browser (`page.evaluate` with local `getDay`) or navigate to `?view=week&date=<local date>`.
