@@ -15,6 +15,17 @@
 -- fresh database and on any database that ran 0176/0174. The urgency CHECK is
 -- the CURRENT definition from 0186 (with 'tonight'), NOT 0174's — re-adding the
 -- 0174 form would reject live rows. Self-contained: no app-side data needed.
+--
+-- The final block back-fills 0176's and 0174's rows in
+-- drizzle.__drizzle_migrations (hash = sha256 of each file, created_at = its
+-- journal `when`) when absent. The migrator never writes a row for a skipped
+-- entry, so without this the restore drill's journal-hashes-present check
+-- fails on every prod dump and the boot check counts prod as a partial apply.
+-- Both `when`s are older than 0193's, so 0193 stays the newest row. The row
+-- commits in the migrator's single transaction together with the DDL above.
+-- The to_regclass guard is an OUTER IF on purpose: scripts/validate-migrations.sh
+-- applies files through psql with no drizzle schema, and an IF condition that
+-- names drizzle.__drizzle_migrations would fail to plan there.
 CREATE TABLE IF NOT EXISTS "lfg_invites" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"recipient_user_id" integer NOT NULL,
@@ -49,5 +60,17 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lfg_intents_ttl_minutes_check' AND conrelid = 'public.lfg_intents'::regclass) THEN
     ALTER TABLE "lfg_intents" ADD CONSTRAINT "lfg_intents_ttl_minutes_check" CHECK ("lfg_intents"."ttl_minutes" IS NULL OR "lfg_intents"."ttl_minutes" IN (30, 60));
+  END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  IF to_regclass('drizzle.__drizzle_migrations') IS NOT NULL THEN
+    IF NOT EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = '4a31d8616170dce35514a0c7bd091ea79d0453d2f14ef4bc85d3a60e14c0b267') THEN
+      INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('4a31d8616170dce35514a0c7bd091ea79d0453d2f14ef4bc85d3a60e14c0b267', 1788754699835); -- 0176_lfg_invites
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM drizzle.__drizzle_migrations WHERE hash = '8dd41f6edbbd43f863df3468ec47c176f66f301cd0f0c7cf8d021f498989363d') THEN
+      INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('8dd41f6edbbd43f863df3468ec47c176f66f301cd0f0c7cf8d021f498989363d', 1788655926072); -- 0174_lfg_intent_urgency
+    END IF;
   END IF;
 END $$;
