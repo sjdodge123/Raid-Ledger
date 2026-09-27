@@ -8,27 +8,29 @@ import { Toaster } from 'sonner';
 import { useThemeStore } from './stores/theme-store';
 import { useConnectivityStore } from './stores/connectivity-store';
 import { queryClient } from './lib/query-client';
-import { getAuthToken, setAuthToken, getCachedUser, fetchCurrentUser } from './hooks/use-auth';
+import { getAuthToken, getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { Layout } from './components/layout';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 import { ThemeParticles } from './components/ui/ThemeParticles';
 import { CHUNK_RELOAD_KEY } from './lazy-routes';
-import { readMagicLinkToken, hasMagicLinkToken, stripMagicLinkToken } from './lib/magic-link';
+import { takeMagicLinkToken } from './lib/magic-link';
+import { startMagicLinkRedeem, isMagicLinkRedeemPending } from './lib/magic-link-redeem';
 import { AppRoutes } from './app-routes';
 
-// ROK-657: Consume magic link token from URL before React renders.
-// ROK-1366: read the fragment first; `?token=` stays supported for links
-// already sitting in Discord.
-const _magicLinkToken = readMagicLinkToken(window.location);
-if (_magicLinkToken && !getAuthToken()) {
-  setAuthToken(_magicLinkToken);
-}
+// ROK-657/1366: take the single-use magic-link token from the URL fragment
+// and strip it before React renders (the query string is never touched —
+// `?token=` belongs to the join page). The token is exchanged for a session
+// by POST, never stored; fetchCurrentUser awaits the exchange. It is skipped
+// only when a stored session still passes /auth/me (OQ6).
+const _magicLinkToken = takeMagicLinkToken(window);
+if (_magicLinkToken) void startMagicLinkRedeem(_magicLinkToken);
 
-// Seed auth cache from localStorage for instant return visits.
+// Seed auth cache from localStorage for instant return visits — but not while
+// a magic link may be swapping in a different user.
 const _cachedUser = getCachedUser();
-if (_cachedUser && getAuthToken()) {
+if (_cachedUser && getAuthToken() && !_magicLinkToken) {
   queryClient.setQueryData(['auth', 'me'], _cachedUser);
 }
 
@@ -39,20 +41,6 @@ import './plugins/wow/register';
 import './plugins/discord/register';
 import './plugins/ai/register';
 import './App.css';
-
-/** Strip the magic-link token from the URL after consumption (ROK-657/1366) */
-function MagicLinkCleanup() {
-  const { search, pathname, hash } = useLocation();
-
-  useEffect(() => {
-    const location = { pathname, search, hash };
-    if (hasMagicLinkToken(location)) {
-      window.history.replaceState(null, '', stripMagicLinkToken(location));
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  return null;
-}
 
 /** Scroll to top on PUSH navigations */
 function ScrollToTop() {
@@ -81,7 +69,7 @@ function useAppBootstrap() {
   }, [startPolling]);
 
   useEffect(() => {
-    if (getAuthToken()) {
+    if (getAuthToken() || isMagicLinkRedeemPending()) {
       void queryClient.prefetchQuery({
         queryKey: ['auth', 'me'],
         queryFn: fetchCurrentUser,
@@ -99,7 +87,6 @@ function App() {
     <StartupGate>
       <ThemeParticles />
       <BrowserRouter>
-        <MagicLinkCleanup />
         <ScrollToTop />
         <Toaster
           position="top-right"

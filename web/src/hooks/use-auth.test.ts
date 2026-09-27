@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
-import { getAuthToken, setAuthToken, useAuth } from './use-auth';
+import { http, HttpResponse } from 'msw';
+import { server } from '../test/mocks/server';
+import { fetchCurrentUser, getAuthToken, setAuthToken, useAuth } from './use-auth';
+import { startMagicLinkRedeem } from '../lib/magic-link-redeem';
 
 const TOKEN_KEY = 'raid_ledger_token';
 
@@ -90,5 +93,40 @@ describe('useAuth login — events cache invalidation (ROK-691)', () => {
 
         invalidateSpy.mockRestore();
         vi.restoreAllMocks();
+    });
+});
+
+describe('ROK-1366: fetchCurrentUser awaits a pending magic-link redeem', () => {
+    const API = 'http://localhost:3000';
+    const redeemedUser = { id: 7, username: 'Linked', discordId: '7', displayName: null, avatar: null, customAvatarUrl: null, steamId: null, onboardingCompletedAt: null };
+
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        localStorage.clear();
+        sessionStorage.clear();
+    });
+
+    it('decides only after the redeem settles, then uses the minted session', async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(
+            http.post(`${API}/auth/redeem-magic-link`, async () => {
+                await gate;
+                return HttpResponse.json({ access_token: 'session.jwt' });
+            }),
+            http.get(`${API}/auth/me`, ({ request }) =>
+                request.headers.get('authorization') === 'Bearer session.jwt'
+                    ? HttpResponse.json(redeemedUser)
+                    : HttpResponse.json({}, { status: 401 }),
+            ),
+        );
+
+        const redeem = startMagicLinkRedeem('magic.jwt.raw');
+        const userPromise = fetchCurrentUser();
+        release();
+        await redeem;
+
+        await expect(userPromise).resolves.toMatchObject({ id: 7, username: 'Linked' });
+        expect(getAuthToken()).toBe('session.jwt');
     });
 });

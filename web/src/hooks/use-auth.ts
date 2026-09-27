@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../lib/config';
 import { ensureFreshToken } from '../lib/api/refresh-client';
 import { clearSilentGuard, clearAuthMethod, getAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
 import { ACCESS_TOKEN_KEY as TOKEN_KEY, ORIGINAL_TOKEN_KEY } from '../lib/api/auth-storage-keys';
+import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
 import type { UserRole } from '@raid-ledger/contract';
 
 const USER_CACHE_KEY = 'raid_ledger_user_cache';
@@ -112,6 +113,9 @@ function handleRefreshFailure(): null {
 }
 
 export async function fetchCurrentUser(): Promise<User | null> {
+    // ROK-1366: a magic-link exchange started at module load may still be in
+    // flight — decide only once it has settled, so a deep link lands signed in.
+    await awaitMagicLinkRedeem();
     let token = getAuthToken();
     if (!token) {
         // ROK-1353: no access token but a refresh cookie may still be live —
