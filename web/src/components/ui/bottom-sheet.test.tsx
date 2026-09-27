@@ -574,6 +574,20 @@ describe('BottomSheet — Tab trap', () => {
         expect(event.defaultPrevented).toBe(false);
     });
 
+    it('leaves Tab alone in a nested dialog that holds focus, even when the sheet has nothing focusable', () => {
+        render(
+            <>
+                <BottomSheet isOpen onClose={() => {}} ariaLabel="Read-only"><p>No controls</p></BottomSheet>
+                <div role="dialog" aria-label="Nested confirm"><button type="button">Stay</button></div>
+            </>,
+        );
+        const stay = screen.getByRole('button', { name: 'Stay' });
+        stay.focus();
+        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        stay.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+    });
+
 });
 
 describe('BottomSheet — focus restore on close', () => {
