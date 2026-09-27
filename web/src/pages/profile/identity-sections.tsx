@@ -137,9 +137,11 @@ function SteamLinkedInfo({ personaName, isPublic }: {
 }
 
 /** Steam account section — linked or link CTA */
-export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary, syncWishlist }: {
+export function SteamSection({ steamStatus, linkSteam, linkPending, unlinkSteam, syncLibrary, syncWishlist }: {
     steamStatus: { data?: { linked: boolean; personaName?: string | null; isPublic?: boolean } | undefined };
-    linkSteam: () => void;
+    linkSteam: () => void | Promise<void>;
+    /** ROK-1630: true while the link-start POST is in flight — disables the CTA. */
+    linkPending?: boolean;
     unlinkSteam: { mutate: () => void; isPending: boolean };
     syncLibrary: { mutate: () => void; isPending: boolean };
     syncWishlist: { mutate: () => void; isPending: boolean };
@@ -150,7 +152,7 @@ export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary,
     return (
         <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
             <p className="text-sm text-muted mb-3">Link your Steam account to sync your game library and playtime.</p>
-            <button onClick={linkSteam} className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1B2838] hover:bg-[#2a475e] text-white font-medium rounded-lg transition-colors">
+            <button onClick={() => { void linkSteam(); }} disabled={linkPending} className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1B2838] hover:bg-[#2a475e] disabled:opacity-50 text-white font-medium rounded-lg transition-colors">
                 <SteamIcon className="w-5 h-5" />
                 Link Steam Account
             </button>

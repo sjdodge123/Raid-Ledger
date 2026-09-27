@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SteamIcon } from '../icons/SteamIcon';
-import { useSteamLink, getSteamLinkUrl } from '../../hooks/use-steam-link';
+import { useSteamLink } from '../../hooks/use-steam-link';
 
 /** Header with Steam icon in emerald circle and title. */
 function SteamStepHeader() {
@@ -18,20 +17,21 @@ function SteamStepHeader() {
     );
 }
 
-/** Primary "Connect Steam" link styled as a button. Uses <a> for testable href. */
-function ConnectSteamLink({ isRedirecting, href, onClick }: {
-    isRedirecting: boolean; href: string | null; onClick: () => void;
-}) {
+/**
+ * Primary "Connect Steam" button. ROK-1630: a real <button>, not an <a href> —
+ * the Steam hop needs a single-use nonce minted on click, so there is no URL
+ * to render up front. Same classes as the old link, so it looks identical.
+ */
+function ConnectSteamButton({ isRedirecting, onClick }: { isRedirecting: boolean; onClick: () => void }) {
     return (
-        <a role="button" href={href ?? '#'} onClick={(e) => { if (isRedirecting || !href) e.preventDefault(); onClick(); }}
-            className="w-full py-3 px-4 min-h-[44px] bg-[#171a21] hover:bg-[#2a475e] text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-3"
-            aria-disabled={isRedirecting}>
+        <button type="button" onClick={onClick} disabled={isRedirecting} aria-busy={isRedirecting}
+            className="w-full py-3 px-4 min-h-[44px] bg-[#171a21] hover:bg-[#2a475e] text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-3">
             {isRedirecting ? (
                 <><span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Redirecting to Steam...</>
             ) : (
                 <><SteamIcon className="w-5 h-5" />Connect Steam</>
             )}
-        </a>
+        </button>
     );
 }
 
@@ -67,18 +67,13 @@ function SteamErrorMessage({ message, onRetry }: { message: string | null; onRet
  */
 export function SteamStep() {
     const [searchParams] = useSearchParams();
-    const { linkSteam } = useSteamLink();
-    const [isRedirecting, setIsRedirecting] = useState(false);
+    const { linkSteam, isLinkPending } = useSteamLink();
 
     const steamResult = searchParams.get('steam');
     const isSuccess = steamResult === 'success';
     const isError = steamResult === 'error';
-    const steamLinkUrl = getSteamLinkUrl('/onboarding');
 
-    const handleConnect = () => {
-        setIsRedirecting(true);
-        linkSteam('/onboarding');
-    };
+    const handleConnect = () => { void linkSteam('/onboarding'); };
 
     return (
         <div className="space-y-6">
@@ -87,7 +82,7 @@ export function SteamStep() {
                 {isSuccess && <SteamSuccessMessage />}
                 {isError && <SteamErrorMessage message={searchParams.get('message')} onRetry={handleConnect} />}
                 {!isSuccess && !isError && (
-                    <ConnectSteamLink isRedirecting={isRedirecting} href={steamLinkUrl} onClick={handleConnect} />
+                    <ConnectSteamButton isRedirecting={isLinkPending} onClick={handleConnect} />
                 )}
                 <p className="text-xs text-dim text-center mt-2">
                     You can always link accounts later from your profile settings.

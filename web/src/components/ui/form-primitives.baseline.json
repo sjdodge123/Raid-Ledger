@@ -127,7 +127,7 @@
     "components/onboarding/connect-step.tsx": 1,
     "components/onboarding/connection-step.tsx": 3,
     "components/onboarding/games-step.tsx": 2,
-    "components/onboarding/steam-step.tsx": 1,
+    "components/onboarding/steam-step.tsx": 2,
     "components/players/players-mobile-toolbar.tsx": 1,
     "components/profile/AvatarSelectorModal.tsx": 3,
     "components/profile/CharacterCard.tsx": 5,

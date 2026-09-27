@@ -36,7 +36,7 @@ export function IntegrationsPanel(): JSX.Element | null {
     const { user } = useAuth();
     const { data: systemStatus } = useSystemStatus();
     const handleLinkDiscord = useDiscordLink();
-    const { linkSteam, steamStatus, unlinkSteam, syncLibrary, syncWishlist } = useSteamLink();
+    const { linkSteam, isLinkPending, steamStatus, unlinkSteam, syncLibrary, syncWishlist } = useSteamLink();
 
     if (!user) return null;
 
@@ -55,7 +55,7 @@ export function IntegrationsPanel(): JSX.Element | null {
                         : <DiscordLinkCta onLink={handleLinkDiscord} />
                 )}
                 {showSteam && (
-                    <SteamSection steamStatus={steamStatus} linkSteam={linkSteam}
+                    <SteamSection steamStatus={steamStatus} linkSteam={linkSteam} linkPending={isLinkPending}
                         unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} syncWishlist={syncWishlist} />
                 )}
             </div>

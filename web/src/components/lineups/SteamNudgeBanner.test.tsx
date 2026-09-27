@@ -21,10 +21,11 @@ vi.mock('../../hooks/use-auth', () => ({
 }));
 
 // Mock Steam link hook to capture linkSteam calls
-const mockLinkSteam = vi.fn();
+const mockLinkSteam = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../hooks/use-steam-link', () => ({
   useSteamLink: vi.fn(() => ({
     linkSteam: mockLinkSteam,
+    isLinkPending: false,
   })),
 }));
 
@@ -35,7 +36,7 @@ const mockUseAuth = vi.mocked(useAuth);
 describe('SteamNudgeBanner — visible states', () => {
   beforeEach(() => {
     localStorage.clear();
-    mockLinkSteam.mockReset();
+    mockLinkSteam.mockReset().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue({
       user: { id: 1, role: 'member', username: 'TestUser' } as never,
     } as never);
@@ -85,7 +86,7 @@ describe('SteamNudgeBanner — visible states', () => {
 describe('SteamNudgeBanner — dismiss behavior', () => {
   beforeEach(() => {
     localStorage.clear();
-    mockLinkSteam.mockReset();
+    mockLinkSteam.mockReset().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue({
       user: { id: 1, role: 'member', username: 'TestUser' } as never,
     } as never);
@@ -132,7 +133,7 @@ describe('SteamNudgeBanner — dismiss behavior', () => {
 describe('SteamNudgeBanner — CTA', () => {
   beforeEach(() => {
     localStorage.clear();
-    mockLinkSteam.mockReset();
+    mockLinkSteam.mockReset().mockResolvedValue(undefined);
     mockUseAuth.mockReturnValue({
       user: { id: 1, role: 'member', username: 'TestUser' } as never,
     } as never);

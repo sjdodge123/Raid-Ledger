@@ -29,12 +29,13 @@ vi.mock('../../hooks/use-system-status', () => ({
 }));
 
 vi.mock('../../hooks/use-discord-link', () => ({
-    useDiscordLink: () => vi.fn(),
+    useDiscordLink: () => vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../hooks/use-steam-link', () => ({
     useSteamLink: () => ({
-        linkSteam: vi.fn(),
+        linkSteam: vi.fn().mockResolvedValue(undefined),
+        isLinkPending: false,
         steamStatus: { data: undefined },
         unlinkSteam: { mutate: vi.fn(), isPending: false },
         syncLibrary: { mutate: vi.fn(), isPending: false },
