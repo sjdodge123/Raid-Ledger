@@ -296,6 +296,19 @@ export class ChannelPresenceEmbedService
   }
 
   /**
+   * DEMO_MODE seam (ROK-1692): drop this channel's cached bindings so the next
+   * flush reads the binding that exists NOW.
+   *
+   * Nothing evicts the 60 s binding cache when a binding is created or
+   * deleted, so a smoke test that re-binds a channel could otherwise be
+   * flushed against the previous test's deleted binding — and schedule its
+   * grace re-check from that binding's grace, not its own.
+   */
+  forgetBinding(channelId: string): void {
+    this.bindingCache.delete(channelId);
+  }
+
+  /**
    * Drain the dirty set immediately instead of waiting for the timer.
    *
    * Used by the D12 seam so a smoke test can assert against the rendered
