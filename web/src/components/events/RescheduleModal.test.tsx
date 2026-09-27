@@ -70,7 +70,8 @@ vi.mock('../../lib/toast', () => ({
 }));
 
 // Mock useFocusTrap to eliminate requestAnimationFrame timing issues
-vi.mock('../../hooks/use-focus-trap', () => ({
+vi.mock('../../hooks/use-focus-trap', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../hooks/use-focus-trap')>()),
     useFocusTrap: () => ({ current: null }),
 }));
 

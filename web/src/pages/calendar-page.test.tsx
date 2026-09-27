@@ -55,7 +55,8 @@ vi.mock('../constants/game-colors', () => ({
 
 vi.mock('../components/calendar/calendar-styles.css', () => ({}));
 
-vi.mock('../hooks/use-focus-trap', () => ({
+vi.mock('../hooks/use-focus-trap', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../hooks/use-focus-trap')>()),
     useFocusTrap: () => ({ current: null }),
 }));
 
