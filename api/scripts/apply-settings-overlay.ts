@@ -18,6 +18,14 @@
  *   - process.env: `RL_SLOT_DISCORD_*` (see SLOT_IDENTITY_ENV_MAP), which
  *     env-spin injects into the container at `docker run` time.
  *
+ * Flags:
+ *   --identity-only  apply ONLY the slot identity (IDENTITY_KEYS) and skip
+ *                    every other key. `rl_env_deploy` passes it when the
+ *                    laptop `sync_settings` succeeded: a fresh sync wins over
+ *                    the VM bundle for shared keys (operator ruling
+ *                    2026-09-27). Without it every key is applied, which is
+ *                    the laptop-less path (sync failed or was skipped).
+ *
  * Output: ONE line of JSON on stdout — key NAMES only, never values. The
  * orchestrator captures this and it lands in agent transcripts.
  *
@@ -51,6 +59,31 @@ export const SLOT_IDENTITY_ENV_MAP: Record<string, string> = {
 const KNOWN_SETTING_KEYS: ReadonlySet<string> = new Set(
   Object.values(SETTING_KEYS) as string[],
 );
+
+/**
+ * Keys the overlay owns even over a fresh laptop sync: the slot's Discord
+ * identity plus `demo_mode`, which every fleet env needs. KEEP IN SYNC with
+ * NON_CREDENTIAL_KEYS in tools/mcp-rl-fleet/src/tools/env-settings-overlay.ts.
+ */
+export const IDENTITY_KEYS: ReadonlySet<string> = new Set([
+  ...Object.values(SLOT_IDENTITY_ENV_MAP),
+  SETTING_KEYS.DISCORD_BOT_ENABLED,
+  SETTING_KEYS.DEMO_MODE,
+]);
+
+export interface OverlayArgs {
+  identityOnly: boolean;
+}
+
+/** Parse the script's argv (after `node <script>`). Unknown flags throw. */
+export function parseOverlayArgs(argv: string[]): OverlayArgs {
+  const args: OverlayArgs = { identityOnly: false };
+  for (const arg of argv) {
+    if (arg === '--identity-only') args.identityOnly = true;
+    else throw new Error(`unknown argument: ${arg}`);
+  }
+  return args;
+}
 
 /**
  * Parse + validate a stdin overlay payload. Blank input yields an empty map
@@ -113,25 +146,55 @@ export interface OverlaySummary {
   ok: true;
   applied: string[];
   count: number;
+  skipped: string[];
+  skipped_count: number;
+  identity_only: boolean;
 }
 
-/** Summarize an applied overlay as key NAMES only — never the values. */
-export function summarizeOverlay(overlay: OverlayMap): OverlaySummary {
-  const applied = Object.keys(overlay);
-  return { ok: true, applied, count: applied.length };
+/**
+ * Summarize an overlay run as key NAMES only — never the values. `skipped`
+ * names the keys an identity-only run left to the laptop sync.
+ */
+export function summarizeOverlay(
+  overlay: OverlayMap,
+  opts: { skipped?: string[]; identityOnly?: boolean } = {},
+): OverlaySummary {
+  const skipped = opts.skipped ?? [];
+  const applied = Object.keys(overlay).filter((k) => !skipped.includes(k));
+  return {
+    ok: true,
+    applied,
+    count: applied.length,
+    skipped,
+    skipped_count: skipped.length,
+    identity_only: opts.identityOnly === true,
+  };
+}
+
+export interface ApplyOverlayResult {
+  applied: string[];
+  skipped: string[];
 }
 
 /**
  * UPSERT each overlay entry into `app_settings`, encrypting with the same
  * `encrypt()` the SettingsService uses (JWT_SECRET-derived key), so the
- * running API can decrypt the rows it just received.
+ * running API can decrypt the rows it just received. With `identityOnly`,
+ * every key outside IDENTITY_KEYS is skipped so a stale VM bundle cannot
+ * overwrite the fresher values a successful laptop sync just copied.
  */
 export async function applyOverlay(
   db: ReturnType<typeof drizzle<typeof schema>>,
   overlay: OverlayMap,
-): Promise<string[]> {
+  opts: { identityOnly?: boolean } = {},
+): Promise<ApplyOverlayResult> {
   const applied: string[] = [];
+  const skipped: string[] = [];
   for (const [key, value] of Object.entries(overlay)) {
+    if (opts.identityOnly && !IDENTITY_KEYS.has(key)) {
+      skipped.push(key);
+      continue;
+    }
     const encryptedValue = encrypt(value);
     await db
       .insert(appSettings)
@@ -142,7 +205,7 @@ export async function applyOverlay(
       });
     applied.push(key);
   }
-  return applied;
+  return { applied, skipped };
 }
 
 /** Read all of stdin. Returns '' when stdin is a TTY or closed immediately. */
@@ -174,6 +237,7 @@ async function main(): Promise<void> {
     console.error('DATABASE_URL is required');
     process.exit(1);
   }
+  const { identityOnly } = parseOverlayArgs(process.argv.slice(2));
   const overlay = mergeOverlays(
     buildOverlayFromEnv(process.env),
     parseOverlayPayload(await readStdin()),
@@ -181,8 +245,10 @@ async function main(): Promise<void> {
   const client = postgres(databaseUrl, { max: 1 });
   try {
     const db = drizzle(client, { schema });
-    await applyOverlay(db, overlay);
-    console.log(JSON.stringify(summarizeOverlay(overlay)));
+    const { skipped } = await applyOverlay(db, overlay, { identityOnly });
+    console.log(
+      JSON.stringify(summarizeOverlay(overlay, { skipped, identityOnly })),
+    );
   } finally {
     await client.end({ timeout: 5 });
   }

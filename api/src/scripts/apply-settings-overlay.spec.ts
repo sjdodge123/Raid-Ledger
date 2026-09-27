@@ -15,10 +15,18 @@
  * testable without a database or a container.
  */
 jest.mock('../sentry/instrument', () => ({}));
+// applyOverlay's own crypto is out of scope here; a marker keeps the fake db
+// able to prove WHICH keys were written without a JWT_SECRET in the test env.
+jest.mock('../settings/encryption.util', () => ({
+  encrypt: (v: string) => `enc:${v}`,
+}));
 
 import {
+  IDENTITY_KEYS,
   SLOT_IDENTITY_ENV_MAP,
+  applyOverlay,
   buildOverlayFromEnv,
+  parseOverlayArgs,
   parseOverlayPayload,
   summarizeOverlay,
 } from '../../scripts/apply-settings-overlay';
@@ -143,5 +151,97 @@ describe('apply-settings-overlay: summarizeOverlay (ROK-1469)', () => {
     expect(summary.count).toBe(2);
     expect(serialized).not.toContain('super-secret-token-value');
     expect(serialized).not.toContain('1234567890');
+  });
+});
+
+/** A drizzle stand-in that records every `insert().values()` row. */
+function fakeDb(): { db: never; written: Array<{ key: string }> } {
+  const written: Array<{ key: string }> = [];
+  const db = {
+    insert: () => ({
+      values: (row: { key: string }) => {
+        written.push(row);
+        return { onConflictDoUpdate: () => Promise.resolve() };
+      },
+    }),
+  };
+  return { db: db as never, written };
+}
+
+// Operator ruling 2026-09-27, "a fresh sync wins": after a successful laptop
+// sync_settings the VM bundle must not overwrite the shared keys it copied.
+const FULL_OVERLAY = {
+  itad_api_key: 'bundle-itad',
+  blizzard_client_secret: 'bundle-bliz',
+  discord_bot_token: 'slot-tok',
+  discord_client_id: '200',
+  discord_client_secret: 'slot-sec',
+  discord_bot_enabled: 'true',
+  demo_mode: 'true',
+};
+const IDENTITY = [
+  'discord_bot_token',
+  'discord_client_id',
+  'discord_client_secret',
+  'discord_bot_enabled',
+  'demo_mode',
+];
+
+describe('apply-settings-overlay: applyOverlay precedence', () => {
+  it('identity-only writes the slot identity and skips every shared key', async () => {
+    const { db, written } = fakeDb();
+    const res = await applyOverlay(db, FULL_OVERLAY, { identityOnly: true });
+    expect(written.map((r) => r.key).sort()).toEqual([...IDENTITY].sort());
+    expect(res.applied.sort()).toEqual([...IDENTITY].sort());
+    expect(res.skipped.sort()).toEqual([
+      'blizzard_client_secret',
+      'itad_api_key',
+    ]);
+  });
+
+  it('full mode (sync failed or skipped) writes every key, as before', async () => {
+    const { db, written } = fakeDb();
+    const res = await applyOverlay(db, FULL_OVERLAY);
+    expect(written.map((r) => r.key).sort()).toEqual(
+      Object.keys(FULL_OVERLAY).sort(),
+    );
+    expect(res.skipped).toEqual([]);
+  });
+
+  it('IDENTITY_KEYS is exactly the always-seeded identity + demo_mode set', () => {
+    expect([...IDENTITY_KEYS].sort()).toEqual([...IDENTITY].sort());
+  });
+});
+
+describe('apply-settings-overlay: parseOverlayArgs', () => {
+  it('defaults to a full overlay', () => {
+    expect(parseOverlayArgs([])).toEqual({ identityOnly: false });
+  });
+
+  it('accepts --identity-only', () => {
+    expect(parseOverlayArgs(['--identity-only'])).toEqual({
+      identityOnly: true,
+    });
+  });
+
+  it('rejects an unknown flag loudly', () => {
+    expect(() => parseOverlayArgs(['--identity'])).toThrow(/unknown argument/i);
+  });
+});
+
+describe('apply-settings-overlay: summarizeOverlay with skipped keys', () => {
+  it('reports applied/skipped NAMES and counts, never values', () => {
+    const summary = summarizeOverlay(FULL_OVERLAY, {
+      skipped: ['itad_api_key', 'blizzard_client_secret'],
+      identityOnly: true,
+    });
+    expect(summary.applied.sort()).toEqual([...IDENTITY].sort());
+    expect(summary.count).toBe(5);
+    expect(summary.skipped_count).toBe(2);
+    expect(summary.identity_only).toBe(true);
+    const serialized = JSON.stringify(summary);
+    for (const v of ['bundle-itad', 'bundle-bliz', 'slot-tok', 'slot-sec']) {
+      expect(serialized).not.toContain(v);
+    }
   });
 });
