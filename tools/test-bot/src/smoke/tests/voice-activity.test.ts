@@ -570,6 +570,13 @@ const lobbyPresenceEditsInPlace: SmokeTest = {
 const BRIEF_GRACE_MINUTES = 1;
 
 /**
+ * The API's presence drain cadence (`PRESENCE_FLUSH_INTERVAL_MS`). The empty
+ * room is first flushed within one tick, and re-flushed within one tick of its
+ * grace running out (ROK-1692) — never by waiting for the 5-min reaper cron.
+ */
+const PRESENCE_DRAIN_TICK_MS = 5_000;
+
+/**
  * ROK-1692 — a drive-by visit leaves no card behind.
  *
  * Its own test, because the room must be one where NOTHING happened: every
@@ -709,9 +716,12 @@ async function messageExists(
  * happened in the room — the only shape the operator ruled a drive-by. (A seam
  * member WITH a `gameId` lands on the occupancy stay and recaps through the
  * P2-2 fallback; `lobbyPresenceEditsInPlace` pins that recap.) The decision is
- * taken only once the binding's grace has run out, so the poll allows the
- * grace on top of the usual timeout. NOTHING posts in the card's place either
- * — the AC7 clause: a lobby session never emits a second card.
+ * taken only once the binding's grace has run out, and the API re-flushes the
+ * empty room on the first drain tick after that (ROK-1692) — so the delete
+ * lands by grace + two ticks. The poll allows that plus the usual timeout of
+ * headroom, and does not depend on the 5-min reaper cron. NOTHING posts in the
+ * card's place either — the AC7 clause: a lobby session never emits a second
+ * card.
  */
 async function assertBriefVisitDeleted(
   ctx: TestContext,
@@ -729,7 +739,7 @@ async function assertBriefVisitDeleted(
         (await messageExists(target.textChannelId, target.messageId))
           ? null
           : true,
-      graceMs + ctx.config.timeoutMs,
+      graceMs + 2 * PRESENCE_DRAIN_TICK_MS + ctx.config.timeoutMs,
       { intervalMs: 1000 },
     );
   } catch (err) {
