@@ -8,7 +8,8 @@
  * The ladder, in order, is the whole contract:
  * 1. no binding  → recap what we can, close the row `unbound`;
  * 2. room empty  → stamp `empty_since`, render the recap, close once the
- *    binding's grace has elapsed AND no session is still live (D8);
+ *    binding's grace has elapsed AND no session is still live (D8) — or, at
+ *    that same close, delete a brief visit's card instead (ROK-1692);
  * 3. room live   → open the row + post on first occupancy, otherwise edit in
  *    place — and only when the payload hash actually moved (D5/AC5);
  * 3a. room live but the row's `empty_since` outlived the grace → the prior
@@ -40,7 +41,6 @@ import {
 import {
   findLinkedEvents,
   resolveRoom,
-  type LinkedEvent,
   type ResolvedRoom,
   type RoomResolveDeps,
   type RoomSnapshot,
@@ -237,6 +237,11 @@ async function flushEmpty(
  * Edit the message into its recap and close once due — or, for a drive-by
  * visit (under two minutes, no game, no event), delete the card and close the
  * row instead of recapping "0m" (ROK-1692).
+ *
+ * The brief-visit call is made only where the row would close anyway: after
+ * the same empty grace (D8). Until then a brief visit recaps like any other,
+ * so a quick reconnect re-lives THIS card instead of deleting it and posting a
+ * fresh one — and the decision reads the activities the buffer settled into.
  */
 async function recapOrRetire(
   state: FlushState,
@@ -252,9 +257,10 @@ async function recapOrRetire(
   const events = await hydrateRecap(flush.deps, bindingId, row.openedAt);
   const roomRecap = await roomRecapFor(flush, row, emptySince, now);
   const live = await findLinkedEvents(flush.deps.db, bindingId);
+  const due = isCloseDue(emptySince, graceMs(empty.binding.config), now, live);
   const { openedAt } = row;
   const { activities } = roomRecap;
-  if (isBriefVisit({ openedAt, emptySince, events, live, activities })) {
+  if (due && isBriefVisit({ openedAt, emptySince, events, live, activities })) {
     await retireBriefVisit(flush, row, emptySince);
     return;
   }
@@ -264,18 +270,12 @@ async function recapOrRetire(
     events,
     room: roomRecap,
   });
-  await closeIfDue(state, empty.binding, live, emptySince);
+  if (due) await closeEmpty(state, emptySince);
 }
 
-/** D8's both clauses: the grace has elapsed AND no session is still live. */
-async function closeIfDue(
-  state: FlushState,
-  binding: ResolvedBinding,
-  live: LinkedEvent[],
-  emptySince: Date,
-): Promise<void> {
-  const { flush, row, now } = state;
-  if (!isCloseDue(emptySince, graceMs(binding.config), now, live)) return;
+/** D8's both clauses held (grace elapsed, nothing live): close `empty`. */
+async function closeEmpty(state: FlushState, emptySince: Date): Promise<void> {
+  const { flush, row } = state;
   await closeRow(flush.deps.db, row.id, 'empty', emptySince);
   flush.roomRecaps?.delete(row.id);
 }
