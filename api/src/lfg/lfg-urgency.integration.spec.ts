@@ -35,8 +35,11 @@ import {
 import { LFG_EVENTS } from './lfg.constants';
 import { listLiveNowHands } from '../discord-bot/lfg-now/lfg-now-spawn.helpers';
 
-/** 14 days expressed the way every assertion below measures — in minutes. */
-const WEEK_MINUTES = 14 * 24 * 60;
+/**
+ * The week horizon expressed the way every assertion below measures — in
+ * minutes. 7 days since ROK-1691 (was 14).
+ */
+const WEEK_MINUTES = 7 * 24 * 60;
 
 let testApp: TestApp;
 
@@ -119,7 +122,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // MUTATION: delete `.default('week')` from `CreateLfgIntentSchema`
   // (`packages/contract/src/lfg.schema.ts`) and this fails on the VALUE —
   // `urgency` comes back undefined — not on a parse throw.
-  it('keeps a body of just gameId on the 14-day week horizon', async () => {
+  it('keeps a body of just gameId on the 7-day week horizon', async () => {
     const [a] = await members('alpha');
     const game = await createGame(testApp, 'Deep Rock');
 
@@ -133,7 +136,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   });
 
   // MUTATION: make `resolveIntentHorizon` fall through to `computeExpiresAt`
-  // for `now` and this fails reporting 20160 minutes instead of 30.
+  // for `now` and this fails reporting 10080 minutes instead of 30.
   it('gives a now request with no ttlMinutes the 30-minute horizon', async () => {
     const [a] = await members('alpha');
     const game = await createGame(testApp, 'Deep Rock');
@@ -164,7 +167,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   });
 
   // A2: a ttl alongside `week` is a client bug. Dropping it silently would
-  // hand back a 14-day intent the caller believes lapses in an hour.
+  // hand back a 7-day intent the caller believes lapses in an hour.
   // MUTATION: delete the `.superRefine` block and this fails 201-vs-400.
   it('rejects ttlMinutes on a week request with a field error', async () => {
     const [a] = await members('alpha');
@@ -213,7 +216,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
     // Not asserting an exact instant: the expiry is 04:00 on the SERVER's
     // community zone, so a fixed number here would fail on a runner in a
     // different offset. What matters is the invariant — strictly ahead of now,
-    // and inside one day, which no `now` (≤60 min) or `week` (14 d) horizon is.
+    // and inside one day, which no `now` (≤60 min) or `week` (7 d) horizon is.
     const minutes = minutesFromNow(body.expiresAt);
     expect(minutes).toBeGreaterThan(0);
     expect(minutes).toBeLessThanOrEqual(28 * 60);
@@ -265,7 +268,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
 
 describe('AC2 — bump, never a second row', () => {
   // MUTATION: make `bumpIntentUrgency` return null before its UPDATE and this
-  // fails on the DATE comparison (20160 minutes, not 30), which is the point —
+  // fails on the DATE comparison (10080 minutes, not 30), which is the point —
   // the row count would still be 1, so a count-only assertion proves nothing.
   it('shortens the caller own row to the now horizon and answers 200', async () => {
     const [a] = await members('alpha');
@@ -295,8 +298,8 @@ describe('AC2 — bump, never a second row', () => {
   // The reverse direction, which is what makes this a bump rather than a
   // one-way "shorten": going back to week must LENGTHEN the same row.
   // MUTATION: restrict the bump to `opts.urgency === 'now'` and this fails
-  // reporting 30 minutes where 20160 was expected.
-  it('lengthens the same row back to 14 days when the caller picks week again', async () => {
+  // reporting 30 minutes where 10080 (7 days) was expected.
+  it('lengthens the same row back to 7 days when the caller picks week again', async () => {
     const [a] = await members('alpha');
     const game = await createGame(testApp, 'Deep Rock');
     const first = (await postIntent(a.token, game.id, { urgency: 'now' }))
@@ -346,7 +349,7 @@ describe('AC3 — expiry and re-hearting', () => {
   });
 
   // MUTATION: replace `expireStaleIntents`'s `expires_at <= now()` with a
-  // 14-day literal and this fails on the status ('active', not 'expired').
+  // 7-day literal and this fails on the status ('active', not 'expired').
   it('flips the lapsed row to expired and announces the game exactly once', async () => {
     const [a] = await members('alpha');
     const game = await createGame(testApp, 'Deep Rock');
@@ -482,13 +485,13 @@ describe('AC4 — LFM_REACHED is urgency-blind', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('AC8 — per-row refresh horizons', () => {
-  // This is the whole feature. One blanket UPDATE writing 14 days across the
+  // This is the whole feature. One blanket UPDATE writing 7 days across the
   // group turns every "right now" intent into a weekly one, and nothing else
   // in the suite would notice.
   // MUTATION: collapse `refreshGroupExpiry` back to a single UPDATE with
-  // `computeExpiresAt(now)` and this fails reporting 20160 minutes on a row
+  // `computeExpiresAt(now)` and this fails reporting 10080 minutes on a row
   // that asked for 60.
-  it('refreshes the week row to 14 days and the now row to its own TTL only', async () => {
+  it('refreshes the week row to 7 days and the now row to its own TTL only', async () => {
     const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock');
     const now = (
@@ -513,10 +516,10 @@ describe('AC8 — per-row refresh horizons', () => {
   });
 
   // AC8(b): the ROK-1451 weekly cohort behaviour is untouched — a +1 still
-  // pushes an existing week row back out to a full 14 days.
+  // pushes an existing week row back out to a full 7 days.
   // MUTATION: drop the `urgency = 'week'` UPDATE from `refreshGroupExpiry` and
   // this fails reporting the wound-down 5 minutes.
-  it('still refreshes a weekly cohort to a full 14 days', async () => {
+  it('still refreshes a weekly cohort to a full 7 days', async () => {
     const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock');
     const first = (await postIntent(a.token, game.id))

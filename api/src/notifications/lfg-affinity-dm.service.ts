@@ -31,7 +31,8 @@ import { buildLfgInviteUrl } from './lfg-affinity-dm.helpers';
 /**
  * Invites dedup for as long as the intents that triggered them can live.
  *
- * ROK-1479 A12 leaves this at 14 days DELIBERATELY, including for a 30-minute
+ * Follows `LFG_EXPIRY_DAYS`, so 7 days since ROK-1691 (was 14). ROK-1479 A12
+ * keeps it at the WEEK horizon DELIBERATELY, including for a 30-minute
  * `now` wave: shortening it for now-groups is a notification-policy call that
  * belongs to ROK-1455, and AC8(a) pins the TTL, the key shape, the cap and the
  * `lfg_invite` opt-out as unchanged by this story.

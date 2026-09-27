@@ -1,6 +1,10 @@
 /**
  * ROK-1471 — LFG forum-board constants. One edit changes every surface.
  */
+import {
+  LFG_EXPIRY_DAYS,
+  LFG_POST_MAX_AGE_DAYS,
+} from '../../lfg/lfg.constants';
 
 /**
  * Forum tag names. These are the ROK-1454 D7 author-line states, verbatim, so
@@ -141,8 +145,10 @@ export const LFG_BOARD_INTRO_LEGACY_TITLES: readonly string[] = [
  * of reading"): one line each for what a post is, how to start one (the
  * composer's `Post an LFG` button pinned on this post, `/lfg`, or the site),
  * how `+1` works (interest, not a commitment), the three horizons and how long
- * each lasts, how to withdraw, and how posts end. The old "you cannot post
- * here yourself" line is gone — the composer now lets a member start one.
+ * each lasts, how to withdraw, and how posts end. The day counts are read
+ * from `lfg.constants.ts` (ROK-1691), so the copy cannot drift from the clock.
+ * The old "you cannot post here yourself" line is gone — the composer now lets
+ * a member start one.
  *
  * `LfgComposerPinService` rewrites an older intro to this text when it sets
  * the composer buttons, so boards seeded before this copy pick it up.
@@ -153,10 +159,11 @@ export const LFG_BOARD_INTRO_BODY = [
   '',
   '**Start one**: press **Post an LFG** below, or use `/lfg` or the Raid Ledger site.',
   "**Join one**: press **+1 · I'm in** on a post. It's interest, not a commitment.",
-  '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next 14 days).',
+  `**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next ${LFG_EXPIRY_DAYS} days).`,
   '**Changed your mind?** Run `/lfg` and press **Withdraw**.',
   '',
-  "Posts close when the group becomes an event or everyone's hand expires.",
+  "Posts close when the group becomes an event, when everyone's hand expires, " +
+    `or ${LFG_POST_MAX_AGE_DAYS} days after they open. Still looking? Post again.`,
 ].join('\n');
 
 /**

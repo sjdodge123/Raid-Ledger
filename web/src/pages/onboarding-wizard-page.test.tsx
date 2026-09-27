@@ -447,4 +447,20 @@ describe('OnboardingWizardPage — Steam step settles first (tech-debt [12])', (
         expect(screen.getByText(/step 2 of 5/i)).toBeInTheDocument();
         expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
     });
+
+    it('ignores Escape during the blank gate render, then Escape skips all once settled', () => {
+        const refresh = renderStable();
+        // The bug: the window Escape listener was live while the wizard
+        // rendered nothing, so a stray key skipped onboarding unseen.
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(
+            mockNavigate,
+            'Escape before the step list settles must not skip onboarding',
+        ).not.toHaveBeenCalled();
+
+        steamStatus.current = { isLoading: false, data: { linked: false } };
+        refresh();
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(mockNavigate).toHaveBeenCalledWith('/calendar', { replace: true });
+    });
 });

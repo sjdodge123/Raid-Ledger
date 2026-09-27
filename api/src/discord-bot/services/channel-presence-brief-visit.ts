@@ -128,10 +128,40 @@ export function isBriefSession(
 }
 
 /**
+ * Drop every session that began at or after `emptySince`: it belongs to a
+ * LATER visit, not the one that ended. The join-side check runs after a
+ * rejoin's live flush, which may already have spawned a fresh linked session
+ * on the binding (a `minPlayers: 1` lobby does it on the first human); both
+ * binding-wide reads would see it and keep a drive-by card forever.
+ *
+ * `live` carries no start time, so it is bounded through the recap's own
+ * `startTime` by id. A live session the recap did not hydrate, or an
+ * unparseable start, is kept: the fallback is the old recap, never a
+ * wrongly deleted card.
+ */
+export function startedBefore(
+  session: EndedSession,
+  emptySince: Date,
+): EndedSession {
+  const cutoff = emptySince.getTime();
+  const later = new Set(
+    session.events
+      .filter((event) => Date.parse(event.startTime) >= cutoff)
+      .map((event) => event.id),
+  );
+  return {
+    ...session,
+    events: session.events.filter((event) => !later.has(event.id)),
+    live: session.live.filter((event) => !later.has(event.id)),
+  };
+}
+
+/**
  * The join-side half: someone rejoined after the grace ran out but before the
  * re-check closed the row, so the live flush is retiring it (ROK-1498). A
  * brief visit's card is deleted there too; otherwise its "<1m" recap would
- * stay in the channel forever beside the fresh card.
+ * stay in the channel forever beside the fresh card. Only sessions that began
+ * before the room emptied count (`startedBefore`).
  *
  * @returns `true` when the card is gone and the row is closed `brief`; `false`
  *   for a real session or a failed delete, which the caller closes `stale`.
@@ -150,6 +180,7 @@ export async function retireIfBrief(
   }
   const ended = { bindingId, emptySince, now };
   const session = await loadEndedSession(flush, row, ended);
-  if (!isBriefSession(row, emptySince, session)) return false;
+  const visit = startedBefore(session, emptySince);
+  if (!isBriefSession(row, emptySince, visit)) return false;
   return retireBriefVisit(flush, row, emptySince);
 }

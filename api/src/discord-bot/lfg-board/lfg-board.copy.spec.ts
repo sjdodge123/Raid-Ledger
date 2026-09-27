@@ -19,7 +19,7 @@ describe('LFG board intro copy (ROK-1616 AC5)', () => {
   it('names all three horizons, each with how long it lasts', () => {
     expect(LFG_BOARD_INTRO_BODY).toContain(
       '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · ' +
-        'This week (next 14 days).',
+        'This week (next 7 days).',
     );
   });
 

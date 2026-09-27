@@ -20,13 +20,29 @@ jest.mock('./channel-presence-store.helpers', () => ({
   __esModule: true,
   closeRow: jest.fn(),
 }));
+jest.mock('./channel-presence-flush.helpers', () => ({
+  __esModule: true,
+  hydrateRecap: jest.fn(),
+}));
+jest.mock('./channel-presence-flush.occupancy', () => ({
+  __esModule: true,
+  roomRecapFor: jest.fn(),
+}));
+jest.mock('./channel-presence-room.helpers', () => ({
+  __esModule: true,
+  findLinkedEvents: jest.fn(),
+}));
 
 import {
   BRIEF_VISIT_MS,
   isBriefVisit,
   retireBriefVisit,
+  retireIfBrief,
 } from './channel-presence-brief-visit';
 import { deleteMessage } from '../discord-bot-client.messages.helpers';
+import { hydrateRecap } from './channel-presence-flush.helpers';
+import { roomRecapFor } from './channel-presence-flush.occupancy';
+import { findLinkedEvents } from './channel-presence-room.helpers';
 import { closeRow, type PresenceRow } from './channel-presence-store.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
 
@@ -167,4 +183,62 @@ describe('retireBriefVisit (ROK-1692)', () => {
       expect(warn).toHaveBeenCalledWith(expect.stringContaining('msg-1'));
     },
   );
+});
+
+/**
+ * Codex follow-up to #1380: the join-side check runs AFTER a rejoin's live
+ * flush, which can already have spawned a fresh linked session on the binding
+ * (a lobby with `minPlayers: 1` does it on the first human). That session is
+ * the NEW visit's, so it must not make the old drive-by row non-brief.
+ */
+describe('retireIfBrief — only what began before the room emptied counts', () => {
+  const emptySince = at(8_000);
+  const row = {
+    id: 'row-2',
+    textChannelId: 'tc-1',
+    messageId: 'msg-2',
+    openedAt: OPENED_AT,
+    emptySince,
+  } as PresenceRow;
+  const client = { isReady: () => true };
+  const flush = {
+    deps: { db: {}, clientService: { getClient: () => client } },
+    channelId: 'vc-1',
+    logger: new Logger('spec'),
+  } as never;
+  const now = at(200_500).getTime();
+  const session = (startedAt: Date) => {
+    const data = { id: 42, startTime: startedAt.toISOString() };
+    jest.mocked(hydrateRecap).mockResolvedValue([data as EmbedEventData]);
+    jest
+      .mocked(findLinkedEvents)
+      .mockResolvedValue([{ id: 42, gameId: 7, adHocStatus: 'live' }]);
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+    jest.mocked(roomRecapFor).mockResolvedValue({ activities: [] } as never);
+  });
+
+  it('deletes the drive-by card although the rejoin already spawned a session', async () => {
+    session(at(200_000));
+
+    await expect(retireIfBrief(flush, row, 'binding-1', now)).resolves.toBe(
+      true,
+    );
+
+    expect(deleteMessage).toHaveBeenCalledWith(client, 'tc-1', 'msg-2');
+    expect(closeRow).toHaveBeenCalledWith({}, 'row-2', 'brief', emptySince);
+  });
+
+  it('keeps the card when the linked session began inside the visit', async () => {
+    session(at(2_000));
+
+    await expect(retireIfBrief(flush, row, 'binding-1', now)).resolves.toBe(
+      false,
+    );
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+  });
 });

@@ -7,9 +7,10 @@
  *
  * Both functions here are the write side of the operator's **A3 ruling**: a +1
  * refreshes every live member of the group, but each on its OWN horizon. A
- * `week` row goes to +14 days, exactly as it did before this story; a `now`
- * row goes to +its own TTL, never to 14 days. That is the whole feature — the
- * moment one blanket UPDATE writes 14 days across the group, a "right now"
+ * `week` row goes to +`LFG_EXPIRY_DAYS` (7 since ROK-1691, was 14); a `now`
+ * row goes to +its own TTL, never to the week horizon. That is the whole
+ * feature — the moment one blanket UPDATE writes the week horizon across the
+ * group, a "right now"
  * intent silently becomes a weekly one.
  */
 import { and, eq, isNull, or } from 'drizzle-orm';

@@ -68,7 +68,7 @@ export const LFG_COPY = {
      * them from here — `lfg-copy.guard.test.ts` fails the build if one drifts.
      */
     urgencyPrompt: 'When do you want to play?',
-    /** The original ROK-1451 intent: quiet, 14 days. */
+    /** The original ROK-1451 intent: quiet, 7 days (ROK-1691; was 14). */
     urgencyWeek: 'This week',
     /**
      * ROK-1616 — the on-demand horizon. Still a `now` intent on a half-hour

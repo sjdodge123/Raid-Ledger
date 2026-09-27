@@ -6,8 +6,8 @@
  * the value the helper handed the driver and compares it to a horizon.
  *
  * The A3 ruling is the reason `refreshGroupExpiry` is tested with a MIXED
- * group: a +1 must push the week row to +14 d and each now row to +its OWN
- * TTL. Collapsing that back to one blanket update is exactly the regression
+ * group: a +1 must push the week row to +`LFG_EXPIRY_DAYS` and each now row
+ * to +its OWN TTL. Collapsing that back to one blanket update is exactly the regression
  * this file exists to catch.
  */
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
@@ -109,7 +109,7 @@ describe('insertIntent', () => {
     jest.useRealTimers();
   });
 
-  it('writes a week intent 14 days out with no TTL when no urgency is asked for', async () => {
+  it('writes a week intent LFG_EXPIRY_DAYS (7) days out with no TTL when no urgency is asked for', async () => {
     await insertIntent(mockDb as unknown as LfgDb, 11, 22);
     const [values] = writtenPayloads(mockDb.values);
     expect(values.urgency).toBe('week');
@@ -246,14 +246,14 @@ describe('refreshGroupExpiry (A3 — per-row horizons)', () => {
     jest.useRealTimers();
   });
 
-  it('refreshes the week rows to +14 d, tonight to 04:00 and each now bucket to its OWN TTL', async () => {
+  it('refreshes the week rows to +LFG_EXPIRY_DAYS, tonight to 04:00 and each now bucket to its OWN TTL', async () => {
     await refreshGroupExpiry(
       mockDb as unknown as LfgDb,
       22,
       'America/New_York',
     );
     // 12:00 UTC on 5 Sep 2026 is 08:00 EDT, so the group's tonight rows land on
-    // 04:00 EDT the next morning — 20 real hours out, not 14 days and not 30
+    // 04:00 EDT the next morning — 20 real hours out, not 7 days and not 30
     // minutes. Stated as an absolute instant rather than a delta so a runner in
     // any zone asserts the same thing.
     expect(writtenPayloads(mockDb.set)[1].expiresAt).toEqual(
