@@ -4,6 +4,7 @@
  * ROK-306: Maintainer telemetry — hardcoded DSN, opt-out via VITE_DISABLE_TELEMETRY.
  */
 import * as Sentry from '@sentry/react';
+import { scrubBreadcrumb, scrubTokenFromUrl } from './lib/sentry-scrub';
 
 const SENTRY_DSN =
     'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
@@ -43,8 +44,13 @@ if (!telemetryDisabled) {
             ) {
                 return null;
             }
+            // ROK-1366 backstop: never ship a magic-link/intent token.
+            if (event.request?.url) {
+                event.request.url = scrubTokenFromUrl(event.request.url);
+            }
             return event;
         },
+        beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
         initialScope: {
             tags: {
                 app_version: (window as unknown as { __APP_VERSION__?: string })

@@ -15,16 +15,17 @@ import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 import { ThemeParticles } from './components/ui/ThemeParticles';
 import { CHUNK_RELOAD_KEY } from './lazy-routes';
-import { takeMagicLinkToken } from './lib/magic-link';
+import { takeCapturedMagicLinkToken } from './lib/magic-link-capture';
 import { startMagicLinkRedeem, isMagicLinkRedeemPending } from './lib/magic-link-redeem';
 import { AppRoutes } from './app-routes';
 
-// ROK-657/1366: take the single-use magic-link token from the URL fragment
-// and strip it before React renders (the query string is never touched —
-// `?token=` belongs to the join page). The token is exchanged for a session
-// by POST, never stored; fetchCurrentUser awaits the exchange. It is skipped
-// only when a stored session still passes /auth/me (OQ6).
-const _magicLinkToken = takeMagicLinkToken(window);
+// ROK-657/1366: the single-use magic-link token was already taken from the URL
+// fragment and stripped by lib/magic-link-capture — main.tsx's first import,
+// ahead of Sentry (the query string is never touched — `?token=` belongs to
+// the join page). It is exchanged for a session by POST, never stored;
+// fetchCurrentUser awaits the exchange. The redeem is skipped unless there is
+// no stored session or /auth/me rejects it with 401/403 (OQ6).
+const _magicLinkToken = takeCapturedMagicLinkToken();
 if (_magicLinkToken) void startMagicLinkRedeem(_magicLinkToken);
 
 // Seed auth cache from localStorage for instant return visits — but not while

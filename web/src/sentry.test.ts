@@ -81,3 +81,37 @@ describe('web Sentry beforeSend (ROK-1162)', () => {
         expect(beforeSend(event)).toBe(event);
     });
 });
+
+type ScrubCrumb = { category?: string; data?: Record<string, unknown> };
+type ScrubEvent = { request?: { url?: string } };
+interface ScrubConfig {
+    beforeSend: (event: ScrubEvent) => ScrubEvent | null;
+    beforeBreadcrumb?: (crumb: ScrubCrumb) => ScrubCrumb | null;
+}
+
+describe('web Sentry magic-link token scrubbing (ROK-1366)', () => {
+    let config: ScrubConfig;
+
+    beforeEach(async () => {
+        vi.resetModules();
+        const Sentry = await import('@sentry/react');
+        const initMock = Sentry.init as unknown as ReturnType<typeof vi.fn>;
+        initMock.mockClear();
+        await import('./sentry');
+        config = initMock.mock.calls[0][0] as ScrubConfig;
+    });
+
+    it('scrubs a fragment token from navigation breadcrumbs', () => {
+        expect(config.beforeBreadcrumb, 'Sentry.init needs a beforeBreadcrumb scrubber').toBeTypeOf('function');
+        const crumb = config.beforeBreadcrumb!({
+            category: 'navigation',
+            data: { from: '/events/1#token=abc', to: '/events/1' },
+        });
+        expect(crumb?.data).toEqual({ from: '/events/1#token=[Filtered]', to: '/events/1' });
+    });
+
+    it('scrubs a fragment token from the event request url', () => {
+        const event = config.beforeSend({ request: { url: 'https://rl.test/e#token=abc' } });
+        expect(event?.request?.url).toBe('https://rl.test/e#token=[Filtered]');
+    });
+});

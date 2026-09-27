@@ -1,4 +1,8 @@
-// Sentry MUST be imported first — before any other modules.
+// ROK-1366: capture + strip the magic-link fragment token BEFORE Sentry
+// initialises, so it never reaches breadcrumbs, tracing or replay. This MUST
+// stay the very first import (magic-link-capture.test.ts pins it).
+import './lib/magic-link-capture';
+// Sentry next — before any other modules.
 // ROK-306: Maintainer telemetry for error tracking.
 import { Sentry } from './sentry';
 
