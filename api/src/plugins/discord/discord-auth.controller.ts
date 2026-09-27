@@ -5,7 +5,6 @@ import {
   Req,
   Res,
   Query,
-  HttpStatus,
   Logger,
   Optional,
   Inject,
@@ -13,7 +12,6 @@ import {
 import { AuthService } from '../../auth/auth.service';
 import { UsersService } from '../../users/users.service';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../../settings/settings.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RateLimit } from '../../throttler/rate-limit.decorator';
@@ -36,6 +34,10 @@ import {
   issueDiscordRefreshCookie,
 } from './discord-auth.helpers';
 import { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
+import {
+  LinkNonceService,
+  LINK_REQUEST_EXPIRED_MESSAGE,
+} from '../../auth/link-nonce.service';
 
 interface RequestWithUser extends Request {
   user: {
@@ -54,7 +56,6 @@ export class DiscordAuthController {
     private authService: AuthService,
     private usersService: UsersService,
     private configService: ConfigService,
-    private jwtService: JwtService,
     private settingsService: SettingsService,
     @Optional()
     @Inject(DiscordNotificationService)
@@ -62,6 +63,7 @@ export class DiscordAuthController {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly eventEmitter: EventEmitter2,
     private readonly refreshService: RefreshTokenService,
+    private readonly linkNonceService: LinkNonceService,
   ) {}
 
   /** Get the frontend client URL for post-auth redirects. */
@@ -203,40 +205,23 @@ export class DiscordAuthController {
     res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
   }
 
-  /** GET /auth/discord/link — initiate Discord OAuth for account linking. */
+  /** GET /auth/discord/link?nonce= — single-use nonce from POST .../link/start (ROK-1630). */
   @RateLimit('auth')
   @Get('discord/link')
   async discordLink(
-    @Query('token') token: string,
+    @Query('nonce') nonce: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    if (!token) {
-      res
-        .status(HttpStatus.UNAUTHORIZED)
-        .json({ message: 'Authentication token required' });
+    const claims = await this.linkNonceService.consume('discord', nonce);
+    if (!claims) {
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE)}`,
+      );
       return;
     }
-    const userId = this.verifyTokenOrRedirect(token, res, clientUrl);
-    if (userId === null) return;
-    await this.initiateDiscordLinkFlow(userId, clientUrl, res);
-  }
-
-  /** Verify JWT token, redirect to error on failure. Returns userId or null. */
-  private verifyTokenOrRedirect(
-    token: string,
-    res: Response,
-    clientUrl: string,
-  ): number | null {
-    try {
-      return this.jwtService.verify<{ sub: number }>(token).sub;
-    } catch {
-      res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
-      );
-      return null;
-    }
+    await this.initiateDiscordLinkFlow(claims.userId, clientUrl, res);
   }
 
   /** Complete the Discord link: persist link, emit event, send DM. */

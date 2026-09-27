@@ -12,13 +12,17 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import * as Sentry from '@sentry/nestjs';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
+import { validateSteamReturnTo } from './steam-link-returnto.helpers';
+import {
+  LinkNonceService,
+  LINK_REQUEST_EXPIRED_MESSAGE,
+} from '../auth/link-nonce.service';
 import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
@@ -42,7 +46,7 @@ export class SteamAuthController {
     private readonly usersService: UsersService,
     private readonly settingsService: SettingsService,
     private readonly configService: ConfigService,
-    private readonly jwtService: JwtService,
+    private readonly linkNonceService: LinkNonceService,
     private readonly steamService: SteamService,
     private readonly steamWishlistService: SteamWishlistService,
   ) {}
@@ -123,20 +127,6 @@ export class SteamAuthController {
     return `${proto}://${host}`;
   }
 
-  /** Allowlist of valid returnTo paths for Steam link redirects. */
-  private static readonly RETURN_TO_ALLOWLIST = ['/onboarding', '/profile'];
-
-  /** Validate returnTo against allowlist; returns safe path or default. */
-  private validateReturnTo(returnTo: string | undefined): string {
-    const defaultPath = '/profile';
-    if (!returnTo || typeof returnTo !== 'string') return defaultPath;
-    if (returnTo.startsWith('//') || /^[a-z]+:\/\//i.test(returnTo))
-      return defaultPath;
-    if (!SteamAuthController.RETURN_TO_ALLOWLIST.includes(returnTo))
-      return defaultPath;
-    return returnTo;
-  }
-
   /** Redirect to client with Steam-not-configured error. */
   private redirectSteamNotConfigured(
     res: Response,
@@ -150,59 +140,37 @@ export class SteamAuthController {
   }
 
   /**
-   * GET /auth/steam/link
-   * Initiates Steam OpenID 2.0 linking.
-   * Note: Uses JWT token in query param since browser redirects can't send headers.
+   * GET /auth/steam/link?nonce= — initiates Steam OpenID 2.0 linking. The
+   * nonce (POST /auth/steam/link/start, ROK-1630) is single-use and carries
+   * the user id + allowlisted returnTo; every miss gets the same error 302.
    */
   @RateLimit('auth')
   @Get('link')
   async steamLink(
-    @Query('token') token: string,
+    @Query('nonce') nonce: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    if (!token) {
-      res.status(401).json({ message: 'Authentication token required' });
+    const claims = await this.linkNonceService.consume('steam', nonce);
+    if (!claims) {
+      const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
+      res.redirect(`${clientUrl}/profile?steam=error&message=${msg}`);
       return;
     }
-
-    const userId = this.verifySteamToken(token, res, clientUrl);
-    if (userId === null) return;
-
-    const returnTo = this.validateReturnTo(
-      req.query.returnTo as string | undefined,
-    );
-
+    const returnTo = validateSteamReturnTo(claims.returnTo);
     if (!(await this.settingsService.isSteamConfigured())) {
       this.redirectSteamNotConfigured(res, clientUrl, returnTo);
       return;
     }
-
     const state = this.signState({
-      userId,
+      userId: claims.userId,
       action: 'steam_link',
       timestamp: Date.now(),
       returnTo,
     });
     const callbackUrl = `${this.getApiBaseUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
     res.redirect(buildSteamOpenIdUrl(callbackUrl));
-  }
-
-  /** Verify JWT token for Steam linking. Returns userId or null on failure. */
-  private verifySteamToken(
-    token: string,
-    res: Response,
-    clientUrl: string,
-  ): number | null {
-    try {
-      return this.jwtService.verify<{ sub: number }>(token).sub;
-    } catch {
-      res.redirect(
-        `${clientUrl}/profile?steam=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
-      );
-      return null;
-    }
   }
 
   /**
@@ -236,7 +204,7 @@ export class SteamAuthController {
     if (!state) return '/profile';
     const stateData = this.verifyState(state);
     if (!stateData) return '/profile';
-    return this.validateReturnTo(stateData.returnTo as string | undefined);
+    return validateSteamReturnTo(stateData.returnTo);
   }
 
   /** Process the Steam link callback: verify state, verify OpenID, link account. */

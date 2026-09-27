@@ -9,6 +9,10 @@ import { consumeTokenOnce } from './single-use-token.helpers';
 /** Link-start nonce lifetime (operator ruling OQ2, 2026-09-27). */
 export const LINK_NONCE_TTL_SECONDS = 120;
 
+/** Copy for every GET-hop miss (operator ruling OQ4, 2026-09-27). */
+export const LINK_REQUEST_EXPIRED_MESSAGE =
+  'Link request expired. Please try again.';
+
 export type LinkProvider = 'discord' | 'steam';
 
 /** What a consumed nonce proves: who started the link, and Steam's returnTo. */
