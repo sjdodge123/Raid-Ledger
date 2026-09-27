@@ -1905,9 +1905,9 @@ run_narrowed_gate() {
   local selected="$1" flag="--only-$1" entry name selector
   for entry in \
     "Build (all workspaces)|" \
-    "Bundle size budget|" \
     "TypeScript (all)|" \
     "Lint (all)|" \
+    "Bundle size budget|" \
     "Shell parse check (scripts/*.sh)|" \
     "${unit_step_label}|unit" \
     "Tools unit tests (mcp servers)|" \
@@ -1930,10 +1930,12 @@ run_narrowed_gate() {
 run_default_gate() {
   if ! $only_e2e; then
     run_step "Build (all workspaces)" run_build
-    # Static, deterministic check on the build output — BOTH static and full.
-    run_step "Bundle size budget" run_bundle_budget
     run_step "TypeScript (all)" run_typecheck
     run_step "Lint (all)" run_lint
+    # Static, deterministic check on the build output — BOTH static and full.
+    # After typecheck + lint: run_step stops on the first FAIL, so an overrun
+    # placed earlier would hide their results.
+    run_step "Bundle size budget" run_bundle_budget
     # Static, deterministic check — runs in BOTH static and full gates.
     run_step "Shell parse check (scripts/*.sh)" run_shell_parse_check
     run_step "Script node:test specs (scripts/*.spec.mjs)" run_script_node_specs

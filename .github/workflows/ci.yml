@@ -153,14 +153,6 @@ jobs:
       - name: Build web
         run: npm run build -w web
 
-      # ROK-1154: gzip budget per web chunk class (entry / vendor / lazy) on
-      # the dist built above; an overrun fails the job. Budgets and the reason
-      # for each: scripts/bundle-budget.config.mjs (scripts/** is in the `code`
-      # filter, so raising one re-runs this job). Same command validate-ci.sh
-      # runs. Runbook: docs/runbooks/bundle-budget.md.
-      - name: Bundle size budget
-        run: node scripts/check-bundle-size.mjs
-
       # ROK-1136: `nest build` uses api/tsconfig.build.json, which EXCLUDES
       # **/*.spec*.ts and src/common/testing/**, so type errors inside test
       # files (e.g. against the shared drizzle-mock) slip past the build step.
@@ -185,6 +177,15 @@ jobs:
       # node_modules installed by `npm ci` above — no test-bot install needed.
       - name: Lint (tools/test-bot)
         run: npm run lint --prefix tools/test-bot
+
+      # ROK-1154: gzip budget per web chunk class (entry / vendor / lazy) on
+      # the dist built above; an overrun fails the job. It runs AFTER typecheck and
+      # lint so an overrun never hides their results. Budgets and the reason
+      # for each: scripts/bundle-budget.config.mjs (scripts/** is in the `code`
+      # filter, so raising one re-runs this job). Same command validate-ci.sh
+      # runs. Runbook: docs/runbooks/bundle-budget.md.
+      - name: Bundle size budget
+        run: node scripts/check-bundle-size.mjs
 
       # 2026-09-07 CI-coverage audit: tools/test-bot's pure assertion specs ran
       # in NO GitHub job. Locally they run only under `validate-ci.sh --full`,
