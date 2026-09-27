@@ -193,24 +193,24 @@ describe('useSyncWishlist onError (ROK-1307 AC-8)', () => {
     });
 });
 
+function stubStart(status: number, body: unknown) {
+    const fn = vi.fn(async (url: string) =>
+        url.endsWith('/auth/steam/link/start')
+            ? { ok: status >= 200 && status < 300, status, json: async () => body }
+            : { ok: true, status: 200, json: async () => ({ linked: false }) },
+    );
+    vi.stubGlobal('fetch', fn);
+    return fn;
+}
+
+function startCall(fn: ReturnType<typeof stubStart>) {
+    return fn.mock.calls.find(([u]) => String(u).endsWith('/auth/steam/link/start')) as
+        [string, RequestInit & { headers: Record<string, string> }] | undefined;
+}
+
 describe('useSteamLink().linkSteam (ROK-1630 AC16)', () => {
     const realLocation = window.location;
     let navigations: string[] = [];
-
-    function stubStart(status: number, body: unknown) {
-        const fn = vi.fn(async (url: string) =>
-            url.endsWith('/auth/steam/link/start')
-                ? { ok: status >= 200 && status < 300, status, json: async () => body }
-                : { ok: true, status: 200, json: async () => ({ linked: false }) },
-        );
-        vi.stubGlobal('fetch', fn);
-        return fn;
-    }
-
-    function startCall(fn: ReturnType<typeof stubStart>) {
-        return fn.mock.calls.find(([u]) => String(u).endsWith('/auth/steam/link/start')) as
-            [string, RequestInit & { headers: Record<string, string> }] | undefined;
-    }
 
     beforeEach(() => {
         navigations = [];
