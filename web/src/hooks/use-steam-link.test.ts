@@ -23,7 +23,9 @@ vi.mock('../lib/toast', () => ({
     toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-import { useUnlinkSteam, useSyncLibrary, useSyncWishlist } from './use-steam-link';
+import { useUnlinkSteam, useSyncLibrary, useSyncWishlist, useSteamLink } from './use-steam-link';
+import { API_BASE_URL } from '../lib/config';
+import { toast } from '../lib/toast';
 
 const STATUS_KEY = ['steam', 'status'];
 
@@ -188,5 +190,78 @@ describe('useSyncWishlist onError (ROK-1307 AC-8)', () => {
             ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(STATUS_KEY),
         );
         expect(statusInvalidations.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe('useSteamLink().linkSteam (ROK-1630 AC16)', () => {
+    const realLocation = window.location;
+    let navigations: string[] = [];
+
+    function stubStart(status: number, body: unknown) {
+        const fn = vi.fn(async (url: string) =>
+            url.endsWith('/auth/steam/link/start')
+                ? { ok: status >= 200 && status < 300, status, json: async () => body }
+                : { ok: true, status: 200, json: async () => ({ linked: false }) },
+        );
+        vi.stubGlobal('fetch', fn);
+        return fn;
+    }
+
+    function startCall(fn: ReturnType<typeof stubStart>) {
+        return fn.mock.calls.find(([u]) => String(u).endsWith('/auth/steam/link/start')) as
+            [string, RequestInit & { headers: Record<string, string> }] | undefined;
+    }
+
+    beforeEach(() => {
+        navigations = [];
+        Object.defineProperty(window, 'location', {
+            configurable: true,
+            writable: true,
+            value: {
+                get href() { return 'http://localhost/onboarding'; },
+                set href(v: string) { navigations.push(v); },
+            },
+        });
+    });
+
+    afterEach(() => {
+        Object.defineProperty(window, 'location', { configurable: true, writable: true, value: realLocation });
+        vi.unstubAllGlobals();
+        vi.clearAllMocks();
+    });
+
+    it('POSTs start with {returnTo} and the Bearer header, then navigates to the ?nonce= hop', async () => {
+        const fetchFn = stubStart(200, { nonce: 'st/eam', expiresIn: 120 });
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useSteamLink(), { wrapper });
+        await act(async () => { await result.current.linkSteam('/onboarding'); });
+
+        const call = startCall(fetchFn);
+        expect(call, 'expected a POST to /auth/steam/link/start').toBeDefined();
+        expect(call![1].method).toBe('POST');
+        expect(call![1].headers.Authorization).toBe('Bearer test-jwt');
+        expect(JSON.parse(String(call![1].body))).toEqual({ returnTo: '/onboarding' });
+        expect(navigations).toEqual([`${API_BASE_URL}/auth/steam/link?nonce=${encodeURIComponent('st/eam')}`]);
+    });
+
+    it('a 401 from start shows the Steam log-in-again toast and does not navigate', async () => {
+        stubStart(401, { message: 'Unauthorized' });
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useSteamLink(), { wrapper });
+        await act(async () => { await result.current.linkSteam(); });
+
+        expect(toast.error).toHaveBeenCalledWith('Please log in again to link Steam');
+        expect(navigations).toEqual([]);
+        expect(result.current.isLinkPending).toBe(false);
+    });
+
+    it('a click event passed as the argument is not sent as returnTo', async () => {
+        const fetchFn = stubStart(200, { nonce: 'n', expiresIn: 120 });
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useSteamLink(), { wrapper });
+        const fakeEvent = { type: 'click' } as unknown as string;
+        await act(async () => { await result.current.linkSteam(fakeEvent); });
+
+        expect(JSON.parse(String(startCall(fetchFn)![1].body))).toEqual({});
     });
 });

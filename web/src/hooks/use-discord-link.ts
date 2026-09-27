@@ -1,21 +1,20 @@
 import { useCallback } from 'react';
-import { API_BASE_URL } from '../lib/config';
-import { toast } from '../lib/toast';
+import { useLinkStart } from './use-link-start';
 
 /**
- * Returns a stable callback that initiates the Discord OAuth account-linking flow.
- * Reads the current JWT from localStorage and redirects the browser to the API's
- * Discord link endpoint with the token as a query parameter.
+ * ROK-1630: the Discord account-linking initiator with its pending state.
+ * POSTs /auth/discord/link/start (Bearer header only), then navigates to the
+ * single-use `?nonce=` hop. Disable the trigger while `isPending` is true.
  */
-export function useDiscordLink() {
-    const linkDiscord = useCallback(() => {
-        const token = localStorage.getItem('raid_ledger_token');
-        if (!token) {
-            toast.error('Please log in again to link Discord');
-            return;
-        }
-        window.location.href = `${API_BASE_URL}/auth/discord/link?token=${encodeURIComponent(token)}`;
-    }, []);
+export function useDiscordLinkAction() {
+    const { start, isPending } = useLinkStart('discord');
+    // Takes no arguments on purpose: a caller wiring this straight to onClick
+    // passes the click event, which must never become a request body field.
+    const linkDiscord = useCallback(() => start(), [start]);
+    return { linkDiscord, isPending };
+}
 
-    return linkDiscord;
+/** Stable callback that starts Discord account linking (see useDiscordLinkAction). */
+export function useDiscordLink() {
+    return useDiscordLinkAction().linkDiscord;
 }

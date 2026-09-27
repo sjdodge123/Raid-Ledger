@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 import { toast } from '../lib/toast';
+import { useLinkStart } from './use-link-start';
 import type { SteamLinkStatusDto } from '@raid-ledger/contract';
 
 /**
@@ -74,21 +75,14 @@ export function useSyncWishlist() {
     });
 }
 
-/** Build the Steam link URL with optional returnTo path. */
-export function getSteamLinkUrl(returnTo?: string): string | null {
-    const token = getAuthToken();
-    if (!token) return null;
-    let url = `${API_BASE_URL}/auth/steam/link?token=${encodeURIComponent(token)}`;
-    if (returnTo) url += `&returnTo=${encodeURIComponent(returnTo)}`;
-    return url;
-}
-
 export function useSteamLink() {
-    const linkSteam = useCallback((returnTo?: string) => {
-        const url = getSteamLinkUrl(returnTo);
-        if (!url) { toast.error('Please log in again to link Steam'); return; }
-        window.location.href = url;
-    }, []);
+    const { start, isPending: isLinkPending } = useLinkStart('steam');
+    // ROK-1630: only a string is a returnTo — a caller wiring this straight to
+    // onClick passes the click event, which must never reach the request body.
+    const linkSteam = useCallback(
+        (returnTo?: string) => start(typeof returnTo === 'string' ? returnTo : undefined),
+        [start],
+    );
 
     const steamStatus = useQuery<SteamLinkStatusDto>({
         queryKey: ['steam', 'status'],
@@ -100,5 +94,5 @@ export function useSteamLink() {
     const unlinkSteam = useUnlinkSteam();
     const syncLibrary = useSyncLibrary();
     const syncWishlist = useSyncWishlist();
-    return { linkSteam, steamStatus, unlinkSteam, syncLibrary, syncWishlist };
+    return { linkSteam, isLinkPending, steamStatus, unlinkSteam, syncLibrary, syncWishlist };
 }
