@@ -109,7 +109,7 @@ describe('insertIntent', () => {
     jest.useRealTimers();
   });
 
-  it('writes a week intent 14 days out with no TTL when no urgency is asked for', async () => {
+  it('writes a week intent LFG_EXPIRY_DAYS (7) days out with no TTL when no urgency is asked for', async () => {
     await insertIntent(mockDb as unknown as LfgDb, 11, 22);
     const [values] = writtenPayloads(mockDb.values);
     expect(values.urgency).toBe('week');

@@ -52,7 +52,7 @@ export interface LfgUrgencyRequest {
   timezone?: string | null;
 }
 
-/** The default every pre-ROK-1479 caller gets: an unchanged 14-day intent. */
+/** The default every pre-ROK-1479 caller gets: an unchanged week intent (`LFG_EXPIRY_DAYS`). */
 const WEEK_REQUEST: LfgUrgencyRequest = { urgency: 'week' };
 
 /** The three columns a class determines, resolved together so they can't drift. */
