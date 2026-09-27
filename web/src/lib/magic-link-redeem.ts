@@ -15,17 +15,24 @@ import { clearSilentGuard, setAuthMethod } from './api/silent-reauth';
 
 let pending: Promise<void> | null = null;
 
-/** OQ6: a stored access token that still passes /auth/me is kept as-is. */
-async function hasValidSession(): Promise<boolean> {
+/** What /auth/me says about the stored access token (OQ6). */
+type StoredSession = 'none' | 'valid' | 'unknown';
+
+/**
+ * OQ6: only a 401/403 from /auth/me proves the stored session is gone. A 429,
+ * 5xx or network error proves nothing, so the session is 'unknown' and kept.
+ */
+async function checkStoredSession(): Promise<StoredSession> {
   const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!stored) return false;
+  if (!stored) return 'none';
   try {
     const res = await fetch(`${API_BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${stored}` },
     });
-    return res.ok;
+    if (res.ok) return 'valid';
+    return res.status === 401 || res.status === 403 ? 'none' : 'unknown';
   } catch {
-    return false;
+    return 'unknown';
   }
 }
 
@@ -55,12 +62,13 @@ function adoptSession(accessToken: string): void {
 }
 
 /**
- * OQ6 (operator ruling 2026-09-27): redeem unless a still-valid session
- * exists. A missing, expired or unverifiable stored token never blocks the
- * link, whoever it is for; only one that passes /auth/me is kept.
+ * OQ6 (operator ruling 2026-09-27): redeem only when there is no stored
+ * session or /auth/me rejects it (401/403), whoever the link is for. A
+ * still-valid session is kept, and so is one a transient /auth/me failure
+ * could not judge — the link is left unspent (its fragment is already gone).
  */
 async function runRedeem(token: string): Promise<void> {
-  if (await hasValidSession()) return;
+  if ((await checkStoredSession()) !== 'none') return;
   const accessToken = await postRedeem(token);
   if (accessToken) adoptSession(accessToken);
 }

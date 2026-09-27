@@ -160,7 +160,7 @@ describe('ROK-1366 OQ6: a stored session decides whether to redeem', () => {
 
 /**
  * OQ6 (operator ruling 2026-09-27): only a stored token that still passes
- * /auth/me blocks a redeem. A missing, expired, unreadable or unverifiable one
+ * /auth/me blocks a redeem. A missing, expired (401/403) or unreadable one
  * does not — whoever the link is for.
  */
 describe('ROK-1366 OQ6: an expired or unverifiable stored token never blocks a redeem', () => {
@@ -181,14 +181,14 @@ describe('ROK-1366 OQ6: an expired or unverifiable stored token never blocks a r
     expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('magic');
   });
 
-  it('redeems when /auth/me is unreachable (the stored session cannot be shown valid)', async () => {
+  it('redeems over a stored token that /auth/me answers with 403 (counts as expired)', async () => {
     localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    server.use(http.get(`${API_BASE}/auth/me`, () => HttpResponse.error()));
+    meReturns(403);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
-    expect(seen.calls, 'an unverifiable stored session must not block the link').toBe(1);
+    expect(seen.calls, 'a 403 from /auth/me means the stored session is gone').toBe(1);
     expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
   });
 
@@ -214,6 +214,43 @@ describe('ROK-1366 OQ6: an expired or unverifiable stored token never blocks a r
     expect(seen.calls, 'an expired impersonation must not block the link').toBe(1);
     expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
     expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBeNull();
+  });
+});
+
+/**
+ * OQ6 review fix: a 429, 5xx or network error from /auth/me proves nothing
+ * about the stored session, so it must not be swapped. The redeem is skipped
+ * and the stored session is left untouched.
+ */
+describe('ROK-1366 OQ6: a transient /auth/me failure never swaps a stored session', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it.each([429, 500, 502, 503])('keeps the stored session and skips the redeem on a %i from /auth/me', async (status) => {
+    const stored = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+    meReturns(status);
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expect(seen.calls, `a ${status} from /auth/me must not spend the link or swap the session`).toBe(0);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
+    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+  });
+
+  it('keeps the stored session and skips the redeem when /auth/me is unreachable', async () => {
+    const stored = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+    server.use(http.get(`${API_BASE}/auth/me`, () => HttpResponse.error()));
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expect(seen.calls, 'a network error must not spend the link or swap the session').toBe(0);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
   });
 });
 
