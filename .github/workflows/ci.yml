@@ -127,6 +127,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # HEAD^1 (the PR base) for the migration merge-order guard below.
+          fetch-depth: 2
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -214,6 +217,14 @@ jobs:
       # packages/contract/dist, built above.
       - name: Script node:test specs (scripts/*.spec.mjs)
         run: node --test scripts/*.spec.mjs
+
+      # ROK-1693: a migration whose journal `when` is <= the newest entry
+      # already on main is silently SKIPPED by Drizzle on every DB that ran
+      # that entry (0176_lfg_invites never reached prod). HEAD^1 is the base:
+      # the merge ref's first parent on pull_request, the prior main on push.
+      # A no-op when the journal is unchanged.
+      - name: Migration merge-order guard
+        run: node scripts/check-migration-merge-order.mjs --base HEAD^1
 
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
