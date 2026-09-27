@@ -13,7 +13,7 @@
  * scrolls rather than growing the banner to fit 200 chips.
  *
  * Clicking an entry ASKS WHEN (ROK-1479 D2). It used to raise the hand
- * immediately on a 14-day horizon; a `now` intent lapses in 30 or 60 minutes,
+ * immediately on the week horizon; a `now` intent lapses in 30 or 60 minutes,
  * so the horizon has to be the user's choice rather than an assumption. The
  * second click is the one that posts.
  *

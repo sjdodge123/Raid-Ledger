@@ -268,7 +268,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
 
 describe('AC2 — bump, never a second row', () => {
   // MUTATION: make `bumpIntentUrgency` return null before its UPDATE and this
-  // fails on the DATE comparison (20160 minutes, not 30), which is the point —
+  // fails on the DATE comparison (10080 minutes, not 30), which is the point —
   // the row count would still be 1, so a count-only assertion proves nothing.
   it('shortens the caller own row to the now horizon and answers 200', async () => {
     const [a] = await members('alpha');
@@ -298,7 +298,7 @@ describe('AC2 — bump, never a second row', () => {
   // The reverse direction, which is what makes this a bump rather than a
   // one-way "shorten": going back to week must LENGTHEN the same row.
   // MUTATION: restrict the bump to `opts.urgency === 'now'` and this fails
-  // reporting 30 minutes where 20160 was expected.
+  // reporting 30 minutes where 10080 (7 days) was expected.
   it('lengthens the same row back to 7 days when the caller picks week again', async () => {
     const [a] = await members('alpha');
     const game = await createGame(testApp, 'Deep Rock');
@@ -489,7 +489,7 @@ describe('AC8 — per-row refresh horizons', () => {
   // group turns every "right now" intent into a weekly one, and nothing else
   // in the suite would notice.
   // MUTATION: collapse `refreshGroupExpiry` back to a single UPDATE with
-  // `computeExpiresAt(now)` and this fails reporting 20160 minutes on a row
+  // `computeExpiresAt(now)` and this fails reporting 10080 minutes on a row
   // that asked for 60.
   it('refreshes the week row to 7 days and the now row to its own TTL only', async () => {
     const [a, b] = await members('alpha', 'bravo');

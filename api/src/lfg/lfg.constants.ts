@@ -2,7 +2,7 @@
  * Constants for the LFG intents module (ROK-1451, extended by ROK-1479).
  *
  * The expiry horizon is a SINGLE global constant (AC13) — never inline
- * `14` anywhere, and never express it as a SQL default. `computeExpiresAt`
+ * the number anywhere, and never express it as a SQL default. `computeExpiresAt`
  * is the only place the arithmetic lives.
  */
 

@@ -119,7 +119,8 @@ export async function recipientHasLinkedDiscord(
  * - `inApp: false` — `NotificationService.create` short-circuits on
  *   `isCategoryEnabled` and returns `null` BEFORE `dispatchDiscord`, so no
  *   in-app row AND no DM. Missing that one spent the cap slot, the recipient's
- *   24h budget and the 14-day no-repeat horizon on a silent delivery (M1).
+ *   24h budget and the `LFG_INVITE_NO_REPEAT_DAYS` no-repeat horizon on a
+ *   silent delivery (M1).
  */
 export async function recipientOptedOut(
   db: LfgDb,
