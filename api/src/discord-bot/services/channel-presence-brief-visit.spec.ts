@@ -37,35 +37,76 @@ describe('isBriefVisit (ROK-1692)', () => {
   });
 
   it('is brief for the 8 s prod visit with nothing happening', () => {
-    expect(isBriefVisit({ openedAt: OPENED_AT, emptySince: at(8_000), ...quiet })).toBe(true);
+    expect(
+      isBriefVisit({ openedAt: OPENED_AT, emptySince: at(8_000), ...quiet }),
+    ).toBe(true);
   });
 
   it('is brief one ms under the threshold', () => {
-    expect(isBriefVisit({ openedAt: OPENED_AT, emptySince: at(BRIEF_VISIT_MS - 1), ...quiet })).toBe(true);
+    expect(
+      isBriefVisit({
+        openedAt: OPENED_AT,
+        emptySince: at(BRIEF_VISIT_MS - 1),
+        ...quiet,
+      }),
+    ).toBe(true);
   });
+});
 
+describe('isBriefVisit — anything else still recaps (ROK-1692)', () => {
   it('is NOT brief at exactly two minutes', () => {
-    expect(isBriefVisit({ openedAt: OPENED_AT, emptySince: at(BRIEF_VISIT_MS), ...quiet })).toBe(false);
+    expect(
+      isBriefVisit({
+        openedAt: OPENED_AT,
+        emptySince: at(BRIEF_VISIT_MS),
+        ...quiet,
+      }),
+    ).toBe(false);
   });
 
   it('is NOT brief when a game was detected', () => {
     const activities = [{ name: 'Valheim', seconds: 20 }];
-    expect(isBriefVisit({ openedAt: OPENED_AT, emptySince: at(20_000), ...quiet, activities })).toBe(false);
+    expect(
+      isBriefVisit({
+        openedAt: OPENED_AT,
+        emptySince: at(20_000),
+        ...quiet,
+        activities,
+      }),
+    ).toBe(false);
   });
 
   it('is NOT brief when an event was linked to the room', () => {
     const events = [{ id: 1 } as EmbedEventData];
-    expect(isBriefVisit({ openedAt: OPENED_AT, emptySince: at(20_000), ...quiet, events })).toBe(false);
+    expect(
+      isBriefVisit({
+        openedAt: OPENED_AT,
+        emptySince: at(20_000),
+        ...quiet,
+        events,
+      }),
+    ).toBe(false);
   });
 
   it('is NOT brief while a linked session is still live', () => {
     const live = [{ id: 9, gameId: 7, adHocStatus: 'live' }];
-    expect(isBriefVisit({ openedAt: OPENED_AT, emptySince: at(20_000), ...quiet, live })).toBe(false);
+    expect(
+      isBriefVisit({
+        openedAt: OPENED_AT,
+        emptySince: at(20_000),
+        ...quiet,
+        live,
+      }),
+    ).toBe(false);
   });
 });
 
 describe('retireBriefVisit (ROK-1692)', () => {
-  const row = { id: 'row-1', textChannelId: 'tc-1', messageId: 'msg-1' } as PresenceRow;
+  const row = {
+    id: 'row-1',
+    textChannelId: 'tc-1',
+    messageId: 'msg-1',
+  } as PresenceRow;
   const client = { isReady: () => true };
   const emptySince = at(8_000);
   const roomRecaps = new Map([['row-1', { endedAt: 1, recap: {} as never }]]);
@@ -79,7 +120,9 @@ describe('retireBriefVisit (ROK-1692)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
   });
 
@@ -101,7 +144,9 @@ describe('retireBriefVisit (ROK-1692)', () => {
     );
     jest.mocked(deleteMessage).mockRejectedValueOnce(error);
 
-    await expect(retireBriefVisit(flush, row, emptySince)).resolves.toBeUndefined();
+    await expect(
+      retireBriefVisit(flush, row, emptySince),
+    ).resolves.toBeUndefined();
 
     expect(closeRow).toHaveBeenCalledWith({}, 'row-1', 'brief', emptySince);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('msg-1'));

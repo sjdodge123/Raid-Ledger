@@ -19,7 +19,6 @@ import type { Logger } from '@nestjs/common';
 import {
   editEmbeds,
   isUnknownMessage,
-  sendEmbeds,
 } from '../discord-bot-client.messages.helpers';
 import type { ChannelEmbed } from '../embeds/embed-chrome.helpers';
 import {
@@ -27,10 +26,8 @@ import {
   type ResolvedBinding,
 } from '../listeners/voice-state.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
-import {
-  buildContext,
-  resolveNotificationChannel,
-} from './ad-hoc-notification.helpers';
+import { buildContext } from './ad-hoc-notification.helpers';
+import { openMessage } from './channel-presence-flush.open';
 import {
   graceMs,
   hydrateRecap,
@@ -43,6 +40,7 @@ import {
 import {
   findLinkedEvents,
   resolveRoom,
+  type LinkedEvent,
   type ResolvedRoom,
   type RoomResolveDeps,
   type RoomSnapshot,
@@ -53,12 +51,12 @@ import {
 } from './channel-presence-flush.occupancy';
 import { closeAllOccupancy } from './channel-presence-occupancy.helpers';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
+import { isBriefVisit, retireBriefVisit } from './channel-presence-brief-visit';
 import {
   clearEmpty,
   closeRow,
   findOpenRow,
   markEmpty,
-  openRow,
   savePayloadHash,
   type PresenceRow,
 } from './channel-presence-store.helpers';
@@ -227,25 +225,56 @@ async function flushEmpty(
       `Presence row ${row.id} lost its binding id; recapping against the channel's current binding ${bindingId} (ROK-1524)`,
     );
   }
-  const events = await hydrateRecap(flush.deps, bindingId, row.openedAt);
-  await renderAndPublishRecap(state, {
+  await recapOrRetire(state, {
     channelName: room.channelName,
+    binding,
+    bindingId,
+    emptySince,
+  });
+}
+
+/**
+ * Edit the message into its recap and close once due — or, for a drive-by
+ * visit (under two minutes, no game, no event), delete the card and close the
+ * row instead of recapping "0m" (ROK-1692).
+ */
+async function recapOrRetire(
+  state: FlushState,
+  empty: {
+    channelName: ResolvedRoom['channelName'];
+    binding: ResolvedBinding;
+    bindingId: string;
+    emptySince: Date;
+  },
+): Promise<void> {
+  const { flush, row, now } = state;
+  const { bindingId, emptySince } = empty;
+  const events = await hydrateRecap(flush.deps, bindingId, row.openedAt);
+  const roomRecap = await roomRecapFor(flush, row, emptySince, now);
+  const live = await findLinkedEvents(flush.deps.db, bindingId);
+  const { openedAt } = row;
+  const { activities } = roomRecap;
+  if (isBriefVisit({ openedAt, emptySince, events, live, activities })) {
+    await retireBriefVisit(flush, row, emptySince);
+    return;
+  }
+  await renderAndPublishRecap(state, {
+    channelName: empty.channelName,
     endedAt: emptySince.getTime(),
     events,
-    room: await roomRecapFor(flush, row, emptySince, now),
+    room: roomRecap,
   });
-  await closeIfDue(state, binding, bindingId, emptySince);
+  await closeIfDue(state, empty.binding, live, emptySince);
 }
 
 /** D8's both clauses: the grace has elapsed AND no session is still live. */
 async function closeIfDue(
   state: FlushState,
   binding: ResolvedBinding,
-  bindingId: string,
+  live: LinkedEvent[],
   emptySince: Date,
 ): Promise<void> {
   const { flush, row, now } = state;
-  const live = await findLinkedEvents(flush.deps.db, bindingId);
   if (!isCloseDue(emptySince, graceMs(binding.config), now, live)) return;
   await closeRow(flush.deps.db, row.id, 'empty', emptySince);
   flush.roomRecaps?.delete(row.id);
@@ -324,76 +353,6 @@ async function renderAndPublishRecap(
     now,
   );
   await publish(state, embeds);
-}
-
-/**
- * First occupancy: post the message, then record it (D7 — the DB is truth).
- *
- * `openRow` is a partial-index-safe upsert, so a lost race returns the row
- * that won rather than throwing. The hash is stored only for the row we
- * actually posted; on a lost race the winner's message is the live one and its
- * own flush owns the hash.
- */
-async function openMessage(
-  flush: ChannelFlush,
-  embeds: ChannelEmbed[],
-  openedAt: Date,
-): Promise<string | null> {
-  const binding = flush.binding;
-  if (!binding) return null;
-  const textChannelId = await resolveNotificationChannel(
-    flush.deps,
-    binding.bindingId,
-    null,
-  );
-  if (!textChannelId) {
-    flush.logger.warn(
-      `No text channel resolved for lobby presence in ${flush.channelId}`,
-    );
-    return null;
-  }
-  const client = flush.deps.clientService.getClient();
-  const message = await sendEmbeds(client, textChannelId, embeds);
-  return recordOpenedMessage(
-    flush,
-    binding.bindingId,
-    { textChannelId, messageId: message.id, embeds },
-    openedAt,
-  );
-}
-
-/**
- * Write the ledger row for a message we just posted, or disown it on a race.
- *
- * @returns The id of the row WE own, or `null` when another writer won it —
- *   the winner's flush owns its occupancy as well as its hash.
- */
-async function recordOpenedMessage(
-  flush: ChannelFlush,
-  bindingId: string,
-  posted: { textChannelId: string; messageId: string; embeds: ChannelEmbed[] },
-  openedAt: Date,
-): Promise<string | null> {
-  const result = await openRow(flush.deps.db, {
-    guildId: flush.guildId,
-    voiceChannelId: flush.channelId,
-    bindingId,
-    textChannelId: posted.textChannelId,
-    messageId: posted.messageId,
-    openedAt,
-  });
-  if (!result.created) {
-    flush.logger.warn(
-      `Presence row for ${flush.channelId} was opened concurrently; message ${posted.messageId} is orphaned`,
-    );
-    return null;
-  }
-  await savePayloadHash(
-    flush.deps.db,
-    result.row.id,
-    payloadHashOf(posted.embeds),
-  );
-  return result.row.id;
 }
 
 /**

@@ -31,6 +31,7 @@ jest.mock('../discord-bot-client.messages.helpers', () => ({
   __esModule: true,
   sendEmbeds: jest.fn(),
   editEmbeds: jest.fn(),
+  deleteMessage: jest.fn(),
   isUnknownMessage: jest.fn(() => false),
 }));
 jest.mock('./ad-hoc-notification.helpers', () => ({
@@ -68,12 +69,20 @@ jest.mock('./channel-presence-flush.helpers', () => ({
 
 import { flushChannel } from './channel-presence-flush';
 import { findLinkedEvents, resolveRoom } from './channel-presence-room.helpers';
-import { sendEmbeds } from '../discord-bot-client.messages.helpers';
+import {
+  deleteMessage,
+  editEmbeds,
+  sendEmbeds,
+} from '../discord-bot-client.messages.helpers';
 import {
   buildContext,
   resolveNotificationChannel,
 } from './ad-hoc-notification.helpers';
-import { findOpenRow, openRow } from './channel-presence-store.helpers';
+import {
+  closeRow,
+  findOpenRow,
+  openRow,
+} from './channel-presence-store.helpers';
 import {
   closeAllOccupancy,
   reconcileOccupancy,
@@ -413,5 +422,119 @@ describe('an unbound row still recaps its room', () => {
 
     expect(m.hydrateRoomRecap).not.toHaveBeenCalled();
     expect(recapInput().room).toBeNull();
+  });
+});
+
+/**
+ * ROK-1692 — a room that empties under two minutes after it opened, with no
+ * game detected and no linked event, has its card DELETED instead of recapped.
+ */
+describe('a brief visit is deleted, not recapped (ROK-1692)', () => {
+  const QUIET: RoomRecap = {
+    spanMs: 8_000,
+    members: [{ displayName: 'Pariah', seconds: 8 }],
+    activities: [],
+  };
+  const openedAgo = (ms: number) =>
+    m.findOpenRow.mockResolvedValue(
+      presenceRow({ openedAt: new Date(NOW - ms), payloadHash: 'live' }),
+    );
+
+  beforeEach(() => {
+    m.resolveRoom.mockResolvedValue(room({ memberCount: 0 }) as never);
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('deletes the card and closes the row brief at empty_since, with no recap', async () => {
+    openedAgo(8_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      'tc-1',
+      'msg-1',
+    );
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'brief', new Date(NOW));
+    expect(m.renderRecapMessage).not.toHaveBeenCalled();
+    expect(editEmbeds).not.toHaveBeenCalled();
+  });
+
+  it('still closes the row when the Discord delete fails', async () => {
+    openedAgo(20_000);
+    jest
+      .mocked(deleteMessage)
+      .mockRejectedValueOnce(new Error('Missing Permissions'));
+
+    await expect(flushChannel(flush())).resolves.toBeUndefined();
+
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'brief', new Date(NOW));
+  });
+});
+
+describe('a visit that is not brief recaps exactly as before (ROK-1692)', () => {
+  const QUIET: RoomRecap = {
+    spanMs: 8_000,
+    members: [{ displayName: 'Pariah', seconds: 8 }],
+    activities: [],
+  };
+  const openedAgo = (ms: number) =>
+    m.findOpenRow.mockResolvedValue(
+      presenceRow({ openedAt: new Date(NOW - ms), payloadHash: 'live' }),
+    );
+
+  beforeEach(() => {
+    m.resolveRoom.mockResolvedValue(room({ memberCount: 0 }) as never);
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('recaps as before once the visit reaches two minutes', async () => {
+    openedAgo(120_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(recapInput().room).toBe(QUIET);
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('recaps a short visit when a game was detected', async () => {
+    openedAgo(20_000);
+    m.hydrateRoomRecap.mockResolvedValue({
+      ...QUIET,
+      activities: [{ name: 'Valheim', seconds: 20 }],
+    });
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('recaps a short visit when an event is linked to the room', async () => {
+    openedAgo(20_000);
+    m.hydrateRecap.mockResolvedValue([{ id: 900 }] as never);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('recaps a short visit while a linked session is still live', async () => {
+    openedAgo(20_000);
+    m.findLinkedEvents.mockResolvedValue([
+      { id: 901, gameId: 7, adHocStatus: 'live' },
+    ]);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(closeRow).not.toHaveBeenCalledWith(
+      db,
+      'row-1',
+      'brief',
+      expect.anything(),
+    );
   });
 });
