@@ -35,7 +35,11 @@
  * `api/src/discord-bot/lfm/lfm-embed.helpers.ts` (`stateAuthorLine`,
  * `playingDescription`) rather than guessed.
  */
-import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
+import {
+  pollForCondition,
+  pollForEmbed,
+  waitForEmbedUpdate,
+} from '../../helpers/polling.js';
 import { readLastMessages } from '../../helpers/messages.js';
 import {
   endLfgSession,
@@ -304,22 +308,35 @@ async function pinLfgBoard(ctx: TestContext, enabled: boolean): Promise<boolean>
  * group first makes the two failures name themselves, which is the whole point
  * of an assertion that has to survive a red run being triaged by someone else.
  *
+ * POLLED, not read once: `POST /lfg` emits `LFM_REACHED` without awaiting it,
+ * the spawn commits in the listener's own transaction, and `await-processing`
+ * drains only BullMQ — so on an idle env a single read beat the spawn's COMMIT
+ * (`playingNow is null (activeCount=2, nowCount=2)`). Same fix as the board's
+ * `lfg-board-spawn-indicator-phase.ts::assertSpawned`.
+ *
  * @param run - The active run.
  * @returns The spawned event's id, which every voice record must land on.
  */
 async function assertSpawned(run: Run): Promise<number> {
-  const group = await run.ctx.api.get<LfgGroupSummary>(
-    `/lfg/${run.game.id}`,
-  );
-  if (!group.playingNow) {
+  const seen: { group?: LfgGroupSummary } = {};
+  try {
+    const playing = await pollForCondition(async () => {
+      seen.group = await run.ctx.api.get<LfgGroupSummary>(
+        `/lfg/${run.game.id}`,
+      );
+      return seen.group.playingNow ?? null;
+    }, run.ctx.config.timeoutMs);
+    return playing.eventId;
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    const group = seen.group as (LfgGroupSummary & { nowCount?: number }) | undefined;
     throw new Error(
       `AC7: two now-hands did NOT spawn a session on "${run.game.name}" — ` +
-        `playingNow is null (activeCount=${group.activeCount}, ` +
-        `nowCount=${(group as { nowCount?: number }).nowCount ?? '?'}). ` +
-        'The post is not the problem; nothing was spawned to post about.',
+        `playingNow is null (activeCount=${group?.activeCount ?? '?'}, ` +
+        `nowCount=${group?.nowCount ?? '?'}). ` +
+        `The post is not the problem; nothing was spawned to post about. (${why})`,
     );
   }
-  return group.playingNow.eventId;
 }
 
 /**
