@@ -12,10 +12,9 @@ import * as envSync from './env-sync.js';
 import * as task from './task.js';
 import { runCloneCore } from './env-clone-prod.js';
 import {
-  IDENTITY_ONLY_NOT_HONOURED,
   countSharedKeys,
   describeOverlayStep,
-  overlayIgnoredIdentityOnly,
+  overlayDeployNotes,
   runSettingsOverlay,
 } from './env-settings-overlay.js';
 import { buildSshArgs } from '../exec.js';
@@ -208,7 +207,7 @@ export async function runDeployChain(
   let overlaySharedKeys = 0;
   let overlayApplied = 0;
   let overlaySkipped = 0;
-  let overlayNotHonoured = false;
+  let overlayNotes = '';
   let overlayBundleWarning: string | null = null;
   if (!params.skip_sync) {
     t = now();
@@ -218,7 +217,7 @@ export async function runDeployChain(
     overlayApplied = ov.applied.length;
     overlaySharedKeys = countSharedKeys(ov.applied);
     overlaySkipped = ov.skipped_keys?.length ?? 0;
-    overlayNotHonoured = overlayIgnoredIdentityOnly(ov, identityOnly);
+    overlayNotes = overlayDeployNotes(ov, identityOnly);
     overlayBundleWarning = ov.bundle_warning ?? null;
     ctx.recordStep(
       'settings_overlay',
@@ -270,9 +269,8 @@ export async function runDeployChain(
   const settingsSource = syncedSettings
     ? `${overlayApplied > 0 ? `laptop sync + slot identity overlay${skippedNote}` : 'laptop sync'}`
     : 'VM settings bundle overlay (laptop DB unavailable)';
-  // Surface the bundle warning on a green deploy too: a healthy laptop sync
-  // masks a missing/undecryptable bundle until the next laptop-less deploy.
-  const bundleNote = (overlayBundleWarning ? ` Bundle warning: ${overlayBundleWarning}.` : '')
-    + (overlayNotHonoured ? ` ${IDENTITY_ONLY_NOT_HONOURED}.` : '');
-  return { ...base, ok: true, message: `Settings: ${settingsSource}.${bundleNote} Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
+  // overlayNotes surfaces, on a green deploy too, a failed overlay (the env
+  // may be on the operator's bot), a bundle warning (a healthy sync masks it
+  // until the next laptop-less deploy) and a not-honoured identity-only run.
+  return { ...base, ok: true, message: `Settings: ${settingsSource}.${overlayNotes} Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
 }

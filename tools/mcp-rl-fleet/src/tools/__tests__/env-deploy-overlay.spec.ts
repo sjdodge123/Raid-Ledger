@@ -28,25 +28,30 @@ vi.mock('../env-build-image.js', () => ({ execute: vi.fn() }));
 const cloneCore = vi.fn();
 vi.mock('../env-clone-prod.js', () => ({ runCloneCore: (...a: unknown[]) => cloneCore(...a) }));
 vi.mock('../task.js', () => ({ executeWait: vi.fn() }));
+// The remote command is the LAST ssh arg, so the child-process stub can tell
+// the overlay from the restart (and the identity-only call from its retry).
 vi.mock('../../exec.js', () => ({
-  buildSshArgs: vi.fn(async () => ['-o', 'BatchMode=yes', 'rl-agent@host', 'noop']),
+  buildSshArgs: vi.fn(async (cmd: string) => ['-o', 'BatchMode=yes', 'rl-agent@host', cmd]),
 }));
-// restartAllinone shells out over ssh; stub the child process so the chain
-// runs offline (the restart itself is not what these tests are about).
+// restartAllinone and the real runSettingsOverlay shell out over ssh; stub the
+// child process so the chain runs offline. childExec resolves { stdout,
+// stderr } (what promisify(execFile) yields) or rejects like a non-zero exit.
+type ExecOut = { stdout: string; stderr: string };
+const childExec = vi.fn(async (_cmd: string, _args: string[]): Promise<ExecOut> => ({ stdout: '', stderr: '' }));
 vi.mock('node:child_process', () => ({
   execFile: (
-    _cmd: string,
-    _args: string[],
+    cmd: string,
+    args: string[],
     opts: unknown,
-    cb?: (e: Error | null, stdout: string, stderr: string) => void,
+    cb?: (e: Error | null, out?: ExecOut) => void,
   ) => {
-    const done = typeof opts === 'function' ? (opts as (e: Error | null, o: string, s: string) => void) : cb;
-    done?.(null, '', '');
+    const done = typeof opts === 'function' ? (opts as (e: Error | null, out?: ExecOut) => void) : cb;
+    childExec(cmd, args).then((out) => done?.(null, out), (err: Error) => done?.(err));
   },
 }));
 
 import { runDeployChain, type ChainCtx } from '../env-deploy-steps.js';
-import { countSharedKeys } from '../env-settings-overlay.js';
+import { IDENTITY_ONLY_NOT_HONOURED, countSharedKeys } from '../env-settings-overlay.js';
 import { buildSshArgs } from '../../exec.js';
 
 // What rl-infra/orchestrator/bin/env-settings-overlay ALWAYS writes, bundle or
@@ -92,7 +97,31 @@ beforeEach(() => {
   envSyncExecute.mockReset();
   overlayRun.mockReset().mockResolvedValue({ ok: true, applied: [] });
   cloneCore.mockReset().mockResolvedValue({ ok: true, restarted_for_settings: true });
+  childExec.mockReset().mockResolvedValue({ stdout: '', stderr: '' });
+  vi.mocked(buildSshArgs).mockClear();
 });
+
+const OVERLAY_BIN = '/srv/rl-infra/orchestrator/bin/env-settings-overlay';
+const realOverlay = () =>
+  vi.importActual<typeof import('../env-settings-overlay.js')>('../env-settings-overlay.js');
+/** The ssh remote commands issued so far (last arg of each buildSshArgs call). */
+const remoteCommands = () => vi.mocked(buildSshArgs).mock.calls.map((c) => c[0]);
+
+/**
+ * A VM orchestrator deployed before --identity-only existed: its arg loop
+ * rejects the flag (`*) echo "unknown arg: $1" >&2; exit 2`), and a plain
+ * run applies the whole bundle and never reports identity_only.
+ */
+function oldOrchestrator(applied: string[]): void {
+  childExec.mockImplementation(async (_cmd, args) => {
+    const remote = args[args.length - 1] ?? '';
+    if (!remote.startsWith(OVERLAY_BIN)) return { stdout: '', stderr: '' };
+    if (remote.includes('--identity-only')) {
+      throw Object.assign(new Error('Command failed: ssh'), { code: 2, stderr: 'unknown arg: --identity-only\n' });
+    }
+    return { stdout: `${JSON.stringify({ ok: true, applied, slot: 2 })}\n`, stderr: '' };
+  });
+}
 
 describe('runDeployChain — settings overlay (ROK-1469)', () => {
   it('succeeds when sync_settings fails but the overlay seeds keys from the bundle', async () => {
@@ -253,20 +282,64 @@ describe('runDeployChain — settings precedence (a fresh sync wins)', () => {
     expect(cap.details.settings_overlay).toMatch(/identity-only NOT honoured/);
     expect(res.message).toMatch(/identity-only NOT honoured/);
   });
+
+  it('an old VM orchestrator that rejects --identity-only still gets the slot identity, and says so', async () => {
+    // rl-infra/deploy.sh not yet run since the flag landed: without the retry
+    // the overlay fails, the env boots on the laptop's shared bot token
+    // (ROK-1469 D1) and the deploy message just says "laptop sync".
+    envSyncExecute.mockResolvedValue({ ok: true });
+    oldOrchestrator(['itad_api_key', ...ALWAYS_SEEDED]);
+    const { runSettingsOverlay } = await realOverlay();
+    overlayRun.mockImplementation(runSettingsOverlay);
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(remoteCommands().filter((c) => c.startsWith(OVERLAY_BIN))).toEqual([
+      `${OVERLAY_BIN} --slug demo --identity-only`,
+      `${OVERLAY_BIN} --slug demo`,
+    ]);
+    expect(cap.steps).toContainEqual({ name: 'settings_overlay', ok: true });
+    expect(res.ok).toBe(true);
+    expect(res.message).toContain(IDENTITY_ONLY_NOT_HONOURED);
+    expect(res.message).toContain('./rl-infra/deploy.sh');
+  });
+
+  it('names a failed overlay on a GREEN deploy: the slot identity was not applied', async () => {
+    envSyncExecute.mockResolvedValue({ ok: true });
+    overlayRun.mockResolvedValue({ ok: false, applied: [], error: 'settings_overlay_failed', message: 'ssh: timeout' });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(res.ok).toBe(true);
+    expect(res.message).toMatch(/settings_overlay FAILED/);
+    expect(res.message).toMatch(/slot Discord identity was NOT applied/);
+  });
 });
 
 describe('runSettingsOverlay — remote command', () => {
   it('appends --identity-only only when asked (the flag, never a value)', async () => {
-    const real = await vi.importActual<typeof import('../env-settings-overlay.js')>(
-      '../env-settings-overlay.js',
-    );
-    const ssh = vi.mocked(buildSshArgs);
-    ssh.mockClear();
+    const real = await realOverlay();
     await real.runSettingsOverlay('demo', { identityOnly: true });
     await real.runSettingsOverlay('demo');
-    expect(ssh.mock.calls.map((c) => c[0])).toEqual([
-      '/srv/rl-infra/orchestrator/bin/env-settings-overlay --slug demo --identity-only',
-      '/srv/rl-infra/orchestrator/bin/env-settings-overlay --slug demo',
+    expect(remoteCommands()).toEqual([
+      `${OVERLAY_BIN} --slug demo --identity-only`,
+      `${OVERLAY_BIN} --slug demo`,
     ]);
+  });
+
+  it('retries WITHOUT the flag when the VM orchestrator rejects it, marked not honoured', async () => {
+    oldOrchestrator(['itad_api_key', ...ALWAYS_SEEDED]);
+    const real = await realOverlay();
+    const ov = await real.runSettingsOverlay('demo', { identityOnly: true });
+    expect(remoteCommands()).toEqual([`${OVERLAY_BIN} --slug demo --identity-only`, `${OVERLAY_BIN} --slug demo`]);
+    expect(ov).toMatchObject({ ok: true, identity_only: false, orchestrator_outdated: true });
+    expect(ov.applied).toContain('discord_bot_token');
+    expect(real.overlayIgnoredIdentityOnly(ov, true)).toBe(true);
+  });
+
+  it('does not retry any other overlay failure', async () => {
+    childExec.mockRejectedValue(Object.assign(new Error('Command failed: ssh'), { stderr: 'env not found: demo' }));
+    const real = await realOverlay();
+    const ov = await real.runSettingsOverlay('demo', { identityOnly: true });
+    expect(remoteCommands()).toEqual([`${OVERLAY_BIN} --slug demo --identity-only`]);
+    expect(ov).toMatchObject({ ok: false, applied: [], message: 'env not found: demo' });
   });
 });

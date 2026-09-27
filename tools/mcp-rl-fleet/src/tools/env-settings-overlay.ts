@@ -21,8 +21,10 @@ export interface SettingsOverlayResult {
   bundle_warning?: string | null;
   /** Key NAMES an identity-only run left to the laptop sync. */
   skipped_keys?: string[];
-  /** Whether the container honoured --identity-only (false: image predates it). */
+  /** Whether the container honoured --identity-only (false: image or orchestrator predates it). */
   identity_only?: boolean;
+  /** The VM orchestrator rejected --identity-only, so the full overlay ran instead. */
+  orchestrator_outdated?: boolean;
   error?: string;
   message?: string;
 }
@@ -55,22 +57,56 @@ export function countSharedKeys(applied: string[]): number {
 
 /** Shown when an identity-only overlay still wrote shared keys. */
 export const IDENTITY_ONLY_NOT_HONOURED =
-  'identity-only NOT honoured: the env image predates it, so the VM bundle overwrote the synced shared keys — rebuild the image';
+  'identity-only NOT honoured, so the VM bundle overwrote the synced shared keys';
+
+/** Fix for an orchestrator deployed before the flag (rl-infra/deploy.sh not run since). */
+export const ORCHESTRATOR_PREDATES_IDENTITY_ONLY =
+  'the VM orchestrator predates --identity-only, so the full overlay ran — run ./rl-infra/deploy.sh';
+
+const IMAGE_PREDATES_IDENTITY_ONLY = 'the env image predates the flag — rebuild the image';
+
+/** True when identity-only was asked for but shared keys were written anyway. */
+export function overlayIgnoredIdentityOnly(ov: SettingsOverlayResult, identityOnly: boolean): boolean {
+  return identityOnly && ov.ok && ov.identity_only !== true && countSharedKeys(ov.applied) > 0;
+}
+
+/** The not-honoured warning with its cause, or null when identity-only held. */
+export function identityOnlyWarning(ov: SettingsOverlayResult, identityOnly: boolean): string | null {
+  if (overlayIgnoredIdentityOnly(ov, identityOnly)) {
+    const cause = ov.orchestrator_outdated ? ORCHESTRATOR_PREDATES_IDENTITY_ONLY : IMAGE_PREDATES_IDENTITY_ONLY;
+    return `${IDENTITY_ONLY_NOT_HONOURED}: ${cause}`;
+  }
+  return identityOnly && ov.orchestrator_outdated ? ORCHESTRATOR_PREDATES_IDENTITY_ONLY : null;
+}
 
 /** Step detail for the deploy chain: counts and notes, never values. */
 export function describeOverlayStep(ov: SettingsOverlayResult, identityOnly: boolean): string {
   const parts = [`${ov.applied.length} key(s), ${countSharedKeys(ov.applied)} shared`];
   if (identityOnly) {
     parts.push(`identity-only after a fresh sync, ${ov.skipped_keys?.length ?? 0} bundle key(s) skipped`);
-    if (overlayIgnoredIdentityOnly(ov, identityOnly)) parts.push(IDENTITY_ONLY_NOT_HONOURED);
+    const warning = identityOnlyWarning(ov, identityOnly);
+    if (warning) parts.push(warning);
   }
   if (ov.bundle_warning) parts.push(`bundle warning: ${ov.bundle_warning}`);
   return parts.join('; ');
 }
 
-/** True when identity-only was asked for but shared keys were written anyway. */
-export function overlayIgnoredIdentityOnly(ov: SettingsOverlayResult, identityOnly: boolean): boolean {
-  return identityOnly && ov.ok && ov.identity_only !== true && countSharedKeys(ov.applied) > 0;
+/**
+ * Notes for a GREEN deploy message (each ` <note>.`). A failed overlay leaves
+ * the env on whatever identity the sync copied — the operator's shared bot
+ * (ROK-1469 D1) — so it must be named, not just recorded as a red step.
+ */
+export function overlayDeployNotes(ov: SettingsOverlayResult, identityOnly: boolean): string {
+  const notes: string[] = [];
+  if (!ov.ok) {
+    notes.push(
+      `settings_overlay FAILED (${ov.error ?? 'unknown'}): the slot Discord identity was NOT applied, so the env may be on the laptop's shared bot token — see the settings_overlay step and re-run rl_env_deploy`,
+    );
+  }
+  if (ov.bundle_warning) notes.push(`Bundle warning: ${ov.bundle_warning}`);
+  const warning = identityOnlyWarning(ov, identityOnly);
+  if (warning) notes.push(warning);
+  return notes.map((n) => ` ${n}.`).join('');
 }
 
 export interface RunOverlayOptions {
@@ -80,11 +116,43 @@ export interface RunOverlayOptions {
 }
 
 const SLUG_RE = /^[a-z0-9-]+$/;
+const OVERLAY_BIN = '/srv/rl-infra/orchestrator/bin/env-settings-overlay';
+/** What bin/env-settings-overlay's arg loop prints (stderr, exit 2) for a flag it predates. */
+const FLAG_REJECTED_RE = /unknown arg: --identity-only/;
+
+type ExecError = Error & { stderr?: string; stdout?: string };
+
+/** One ssh call to the orchestrator bin; throws on a non-zero exit. */
+async function execOverlay(slug: string, identityOnly: boolean): Promise<SettingsOverlayResult> {
+  const flag = identityOnly ? ' --identity-only' : '';
+  const args = await buildSshArgs(`${OVERLAY_BIN} --slug ${slug}${flag}`);
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { stdout } = await promisify(execFile)('ssh', args, { timeout: 120_000 });
+  const parsed = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as SettingsOverlayResult;
+  return { ...parsed, applied: parsed.applied ?? [] };
+}
+
+function overlayFailure(err: unknown): SettingsOverlayResult {
+  const e = err as ExecError;
+  return { ok: false, applied: [], error: 'settings_overlay_failed', message: e.stderr || e.message };
+}
+
+function orchestratorRejectedFlag(err: unknown): boolean {
+  const e = err as ExecError;
+  return FLAG_REJECTED_RE.test(`${e.stderr ?? ''}\n${e.stdout ?? ''}`);
+}
 
 /**
  * Apply the slot identity + shared bundle to `slug`'s env. With
  * `identityOnly`, the bundle's shared keys are skipped (reported in
  * `skipped_keys`) so they cannot overwrite what a fresh sync just copied.
+ *
+ * The VM orchestrator only moves on `./rl-infra/deploy.sh`, while this code
+ * reloads with the laptop MCP. An orchestrator that predates --identity-only
+ * rejects it, so retry once WITHOUT it: the slot identity must still land
+ * (else the env runs on the operator's synced bot token), and the result is
+ * marked not honoured so the deploy message warns.
  *
  * Never throws: a failed overlay must not abort an otherwise healthy deploy
  * (the env is still usable, just possibly on the operator's shared bot), so
@@ -97,23 +165,16 @@ export async function runSettingsOverlay(
   if (!SLUG_RE.test(slug)) {
     return { ok: false, applied: [], error: 'invalid_slug' };
   }
-  const flag = opts.identityOnly ? ' --identity-only' : '';
-  const args = await buildSshArgs(
-    `/srv/rl-infra/orchestrator/bin/env-settings-overlay --slug ${slug}${flag}`,
-  );
-  const { execFile } = await import('node:child_process');
-  const { promisify } = await import('node:util');
+  const identityOnly = opts.identityOnly === true;
   try {
-    const { stdout } = await promisify(execFile)('ssh', args, { timeout: 120_000 });
-    const parsed = JSON.parse(stdout.trim().split('\n').pop() ?? '{}') as SettingsOverlayResult;
-    return { ...parsed, applied: parsed.applied ?? [] };
+    return await execOverlay(slug, identityOnly);
   } catch (err) {
-    const e = err as Error & { stderr?: string };
-    return {
-      ok: false,
-      applied: [],
-      error: 'settings_overlay_failed',
-      message: e.stderr || e.message,
-    };
+    if (!identityOnly || !orchestratorRejectedFlag(err)) return overlayFailure(err);
+  }
+  try {
+    const ov = await execOverlay(slug, false);
+    return { ...ov, identity_only: false, orchestrator_outdated: true };
+  } catch (err) {
+    return { ...overlayFailure(err), orchestrator_outdated: true };
   }
 }
