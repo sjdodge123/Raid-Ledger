@@ -19,6 +19,10 @@ export interface SettingsOverlayResult {
   bot_identity?: unknown;
   /** Why the VM-side shared-key bundle contributed nothing (absent, wrong key, malformed). */
   bundle_warning?: string | null;
+  /** Key NAMES an identity-only run left to the laptop sync. */
+  skipped_keys?: string[];
+  /** Whether the container honoured --identity-only (false: image predates it). */
+  identity_only?: boolean;
   error?: string;
   message?: string;
 }
@@ -49,10 +53,38 @@ export function countSharedKeys(applied: string[]): number {
   return applied.filter((k) => !NON_CREDENTIAL_KEYS.has(k)).length;
 }
 
+/** Shown when an identity-only overlay still wrote shared keys. */
+export const IDENTITY_ONLY_NOT_HONOURED =
+  'identity-only NOT honoured: the env image predates it, so the VM bundle overwrote the synced shared keys — rebuild the image';
+
+/** Step detail for the deploy chain: counts and notes, never values. */
+export function describeOverlayStep(ov: SettingsOverlayResult, identityOnly: boolean): string {
+  const parts = [`${ov.applied.length} key(s), ${countSharedKeys(ov.applied)} shared`];
+  if (identityOnly) {
+    parts.push(`identity-only after a fresh sync, ${ov.skipped_keys?.length ?? 0} bundle key(s) skipped`);
+    if (overlayIgnoredIdentityOnly(ov, identityOnly)) parts.push(IDENTITY_ONLY_NOT_HONOURED);
+  }
+  if (ov.bundle_warning) parts.push(`bundle warning: ${ov.bundle_warning}`);
+  return parts.join('; ');
+}
+
+/** True when identity-only was asked for but shared keys were written anyway. */
+export function overlayIgnoredIdentityOnly(ov: SettingsOverlayResult, identityOnly: boolean): boolean {
+  return identityOnly && ov.ok && ov.identity_only !== true && countSharedKeys(ov.applied) > 0;
+}
+
+export interface RunOverlayOptions {
+  /** Apply only the slot identity: a successful laptop sync wins for shared
+   *  keys (operator ruling 2026-09-27). Omit after a failed/skipped sync. */
+  identityOnly?: boolean;
+}
+
 const SLUG_RE = /^[a-z0-9-]+$/;
 
 /**
- * Apply the slot identity + shared bundle to `slug`'s env.
+ * Apply the slot identity + shared bundle to `slug`'s env. With
+ * `identityOnly`, the bundle's shared keys are skipped (reported in
+ * `skipped_keys`) so they cannot overwrite what a fresh sync just copied.
  *
  * Never throws: a failed overlay must not abort an otherwise healthy deploy
  * (the env is still usable, just possibly on the operator's shared bot), so
@@ -60,12 +92,14 @@ const SLUG_RE = /^[a-z0-9-]+$/;
  */
 export async function runSettingsOverlay(
   slug: string,
+  opts: RunOverlayOptions = {},
 ): Promise<SettingsOverlayResult> {
   if (!SLUG_RE.test(slug)) {
     return { ok: false, applied: [], error: 'invalid_slug' };
   }
+  const flag = opts.identityOnly ? ' --identity-only' : '';
   const args = await buildSshArgs(
-    `/srv/rl-infra/orchestrator/bin/env-settings-overlay --slug ${slug}`,
+    `/srv/rl-infra/orchestrator/bin/env-settings-overlay --slug ${slug}${flag}`,
   );
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');

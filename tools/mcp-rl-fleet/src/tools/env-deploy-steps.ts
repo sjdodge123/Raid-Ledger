@@ -11,7 +11,13 @@ import { describeOperatorAdmin, type OperatorAdminMode } from './operator-admin.
 import * as envSync from './env-sync.js';
 import * as task from './task.js';
 import { runCloneCore } from './env-clone-prod.js';
-import { countSharedKeys, runSettingsOverlay } from './env-settings-overlay.js';
+import {
+  IDENTITY_ONLY_NOT_HONOURED,
+  countSharedKeys,
+  describeOverlayStep,
+  overlayIgnoredIdentityOnly,
+  runSettingsOverlay,
+} from './env-settings-overlay.js';
 import { buildSshArgs } from '../exec.js';
 import { isStillRunning, type ExecuteStatusReturn } from './task-schemas.js';
 import type { EnvDeployParams } from './env-deploy.js';
@@ -193,26 +199,32 @@ export async function runDeployChain(
     }
   }
 
-  // 6. ROK-1469: stamp the SLOT's Discord identity + the VM-side shared-key
-  // bundle over whatever sync_settings (and clone_prod) just copied. Runs even
-  // when the sync FAILED — the bundle is the laptop-independent path (Docker
+  // 6. ROK-1469: stamp the SLOT's Discord identity over whatever
+  // sync_settings (and clone_prod) just copied. Operator ruling 2026-09-27,
+  // "a fresh sync wins": after a SUCCESSFUL sync the overlay is identity-only,
+  // so a stale VM bundle cannot overwrite the synced shared keys. When the
+  // sync FAILED the full bundle applies — the laptop-independent path (Docker
   // Desktop off).
   let overlaySharedKeys = 0;
   let overlayApplied = 0;
+  let overlaySkipped = 0;
+  let overlayNotHonoured = false;
   let overlayBundleWarning: string | null = null;
   if (!params.skip_sync) {
     t = now();
-    ctx.setCurrent('applying slot identity + settings bundle');
-    const ov = await runSettingsOverlay(params.slug);
+    const identityOnly = syncedSettings;
+    ctx.setCurrent(identityOnly ? 'applying slot identity (sync wins for shared keys)' : 'applying slot identity + settings bundle');
+    const ov = await runSettingsOverlay(params.slug, { identityOnly });
     overlayApplied = ov.applied.length;
     overlaySharedKeys = countSharedKeys(ov.applied);
+    overlaySkipped = ov.skipped_keys?.length ?? 0;
+    overlayNotHonoured = overlayIgnoredIdentityOnly(ov, identityOnly);
     overlayBundleWarning = ov.bundle_warning ?? null;
-    const warnNote = overlayBundleWarning ? `; bundle warning: ${overlayBundleWarning}` : '';
     ctx.recordStep(
       'settings_overlay',
       ov.ok,
       now() - t,
-      ov.ok ? `${overlayApplied} key(s), ${overlaySharedKeys} shared${warnNote}` : undefined,
+      ov.ok ? describeOverlayStep(ov, identityOnly) : undefined,
       ov.ok ? undefined : (ov.error ?? ov.message),
     );
   }
@@ -254,11 +266,13 @@ export async function runDeployChain(
     return { ...base, ok: false, failed_step: 'clone_prod', error: 'clone_prod_failed', message: `FAILED: clone_prod did not succeed (${cloneFailureDetail ?? 'unknown'}). Container up at ${sp.url} with synced settings but prod data NOT loaded.` };
   }
   const operatorAdminNote = sp.operator_admin ? ` ${describeOperatorAdmin(sp.operator_admin)}` : '';
+  const skippedNote = overlaySkipped > 0 ? ` (${overlaySkipped} bundle key(s) skipped — the fresh sync wins)` : '';
   const settingsSource = syncedSettings
-    ? `${overlayApplied > 0 ? 'laptop sync + slot identity/bundle overlay' : 'laptop sync'}`
+    ? `${overlayApplied > 0 ? `laptop sync + slot identity overlay${skippedNote}` : 'laptop sync'}`
     : 'VM settings bundle overlay (laptop DB unavailable)';
   // Surface the bundle warning on a green deploy too: a healthy laptop sync
   // masks a missing/undecryptable bundle until the next laptop-less deploy.
-  const bundleNote = overlayBundleWarning ? ` Bundle warning: ${overlayBundleWarning}.` : '';
+  const bundleNote = (overlayBundleWarning ? ` Bundle warning: ${overlayBundleWarning}.` : '')
+    + (overlayNotHonoured ? ` ${IDENTITY_ONLY_NOT_HONOURED}.` : '');
   return { ...base, ok: true, message: `Settings: ${settingsSource}.${bundleNote} Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
 }

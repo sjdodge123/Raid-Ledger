@@ -47,6 +47,7 @@ vi.mock('node:child_process', () => ({
 
 import { runDeployChain, type ChainCtx } from '../env-deploy-steps.js';
 import { countSharedKeys } from '../env-settings-overlay.js';
+import { buildSshArgs } from '../../exec.js';
 
 // What rl-infra/orchestrator/bin/env-settings-overlay ALWAYS writes, bundle or
 // not: the slot's Discord identity (_bot_identity.sh) plus the demo_mode flag
@@ -201,5 +202,71 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
     expect(res.ok).toBe(true);
     expect(overlayRun).not.toHaveBeenCalled();
     expect(cap.steps.some((s) => s.name === 'settings_overlay')).toBe(false);
+  });
+});
+
+// Operator ruling 2026-09-27, "a fresh sync wins": a stale VM bundle.enc must
+// not overwrite the shared keys (ITAD/Co-Optimus/Blizzard/IGDB/LLM) that a
+// SUCCESSFUL laptop sync_settings just copied. Only the slot identity (and
+// demo_mode) still wins over the sync.
+describe('runDeployChain — settings precedence (a fresh sync wins)', () => {
+  it('asks for an identity-only overlay after a SUCCESSFUL sync', async () => {
+    envSyncExecute.mockResolvedValue({ ok: true });
+    overlayRun.mockResolvedValue({ ok: true, applied: ALWAYS_SEEDED, identity_only: true });
+    const { ctx } = makeCtx();
+    await runDeployChain(PARAMS as never, ctx);
+    expect(overlayRun).toHaveBeenCalledWith('demo', { identityOnly: true });
+  });
+
+  it('asks for a FULL overlay when the sync failed (laptop DB unavailable)', async () => {
+    envSyncExecute.mockResolvedValue({ ok: false, stderr: 'laptop DB unavailable' });
+    overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', ...ALWAYS_SEEDED] });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(overlayRun).toHaveBeenCalledWith('demo', { identityOnly: false });
+    expect(res.ok).toBe(true);
+  });
+
+  it('surfaces the skipped count and the bundle warning on an identity-only run', async () => {
+    const warning = 'settings bundle absent at /srv/rl-infra/settings/bundle.enc';
+    envSyncExecute.mockResolvedValue({ ok: true });
+    overlayRun.mockResolvedValue({
+      ok: true,
+      applied: ALWAYS_SEEDED,
+      skipped_keys: ['itad_api_key', 'blizzard_client_secret'],
+      identity_only: true,
+      bundle_warning: warning,
+    });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(cap.details.settings_overlay).toMatch(/2 bundle key\(s\) skipped/);
+    expect(cap.details.settings_overlay).toContain(warning);
+    expect(res.message).toMatch(/2 bundle key\(s\) skipped/);
+    expect(res.message).toContain(warning);
+  });
+
+  it('warns when an old env image ignored identity-only and overwrote shared keys', async () => {
+    envSyncExecute.mockResolvedValue({ ok: true });
+    overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', ...ALWAYS_SEEDED] });
+    const { ctx, cap } = makeCtx();
+    const res = await runDeployChain(PARAMS as never, ctx);
+    expect(cap.details.settings_overlay).toMatch(/identity-only NOT honoured/);
+    expect(res.message).toMatch(/identity-only NOT honoured/);
+  });
+});
+
+describe('runSettingsOverlay — remote command', () => {
+  it('appends --identity-only only when asked (the flag, never a value)', async () => {
+    const real = await vi.importActual<typeof import('../env-settings-overlay.js')>(
+      '../env-settings-overlay.js',
+    );
+    const ssh = vi.mocked(buildSshArgs);
+    ssh.mockClear();
+    await real.runSettingsOverlay('demo', { identityOnly: true });
+    await real.runSettingsOverlay('demo');
+    expect(ssh.mock.calls.map((c) => c[0])).toEqual([
+      '/srv/rl-infra/orchestrator/bin/env-settings-overlay --slug demo --identity-only',
+      '/srv/rl-infra/orchestrator/bin/env-settings-overlay --slug demo',
+    ]);
   });
 });
