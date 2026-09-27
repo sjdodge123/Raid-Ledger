@@ -1915,3 +1915,7 @@ same day (#1278, #1279, #1280).
   - The test runs ungated in CI.
   - `lfg/end-session` destroys the session's own temp voice channel, which it finds by the event's stored `ephemeralVoiceChannelId`.
 - low — `api/src/admin/demo-test-lfg.controller.ts:196`: `destroyForEvent` is a silent no-op when the bot is offline and only logs its own errors, so `end-session` still returns `ended:true` and the smoke can't see a leaked channel. Suggested: return a `channelDestroyed` flag and have the smoke `console.warn` when it's false.
+
+### 2026-09-27 — fix/ui-tech-debt-0927 (review MINOR, deferred)
+- **[low]** `web/src/pages/admin/backup-panel-modals.tsx` — the one-time-password view (after a Reset) is now on the shared Modal and guarded by the dirty-close confirm, which reads "Discard your changes?" / "Keep editing" / "Discard". That's the wrong wording for "leave without saving the password". `DiscardChangesConfirm` accepts only `message`; title and button labels are hard-coded.
+  Suggested: let `DiscardChangesConfirm` take optional `title`/`keepLabel`/`discardLabel` props (primitive change + design-system doc), then pass "Leave without saving the password?" / "Stay" / "Leave".
