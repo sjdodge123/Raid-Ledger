@@ -1,6 +1,7 @@
 import { useSearchParams } from 'react-router-dom';
 import { SteamIcon } from '../icons/SteamIcon';
 import { useSteamLink } from '../../hooks/use-steam-link';
+import { Button } from '../ui/button';
 
 /** Header with Steam icon in emerald circle and title. */
 function SteamStepHeader() {
@@ -18,20 +19,18 @@ function SteamStepHeader() {
 }
 
 /**
- * Primary "Connect Steam" button. ROK-1630: a real <button>, not an <a href> —
+ * Primary "Connect Steam" button. ROK-1630: a real button, not an <a href> —
  * the Steam hop needs a single-use nonce minted on click, so there is no URL
- * to render up front. Same classes as the old link, so it looks identical.
+ * to render up front. The shared Button with Steam's brand fill, like the
+ * login page's provider buttons (design-system §4.11). `disabled` as well as
+ * `loading`, so a pending start cannot fire twice from the keyboard either.
  */
 function ConnectSteamButton({ isRedirecting, onClick }: { isRedirecting: boolean; onClick: () => void }) {
     return (
-        <button type="button" onClick={onClick} disabled={isRedirecting} aria-busy={isRedirecting}
-            className="w-full py-3 px-4 min-h-[44px] bg-[#171a21] hover:bg-[#2a475e] text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-3">
-            {isRedirecting ? (
-                <><span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Redirecting to Steam...</>
-            ) : (
-                <><SteamIcon className="w-5 h-5" />Connect Steam</>
-            )}
-        </button>
+        <Button onClick={onClick} size="lg" fullWidth brandColor="#171a21" loading={isRedirecting}
+            disabled={isRedirecting} loadingLabel="Redirecting to Steam...">
+            <SteamIcon className="w-5 h-5" />Connect Steam
+        </Button>
     );
 }
 

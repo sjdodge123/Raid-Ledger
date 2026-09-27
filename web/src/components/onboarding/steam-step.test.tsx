@@ -33,6 +33,13 @@ describe('SteamStep connect control (ROK-1630 AC16)', () => {
         expect(button).toHaveAttribute('type', 'button');
     });
 
+    it('is the shared Button primitive with the Steam brand fill (no hand-rolled button)', () => {
+        renderStep();
+        const button = screen.getByRole('button', { name: /connect steam/i });
+        expect(button).toHaveAttribute('data-brand-fill');
+        expect(button).toHaveStyle({ backgroundColor: '#171a21' });
+    });
+
     it('clicking starts the Steam link with returnTo /onboarding', () => {
         renderStep();
         fireEvent.click(screen.getByRole('button', { name: /connect steam/i }));
@@ -44,5 +51,6 @@ describe('SteamStep connect control (ROK-1630 AC16)', () => {
         renderStep();
         const button = screen.getByRole('button', { name: /redirecting to steam/i });
         expect(button).toBeDisabled();
+        expect(button).toHaveAttribute('aria-busy', 'true');
     });
 });
