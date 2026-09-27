@@ -30,12 +30,14 @@ function setup(opts: { dbDemo?: boolean; knownIds?: number[] } = {}) {
     ),
   };
   const jwt = { sign: jest.fn().mockReturnValue('tok.en.sig') };
+  const db: MockDb = createDrizzleMock();
   const magic = new MagicLinkService(
     jwt as unknown as MagicCtor[0],
     users as unknown as MagicCtor[1],
+    { isBlocked: jest.fn() } as unknown as MagicCtor[2],
+    db as unknown as MagicCtor[3],
   );
   const generateLink = jest.spyOn(magic, 'generateLink');
-  const db: MockDb = createDrizzleMock();
   const settings = {
     getDemoMode: jest.fn().mockResolvedValue(opts.dbDemo ?? true),
   };
@@ -53,6 +55,7 @@ describe('DemoTestSignInLinkController — POST /admin/test/sign-in-link', () =>
   beforeEach(() => {
     process.env.DEMO_MODE = 'true';
     process.env.CLIENT_URL = CLIENT;
+    process.env.JWT_SECRET = 'sign-in-link-spec-secret';
     delete process.env.CORS_ORIGIN;
   });
 

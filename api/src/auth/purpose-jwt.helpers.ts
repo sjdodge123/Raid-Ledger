@@ -9,9 +9,7 @@ import type { JwtService } from '@nestjs/jwt';
  * signature failure rather than a branch someone could get wrong.
  */
 export type JwtPurpose =
-  | 'magic-link'
-  | 'link-nonce:discord'
-  | 'link-nonce:steam';
+  'magic-link' | 'link-nonce:discord' | 'link-nonce:steam';
 
 /** HMAC-SHA256(baseSecret, "rl-jwt-purpose:<purpose>"), hex-encoded. */
 export function derivePurposeSecret(

@@ -64,6 +64,20 @@ async function setupModule(): Promise<void> {
   strategy = module.get<JwtStrategy>(JwtStrategy);
 }
 
+describe('JwtStrategy rejects magic-link tokens (ROK-1366 AC5/D2)', () => {
+  beforeEach(setupModule);
+
+  it('throws 401 for a {magicLink:true} payload before any lookup', async () => {
+    await expect(
+      strategy.validate(buildPayload({ magicLink: true })),
+    ).rejects.toThrow(
+      new UnauthorizedException('Magic-link tokens are not session tokens'),
+    );
+    expect(mockBlocklist.isBlocked).not.toHaveBeenCalled();
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+});
+
 describe('JwtStrategy — blocklist integration', () => {
   beforeEach(() => setupModule());
 

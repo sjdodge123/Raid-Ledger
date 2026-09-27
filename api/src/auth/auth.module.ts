@@ -3,6 +3,7 @@ import { AuthService } from './auth.service';
 import { LocalAuthService } from './local-auth.service';
 import { MagicLinkService } from './magic-link.service';
 import { IntentTokenService } from './intent-token.service';
+import { LinkNonceService } from './link-nonce.service';
 import { UsersModule } from '../users/users.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
@@ -56,6 +57,7 @@ import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.serv
     LocalAuthService,
     MagicLinkService,
     IntentTokenService,
+    LinkNonceService,
     JwtStrategy,
     SessionCleanupService,
     IntentTokenCleanupService,
@@ -68,6 +70,7 @@ import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.serv
     LocalAuthService,
     MagicLinkService,
     IntentTokenService,
+    LinkNonceService,
     TokenBlocklistService,
     RefreshTokenService,
   ],

@@ -32,9 +32,9 @@ describe('purpose-jwt.helpers', () => {
 
   it('round-trips a payload signed and verified for the same purpose', () => {
     const token = signPurposeJwt(jwt, 'magic-link', { sub: 7 }, '15m');
-    expect(verifyPurposeJwt<{ sub: number }>(jwt, 'magic-link', token).sub).toBe(
-      7,
-    );
+    expect(
+      verifyPurposeJwt<{ sub: number }>(jwt, 'magic-link', token).sub,
+    ).toBe(7);
   });
 
   it('is rejected by a plain JWT_SECRET verify (the 5 direct-verify sites)', () => {

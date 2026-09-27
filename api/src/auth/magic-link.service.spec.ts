@@ -1,119 +1,180 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
+import { UnauthorizedException } from '@nestjs/common';
 import { MagicLinkService } from './magic-link.service';
 import { UsersService } from '../users/users.service';
+import { TokenBlocklistService } from './token-blocklist.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { derivePurposeSecret } from './purpose-jwt.helpers';
+import { hashToken } from './single-use-token.helpers';
 
-function describeMagicLinkService() {
-  let service: MagicLinkService;
-  let jwtService: JwtService;
-  let usersService: UsersService;
+const SECRET = 'magic-spec-secret';
+const jwt = new JwtService({ secret: SECRET });
+let service: MagicLinkService;
+let findById: jest.Mock;
+let isBlocked: jest.Mock;
+let db: MockDb;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        MagicLinkService,
-        {
-          provide: JwtService,
-          useValue: {
-            sign: jest.fn().mockReturnValue('mock-jwt-token'),
-          },
-        },
-        {
-          provide: UsersService,
-          useValue: {
-            findById: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
+const member = {
+  id: 1,
+  username: 'a',
+  role: 'member' as const,
+  bannedAt: null as Date | null,
+  banReason: null as string | null,
+  kickedAt: null as Date | null,
+};
 
-    service = module.get<MagicLinkService>(MagicLinkService);
-    jwtService = module.get<JwtService>(JwtService);
-    usersService = module.get<UsersService>(UsersService);
+beforeEach(async () => {
+  process.env.JWT_SECRET = SECRET;
+  findById = jest.fn().mockResolvedValue(member);
+  isBlocked = jest.fn().mockResolvedValue(false);
+  db = createDrizzleMock();
+  db.returning.mockResolvedValue([{ id: 1 }]);
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      MagicLinkService,
+      { provide: JwtService, useValue: jwt },
+      { provide: UsersService, useValue: { findById } },
+      { provide: TokenBlocklistService, useValue: { isBlocked } },
+      { provide: DrizzleAsyncProvider, useValue: db },
+    ],
+  }).compile();
+  service = module.get(MagicLinkService);
+});
+
+async function mintToken(userId = 1): Promise<string> {
+  const link = await service.generateLink(
+    userId,
+    '/events/42',
+    'https://rl.test',
+  );
+  return new URLSearchParams(new URL(link!).hash.slice(1)).get('token')!;
+}
+
+/** A magic-link-purpose token with arbitrary claims (bypasses generateLink). */
+function signMagicPurpose(payload: Record<string, unknown>): string {
+  return jwt.sign(payload, {
+    secret: derivePurposeSecret(SECRET, 'magic-link'),
+  });
+}
+
+async function redeemError(token: string): Promise<UnauthorizedException> {
+  const err: unknown = await service.redeem(token).catch((e: unknown) => e);
+  expect(err).toBeInstanceOf(UnauthorizedException);
+  return err as UnauthorizedException;
+}
+
+describe('MagicLinkService.generateLink (ROK-1366 AC1)', () => {
+  it('signs only {sub, magicLink} with a 15-minute expiry', async () => {
+    const decoded = jwt.decode<Record<string, number>>(await mintToken());
+    expect(Object.keys(decoded).sort()).toEqual([
+      'exp',
+      'iat',
+      'magicLink',
+      'sub',
+    ]);
+    expect(decoded.sub).toBe(1);
+    expect(decoded.magicLink).toBe(true);
+    expect(decoded.exp - decoded.iat).toBe(15 * 60);
   });
 
-  function describeGenerateLink() {
-    it('should generate a magic link for a valid user', async () => {
-      const mockUser = {
-        id: 1,
-        username: 'testuser',
-        role: 'member' as const,
-      };
-      (usersService.findById as jest.Mock).mockResolvedValue(mockUser);
+  it('carries the token in the fragment only, never the query string', async () => {
+    const url = new URL(
+      (await service.generateLink(3, '/plan', 'https://rl.test'))!,
+    );
+    expect(url.pathname).toBe('/plan');
+    expect(url.search).toBe('');
+    expect(url.hash).toMatch(/^#token=/);
+  });
 
-      const result = await service.generateLink(
-        1,
-        '/events/42/edit',
-        'http://localhost:5173',
-      );
+  it('is not verifiable with the plain JWT_SECRET', async () => {
+    const token = await mintToken();
+    expect(() => jwt.verify(token)).toThrow('invalid signature');
+  });
 
-      expect(result).toBe(
-        'http://localhost:5173/events/42/edit#token=mock-jwt-token',
-      );
-      expect(jwtService.sign).toHaveBeenCalledWith(
-        {
-          sub: 1,
-          username: 'testuser',
-          role: 'member',
-          magicLink: true,
-        },
-        { expiresIn: '15m' },
-      );
+  it('is no longer than the legacy JWT_SECRET token for the same user', async () => {
+    const legacy = jwt.sign(
+      { sub: 1, username: 'a', role: 'member', magicLink: true },
+      { expiresIn: '15m' },
+    );
+    expect((await mintToken()).length).toBeLessThanOrEqual(legacy.length);
+  });
+
+  it('returns null and signs nothing for an unknown user', async () => {
+    findById.mockResolvedValueOnce(undefined);
+    await expect(
+      service.generateLink(999, '/x', 'https://rl.test'),
+    ).resolves.toBeNull();
+  });
+});
+
+describe('MagicLinkService.redeem — token checks (AC3/AC4)', () => {
+  it('returns the reloaded user and consumes sha256(token)', async () => {
+    const token = await mintToken();
+    await expect(service.redeem(token)).resolves.toEqual({
+      id: 1,
+      username: 'a',
+      role: 'member',
     });
+    expect(db.values).toHaveBeenCalledWith({ tokenHash: hashToken(token) });
+  });
 
-    it('ROK-1366: never puts the token in the query string', async () => {
-      (usersService.findById as jest.Mock).mockResolvedValue({
-        id: 3,
-        username: 'carrier',
-        role: 'member' as const,
-      });
+  it('401s a replay (hash already consumed)', async () => {
+    const token = await mintToken();
+    db.returning.mockResolvedValueOnce([]);
+    await redeemError(token);
+    expect(findById).toHaveBeenCalledTimes(1); // generateLink only
+  });
 
-      const result = await service.generateLink(
-        3,
-        '/plan',
-        'https://raidledger.com',
-      );
+  it('401s expired, garbage, JWT_SECRET-signed and access tokens with one body, consuming none', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const bad = [
+      signMagicPurpose({
+        sub: 1,
+        magicLink: true,
+        iat: now - 1000,
+        exp: now - 100,
+      }),
+      'not.a.jwt',
+      jwt.sign({ sub: 1, username: 'a', role: 'member', magicLink: true }),
+      jwt.sign({ sub: 1, username: 'a', role: 'member' }),
+      signMagicPurpose({ sub: 1 }),
+    ];
+    const bodies = await Promise.all(
+      bad.map(async (t) => (await redeemError(t)).getResponse()),
+    );
+    expect(new Set(bodies.map((b) => JSON.stringify(b))).size).toBe(1);
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+});
 
-      const url = new URL(result!);
-      expect(url.searchParams.get('token')).toBeNull();
-      expect(url.search).toBe('');
-      expect(new URLSearchParams(url.hash.slice(1)).get('token')).toBe(
-        'mock-jwt-token',
-      );
-    });
+describe('MagicLinkService.redeem — user checks after consuming (AC6)', () => {
+  it('401s a user who no longer exists, after consuming', async () => {
+    const token = await mintToken();
+    findById.mockResolvedValueOnce(undefined);
+    await redeemError(token);
+    expect(db.values).toHaveBeenCalledWith({ tokenHash: hashToken(token) });
+  });
 
-    it('should return null if user not found', async () => {
-      (usersService.findById as jest.Mock).mockResolvedValue(null);
+  it('401s a banned user, after consuming', async () => {
+    const token = await mintToken();
+    findById.mockResolvedValueOnce({ ...member, bannedAt: new Date() });
+    await redeemError(token);
+    expect(db.values).toHaveBeenCalledWith({ tokenHash: hashToken(token) });
+  });
 
-      const result = await service.generateLink(
-        999,
-        '/events/42/edit',
-        'http://localhost:5173',
-      );
+  it('401s a user inside the kick cooldown', async () => {
+    const token = await mintToken();
+    findById.mockResolvedValueOnce({ ...member, kickedAt: new Date() });
+    await redeemError(token);
+  });
 
-      expect(result).toBeNull();
-      expect(jwtService.sign).not.toHaveBeenCalled();
-    });
-
-    it('should handle paths with leading slashes correctly', async () => {
-      const mockUser = {
-        id: 2,
-        username: 'admin',
-        role: 'admin' as const,
-      };
-      (usersService.findById as jest.Mock).mockResolvedValue(mockUser);
-
-      const result = await service.generateLink(
-        2,
-        '/events/100/edit',
-        'https://raidledger.com',
-      );
-
-      expect(result).toBe(
-        'https://raidledger.com/events/100/edit#token=mock-jwt-token',
-      );
-    });
-  }
-  describe('generateLink', () => describeGenerateLink());
-}
-describe('MagicLinkService', () => describeMagicLinkService());
+  it('401s a token blocklisted at its iat', async () => {
+    const token = await mintToken();
+    isBlocked.mockResolvedValueOnce(true);
+    await redeemError(token);
+    const { iat } = jwt.decode<{ iat: number }>(token);
+    expect(isBlocked).toHaveBeenCalledWith(1, iat);
+  });
+});
