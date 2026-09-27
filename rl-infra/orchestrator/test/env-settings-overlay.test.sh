@@ -283,9 +283,43 @@ test_overlay_reports_bundle_warning_on_skip() {
     eso_teardown
 }
 
+# 10 — operator ruling 2026-09-27, "a fresh sync wins": --sync-wins is
+#      forwarded to the container script (argv carries the FLAG, never a
+#      value), and the filled/kept names + counts it reports reach stdout.
+test_overlay_sync_wins_forwards_flag() {
+    CURRENT_TEST_NAME="sync-wins: --sync-wins reaches the container and filled/kept keys surface"
+    eso_setup
+    # shellcheck disable=SC2089,SC2090  # a JSON literal, not a word list
+    ESO_EXEC_STDOUT='{"ok":true,"applied":["discord_bot_token","demo_mode"],"count":2,"inserted_if_absent":["blizzard_client_secret"],"inserted_count":1,"kept_synced":["itad_api_key","igdb_client_secret"],"kept_count":2,"sync_wins":true}'
+    # shellcheck disable=SC2090
+    export ESO_EXEC_STDOUT
+
+    local out rc=0
+    out=$(bash "$OVERLAY_BIN" --slug eso1 --sync-wins 2>&1) || rc=$?
+    assert_exit_code "$rc" "0" "sync-wins overlay should exit 0"
+    assert_contains "$(cat "$ESO_ARGV_CAPTURE" 2>/dev/null)" "--sync-wins" \
+        "env-exec-app argv carries --sync-wins"
+    assert_eq "$(jq -c '.inserted_if_absent' <<<"$out" 2>/dev/null || echo parse_err)" '["blizzard_client_secret"]' \
+        ".inserted_if_absent names the key the bundle filled"
+    assert_eq "$(jq -r '.inserted_count' <<<"$out" 2>/dev/null || echo parse_err)" "1" ".inserted_count == 1"
+    assert_eq "$(jq -c '.kept_synced' <<<"$out" 2>/dev/null || echo parse_err)" '["itad_api_key","igdb_client_secret"]' \
+        ".kept_synced names the keys the sync won"
+    assert_eq "$(jq -r '.kept_count' <<<"$out" 2>/dev/null || echo parse_err)" "2" ".kept_count == 2"
+    assert_eq "$(jq -r '.sync_wins' <<<"$out" 2>/dev/null || echo parse_err)" "true" \
+        ".sync_wins reports what the container honoured"
+
+    # Without the flag the container gets a full overlay, as before.
+    : > "$ESO_ARGV_CAPTURE"
+    out=$(bash "$OVERLAY_BIN" --slug eso1 2>&1) || rc=$?
+    assert_eq "$(grep -c -- '--sync-wins' "$ESO_ARGV_CAPTURE")" "0" \
+        "a plain run does not pass --sync-wins"
+    eso_teardown
+}
+
 run_test "d6-bundle-merge" test_overlay_merges_settings_bundle
 run_test "d6-bundle-only" test_overlay_runs_for_bundle_only
 run_test "b1-bundle-warning" test_overlay_reports_bundle_warning
 run_test "b1-bundle-warning-skip" test_overlay_reports_bundle_warning_on_skip
+run_test "sync-wins-flag" test_overlay_sync_wins_forwards_flag
 
 print_test_summary
