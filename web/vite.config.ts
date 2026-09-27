@@ -41,15 +41,15 @@ function manualChunks(moduleId: string): string | undefined {
 
 /**
  * ROK-1154: bundle treemap for `npm run analyze -w web`, which sets ANALYZE=1.
- * Without ANALYZE the plugin module is never even imported, so a normal build
- * is untouched. The report goes to web/.bundle-report/ (gitignored) and never
+ * Any other value (unset, `0`, `false`) never even imports the plugin module,
+ * so a normal build is untouched. The report goes to web/.bundle-report/ (gitignored) and never
  * into dist: Dockerfile.allinone ships web/dist to nginx, so anything written
  * there would be served publicly in the prod image.
  *
  * @returns The visualizer plugin when analysis was requested, else `null`.
  */
 function analyzePlugin(): PluginOption {
-  if (!process.env.ANALYZE) return null
+  if (process.env.ANALYZE !== '1') return null
   return import('rollup-plugin-visualizer').then(({ visualizer }) =>
     visualizer({
       filename: resolve(__dirname, '.bundle-report/stats.html'),
