@@ -12,8 +12,13 @@ import {
   isUnknownMessage,
 } from '../discord-bot-client.messages.helpers';
 import type { ChannelFlush } from './channel-presence-flush';
+import { hydrateRecap } from './channel-presence-flush.helpers';
+import { roomRecapFor } from './channel-presence-flush.occupancy';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
-import type { LinkedEvent } from './channel-presence-room.helpers';
+import {
+  findLinkedEvents,
+  type LinkedEvent,
+} from './channel-presence-room.helpers';
 import { closeRow, type PresenceRow } from './channel-presence-store.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
 
@@ -83,4 +88,68 @@ export async function retireBriefVisit(
     `Presence row ${row.id} for ${flush.channelId} was a brief visit (<${String(BRIEF_VISIT_MS / 1000)}s, nothing happened); card deleted (ROK-1692)`,
   );
   return true;
+}
+
+/** What the empty-room ladder reads about a session that ended. */
+export interface EndedSession {
+  /** Ad-hoc sessions the recap renders (`hydrateRecap`). */
+  events: EmbedEventData[];
+  /** Sessions still linked to the binding (`findLinkedEvents`). */
+  live: LinkedEvent[];
+  /** Who was in the room and what they played. */
+  room: RoomRecap;
+}
+
+/** Read the ended session once, for both the recap and the brief decision. */
+export async function loadEndedSession(
+  flush: ChannelFlush,
+  row: PresenceRow,
+  ended: { bindingId: string; emptySince: Date; now: number },
+): Promise<EndedSession> {
+  const events = await hydrateRecap(flush.deps, ended.bindingId, row.openedAt);
+  const room = await roomRecapFor(flush, row, ended.emptySince, ended.now);
+  const live = await findLinkedEvents(flush.deps.db, ended.bindingId);
+  return { events, live, room };
+}
+
+/** `isBriefVisit` over what `loadEndedSession` read. */
+export function isBriefSession(
+  row: PresenceRow,
+  emptySince: Date,
+  session: EndedSession,
+): boolean {
+  return isBriefVisit({
+    openedAt: row.openedAt,
+    emptySince,
+    events: session.events,
+    live: session.live,
+    activities: session.room.activities,
+  });
+}
+
+/**
+ * The join-side half: someone rejoined after the grace ran out but before the
+ * re-check closed the row, so the live flush is retiring it (ROK-1498). A
+ * brief visit's card is deleted there too; otherwise its "<1m" recap would
+ * stay in the channel forever beside the fresh card.
+ *
+ * @returns `true` when the card is gone and the row is closed `brief`; `false`
+ *   for a real session or a failed delete, which the caller closes `stale`.
+ */
+export async function retireIfBrief(
+  flush: ChannelFlush,
+  row: PresenceRow,
+  bindingId: string,
+  now: number,
+): Promise<boolean> {
+  const { emptySince } = row;
+  if (!emptySince) return false;
+  // A session this long cannot be brief: skip the three reads.
+  if (emptySince.getTime() - row.openedAt.getTime() >= BRIEF_VISIT_MS) {
+    return false;
+  }
+  const ended = { bindingId, emptySince, now };
+  const session = await loadEndedSession(flush, row, ended);
+  if (!isBriefSession(row, emptySince, session)) return false;
+  return retireBriefVisit(flush, row, emptySince);
 }

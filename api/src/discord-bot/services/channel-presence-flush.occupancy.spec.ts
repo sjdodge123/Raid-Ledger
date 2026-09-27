@@ -476,7 +476,7 @@ describe('a brief visit is deleted, not recapped (ROK-1692)', () => {
       .mocked(deleteMessage)
       .mockRejectedValueOnce(new Error('Missing Permissions'));
 
-    await expect(flushChannel(flush())).resolves.toBeUndefined();
+    await expect(flushChannel(flush())).resolves.toBeNull();
 
     expect(editEmbeds).toHaveBeenCalledTimes(1);
     expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'empty', EMPTIED);
@@ -491,6 +491,82 @@ describe('a brief visit is deleted, not recapped (ROK-1692)', () => {
     expect(deleteMessage).not.toHaveBeenCalled();
     expect(closeRow).not.toHaveBeenCalled();
     expect(editEmbeds).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the flush reports when an empty room must be re-checked (ROK-1692)', () => {
+  beforeEach(() => {
+    m.resolveRoom.mockResolvedValue(room({ memberCount: 0 }) as never);
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('returns the instant the grace runs out while the room is inside it', async () => {
+    visit(8_000, null);
+
+    await expect(flushChannel(flush())).resolves.toBe(NOW + GRACE_MS);
+  });
+
+  it('returns null once the grace has run out and the row closed', async () => {
+    visit(120_000);
+
+    await expect(flushChannel(flush())).resolves.toBeNull();
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'empty', EMPTIED);
+  });
+
+  it('returns null for a live room', async () => {
+    m.resolveRoom.mockResolvedValue(room() as never);
+    visit(8_000, null);
+
+    await expect(flushChannel(flush())).resolves.toBeNull();
+  });
+});
+
+/**
+ * A rejoin that lands after the grace but before the re-check retires the row
+ * on the JOIN side (ROK-1498). A brief visit's card must be deleted there too,
+ * or its "<1m" recap stays in the channel forever beside the fresh card.
+ */
+describe('a rejoin after the grace never strands a brief card (ROK-1692)', () => {
+  beforeEach(() => {
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('deletes the brief card, closes it brief and posts a fresh one', async () => {
+    visit(8_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      'tc-1',
+      'msg-1',
+    );
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'brief', EMPTIED);
+    expect(closeRow).not.toHaveBeenCalledWith(db, 'row-1', 'stale', EMPTIED);
+    expect(m.sendEmbeds).toHaveBeenCalledTimes(1);
+    expect(editEmbeds).not.toHaveBeenCalled();
+  });
+
+  it('still closes a real session stale and deletes nothing', async () => {
+    visit(120_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'stale', EMPTIED);
+    expect(m.sendEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the stale close when the delete fails', async () => {
+    visit(8_000);
+    jest
+      .mocked(deleteMessage)
+      .mockRejectedValueOnce(new Error('Missing Permissions'));
+
+    await flushChannel(flush());
+
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'stale', EMPTIED);
+    expect(m.sendEmbeds).toHaveBeenCalledTimes(1);
   });
 });
 

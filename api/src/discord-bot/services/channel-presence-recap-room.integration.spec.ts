@@ -181,7 +181,7 @@ function flushRoom(
   members: { discordUserId: string; displayName: string }[],
   minutes: number,
   gameId: number | null = room.gameId,
-): Promise<void> {
+): Promise<number | null> {
   return flushChannel({
     deps: room.deps,
     channelId: VOICE_CHANNEL_ID,
@@ -259,7 +259,9 @@ describe('a brief visit end to end (integration, ROK-1692)', () => {
 
     // Inside the grace a brief visit recaps like any other, so a reconnect
     // would re-live THIS card rather than delete it and post a new one.
-    await flushRoom(room.current, [], 1, null);
+    // The empty flush reports when the grace runs out, so the service
+    // re-flushes the room then instead of waiting for the 5-min reaper.
+    expect(await flushRoom(room.current, [], 1, null)).toBe(T0 + 61 * MINUTE);
     expect(transport.deleted).toEqual([]);
     expect(transport.edited).toHaveLength(1);
 
@@ -270,6 +272,24 @@ describe('a brief visit end to end (integration, ROK-1692)', () => {
     expect(closed.closeReason).toBe('brief');
     expect(closed.closedAt).not.toBeNull();
     expect(await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID)).toBeNull();
+  });
+
+  it('deletes the card when someone rejoins after the grace, before any re-check', async () => {
+    const { db, transport } = room.current;
+    await flushRoom(room.current, ROOM, 0, null);
+    const opened = await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID);
+    await flushRoom(room.current, [], 1, null);
+
+    // Nothing re-flushed the empty room at minute 61: the next flush it sees
+    // is a rejoin, which retires the row on the join side (ROK-1498).
+    await flushRoom(room.current, ROOM, 62, null);
+
+    expect(transport.deleted).toEqual([opened!.messageId]);
+    expect((await presenceRowById(db, opened!.id)).closeReason).toBe('brief');
+    expect(transport.sent).toHaveLength(2);
+    const fresh = await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID);
+    expect(fresh).not.toBeNull();
+    expect(fresh!.id).not.toBe(opened!.id);
   });
 
   it('keeps and recaps a one-minute visit where a game was detected', async () => {

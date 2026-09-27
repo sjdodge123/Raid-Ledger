@@ -9,12 +9,15 @@
  * 1. no binding  → recap what we can, close the row `unbound`;
  * 2. room empty  → stamp `empty_since`, render the recap, close once the
  *    binding's grace has elapsed AND no session is still live (D8) — or, at
- *    that same close, delete a brief visit's card instead (ROK-1692);
+ *    that same close, delete a brief visit's card instead (ROK-1692). The
+ *    flush returns when that grace runs out so the service re-flushes the
+ *    room then, instead of waiting for the 5-min reaper;
  * 3. room live   → open the row + post on first occupancy, otherwise edit in
  *    place — and only when the payload hash actually moved (D5/AC5);
  * 3a. room live but the row's `empty_since` outlived the grace → the prior
- *    session is over: close that row `stale`, then treat as first occupancy
- *    so a NEW message is posted (ROK-1498).
+ *    session is over: close that row `stale` (or delete a brief visit's card
+ *    and close it `brief`, ROK-1692), then treat as first occupancy so a NEW
+ *    message is posted (ROK-1498).
  */
 import type { Logger } from '@nestjs/common';
 import {
@@ -31,6 +34,7 @@ import { buildContext } from './ad-hoc-notification.helpers';
 import { openMessage } from './channel-presence-flush.open';
 import {
   graceMs,
+  graceRecheckAt,
   hydrateRecap,
   isCloseDue,
   isSessionExpired,
@@ -39,7 +43,6 @@ import {
   renderRecapMessage,
 } from './channel-presence-flush.helpers';
 import {
-  findLinkedEvents,
   resolveRoom,
   type ResolvedRoom,
   type RoomResolveDeps,
@@ -51,7 +54,12 @@ import {
 } from './channel-presence-flush.occupancy';
 import { closeAllOccupancy } from './channel-presence-occupancy.helpers';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
-import { isBriefVisit, retireBriefVisit } from './channel-presence-brief-visit';
+import {
+  isBriefSession,
+  loadEndedSession,
+  retireBriefVisit,
+  retireIfBrief,
+} from './channel-presence-brief-visit';
 import {
   clearEmpty,
   closeRow,
@@ -107,14 +115,18 @@ interface FlushState {
  * the caller can log them per channel and keep the tick alive.
  *
  * @param flush - The channel, its binding, and the deps to resolve both.
+ * @returns When this channel must be flushed again although nothing marks it
+ *   dirty — the instant an empty room's grace runs out (ROK-1692) — or `null`.
  */
-export async function flushChannel(flush: ChannelFlush): Promise<void> {
+export async function flushChannel(
+  flush: ChannelFlush,
+): Promise<number | null> {
   const now = flush.now ?? Date.now();
   const { deps, channelId, guildId, binding } = flush;
   const row = await findOpenRow(deps.db, guildId, channelId);
   if (!binding) {
     if (row) await closeUnbound({ flush, row, now });
-    return;
+    return null;
   }
   const room = await resolveRoom(deps, channelId, binding, flush.override);
   if (room.channelResolved === false) {
@@ -126,13 +138,16 @@ export async function flushChannel(flush: ChannelFlush): Promise<void> {
     flush.logger.warn(
       `Voice channel ${channelId} did not resolve; skipping presence flush`,
     );
-    return;
+    return null;
   }
   if (room.memberCount === 0) {
-    if (row) await flushEmpty({ flush, row, now }, room, binding);
-    return;
+    if (!row) return null;
+    await flushEmpty({ flush, row, now }, room, binding);
+    const emptySince = row.emptySince ?? new Date(now);
+    return graceRecheckAt(emptySince, graceMs(binding.config), now);
   }
   await flushLive(flush, row, room, binding, now);
+  return null;
 }
 
 /**
@@ -158,6 +173,10 @@ async function retireExpiredRow(
   if (!row || !isSessionExpired(row.emptySince, graceMs(binding.config), now)) {
     return row;
   }
+  // ROK-1692: a rejoin that beat the grace re-check must not leave a brief
+  // visit's "<1m" recap in the channel forever beside the fresh card.
+  const bindingId = row.bindingId ?? binding.bindingId;
+  if (await retireIfBrief(flush, row, bindingId, now)) return null;
   flush.logger.log(
     `Presence row ${row.id} for ${flush.channelId} outlived its grace; closing stale and posting a fresh message (ROK-1498)`,
   );
@@ -254,21 +273,21 @@ async function recapOrRetire(
 ): Promise<void> {
   const { flush, row, now } = state;
   const { bindingId, emptySince } = empty;
-  const events = await hydrateRecap(flush.deps, bindingId, row.openedAt);
-  const roomRecap = await roomRecapFor(flush, row, emptySince, now);
-  const live = await findLinkedEvents(flush.deps.db, bindingId);
-  const due = isCloseDue(emptySince, graceMs(empty.binding.config), now, live);
-  const { openedAt } = row;
-  const { activities } = roomRecap;
-  const brief =
-    due && isBriefVisit({ openedAt, emptySince, events, live, activities });
+  const session = await loadEndedSession(flush, row, {
+    bindingId,
+    emptySince,
+    now,
+  });
+  const grace = graceMs(empty.binding.config);
+  const due = isCloseDue(emptySince, grace, now, session.live);
+  const brief = due && isBriefSession(row, emptySince, session);
   // A delete that failed for any reason but 10008 falls through to the recap.
   if (brief && (await retireBriefVisit(flush, row, emptySince))) return;
   await renderAndPublishRecap(state, {
     channelName: empty.channelName,
     endedAt: emptySince.getTime(),
-    events,
-    room: roomRecap,
+    events: session.events,
+    room: session.room,
   });
   if (due) await closeEmpty(state, emptySince);
 }
