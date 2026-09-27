@@ -112,76 +112,107 @@ function fakeDeps(db: Db, bindingId: string, client: Client): RoomResolveDeps {
   };
 }
 
-describe('room recap end to end (integration, ROK-1499)', () => {
-  let testApp: TestApp;
-  let db: Db;
-  let transport: Transport;
-  let deps: RoomResolveDeps;
-  let binding: ResolvedBinding;
-  let gameId: number;
+/** One bound lobby room: its binding, its fake Discord, and a real game. */
+interface RecapRoom {
+  db: Db;
+  transport: Transport;
+  deps: RoomResolveDeps;
+  binding: ResolvedBinding;
+  gameId: number;
+}
 
+/** A 60-minute grace, so "after the grace" is any flush at minute 61+. */
+const CONFIG = { minPlayers: 2, gracePeriod: 60 };
+
+/** Seed a game and a `general-lobby` binding, and wire the fake transport. */
+async function seedRecapRoom(db: Db): Promise<RecapRoom> {
+  const [game] = await db
+    .insert(schema.games)
+    .values({ name: 'Deep Rock Galactic', slug: 'rok1499e2e-drg' })
+    .returning();
+  const [row] = await db
+    .insert(schema.channelBindings)
+    .values({
+      guildId: GUILD_ID,
+      channelId: VOICE_CHANNEL_ID,
+      channelType: 'voice',
+      bindingPurpose: 'general-lobby',
+      config: CONFIG,
+    })
+    .returning();
+  const transport = fakeTransport();
+  const binding: ResolvedBinding = {
+    bindingId: row.id,
+    gameId: null,
+    gameName: null,
+    bindingPurpose: 'general-lobby',
+    recurrenceGroupId: null,
+    config: CONFIG,
+  };
+  const deps = fakeDeps(db, row.id, transport.client);
+  return { db, transport, deps, binding, gameId: game.id };
+}
+
+/** Register the per-test DB lifecycle; `.current` is this test's room. */
+function useRecapRoom(): { current: RecapRoom } {
+  const ref = {} as { current: RecapRoom };
+  let testApp: TestApp;
   beforeAll(async () => {
     testApp = await getTestApp();
-    db = testApp.db;
   });
-
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
   });
-
   beforeEach(async () => {
-    const [game] = await db
-      .insert(schema.games)
-      .values({ name: 'Deep Rock Galactic', slug: 'rok1499e2e-drg' })
-      .returning();
-    gameId = game.id;
-    const [row] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: GUILD_ID,
-        channelId: VOICE_CHANNEL_ID,
-        channelType: 'voice',
-        bindingPurpose: 'general-lobby',
-        config: { minPlayers: 2, gracePeriod: 60 },
-      })
-      .returning();
-    transport = fakeTransport();
-    deps = fakeDeps(db, row.id, transport.client);
-    binding = {
-      bindingId: row.id,
-      gameId: null,
-      gameName: null,
-      bindingPurpose: 'general-lobby',
-      recurrenceGroupId: null,
-      config: { minPlayers: 2, gracePeriod: 60 },
-    };
+    ref.current = await seedRecapRoom(testApp.db);
   });
+  return ref;
+}
 
-  /** One flush of the bound channel with the D12 seam standing in for Discord. */
-  function flush(
-    members: { discordUserId: string; displayName: string }[],
-    minutes: number,
-  ): Promise<void> {
-    return flushChannel({
-      deps,
-      channelId: VOICE_CHANNEL_ID,
-      guildId: GUILD_ID,
-      binding,
-      override: {
-        members: members.map((m) => ({ ...m, gameId })),
-      },
-      logger: new Logger('rok1499-e2e'),
-      now: T0 + minutes * MINUTE,
-    });
-  }
+/**
+ * One flush of the bound channel with the D12 seam standing in for Discord.
+ *
+ * @param gameId - What the seam reads every member as playing. It lands on
+ *   the occupancy stays and comes back as a recap activity (P2-2), so `null`
+ *   is the only way to build a room where no game was detected (ROK-1692).
+ */
+function flushRoom(
+  room: RecapRoom,
+  members: { discordUserId: string; displayName: string }[],
+  minutes: number,
+  gameId: number | null = room.gameId,
+): Promise<void> {
+  return flushChannel({
+    deps: room.deps,
+    channelId: VOICE_CHANNEL_ID,
+    guildId: GUILD_ID,
+    binding: room.binding,
+    override: { members: members.map((m) => ({ ...m, gameId })) },
+    logger: new Logger('rok1499-e2e'),
+    now: T0 + minutes * MINUTE,
+  });
+}
 
-  const ROOM = [
-    { discordUserId: 'e2e-u1', displayName: 'Ada' },
-    { discordUserId: 'e2e-u2', displayName: 'Bo' },
-  ];
+/** The presence row as the ledger now holds it, open or closed. */
+async function presenceRowById(db: Db, id: string) {
+  const [row] = await db
+    .select()
+    .from(schema.discordChannelPresenceMessages)
+    .where(eq(schema.discordChannelPresenceMessages.id, id));
+  return row;
+}
+
+const ROOM = [
+  { discordUserId: 'e2e-u1', displayName: 'Ada' },
+  { discordUserId: 'e2e-u2', displayName: 'Bo' },
+];
+
+describe('room recap end to end (integration, ROK-1499)', () => {
+  const room = useRecapRoom();
 
   it('writes the ledger on the live flush and recaps it when the room empties', async () => {
-    await flush(ROOM, 0);
+    const { db, transport } = room.current;
+    await flushRoom(room.current, ROOM, 0);
 
     const opened = await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID);
     expect(opened).not.toBeNull();
@@ -190,7 +221,7 @@ describe('room recap end to end (integration, ROK-1499)', () => {
     expect(live.map((s) => s.displayName).sort()).toEqual(['Ada', 'Bo']);
     expect(live.every((s) => s.leftAt === null)).toBe(true);
 
-    await flush([], 45);
+    await flushRoom(room.current, [], 45);
 
     const closed = await listOccupancy(db, opened!.id);
     expect(closed.every((s) => s.leftAt !== null)).toBe(true);
@@ -202,35 +233,55 @@ describe('room recap end to end (integration, ROK-1499)', () => {
     expect(recapLead(transport)).toMatch(/^2 in voice ·/);
   });
 
-  it('deletes a brief visit instead of recapping it, and closes the row brief (ROK-1692)', async () => {
-    await flush(ROOM, 0);
+  it('keeps the recap stable across the whole grace window', async () => {
+    const { transport } = room.current;
+    await flushRoom(room.current, ROOM, 0);
+    await flushRoom(room.current, [], 45);
+    const firstRecap = recapLead(transport);
+
+    // A second empty flush inside the grace must not restamp the ledger, so
+    // the render is byte-identical and the hash check suppresses the edit.
+    await flushRoom(room.current, [], 50);
+
+    expect(transport.edited).toHaveLength(1);
+    expect(firstRecap).toBe(recapLead(transport));
+  });
+});
+
+describe('a brief visit end to end (integration, ROK-1692)', () => {
+  const room = useRecapRoom();
+
+  it('recaps through the grace, then deletes the card and closes brief', async () => {
+    const { db, transport } = room.current;
+    await flushRoom(room.current, ROOM, 0, null);
     const opened = await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID);
     expect(opened).not.toBeNull();
 
-    await flush([], 1);
+    // Inside the grace a brief visit recaps like any other, so a reconnect
+    // would re-live THIS card rather than delete it and post a new one.
+    await flushRoom(room.current, [], 1, null);
+    expect(transport.deleted).toEqual([]);
+    expect(transport.edited).toHaveLength(1);
+
+    await flushRoom(room.current, [], 62, null);
 
     expect(transport.deleted).toEqual([opened!.messageId]);
-    expect(transport.edited).toHaveLength(0);
-    const [closed] = await db
-      .select()
-      .from(schema.discordChannelPresenceMessages)
-      .where(eq(schema.discordChannelPresenceMessages.id, opened!.id));
+    const closed = await presenceRowById(db, opened!.id);
     expect(closed.closeReason).toBe('brief');
     expect(closed.closedAt).not.toBeNull();
     expect(await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID)).toBeNull();
   });
 
-  it('keeps the recap stable across the whole grace window', async () => {
-    await flush(ROOM, 0);
-    await flush([], 45);
-    const firstRecap = recapLead(transport);
+  it('keeps and recaps a one-minute visit where a game was detected', async () => {
+    const { db, transport } = room.current;
+    await flushRoom(room.current, ROOM, 0);
+    const opened = await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID);
+    await flushRoom(room.current, [], 1);
+    await flushRoom(room.current, [], 62);
 
-    // A second empty flush inside the grace must not restamp the ledger, so
-    // the render is byte-identical and the hash check suppresses the edit.
-    await flush([], 50);
-
-    expect(transport.edited).toHaveLength(1);
-    expect(firstRecap).toBe(recapLead(transport));
+    expect(transport.deleted).toEqual([]);
+    expect(recapLead(transport)).toMatch(/^2 in voice ·/);
+    expect((await presenceRowById(db, opened!.id)).closeReason).toBe('empty');
   });
 });
 
