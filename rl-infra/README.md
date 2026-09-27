@@ -807,6 +807,22 @@ before. The bundle is read either way, so `bundle_warning` still surfaces on a
 green deploy. `identity_only: false` on an identity-only request means the env
 image predates the flag (it applied everything); the deploy message says so.
 
+The flag has to exist in two places that ship separately: the VM orchestrator
+(`bin/env-settings-overlay`, moved only by `./rl-infra/deploy.sh`) and the
+env image. An orchestrator that predates it rejects the flag (`unknown arg:
+--identity-only`); the laptop MCP then retries once WITHOUT it, so the slot
+identity still lands, and reports `orchestrator_outdated: true` — the bundle
+overwrote the synced shared keys, and the deploy message says to run
+`./rl-infra/deploy.sh`. A settings overlay that fails outright is named in the
+green deploy message too: the env is then on the laptop's shared bot token.
+
+**Rollout order for a settings-overlay change:** (1) `./rl-infra/deploy.sh`
+from the operator's laptop, so the VM orchestrator knows the new flag; (2)
+reload the laptop MCP server (`mcp-rl-fleet`); (3) rebuild the env image
+(`rl_env_deploy` builds from the branch). Reloading the MCP first is safe
+since the retry above, but until step 1 runs every identity-only deploy
+falls back to the full bundle.
+
 ## Agent MCP tool reference (canonical — moved from CLAUDE.md 2026-06-06)
 
 Per-tool "Use When" reference for the `mcp__mcp-rl-fleet__*` surface. CLAUDE.md
