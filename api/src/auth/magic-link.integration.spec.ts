@@ -290,6 +290,37 @@ describe('POST /auth/redeem-magic-link — user-state gates (AC6)', () => {
     expect(await isConsumed(token)).toBe(true);
     expect(await refreshRows(user.id)).toHaveLength(0);
   });
+
+  /**
+   * AC6: a deactivated user is treated exactly like Discord login — the
+   * link signs them in, and NotDeactivatedGuard 403s them per gated route.
+   */
+  it('a deactivated user → signs in (token consumed), then a gated route 403s USER_DEACTIVATED', async () => {
+    const user = await createMember('deactivated-user', {
+      deactivatedAt: new Date(),
+    });
+    const token = await mintToken(user.id);
+
+    const res = await redeem(token);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ access_token: expect.any(String) });
+    expect(await isConsumed(token)).toBe(true);
+    expect(await refreshRows(user.id)).toEqual([{ authMethod: 'magic' }]);
+
+    const gated = await testApp.request
+      .post('/events/999999/signup')
+      .set(
+        'Authorization',
+        `Bearer ${(res.body as { access_token: string }).access_token}`,
+      )
+      .send({});
+    expect(gated.status).toBe(403);
+    expect(gated.body).toMatchObject({
+      code: 'USER_DEACTIVATED',
+      message: 'Account deactivated',
+    });
+  });
 });
 
 // ── AC5 (HTTP half) — a magic token is never a bearer ────────────────────────
