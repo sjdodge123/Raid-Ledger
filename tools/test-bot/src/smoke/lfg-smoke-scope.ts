@@ -10,11 +10,18 @@
  * games with no offset, so on any env with the full seed they converged on the
  * newest game (Chao Chao, `api/src/games-lookup/seed-games.data.ts`) and, with
  * the board on, filled the operator's forum with its threads. The windows now
- * live in one place so the three suites cannot drift back onto each other:
+ * live in one place so the four suites cannot drift back onto each other:
  *
  *   reversed registry:  [0 .. 8)   skipped (newest games — the old default)
  *                       [8 .. 16)  lfg-board.test.ts   (BOARD_SCAN_OFFSET)
  *                       [16 .. 24) lfm-embed / lfm-playing (LFM_SCAN_OFFSET)
+ *                       [24 .. )   lfg-invite.test.ts  (INVITE_SCAN_OFFSET)
+ *
+ * `lfg-invite` is the one LFG suite that does NOT take `withLfgSurface`, so its
+ * window is the only thing keeping its hand off a game a locked suite has just
+ * picked. It once scanned from 16 too, and after #1372 moved the LFM window
+ * there both suites picked the same idle game in one pool run ("expected
+ * activeCount 1 … got 2").
  *
  * The LFM suites deliberately do NOT share the board's offset: the board
  * started past the LFM window precisely so the two never contend for one
@@ -37,6 +44,9 @@ export const GAME_SCAN_LIMIT = 8;
 export const BOARD_SCAN_OFFSET = 8;
 /** The LFM suites start past the board's window, never on the newest games. */
 export const LFM_SCAN_OFFSET = BOARD_SCAN_OFFSET + GAME_SCAN_LIMIT;
+
+/** `lfg-invite.test.ts` starts here: past the board's and the LFM windows. */
+export const INVITE_SCAN_OFFSET = LFM_SCAN_OFFSET + GAME_SCAN_LIMIT;
 
 /** The window at `offset`, or null when the registry is too short for it. */
 function windowAt<T>(reversed: T[], offset: number): T[] | null {
@@ -64,6 +74,27 @@ export function lfmCandidates<T>(games: T[]): T[] {
     return reversed.slice(1, BOARD_SCAN_OFFSET);
   }
   return reversed.slice(0, GAME_SCAN_LIMIT);
+}
+
+/**
+ * Candidate games for `lfg-invite.test.ts`, in scan order — ORDERED, not
+ * windowed: a fixed window is empty on the seven-game CI seed, so every game
+ * stays a candidate. Its own window comes first, then every game no sibling
+ * window holds, and the board's and LFM suites' games only as a last resort
+ * (on the CI seed they hold every game, so the order is newest-first as
+ * before). The caller caps how many it probes.
+ */
+export function inviteCandidates<T>(games: T[]): T[] {
+  const reversed = games.slice().reverse();
+  const taken = new Set<T>([...boardCandidates(games), ...lfmCandidates(games)]);
+  const ordered = [
+    ...reversed.slice(INVITE_SCAN_OFFSET),
+    ...reversed.slice(0, INVITE_SCAN_OFFSET),
+  ];
+  return [
+    ...ordered.filter((g) => !taken.has(g)),
+    ...ordered.filter((g) => taken.has(g)),
+  ];
 }
 
 /** Discord's epoch (2015-01-01T00:00:00Z) — snowflakes count from it. */
