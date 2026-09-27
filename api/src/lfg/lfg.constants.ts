@@ -18,8 +18,27 @@ import type { LfgNowTtl, LfgUrgency } from '@raid-ledger/contract';
  */
 export const LFG_LIST_LIMIT = 200;
 
-/** Single global expiry horizon, in days. */
-export const LFG_EXPIRY_DAYS = 14;
+/**
+ * Single global expiry horizon, in days — how long a "This week" hand lives
+ * after it is raised or refreshed by a +1.
+ *
+ * ROK-1691: 7, not 14. Operators and players read "This week" as a week, and
+ * at 14 a group's board post outlived the label by a whole second week.
+ */
+export const LFG_EXPIRY_DAYS = 7;
+
+/**
+ * ROK-1691 — the most a board post can age, in days, measured from when it
+ * OPENED (`lfg_group_messages.posted_at`), whatever the group's activity.
+ *
+ * Deliberately a second clock beside {@link LFG_EXPIRY_DAYS}. A +1 refreshes
+ * every hand on the group, so a busy group's hands never lapse and its post
+ * would never leave the board. The expiry sweep lapses every live hand on a
+ * game whose open forum post is this old, and the board then retires the post
+ * through the ordinary expired render. People still looking post again, which
+ * opens a fresh row with a fresh `posted_at`.
+ */
+export const LFG_POST_MAX_AGE_DAYS = 7;
 
 /**
  * Days of recurring game-time grid the overlap read projects forward from now
@@ -238,6 +257,17 @@ export interface LfgQuickPlayMatchPayload {
  */
 export function computeExpiresAt(from: Date = new Date()): Date {
   return new Date(from.getTime() + LFG_EXPIRY_DAYS * DAY_MS);
+}
+
+/**
+ * The instant a board post must have opened ON or BEFORE to be retired by the
+ * post-age cap: `now` minus {@link LFG_POST_MAX_AGE_DAYS} (ROK-1691).
+ *
+ * @param now - The sweep's clock. Defaults to the current time.
+ * @returns The cutoff instant.
+ */
+export function computePostAgeCutoff(now: Date = new Date()): Date {
+  return new Date(now.getTime() - LFG_POST_MAX_AGE_DAYS * DAY_MS);
 }
 
 /**

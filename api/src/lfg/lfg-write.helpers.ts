@@ -18,6 +18,7 @@ import * as schema from '../drizzle/schema';
 import type { LfgDb } from './lfg-query.helpers';
 import { convertedToTarget } from './lfg-provenance.helpers';
 import { tonightExpiresAt } from './lfg-tonight.helpers';
+import { agedBoardPostGameIds } from './lfg-post-age.helpers';
 import {
   LFG_DEFAULT_NOW_TTL_MINUTES,
   LFG_DEFAULT_VISIBILITY,
@@ -373,17 +374,29 @@ export interface LfgExpirySweep {
  * consumer can only re-render the group, so a member who quietly lapsed stayed
  * in the board post's forum thread forever.
  *
+ * ROK-1691 — a hand ALSO lapses when its game's open forum post opened more
+ * than `LFG_POST_MAX_AGE_DAYS` ago, however recently it was refreshed. Same
+ * UPDATE, same RETURNING, same per-game emit: the board retires that post
+ * exactly as it retires one whose hands ran out, with no new path.
+ *
  * @param db - Drizzle handle.
+ * @param now - The sweep's clock. Defaults to the current time.
  * @returns How many rows expired, and the distinct games with their users.
  */
-export async function expireStaleIntents(db: LfgDb): Promise<LfgExpirySweep> {
+export async function expireStaleIntents(
+  db: LfgDb,
+  now: Date = new Date(),
+): Promise<LfgExpirySweep> {
   const rows = await db
     .update(schema.lfgIntents)
     .set({ status: 'expired' })
     .where(
       and(
         eq(schema.lfgIntents.status, 'active'),
-        lte(schema.lfgIntents.expiresAt, new Date()),
+        or(
+          lte(schema.lfgIntents.expiresAt, now),
+          inArray(schema.lfgIntents.gameId, agedBoardPostGameIds(now)),
+        ),
       ),
     )
     .returning({

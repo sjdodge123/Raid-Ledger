@@ -115,8 +115,8 @@ describe('deriveViability', () => {
 });
 
 describe('expiry constant', () => {
-  it('is a single global 14-day horizon', () => {
-    expect(LFG_EXPIRY_DAYS).toBe(14);
+  it('is a single global 7-day horizon (ROK-1691; was 14)', () => {
+    expect(LFG_EXPIRY_DAYS).toBe(7);
   });
 
   it('computes an expiry exactly LFG_EXPIRY_DAYS after the supplied instant', () => {

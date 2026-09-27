@@ -647,10 +647,10 @@ describe('LFG_BOARD_INTRO_BODY (ROK-1658 concise intro)', () => {
       '',
       '**Start one**: press **Post an LFG** below, or use `/lfg` or the Raid Ledger site.',
       "**Join one**: press **+1 · I'm in** on a post. It's interest, not a commitment.",
-      '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next 14 days).',
+      '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next 7 days).',
       '**Changed your mind?** Run `/lfg` and press **Withdraw**.',
       '',
-      "Posts close when the group becomes an event or everyone's hand expires.",
+      "Posts close when the group becomes an event, when everyone's hand expires, or 7 days after they open. Still looking? Post again.",
     ]);
   });
 
