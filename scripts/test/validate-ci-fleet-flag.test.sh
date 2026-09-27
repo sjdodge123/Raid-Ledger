@@ -151,13 +151,14 @@ EOF
     # ROK-1154: the bundle budget measures web/dist, which the stubbed `npm run
     # build` never produces, so a real run would read a missing or stale bundle.
     # Record that one call; every other node call (the node:test specs) is real.
+    # STUB_NODE_BUNDLE_RC=1 makes the checker report an overrun (its real exit 1).
     # The real node path is baked in: `command -v node` inside the stub would
     # find the stub itself.
     cat >"$stub_dir/node" <<EOF
 #!/usr/bin/env bash
 if [[ "\${1:-}" == *check-bundle-size.mjs ]]; then
   [[ -n "\${STUB_NODE_ARGV_FILE:-}" ]] && echo "\$*" >>"\$STUB_NODE_ARGV_FILE"
-  exit 0
+  exit "\${STUB_NODE_BUNDLE_RC:-0}"
 fi
 exec "$(command -v node)" "\$@"
 EOF
@@ -226,6 +227,7 @@ invoke() {
             STUB_NPX_ARGV_FILE="$npx_argv_file" \
             STUB_NPM_ARGV_FILE="$npm_argv_file" \
             STUB_CURL_ARGV_FILE="$curl_argv_file" \
+            STUB_NODE_ARGV_FILE="$node_argv_file" \
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
             bash "$VALIDATE_CI_PATH" "$@" 2>"$err_file"
         ) || INVOKE_RC=$?
@@ -378,6 +380,20 @@ assert_out_matches 'Migration validation' "Migration row"
 assert_out_matches 'Container startup' "Container row"
 assert_out_matches 'Playwright \(desktop \+ mobile\)' "Playwright row"
 assert_out_matches 'Discord smoke \(companion bot\)' "Discord row"
+
+# ROK-1154 review: the node stub used to exit 0 unconditionally, so nothing
+# proved an overrun fails the gate. The checker exits 1 on an overrun; the gate
+# must turn that into a non-zero exit and a FAIL row, and — because run_step
+# stops on the first FAIL — only AFTER typecheck and lint have reported.
+CURRENT_TEST_NAME="ROK-1154: a bundle budget overrun fails the --static gate after typecheck + lint"
+export STUB_NODE_BUNDLE_RC=1
+invoke local "" --static
+unset STUB_NODE_BUNDLE_RC
+assert_rc 1 "--static with a budget overrun"
+assert_grep 'scripts/check-bundle-size\.mjs' "$node_argv_file" "the gate must invoke the budget checker"
+assert_out_matches 'Bundle size budget.*FAIL' "the budget row must read FAIL"
+assert_out_matches 'TypeScript \(all\).*PASS' "typecheck must report before the budget runs"
+assert_out_matches 'Lint \(all\).*PASS' "lint must report before the budget runs"
 
 # ===== AC3: e2e targets the explicit BASE_URL and nothing else =====
 
