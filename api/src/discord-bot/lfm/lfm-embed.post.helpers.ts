@@ -64,7 +64,7 @@ export async function postNew(
 ): Promise<void> {
   const surface = await resolveLfgBoardSurface(deps.surfaceDeps, gameId);
   if (!surface) return; // E2 — warned inside the resolver, never thrown.
-  const lfg = view.memberCount < LFM_FLOOR; // D3
+  const lfg = view.state !== 'playing' && view.memberCount < LFM_FLOOR; // D3 — a playing group always posts (ROK-1695)
   if (surface.kind === 'forum') {
     if (await postForum(deps, gameId, surface, view)) return;
     if (lfg) return; // D3 — a refused forum post has no text fallback at LFG.
