@@ -135,6 +135,23 @@ vi.mock('../hooks/use-discord-onboarding', () => ({
     })),
 }));
 
+/**
+ * Tech-debt [12]: the Steam status query, driven per test. Defaults to a
+ * settled "not linked" answer — irrelevant unless `steamConfigured` is on.
+ */
+const steamStatus = vi.hoisted(() => ({
+    current: { isLoading: false, data: { linked: false } } as {
+        isLoading: boolean; data: { linked: boolean } | undefined;
+    },
+}));
+vi.mock('../hooks/use-steam-link', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../hooks/use-steam-link')>();
+    return {
+        ...actual,
+        useSteamLink: () => ({ ...actual.useSteamLink(), steamStatus: steamStatus.current }),
+    };
+});
+
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 
@@ -372,4 +389,78 @@ describe('OnboardingWizardPage — part 3', () => {
         });
     });
 
+});
+
+describe('OnboardingWizardPage — Steam step settles first (tech-debt [12])', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockIsAdmin.mockReturnValue(false);
+        mockUseAuth.mockReturnValue({
+            user: { id: 1, username: 'newuser', role: 'member', discordId: '123', onboardingCompletedAt: null },
+        });
+        mockUseSystemStatus.mockReturnValue({
+            data: { discordConfigured: false, steamConfigured: true },
+        });
+        steamStatus.current = { isLoading: true, data: undefined };
+    });
+
+    /** One provider tree, so `rerender` keeps the wizard's step state. */
+    function renderStable(): () => void {
+        const client = createQueryClient();
+        const tree = (): React.ReactElement => (
+            <QueryClientProvider client={client}>
+                <MemoryRouter initialEntries={['/onboarding']}>
+                    <Routes><Route path="/onboarding" element={<OnboardingWizardPage />} /></Routes>
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+        const { rerender } = render(tree());
+        return () => rerender(tree());
+    }
+
+    it('shows no step while Steam status is loading, so Games is never displaced by a late Steam step', () => {
+        const refresh = renderStable();
+        // The bug: Games rendered as step 1 here, then the Steam step was
+        // inserted at index 0 when the status landed and the wizard jumped back.
+        expect(
+            screen.queryByText(/what do you play\?/i),
+            'Games must not be reachable before the Steam step is known',
+        ).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Next' })).not.toBeInTheDocument();
+
+        steamStatus.current = { isLoading: false, data: { linked: false } };
+        refresh();
+        expect(screen.getByText(/step 1 of 5/i)).toBeInTheDocument();
+        expect(screen.getByText(/connect your steam account/i)).toBeInTheDocument();
+    });
+
+    it('stays on Games when Steam status re-renders after the user reached it', () => {
+        const refresh = renderStable();
+        steamStatus.current = { isLoading: false, data: { linked: false } };
+        refresh();
+        fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
+
+        // A background refetch with the same answer must not move the wizard.
+        steamStatus.current = { isLoading: false, data: { linked: false } };
+        refresh();
+        expect(screen.getByText(/step 2 of 5/i)).toBeInTheDocument();
+        expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
+    });
+
+    it('ignores Escape during the blank gate render, then Escape skips all once settled', () => {
+        const refresh = renderStable();
+        // The bug: the window Escape listener was live while the wizard
+        // rendered nothing, so a stray key skipped onboarding unseen.
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(
+            mockNavigate,
+            'Escape before the step list settles must not skip onboarding',
+        ).not.toHaveBeenCalled();
+
+        steamStatus.current = { isLoading: false, data: { linked: false } };
+        refresh();
+        fireEvent.keyDown(window, { key: 'Escape', code: 'Escape' });
+        expect(mockNavigate).toHaveBeenCalledWith('/calendar', { replace: true });
+    });
 });

@@ -15,9 +15,11 @@ import assert from 'node:assert/strict';
 import {
   BOARD_SCAN_OFFSET,
   GAME_SCAN_LIMIT,
+  INVITE_SCAN_OFFSET,
   LFM_SCAN_OFFSET,
   SWEEP_CLOCK_SKEW_MS,
   boardCandidates,
+  inviteCandidates,
   isSweepableThread,
   lfmCandidates,
   snowflakeTimestampMs,
@@ -83,6 +85,29 @@ test('12 games: LFM skips the newest game and the board window', () => {
 test('20 games: LFM uses its own window past the board', () => {
   assert.deepEqual(boardCandidates(seed(20)), [12, 11, 10, 9, 8, 7, 6, 5]);
   assert.deepEqual(lfmCandidates(seed(20)), [4, 3, 2, 1]);
+});
+
+test('invite scans its own window first, disjoint from board and LFM (full seed)', () => {
+  assert.equal(INVITE_SCAN_OFFSET, LFM_SCAN_OFFSET + GAME_SCAN_LIMIT);
+  const invite = inviteCandidates(FULL);
+  assert.deepEqual(invite.slice(0, 7), [7, 6, 5, 4, 3, 2, 1]);
+  const taken = [...boardCandidates(FULL), ...lfmCandidates(FULL)];
+  const own = invite.slice(0, FULL.length - taken.length);
+  const shared = own.filter((g) => taken.includes(g));
+  assert.deepEqual(shared, [], `invite's preferred games overlap a sibling window on [${shared}]`);
+});
+
+test('invite puts every game no sibling window holds ahead of theirs, at any size', () => {
+  for (const n of [7, 12, 17, 20, 31, 40]) {
+    const games = seed(n);
+    const taken = new Set([...boardCandidates(games), ...lfmCandidates(games)]);
+    const invite = inviteCandidates(games);
+    assert.deepEqual([...invite].sort((a, b) => a - b), games, `${n}: not a permutation`);
+    const firstTaken = invite.findIndex((g) => taken.has(g));
+    const late = firstTaken < 0 ? [] : invite.slice(firstTaken).filter((g) => !taken.has(g));
+    assert.deepEqual(late, [], `${n} games: free games [${late}] sorted after a sibling's`);
+  }
+  assert.deepEqual(inviteCandidates(CI), [7, 6, 5, 4, 3, 2, 1]);
 });
 
 const DISCORD_EPOCH_MS = 1_420_070_400_000;

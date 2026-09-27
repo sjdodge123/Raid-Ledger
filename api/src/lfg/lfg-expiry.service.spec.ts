@@ -10,6 +10,8 @@
  * games.
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -211,5 +213,48 @@ describe('LfgExpiryService.expireIntents', () => {
       LFG_EXPIRY_JOB_NAME,
       expect.any(Function),
     );
+  });
+
+  // ROK-1691 — a board post retires 7 days after it opened, regardless of
+  // +1s. The sweep does it in its ONE existing UPDATE: a hand also lapses when
+  // its game's open forum post is past the cap, so the rows come back through
+  // the same RETURNING and the same per-game `expired` emit as a natural lapse.
+  // Mutation: drop the aged-post arm and the SQL no longer names the table.
+  describe('the board post-age cap (ROK-1691)', () => {
+    const NOW = new Date('2026-09-26T12:00:00.000Z');
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    /** The sweep UPDATE's WHERE, rendered the way Postgres receives it. */
+    const sweepWhere = async (): Promise<{
+      sql: string;
+      params: unknown[];
+    }> => {
+      jest.useFakeTimers({ now: NOW });
+      arrangeSweep([]);
+      await service.expireIntents();
+      expect(mockDb.where).toHaveBeenCalledTimes(1);
+      const where = mockDb.where.mock.calls[0][0] as SQL;
+      return new PgDialect().sqlToQuery(where);
+    };
+
+    it('also lapses every hand on a game whose open post is past the cap', async () => {
+      const { sql, params } = await sweepWhere();
+      expect(sql).toContain(
+        '"lfg_intents"."game_id" in (select "game_id" from "lfg_group_messages"',
+      );
+      expect(params).toContain(
+        new Date(NOW.getTime() - 7 * DAY_MS).toISOString(),
+      );
+    });
+
+    it('keeps the natural expiry arm beside it', async () => {
+      const { sql, params } = await sweepWhere();
+      expect(sql).toContain('"lfg_intents"."expires_at" <=');
+      expect(params).toContain(NOW.toISOString());
+    });
   });
 });

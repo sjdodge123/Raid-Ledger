@@ -26,6 +26,16 @@ describe('SearchInput', () => {
         expect(screen.getByTestId('search-input-icon')).toBeInTheDocument();
     });
 
+    it('sizes the clear button to the compact frame when fieldSize="sm"', () => {
+        render(<Harness initial="wow" fieldSize="sm" />);
+        expect(screen.getByRole('button', { name: 'Clear search' })).toHaveClass('lg:min-h-9');
+    });
+
+    it('keeps the md clear button on the default frame', () => {
+        render(<Harness initial="wow" />);
+        expect(screen.getByRole('button', { name: 'Clear search' })).not.toHaveClass('lg:min-h-9');
+    });
+
     it('shows no clear button while empty', () => {
         render(<Harness />);
         expect(screen.queryByRole('button', { name: 'Clear search' })).not.toBeInTheDocument();
@@ -79,3 +89,19 @@ function setNativeValue(el: HTMLInputElement, value: string): void {
     setter?.call(el, value);
     el.dispatchEvent(new Event('input', { bubbles: true }));
 }
+
+describe('SearchInput icon padding', () => {
+    it('keeps the text clear of the magnifier at every fieldSize', () => {
+        const { unmount } = render(<Harness />);
+        const md = screen.getByRole('searchbox', { name: 'Search games' });
+        expect(md).toHaveClass('px-3', 'pl-10');
+        expect(md).not.toHaveClass('lg:px-2');
+        expect(md).not.toHaveClass('lg:pl-10');
+        unmount();
+        // sm's `lg:px-2` outranks a bare `pl-10` from `lg` up, so the icon
+        // padding must be restated at `lg:` or the text runs under the icon.
+        render(<Harness initial="wow" fieldSize="sm" />);
+        expect(screen.getByRole('searchbox', { name: 'Search games' }))
+            .toHaveClass('lg:px-2', 'pl-10', 'lg:pl-10', 'pr-14', 'lg:pr-14');
+    });
+});

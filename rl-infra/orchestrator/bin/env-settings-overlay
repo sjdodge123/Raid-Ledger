@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ROK-1469 D1/D6 — env-settings-overlay --slug <slug> [--slot <n>]
+# ROK-1469 D1/D6 — env-settings-overlay --slug <slug> [--slot <n>] [--sync-wins]
 #
 # UPSERTs the SLOT-owned settings into a running env's app_settings:
 #   D1  the slot's Discord identity (bot token + OAuth client id/secret) from
@@ -11,6 +11,15 @@
 # Runs AFTER sync_settings (which copies the laptop's app_settings wholesale
 # and would otherwise stamp every env with the SAME bot identity) and before
 # the settings-restart, so the env boots on its own bot.
+#
+# --sync-wins (operator ruling 2026-09-27): rl_env_deploy passes it after the
+# laptop's app_settings landed (a SUCCESSFUL sync_settings or clone_prod). The
+# container script then UPSERTs only the slot identity + demo_mode and INSERTs
+# every other bundle key only where the env has no row (ON CONFLICT DO
+# NOTHING): a synced value is kept (`kept_synced`), a key the laptop DB lacked
+# is still filled (`inserted_if_absent`). Without the flag every key is
+# UPSERTed (the laptop-less path). The bundle is read either way, so
+# bundle_warning keeps surfacing.
 #
 # Secrets travel over STDIN into the container — never as argv (visible in
 # `ps`), never in stdout, never in the audit log. Output is a single JSON line
@@ -29,10 +38,12 @@ source "$BIN_DIR_SELF/_settings_bundle.sh"
 
 SLUG=""
 SLOT=""
+SYNC_WINS=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --slug) SLUG="$2"; shift 2 ;;
         --slot) SLOT="$2"; shift 2 ;;
+        --sync-wins) SYNC_WINS="--sync-wins"; shift ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
     esac
 done
@@ -111,7 +122,7 @@ OVERLAY_SCRIPT="${RL_OVERLAY_SCRIPT_PATH:-/app/dist/scripts/apply-settings-overl
 EXEC_OUT_FILE=$(mktemp -t rl-settings-overlay.XXXXXX)
 EXEC_RC=0
 printf '%s' "$PAYLOAD" | "$EXEC_APP" "$SLUG" -- node "$OVERLAY_SCRIPT" \
-    > "$EXEC_OUT_FILE" 2>&1 || EXEC_RC=$?
+    ${SYNC_WINS:+"$SYNC_WINS"} > "$EXEC_OUT_FILE" 2>&1 || EXEC_RC=$?
 # tr -d '\000' guards against a binary blob wedging jq; tail caps a runaway
 # stack trace so the failure stays readable in the agent transcript.
 EXEC_OUT=$(tr -d '\000' < "$EXEC_OUT_FILE" | tail -c 2048)
@@ -132,10 +143,22 @@ fi
 # if an older script version printed nothing parseable.
 APPLIED=$(jq -c '.applied // empty' <<<"$EXEC_OUT" 2>/dev/null || true)
 [[ -z "$APPLIED" ]] && APPLIED="$PAYLOAD_KEYS"
+# A sync-wins run's bundle keys: filled where absent / kept as synced (NAMES
+# only). And whether the container honoured the flag at all — an image that
+# predates it ignores argv and UPSERTs everything, which the caller must see.
+INSERTED=$(jq -c '.inserted_if_absent // empty' <<<"$EXEC_OUT" 2>/dev/null || true)
+[[ -z "$INSERTED" ]] && INSERTED='[]'
+KEPT=$(jq -c '.kept_synced // empty' <<<"$EXEC_OUT" 2>/dev/null || true)
+[[ -z "$KEPT" ]] && KEPT='[]'
+HONOURED=$(jq -c '.sync_wins // empty' <<<"$EXEC_OUT" 2>/dev/null || true)
+[[ "$HONOURED" == "true" ]] || HONOURED=false
 
 audit::log env-settings-overlay ok \
     "$(jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --argjson applied "$APPLIED" '{slug:$slug, slot:$slot, applied:$applied}')" 2>/dev/null || true
 jq -nc --arg slug "$SLUG" --argjson slot "$SLOT" --argjson applied "$APPLIED" \
     --argjson identity "$IDENTITY_JSON" --arg bundle_warning "$BUNDLE_WARNING" \
+    --argjson inserted "$INSERTED" --argjson kept "$KEPT" --argjson honoured "$HONOURED" \
     '{ok:true, slug:$slug, slot:$slot, applied:$applied, bot_identity:$identity,
+      inserted_if_absent:$inserted, inserted_count:($inserted | length),
+      kept_synced:$kept, kept_count:($kept | length), sync_wins:$honoured,
       bundle_warning: (if $bundle_warning == "" then null else $bundle_warning end)}'

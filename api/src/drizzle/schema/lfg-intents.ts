@@ -38,7 +38,7 @@ export const lfgIntents = pgTable(
     /** ROK-274 relay seam — column ships now, only `local` is implemented. */
     visibility: text('visibility').default('local').notNull(),
     /**
-     * `week` (the ROK-1451 14-day intent), `now` (ROK-1479's on-demand one) or
+     * `week` (the ROK-1451 week intent, 7 days since ROK-1691), `now` (ROK-1479's on-demand one) or
      * `tonight` (ROK-1616 — lapses 04:00 local next day, community timezone).
      *
      * ROK-1616 AC7: widening the CHECK reinterprets NOTHING. Existing `week`
@@ -57,7 +57,7 @@ export const lfgIntents = pgTable(
      * How many minutes a `now` intent lives — NULL on every `week` row.
      *
      * Stored because of the A3 ruling: a +1 refreshes a now-intent by its OWN
-     * horizon (30 or 60 minutes from the +1), never to 14 days, so the refresh
+     * horizon (30 or 60 minutes from the +1), never to the week horizon, so the refresh
      * distance has to survive on the row.
      */
     ttlMinutes: integer('ttl_minutes'),

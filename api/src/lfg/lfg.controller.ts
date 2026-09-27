@@ -58,7 +58,7 @@ export class LfgController {
    * `urgency` / `ttlMinutes` are passed straight through from the parsed body
    * (ROK-1479 AC1). `urgency` is never undefined here — `CreateLfgIntentSchema`
    * carries `.default('week')`, which is what keeps a pre-1479 client sending
-   * only `gameId` on the 14-day horizon. The `week` + `ttlMinutes` rejection
+   * only `gameId` on the week horizon. The `week` + `ttlMinutes` rejection
    * (A2) is the schema's `.superRefine`, so it lands in `fieldErrors` on
    * `ttlMinutes` through the existing 400 below.
    */
