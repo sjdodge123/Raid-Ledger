@@ -223,3 +223,53 @@ describe('EventDetailRoster — running-late badge (ROK-1379 follow-up)', () => 
         expect(screen.queryByTitle(/Running late/)).not.toBeInTheDocument();
     });
 });
+
+/** ROK-1694: an anonymous Discord signup (user_id NULL) — the API sends user.id 0. */
+function createAnonymousSignup(overrides: Record<string, unknown> = {}) {
+    return createSignup({
+        id: 99,
+        user: { id: 0, username: 'DiscordGuy', avatar: null, discordId: '999' },
+        isAnonymous: true,
+        discordUsername: 'DiscordGuy',
+        ...overrides,
+    });
+}
+
+function profileLinksTo(container: HTMLElement, userId: number) {
+    return container.querySelectorAll(`a[href="/users/${userId}"]`);
+}
+
+describe('EventDetailRoster — anonymous Discord signups (ROK-1694)', () => {
+    it('a CONFIRMED anonymous signup shows its Discord name + "via Discord" chip and no /users/0 link', () => {
+        const { container } = renderRoster(createRoster([createAnonymousSignup()]));
+        expect(profileLinksTo(container, 0)).toHaveLength(0);
+        expect(screen.getByText(/Confirmed \(1\)/)).toBeInTheDocument();
+        expect(screen.getByText('DiscordGuy')).toBeInTheDocument();
+        expect(screen.getByText('via Discord')).toBeInTheDocument();
+    });
+
+    it('a pending anonymous signup (routed to Confirmed) also renders the label, not a link', () => {
+        const signup = createAnonymousSignup({ confirmationStatus: 'pending' });
+        const { container } = renderRoster(createRoster([signup]));
+        expect(screen.getByText('via Discord')).toBeInTheDocument();
+        expect(profileLinksTo(container, 0)).toHaveLength(0);
+    });
+
+    it('keeps role icons for a confirmed anonymous signup', () => {
+        renderRoster(createRoster([createAnonymousSignup({ preferredRoles: ['healer'] })]));
+        expect(screen.getByAltText('healer')).toBeInTheDocument();
+    });
+
+    it('no roster group links to /users/0, while members still link to their profile', () => {
+        const signups = [
+            createAnonymousSignup({ id: 91 }),
+            createAnonymousSignup({ id: 92, status: 'tentative' }),
+            createAnonymousSignup({ id: 93, status: 'departed' }),
+            createSignup({ id: 94 }),
+        ];
+        const { container } = renderRoster(createRoster(signups));
+        expect(screen.getAllByText('via Discord')).toHaveLength(3);
+        expect(profileLinksTo(container, 0)).toHaveLength(0);
+        expect(profileLinksTo(container, 10)).toHaveLength(1);
+    });
+});
