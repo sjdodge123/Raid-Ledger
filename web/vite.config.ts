@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type PluginOption } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { sentryVitePlugin } from '@sentry/vite-plugin'
@@ -39,6 +39,26 @@ function manualChunks(moduleId: string): string | undefined {
   return undefined
 }
 
+/**
+ * ROK-1154: bundle treemap for `npm run analyze -w web`, which sets ANALYZE=1.
+ * Any other value (unset, `0`, `false`) never even imports the plugin module,
+ * so a normal build is untouched. The report goes to web/.bundle-report/ (gitignored) and never
+ * into dist: Dockerfile.allinone ships web/dist to nginx, so anything written
+ * there would be served publicly in the prod image.
+ *
+ * @returns The visualizer plugin when analysis was requested, else `null`.
+ */
+function analyzePlugin(): PluginOption {
+  if (process.env.ANALYZE !== '1') return null
+  return import('rollup-plugin-visualizer').then(({ visualizer }) =>
+    visualizer({
+      filename: resolve(__dirname, '.bundle-report/stats.html'),
+      template: 'treemap',
+      gzipSize: true,
+    }),
+  )
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -55,6 +75,7 @@ export default defineConfig({
       // Silently skip when SENTRY_AUTH_TOKEN is not set (local dev)
       disable: !process.env.SENTRY_AUTH_TOKEN,
     }),
+    analyzePlugin(),
   ],
   define: {
     __APP_VERSION__: JSON.stringify(rootPkg.version),
