@@ -15,6 +15,7 @@ import type { AvatarUser } from '../../lib/avatar';
 import { formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { RoleIcon } from '../shared/RoleIcon';
+import { AnonymousDiscordName } from '../common/AnonymousDiscordName';
 
 export interface PlayerCardProps {
     /** Player data from roster assignments */
@@ -57,14 +58,17 @@ function buildAvatarUser(player: RosterAssignmentResponse): {
     return { avatarUser: base, gameId: undefined };
 }
 
+/** Member → profile link; account-less Discord signup (userId 0) → name + "via Discord" chip, no link (ROK-1694). */
 function PlayerNameLink({ player }: { player: RosterAssignmentResponse }) {
+    if (player.userId === 0) {
+        return (
+            <AnonymousDiscordName name={player.username} className="flex min-w-0 items-center gap-1.5"
+                nameClassName="truncate font-medium text-foreground" />
+        );
+    }
     return (
         <Link
             to={`/users/${player.userId}`}
-            state={player.userId === 0 ? {
-                guest: true, username: player.username,
-                discordId: player.discordId, avatarHash: player.avatar,
-            } : undefined}
             className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
             title={player.username} onClick={(e) => e.stopPropagation()}>
             {player.username}
