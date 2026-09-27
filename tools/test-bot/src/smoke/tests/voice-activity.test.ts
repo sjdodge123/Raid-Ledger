@@ -769,30 +769,55 @@ async function messageExists(
 }
 
 /**
- * The room empties and the grace runs out: a drive-by visit's card is DELETED
- * (ROK-1692).
- *
- * Every member reads `gameId: null` and no event is linked, so nothing
- * happened in the room — the only shape the operator ruled a drive-by. (A seam
- * member WITH a `gameId` lands on the occupancy stay and recaps through the
- * P2-2 fallback; `lobbyPresenceEditsInPlace` pins that recap.) The decision is
- * taken only once the binding's grace has run out, and the API re-flushes the
- * empty room on the first drain tick after that (ROK-1692) — so the delete
- * lands by grace + two ticks. The poll allows that plus the usual timeout of
- * headroom, and does not depend on the 5-min reaper cron. NOTHING posts in the
- * card's place either — the AC7 clause: a lobby session never emits a second
- * card.
+ * The API's title fallback when a voice channel does not resolve
+ * (`channel-presence-embed.lead.helpers.ts::UNKNOWN_CHANNEL_NAME`).
  */
-async function assertBriefVisitDeleted(
+const UNRESOLVED_ROOM_NAME = 'Voice channel';
+
+/**
+ * The "no second card" watch after a brief visit's card is deleted: four drain
+ * ticks, so any re-flush of the empty room has had several chances to post.
+ */
+const NO_SECOND_CARD_WINDOW_MS = 4 * PRESENCE_DRAIN_TICK_MS;
+
+/** The pool's name for a voice channel — the room name its cards carry. */
+function voiceRoomName(ctx: TestContext, vChId: string): string {
+  const ch = ctx.voiceChannels.find((c) => c.id === vChId);
+  if (!ch) throw new Error(`Voice channel ${vChId} is not in the smoke pool`);
+  return ch.name;
+}
+
+/**
+ * Ids of the lobby cards and recaps for ONE room in a text channel.
+ *
+ * Both lead with `🔊 <room> · ` (`leadTitle` / `recapTitle` in the API's
+ * `channel-presence-embed.*.helpers.ts`). The brief-visit room posts into the
+ * guild's default notification channel, where the same API bot posts unrelated
+ * event embeds, so counting every bot message let a burst of those fail the
+ * check. The unresolved-room fallback title counts too, so a card whose room
+ * name failed to resolve is still seen rather than filtered out.
+ */
+async function roomLobbyCardIds(
+  channelId: string,
+  roomName: string,
+): Promise<string[]> {
+  const heads = [roomName, UNRESOLVED_ROOM_NAME].map(
+    (name) => `\u{1F50A} ${name} · `,
+  );
+  return (await readLastMessages(channelId, 50))
+    .filter((m) => {
+      const title = m.embeds[0]?.title ?? '';
+      return heads.some((head) => title.startsWith(head));
+    })
+    .map((m) => m.id);
+}
+
+/** Poll until Discord no longer has the brief visit's card (ROK-1692). */
+async function awaitCardDeleted(
   ctx: TestContext,
   target: PresenceTarget,
-  vChId: string,
   graceMs: number,
 ): Promise<void> {
-  const seen = await botMessageIds(target.textChannelId);
-  // `[]` is an EMPTY ROOM (the recap path). It is NOT `null`, which would clear
-  // the override and hand the channel back to real Discord reads.
-  await setLobbyPresence(ctx.api, vChId, []);
   try {
     await pollForCondition(
       async () =>
@@ -811,15 +836,55 @@ async function assertBriefVisitDeleted(
         `(underlying: ${(err as Error).message})`,
     );
   }
+}
+
+/**
+ * The room empties and the grace runs out: a drive-by visit's card is DELETED
+ * (ROK-1692).
+ *
+ * Every member reads `gameId: null` and no event is linked, so nothing
+ * happened in the room — the only shape the operator ruled a drive-by. (A seam
+ * member WITH a `gameId` lands on the occupancy stay and recaps through the
+ * P2-2 fallback; `lobbyPresenceEditsInPlace` pins that recap.) The decision is
+ * taken only once the binding's grace has run out, and the API re-flushes the
+ * empty room on the first drain tick after that (ROK-1692) — so the delete
+ * lands by grace + two ticks. The poll allows that plus the usual timeout of
+ * headroom, and does not depend on the 5-min reaper cron. NOTHING posts in the
+ * card's place either — the AC7 clause: a lobby session never emits a second
+ * card. Only THIS room's lobby cards count (`roomLobbyCardIds`); the watch
+ * window opens when the delete is observed, and a card posted while the room
+ * sat empty is caught by the snapshot taken at that moment.
+ */
+async function assertBriefVisitDeleted(
+  ctx: TestContext,
+  target: PresenceTarget,
+  vChId: string,
+  graceMs: number,
+): Promise<void> {
+  const room = voiceRoomName(ctx, vChId);
+  const chId = target.textChannelId;
+  const before = await roomLobbyCardIds(chId, room);
+  // `[]` is an EMPTY ROOM (the recap path). It is NOT `null`, which would clear
+  // the override and hand the channel back to real Discord reads.
+  await setLobbyPresence(ctx.api, vChId, []);
+  await awaitCardDeleted(ctx, target, graceMs);
+  const seen = await roomLobbyCardIds(chId, room);
+  const replaced = seen.filter((id) => !before.includes(id));
+  const never =
+    `A lobby session never posts a second card (AC7/D9), and a drive-by ` +
+    `visit's card is deleted, never replaced (ROK-1692).`;
+  if (replaced.length > 0) {
+    throw new Error(
+      `Lobby card(s) ${replaced.join(', ')} for ${room} appeared in ${chId} ` +
+        `while the brief visit's room sat empty. ${never}`,
+    );
+  }
   await assertConditionNeverMet(
-    async () => {
-      const now = await botMessageIds(target.textChannelId);
-      return now.some((id) => !seen.includes(id));
-    },
-    20_000,
-    `A new bot message appeared in ${target.textChannelId} after the brief ` +
-      `visit's card was deleted. A lobby session never posts a second card ` +
-      `(AC7/D9), and a drive-by visit's card is deleted, never replaced (ROK-1692).`,
+    async () =>
+      (await roomLobbyCardIds(chId, room)).some((id) => !seen.includes(id)),
+    NO_SECOND_CARD_WINDOW_MS,
+    `A new lobby card for ${room} appeared in ${chId} after the brief ` +
+      `visit's card was deleted. ${never}`,
   );
 }
 
