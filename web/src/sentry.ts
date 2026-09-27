@@ -2,7 +2,14 @@
  * Sentry initialization for the React frontend.
  * MUST be imported FIRST in main.tsx — before any other imports.
  * ROK-306: Maintainer telemetry — hardcoded DSN, opt-out via VITE_DISABLE_TELEMETRY.
+ *
+ * ROK-1366: the magic-link fragment strip is this module's FIRST import. ES
+ * module evaluation runs an importer's dependencies before its body, so the
+ * token leaves the address bar before `Sentry.init` below — whichever chunk
+ * the bundler puts this file in (main.tsx's import order alone did not survive
+ * chunking). magic-link-capture.test.ts pins it.
  */
+import './lib/magic-link-capture';
 import * as Sentry from '@sentry/react';
 import { scrubBreadcrumb, scrubTokenFromUrl } from './lib/sentry-scrub';
 import {

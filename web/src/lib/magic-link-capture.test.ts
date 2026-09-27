@@ -38,6 +38,16 @@ describe('ROK-1366: magic-link fragment is captured before Sentry initialises', 
         expect(specifiers.indexOf('./sentry')).toBeGreaterThan(0);
     });
 
+    it("is sentry.ts's first import, so the strip precedes Sentry.init in any chunk layout", () => {
+        // main.tsx's order did not survive bundling: src/sentry.ts landed in a
+        // shared chunk the entry imports, so it evaluated before the entry body.
+        const specifiers = importsOf('../sentry.ts');
+        expect(specifiers[0], 'sentry.ts must import the fragment strip before @sentry/react').toBe(
+            './lib/magic-link-capture',
+        );
+        expect(specifiers.indexOf('@sentry/react')).toBeGreaterThan(0);
+    });
+
     it('pulls in nothing that could initialise Sentry before the strip', () => {
         expect(importsOf('./magic-link-capture.ts')).toEqual(['./magic-link']);
         expect(importsOf('./magic-link.ts')).toEqual([]);
