@@ -1940,3 +1940,7 @@ same day (#1278, #1279, #1280).
 ### 2026-09-27 — fix/fleet-settings-sync-wins (resolution)
 
 - **[resolved 2026-09-27]** Entry ≈:1902 (the VM bundle overlay UPSERTs every bundle key over a fresher laptop `sync_settings`) is fixed on this branch per the operator ruling "a fresh sync wins": `rl_env_deploy` passes `--sync-wins` after a successful sync or clone_prod (`env-deploy-steps.ts` step 6 → `bin/env-settings-overlay` → `apply-settings-overlay.ts`), which UPSERTs only the slot identity + `demo_mode` and INSERTs every other bundle key ON CONFLICT DO NOTHING — a synced value is kept, a key the laptop DB lacked is still filled — reporting `inserted_if_absent` / `kept_synced` names + counts. A failed or skipped sync still UPSERTs the full bundle.
+
+### 2026-09-27 — fix/td-calendar-searchinput (review follow-up)
+- **[low]** `web/src/components/ui/select.tsx:30` has a bare `pr-9`, and `FIELD_PAD.sm`'s `lg:px-2` beats it from `lg` up, so on `Select fieldSize="sm"` the value text runs under the chevron. Affected call sites: `web/src/components/admin/UserManagementRow.tsx:211`, `web/src/pages/admin/cron-jobs-panel.tsx:113`, `web/src/components/characters/inline-character-form.tsx:63`. This is the same class-order bug this branch fixed for SearchInput and Combobox, and it predates this branch.
+  Suggested: the same per-size padding map with `pr-9 lg:pr-9` for sm, plus a vitest class assertion.
