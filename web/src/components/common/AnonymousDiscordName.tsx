@@ -6,7 +6,7 @@
  */
 
 /** The chip's raw-hue classes are repainted for the six light schemes in index.css. */
-export const VIA_DISCORD_CHIP_CLASS = 'text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded';
+export const VIA_DISCORD_CHIP_CLASS = 'text-xs text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded';
 
 export function ViaDiscordChip() {
     return <span className={VIA_DISCORD_CHIP_CLASS}>via Discord</span>;
