@@ -14,6 +14,8 @@
  * live credential: it is never logged, and only its path + fragment are used,
  * re-rooted on the run's baseURL so CLIENT_URL's origin never matters.
  *
+ * Each Playwright project signs in as its OWN user (see SIGN_IN_USER_BY_PROJECT).
+ *
  * Deterministic waits only — NEVER sleep().
  */
 import type { Browser, Page, Response } from '@playwright/test';
@@ -32,7 +34,7 @@ interface MintedLink {
     userId: number;
 }
 
-/** `sub` of a JWT — the admin's user id, read from the run's admin token. */
+/** `sub` of a JWT: the admin's user id, read from the run's admin token. */
 function jwtSubject(jwt: string): number {
     const payload = JSON.parse(Buffer.from(jwt.split('.')[1] ?? '', 'base64url').toString('utf8')) as {
         sub?: unknown;
@@ -42,9 +44,37 @@ function jwtSubject(jwt: string): number {
     return sub;
 }
 
-async function mintSignInLink(path: string): Promise<MintedLink> {
+/**
+ * One distinct user per project. A targeted run starts the desktop, mobile and
+ * tablet copies of this file at once, and a magic token carries no jti (D3):
+ * two links minted for the same user in the same second are byte-identical,
+ * so the first redeem would spend the others' link and they would 401.
+ * Fixture slots 8 and 9 are used by no other smoke spec; the fixture upsert
+ * keeps them active and onboarded, so AuthGuard never detours to /onboarding.
+ */
+const SIGN_IN_USER_BY_PROJECT: Readonly<Record<string, 'admin' | number>> = {
+    desktop: 'admin',
+    mobile: 8,
+    tablet: 9,
+};
+
+async function signInUserId(adminToken: string, project: string): Promise<number> {
+    const who = SIGN_IN_USER_BY_PROJECT[project];
+    if (who === undefined) {
+        throw new Error(`no distinct sign-in user for project "${project}": add one to SIGN_IN_USER_BY_PROJECT`);
+    }
+    if (who === 'admin') return jwtSubject(adminToken);
+    // Only `userId` is read; the fixture's `jwt` is never used or logged.
+    const res = (await apiPost(adminToken, '/admin/test/seed-fixture-user', { slot: who })) as {
+        userId?: unknown;
+    } | null;
+    if (typeof res?.userId !== 'number') throw new Error(`seed-fixture-user(slot ${who}) returned no userId`);
+    return res.userId;
+}
+
+async function mintSignInLink(path: string, project: string): Promise<MintedLink> {
     const adminToken = await getAdminToken();
-    const userId = jwtSubject(adminToken);
+    const userId = await signInUserId(adminToken, project);
     const res = (await apiPost(adminToken, '/admin/test/sign-in-link', { userId, path })) as {
         url?: unknown;
         message?: unknown;
@@ -98,7 +128,7 @@ test.describe('Magic sign-in link is single-use (ROK-1366)', () => {
     test('first context lands signed in on the deep link; the same link in a second context shows login', async ({
         browser,
     }) => {
-        const link = await mintSignInLink(LANDING_PATH);
+        const link = await mintSignInLink(LANDING_PATH, test.info().project.name);
 
         // --- Context A: the first open redeems and lands on the deep link.
         const a = await openLinkInFreshContext(browser, link.target);
