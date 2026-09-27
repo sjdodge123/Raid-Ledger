@@ -115,7 +115,7 @@ export function ConnectPluginsStep({ onNext, onBack, onSkip }: ConnectPluginsSte
                 ))}
             </div>
             <div className="bg-blue-500/5 border border-blue-500/20 rounded-lg p-4">
-                <p className="text-sm text-blue-400/80">
+                <p className="text-sm text-blue-400">
                     Plugins and integrations can be managed anytime in <span className="font-medium">Admin Settings &gt; Plugins</span>.
                     You can also configure API credentials under <span className="font-medium">Admin Settings &gt; Integrations</span>.
                 </p>

@@ -59,6 +59,7 @@ function ModalHeader({ titleId, title, onClose }: { titleId: string; title: stri
         <div className="shrink-0 flex items-center justify-between p-4 border-b border-edge">
             <h2 id={titleId} className="text-lg font-semibold text-foreground">{title}</h2>
             <button
+                type="button"
                 onClick={onClose}
                 className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
                 aria-label="Close modal"

@@ -78,7 +78,7 @@ function DayLabel({ displayDay, isRollingPast, isTodaySplit, dateLabel, nextDate
                 <span className="text-xs leading-none flex items-center gap-0.5">
                     <span className="text-muted">{nextDateLabel}</span>
                     <span className="text-dim">/</span>
-                    <span className="text-emerald-400/80">{dateLabel}</span>
+                    <span className="text-success">{dateLabel}</span>
                 </span>
             } />
         );

@@ -20,8 +20,11 @@ export interface SwitchProps {
     'aria-describedby'?: string;
 }
 
+/** The track is 24px tall; its `::before` reaches 10px above and below it — a 44px hit area. */
+const HIT_AREA = "before:absolute before:content-[''] before:-inset-y-2.5 before:inset-x-0 ";
+
 const TRACK =
-    'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ' +
+    'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ' + HIT_AREA +
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/50 ' +
     'focus-visible:ring-offset-2 focus-visible:ring-offset-surface ' +
     'disabled:cursor-not-allowed disabled:opacity-50';

@@ -27,7 +27,10 @@
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-/* ROK-335: Segmented pill toggle (On/Off) */
+/* ROK-335: Segmented pill toggle (On/Off). Theme tokens only, so all fifteen schemes paint
+   it with no per-scheme override — the same vocabulary as RadioGroup appearance="segmented"
+   (docs/design-system.md): track = panel + edge, OFF = muted on a transparent border (no
+   shift), ON = overlay + a full-strength success border (the 1.4.11 indicator) + foreground. */
 .event-detail-autosub-toggle {
     display: flex;
     align-items: center;
@@ -35,8 +38,8 @@
 
 .event-detail-autosub-toggle__track {
     display: inline-flex;
-    background: rgba(30, 30, 50, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--color-panel);
+    border: 1px solid var(--color-edge);
     border-radius: 0.5rem;
     padding: 0.1875rem;
     cursor: pointer;
@@ -48,7 +51,8 @@
     font-size: 0.75rem;
     font-weight: 600;
     border-radius: 0.375rem;
-    color: rgba(148, 163, 184, 0.7);
+    border: 1px solid transparent;
+    color: var(--color-muted);
     transition: all 0.2s ease;
     user-select: none;
     min-height: 28px;
@@ -58,23 +62,9 @@
 }
 
 .event-detail-autosub-toggle__option--active {
-    background: rgba(99, 102, 241, 0.6);
-    color: #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-autosub-toggle__track {
-    background: rgba(226, 232, 240, 0.9);
-    border-color: rgba(203, 213, 225, 0.6);
-}
-
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-autosub-toggle__option {
-    color: rgba(100, 116, 139, 0.7);
-}
-
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .event-detail-autosub-toggle__option--active {
-    background: rgba(99, 102, 241, 0.8);
-    color: #fff;
+    background: var(--color-overlay);
+    border-color: var(--color-success);
+    color: var(--color-foreground);
 }
 
 .event-detail-page--error {

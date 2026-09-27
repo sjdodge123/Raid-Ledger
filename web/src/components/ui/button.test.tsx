@@ -30,9 +30,23 @@ describe('Button', () => {
         ['ghost', 'text-muted'],
         ['destructive', 'bg-red-600'],
         ['destructive-soft', 'bg-danger/10'],
+        ['warning-soft', 'bg-warning/10'],
+        ['success-soft', 'bg-success/10'],
     ] as const)('variant %s paints %s', (variant, cls) => {
         render(<Button variant={variant}>X</Button>);
         expect(screen.getByRole('button', { name: 'X' })).toHaveClass(cls);
+    });
+
+    it.each([
+        ['destructive-soft', 'danger'],
+        ['warning-soft', 'warning'],
+        ['success-soft', 'success'],
+    ] as const)('soft variant %s mirrors the destructive-soft shape on the %s token', (variant, token) => {
+        render(<Button variant={variant} size="sm">X</Button>);
+        const btn = screen.getByRole('button', { name: 'X' });
+        expect(btn).toHaveClass(`bg-${token}/10`, `text-${token}`, 'border', `border-${token}/30`, `hover:bg-${token}/20`);
+        expect(btn).toHaveClass('min-h-[44px]', 'disabled:opacity-50', 'focus-visible:ring-success/80');
+        expect(btn).not.toHaveClass('text-muted');
     });
 
     it('defaults to the primary variant at md size with a 44px target', () => {

@@ -146,6 +146,17 @@ export class ChannelPresenceEmbedService
    */
   private inFlight: Promise<void> | null = null;
 
+  /**
+   * ROK-1692 — when each emptied room's grace runs out, keyed by voice channel.
+   *
+   * An empty room gets no voice events, so without this only the 5-min reaper
+   * ever re-flushed it: its close (and a brief visit's delete) landed up to six
+   * minutes late. `flushChannel` reports the instant; each tick re-marks the
+   * rooms that reached it. Memory only, and safe to lose: `recover()` marks
+   * every open row dirty after a restart, and that flush reschedules it.
+   */
+  private readonly graceDue = new Map<string, number>();
+
   /** Consecutive failed flushes per channel; the S-1 retry budget. */
   private readonly flushFailures = new Map<string, number>();
 
@@ -259,6 +270,7 @@ export class ChannelPresenceEmbedService
   clear(): void {
     this.dirty.clear();
     this.dirtyBindings.clear();
+    this.graceDue.clear();
     this.overrides.clear();
     this.bindingCache.clear();
     this.flushFailures.clear();
@@ -281,6 +293,19 @@ export class ChannelPresenceEmbedService
     else this.overrides.set(channelId, snapshot);
     this.markDirty(channelId);
     return Promise.resolve();
+  }
+
+  /**
+   * DEMO_MODE seam (ROK-1692): drop this channel's cached bindings so the next
+   * flush reads the binding that exists NOW.
+   *
+   * Nothing evicts the 60 s binding cache when a binding is created or
+   * deleted, so a smoke test that re-binds a channel could otherwise be
+   * flushed against the previous test's deleted binding — and schedule its
+   * grace re-check from that binding's grace, not its own.
+   */
+  forgetBinding(channelId: string): void {
+    this.bindingCache.delete(channelId);
   }
 
   /**
@@ -308,8 +333,9 @@ export class ChannelPresenceEmbedService
   /**
    * Cron entry point (D7): re-flush every open row every 5 minutes.
    *
-   * This is what closes a room nobody will ever touch again — the last human
-   * left, the grace elapsed, and no voice event will ever mark it dirty. Going
+   * The backstop for a room nobody will ever touch again — the last human
+   * left, the grace elapsed, and no voice event will ever mark it dirty. The
+   * grace re-check (`graceDue`) normally closes it first (ROK-1692). Going
    * through the normal flush keeps ONE close ladder rather than a second,
    * divergent one living in the reaper.
    */
@@ -351,11 +377,21 @@ export class ChannelPresenceEmbedService
 
   /** The body of one tick; `drain` owns the re-entrancy bookkeeping. */
   private async tick(): Promise<void> {
+    this.markGraceExpired(Date.now());
     await this.expandDirtyBindings();
     const channels = [...this.dirty];
     this.dirty.clear();
     for (const channelId of channels) {
       await this.flushOne(channelId);
+    }
+  }
+
+  /** Re-mark every emptied room whose grace has run out (ROK-1692). */
+  private markGraceExpired(now: number): void {
+    for (const [channelId, dueAt] of this.graceDue) {
+      if (dueAt > now) continue;
+      this.graceDue.delete(channelId);
+      this.markDirty(channelId);
     }
   }
 
@@ -387,7 +423,7 @@ export class ChannelPresenceEmbedService
       return;
     }
     try {
-      await flushChannel({
+      const dueAt = await flushChannel({
         deps: this.resolveDeps(),
         channelId,
         guildId,
@@ -396,6 +432,8 @@ export class ChannelPresenceEmbedService
         logger: this.logger,
         roomRecaps: this.roomRecaps,
       });
+      if (dueAt === null) this.graceDue.delete(channelId);
+      else this.graceDue.set(channelId, dueAt);
       this.flushFailures.delete(channelId);
     } catch (error) {
       this.requeue(channelId);

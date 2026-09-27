@@ -11,7 +11,13 @@ import { describeOperatorAdmin, type OperatorAdminMode } from './operator-admin.
 import * as envSync from './env-sync.js';
 import * as task from './task.js';
 import { runCloneCore } from './env-clone-prod.js';
-import { countSharedKeys, runSettingsOverlay } from './env-settings-overlay.js';
+import {
+  countSharedKeys,
+  describeOverlayStep,
+  describeSyncWinsCounts,
+  overlayDeployNotes,
+  runSettingsOverlay,
+} from './env-settings-overlay.js';
 import { buildSshArgs } from '../exec.js';
 import { isStillRunning, type ExecuteStatusReturn } from './task-schemas.js';
 import type { EnvDeployParams } from './env-deploy.js';
@@ -193,33 +199,43 @@ export async function runDeployChain(
     }
   }
 
-  // 6. ROK-1469: stamp the SLOT's Discord identity + the VM-side shared-key
-  // bundle over whatever sync_settings (and clone_prod) just copied. Runs even
-  // when the sync FAILED — the bundle is the laptop-independent path (Docker
-  // Desktop off).
+  // 6. ROK-1469: stamp the SLOT's Discord identity over whatever
+  // sync_settings (and clone_prod) just copied. Operator ruling 2026-09-27:
+  // when the laptop's app_settings landed — a good sync, or a good clone_prod,
+  // which rewrites app_settings from the laptop too — the overlay runs
+  // sync-wins: identity UPSERTed, every other bundle key inserted only where
+  // absent. Otherwise the full bundle applies — the laptop-independent path
+  // (Docker Desktop off).
+  const laptopSettings = syncedSettings || (params.clone_prod === true && !cloneFailed);
   let overlaySharedKeys = 0;
   let overlayApplied = 0;
+  let overlayWrote = 0;
+  let overlayCounts = '';
+  let overlayNotes = '';
   let overlayBundleWarning: string | null = null;
   if (!params.skip_sync) {
     t = now();
-    ctx.setCurrent('applying slot identity + settings bundle');
-    const ov = await runSettingsOverlay(params.slug);
+    const syncWins = laptopSettings;
+    ctx.setCurrent(syncWins ? 'applying slot identity (sync wins for shared keys)' : 'applying slot identity + settings bundle');
+    const ov = await runSettingsOverlay(params.slug, { syncWins });
     overlayApplied = ov.applied.length;
+    overlayWrote = overlayApplied + (ov.inserted_if_absent?.length ?? 0);
     overlaySharedKeys = countSharedKeys(ov.applied);
+    overlayCounts = syncWins && ov.ok ? ` (${describeSyncWinsCounts(ov)})` : '';
+    overlayNotes = overlayDeployNotes(ov, syncWins);
     overlayBundleWarning = ov.bundle_warning ?? null;
-    const warnNote = overlayBundleWarning ? `; bundle warning: ${overlayBundleWarning}` : '';
     ctx.recordStep(
       'settings_overlay',
       ov.ok,
       now() - t,
-      ov.ok ? `${overlayApplied} key(s), ${overlaySharedKeys} shared${warnNote}` : undefined,
+      ov.ok ? describeOverlayStep(ov, syncWins) : undefined,
       ov.ok ? undefined : (ov.error ?? ov.message),
     );
   }
 
   // 7. Restart the allinone so SettingsService re-reads the new rows. Last,
   // so it picks up the clone AND the overlay.
-  if (syncedSettings || overlayApplied > 0) {
+  if (laptopSettings || overlayWrote > 0) {
     t = now();
     ctx.setCurrent('restarting for settings');
     try {
@@ -235,7 +251,7 @@ export async function runDeployChain(
   // The slot identity (and demo_mode) is written on every overlay, so counting
   // it (see NON_CREDENTIAL_KEYS) would report a green deploy for an env with
   // no ITAD/Blizzard/LLM credentials (Codex #2).
-  const settingsFailed = !params.skip_sync && !syncedSettings && overlaySharedKeys === 0;
+  const settingsFailed = !params.skip_sync && !laptopSettings && overlaySharedKeys === 0;
   const base = {
     slot,
     url: sp.url,
@@ -254,11 +270,12 @@ export async function runDeployChain(
     return { ...base, ok: false, failed_step: 'clone_prod', error: 'clone_prod_failed', message: `FAILED: clone_prod did not succeed (${cloneFailureDetail ?? 'unknown'}). Container up at ${sp.url} with synced settings but prod data NOT loaded.` };
   }
   const operatorAdminNote = sp.operator_admin ? ` ${describeOperatorAdmin(sp.operator_admin)}` : '';
-  const settingsSource = syncedSettings
-    ? `${overlayApplied > 0 ? 'laptop sync + slot identity/bundle overlay' : 'laptop sync'}`
+  const laptopSource = syncedSettings ? 'laptop sync' : 'laptop app_settings via clone_prod';
+  const settingsSource = laptopSettings
+    ? `${overlayApplied > 0 ? `${laptopSource} + slot identity overlay${overlayCounts}` : laptopSource}`
     : 'VM settings bundle overlay (laptop DB unavailable)';
-  // Surface the bundle warning on a green deploy too: a healthy laptop sync
-  // masks a missing/undecryptable bundle until the next laptop-less deploy.
-  const bundleNote = overlayBundleWarning ? ` Bundle warning: ${overlayBundleWarning}.` : '';
-  return { ...base, ok: true, message: `Settings: ${settingsSource}.${bundleNote} Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
+  // overlayNotes surfaces, on a green deploy too, a failed overlay (the env
+  // may be on the operator's bot), a bundle warning (a healthy sync masks it
+  // until the next laptop-less deploy) and a not-honoured sync-wins run.
+  return { ...base, ok: true, message: `Settings: ${settingsSource}.${overlayNotes} Deployed branch to ${sp.url}. Share this URL with testers for ALL purposes (general testing AND Discord login). Admin login: ${sp.admin_email} — the password is withheld from tool output by default (A3-B P4); re-read this task with rl_task_status({task_id, include_credentials: true}) only if you must authenticate as admin@local yourself.${operatorAdminNote}` };
 }

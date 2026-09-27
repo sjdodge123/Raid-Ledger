@@ -174,6 +174,27 @@ export function isSessionExpired(
 }
 
 /**
+ * When an empty room must be flushed again although nothing marks it dirty
+ * (ROK-1692): the instant its grace runs out.
+ *
+ * `null` once that instant has passed: the flush that ran at or after it has
+ * closed the row, or a live linked session holds it open, and `onEventEnded`
+ * plus the reaper already cover that case.
+ *
+ * @param emptySince - When the room was first seen empty.
+ * @param grace - `graceMs` for the owning binding.
+ * @param now - Epoch ms of this flush.
+ */
+export function graceRecheckAt(
+  emptySince: Date,
+  grace: number,
+  now: number,
+): number | null {
+  const due = emptySince.getTime() + grace;
+  return due > now ? due : null;
+}
+
+/**
  * Is this row done (D8)? BOTH clauses must hold.
  *
  * @param emptySince - When the room was first seen empty.

@@ -401,9 +401,13 @@ it('disables Remove button when isDeleting and deletingId matches', () => {
       />,
     );
 
-    expect(
-      screen.getByRole('button', { name: 'Removing...' }),
-    ).toBeDisabled();
+    // Button `loading` blocks the row via aria-disabled (not native disabled, so
+    // focus stays) and swallows clicks: a second press must not delete again.
+    const removing = screen.getByRole('button', { name: 'Removing...' });
+    expect(removing).toHaveAttribute('aria-disabled', 'true');
+    expect(removing).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(removing);
+    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
 }
@@ -584,4 +588,47 @@ describe('ChannelBindingList — ROK-1416 inert surfacing', () => {
 
   channelbindinglistInertBadge();
   channelbindinglistFixOpensForm();
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// UI tech-debt 2026-09-27 — at phone width the Fix/Edit/Remove cluster (44px
+// Button primitive) squeezed the info column of an INERT row to ~70px. The row
+// stacks the actions under the info below `sm` and is a row again from `sm`.
+// The INERT badge sits on the `danger` tokens so it reads in both colour
+// families (raw `bg-red-600/40 text-red-100` was 1.89:1 in default-light).
+// ───────────────────────────────────────────────────────────────────────────
+
+const INERT_BINDING = { id: 'inert', channelId: 'ch-a', channelType: 'voice', bindingPurpose: 'game-voice-monitor', gameId: null } as const;
+
+function channelbindinglistRowStacksOnPhone() {
+  it('stacks the action cluster under the info block at base and lays it out as a row from sm', () => {
+    renderBindingList([makeBinding(INERT_BINDING)]);
+    const row = screen.getByTestId('channel-binding-row');
+    expect(row).toHaveClass('flex', 'flex-col', 'sm:flex-row', 'sm:items-center', 'sm:justify-between');
+    expect(row).not.toHaveClass('items-center');
+    const actions = screen.getByTestId('channel-binding-actions');
+    expect(actions).toHaveClass('flex', 'flex-wrap', 'gap-2');
+    expect(within(actions).getAllByRole('button').map((b) => b.textContent)).toEqual(['Fix →', 'Edit', 'Remove']);
+  });
+}
+
+function channelbindinglistInertBadgeTokens() {
+  it('puts the INERT badge and the inert row tint on danger tokens, not raw red', () => {
+    renderBindingList([makeBinding(INERT_BINDING)]);
+    const badge = screen.getByText(/INERT/);
+    expect(badge).toHaveClass('bg-danger/10', 'text-danger', 'border', 'border-danger/30');
+    expect(badge.className).not.toMatch(/\bred-\d/);
+    const row = screen.getByTestId('channel-binding-row');
+    expect(row).toHaveClass('bg-danger/5', 'border-danger/30');
+    expect(row.className).not.toMatch(/\bred-\d/);
+  });
+}
+
+describe('ChannelBindingList — phone stacking + INERT badge tokens', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  channelbindinglistRowStacksOnPhone();
+  channelbindinglistInertBadgeTokens();
 });
