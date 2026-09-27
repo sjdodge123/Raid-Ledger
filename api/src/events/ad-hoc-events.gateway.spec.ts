@@ -1,6 +1,7 @@
 import { AdHocEventsGateway } from './ad-hoc-events.gateway';
 import { JwtService } from '@nestjs/jwt';
 import type { Socket } from 'socket.io';
+import { signPurposeJwt } from '../auth/purpose-jwt.helpers';
 
 let gateway: AdHocEventsGateway;
 let mockServer: { to: jest.Mock };
@@ -170,4 +171,46 @@ describe('AdHocEventsGateway — emit', () => {
   it('emits grace_period status', () => testEmitGracePeriodStatus());
   it('emits ended status', () => testEmitEndedStatus());
   it('emits end time extension', () => testEmitEndTimeExtended());
+});
+
+// ── ROK-1366 AC5 — a magic-link token never opens a socket ──────────────────
+// Real JwtService (not the mock): the gateway verifies with JWT_SECRET, and a
+// magic token is signed with the derived 'magic-link' purpose secret (D1).
+
+const MAGIC_SPEC_SECRET = 'gateway-magic-spec-secret';
+let savedJwtSecret: string | undefined;
+
+function handshakeWith(token: string): Socket {
+  const realJwt = new JwtService({ secret: MAGIC_SPEC_SECRET });
+  const realGateway = new AdHocEventsGateway(realJwt);
+  const client = makeClient('client-magic', { handshake: { auth: { token } } });
+  realGateway.handleConnection(client);
+  return client;
+}
+
+describe('AdHocEventsGateway — magic-link handshake (ROK-1366 AC5)', () => {
+  beforeAll(() => {
+    savedJwtSecret = process.env.JWT_SECRET;
+    process.env.JWT_SECRET = MAGIC_SPEC_SECRET;
+  });
+  afterAll(() => {
+    process.env.JWT_SECRET = savedJwtSecret;
+  });
+
+  it('accepts a session token signed with JWT_SECRET (control)', () => {
+    const signer = new JwtService({ secret: MAGIC_SPEC_SECRET });
+    const client = handshakeWith(signer.sign({ sub: 1, username: 'test' }));
+    expect(client.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('disconnects a magic-link token signed with the purpose secret', () => {
+    const magic = signPurposeJwt(
+      new JwtService(),
+      'magic-link',
+      { sub: 1, magicLink: true },
+      '15m',
+    );
+    const client = handshakeWith(magic);
+    expect(client.disconnect).toHaveBeenCalledWith(true);
+  });
 });
