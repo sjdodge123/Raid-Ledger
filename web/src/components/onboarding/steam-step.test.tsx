@@ -44,7 +44,7 @@ describe('SteamStep connect control (ROK-1630 AC16)', () => {
         renderStep();
         const button = screen.getByRole('button', { name: /connect steam/i });
         for (const cls of ['w-full', 'px-4', 'py-3', 'min-h-[44px]', 'rounded-lg', 'transition-colors',
-            'hover:bg-[#2a475e]!', 'hover:filter-none!']) {
+            'hover:bg-[#2a475e]!', 'hover:filter-none!', 'cursor-pointer']) {
             expect(button).toHaveClass(cls);
         }
         const label = screen.getByText('Connect Steam');

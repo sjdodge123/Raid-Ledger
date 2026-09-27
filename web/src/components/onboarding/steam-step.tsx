@@ -25,7 +25,7 @@ function SteamStepHeader() {
  * modifiers (they must beat the inline fill). See PR notes, "New pattern".
  */
 const STEAM_FILL = '#171a21';
-const STEAM_HOVER_CLS = 'hover:bg-[#2a475e]! hover:filter-none!';
+const STEAM_HOVER_CLS = 'hover:bg-[#2a475e]! hover:filter-none! cursor-pointer';
 /** The old anchor's label: 16px/600 with a 12px icon gap (48px tall at py-3). */
 const STEAM_LABEL_CLS = 'inline-flex items-center gap-3 text-base font-semibold';
 
