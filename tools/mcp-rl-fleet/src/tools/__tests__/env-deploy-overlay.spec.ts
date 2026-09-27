@@ -29,7 +29,7 @@ const cloneCore = vi.fn();
 vi.mock('../env-clone-prod.js', () => ({ runCloneCore: (...a: unknown[]) => cloneCore(...a) }));
 vi.mock('../task.js', () => ({ executeWait: vi.fn() }));
 // The remote command is the LAST ssh arg, so the child-process stub can tell
-// the overlay from the restart (and the identity-only call from its retry).
+// the overlay from the restart (and the sync-wins call from its retry).
 vi.mock('../../exec.js', () => ({
   buildSshArgs: vi.fn(async (cmd: string) => ['-o', 'BatchMode=yes', 'rl-agent@host', cmd]),
 }));
@@ -51,7 +51,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { runDeployChain, type ChainCtx } from '../env-deploy-steps.js';
-import { IDENTITY_ONLY_NOT_HONOURED, countSharedKeys } from '../env-settings-overlay.js';
+import { SYNC_WINS_NOT_HONOURED, countSharedKeys } from '../env-settings-overlay.js';
 import { buildSshArgs } from '../../exec.js';
 
 // What rl-infra/orchestrator/bin/env-settings-overlay ALWAYS writes, bundle or
@@ -108,16 +108,16 @@ const realOverlay = () =>
 const remoteCommands = () => vi.mocked(buildSshArgs).mock.calls.map((c) => c[0]);
 
 /**
- * A VM orchestrator deployed before --identity-only existed: its arg loop
+ * A VM orchestrator deployed before --sync-wins existed: its arg loop
  * rejects the flag (`*) echo "unknown arg: $1" >&2; exit 2`), and a plain
- * run applies the whole bundle and never reports identity_only.
+ * run applies the whole bundle and never reports sync_wins.
  */
 function oldOrchestrator(applied: string[]): void {
   childExec.mockImplementation(async (_cmd, args) => {
     const remote = args[args.length - 1] ?? '';
     if (!remote.startsWith(OVERLAY_BIN)) return { stdout: '', stderr: '' };
-    if (remote.includes('--identity-only')) {
-      throw Object.assign(new Error('Command failed: ssh'), { code: 2, stderr: 'unknown arg: --identity-only\n' });
+    if (remote.includes('--sync-wins')) {
+      throw Object.assign(new Error('Command failed: ssh'), { code: 2, stderr: 'unknown arg: --sync-wins\n' });
     }
     return { stdout: `${JSON.stringify({ ok: true, applied, slot: 2 })}\n`, stderr: '' };
   });
@@ -234,17 +234,18 @@ describe('runDeployChain — settings overlay (ROK-1469)', () => {
   });
 });
 
-// Operator ruling 2026-09-27, "a fresh sync wins": a stale VM bundle.enc must
-// not overwrite the shared keys (ITAD/Co-Optimus/Blizzard/IGDB/LLM) that a
-// SUCCESSFUL laptop sync_settings just copied. Only the slot identity (and
-// demo_mode) still wins over the sync.
+// Operator ruling 2026-09-27: "When the laptop sync succeeds, the overlay
+// applies only the slot-identity keys and skips the keys the sync just
+// copied. The bundle still fills everything when the sync fails or is
+// skipped." So after a good sync the overlay runs with --sync-wins: identity
+// UPSERTed, every other bundle key inserted only where the sync left no row.
 describe('runDeployChain — settings precedence (a fresh sync wins)', () => {
-  it('asks for an identity-only overlay after a SUCCESSFUL sync', async () => {
+  it('asks for a sync-wins overlay after a SUCCESSFUL sync', async () => {
     envSyncExecute.mockResolvedValue({ ok: true });
-    overlayRun.mockResolvedValue({ ok: true, applied: ALWAYS_SEEDED, identity_only: true });
+    overlayRun.mockResolvedValue({ ok: true, applied: ALWAYS_SEEDED, sync_wins: true });
     const { ctx } = makeCtx();
     await runDeployChain(PARAMS as never, ctx);
-    expect(overlayRun).toHaveBeenCalledWith('demo', { identityOnly: true });
+    expect(overlayRun).toHaveBeenCalledWith('demo', { syncWins: true });
   });
 
   it('asks for a FULL overlay when the sync failed (laptop DB unavailable)', async () => {
@@ -252,38 +253,59 @@ describe('runDeployChain — settings precedence (a fresh sync wins)', () => {
     overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', ...ALWAYS_SEEDED] });
     const { ctx } = makeCtx();
     const res = await runDeployChain(PARAMS as never, ctx);
-    expect(overlayRun).toHaveBeenCalledWith('demo', { identityOnly: false });
+    expect(overlayRun).toHaveBeenCalledWith('demo', { syncWins: false });
     expect(res.ok).toBe(true);
   });
 
-  it('surfaces the skipped count and the bundle warning on an identity-only run', async () => {
+  it('treats a successful clone_prod like a sync: it rewrote app_settings from the laptop', async () => {
+    envSyncExecute.mockResolvedValue({ ok: false, stderr: 'transient ssh reset' });
+    overlayRun.mockResolvedValue({ ok: true, applied: ALWAYS_SEEDED, kept_synced: ['itad_api_key'], sync_wins: true });
+    const { ctx } = makeCtx();
+    const res = await runDeployChain({ ...PARAMS, clone_prod: true } as never, ctx);
+    expect(overlayRun).toHaveBeenCalledWith('demo', { syncWins: true });
+    expect(res.ok).toBe(true);
+    expect(res.message).toMatch(/clone_prod/);
+  });
+
+  it('a FAILED clone_prod after a failed sync still gets the full bundle', async () => {
+    envSyncExecute.mockResolvedValue({ ok: false, stderr: 'laptop DB unavailable' });
+    cloneCore.mockResolvedValue({ ok: false, stderr: 'clone failed' });
+    overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', ...ALWAYS_SEEDED] });
+    const { ctx } = makeCtx();
+    await runDeployChain({ ...PARAMS, clone_prod: true } as never, ctx);
+    expect(overlayRun).toHaveBeenCalledWith('demo', { syncWins: false });
+  });
+
+  it('surfaces the filled/kept counts and the bundle warning on a sync-wins run', async () => {
     const warning = 'settings bundle absent at /srv/rl-infra/settings/bundle.enc';
     envSyncExecute.mockResolvedValue({ ok: true });
     overlayRun.mockResolvedValue({
       ok: true,
       applied: ALWAYS_SEEDED,
-      skipped_keys: ['itad_api_key', 'blizzard_client_secret'],
-      identity_only: true,
+      inserted_if_absent: ['blizzard_client_secret'],
+      kept_synced: ['itad_api_key', 'igdb_client_secret'],
+      sync_wins: true,
       bundle_warning: warning,
     });
     const { ctx, cap } = makeCtx();
     const res = await runDeployChain(PARAMS as never, ctx);
-    expect(cap.details.settings_overlay).toMatch(/2 bundle key\(s\) skipped/);
+    const counts = /1 bundle key\(s\) filled where absent, 2 kept from the sync/;
+    expect(cap.details.settings_overlay).toMatch(counts);
     expect(cap.details.settings_overlay).toContain(warning);
-    expect(res.message).toMatch(/2 bundle key\(s\) skipped/);
+    expect(res.message).toMatch(counts);
     expect(res.message).toContain(warning);
   });
 
-  it('warns when an old env image ignored identity-only and overwrote shared keys', async () => {
+  it('warns when an old env image ignored sync-wins and overwrote shared keys', async () => {
     envSyncExecute.mockResolvedValue({ ok: true });
     overlayRun.mockResolvedValue({ ok: true, applied: ['itad_api_key', ...ALWAYS_SEEDED] });
     const { ctx, cap } = makeCtx();
     const res = await runDeployChain(PARAMS as never, ctx);
-    expect(cap.details.settings_overlay).toMatch(/identity-only NOT honoured/);
-    expect(res.message).toMatch(/identity-only NOT honoured/);
+    expect(cap.details.settings_overlay).toMatch(/sync-wins NOT honoured/);
+    expect(res.message).toMatch(/sync-wins NOT honoured/);
   });
 
-  it('an old VM orchestrator that rejects --identity-only still gets the slot identity, and says so', async () => {
+  it('an old VM orchestrator that rejects --sync-wins still gets the slot identity, and says so', async () => {
     // rl-infra/deploy.sh not yet run since the flag landed: without the retry
     // the overlay fails, the env boots on the laptop's shared bot token
     // (ROK-1469 D1) and the deploy message just says "laptop sync".
@@ -294,12 +316,12 @@ describe('runDeployChain — settings precedence (a fresh sync wins)', () => {
     const { ctx, cap } = makeCtx();
     const res = await runDeployChain(PARAMS as never, ctx);
     expect(remoteCommands().filter((c) => c.startsWith(OVERLAY_BIN))).toEqual([
-      `${OVERLAY_BIN} --slug demo --identity-only`,
+      `${OVERLAY_BIN} --slug demo --sync-wins`,
       `${OVERLAY_BIN} --slug demo`,
     ]);
     expect(cap.steps).toContainEqual({ name: 'settings_overlay', ok: true });
     expect(res.ok).toBe(true);
-    expect(res.message).toContain(IDENTITY_ONLY_NOT_HONOURED);
+    expect(res.message).toContain(SYNC_WINS_NOT_HONOURED);
     expect(res.message).toContain('./rl-infra/deploy.sh');
   });
 
@@ -315,12 +337,12 @@ describe('runDeployChain — settings precedence (a fresh sync wins)', () => {
 });
 
 describe('runSettingsOverlay — remote command', () => {
-  it('appends --identity-only only when asked (the flag, never a value)', async () => {
+  it('appends --sync-wins only when asked (the flag, never a value)', async () => {
     const real = await realOverlay();
-    await real.runSettingsOverlay('demo', { identityOnly: true });
+    await real.runSettingsOverlay('demo', { syncWins: true });
     await real.runSettingsOverlay('demo');
     expect(remoteCommands()).toEqual([
-      `${OVERLAY_BIN} --slug demo --identity-only`,
+      `${OVERLAY_BIN} --slug demo --sync-wins`,
       `${OVERLAY_BIN} --slug demo`,
     ]);
   });
@@ -328,18 +350,18 @@ describe('runSettingsOverlay — remote command', () => {
   it('retries WITHOUT the flag when the VM orchestrator rejects it, marked not honoured', async () => {
     oldOrchestrator(['itad_api_key', ...ALWAYS_SEEDED]);
     const real = await realOverlay();
-    const ov = await real.runSettingsOverlay('demo', { identityOnly: true });
-    expect(remoteCommands()).toEqual([`${OVERLAY_BIN} --slug demo --identity-only`, `${OVERLAY_BIN} --slug demo`]);
-    expect(ov).toMatchObject({ ok: true, identity_only: false, orchestrator_outdated: true });
+    const ov = await real.runSettingsOverlay('demo', { syncWins: true });
+    expect(remoteCommands()).toEqual([`${OVERLAY_BIN} --slug demo --sync-wins`, `${OVERLAY_BIN} --slug demo`]);
+    expect(ov).toMatchObject({ ok: true, sync_wins: false, orchestrator_outdated: true });
     expect(ov.applied).toContain('discord_bot_token');
-    expect(real.overlayIgnoredIdentityOnly(ov, true)).toBe(true);
+    expect(real.overlayIgnoredSyncWins(ov, true)).toBe(true);
   });
 
   it('does not retry any other overlay failure', async () => {
     childExec.mockRejectedValue(Object.assign(new Error('Command failed: ssh'), { stderr: 'env not found: demo' }));
     const real = await realOverlay();
-    const ov = await real.runSettingsOverlay('demo', { identityOnly: true });
-    expect(remoteCommands()).toEqual([`${OVERLAY_BIN} --slug demo --identity-only`]);
+    const ov = await real.runSettingsOverlay('demo', { syncWins: true });
+    expect(remoteCommands()).toEqual([`${OVERLAY_BIN} --slug demo --sync-wins`]);
     expect(ov).toMatchObject({ ok: false, applied: [], message: 'env not found: demo' });
   });
 });

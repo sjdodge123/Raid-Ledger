@@ -14,16 +14,19 @@ import { buildSshArgs } from '../exec.js';
 /** Key NAMES the overlay wrote — never values (the orchestrator emits names). */
 export interface SettingsOverlayResult {
   ok: boolean;
+  /** UPSERTed: the env now holds the overlay's value. */
   applied: string[];
   slot?: number | null;
   bot_identity?: unknown;
   /** Why the VM-side shared-key bundle contributed nothing (absent, wrong key, malformed). */
   bundle_warning?: string | null;
-  /** Key NAMES an identity-only run left to the laptop sync. */
-  skipped_keys?: string[];
-  /** Whether the container honoured --identity-only (false: image or orchestrator predates it). */
-  identity_only?: boolean;
-  /** The VM orchestrator rejected --identity-only, so the full overlay ran instead. */
+  /** --sync-wins: bundle keys the synced DB lacked, inserted by the overlay. */
+  inserted_if_absent?: string[];
+  /** --sync-wins: bundle keys the sync had already written, left as synced. */
+  kept_synced?: string[];
+  /** Whether the container honoured --sync-wins (false: image or orchestrator predates it). */
+  sync_wins?: boolean;
+  /** The VM orchestrator rejected --sync-wins, so the full overlay ran instead. */
   orchestrator_outdated?: boolean;
   error?: string;
   message?: string;
@@ -55,36 +58,43 @@ export function countSharedKeys(applied: string[]): number {
   return applied.filter((k) => !NON_CREDENTIAL_KEYS.has(k)).length;
 }
 
-/** Shown when an identity-only overlay still wrote shared keys. */
-export const IDENTITY_ONLY_NOT_HONOURED =
-  'identity-only NOT honoured, so the VM bundle overwrote the synced shared keys';
+/** Shown when a sync-wins overlay still UPSERTed shared keys. */
+export const SYNC_WINS_NOT_HONOURED =
+  'sync-wins NOT honoured, so the VM bundle overwrote the synced shared keys';
 
 /** Fix for an orchestrator deployed before the flag (rl-infra/deploy.sh not run since). */
-export const ORCHESTRATOR_PREDATES_IDENTITY_ONLY =
-  'the VM orchestrator predates --identity-only, so the full overlay ran — run ./rl-infra/deploy.sh';
+export const ORCHESTRATOR_PREDATES_SYNC_WINS =
+  'the VM orchestrator predates --sync-wins, so the full overlay ran — run ./rl-infra/deploy.sh';
 
-const IMAGE_PREDATES_IDENTITY_ONLY = 'the env image predates the flag — rebuild the image';
+const IMAGE_PREDATES_SYNC_WINS = 'the env image predates the flag — rebuild the image';
 
-/** True when identity-only was asked for but shared keys were written anyway. */
-export function overlayIgnoredIdentityOnly(ov: SettingsOverlayResult, identityOnly: boolean): boolean {
-  return identityOnly && ov.ok && ov.identity_only !== true && countSharedKeys(ov.applied) > 0;
+/** True when sync-wins was asked for but shared keys were UPSERTed anyway. */
+export function overlayIgnoredSyncWins(ov: SettingsOverlayResult, syncWins: boolean): boolean {
+  return syncWins && ov.ok && ov.sync_wins !== true && countSharedKeys(ov.applied) > 0;
 }
 
-/** The not-honoured warning with its cause, or null when identity-only held. */
-export function identityOnlyWarning(ov: SettingsOverlayResult, identityOnly: boolean): string | null {
-  if (overlayIgnoredIdentityOnly(ov, identityOnly)) {
-    const cause = ov.orchestrator_outdated ? ORCHESTRATOR_PREDATES_IDENTITY_ONLY : IMAGE_PREDATES_IDENTITY_ONLY;
-    return `${IDENTITY_ONLY_NOT_HONOURED}: ${cause}`;
+/** The not-honoured warning with its cause, or null when sync-wins held. */
+export function syncWinsWarning(ov: SettingsOverlayResult, syncWins: boolean): string | null {
+  if (overlayIgnoredSyncWins(ov, syncWins)) {
+    const cause = ov.orchestrator_outdated ? ORCHESTRATOR_PREDATES_SYNC_WINS : IMAGE_PREDATES_SYNC_WINS;
+    return `${SYNC_WINS_NOT_HONOURED}: ${cause}`;
   }
-  return identityOnly && ov.orchestrator_outdated ? ORCHESTRATOR_PREDATES_IDENTITY_ONLY : null;
+  return syncWins && ov.orchestrator_outdated ? ORCHESTRATOR_PREDATES_SYNC_WINS : null;
+}
+
+/** "sync wins: N bundle key(s) filled where absent, M kept from the sync" — counts only. */
+export function describeSyncWinsCounts(ov: SettingsOverlayResult): string {
+  const filled = ov.inserted_if_absent?.length ?? 0;
+  const kept = ov.kept_synced?.length ?? 0;
+  return `sync wins: ${filled} bundle key(s) filled where absent, ${kept} kept from the sync`;
 }
 
 /** Step detail for the deploy chain: counts and notes, never values. */
-export function describeOverlayStep(ov: SettingsOverlayResult, identityOnly: boolean): string {
-  const parts = [`${ov.applied.length} key(s), ${countSharedKeys(ov.applied)} shared`];
-  if (identityOnly) {
-    parts.push(`identity-only after a fresh sync, ${ov.skipped_keys?.length ?? 0} bundle key(s) skipped`);
-    const warning = identityOnlyWarning(ov, identityOnly);
+export function describeOverlayStep(ov: SettingsOverlayResult, syncWins: boolean): string {
+  const parts = [`${ov.applied.length} key(s) upserted, ${countSharedKeys(ov.applied)} shared`];
+  if (syncWins) {
+    parts.push(describeSyncWinsCounts(ov));
+    const warning = syncWinsWarning(ov, syncWins);
     if (warning) parts.push(warning);
   }
   if (ov.bundle_warning) parts.push(`bundle warning: ${ov.bundle_warning}`);
@@ -96,7 +106,7 @@ export function describeOverlayStep(ov: SettingsOverlayResult, identityOnly: boo
  * the env on whatever identity the sync copied — the operator's shared bot
  * (ROK-1469 D1) — so it must be named, not just recorded as a red step.
  */
-export function overlayDeployNotes(ov: SettingsOverlayResult, identityOnly: boolean): string {
+export function overlayDeployNotes(ov: SettingsOverlayResult, syncWins: boolean): string {
   const notes: string[] = [];
   if (!ov.ok) {
     notes.push(
@@ -104,27 +114,29 @@ export function overlayDeployNotes(ov: SettingsOverlayResult, identityOnly: bool
     );
   }
   if (ov.bundle_warning) notes.push(`Bundle warning: ${ov.bundle_warning}`);
-  const warning = identityOnlyWarning(ov, identityOnly);
+  const warning = syncWinsWarning(ov, syncWins);
   if (warning) notes.push(warning);
   return notes.map((n) => ` ${n}.`).join('');
 }
 
 export interface RunOverlayOptions {
-  /** Apply only the slot identity: a successful laptop sync wins for shared
-   *  keys (operator ruling 2026-09-27). Omit after a failed/skipped sync. */
-  identityOnly?: boolean;
+  /** The laptop's app_settings just landed (sync_settings or clone_prod
+   *  succeeded): UPSERT only the slot identity and insert every other bundle
+   *  key only where absent (operator ruling 2026-09-27). Omit after a
+   *  failed/skipped sync, so the bundle UPSERTs everything. */
+  syncWins?: boolean;
 }
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 const OVERLAY_BIN = '/srv/rl-infra/orchestrator/bin/env-settings-overlay';
 /** What bin/env-settings-overlay's arg loop prints (stderr, exit 2) for a flag it predates. */
-const FLAG_REJECTED_RE = /unknown arg: --identity-only/;
+const FLAG_REJECTED_RE = /unknown arg: --sync-wins/;
 
 type ExecError = Error & { stderr?: string; stdout?: string };
 
 /** One ssh call to the orchestrator bin; throws on a non-zero exit. */
-async function execOverlay(slug: string, identityOnly: boolean): Promise<SettingsOverlayResult> {
-  const flag = identityOnly ? ' --identity-only' : '';
+async function execOverlay(slug: string, syncWins: boolean): Promise<SettingsOverlayResult> {
+  const flag = syncWins ? ' --sync-wins' : '';
   const args = await buildSshArgs(`${OVERLAY_BIN} --slug ${slug}${flag}`);
   const { execFile } = await import('node:child_process');
   const { promisify } = await import('node:util');
@@ -144,12 +156,13 @@ function orchestratorRejectedFlag(err: unknown): boolean {
 }
 
 /**
- * Apply the slot identity + shared bundle to `slug`'s env. With
- * `identityOnly`, the bundle's shared keys are skipped (reported in
- * `skipped_keys`) so they cannot overwrite what a fresh sync just copied.
+ * Apply the slot identity + shared bundle to `slug`'s env. With `syncWins`,
+ * the bundle's shared keys are inserted only where absent (reported as
+ * `inserted_if_absent` / `kept_synced`) so they cannot overwrite what a fresh
+ * sync just copied, yet still fill a key the laptop DB lacked.
  *
  * The VM orchestrator only moves on `./rl-infra/deploy.sh`, while this code
- * reloads with the laptop MCP. An orchestrator that predates --identity-only
+ * reloads with the laptop MCP. An orchestrator that predates --sync-wins
  * rejects it, so retry once WITHOUT it: the slot identity must still land
  * (else the env runs on the operator's synced bot token), and the result is
  * marked not honoured so the deploy message warns.
@@ -165,15 +178,15 @@ export async function runSettingsOverlay(
   if (!SLUG_RE.test(slug)) {
     return { ok: false, applied: [], error: 'invalid_slug' };
   }
-  const identityOnly = opts.identityOnly === true;
+  const syncWins = opts.syncWins === true;
   try {
-    return await execOverlay(slug, identityOnly);
+    return await execOverlay(slug, syncWins);
   } catch (err) {
-    if (!identityOnly || !orchestratorRejectedFlag(err)) return overlayFailure(err);
+    if (!syncWins || !orchestratorRejectedFlag(err)) return overlayFailure(err);
   }
   try {
     const ov = await execOverlay(slug, false);
-    return { ...ov, identity_only: false, orchestrator_outdated: true };
+    return { ...ov, sync_wins: false, orchestrator_outdated: true };
   } catch (err) {
     return { ...overlayFailure(err), orchestrator_outdated: true };
   }
