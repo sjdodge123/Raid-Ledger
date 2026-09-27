@@ -1915,3 +1915,10 @@ same day (#1278, #1279, #1280).
   - The test runs ungated in CI.
   - `lfg/end-session` destroys the session's own temp voice channel, which it finds by the event's stored `ephemeralVoiceChannelId`.
 - low — `api/src/admin/demo-test-lfg.controller.ts:196`: `destroyForEvent` is a silent no-op when the bot is offline and only logs its own errors, so `end-session` still returns `ended:true` and the smoke can't see a leaked channel. Suggested: return a `channelDestroyed` flag and have the smoke `console.warn` when it's false.
+
+### 2026-09-27 — chore/rok-1154-bundle-budget (surfaced during fleet gate)
+- **[med]** `scripts/playwright-global-setup.ts:82` (fleet runner image): `[global-setup] Playwright browsers are missing or are the wrong build for this version of @playwright/test (expected at: /ms-playwright/chromium_headless_shell-1243/...)` (slot-3 fleet task 1ea74d6ff72c).
+  - **Cause:** the repo pins `@playwright/test ^1.63.0`, but the rl-infra runner image bakes the browsers for an older minor. A runner's stale persistent `node_modules` masks the drift until something runs `npm ci` on it. A devDependency branch has to do that, and then the runner fails every Playwright gate.
+  - **Why it's pre-existing:** the branch doesn't touch Playwright, and the slot-1 gate on the old `node_modules` passed the same suite that night.
+  - **Current state:** slot 3's runner is in the drifted state now.
+  - **Suggested:** bump the runner image's baked Playwright to the repo's pinned minor as an rl-infra image update. Until then, run `npx playwright install chromium` on a runner right after any `npm ci` there.
