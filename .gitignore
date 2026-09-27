@@ -72,6 +72,10 @@ scripts/*
 # until it is un-ignored — this one shipped untracked for four commits.
 !scripts/validate-ci-e2e-scope.spec.mjs
 !scripts/restore-drill.constants.mjs
+# ROK-1154: web bundle-size budget gate (checker, budgets, node:test spec).
+!scripts/check-bundle-size.mjs
+!scripts/check-bundle-size.spec.mjs
+!scripts/bundle-budget.config.mjs
 !scripts/test/
 # ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the
 # fleet Mutagen replica never deletes it mid-run) while still ignoring the JWT
@@ -149,5 +153,8 @@ build-state.yaml
 
 # ROK-1160: the drill report artefact is produced per run, never committed.
 restore-drill-report.json
+# ROK-1154: `npm run analyze -w web` treemap. Written here, never into
+# web/dist, which Dockerfile.allinone ships to nginx.
+web/.bundle-report/
 # ROK-1527: flag file that switches the opt-in integration heap probe on
 api/.rl-heap-probe
