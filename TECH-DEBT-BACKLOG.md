@@ -1922,3 +1922,7 @@ same day (#1278, #1279, #1280).
   - **Why it's pre-existing:** the branch doesn't touch Playwright, and the slot-1 gate on the old `node_modules` passed the same suite that night.
   - **Current state:** slot 3's runner is in the drifted state now.
   - **Suggested:** bump the runner image's baked Playwright to the repo's pinned minor as an rl-infra image update. Until then, run `npx playwright install chromium` on a runner right after any `npm ci` there.
+
+### 2026-09-27 — fix/fleet-settings-sync-wins (resolution)
+
+- **[resolved 2026-09-27]** Entry ≈:1902 (the VM bundle overlay UPSERTs every bundle key over a fresher laptop `sync_settings`) is fixed on this branch per the operator ruling "a fresh sync wins": `rl_env_deploy` passes `--identity-only` after a successful sync (`env-deploy-steps.ts` step 6 → `bin/env-settings-overlay` → `apply-settings-overlay.ts`), which writes only the slot identity + `demo_mode` and reports skipped key names/count. A failed or skipped sync still applies the full bundle.

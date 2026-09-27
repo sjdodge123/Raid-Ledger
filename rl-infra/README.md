@@ -797,6 +797,16 @@ failure with nothing applied is still a hard failure, because reporting
 "deployed" for an env with no credentials is the trap the step exists to
 prevent.
 
+**Precedence: a fresh sync wins (operator ruling 2026-09-27).** After a
+SUCCESSFUL `sync_settings`, `rl_env_deploy` runs the overlay with
+`--identity-only`: the container writes only the slot identity and
+`demo_mode`, and reports the bundle's shared keys as `skipped_keys` /
+`skipped_count`, so a stale `bundle.enc` cannot overwrite the fresher laptop
+values. When the sync failed or was unavailable, the full bundle applies as
+before. The bundle is read either way, so `bundle_warning` still surfaces on a
+green deploy. `identity_only: false` on an identity-only request means the env
+image predates the flag (it applied everything); the deploy message says so.
+
 ## Agent MCP tool reference (canonical — moved from CLAUDE.md 2026-06-06)
 
 Per-tool "Use When" reference for the `mcp__mcp-rl-fleet__*` surface. CLAUDE.md
