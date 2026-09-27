@@ -1,49 +1,50 @@
 /**
  * ROK-657 magic-link token pickup, hardened in ROK-1366.
  *
- * The API now ships the 15-minute token in the URL *fragment* (`#token=`)
- * rather than the query string. A fragment never leaves the browser, so it
- * stays out of server and reverse-proxy access logs, out of the `Referer`
- * header on outbound subresource requests, and out of link-tracker redirect
- * chains. The legacy `?token=` form is still accepted so links already sitting
- * in Discord channels keep working until they expire.
+ * The API ships the single-use sign-in token in the URL *fragment*
+ * (`#token=`). A fragment never leaves the browser, so it stays out of server
+ * and reverse-proxy access logs, out of the `Referer` header on outbound
+ * subresource requests, and out of link-tracker redirect chains.
+ *
+ * The fragment is the ONLY carrier. A query-string `?token=` is somebody
+ * else's param (the join page reads it as an intent token), so it is never
+ * read here and never stripped.
  */
 
-/** Read a magic-link token from a location, fragment first. */
-export function readMagicLinkToken(location: {
-  search: string;
-  hash: string;
-}): string | null {
-  const fromHash = new URLSearchParams(
-    location.hash.replace(/^#/, ''),
-  ).get('token');
-  if (fromHash) return fromHash;
-  return new URLSearchParams(location.search).get('token');
-}
-
-/** True when either carrier holds a token worth stripping from the URL. */
-export function hasMagicLinkToken(location: {
-  search: string;
-  hash: string;
-}): boolean {
-  return readMagicLinkToken(location) !== null;
-}
-
-/**
- * Build the cleaned-up URL for a location that carried a token — the token is
- * removed from both carriers, every other param and fragment value is kept.
- */
-export function stripMagicLinkToken(location: {
+interface UrlParts {
   pathname: string;
   search: string;
   hash: string;
-}): string {
-  const params = new URLSearchParams(location.search);
-  params.delete('token');
-  const query = params.toString();
-  return (
-    location.pathname + (query ? `?${query}` : '') + stripTokenFromHash(location.hash)
-  );
+}
+
+/** Read a magic-link token from a location's fragment. */
+export function readMagicLinkToken(location: { hash: string }): string | null {
+  return new URLSearchParams(location.hash.replace(/^#/, '')).get('token');
+}
+
+/**
+ * Build the cleaned-up URL for a location whose fragment carried a token.
+ * Path and query string are kept verbatim; only the fragment `token` goes.
+ */
+export function stripMagicLinkToken(location: UrlParts): string {
+  return location.pathname + location.search + stripTokenFromHash(location.hash);
+}
+
+/**
+ * Read the fragment token and drop it from the address bar in one step.
+ * Runs at module load, before React renders, so the token never reaches
+ * history, the router, or a render-time Referer. Returns null (and leaves
+ * history alone) when the fragment carries no token.
+ */
+export function takeMagicLinkToken(win: {
+  location: UrlParts;
+  history: Pick<History, 'replaceState'>;
+}): string | null {
+  const token = readMagicLinkToken(win.location);
+  if (token) {
+    win.history.replaceState(null, '', stripMagicLinkToken(win.location));
+  }
+  return token;
 }
 
 /**
