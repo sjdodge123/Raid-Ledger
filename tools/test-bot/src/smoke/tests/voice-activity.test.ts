@@ -35,6 +35,7 @@ import {
   assertEmbedTitle,
   rosterEntries,
   rosterHasExactly,
+  SmokeAssertionError,
 } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -577,6 +578,62 @@ const BRIEF_GRACE_MINUTES = 1;
 const PRESENCE_DRAIN_TICK_MS = 5_000;
 
 /**
+ * The brief-visit test's OWN channel (ROK-1692). `lobbyPresenceRenders` and
+ * `lobbyPresenceEditsInPlace` share index 2, and the latter ends with its row
+ * still OPEN — its binding's 5-min grace outlives the test and deleting a
+ * binding leaves the row. On index 2 this test's first flush re-lives that
+ * card, whose stays carry games, so it recaps instead of being deleted.
+ */
+const BRIEF_VISIT_CHANNEL_INDEX = 3;
+
+/** The voice/text index the other general-lobby tests bind. */
+const SHARED_LOBBY_CHANNEL_INDEX = 2;
+
+/** Fail fast (never retried) when the pool folds both indexes onto one channel. */
+function assertOwnLobbyChannel(ctx: TestContext): void {
+  const own = pickChannel(ctx.voiceChannels, BRIEF_VISIT_CHANNEL_INDEX);
+  const shared = pickChannel(ctx.voiceChannels, SHARED_LOBBY_CHANNEL_INDEX);
+  if (own.id === shared.id) {
+    throw new SmokeAssertionError(
+      `Brief-visit test needs a voice channel no other general-lobby test ` +
+        `binds, but the pool has ${String(ctx.voiceChannels.length)} voice ` +
+        `channel(s), so index ${String(BRIEF_VISIT_CHANNEL_INDEX)} and index ` +
+        `${String(SHARED_LOBBY_CHANNEL_INDEX)} are both ${own.name} (${own.id}).`,
+    );
+  }
+}
+
+/**
+ * The card `openLobbyRoom` handed back must be one THIS test posted.
+ *
+ * An inherited open row (an earlier test's card re-lived by the first flush)
+ * carries that test's history and is recapped rather than deleted; without
+ * this check the failure surfaces as a poll timeout that the runner retries,
+ * hiding it. A `SmokeAssertionError` is never retried and names the row.
+ */
+function assertFreshCard(
+  target: PresenceTarget,
+  textChannelId: string,
+  before: string[],
+): void {
+  if (target.textChannelId !== textChannelId) {
+    throw new SmokeAssertionError(
+      `Brief-visit room's open presence row posts to ${target.textChannelId}, ` +
+        `not this binding's notification channel ${textChannelId}: message ` +
+        `${target.messageId} is an inherited row, not a card this test posted.`,
+    );
+  }
+  if (before.includes(target.messageId)) {
+    throw new SmokeAssertionError(
+      `Brief-visit room re-lived message ${target.messageId}, which was ` +
+        `already in ${textChannelId} before this test opened its room: an ` +
+        `earlier test left the voice channel's presence row OPEN. A brief ` +
+        `visit must start from a card it owns.`,
+    );
+  }
+}
+
+/**
  * ROK-1692 — a drive-by visit leaves no card behind.
  *
  * Its own test, because the room must be one where NOTHING happened: every
@@ -588,17 +645,20 @@ const lobbyBriefVisitDeleted: SmokeTest = {
   name: 'Lobby presence card of a brief visit is deleted',
   category: 'voice',
   async run(ctx) {
+    assertOwnLobbyChannel(ctx);
     await withVoiceBinding(
       ctx,
-      2,
+      BRIEF_VISIT_CHANNEL_INDEX,
       'general-lobby',
       undefined,
-      async (vChId) => {
+      async (vChId, tChId) => {
         try {
+          const before = await botMessageIds(tChId);
           const target = await openLobbyRoom(ctx, vChId, [
             { discordUserId: 'rok1692-a', displayName: 'Ana', gameId: null },
             { discordUserId: 'rok1692-b', displayName: 'Bo', gameId: null },
           ]);
+          assertFreshCard(target, tChId, before);
           await assertBriefVisitDeleted(
             ctx,
             target,
