@@ -34,12 +34,14 @@ import { RecipeStates } from './forms-recipes-demo';
 function ButtonVariants(): JSX.Element {
     return (
         <>
-            <StateFrame label="Button — variants" note="Solid fills stay bg-emerald-600 / bg-red-600: index.css forces their label white on light.">
+            <StateFrame label="Button — variants" note="Solid fills stay bg-emerald-600 / bg-red-600: index.css forces their label white on light. The three *-soft variants share one token-tint shape.">
                 <Button>Primary</Button>
                 <Button variant="secondary">Secondary</Button>
                 <Button variant="ghost">Ghost</Button>
                 <Button variant="destructive">Delete</Button>
                 <Button variant="destructive-soft">Clear</Button>
+                <Button variant="warning-soft">Pause</Button>
+                <Button variant="success-soft">Resume</Button>
             </StateFrame>
             <StateFrame label="Button — sizes" note="sm drops to 36px from lg only; every size is 44px below lg.">
                 <Button size="sm" variant="secondary">Small</Button>

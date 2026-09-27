@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useBackups } from '../../hooks/use-backups';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { toast } from 'sonner';
+import { Button } from '../../components/ui/button';
 import { formatSize, formatDate, TYPE_BADGE } from './backup-panel-utils';
 import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
 
@@ -164,8 +165,8 @@ function BackupRow({ backup, tz, onRestore, onDelete }: { backup: BackupFileDto;
             <td className="px-4 py-3 text-muted hidden md:table-cell">{formatSize(backup.sizeBytes)}</td>
             <td className="px-4 py-3 text-right">
                 <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => onRestore(backup)} className="px-3 py-1 text-xs font-medium text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-lg hover:bg-amber-500/20 transition-colors">Restore</button>
-                    <button onClick={() => onDelete(backup)} className="px-3 py-1 text-xs font-medium text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-colors">Delete</button>
+                    <Button size="sm" variant="warning-soft" onClick={() => onRestore(backup)}>Restore</Button>
+                    <Button size="sm" variant="destructive-soft" onClick={() => onDelete(backup)}>Delete</Button>
                 </div>
             </td>
         </tr>
@@ -183,7 +184,7 @@ function DangerZone({ onShowResetModal }: { onShowResetModal: () => void }): JSX
                     <p className="text-sm font-medium text-foreground">Reset Instance</p>
                     <p className="text-xs text-muted mt-0.5">Wipe all data and return to factory defaults. A safety backup is created automatically.</p>
                 </div>
-                <button onClick={onShowResetModal} className="px-4 py-2 text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg hover:bg-red-500/20 transition-colors whitespace-nowrap">Reset Instance</button>
+                <Button variant="destructive-soft" className="whitespace-nowrap" onClick={onShowResetModal}>Reset Instance</Button>
             </div>
         </div>
     );

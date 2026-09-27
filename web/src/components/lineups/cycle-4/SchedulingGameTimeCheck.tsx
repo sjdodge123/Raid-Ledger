@@ -18,6 +18,13 @@
  * ROK-1569: the phone body is the week editor itself (`PhoneWeekCheckStep`,
  * the Option A comp) rather than the four-answer `GameTimeCheckBody` — which
  * stays as the DESKTOP modal's body.
+ *
+ * `suppressed` (tech-debt [19]): while another blocking dialog owns the screen
+ * — the lock-in confirm a `?lock=` DM link opens — the check waits instead of
+ * stacking a second dialog on it. The phone sheet stays MOUNTED with `isOpen`
+ * false (its `onVisibleChange` still reports, so the ladder comes back); the
+ * desktop shell is self-gating and keeps no state of its own beyond the gate's
+ * session skip, so it simply is not rendered. Either returns once cleared.
  */
 import { useState, type JSX } from 'react';
 import { useMediaQuery } from '../../../hooks/use-media-query';
@@ -38,17 +45,19 @@ export interface SchedulingGameTimeCheckState {
 }
 
 /** The game-time check for the composite — see file-level docstring. */
-export function useSchedulingGameTimeCheck(): SchedulingGameTimeCheckState {
+export function useSchedulingGameTimeCheck(suppressed = false): SchedulingGameTimeCheckState {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const gate = useGameTimeCheckGate();
     const [sheetVisible, setSheetVisible] = useState(false);
 
-    if (isDesktop) return { shell: <GameTimeRefreshModal />, sheetVisible: false };
+    if (isDesktop) {
+        return { shell: suppressed ? null : <GameTimeRefreshModal />, sheetVisible: false };
+    }
     return {
         sheetVisible,
         shell: (
             <GameTimeCheckSheet
-                isOpen={gate.open}
+                isOpen={gate.open && !suppressed}
                 onClose={gate.skip}
                 onDone={noop}
                 onVisibleChange={setSheetVisible}

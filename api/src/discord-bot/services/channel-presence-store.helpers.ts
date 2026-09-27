@@ -50,7 +50,15 @@ export const PRESENCE_CLOSED = 'closed';
  *   row nothing had closed (join-side boundary, ROK-1498), or the cron reaper
  *   found it abandoned.
  */
-export type PresenceCloseReason = 'empty' | 'missing' | 'unbound' | 'stale';
+export type PresenceCloseReason =
+  | 'empty'
+  | 'missing'
+  | 'unbound'
+  | 'stale'
+  /** ROK-1692: a drive-by visit whose card was deleted, not recapped.
+   * `close_reason` is a plain varchar(50) (migration 0166), so no schema
+   * change is needed for a new value. */
+  | 'brief';
 
 /** Identity of a newly opened presence message. */
 export interface OpenRowInput {

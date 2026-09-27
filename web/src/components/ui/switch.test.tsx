@@ -17,6 +17,11 @@ describe('Switch', () => {
         expect(control).toBeChecked();
     });
 
+    it('pads its 24px track to a 44px hit area (a ::before 10px above and below)', () => {
+        const { control } = renderSwitch();
+        expect(control).toHaveClass('relative', 'h-6', 'before:absolute', 'before:-inset-y-2.5', 'before:inset-x-0');
+    });
+
     it('reports the NEW state when clicked', async () => {
         const { control, onChange } = renderSwitch({ checked: false });
         await userEvent.click(control);

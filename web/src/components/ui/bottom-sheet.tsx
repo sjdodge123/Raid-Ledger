@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
+import { useTabTrap } from '../../hooks/use-focus-trap';
 import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 import { DiscardChangesConfirm } from './discard-changes-confirm';
@@ -61,7 +62,7 @@ function focusMovedToAnotherDialog(sheet: HTMLElement | null): boolean {
  * Move focus into the sheet on open and give it back on close (ROK-1574 review:
  * the check is the first BLOCKING flow in a sheet, and `aria-modal` alone does
  * not move a keyboard user off the page) — unless another dialog took it.
- * A full focus trap is TECH-DEBT.
+ * Tab / Shift+Tab are trapped separately by `useTabTrap` (`useSheetControls`).
  */
 function useSheetFocus(isOpen: boolean, sheetRef: React.RefObject<HTMLDivElement | null>) {
     useEffect(() => {
@@ -181,6 +182,7 @@ function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: 
     useBodyScrollLock(isOpen);
     const drag = useDragHandlers(sheetRef, expanded, setExpanded, requestClose, initiallyExpanded);
     useSheetFocus(isOpen, sheetRef);
+    useTabTrap(isOpen, sheetRef);
     return { sheetRef, drag, ...useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight) };
 }
 

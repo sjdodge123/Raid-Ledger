@@ -26,6 +26,16 @@ describe('SearchInput', () => {
         expect(screen.getByTestId('search-input-icon')).toBeInTheDocument();
     });
 
+    it('sizes the clear button to the compact frame when fieldSize="sm"', () => {
+        render(<Harness initial="wow" fieldSize="sm" />);
+        expect(screen.getByRole('button', { name: 'Clear search' })).toHaveClass('lg:min-h-9');
+    });
+
+    it('keeps the md clear button on the default frame', () => {
+        render(<Harness initial="wow" />);
+        expect(screen.getByRole('button', { name: 'Clear search' })).not.toHaveClass('lg:min-h-9');
+    });
+
     it('shows no clear button while empty', () => {
         render(<Harness />);
         expect(screen.queryByRole('button', { name: 'Clear search' })).not.toBeInTheDocument();

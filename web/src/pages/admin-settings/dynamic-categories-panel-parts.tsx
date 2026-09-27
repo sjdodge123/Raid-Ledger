@@ -13,6 +13,7 @@ import type {
     SuggestionStatus,
 } from '@raid-ledger/contract';
 import { DynamicCategoryCard } from '../../components/admin/DynamicCategoryCard';
+import { Button } from '../../components/ui/button';
 
 const TABS: { key: SuggestionStatus; label: string }[] = [
     { key: 'pending', label: 'Pending' },
@@ -84,18 +85,13 @@ export function EmptyPending({
             <p className="text-sm text-muted">
                 No suggestions yet. Click Regenerate to seed some.
             </p>
-            <button
-                type="button"
-                onClick={onRegenerate}
-                disabled={isRegenerating}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-foreground rounded-lg transition-colors"
-            >
+            <Button size="sm" onClick={onRegenerate} disabled={isRegenerating}>
                 <SparklesIcon
                     className={`h-4 w-4 ${isRegenerating ? 'animate-pulse' : ''}`}
                     aria-hidden
                 />
                 {isRegenerating ? 'Regenerating…' : 'Regenerate'}
-            </button>
+            </Button>
         </div>
     );
 }
