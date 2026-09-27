@@ -24,8 +24,8 @@ export const LFG_EXPIRY_JOB_NAME = 'LfgExpiryService_expireIntents';
  */
 export const LFG_EXPIRY_CRON_EXPRESSION = '0 */5 * * * *';
 
-/** Single global expiry horizon (AC13). */
-export const LFG_EXPIRY_DAYS = 14;
+/** Single global expiry horizon (AC13) — 7 days since ROK-1691 (was 14). */
+export const LFG_EXPIRY_DAYS = 7;
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -39,7 +39,7 @@ export interface LfgIntentDto {
   visibility: string;
   createdAt: string;
   expiresAt: string;
-  /** ROK-1479: `'week'` (14 days) or `'now'` (30/60 minutes). */
+  /** ROK-1479: `'week'` (7 days, ROK-1691) or `'now'` (30/60 minutes). */
   urgency: string;
   /** ROK-1479: the `now` row's own refresh horizon; null on a week row. */
   ttlMinutes: number | null;
