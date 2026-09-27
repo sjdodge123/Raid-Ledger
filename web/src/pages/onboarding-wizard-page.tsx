@@ -165,7 +165,7 @@ export function OnboardingWizardPage(): JSX.Element | null {
     const { goNext, goSkip, goBack } = useNavCallbacks(stepValidatorRef, setCurrentStep, steps.length - 1);
     const { addCharacterStep, removeCharacterStep } = useCharacterStepActions(setExtraCharCounts, setCurrentStep);
     const { handleSkipAll, handleComplete } = useCompletionHandlers(completeOnboarding);
-    useEscapeDismiss(handleSkipAll);
+    useEscapeDismiss(handleSkipAll, settled);
 
     const shouldRedirect = !isRerun && ((user && isAdmin(user)) || user?.onboardingCompletedAt);
     if (shouldRedirect) return <Navigate to="/calendar" replace />;
@@ -183,13 +183,18 @@ export function OnboardingWizardPage(): JSX.Element | null {
     );
 }
 
-/** Dismiss wizard on Escape key */
-function useEscapeDismiss(onDismiss: () => void): void {
+/**
+ * Dismiss wizard on Escape key — only once `enabled` (the step list has
+ * settled). Hooks run before the `!settled` blank render, so without the
+ * gate a stray Escape would skip onboarding before any step was shown.
+ */
+function useEscapeDismiss(onDismiss: () => void, enabled: boolean): void {
     useEffect(() => {
+        if (!enabled) return;
         const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Escape') onDismiss(); };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [onDismiss]);
+    }, [onDismiss, enabled]);
 }
 
 /** Full wizard dialog shell */
