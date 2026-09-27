@@ -12,6 +12,8 @@ import { ConfigService, ConfigModule } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { LocalAuthController } from './local-auth.controller';
+import { MagicLinkController } from './magic-link.controller';
+import { LinkStartController } from './link-start.controller';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { SettingsModule } from '../settings/settings.module';
 import { EventsModule } from '../events/events.module';
@@ -51,7 +53,13 @@ import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.serv
       inject: [ConfigService],
     }),
   ],
-  controllers: [AuthController, LocalAuthController, RefreshTokenController],
+  controllers: [
+    AuthController,
+    LocalAuthController,
+    RefreshTokenController,
+    MagicLinkController,
+    LinkStartController,
+  ],
   providers: [
     AuthService,
     LocalAuthService,
