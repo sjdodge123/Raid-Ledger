@@ -470,6 +470,19 @@ describe('a brief visit is deleted, not recapped (ROK-1692)', () => {
     expect(editEmbeds).not.toHaveBeenCalled();
   });
 
+  it('falls back to the recap and an empty close when the delete fails', async () => {
+    visit(8_000);
+    jest
+      .mocked(deleteMessage)
+      .mockRejectedValueOnce(new Error('Missing Permissions'));
+
+    await expect(flushChannel(flush())).resolves.toBeUndefined();
+
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'empty', EMPTIED);
+    expect(closeRow).not.toHaveBeenCalledWith(db, 'row-1', 'brief', EMPTIED);
+  });
+
   it('recaps and keeps the card during the grace, so a reconnect re-lives it', async () => {
     visit(8_000, null);
 

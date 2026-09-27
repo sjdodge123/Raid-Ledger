@@ -260,10 +260,10 @@ async function recapOrRetire(
   const due = isCloseDue(emptySince, graceMs(empty.binding.config), now, live);
   const { openedAt } = row;
   const { activities } = roomRecap;
-  if (due && isBriefVisit({ openedAt, emptySince, events, live, activities })) {
-    await retireBriefVisit(flush, row, emptySince);
-    return;
-  }
+  const brief =
+    due && isBriefVisit({ openedAt, emptySince, events, live, activities });
+  // A delete that failed for any reason but 10008 falls through to the recap.
+  if (brief && (await retireBriefVisit(flush, row, emptySince))) return;
   await renderAndPublishRecap(state, {
     channelName: empty.channelName,
     endedAt: emptySince.getTime(),

@@ -12,6 +12,9 @@ import { DiscordAPIError } from 'discord.js';
 jest.mock('../discord-bot-client.messages.helpers', () => ({
   __esModule: true,
   deleteMessage: jest.fn(),
+  isUnknownMessage: jest.requireActual<
+    typeof import('../discord-bot-client.messages.helpers')
+  >('../discord-bot-client.messages.helpers').isUnknownMessage,
 }));
 jest.mock('./channel-presence-store.helpers', () => ({
   __esModule: true,
@@ -126,29 +129,42 @@ describe('retireBriefVisit (ROK-1692)', () => {
     jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
   });
 
+  const discordError = (code: number) =>
+    Object.assign(Object.create(DiscordAPIError.prototype) as object, {
+      code,
+      message: 'nope',
+    });
+
   it('deletes the card and closes the row at empty_since', async () => {
-    await retireBriefVisit(flush, row, emptySince);
+    await expect(retireBriefVisit(flush, row, emptySince)).resolves.toBe(true);
 
     expect(deleteMessage).toHaveBeenCalledWith(client, 'tc-1', 'msg-1');
     expect(closeRow).toHaveBeenCalledWith({}, 'row-1', 'brief', emptySince);
     expect(roomRecaps.has('row-1')).toBe(false);
   });
 
-  it.each([
-    ['an already-deleted message (10008)', 10008],
-    ['missing permissions (50013)', 50013],
-  ])('logs %s and closes the row anyway', async (_label, code) => {
-    const error = Object.assign(
-      Object.create(DiscordAPIError.prototype) as object,
-      { code, message: 'nope' },
-    );
-    jest.mocked(deleteMessage).mockRejectedValueOnce(error);
+  it('closes the row brief when the card is already gone (10008)', async () => {
+    jest.mocked(deleteMessage).mockRejectedValueOnce(discordError(10008));
 
-    await expect(
-      retireBriefVisit(flush, row, emptySince),
-    ).resolves.toBeUndefined();
+    await expect(retireBriefVisit(flush, row, emptySince)).resolves.toBe(true);
 
     expect(closeRow).toHaveBeenCalledWith({}, 'row-1', 'brief', emptySince);
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('msg-1'));
   });
+
+  it.each([
+    ['missing permissions (50013)', discordError(50013)],
+    ['a transport fault', new Error('socket hang up')],
+  ])(
+    'leaves the row open for the recap fallback on %s',
+    async (_label, error) => {
+      jest.mocked(deleteMessage).mockRejectedValueOnce(error);
+
+      await expect(retireBriefVisit(flush, row, emptySince)).resolves.toBe(
+        false,
+      );
+
+      expect(closeRow).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('msg-1'));
+    },
+  );
 });

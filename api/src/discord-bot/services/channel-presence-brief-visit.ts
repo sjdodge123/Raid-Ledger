@@ -7,7 +7,10 @@
  * ruling: when the room empties and the visit was under two minutes with
  * nothing happening, delete the card instead of recapping it.
  */
-import { deleteMessage } from '../discord-bot-client.messages.helpers';
+import {
+  deleteMessage,
+  isUnknownMessage,
+} from '../discord-bot-client.messages.helpers';
 import type { ChannelFlush } from './channel-presence-flush';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
 import type { LinkedEvent } from './channel-presence-room.helpers';
@@ -46,16 +49,20 @@ export function isBriefVisit(input: BriefVisitInput): boolean {
 /**
  * Delete the card and close the row `brief` at `empty_since`.
  *
- * A failed delete (10008 already gone, 50013 missing permissions, a transport
- * fault) never throws out of the flush: a card we could not delete is still a
- * finished session, and leaving the row open would only retry the delete on
- * every tick. A rejoin afterwards opens a fresh row and message.
+ * Never throws out of the flush. A 10008 means the card is already gone, which
+ * is the outcome we wanted, so the row closes `brief`. Any OTHER failure (50013
+ * missing permissions, a transport fault) leaves the card in the channel, so
+ * this returns `false` and the caller falls back to the normal recap edit and
+ * `empty` close: the channel must never keep a card for an empty room that
+ * nothing will ever touch again.
+ *
+ * @returns `true` when the card is gone and the row is closed `brief`.
  */
 export async function retireBriefVisit(
   flush: ChannelFlush,
   row: PresenceRow,
   emptySince: Date,
-): Promise<void> {
+): Promise<boolean> {
   try {
     await deleteMessage(
       flush.deps.clientService.getClient(),
@@ -63,13 +70,17 @@ export async function retireBriefVisit(
       row.messageId,
     );
   } catch (error) {
-    flush.logger.warn(
-      `Brief-visit presence message ${row.messageId} could not be deleted (${String(error)}); closing row ${row.id} anyway`,
-    );
+    if (!isUnknownMessage(error)) {
+      flush.logger.warn(
+        `Brief-visit presence message ${row.messageId} could not be deleted (${String(error)}); recapping row ${row.id} instead`,
+      );
+      return false;
+    }
   }
   await closeRow(flush.deps.db, row.id, 'brief', emptySince);
   flush.roomRecaps?.delete(row.id);
   flush.logger.log(
     `Presence row ${row.id} for ${flush.channelId} was a brief visit (<${String(BRIEF_VISIT_MS / 1000)}s, nothing happened); card deleted (ROK-1692)`,
   );
+  return true;
 }
