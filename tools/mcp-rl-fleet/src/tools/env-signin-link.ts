@@ -1,6 +1,8 @@
 // rl_env_signin_link — mint a 15-minute magic sign-in link on a fleet env so an
 // agent browser-verification lane can load the app as a real user WITHOUT ever
-// typing a password (operator ruling 2026-09-24).
+// typing a password (operator ruling 2026-09-24). The link signs in ONCE
+// (ROK-1366): the web app redeems the fragment token with a single-use POST,
+// so every further browser (a second context, the iOS Simulator) needs its own.
 //
 // Server-side flow (none of the intermediate secrets reach the caller):
 //   1. slug -> slot via `rl status` (the rl_env_list source) -> the slot-stable
@@ -24,7 +26,7 @@ import * as envList from './env-list.js';
 
 export const TOOL_NAME = 'rl_env_signin_link';
 export const TOOL_DESCRIPTION =
-  'For agent browser-verification lanes: mint a 15-minute magic sign-in link for a fleet env so you can load the app as a real user WITHOUT typing a password (never type one into a form). Signs in as the env admin (admin@local) by default; pass user_id OR username (exact, case-sensitive match on users.username; lowest id wins on duplicates) to sign in as someone else, and path (same-origin, default "/") to land on a specific page. Resolves the slot-stable https://slot-N URL itself and returns {ok, url, user_id, expires_in_seconds, base_url}. Open `url` in a FRESH browser context (new incognito/profile/tab group) so no other session cookie interferes. The token in `url` is a 15-minute, env-only credential: NEVER paste `url` into reports, PR bodies, test plans or Linear — hand out base_url + path instead. The env must run an image with POST /admin/test/sign-in-link and DEMO_MODE=true; a 404 on an existing user means the image predates it. Side effect: re-asserts admin@local to the stable RL_ADMIN_PASSWORD (unchanged); if the VM has no RL_ADMIN_PASSWORD it fails with admin_seed_failed instead of rotating it. Fails closed if another env shares the slot. The admin password and admin token are never returned or logged.';
+  'For agent browser-verification lanes: mint a 15-minute magic sign-in link for a fleet env so you can load the app as a real user WITHOUT typing a password (never type one into a form). Signs in as the env admin (admin@local) by default; pass user_id OR username (exact, case-sensitive match on users.username; lowest id wins on duplicates) to sign in as someone else, and path (same-origin, default "/") to land on a specific page. Resolves the slot-stable https://slot-N URL itself and returns {ok, url, user_id, expires_in_seconds, base_url}. The link signs in ONCE: the first browser to open it spends it, and the same URL in any other browser silently lands on the login screen, so mint a fresh link per browser context (the iOS Simulator\'s Safari is a separate browser and needs its own). Open `url` in a FRESH browser context (new incognito/profile/tab group): a context that already holds a valid session keeps it and ignores the link. The token in `url` is a single-use, 15-minute, env-only credential: NEVER paste `url` into reports, PR bodies, test plans or Linear — hand out base_url + path instead. The env must run an image with POST /admin/test/sign-in-link and DEMO_MODE=true; a 404 on an existing user means the image predates it. Side effect: re-asserts admin@local to the stable RL_ADMIN_PASSWORD (unchanged); if the VM has no RL_ADMIN_PASSWORD it fails with admin_seed_failed instead of rotating it. Fails closed if another env shares the slot. The admin password and admin token are never returned or logged.';
 
 const SLUG_RE = /^[a-z0-9-]+$/;
 const ADMIN_EMAIL = 'admin@local';
