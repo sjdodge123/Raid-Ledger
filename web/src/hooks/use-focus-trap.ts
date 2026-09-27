@@ -55,6 +55,22 @@ function focusInitial(container: HTMLElement, initialFocusRef?: React.RefObject<
     getFocusableElements(container)[0]?.focus();
 }
 
+/**
+ * Tab / Shift+Tab only: keeps keyboard focus cycling inside `containerRef`
+ * while `active`. It neither moves focus in nor restores it on close — for an
+ * overlay that owns those itself (`BottomSheet`'s ROK-1650 hand-off guard).
+ */
+export function useTabTrap(active: boolean, containerRef: React.RefObject<HTMLElement | null>): void {
+    useEffect(() => {
+        if (!active) return;
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Tab' && containerRef.current) handleTabTrap(e, containerRef.current);
+        };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [active, containerRef]);
+}
+
 export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(
     active: boolean,
     initialFocusRef?: React.RefObject<HTMLElement | null>,
