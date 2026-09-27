@@ -1,2 +1,2 @@
 export { UserLink } from './UserLink';
-export { AnonymousDiscordName, ViaDiscordChip } from './AnonymousDiscordName';
+export { AnonymousDiscordName } from './AnonymousDiscordName';
