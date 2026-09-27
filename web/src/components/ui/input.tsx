@@ -9,7 +9,8 @@
  *   `aria-required` from context (`useFieldControlProps`).
  * - `leading` is a decorative icon slot (pointer-events off, `text-muted`);
  *   `trailing` is interactive (a show/hide or copy button). A bare input
- *   renders no wrapper, so it drops into flex rows unchanged.
+ *   renders no wrapper, so it drops into flex rows unchanged. Their padding
+ *   comes from `LEADING_PAD` / `TRAILING_PAD`, per `fieldSize`.
  */
 import { forwardRef, type InputHTMLAttributes, type ReactNode } from 'react';
 import { FIELD_FRAME_BASE, FIELD_PAD, type FieldSize } from './form-classes';
@@ -34,13 +35,25 @@ const DATE_TIME_TYPES = new Set(['date', 'time', 'datetime-local', 'month', 'wee
  */
 const DATE_TIME_GUARD = 'min-w-0 appearance-none [&::-webkit-date-and-time-value]:text-left';
 
+/**
+ * Padding that clears the `leading` icon / `trailing` button, per size. `sm`
+ * repeats it at `lg:`: FIELD_PAD.sm's `lg:px-2` is a responsive variant, so in
+ * the generated CSS it sorts after (and beats) a bare `pl-10` / `pr-14`, and
+ * the text ran under the magnifier. Inside one variant `pl`/`pr` sort after
+ * `px`, so `lg:pl-10` wins over `lg:px-2` exactly as `pl-10` wins over `px-3`.
+ * Literal strings — Tailwind only generates classes it can see in source.
+ */
+const LEADING_PAD: Record<FieldSize, string> = { md: 'pl-10', lg: 'pl-10', sm: 'pl-10 lg:pl-10' };
+const TRAILING_PAD: Record<FieldSize, string> = { md: 'pr-14', lg: 'pr-14', sm: 'pr-14 lg:pr-14' };
+
 function inputClass(p: Pick<InputProps, 'type' | 'fieldSize' | 'leading' | 'trailing' | 'mono' | 'className'>): string {
+    const size = p.fieldSize ?? 'md';
     return [
         FIELD_FRAME_BASE,
-        FIELD_PAD[p.fieldSize ?? 'md'],
+        FIELD_PAD[size],
         p.type && DATE_TIME_TYPES.has(p.type) ? DATE_TIME_GUARD : '',
-        p.leading ? 'pl-10' : '',
-        p.trailing ? 'pr-14' : '',
+        p.leading ? LEADING_PAD[size] : '',
+        p.trailing ? TRAILING_PAD[size] : '',
         p.mono ? 'font-mono' : '',
         p.className ?? '',
     ].filter(Boolean).join(' ');
