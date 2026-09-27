@@ -3,11 +3,18 @@
  * (lfg_intents urgency / ttl_minutes) idempotently, repairing databases where
  * Drizzle's migrator skipped them because they merged with an older `when`.
  *
- * The harness DB already ran every migration, so it is the "up to date" case.
- * The "skipped" cases drop the objects first. Every case runs inside a
- * transaction that is rolled back — Postgres DDL is transactional, so the
- * dropped table never leaks to other specs. Statements are split on drizzle's
- * statement-breakpoint marker and executed the way the migrator runs them.
+ * HEAD is NOT the oracle. 0193 is frozen once it ships, but the harness DB is
+ * migrated to HEAD, and later migrations keep moving what 0193 touches: every
+ * new notification type re-sets the channel_prefs default (0149, 0154, 0158,
+ * 0172, 0176 so far), and lfg_invites or the urgency CHECK (0186) can change
+ * too. So each "skipped" case is compared with the SAME skipped state repaired
+ * by the frozen originals — 0176, or 0174 + 0186. Later drift lands on both
+ * sides identically and cancels out; the `laterMigrations` baseline proves it.
+ *
+ * Every case runs inside a transaction that is rolled back — Postgres DDL is
+ * transactional, so the dropped objects never leak to other specs. Statements
+ * are split on drizzle's statement-breakpoint marker and executed the way the
+ * migrator runs them.
  *
  * 0193 also back-fills the skipped entries' drizzle.__drizzle_migrations rows,
  * because the migrator never writes one for a skipped entry and the restore
@@ -20,10 +27,8 @@ import { sql, TransactionRollbackError, type SQL } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
-const REPAIR_SQL_PATH = path.join(
-  MIGRATIONS_DIR,
-  '0193_repair_skipped_0176_0174.sql',
-);
+const REPAIR = '0193_repair_skipped_0176_0174';
+const REPAIR_SQL_PATH = path.join(MIGRATIONS_DIR, `${REPAIR}.sql`);
 
 interface JournalEntry {
   tag: string;
@@ -54,12 +59,17 @@ const E0174 = journalEntry('0174_lfg_intent_urgency');
 const NEWEST = JOURNAL.reduce((a, b) => (b.when > a.when ? b : a));
 
 type Tx = Parameters<Parameters<TestApp['db']['transaction']>[0]>[0];
+type Step = (tx: Tx) => Promise<void>;
 
 interface CatalogState {
   lfgInvites: string | null;
   columns: string[];
   constraints: string[];
   indexes: string[];
+}
+
+interface DbState {
+  catalog: CatalogState;
   channelPrefsDefault: string | null;
 }
 
@@ -69,12 +79,49 @@ beforeAll(async () => {
   testApp = await getTestApp();
 });
 
-async function applyRepair(tx: Tx): Promise<void> {
-  const statements = readFileSync(REPAIR_SQL_PATH, 'utf8')
-    .split('--> statement-breakpoint')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  for (const statement of statements) await tx.execute(sql.raw(statement));
+/** Runs each migration file's statements in order, split the way the migrator splits them. */
+async function applyMigrations(tx: Tx, ...tags: string[]): Promise<void> {
+  for (const tag of tags) {
+    const statements = readFileSync(
+      path.join(MIGRATIONS_DIR, `${tag}.sql`),
+      'utf8',
+    )
+      .split('--> statement-breakpoint')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    for (const statement of statements) await tx.execute(sql.raw(statement));
+  }
+}
+
+const applyRepair: Step = (tx) => applyMigrations(tx, REPAIR);
+
+/** A DB that skipped 0176: no lfg_invites, channel_prefs on an older default. */
+async function skip0176(tx: Tx): Promise<void> {
+  await tx.execute(sql`DROP TABLE "lfg_invites" CASCADE`);
+  await tx.execute(
+    sql`ALTER TABLE "user_notification_preferences" ALTER COLUMN "channel_prefs" SET DEFAULT '{}'::jsonb`,
+  );
+}
+
+/** A DB that skipped 0174: no urgency / ttl_minutes (their CHECKs go with them). */
+async function skip0174(tx: Tx): Promise<void> {
+  await tx.execute(
+    sql`ALTER TABLE "lfg_intents" DROP COLUMN "urgency" CASCADE, DROP COLUMN "ttl_minutes" CASCADE`,
+  );
+}
+
+const atHead: Step = () => Promise.resolve();
+
+/** Stand-ins for migrations landing after 0193 — none of them may change its verdict. */
+async function laterMigrations(tx: Tx): Promise<void> {
+  const statements = [
+    sql`ALTER TABLE "user_notification_preferences" ALTER COLUMN "channel_prefs" SET DEFAULT '{"rok1693_future_type":{"inApp":true,"push":false,"discord":false}}'::jsonb`,
+    sql`ALTER TABLE "lfg_invites" ADD COLUMN "rok1693_future" integer`,
+    sql`CREATE INDEX "lfg_invites_rok1693_future_idx" ON "lfg_invites" USING btree ("declined_at")`,
+    sql`ALTER TABLE "lfg_intents" DROP CONSTRAINT "lfg_intents_urgency_check"`,
+    sql`ALTER TABLE "lfg_intents" ADD CONSTRAINT "lfg_intents_urgency_check" CHECK ("lfg_intents"."urgency" IN ('week', 'now', 'tonight', 'weekend'))`,
+  ];
+  for (const statement of statements) await tx.execute(statement);
 }
 
 async function list(tx: Tx, query: SQL): Promise<string[]> {
@@ -88,13 +135,6 @@ async function readCatalog(tx: Tx): Promise<CatalogState> {
   const [reg] = await list(
     tx,
     sql`SELECT to_regclass('public.lfg_invites')::text AS v`,
-  );
-  const [prefs] = await list(
-    tx,
-    sql`
-    SELECT column_default AS v FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'user_notification_preferences'
-      AND column_name = 'channel_prefs'`,
   );
   const columns = await list(
     tx,
@@ -121,13 +161,18 @@ async function readCatalog(tx: Tx): Promise<CatalogState> {
     WHERE schemaname = 'public' AND tablename IN ('lfg_invites', 'lfg_intents')
     ORDER BY 1`,
   );
-  return {
-    lfgInvites: reg || null,
-    columns,
-    constraints,
-    indexes,
-    channelPrefsDefault: prefs || null,
-  };
+  return { lfgInvites: reg || null, columns, constraints, indexes };
+}
+
+async function readState(tx: Tx): Promise<DbState> {
+  const [prefs] = await list(
+    tx,
+    sql`
+    SELECT column_default AS v FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_notification_preferences'
+      AND column_name = 'channel_prefs'`,
+  );
+  return { catalog: await readCatalog(tx), channelPrefsDefault: prefs || null };
 }
 
 /** `<hash> <created_at>` per drizzle.__drizzle_migrations row, optionally for one hash. */
@@ -164,63 +209,78 @@ async function inRolledBackTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
   return (result as { value: T }).value;
 }
 
-describe('ROK-1693 migration 0193 — repair skipped 0176 / 0174', () => {
-  it('re-creates lfg_invites with its FKs, indexes and the channel_prefs default on a DB that skipped 0176', async () => {
-    const { before, skipped, after } = await inRolledBackTx(async (tx) => {
-      const before = await readCatalog(tx);
-      await tx.execute(sql`DROP TABLE "lfg_invites"`);
-      await tx.execute(
-        sql`ALTER TABLE "user_notification_preferences" ALTER COLUMN "channel_prefs" SET DEFAULT '{}'::jsonb`,
-      );
-      const skipped = await readCatalog(tx);
-      await applyRepair(tx);
-      return { before, skipped, after: await readCatalog(tx) };
-    });
-    expect(skipped.lfgInvites).toBeNull();
-    expect(before.lfgInvites).toBe('lfg_invites');
-    expect(before.constraints).toEqual(
+/** The state after the setup steps and then the given migrations, in a rolled-back transaction. */
+function stateAfter(setup: Step[], ...tags: string[]): Promise<DbState> {
+  return inRolledBackTx(async (tx) => {
+    for (const step of setup) await step(tx);
+    await applyMigrations(tx, ...tags);
+    return readState(tx);
+  });
+}
+
+describe.each<[string, Step]>([
+  ['at HEAD', atHead],
+  [
+    'after later migrations re-set channel_prefs, extend lfg_invites and widen the urgency CHECK',
+    laterMigrations,
+  ],
+])('ROK-1693 migration 0193 — repair skipped 0176 / 0174 (%s)', (_, base) => {
+  it('re-creates lfg_invites and the channel_prefs default exactly as 0176 does, on a DB that skipped 0176', async () => {
+    const skipped = await stateAfter([base, skip0176]);
+    const oracle = await stateAfter([base, skip0176], '0176_lfg_invites');
+    const repaired = await stateAfter([base, skip0176], REPAIR);
+    expect(skipped.catalog.lfgInvites).toBeNull();
+    expect(oracle.catalog.lfgInvites).toBe('lfg_invites');
+    expect(oracle.catalog.constraints).toEqual(
       expect.arrayContaining([
         'lfg_invites.lfg_invites_game_id_games_id_fk: FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE',
       ]),
     );
     expect(
-      before.indexes.filter((i) => i.startsWith('idx_lfg_invites_')),
+      oracle.catalog.indexes.filter((i) => i.startsWith('idx_lfg_invites_')),
     ).toHaveLength(3);
-    expect(after).toEqual(before);
+    expect(oracle.channelPrefsDefault).not.toEqual(skipped.channelPrefsDefault);
+    expect(repaired).toEqual(oracle);
   });
 
-  it('restores lfg_intents.urgency / ttl_minutes and their CURRENT checks on a DB that skipped 0174', async () => {
-    const { before, skipped, after } = await inRolledBackTx(async (tx) => {
-      const before = await readCatalog(tx);
-      await tx.execute(
-        sql`ALTER TABLE "lfg_intents" DROP COLUMN "urgency", DROP COLUMN "ttl_minutes"`,
-      );
-      const skipped = await readCatalog(tx);
-      await applyRepair(tx);
-      return { before, skipped, after: await readCatalog(tx) };
-    });
+  it("restores lfg_intents.urgency / ttl_minutes with 0186's urgency CHECK on a DB that skipped 0174", async () => {
+    const skipped = await stateAfter([base, skip0174]);
+    const oracle = await stateAfter(
+      [base, skip0174],
+      '0174_lfg_intent_urgency',
+      '0186_magenta_korath',
+    );
+    const repaired = await stateAfter([base, skip0174], REPAIR);
     expect(
-      skipped.columns.some((c) => c.startsWith('lfg_intents.urgency ')),
+      skipped.catalog.columns.some((c) => c.startsWith('lfg_intents.urgency ')),
     ).toBe(false);
     expect(
-      after.constraints.find((c) => c.includes('lfg_intents_urgency_check')),
+      oracle.catalog.constraints.find((c) =>
+        c.includes('lfg_intents_urgency_check'),
+      ),
     ).toContain("'tonight'");
-    expect(after).toEqual(before);
+    // 0193 also re-sets channel_prefs, which 0174/0186 never touch — the 0176 case pins that.
+    expect(repaired.catalog).toEqual(oracle.catalog);
   });
 
-  it('is a no-op on an up-to-date DB, and again on a second run', async () => {
+  it('keeps every existing object verbatim on an up-to-date DB, and a second run changes nothing', async () => {
     const { before, once, twice, rows } = await inRolledBackTx(async (tx) => {
+      await base(tx);
       const before = await readCatalog(tx);
       const rowsBefore = await journalRows(tx);
       await applyRepair(tx);
-      const once = await readCatalog(tx);
+      const once = await readState(tx);
       await applyRepair(tx);
-      const twice = await readCatalog(tx);
+      const twice = await readState(tx);
       const rows = { before: rowsBefore, after: await journalRows(tx) };
       return { before, once, twice, rows };
     });
-    expect(once).toEqual(before);
-    expect(twice).toEqual(before);
+    // Every 0193 guard is by name, so it never rewrites what exists — it may
+    // only re-add an object a later migration dropped.
+    for (const key of ['columns', 'constraints', 'indexes'] as const) {
+      expect(once.catalog[key]).toEqual(expect.arrayContaining(before[key]));
+    }
+    expect(twice).toEqual(once);
     expect(rows.after).toEqual(rows.before);
   });
 });
@@ -243,7 +303,7 @@ describe('ROK-1693 migration 0193 — back-fills the skipped __drizzle_migration
 
   it('back-fills the skipped hash rows exactly once, so every journal hash is present and 0193 stays latest', async () => {
     const result = await inRolledBackTx(async (tx) => {
-      await tx.execute(sql`DROP TABLE "lfg_invites"`);
+      await skip0176(tx);
       await tx.execute(
         sql`DELETE FROM drizzle.__drizzle_migrations WHERE hash IN (${E0176.hash}, ${E0174.hash})`,
       );
@@ -268,9 +328,9 @@ describe('ROK-1693 migration 0193 — back-fills the skipped __drizzle_migration
   });
 
   it('applies cleanly when the drizzle schema is absent (the validate-migrations.sh psql path)', async () => {
-    const { error, before, after } = await inRolledBackTx(async (tx) => {
-      const before = await readCatalog(tx);
-      await tx.execute(sql`DROP TABLE "lfg_invites"`);
+    const oracle = await stateAfter([skip0176], '0176_lfg_invites');
+    const { error, after } = await inRolledBackTx(async (tx) => {
+      await skip0176(tx);
       await tx.execute(
         sql`ALTER SCHEMA drizzle RENAME TO drizzle_rok1693_hidden`,
       );
@@ -278,9 +338,9 @@ describe('ROK-1693 migration 0193 — back-fills the skipped __drizzle_migration
         () => null,
         (err: Error) => err.message,
       );
-      return { error, before, after: error ? null : await readCatalog(tx) };
+      return { error, after: error ? null : await readState(tx) };
     });
     expect(error).toBeNull();
-    expect(after).toEqual(before);
+    expect(after).toEqual(oracle);
   });
 });
