@@ -1944,3 +1944,9 @@ same day (#1278, #1279, #1280).
 ### 2026-09-27 — fix/td-calendar-searchinput (review follow-up)
 - **[low]** `web/src/components/ui/select.tsx:30` has a bare `pr-9`, and `FIELD_PAD.sm`'s `lg:px-2` beats it from `lg` up, so on `Select fieldSize="sm"` the value text runs under the chevron. Affected call sites: `web/src/components/admin/UserManagementRow.tsx:211`, `web/src/pages/admin/cron-jobs-panel.tsx:113`, `web/src/components/characters/inline-character-form.tsx:63`. This is the same class-order bug this branch fixed for SearchInput and Combobox, and it predates this branch.
   Suggested: the same per-size padding map with `pr-9 lg:pr-9` for sm, plus a vitest class assertion.
+
+### 2026-09-27 — fix/anon-confirmed-roster (ROK-1694 UI verify findings, pre-existing)
+- **[low, a11y]** `web/src/components/events/player-card.tsx`: the roster slot card is a clickable `div` (it opens the assign dialog) that wraps both the player's name link and the "Remove <name> from slot" button, so interactive elements are nested. A click on the link does not also open the dialog, but the structure predates ROK-1694.
+  Suggested: make the card's own action a real button sibling rather than a wrapper, or stop propagation explicitly, and add an axe/vitest nesting assertion.
+- **[low]** `web/src/pages/user-profile/user-profile-extra-sections.tsx:~104` (`GuestProfile`): when the Discord avatar image fails to load (a stale or invalid `avatarHash`), the image is hidden and **no initials fallback** renders. A real guest whose avatar hash went stale sees a blank avatar. Seen with seeded data during ROK-1694 verification.
+  Suggested: render the same initials fallback other avatars use when `onError` fires.
