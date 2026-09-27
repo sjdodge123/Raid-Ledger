@@ -16,6 +16,7 @@ import {
   loadRoomActivities,
 } from './channel-presence-room-recap.hydrate';
 import type { PresenceRow } from './channel-presence-store.helpers';
+import { isBriefVisit } from './channel-presence-brief-visit';
 
 interface Op {
   kind: 'select';
@@ -317,5 +318,47 @@ describe('hydrateRoomRecap', () => {
     // S-5: a span measured against `now` would grow every tick and re-edit the
     // recap for the whole grace window.
     expect(recap.spanMs).toBe(ENDED.getTime() - OPENED.getTime());
+  });
+});
+
+/**
+ * ROK-1692 — the brief-visit rule composed with the REAL hydration.
+ *
+ * The flush specs mock `hydrateRoomRecap` with empty activities, so they can
+ * never see that the D12 seam's `gameId` lands on the occupancy stay and comes
+ * back as an activity through the P2-2 fallback. A 20-second room where the
+ * seam read a game is therefore NOT a drive-by visit: it recaps.
+ */
+describe('a brief room whose stays carry a game still recaps (ROK-1692)', () => {
+  const emptySince = new Date(OPENED.getTime() + 20_000);
+  const quiet = { events: [], live: [] };
+
+  it('is not brief when a stay carries a game', async () => {
+    const m = buildMockDb();
+    m.queue([stay({ gameId: 7, leftAt: emptySince })]);
+    m.queue([]);
+    m.queue([{ id: 7, name: 'Deep Rock Galactic' }]);
+
+    const recap = await hydrateRoomRecap(m.db, row, emptySince);
+
+    expect(recap.activities).toEqual([
+      { name: 'Deep Rock Galactic', seconds: 20 },
+    ]);
+    expect(
+      isBriefVisit({ openedAt: OPENED, emptySince, ...quiet, ...recap }),
+    ).toBe(false);
+  });
+
+  it('is brief when no stay carries a game', async () => {
+    const m = buildMockDb();
+    m.queue([stay({ leftAt: emptySince })]);
+    m.queue([]);
+
+    const recap = await hydrateRoomRecap(m.db, row, emptySince);
+
+    expect(recap.activities).toEqual([]);
+    expect(
+      isBriefVisit({ openedAt: OPENED, emptySince, ...quiet, ...recap }),
+    ).toBe(true);
   });
 });
