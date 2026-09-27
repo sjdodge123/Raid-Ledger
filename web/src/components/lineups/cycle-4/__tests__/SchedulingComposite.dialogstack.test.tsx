@@ -121,6 +121,25 @@ describe('SchedulingComposite — ?lock= deep link + stale game time ([19])', ()
         await waitFor(() => expect(screen.getAllByRole('dialog')).toHaveLength(1));
     });
 
+    it.each([
+        ['phone', false, () => screen.queryByTestId('game-time-check-sheet')],
+        ['desktop', true, () => screen.queryByText('Anything changed?')],
+    ])('%s: the check never shows while the lock confirm fetches its fresh slot', async (_label, isDesktop, check) => {
+        setViewport(isDesktop);
+        const poll = buildPoll({ lineupCreatedById: 99 });
+        let resolveFetch!: (p: typeof poll) => void;
+        vi.mocked(getSchedulePoll).mockReturnValue(new Promise((r) => { resolveFetch = r; }));
+        renderWithProviders(
+            <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
+            { initialEntries: [`/lineups/7/schedule/500?lock=${LOCK_SLOT_ID}`] },
+        );
+        await waitFor(() => expect(getSchedulePoll).toHaveBeenCalled());
+        expect(check()).not.toBeInTheDocument();
+        resolveFetch(poll);
+        await screen.findByRole('button', { name: 'Cancel' });
+        expect(check()).not.toBeInTheDocument();
+    });
+
     it('desktop: renders exactly one blocking dialog — the lock confirm', async () => {
         setViewport(true);
         await renderDeepLinked();

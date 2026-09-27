@@ -166,9 +166,10 @@ export function SchedulingComposite(
     onLock: (slot) => void ladder.onLock(slot),
   });
   // Tech-debt [19]: a pending lock-in confirm (e.g. from a `?lock=` DM link)
-  // holds the game-time check back — never two blocking dialogs at once.
+  // holds the game-time check back — never two blocking dialogs at once. It
+  // also waits while that confirm fetches its fresh slot, or it would flash.
   const check = useSchedulingGameTimeCheck(
-    !!(lock.pendingSlot || expiredLock.pendingSlot),
+    !!(lock.pendingSlot || lock.refreshing || expiredLock.pendingSlot),
   );
   const canVote = ladder.canVote;
   /**
