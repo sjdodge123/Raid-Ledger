@@ -53,7 +53,10 @@ if (!telemetryDisabled) {
             ) {
                 return null;
             }
-            // ROK-1366 backstop: never ship a magic-link/intent token.
+            // ROK-1366 backstop: scrub a `token=` from the error event's
+            // request.url. This covers request.url only. The join page's
+            // intent `?token=` stays in the address bar, so it still reaches
+            // the Replay Meta href (TECH-DEBT-BACKLOG.md, 2026-09-27).
             if (event.request?.url) {
                 event.request.url = scrubTokenFromUrl(event.request.url);
             }
