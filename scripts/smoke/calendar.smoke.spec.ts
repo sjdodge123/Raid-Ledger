@@ -33,6 +33,32 @@ async function resetSavedGameFilter(): Promise<void> {
 
 const gamesHidden = (n: number): string => `${n} ${n === 1 ? 'game' : 'games'} hidden`;
 
+/**
+ * Whole weeks from the week the calendar shows to the week `iso` lands in —
+ * measured in the BROWSER, never in the test runner's clock. The grid week is
+ * the page's `?date=` (local yyyy-MM-dd of its current date); the event sits
+ * on its wall-clock date in the app's timezone (`raid_ledger_timezone`, else
+ * the browser's). UTC week math broke on the America/Denver fleet runners
+ * every Sun 04-06Z and Sat 22-24Z (2026-09-27).
+ */
+async function weeksFromShownWeekTo(page: Page, iso: string): Promise<number> {
+    return page.evaluate((eventIso) => {
+        const pref = localStorage.getItem('raid_ledger_timezone');
+        const timeZone = pref && pref !== 'auto' ? pref : undefined;
+        const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: 'numeric', day: 'numeric' })
+            .formatToParts(new Date(eventIso));
+        const part = (type: string): number => Number(parts.find((p) => p.type === type)?.value);
+        const shown = (new URLSearchParams(window.location.search).get('date') ?? '').split('-').map(Number);
+        // Calendar-date arithmetic on UTC midnights: no DST drift.
+        const sundayOf = (y: number, m: number, d: number): number => {
+            const t = Date.UTC(y, m - 1, d);
+            return t - new Date(t).getUTCDay() * 86_400_000;
+        };
+        const diff = sundayOf(part('year'), part('month'), part('day')) - sundayOf(shown[0], shown[1], shown[2]);
+        return Math.round(diff / (7 * 86_400_000));
+    }, iso);
+}
+
 /** The filter body's "N of M selected" line → M (every game the filter knows). */
 async function knownGameCount(filters: Locator): Promise<number> {
     const summary = filters.getByText(/^\d+ of \d+ selected$/);
@@ -276,18 +302,14 @@ test.describe('Regression: ROK-1315 — calendar shows gameless events when the 
             // The user's last viewPref (persisted) could be Day — narrow to Week
             // so the assertion is deterministic across stored prefs.
             await page.getByRole('button', { name: 'Week', exact: true }).click();
+            await expect(page).toHaveURL(/[?&]date=\d{4}-\d{2}-\d{2}/);
 
             // The week starts on SUNDAY (`weekStartsOn: 0`). A run late on a
             // Saturday seeds "now + 2h" into next week's Sunday, which the
-            // current week never renders — every Saturday-night CI run failed
-            // here (2026-08-29 22:59Z, 2026-09-05 22:42Z). Follow the event.
-            const sundayOf = (d: Date): number => {
-                const x = new Date(d);
-                x.setUTCHours(0, 0, 0, 0);
-                x.setUTCDate(x.getUTCDate() - x.getUTCDay());
-                return x.getTime();
-            };
-            if (sundayOf(new Date(start)) > sundayOf(new Date())) {
+            // current week never renders. Follow the event.
+            const weeksAhead = await weeksFromShownWeekTo(page, start);
+            expect(weeksAhead, 'the event (now + 2h) is in the shown week or the next one').toBeGreaterThanOrEqual(0);
+            for (let i = 0; i < weeksAhead; i++) {
                 await page.getByRole('button', { name: /^Next week$/i }).click();
             }
 
