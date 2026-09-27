@@ -165,7 +165,11 @@ export function SchedulingComposite(
     leaderSlot: leader?.slot ?? null,
     onLock: (slot) => void ladder.onLock(slot),
   });
-  const check = useSchedulingGameTimeCheck();
+  // Tech-debt [19]: a pending lock-in confirm (e.g. from a `?lock=` DM link)
+  // holds the game-time check back — never two blocking dialogs at once.
+  const check = useSchedulingGameTimeCheck(
+    !!(lock.pendingSlot || expiredLock.pendingSlot),
+  );
   const canVote = ladder.canVote;
   /**
    * Review fix: suggesting outlives voting in exactly one state — the
