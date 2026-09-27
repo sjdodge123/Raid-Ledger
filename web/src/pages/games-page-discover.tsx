@@ -99,7 +99,7 @@ function CuratedSection({
             className="border-l-2 border-emerald-500/40 pl-4 md:pl-5"
         >
             <div className="mb-4">
-                <h2 className="text-sm font-medium text-emerald-300/90 uppercase tracking-wider">
+                <h2 className="text-sm font-medium text-success uppercase tracking-wider">
                     Curated This Week
                 </h2>
             </div>

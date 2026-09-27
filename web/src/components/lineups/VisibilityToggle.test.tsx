@@ -35,4 +35,13 @@ describe('VisibilityToggle', () => {
       screen.getByText(/only invited users/i),
     ).toBeInTheDocument();
   });
+
+  it('gives both radios a 44px tap target and paints the checked one with its status token', () => {
+    const { rerender } = render(<VisibilityToggle value="public" onChange={() => {}} />);
+    expect(screen.getByTestId('visibility-public')).toHaveClass('min-h-[44px]', 'bg-success/15', 'border-success');
+    expect(screen.getByTestId('visibility-private')).toHaveClass('min-h-[44px]', 'border-edge');
+    rerender(<VisibilityToggle value="private" onChange={() => {}} />);
+    expect(screen.getByTestId('visibility-private')).toHaveClass('min-h-[44px]', 'bg-warning/15', 'border-warning');
+    expect(screen.getByTestId('visibility-public')).toHaveClass('border-edge');
+  });
 });
