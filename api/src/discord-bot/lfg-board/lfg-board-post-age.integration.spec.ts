@@ -193,4 +193,45 @@ describe('LFG board post-age cap (ROK-1691, integration)', () => {
     expect(still).toMatchObject({ id: row.id, state: 'open', closedAt: null });
     expect(edits).toEqual([]);
   });
+
+  // A re-post is a NEW row with its own clock, and the retired row stays
+  // behind: closed, 8 days old, same game. The cap must read only the OPEN
+  // row, or that old row would retire every re-post on the very next sweep.
+  // Mutation: drop `eq(posts.state, 'open')` from `agedBoardPostGameIds` and
+  // this fails on the statuses — `Expected: [..., "active", "active"]
+  // Received: [..., "expired", "expired"]`.
+  it('leaves a young re-post live beside the old closed row', async () => {
+    const { gameId, row: old } = await freshGroupOnPostAged('repost', 8);
+    await sweepExpiry(gameId);
+    expect(await boardRows(gameId)).toMatchObject([
+      { id: old.id, state: 'expired' },
+    ]);
+
+    // People still looking post again: a fresh row, a fresh `posted_at`.
+    const [c, d] = await Promise.all([
+      createMemberAndLogin(testApp, 'repost-c', 'repost-c@test.dev'),
+      createMemberAndLogin(testApp, 'repost-d', 'repost-d@test.dev'),
+    ]);
+    await raiseHand(c.token, gameId);
+    await raiseHand(d.token, gameId);
+    const [, young] = await boardRows(gameId);
+    expect(young).toMatchObject({ state: 'open', postKind: 'forum' });
+    edits = [];
+
+    await sweepExpiry(gameId);
+
+    const after = await hands(gameId);
+    expect(after.map((h) => h.status)).toEqual([
+      'expired',
+      'expired',
+      'active',
+      'active',
+    ]);
+    const rows = await boardRows(gameId);
+    expect(rows.map((r) => [r.id, r.state, r.closedAt === null])).toEqual([
+      [old.id, 'expired', false],
+      [young.id, 'open', true],
+    ]);
+    expect(edits).toEqual([]);
+  });
 });
