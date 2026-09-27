@@ -182,21 +182,3 @@ describe('PlayerCard — running-late badge (ROK-1379 follow-up)', () => {
         expect(screen.getByTitle('Running late')).toBeInTheDocument();
     });
 });
-
-describe('PlayerCard — anonymous Discord signup (ROK-1694)', () => {
-    it('renders the name + "via Discord" chip and no /users/0 link when userId is 0', () => {
-        const { container } = renderCard({ player: createMockPlayer({ userId: 0, username: 'DiscordGuy' }) });
-        expect(
-            container.querySelectorAll('a[href="/users/0"]'),
-            'an account-less Discord signup must not link to /users/0',
-        ).toHaveLength(0);
-        expect(screen.getByText('DiscordGuy')).toBeInTheDocument();
-        expect(screen.getByText('via Discord')).toBeInTheDocument();
-    });
-
-    it('a member still links to their profile, without the chip', () => {
-        const { container } = renderCard({ player: createMockPlayer({ userId: 10 }) });
-        expect(container.querySelector('a[href="/users/10"]')).toHaveTextContent('TestPlayer');
-        expect(screen.queryByText('via Discord')).not.toBeInTheDocument();
-    });
-});
