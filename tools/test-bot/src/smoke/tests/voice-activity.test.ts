@@ -30,7 +30,6 @@ import {
 } from '../fixtures.js';
 import {
   assertEmbedColor,
-  assertEmbedDescription,
   assertEmbedHasField,
   assertEmbedTitle,
   rosterEntries,
@@ -425,55 +424,6 @@ function assertLobbyRender(msg: SimpleMessage, eventId: number): void {
 }
 
 /**
- * ROK-1608 — the recap must NAME who was in the room.
- *
- * Prod, 2026-09-17: "5 in voice" and not one of the five was named. The
- * participant line sits directly under the room line and carries bold display
- * names, never mentions — a recap that re-renders must not ping the channel.
- */
-function assertRecapParticipants(description: string): void {
-  const participants = description.split('\n')[1] ?? '';
-  if (rosterEntries(participants).length === 0) {
-    throw new Error(
-      'recap participant line: expected bold display names on the line under ' +
-        `the "N in voice" line, read "${description}"`,
-    );
-  }
-  assertLacks(participants, '<@', 'recap participant line');
-}
-
-/**
- * AC9's recap: the SAME message becomes the session-ended card (D8).
- *
- * The two load-bearing clauses are the negative ones — the amber group and the
- * LIVE group must both be GONE from a message that previously carried them.
- * The per-session `ENDED` loop below is correct but currently iterates an empty
- * list: `recapEvents` only hydrates rows with `is_ad_hoc AND
- * channel_binding_id = <binding>`, and the seam cannot create one (see the
- * test's own note), so the recap renders lead-only today.
- */
-function assertRecapRender(msg: SimpleMessage): void {
-  assertEmbedTitle(msg.embeds[0], /\u{1F50A} .+ · session ended/u);
-  // ROK-1499: the room this recap covers HAD members — the D12 seam put them
-  // there — so the occupancy ledger must have outlived them leaving. A lead
-  // description with no "N in voice" line is the prod bug this closed: the
-  // service keeps nothing between flushes, so a recap rendered from the room
-  // it can no longer see says "No session started." for an evening three
-  // people sat through.
-  assertEmbedDescription(msg.embeds[0], /\d+ in voice/);
-  assertRecapParticipants(msg.embeds[0]?.description ?? '');
-  for (const embed of msg.embeds) {
-    assertEmbedColor(embed, SYSTEM_SLATE);
-  }
-  for (const embed of msg.embeds.slice(1)) {
-    assertAuthor(embed, /■ ENDED · Quick Play/, 'recap session embed');
-  }
-  const authors = msg.embeds.map((e) => e.author ?? '').join(' | ');
-  assertLacks(authors, 'NEEDS', 'recap author lines');
-  assertLacks(authors, 'LIVE', 'recap author lines');
-}
-
-/**
  * ROK-1446 AC1/AC2/AC4/AC10 — one message per bound lobby channel, carrying
  * every human occupant grouped by game.
  *
@@ -555,7 +505,7 @@ const lobbyPresenceEditsInPlace: SmokeTest = {
             lobbyRoom(g1, g2, eventId),
           );
           await assertMergesIntoOneGroup(ctx, target, vChId, g1, g2, eventId);
-          await assertFoldsIntoRecap(ctx, target, vChId);
+          await assertBriefVisitDeleted(ctx, target, vChId);
         } finally {
           await setLobbyPresence(ctx.api, vChId, null);
           await deleteEvent(ctx.api, eventId);
@@ -605,12 +555,39 @@ async function assertMergesIntoOneGroup(
 }
 
 /**
- * The room empties: the same message becomes the recap and NOTHING else posts.
- *
- * The negative window is the AC7 clause — completions fold into this message,
- * so a lobby session must never emit a separate completion card.
+ * Does Discord still have this message? A REST fetch (never the cache) that
+ * answers 10008 "Unknown Message" means it was deleted.
  */
-async function assertFoldsIntoRecap(
+async function messageExists(
+  channelId: string,
+  messageId: string,
+): Promise<boolean> {
+  const channel = await getClient().channels.fetch(channelId);
+  if (!channel?.isTextBased()) {
+    throw new Error(`Channel ${channelId} is not a text channel`);
+  }
+  try {
+    await channel.messages.fetch({ message: messageId, force: true });
+    return true;
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 10008) return false;
+    throw err;
+  }
+}
+
+/**
+ * The room empties seconds after it opened: a drive-by visit (ROK-1692).
+ *
+ * Under two minutes with no game detected and no linked event, the card is
+ * DELETED instead of being edited into a "session ended · 0m" recap. NOTHING
+ * else posts in its place either. That is the AC7 clause: a lobby session never
+ * emits a second card. The seam's room lives for seconds and can create neither
+ * an ad-hoc event nor a game-activity session, so this is always the brief
+ * path. The recap render itself (title duration, "N in voice", participants,
+ * ENDED sessions) is pinned by `channel-presence-embed.recap.helpers.spec.ts`
+ * and `channel-presence-recap-room.integration.spec.ts`.
+ */
+async function assertBriefVisitDeleted(
   ctx: TestContext,
   target: PresenceTarget,
   vChId: string,
@@ -619,23 +596,32 @@ async function assertFoldsIntoRecap(
   // `[]` is an EMPTY ROOM (the recap path). It is NOT `null`, which would clear
   // the override and hand the channel back to real Discord reads.
   await setLobbyPresence(ctx.api, vChId, []);
-  const recap = await expectMessageState(
-    ctx,
-    target,
-    (m) => /session ended/.test(m.embeds[0]?.title ?? ''),
-    'An emptied room must edit its OWN message into the session recap (D8)',
-    'edited',
-  );
-  assertRecapRender(recap);
+  try {
+    await pollForCondition(
+      async () =>
+        (await messageExists(target.textChannelId, target.messageId))
+          ? null
+          : true,
+      ctx.config.timeoutMs,
+      { intervalMs: 1000 },
+    );
+  } catch (err) {
+    throw new Error(
+      `A brief visit's card must be DELETED when the room empties (ROK-1692), ` +
+        `but message ${target.messageId} still exists and renders ` +
+        `${await describeMessage(target)}. ` +
+        `(underlying: ${(err as Error).message})`,
+    );
+  }
   await assertConditionNeverMet(
     async () => {
       const now = await botMessageIds(target.textChannelId);
       return now.some((id) => !seen.includes(id));
     },
     20_000,
-    `A new bot message appeared in ${target.textChannelId} after the recap. ` +
-      `Completions fold into the existing presence message (AC7/D9) — a lobby ` +
-      `session must never post a second card.`,
+    `A new bot message appeared in ${target.textChannelId} after the brief ` +
+      `visit's card was deleted. A lobby session never posts a second card ` +
+      `(AC7/D9), and a drive-by visit posts no recap at all (ROK-1692).`,
   );
 }
 

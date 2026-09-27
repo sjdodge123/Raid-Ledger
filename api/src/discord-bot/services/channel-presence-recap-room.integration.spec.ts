@@ -14,6 +14,7 @@
  * which records the payloads instead of sending them.
  */
 import { Logger } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import type { Client, EmbedBuilder } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -43,6 +44,8 @@ const T0 = new Date('2026-03-05T20:00:00Z').getTime();
 interface Transport {
   sent: EmbedBuilder[][];
   edited: EmbedBuilder[][];
+  /** Message ids the flush deleted (ROK-1692 brief visits). */
+  deleted: string[];
   client: Client;
 }
 
@@ -50,6 +53,7 @@ interface Transport {
 function fakeTransport(): Transport {
   const sent: EmbedBuilder[][] = [];
   const edited: EmbedBuilder[][] = [];
+  const deleted: string[] = [];
   const message = {
     id: 'rok1499e2e-message',
     edit: ({ embeds }: { embeds: EmbedBuilder[] }) => {
@@ -62,7 +66,13 @@ function fakeTransport(): Transport {
       sent.push(embeds);
       return Promise.resolve(message);
     },
-    messages: { fetch: () => Promise.resolve(message) },
+    messages: {
+      fetch: () => Promise.resolve(message),
+      delete: (id: string) => {
+        deleted.push(id);
+        return Promise.resolve();
+      },
+    },
   };
   const client = {
     isReady: () => true,
@@ -72,7 +82,7 @@ function fakeTransport(): Transport {
     // which is exactly the "override stands in for Discord" path.
     guilds: { cache: new Map() },
   } as unknown as Client;
-  return { sent, edited, client };
+  return { sent, edited, deleted, client };
 }
 
 /** The four edge services `flushChannel` reaches through, stubbed. */
@@ -190,6 +200,24 @@ describe('room recap end to end (integration, ROK-1499)', () => {
       closed.map((s) => (s.leftAt!.getTime() - s.joinedAt.getTime()) / MINUTE),
     ).toEqual([45, 45]);
     expect(recapLead(transport)).toMatch(/^2 in voice ·/);
+  });
+
+  it('deletes a brief visit instead of recapping it, and closes the row brief (ROK-1692)', async () => {
+    await flush(ROOM, 0);
+    const opened = await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID);
+    expect(opened).not.toBeNull();
+
+    await flush([], 1);
+
+    expect(transport.deleted).toEqual([opened!.messageId]);
+    expect(transport.edited).toHaveLength(0);
+    const [closed] = await db
+      .select()
+      .from(schema.discordChannelPresenceMessages)
+      .where(eq(schema.discordChannelPresenceMessages.id, opened!.id));
+    expect(closed.closeReason).toBe('brief');
+    expect(closed.closedAt).not.toBeNull();
+    expect(await findOpenRow(db, GUILD_ID, VOICE_CHANNEL_ID)).toBeNull();
   });
 
   it('keeps the recap stable across the whole grace window', async () => {
