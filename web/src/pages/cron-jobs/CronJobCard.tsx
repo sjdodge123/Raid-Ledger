@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import { SparklesIcon } from '@heroicons/react/24/outline';
 import type { CronJobDto } from '@raid-ledger/contract';
+import { Button } from '../../components/ui/button';
 import { formatJobName, getCronLabel, formatTimestamp, THEME_COLORS } from './cron-utils';
 
 /** Emerald sparkles pill — marks a cron that issues LLM calls. */
@@ -30,17 +31,19 @@ function SourceBadge({ source, pluginSlug }: { source: string; pluginSlug: strin
     );
 }
 
-/** Status badge (active/paused) */
+const PILL = 'inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border';
+
+/** Status badge (active/paused) — semantic, so the success/warning tokens. */
 function StatusBadge({ paused }: { paused: boolean }): JSX.Element {
     if (paused) {
         return (
-            <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+            <span className={`${PILL} bg-warning/10 text-warning border-warning/30`}>
                 Paused
             </span>
         );
     }
     return (
-        <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
+        <span className={`${PILL} bg-success/10 text-success border-success/30`}>
             Active
         </span>
     );
@@ -97,26 +100,28 @@ export function JobCard({ job, tz, onViewHistory, onEditSchedule, onRun, onPause
     );
 }
 
-const ACTION_BTN = 'px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground bg-surface/50 hover:bg-surface border border-edge rounded-lg transition-colors';
+/** Warning-/success-soft on the ghost Button (no such variants exist): token tints, flip with the scheme. */
+const WARNING_SOFT = 'text-warning hover:text-warning bg-warning/10 hover:bg-warning/20 border border-warning/30';
+const SUCCESS_SOFT = 'text-success hover:text-success bg-success/10 hover:bg-success/20 border border-success/30';
 
 function PauseResumeButton({ paused, onPause, onResume, isPausing, isResuming }: {
     paused: boolean; onPause: () => void; onResume: () => void; isPausing: boolean; isResuming: boolean;
 }) {
     if (paused) {
-        return <button onClick={onResume} disabled={isResuming} className="px-3 py-1.5 text-xs font-medium text-green-400 hover:text-green-300 bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 rounded-lg transition-colors disabled:opacity-50">Resume</button>;
+        return <Button size="sm" variant="ghost" className={SUCCESS_SOFT} onClick={onResume} disabled={isResuming}>Resume</Button>;
     }
-    return <button onClick={onPause} disabled={isPausing} className="px-3 py-1.5 text-xs font-medium text-yellow-400 hover:text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 rounded-lg transition-colors disabled:opacity-50">Pause</button>;
+    return <Button size="sm" variant="ghost" className={WARNING_SOFT} onClick={onPause} disabled={isPausing}>Pause</Button>;
 }
 
 /** Action buttons row for a job card */
 function JobCardActions({ job, onViewHistory, onEditSchedule, onRun, onPause, onResume, isPausing, isResuming, isRunning }: Omit<JobCardProps, 'tz'>): JSX.Element {
     return (
-        <div className="flex items-center gap-2 pt-2 border-t border-edge/30">
-            <button onClick={onViewHistory} className={ACTION_BTN}>History</button>
-            <button onClick={onEditSchedule} className={ACTION_BTN}>Schedule</button>
-            <button onClick={onRun} disabled={isRunning} className="px-3 py-1.5 text-xs font-medium text-success hover:text-success/80 bg-success/10 hover:bg-success/20 border border-success/30 rounded-lg transition-colors disabled:opacity-50">
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-edge/30">
+            <Button size="sm" variant="secondary" onClick={onViewHistory}>History</Button>
+            <Button size="sm" variant="secondary" onClick={onEditSchedule}>Schedule</Button>
+            <Button size="sm" variant="ghost" className={SUCCESS_SOFT} onClick={onRun} disabled={isRunning}>
                 {isRunning ? 'Running...' : 'Run Now'}
-            </button>
+            </Button>
             <div className="flex-1" />
             <PauseResumeButton paused={job.paused} onPause={onPause} onResume={onResume} isPausing={isPausing} isResuming={isResuming} />
         </div>
