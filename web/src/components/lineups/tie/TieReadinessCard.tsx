@@ -44,7 +44,7 @@ function CardHeader({
                 Tied — {voteCount} votes each
             </h3>
             {starTieLine && (
-                <p data-testid="tie-star-tied" className="text-sm text-amber-300/90">
+                <p data-testid="tie-star-tied" className="text-sm text-warning">
                     {starTieLine}
                 </p>
             )}

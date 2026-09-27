@@ -1,9 +1,12 @@
 /**
  * Button — the one button API (ROK-1646, spike ROK-1644 §4.1, operator Q2/Q3).
  *
- * - Five variants. The solid fills (`bg-emerald-600`, `bg-red-600`) stay raw
+ * - Seven variants. The solid fills (`bg-emerald-600`, `bg-red-600`) stay raw
  *   on purpose: `index.css` forces their label white on the light schemes by
- *   those exact class names (design-system.md §2.2).
+ *   those exact class names (design-system.md §2.2). The three `*-soft`
+ *   variants share one shape — a `/10` token tint, token label, `/30` border,
+ *   `/20` hover — on `danger`, `warning` and `success`. Tint a button with a
+ *   variant, never with colour classes in `className` (no tailwind-merge here).
  * - `type` defaults to "button", so a button inside a `<form>` never submits it
  *   by accident.
  * - `loading` sets `aria-busy` + `aria-disabled` — NOT native `disabled`, so a
@@ -24,7 +27,8 @@
 import { forwardRef, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
 import { DISABLED, FOCUS_RING } from './form-classes';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft';
+export type ButtonVariant =
+    | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'warning-soft' | 'success-soft';
 export type ButtonSize = 'md' | 'sm' | 'lg';
 
 const VARIANT_CLS: Record<ButtonVariant, string> = {
@@ -33,6 +37,8 @@ const VARIANT_CLS: Record<ButtonVariant, string> = {
     ghost: 'text-muted hover:text-foreground hover:bg-overlay',
     destructive: 'bg-red-600 hover:bg-red-500 text-foreground',
     'destructive-soft': 'bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20',
+    'warning-soft': 'bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20',
+    'success-soft': 'bg-success/10 text-success border border-success/30 hover:bg-success/20',
 };
 
 /** A brand fill replaces the variant paint; index.css forces the label white via `data-brand-fill`. */

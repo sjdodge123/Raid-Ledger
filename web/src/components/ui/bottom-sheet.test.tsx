@@ -512,3 +512,112 @@ describe('BottomSheet — ROK-1640/ROK-1641 visible-viewport sizing', () => {
         expect(dialog.style.maxHeight).toBe('950px');
     });
 });
+
+/**
+ * Tab / Shift+Tab stay inside an open sheet (it is `aria-modal`), while focus
+ * restore on close stays with `useSheetFocus` so the ROK-1650 hand-off guard
+ * (another dialog already took focus) still applies.
+ */
+/** jsdom reports offsetParent null for everything; the trap skips hidden (null) elements. */
+function mockVisibleLayout(): void {
+    const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetParent');
+    beforeEach(() => {
+        Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+            configurable: true,
+            get(this: HTMLElement) { return this.parentNode; },
+        });
+    });
+    afterEach(() => {
+        if (original) Object.defineProperty(HTMLElement.prototype, 'offsetParent', original);
+        else Reflect.deleteProperty(HTMLElement.prototype, 'offsetParent');
+        document.body.style.overflow = '';
+    });
+}
+
+describe('BottomSheet — Tab trap', () => {
+    mockVisibleLayout();
+
+    const renderTrap = () => render(
+        <BottomSheet isOpen onClose={() => {}} title="Actions">
+            <button type="button">First action</button>
+            <button type="button">Last action</button>
+        </BottomSheet>,
+    );
+
+    it('wraps Tab from the last focusable back to the first (the header Close)', () => {
+        renderTrap();
+        const last = screen.getByRole('button', { name: 'Last action' });
+        last.focus();
+        fireEvent.keyDown(last, { key: 'Tab' });
+        expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+    });
+
+    it('wraps Shift+Tab from the first focusable to the last', () => {
+        renderTrap();
+        const first = screen.getByRole('button', { name: 'Close' });
+        first.focus();
+        fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+        expect(screen.getByRole('button', { name: 'Last action' })).toHaveFocus();
+    });
+
+    it('leaves Tab alone while the sheet is closed', () => {
+        render(
+            <>
+                <button type="button">Page button</button>
+                <BottomSheet isOpen={false} onClose={() => {}} title="Actions"><button type="button">Only</button></BottomSheet>
+            </>,
+        );
+        const page = screen.getByRole('button', { name: 'Page button' });
+        page.focus();
+        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        page.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+    });
+
+    it('leaves Tab alone in a nested dialog that holds focus, even when the sheet has nothing focusable', () => {
+        render(
+            <>
+                <BottomSheet isOpen onClose={() => {}} ariaLabel="Read-only"><p>No controls</p></BottomSheet>
+                <div role="dialog" aria-label="Nested confirm"><button type="button">Stay</button></div>
+            </>,
+        );
+        const stay = screen.getByRole('button', { name: 'Stay' });
+        stay.focus();
+        const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+        stay.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(false);
+    });
+
+});
+
+describe('BottomSheet — focus restore on close', () => {
+    mockVisibleLayout();
+
+    function Host({ open }: { open: boolean }) {
+        return (
+            <>
+                <button type="button">Opener</button>
+                <div role="dialog" aria-label="Confirm advance"><button type="button">Confirm</button></div>
+                <BottomSheet isOpen={open} onClose={() => {}} title="Actions"><button type="button">Advance</button></BottomSheet>
+            </>
+        );
+    }
+
+    it('gives focus back to the opener on a plain close', () => {
+        const { rerender } = render(<Host open={false} />);
+        screen.getByRole('button', { name: 'Opener' }).focus();
+        rerender(<Host open />);
+        screen.getByRole('button', { name: 'Advance' }).focus();
+        rerender(<Host open={false} />);
+        expect(screen.getByRole('button', { name: 'Opener' })).toHaveFocus();
+    });
+
+    it('does not pull focus back to the opener when another dialog took it (ROK-1650)', () => {
+        const { rerender } = render(<Host open={false} />);
+        screen.getByRole('button', { name: 'Opener' }).focus();
+        rerender(<Host open />);
+        screen.getByRole('button', { name: 'Confirm' }).focus();
+        rerender(<Host open={false} />);
+        expect(screen.getByRole('button', { name: 'Confirm' })).toHaveFocus();
+    });
+});

@@ -255,7 +255,7 @@ function DecisionReasonLine({
   return (
     <p
       data-testid="decided-decision-reason"
-      className="mt-2 text-xs text-amber-300/90"
+      className="mt-2 text-xs text-warning"
     >
       <span aria-hidden="true">⭐ </span>
       Why this won — {reason}
