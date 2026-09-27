@@ -24,8 +24,11 @@ export const LFG_EXPIRY_JOB_NAME = 'LfgExpiryService_expireIntents';
  */
 export const LFG_EXPIRY_CRON_EXPRESSION = '0 */5 * * * *';
 
-/** Single global expiry horizon (AC13) — 7 days since ROK-1691 (was 14). */
-export const LFG_EXPIRY_DAYS = 7;
+/**
+ * Single global expiry horizon (AC13), re-exported from the app's own constant
+ * so a spec can never assert against a second copy that drifted (ROK-1691).
+ */
+export { LFG_EXPIRY_DAYS } from './lfg.constants';
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
