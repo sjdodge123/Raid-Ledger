@@ -18,9 +18,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@m-lab/ndt7": "^0.1.5",
     "@date-fns/tz": "^1.5.0",
     "@heroicons/react": "^2.2.0",
-    "@m-lab/ndt7": "^0.1.5",
     "@sentry/react": "^10.73.0",
     "@tanstack/react-query": "^5.103.1",
     "date-fns": "^4.4.0",
