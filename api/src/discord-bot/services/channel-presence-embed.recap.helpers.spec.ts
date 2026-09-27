@@ -366,6 +366,17 @@ describe('buildRecapEmbeds — the room title', () => {
     expect(lead.title).toBe('\u{1F50A} General · session ended · 2h 55m');
   });
 
+  it('renders a sub-minute room as "<1m", never "0m" (ROK-1692)', () => {
+    const [lead] = renderRoom({
+      spanMs: 20_000,
+      members: [{ displayName: 'Pariah', seconds: 20 }],
+      activities: [{ name: 'Valheim', seconds: 20 }],
+    });
+    expect(lead.title).toBe('\u{1F50A} General · session ended · <1m');
+    expect(lead.description).toContain('Valheim (<1m)');
+    expect(`${lead.title} ${lead.description}`).not.toContain('0m');
+  });
+
   it('leaves the title alone when the room never opened for measurable time', () => {
     const [lead] = renderRoom({ spanMs: 0, members: [], activities: [] });
     expect(lead.title).toBe('\u{1F50A} General · session ended');

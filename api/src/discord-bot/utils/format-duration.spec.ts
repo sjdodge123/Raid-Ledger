@@ -1,4 +1,4 @@
-import { formatDurationMs } from './format-duration';
+import { formatDurationMs, formatRecapDurationMs } from './format-duration';
 
 describe('formatDurationMs', () => {
   it('returns "0m" for zero', () => {
@@ -36,5 +36,21 @@ describe('formatDurationMs', () => {
 
   it('returns "1h" for exactly 1 hour', () => {
     expect(formatDurationMs(3_600_000)).toBe('1h');
+  });
+});
+
+describe('formatRecapDurationMs (ROK-1692)', () => {
+  it('renders a sub-minute recap span as "<1m", never "0m"', () => {
+    expect(formatRecapDurationMs(8_000)).toBe('<1m');
+    expect(formatRecapDurationMs(59_999)).toBe('<1m');
+  });
+
+  it('renders a zero-length recap figure as "<1m" too', () => {
+    expect(formatRecapDurationMs(0)).toBe('<1m');
+  });
+
+  it('delegates a minute or more to formatDurationMs unchanged', () => {
+    expect(formatRecapDurationMs(60_000)).toBe('1m');
+    expect(formatRecapDurationMs(2 * 3_600_000 + 55 * 60_000)).toBe('2h 55m');
   });
 });

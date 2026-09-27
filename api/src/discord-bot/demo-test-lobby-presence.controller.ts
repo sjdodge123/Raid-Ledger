@@ -72,6 +72,10 @@ export class DemoTestLobbyPresenceController {
     // override input type — if `RoomMemberSnapshot` gains a field, this breaks.
     const snapshot: RoomSnapshot | null = members === null ? null : { members };
 
+    // ROK-1692: the smoke tests re-bind the same channel back to back, and the
+    // service's 60 s binding cache is never evicted on a binding change — so
+    // every seam flush must read the binding (and its grace) that exists now.
+    this.presence.forgetBinding(voiceChannelId);
     await this.presence.setRoomOverride(voiceChannelId, snapshot);
     await this.presence.flushNow();
     return this.readOpenRow(voiceChannelId);

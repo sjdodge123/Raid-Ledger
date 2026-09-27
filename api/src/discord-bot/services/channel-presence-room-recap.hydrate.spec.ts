@@ -16,6 +16,7 @@ import {
   loadRoomActivities,
 } from './channel-presence-room-recap.hydrate';
 import type { PresenceRow } from './channel-presence-store.helpers';
+import { isBriefVisit } from './channel-presence-brief-visit';
 
 interface Op {
   kind: 'select';
@@ -175,10 +176,33 @@ describe('loadRoomActivities — naming', () => {
   });
 });
 
-describe('an occupant the session table never saw still gets their game (P2-2)', () => {
-  const playing = (over: Record<string, unknown> = {}) =>
-    stay({ gameId: 7, activityName: 'Deep Rock Galactic', ...over });
+/** A stay the seam read as playing Deep Rock Galactic (P2-2). */
+const playing = (over: Record<string, unknown> = {}) =>
+  stay({ gameId: 7, activityName: 'Deep Rock Galactic', ...over });
 
+/** A tracked Deep Rock Galactic session with real start/stop instants. */
+function trackedDrgSession() {
+  return {
+    discordUserId: 'u1',
+    gameName: 'Deep Rock Galactic',
+    activityName: 'drg',
+    startedAt: new Date('2026-09-13T19:00:00Z'),
+    endedAt: ENDED,
+  };
+}
+
+/** ROK-1608's prod shape: a Baldur's Gate 3 session the bot never closed. */
+function leakedBg3Session() {
+  return {
+    discordUserId: 'u1',
+    gameName: "Baldur's Gate 3",
+    activityName: 'bg3',
+    startedAt: new Date(OPENED.getTime() - 20 * 3_600_000),
+    endedAt: null,
+  };
+}
+
+describe('an occupant the session table never saw still gets their game (P2-2)', () => {
   it('falls back to the stay when the user has no session row', async () => {
     // Unlinked users and `/playing` overrides produce no
     // `game_activity_sessions` row at all, so their game showed on the live
@@ -200,15 +224,7 @@ describe('an occupant the session table never saw still gets their game (P2-2)',
     // long as they were in the room".
     const m = buildMockDb();
     m.queue([playing()]);
-    m.queue([
-      {
-        discordUserId: 'u1',
-        gameName: 'Deep Rock Galactic',
-        activityName: 'drg',
-        startedAt: new Date('2026-09-13T19:00:00Z'),
-        endedAt: ENDED,
-      },
-    ]);
+    m.queue([trackedDrgSession()]);
 
     const recap = await hydrateRoomRecap(m.db, row, ENDED);
 
@@ -226,15 +242,7 @@ describe('an occupant the session table never saw still gets their game (P2-2)',
   it('falls back to the stay when the only session row is a leaked open one', async () => {
     const m = buildMockDb();
     m.queue([playing({ leftAt: ENDED })]);
-    m.queue([
-      {
-        discordUserId: 'u1',
-        gameName: "Baldur's Gate 3",
-        activityName: 'bg3',
-        startedAt: new Date(OPENED.getTime() - 20 * 3_600_000),
-        endedAt: null,
-      },
-    ]);
+    m.queue([leakedBg3Session()]);
     m.queue([{ id: 7, name: 'Deep Rock Galactic' }]);
 
     const recap = await hydrateRoomRecap(m.db, row, ENDED);
@@ -317,5 +325,47 @@ describe('hydrateRoomRecap', () => {
     // S-5: a span measured against `now` would grow every tick and re-edit the
     // recap for the whole grace window.
     expect(recap.spanMs).toBe(ENDED.getTime() - OPENED.getTime());
+  });
+});
+
+/**
+ * ROK-1692 — the brief-visit rule composed with the REAL hydration.
+ *
+ * The flush specs mock `hydrateRoomRecap` with empty activities, so they can
+ * never see that the D12 seam's `gameId` lands on the occupancy stay and comes
+ * back as an activity through the P2-2 fallback. A 20-second room where the
+ * seam read a game is therefore NOT a drive-by visit: it recaps.
+ */
+describe('a brief room whose stays carry a game still recaps (ROK-1692)', () => {
+  const emptySince = new Date(OPENED.getTime() + 20_000);
+  const quiet = { events: [], live: [] };
+
+  it('is not brief when a stay carries a game', async () => {
+    const m = buildMockDb();
+    m.queue([stay({ gameId: 7, leftAt: emptySince })]);
+    m.queue([]);
+    m.queue([{ id: 7, name: 'Deep Rock Galactic' }]);
+
+    const recap = await hydrateRoomRecap(m.db, row, emptySince);
+
+    expect(recap.activities).toEqual([
+      { name: 'Deep Rock Galactic', seconds: 20 },
+    ]);
+    expect(
+      isBriefVisit({ openedAt: OPENED, emptySince, ...quiet, ...recap }),
+    ).toBe(false);
+  });
+
+  it('is brief when no stay carries a game', async () => {
+    const m = buildMockDb();
+    m.queue([stay({ leftAt: emptySince })]);
+    m.queue([]);
+
+    const recap = await hydrateRoomRecap(m.db, row, emptySince);
+
+    expect(recap.activities).toEqual([]);
+    expect(
+      isBriefVisit({ openedAt: OPENED, emptySince, ...quiet, ...recap }),
+    ).toBe(true);
   });
 });
