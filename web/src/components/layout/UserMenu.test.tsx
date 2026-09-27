@@ -29,7 +29,8 @@ vi.mock('../../lib/avatar', () => ({
     toAvatarUser: (u: Record<string, unknown>) => u,
 }));
 
-vi.mock('../../hooks/use-focus-trap', () => ({
+vi.mock('../../hooks/use-focus-trap', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../hooks/use-focus-trap')>()),
     useFocusTrap: () => ({ current: null }),
 }));
 

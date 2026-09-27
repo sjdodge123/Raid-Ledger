@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { AA_SMALL_TEXT, composite, contrastRatio, stripComments } from './wcag-contrast';
 import { lightSchemes, lightTextRules } from './light-scheme-css';
+import { stripComments as stripCodeComments } from '../test/form-primitives-count';
 
 /**
  * Raw-hue light-contrast guard (ROK-1586 follow-up).
@@ -77,6 +78,46 @@ const CASES = RULES.filter((r) => TINT_500[r.hue] !== undefined).flatMap((r) =>
         }),
     ),
 );
+
+/**
+ * Every `[variant:]text-{hue}-{shade}/{alpha}` written in shipped markup — `web/src` minus the
+ * DEMO_MODE-only `dev/` tree and test files, comments stripped. `index.css` repaints only a
+ * handful of these opacity variants; any other one paints its dark-first hue on a light panel
+ * (`text-emerald-300/80` is ~1.5:1 on white). Use a token (`text-success` / `-warning` /
+ * `-danger`) instead — tokens flip with the scheme at any alpha.
+ */
+const SRC = resolve(__dirname, '..');
+const ALPHA_TEXT = /(?<![\w-])((?:[a-z-]+:)*)text-([a-z]+)-(\d{2,3})\/(\d{1,3})(?![\w-])/g;
+
+function alphaTextUses(): { where: string; cls: string }[] {
+    const files = (readdirSync(SRC, { recursive: true }) as string[])
+        .map((f) => f.split(sep).join('/'))
+        .filter((f) => /\.tsx?$/.test(f) && !/\.(test|spec)\.tsx?$/.test(f) && !f.startsWith('dev/'));
+    return files.sort().flatMap((f) => {
+        const src = readFileSync(join(SRC, f), 'utf-8');
+        return [...stripCodeComments(src).matchAll(ALPHA_TEXT)].map(([, variants, hue, shade, alpha]) => {
+            const cls = `${variants}text-${hue}-${shade}/${alpha}`;
+            return { where: `${f}:${src.split('\n').findIndex((l) => l.includes(cls)) + 1}`, cls };
+        });
+    });
+}
+
+const ALPHA_USES = alphaTextUses();
+const REPAINTED = new Set(RULES.map((r) => r.cls));
+
+describe('raw-hue opacity text variants in shipped markup', () => {
+    it('the scanner reads markup: it finds at least one repainted variant in use', () => {
+        expect(ALPHA_USES.some((u) => REPAINTED.has(u.cls)), 'no repainted `text-{hue}-{shade}/{alpha}` found — the scanner is not reading web/src').toBe(true);
+    });
+
+    it('every text-{hue}-{shade}/{alpha} outside web/src/dev has a light repaint in index.css', () => {
+        const unrepainted = ALPHA_USES.filter((u) => !REPAINTED.has(u.cls)).map((u) => `${u.where} ${u.cls}`);
+        expect(
+            unrepainted,
+            'these opacity variants have NO light repaint — they render the dark-first hue on a light panel. Use text-success / text-warning / text-danger (or a repainted class)',
+        ).toEqual([]);
+    });
+});
 
 describe('raw Tailwind accent hues on light (ROK-1586)', () => {
     it('finds every light scheme with a surface and panel', () => {

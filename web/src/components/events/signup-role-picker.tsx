@@ -42,7 +42,7 @@ export function RolePicker({ selectedRoles, onToggleRole, showMismatchWarning, m
                 ))}
             </div>
             {selectedRoles.length > 1 && (
-                <p className="text-xs text-emerald-400/80 mt-1.5">You'll be auto-assigned to the best available slot.</p>
+                <p className="text-xs text-success mt-1.5">You'll be auto-assigned to the best available slot.</p>
             )}
             {showMismatchWarning && mismatchDefaultRole && mismatchSelectedRole && selectedRoles.length === 1 && (
                 <p className="text-xs text-amber-400/80 mt-1.5">

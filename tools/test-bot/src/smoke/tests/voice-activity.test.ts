@@ -35,6 +35,7 @@ import {
   assertEmbedTitle,
   rosterEntries,
   rosterHasExactly,
+  SmokeAssertionError,
 } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
@@ -566,6 +567,113 @@ const lobbyPresenceEditsInPlace: SmokeTest = {
   },
 };
 
+/** The binding's grace for the brief-visit test, in minutes (the minimum). */
+const BRIEF_GRACE_MINUTES = 1;
+
+/**
+ * The API's presence drain cadence (`PRESENCE_FLUSH_INTERVAL_MS`). The empty
+ * room is first flushed within one tick, and re-flushed within one tick of its
+ * grace running out (ROK-1692) — never by waiting for the 5-min reaper cron.
+ */
+const PRESENCE_DRAIN_TICK_MS = 5_000;
+
+/**
+ * The brief-visit test's OWN channel (ROK-1692). `lobbyPresenceRenders` and
+ * `lobbyPresenceEditsInPlace` share index 2, and the latter ends with its row
+ * still OPEN — its binding's 5-min grace outlives the test and deleting a
+ * binding leaves the row. On index 2 this test's first flush re-lives that
+ * card, whose stays carry games, so it recaps instead of being deleted.
+ */
+const BRIEF_VISIT_CHANNEL_INDEX = 3;
+
+/** The voice/text index the other general-lobby tests bind. */
+const SHARED_LOBBY_CHANNEL_INDEX = 2;
+
+/** Fail fast (never retried) when the pool folds both indexes onto one channel. */
+function assertOwnLobbyChannel(ctx: TestContext): void {
+  const own = pickChannel(ctx.voiceChannels, BRIEF_VISIT_CHANNEL_INDEX);
+  const shared = pickChannel(ctx.voiceChannels, SHARED_LOBBY_CHANNEL_INDEX);
+  if (own.id === shared.id) {
+    throw new SmokeAssertionError(
+      `Brief-visit test needs a voice channel no other general-lobby test ` +
+        `binds, but the pool has ${String(ctx.voiceChannels.length)} voice ` +
+        `channel(s), so index ${String(BRIEF_VISIT_CHANNEL_INDEX)} and index ` +
+        `${String(SHARED_LOBBY_CHANNEL_INDEX)} are both ${own.name} (${own.id}).`,
+    );
+  }
+}
+
+/**
+ * The card `openLobbyRoom` handed back must be one THIS test posted.
+ *
+ * An inherited open row (an earlier test's card re-lived by the first flush)
+ * carries that test's history and is recapped rather than deleted; without
+ * this check the failure surfaces as a poll timeout that the runner retries,
+ * hiding it. A `SmokeAssertionError` is never retried and names the row.
+ */
+function assertFreshCard(
+  target: PresenceTarget,
+  textChannelId: string,
+  before: string[],
+): void {
+  if (target.textChannelId !== textChannelId) {
+    throw new SmokeAssertionError(
+      `Brief-visit room's open presence row posts to ${target.textChannelId}, ` +
+        `not this binding's notification channel ${textChannelId}: message ` +
+        `${target.messageId} is an inherited row, not a card this test posted.`,
+    );
+  }
+  if (before.includes(target.messageId)) {
+    throw new SmokeAssertionError(
+      `Brief-visit room re-lived message ${target.messageId}, which was ` +
+        `already in ${textChannelId} before this test opened its room: an ` +
+        `earlier test left the voice channel's presence row OPEN. A brief ` +
+        `visit must start from a card it owns.`,
+    );
+  }
+}
+
+/**
+ * ROK-1692 — a drive-by visit leaves no card behind.
+ *
+ * Its own test, because the room must be one where NOTHING happened: every
+ * member reads `gameId: null` and no event is linked. Any detected game recaps
+ * instead (see `assertBriefVisitDeleted`). The binding's grace is set to the
+ * one-minute minimum so the deletion lands inside a smoke run.
+ */
+const lobbyBriefVisitDeleted: SmokeTest = {
+  name: 'Lobby presence card of a brief visit is deleted',
+  category: 'voice',
+  async run(ctx) {
+    assertOwnLobbyChannel(ctx);
+    await withVoiceBinding(
+      ctx,
+      BRIEF_VISIT_CHANNEL_INDEX,
+      'general-lobby',
+      undefined,
+      async (vChId, tChId) => {
+        try {
+          const before = await botMessageIds(tChId);
+          const target = await openLobbyRoom(ctx, vChId, [
+            { discordUserId: 'rok1692-a', displayName: 'Ana', gameId: null },
+            { discordUserId: 'rok1692-b', displayName: 'Bo', gameId: null },
+          ]);
+          assertFreshCard(target, tChId, before);
+          await assertBriefVisitDeleted(
+            ctx,
+            target,
+            vChId,
+            BRIEF_GRACE_MINUTES * 60_000,
+          );
+        } finally {
+          await setLobbyPresence(ctx.api, vChId, null);
+        }
+      },
+      { minPlayers: 2, gracePeriod: BRIEF_GRACE_MINUTES },
+    );
+  },
+};
+
 /** Cass switches to game 1: the amber group folds into the LIVE one. */
 async function assertMergesIntoOneGroup(
   ctx: TestContext,
@@ -636,6 +744,82 @@ async function assertFoldsIntoRecap(
     `A new bot message appeared in ${target.textChannelId} after the recap. ` +
       `Completions fold into the existing presence message (AC7/D9) — a lobby ` +
       `session must never post a second card.`,
+  );
+}
+
+/**
+ * Does Discord still have this message? A REST fetch (never the cache) that
+ * answers 10008 "Unknown Message" means it was deleted.
+ */
+async function messageExists(
+  channelId: string,
+  messageId: string,
+): Promise<boolean> {
+  const channel = await getClient().channels.fetch(channelId);
+  if (!channel?.isTextBased()) {
+    throw new Error(`Channel ${channelId} is not a text channel`);
+  }
+  try {
+    await channel.messages.fetch({ message: messageId, force: true });
+    return true;
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 10008) return false;
+    throw err;
+  }
+}
+
+/**
+ * The room empties and the grace runs out: a drive-by visit's card is DELETED
+ * (ROK-1692).
+ *
+ * Every member reads `gameId: null` and no event is linked, so nothing
+ * happened in the room — the only shape the operator ruled a drive-by. (A seam
+ * member WITH a `gameId` lands on the occupancy stay and recaps through the
+ * P2-2 fallback; `lobbyPresenceEditsInPlace` pins that recap.) The decision is
+ * taken only once the binding's grace has run out, and the API re-flushes the
+ * empty room on the first drain tick after that (ROK-1692) — so the delete
+ * lands by grace + two ticks. The poll allows that plus the usual timeout of
+ * headroom, and does not depend on the 5-min reaper cron. NOTHING posts in the
+ * card's place either — the AC7 clause: a lobby session never emits a second
+ * card.
+ */
+async function assertBriefVisitDeleted(
+  ctx: TestContext,
+  target: PresenceTarget,
+  vChId: string,
+  graceMs: number,
+): Promise<void> {
+  const seen = await botMessageIds(target.textChannelId);
+  // `[]` is an EMPTY ROOM (the recap path). It is NOT `null`, which would clear
+  // the override and hand the channel back to real Discord reads.
+  await setLobbyPresence(ctx.api, vChId, []);
+  try {
+    await pollForCondition(
+      async () =>
+        (await messageExists(target.textChannelId, target.messageId))
+          ? null
+          : true,
+      graceMs + 2 * PRESENCE_DRAIN_TICK_MS + ctx.config.timeoutMs,
+      { intervalMs: 1000 },
+    );
+  } catch (err) {
+    throw new Error(
+      `A brief visit's card must be DELETED once the room has been empty for ` +
+        `the grace (ROK-1692), ` +
+        `but message ${target.messageId} still exists and renders ` +
+        `${await describeMessage(target)}. ` +
+        `(underlying: ${(err as Error).message})`,
+    );
+  }
+  await assertConditionNeverMet(
+    async () => {
+      const now = await botMessageIds(target.textChannelId);
+      return now.some((id) => !seen.includes(id));
+    },
+    20_000,
+    `A new bot message appeared in ${target.textChannelId} after the brief ` +
+      `visit's card was deleted. A lobby session never posts a second card ` +
+      `(AC7/D9), and a drive-by visit's card is deleted, never replaced (ROK-1692).`,
   );
 }
 
@@ -1202,6 +1386,7 @@ export const voiceActivityTests: SmokeTest[] = [
   classifyPopulatesAttendance,
   lobbyPresenceRenders,
   lobbyPresenceEditsInPlace,
+  lobbyBriefVisitDeleted,
   ...(includeSlow ? [metricsVoicePopulated] : []),
   ...(canJoinVoice
     ? [voiceMemberList, multiGameVoiceDetected, siblingBindingSuppression, attendancePipelineE2E]

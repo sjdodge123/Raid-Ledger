@@ -8,18 +8,21 @@
  * The ladder, in order, is the whole contract:
  * 1. no binding  → recap what we can, close the row `unbound`;
  * 2. room empty  → stamp `empty_since`, render the recap, close once the
- *    binding's grace has elapsed AND no session is still live (D8);
+ *    binding's grace has elapsed AND no session is still live (D8) — or, at
+ *    that same close, delete a brief visit's card instead (ROK-1692). The
+ *    flush returns when that grace runs out so the service re-flushes the
+ *    room then, instead of waiting for the 5-min reaper;
  * 3. room live   → open the row + post on first occupancy, otherwise edit in
  *    place — and only when the payload hash actually moved (D5/AC5);
  * 3a. room live but the row's `empty_since` outlived the grace → the prior
- *    session is over: close that row `stale`, then treat as first occupancy
- *    so a NEW message is posted (ROK-1498).
+ *    session is over: close that row `stale` (or delete a brief visit's card
+ *    and close it `brief`, ROK-1692), then treat as first occupancy so a NEW
+ *    message is posted (ROK-1498).
  */
 import type { Logger } from '@nestjs/common';
 import {
   editEmbeds,
   isUnknownMessage,
-  sendEmbeds,
 } from '../discord-bot-client.messages.helpers';
 import type { ChannelEmbed } from '../embeds/embed-chrome.helpers';
 import {
@@ -27,12 +30,11 @@ import {
   type ResolvedBinding,
 } from '../listeners/voice-state.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
-import {
-  buildContext,
-  resolveNotificationChannel,
-} from './ad-hoc-notification.helpers';
+import { buildContext } from './ad-hoc-notification.helpers';
+import { openMessage } from './channel-presence-flush.open';
 import {
   graceMs,
+  graceRecheckAt,
   hydrateRecap,
   isCloseDue,
   isSessionExpired,
@@ -41,7 +43,6 @@ import {
   renderRecapMessage,
 } from './channel-presence-flush.helpers';
 import {
-  findLinkedEvents,
   resolveRoom,
   type ResolvedRoom,
   type RoomResolveDeps,
@@ -54,11 +55,16 @@ import {
 import { closeAllOccupancy } from './channel-presence-occupancy.helpers';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
 import {
+  isBriefSession,
+  loadEndedSession,
+  retireBriefVisit,
+  retireIfBrief,
+} from './channel-presence-brief-visit';
+import {
   clearEmpty,
   closeRow,
   findOpenRow,
   markEmpty,
-  openRow,
   savePayloadHash,
   type PresenceRow,
 } from './channel-presence-store.helpers';
@@ -109,14 +115,18 @@ interface FlushState {
  * the caller can log them per channel and keep the tick alive.
  *
  * @param flush - The channel, its binding, and the deps to resolve both.
+ * @returns When this channel must be flushed again although nothing marks it
+ *   dirty — the instant an empty room's grace runs out (ROK-1692) — or `null`.
  */
-export async function flushChannel(flush: ChannelFlush): Promise<void> {
+export async function flushChannel(
+  flush: ChannelFlush,
+): Promise<number | null> {
   const now = flush.now ?? Date.now();
   const { deps, channelId, guildId, binding } = flush;
   const row = await findOpenRow(deps.db, guildId, channelId);
   if (!binding) {
     if (row) await closeUnbound({ flush, row, now });
-    return;
+    return null;
   }
   const room = await resolveRoom(deps, channelId, binding, flush.override);
   if (room.channelResolved === false) {
@@ -128,13 +138,16 @@ export async function flushChannel(flush: ChannelFlush): Promise<void> {
     flush.logger.warn(
       `Voice channel ${channelId} did not resolve; skipping presence flush`,
     );
-    return;
+    return null;
   }
   if (room.memberCount === 0) {
-    if (row) await flushEmpty({ flush, row, now }, room, binding);
-    return;
+    if (!row) return null;
+    await flushEmpty({ flush, row, now }, room, binding);
+    const emptySince = row.emptySince ?? new Date(now);
+    return graceRecheckAt(emptySince, graceMs(binding.config), now);
   }
   await flushLive(flush, row, room, binding, now);
+  return null;
 }
 
 /**
@@ -160,6 +173,10 @@ async function retireExpiredRow(
   if (!row || !isSessionExpired(row.emptySince, graceMs(binding.config), now)) {
     return row;
   }
+  // ROK-1692: a rejoin that beat the grace re-check must not leave a brief
+  // visit's "<1m" recap in the channel forever beside the fresh card.
+  const bindingId = row.bindingId ?? binding.bindingId;
+  if (await retireIfBrief(flush, row, bindingId, now)) return null;
   flush.logger.log(
     `Presence row ${row.id} for ${flush.channelId} outlived its grace; closing stale and posting a fresh message (ROK-1498)`,
   );
@@ -227,26 +244,57 @@ async function flushEmpty(
       `Presence row ${row.id} lost its binding id; recapping against the channel's current binding ${bindingId} (ROK-1524)`,
     );
   }
-  const events = await hydrateRecap(flush.deps, bindingId, row.openedAt);
-  await renderAndPublishRecap(state, {
+  await recapOrRetire(state, {
     channelName: room.channelName,
-    endedAt: emptySince.getTime(),
-    events,
-    room: await roomRecapFor(flush, row, emptySince, now),
+    binding,
+    bindingId,
+    emptySince,
   });
-  await closeIfDue(state, binding, bindingId, emptySince);
 }
 
-/** D8's both clauses: the grace has elapsed AND no session is still live. */
-async function closeIfDue(
+/**
+ * Edit the message into its recap and close once due — or, for a drive-by
+ * visit (under two minutes, no game, no event), delete the card and close the
+ * row instead of recapping "0m" (ROK-1692).
+ *
+ * The brief-visit call is made only where the row would close anyway: after
+ * the same empty grace (D8). Until then a brief visit recaps like any other,
+ * so a quick reconnect re-lives THIS card instead of deleting it and posting a
+ * fresh one — and the decision reads the activities the buffer settled into.
+ */
+async function recapOrRetire(
   state: FlushState,
-  binding: ResolvedBinding,
-  bindingId: string,
-  emptySince: Date,
+  empty: {
+    channelName: ResolvedRoom['channelName'];
+    binding: ResolvedBinding;
+    bindingId: string;
+    emptySince: Date;
+  },
 ): Promise<void> {
   const { flush, row, now } = state;
-  const live = await findLinkedEvents(flush.deps.db, bindingId);
-  if (!isCloseDue(emptySince, graceMs(binding.config), now, live)) return;
+  const { bindingId, emptySince } = empty;
+  const session = await loadEndedSession(flush, row, {
+    bindingId,
+    emptySince,
+    now,
+  });
+  const grace = graceMs(empty.binding.config);
+  const due = isCloseDue(emptySince, grace, now, session.live);
+  const brief = due && isBriefSession(row, emptySince, session);
+  // A delete that failed for any reason but 10008 falls through to the recap.
+  if (brief && (await retireBriefVisit(flush, row, emptySince))) return;
+  await renderAndPublishRecap(state, {
+    channelName: empty.channelName,
+    endedAt: emptySince.getTime(),
+    events: session.events,
+    room: session.room,
+  });
+  if (due) await closeEmpty(state, emptySince);
+}
+
+/** D8's both clauses held (grace elapsed, nothing live): close `empty`. */
+async function closeEmpty(state: FlushState, emptySince: Date): Promise<void> {
+  const { flush, row } = state;
   await closeRow(flush.deps.db, row.id, 'empty', emptySince);
   flush.roomRecaps?.delete(row.id);
 }
@@ -324,76 +372,6 @@ async function renderAndPublishRecap(
     now,
   );
   await publish(state, embeds);
-}
-
-/**
- * First occupancy: post the message, then record it (D7 — the DB is truth).
- *
- * `openRow` is a partial-index-safe upsert, so a lost race returns the row
- * that won rather than throwing. The hash is stored only for the row we
- * actually posted; on a lost race the winner's message is the live one and its
- * own flush owns the hash.
- */
-async function openMessage(
-  flush: ChannelFlush,
-  embeds: ChannelEmbed[],
-  openedAt: Date,
-): Promise<string | null> {
-  const binding = flush.binding;
-  if (!binding) return null;
-  const textChannelId = await resolveNotificationChannel(
-    flush.deps,
-    binding.bindingId,
-    null,
-  );
-  if (!textChannelId) {
-    flush.logger.warn(
-      `No text channel resolved for lobby presence in ${flush.channelId}`,
-    );
-    return null;
-  }
-  const client = flush.deps.clientService.getClient();
-  const message = await sendEmbeds(client, textChannelId, embeds);
-  return recordOpenedMessage(
-    flush,
-    binding.bindingId,
-    { textChannelId, messageId: message.id, embeds },
-    openedAt,
-  );
-}
-
-/**
- * Write the ledger row for a message we just posted, or disown it on a race.
- *
- * @returns The id of the row WE own, or `null` when another writer won it —
- *   the winner's flush owns its occupancy as well as its hash.
- */
-async function recordOpenedMessage(
-  flush: ChannelFlush,
-  bindingId: string,
-  posted: { textChannelId: string; messageId: string; embeds: ChannelEmbed[] },
-  openedAt: Date,
-): Promise<string | null> {
-  const result = await openRow(flush.deps.db, {
-    guildId: flush.guildId,
-    voiceChannelId: flush.channelId,
-    bindingId,
-    textChannelId: posted.textChannelId,
-    messageId: posted.messageId,
-    openedAt,
-  });
-  if (!result.created) {
-    flush.logger.warn(
-      `Presence row for ${flush.channelId} was opened concurrently; message ${posted.messageId} is orphaned`,
-    );
-    return null;
-  }
-  await savePayloadHash(
-    flush.deps.db,
-    result.row.id,
-    payloadHashOf(posted.embeds),
-  );
-  return result.row.id;
 }
 
 /**

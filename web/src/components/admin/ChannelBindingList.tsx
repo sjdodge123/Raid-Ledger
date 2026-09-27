@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/contract';
 import { classifyBindingTriple } from '@raid-ledger/contract';
+import { Button } from '../ui/button';
 import { BindingConfigForm } from './BindingConfigForm';
 import { useMultiMonitorChannels } from './use-multi-monitor-channels';
 
@@ -44,9 +45,10 @@ function BindingBadge({ purpose }: { purpose: string }) {
     return <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${badge.className}`}>{badge.label}</span>;
 }
 
+/** Status tone on the danger tokens (design-system §4.7) so it reads in both colour families. */
 function InertBadge() {
     return (
-        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-600/40 text-red-100">
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-danger/10 text-danger border border-danger/30">
             ⚠ INERT — Quick Play can&apos;t fire
         </span>
     );
@@ -84,20 +86,17 @@ function BindingActions({ binding, isEditing, isInert, onToggleEdit, onFix, onDe
     binding: ChannelBindingDto; isEditing: boolean; isInert: boolean; onToggleEdit: () => void; onFix: () => void;
     onDelete: (id: string) => void; isDeleting: boolean; deletingId: string | null;
 }) {
+    const isRemoving = isDeleting && deletingId === binding.id;
     return (
-        <div className="flex items-center gap-2 flex-shrink-0">
-            {isInert && !isEditing && (
-                <button onClick={onFix} className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors">
-                    Fix &rarr;
-                </button>
-            )}
-            <button onClick={onToggleEdit} className="px-3 py-1.5 text-xs bg-overlay hover:bg-faint text-foreground rounded-lg transition-colors">
+        <div data-testid="channel-binding-actions" className="flex flex-wrap items-center gap-2 flex-shrink-0">
+            {isInert && !isEditing && <Button size="sm" onClick={onFix}>Fix &rarr;</Button>}
+            <Button size="sm" variant="secondary" onClick={onToggleEdit}>
                 {isEditing ? 'Close' : 'Edit'}
-            </button>
-            <button onClick={() => onDelete(binding.id)} disabled={isDeleting && deletingId === binding.id}
-                className="px-3 py-1.5 text-xs bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors disabled:opacity-50">
-                {isDeleting && deletingId === binding.id ? 'Removing...' : 'Remove'}
-            </button>
+            </Button>
+            <Button size="sm" variant="destructive-soft" onClick={() => onDelete(binding.id)}
+                loading={isRemoving} loadingLabel="Removing...">
+                Remove
+            </Button>
         </div>
     );
 }
@@ -111,7 +110,9 @@ function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpda
     const isInert = isBindingInert(binding);
     return (
         <div key={binding.id}>
-            <div className={`flex items-center justify-between p-4 rounded-lg border ${isInert ? 'bg-red-500/5 border-red-500/30' : 'bg-panel/50 border-edge'}`}>
+            {/* Below sm the 44px action cluster stacks under the info block so it can't squeeze it; a row from sm. */}
+            <div data-testid="channel-binding-row"
+                className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0 p-4 rounded-lg border ${isInert ? 'bg-danger/5 border-danger/30' : 'bg-panel/50 border-edge'}`}>
                 <BindingInfo binding={binding} hasMultiMonitor={hasMultiMonitor} isInert={isInert} />
                 <BindingActions binding={binding} isEditing={isEditing} isInert={isInert}
                     onToggleEdit={() => setEditingId(isEditing ? null : binding.id)}

@@ -36,7 +36,7 @@ import {
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
-import { formatDurationMs } from '../utils/format-duration';
+import { formatRecapDurationMs } from '../utils/format-duration';
 
 const SPEAKER = '\u{1F50A}'; // 🔊
 const SEP = '·'; // ·
@@ -113,7 +113,8 @@ function activityTokens(room: RoomRecap): string[] {
   const shown = room.activities
     .slice(0, MAX_RECAP_ACTIVITIES)
     .map(
-      (a) => `${sanitizeName(a.name)} (${formatDurationMs(a.seconds * 1000)})`,
+      (a) =>
+        `${sanitizeName(a.name)} (${formatRecapDurationMs(a.seconds * 1000)})`,
     );
   const hidden = room.activities.length - shown.length;
   return hidden > 0 ? [...shown, `+${String(hidden)} more`] : shown;
@@ -174,7 +175,7 @@ function recapTitle(
 ): string {
   const head = `${SPEAKER} ${channelName ?? UNKNOWN_CHANNEL_NAME} ${SEP} session ended`;
   return room && room.spanMs > 0
-    ? `${head} ${SEP} ${formatDurationMs(room.spanMs)}`
+    ? `${head} ${SEP} ${formatRecapDurationMs(room.spanMs)}`
     : head;
 }
 

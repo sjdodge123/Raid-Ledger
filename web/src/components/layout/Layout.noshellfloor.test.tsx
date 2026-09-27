@@ -61,10 +61,15 @@ describe('ROK-1661 experiment: ?noshellfloor=1 (DEMO_MODE only)', () => {
     it('in DEMO_MODE the flag drops min-h-dvh, the inline floor and the viewport sentinel', async () => {
         const { container } = renderLayout('/calendar?noshellfloor=1');
         const root = container.firstElementChild as HTMLElement;
-        await waitFor(() => expect(root).not.toHaveClass('min-h-dvh'));
+        // The sentinel leaves in useShellHeight's effect cleanup, a passive
+        // effect that can flush after the commit that drops the class — so it
+        // is awaited too, not read synchronously after the class check.
+        await waitFor(() => {
+            expect(root).not.toHaveClass('min-h-dvh');
+            expect(sentinel()).toBeNull();
+        });
         expect(root.style.minHeight).toBe('');
         expect(root).toHaveClass('bg-backdrop', 'flex', 'flex-col');
-        expect(sentinel()).toBeNull();
         expect(screen.getByTestId('footer')).toBeInTheDocument();
     });
 

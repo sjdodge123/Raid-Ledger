@@ -217,8 +217,8 @@ function ProfessionRowEditor({
     draft, onChange, onRemove, maxSkill, availableOptions,
 }: ProfessionRowEditorProps) {
     return (
-        <div className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+            <div className="basis-full sm:basis-auto flex-1 min-w-0">
                 <Select aria-label="Profession" placeholder="Select profession…" value={draft.name}
                     onChange={(e) => onChange({ ...draft, name: e.target.value })}>
                     {availableOptions.map((name) => (
