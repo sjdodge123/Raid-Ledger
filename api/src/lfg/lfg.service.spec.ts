@@ -29,7 +29,7 @@ import type { LfgGroupChangedPayload } from './lfg.constants';
 import { LfgService } from './lfg.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
-import { LFG_EVENTS } from './lfg.constants';
+import { LFG_EVENTS, LFG_EXPIRY_DAYS } from './lfg.constants';
 
 const GAME_ID = 7;
 const MINUTE_MS = 60 * 1000;
@@ -53,7 +53,7 @@ function intentRow(overrides: Record<string, unknown> = {}) {
     visibility: 'local',
     createdAt: new Date('2026-09-01T10:00:00Z'),
     // Relative so the row stays live whatever day the suite runs on.
-    expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+    expiresAt: new Date(Date.now() + LFG_EXPIRY_DAYS * 24 * 60 * 60 * 1000),
     urgency: 'week',
     ttlMinutes: null,
     convertedToPollId: null,
@@ -423,7 +423,7 @@ describe('LfgService lifecycle events', () => {
         ttlMinutes: null,
       });
       expect(minutesFromNow(insertedValues().expiresAt as Date)).toBe(
-        14 * 24 * 60,
+        LFG_EXPIRY_DAYS * 24 * 60,
       );
     });
 
