@@ -797,20 +797,28 @@ failure with nothing applied is still a hard failure, because reporting
 "deployed" for an env with no credentials is the trap the step exists to
 prevent.
 
-**Precedence: a fresh sync wins (operator ruling 2026-09-27).** After a
-SUCCESSFUL `sync_settings`, `rl_env_deploy` runs the overlay with
-`--identity-only`: the container writes only the slot identity and
-`demo_mode`, and reports the bundle's shared keys as `skipped_keys` /
-`skipped_count`, so a stale `bundle.enc` cannot overwrite the fresher laptop
-values. When the sync failed or was unavailable, the full bundle applies as
-before. The bundle is read either way, so `bundle_warning` still surfaces on a
-green deploy. `identity_only: false` on an identity-only request means the env
-image predates the flag (it applied everything); the deploy message says so.
+**Precedence: a fresh sync wins (operator ruling 2026-09-27).** When the
+laptop's `app_settings` landed — a SUCCESSFUL `sync_settings`, or a
+successful `clone_prod`, which rewrites `app_settings` from the laptop too —
+`rl_env_deploy` runs the overlay with `--sync-wins`:
+
+| Key | After a good sync / clone_prod (`--sync-wins`) | Sync failed or unavailable |
+| --- | --- | --- |
+| Slot identity + `demo_mode` (`IDENTITY_KEYS`) | UPSERT — the slot wins → `applied` | UPSERT → `applied` |
+| Bundle key the sync already wrote | left as synced → `kept_synced` | UPSERT — the bundle wins → `applied` |
+| Bundle key the laptop DB lacked | INSERT (`ON CONFLICT DO NOTHING`) → `inserted_if_absent` | UPSERT → `applied` |
+
+So a stale `bundle.enc` never overwrites a fresher laptop value, and an env
+never loses a key only the bundle holds. The overlay output carries key NAMES
+and counts only (`inserted_count`, `kept_count`, `sync_wins`). The bundle is
+read either way, so `bundle_warning` still surfaces on a green deploy.
+`sync_wins: false` on a sync-wins request means the env image predates the
+flag (it UPSERTed everything); the deploy message says so.
 
 The flag has to exist in two places that ship separately: the VM orchestrator
 (`bin/env-settings-overlay`, moved only by `./rl-infra/deploy.sh`) and the
 env image. An orchestrator that predates it rejects the flag (`unknown arg:
---identity-only`); the laptop MCP then retries once WITHOUT it, so the slot
+--sync-wins`); the laptop MCP then retries once WITHOUT it, so the slot
 identity still lands, and reports `orchestrator_outdated: true` — the bundle
 overwrote the synced shared keys, and the deploy message says to run
 `./rl-infra/deploy.sh`. A settings overlay that fails outright is named in the
@@ -820,7 +828,7 @@ green deploy message too: the env is then on the laptop's shared bot token.
 from the operator's laptop, so the VM orchestrator knows the new flag; (2)
 reload the laptop MCP server (`mcp-rl-fleet`); (3) rebuild the env image
 (`rl_env_deploy` builds from the branch). Reloading the MCP first is safe
-since the retry above, but until step 1 runs every identity-only deploy
+since the retry above, but until step 1 runs every sync-wins deploy
 falls back to the full bundle.
 
 ## Agent MCP tool reference (canonical — moved from CLAUDE.md 2026-06-06)
