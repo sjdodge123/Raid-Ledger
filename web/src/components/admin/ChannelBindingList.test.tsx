@@ -401,9 +401,13 @@ it('disables Remove button when isDeleting and deletingId matches', () => {
       />,
     );
 
-    expect(
-      screen.getByRole('button', { name: 'Removing...' }),
-    ).toBeDisabled();
+    // Button `loading` blocks the row via aria-disabled (not native disabled, so
+    // focus stays) and swallows clicks: a second press must not delete again.
+    const removing = screen.getByRole('button', { name: 'Removing...' });
+    expect(removing).toHaveAttribute('aria-disabled', 'true');
+    expect(removing).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(removing);
+    expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
 }
