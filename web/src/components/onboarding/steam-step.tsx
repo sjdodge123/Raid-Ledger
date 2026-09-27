@@ -19,17 +19,29 @@ function SteamStepHeader() {
 }
 
 /**
+ * Steam's own brand pair (the fill + hover of origin/main's anchor and the
+ * Retry button below). `brandColor` paints the fill; its default hover is
+ * `brightness-110`, so the Steam hover colour is restored with important
+ * modifiers (they must beat the inline fill). See PR notes, "New pattern".
+ */
+const STEAM_FILL = '#171a21';
+const STEAM_HOVER_CLS = 'hover:bg-[#2a475e]! hover:filter-none!';
+/** The old anchor's label: 16px/600 with a 12px icon gap (48px tall at py-3). */
+const STEAM_LABEL_CLS = 'inline-flex items-center gap-3 text-base font-semibold';
+
+/**
  * Primary "Connect Steam" button. ROK-1630: a real button, not an <a href> —
  * the Steam hop needs a single-use nonce minted on click, so there is no URL
- * to render up front. The shared Button with Steam's brand fill, like the
- * login page's provider buttons (design-system §4.11). `disabled` as well as
- * `loading`, so a pending start cannot fire twice from the keyboard either.
+ * to render up front. The shared Button with Steam's brand fill (design-system
+ * §4.11), styled to match the anchor it replaced pixel for pixel (AC16).
+ * `disabled` as well as `loading`, so a pending start cannot fire twice from
+ * the keyboard either.
  */
 function ConnectSteamButton({ isRedirecting, onClick }: { isRedirecting: boolean; onClick: () => void }) {
     return (
-        <Button onClick={onClick} size="lg" fullWidth brandColor="#171a21" loading={isRedirecting}
-            disabled={isRedirecting} loadingLabel="Redirecting to Steam...">
-            <SteamIcon className="w-5 h-5" />Connect Steam
+        <Button onClick={onClick} size="lg" fullWidth brandColor={STEAM_FILL} className={STEAM_HOVER_CLS}
+            loading={isRedirecting} disabled={isRedirecting} loadingLabel="Redirecting to Steam...">
+            <span className={STEAM_LABEL_CLS}><SteamIcon className="w-5 h-5" />Connect Steam</span>
         </Button>
     );
 }

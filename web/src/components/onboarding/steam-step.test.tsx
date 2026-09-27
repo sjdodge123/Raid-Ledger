@@ -40,6 +40,18 @@ describe('SteamStep connect control (ROK-1630 AC16)', () => {
         expect(button).toHaveStyle({ backgroundColor: '#171a21' });
     });
 
+    it('matches the replaced anchor exactly: 48px (py-3 + 16px/24px label), 16px/600, 12px gap, #2a475e hover', () => {
+        renderStep();
+        const button = screen.getByRole('button', { name: /connect steam/i });
+        for (const cls of ['w-full', 'px-4', 'py-3', 'min-h-[44px]', 'rounded-lg', 'transition-colors',
+            'hover:bg-[#2a475e]!', 'hover:filter-none!']) {
+            expect(button).toHaveClass(cls);
+        }
+        const label = screen.getByText('Connect Steam');
+        expect(label).toHaveClass('text-base', 'font-semibold', 'gap-3', 'inline-flex', 'items-center');
+        expect(label.querySelector('svg')).toHaveClass('w-5', 'h-5');
+    });
+
     it('clicking starts the Steam link with returnTo /onboarding', () => {
         renderStep();
         fireEvent.click(screen.getByRole('button', { name: /connect steam/i }));
