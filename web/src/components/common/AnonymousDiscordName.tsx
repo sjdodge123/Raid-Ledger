@@ -1,8 +1,9 @@
 /**
  * AnonymousDiscordName — the name of a Discord user who signed up without a
  * Raid Ledger account (ROK-1694). There is no member row behind it (the API
- * sends user id 0), so it is plain text plus a "via Discord" chip — never a
- * link to a profile.
+ * sends user id 0), so it is plain text plus a "via Discord" chip and is not
+ * interactive itself: roster list rows wrap it in the ROK-381 guest-profile
+ * link (`lib/guest-profile-link.ts`), the same one roster slot cards use.
  */
 
 /** The chip's raw-hue classes are repainted for the six light schemes in index.css. */

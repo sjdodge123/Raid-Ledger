@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, within, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { EventDetailRoster } from './EventDetailRoster';
 import { createMockEvent } from '../../test/factories';
 import type { EventRosterDto } from '@raid-ledger/contract';
@@ -239,20 +239,67 @@ function profileLinksTo(container: HTMLElement, userId: number) {
     return container.querySelectorAll(`a[href="/users/${userId}"]`);
 }
 
+/** The ROK-381 guest route state a roster slot card passes for the same account-less signup. */
+const GUEST_STATE = { guest: true, username: 'DiscordGuy', discordId: '999', avatarHash: null };
+
+function ProfileProbe() {
+    const location = useLocation();
+    return (
+        <>
+            <div data-testid="probe-path">{location.pathname}</div>
+            <div data-testid="probe-state">{JSON.stringify(location.state ?? null)}</div>
+        </>
+    );
+}
+
+function renderRosterWithProfileRoute(roster: EventRosterDto) {
+    return render(
+        <MemoryRouter initialEntries={['/events/1']}>
+            <Routes>
+                <Route path="/events/1" element={<EventDetailRoster roster={roster} event={createMockEvent()} />} />
+                <Route path="/users/:id" element={<ProfileProbe />} />
+            </Routes>
+        </MemoryRouter>,
+    );
+}
+
+/** Follow the anonymous row's link; return where it landed (path + ROK-381 guest state). */
+function followAnonymousRowLink(signup: ReturnType<typeof createSignup>) {
+    const { container } = renderRosterWithProfileRoute(createRoster([signup]));
+    const links = profileLinksTo(container, 0);
+    expect(links, 'an anonymous roster row must link to the ROK-381 guest profile (/users/0)').toHaveLength(1);
+    const link = links[0] as HTMLElement;
+    expect(within(link).queryByText('DiscordGuy'), 'the Discord name renders inside the link').not.toBeNull();
+    expect(within(link).queryByText('via Discord'), 'the "via Discord" chip renders inside the link').not.toBeNull();
+    expect(link.querySelector('a, button'), 'no interactive element nested inside the link').toBeNull();
+    fireEvent.click(link);
+    return {
+        path: screen.getByTestId('probe-path').textContent,
+        state: JSON.parse(screen.getByTestId('probe-state').textContent ?? 'null') as unknown,
+    };
+}
+
+// Operator ruling 2026-09-27 (ROK-1694 Option B): list rows link an account-less Discord signup to the
+// SAME ROK-381 guest profile the slot cards use. Supersedes the old "no roster surface links to /users/0" AC.
 describe('EventDetailRoster — anonymous Discord signups (ROK-1694)', () => {
-    it('a CONFIRMED anonymous signup shows its Discord name + "via Discord" chip and no /users/0 link', () => {
-        const { container } = renderRoster(createRoster([createAnonymousSignup()]));
-        expect(profileLinksTo(container, 0)).toHaveLength(0);
-        expect(screen.getByText(/Confirmed \(1\)/)).toBeInTheDocument();
-        expect(screen.getByText('DiscordGuy')).toBeInTheDocument();
-        expect(screen.getByText('via Discord')).toBeInTheDocument();
+    it('a CONFIRMED anonymous row renders name + "via Discord" chip inside the ROK-381 guest-profile link', () => {
+        const landed = followAnonymousRowLink(createAnonymousSignup());
+        expect(landed).toEqual({ path: '/users/0', state: GUEST_STATE });
     });
 
-    it('a pending anonymous signup (routed to Confirmed) also renders the label, not a link', () => {
-        const signup = createAnonymousSignup({ confirmationStatus: 'pending' });
-        const { container } = renderRoster(createRoster([signup]));
-        expect(screen.getByText('via Discord')).toBeInTheDocument();
-        expect(profileLinksTo(container, 0)).toHaveLength(0);
+    it('a pending anonymous signup (routed to Confirmed) links to the guest profile too', () => {
+        const landed = followAnonymousRowLink(createAnonymousSignup({ confirmationStatus: 'pending' }));
+        expect(landed).toEqual({ path: '/users/0', state: GUEST_STATE });
+    });
+
+    it('a TENTATIVE anonymous row links to the guest profile with the chip', () => {
+        const landed = followAnonymousRowLink(createAnonymousSignup({ status: 'tentative' }));
+        expect(landed).toEqual({ path: '/users/0', state: GUEST_STATE });
+    });
+
+    it('a DEPARTED anonymous row links to the guest profile with the chip', () => {
+        const landed = followAnonymousRowLink(createAnonymousSignup({ status: 'departed' }));
+        expect(landed).toEqual({ path: '/users/0', state: GUEST_STATE });
     });
 
     it('keeps role icons for a confirmed anonymous signup', () => {
@@ -260,7 +307,7 @@ describe('EventDetailRoster — anonymous Discord signups (ROK-1694)', () => {
         expect(screen.getByAltText('healer')).toBeInTheDocument();
     });
 
-    it('no roster group links to /users/0, while members still link to their profile', () => {
+    it('every group links anonymous rows to the guest profile, while a member still links to /users/<id>', () => {
         const signups = [
             createAnonymousSignup({ id: 91 }),
             createAnonymousSignup({ id: 92, status: 'tentative' }),
@@ -268,8 +315,9 @@ describe('EventDetailRoster — anonymous Discord signups (ROK-1694)', () => {
             createSignup({ id: 94 }),
         ];
         const { container } = renderRoster(createRoster(signups));
-        expect(screen.getAllByText('via Discord')).toHaveLength(3);
-        expect(profileLinksTo(container, 0)).toHaveLength(0);
-        expect(profileLinksTo(container, 10)).toHaveLength(1);
+        const guestLinks = [...profileLinksTo(container, 0)];
+        expect(guestLinks, 'Confirmed, Tentative and Departed anonymous rows each link to /users/0').toHaveLength(3);
+        guestLinks.forEach((a) => expect(within(a as HTMLElement).queryByText('via Discord')).not.toBeNull());
+        expect(profileLinksTo(container, 10), 'the member links to their own profile').toHaveLength(1);
     });
 });

@@ -29,10 +29,10 @@ function renderName() {
 }
 
 describe('AnonymousDiscordName (ROK-1694)', () => {
-    it('renders the Discord name and a "via Discord" chip, and never a link', () => {
+    it('renders the Discord name and a "via Discord" chip, and is not a link itself (callers wrap it in the guest-profile link)', () => {
         const { container } = renderName();
         expect(screen.getByText('DiscordGuy')).toBeInTheDocument();
-        expect(container.querySelector('a'), 'an account-less Discord signup must not link anywhere').toBeNull();
+        expect(container.querySelector('a'), 'the name + chip is not interactive itself — the caller supplies the ROK-381 guest-profile link').toBeNull();
     });
 
     it('every raw-hue class on the chip is repainted for the light schemes', () => {

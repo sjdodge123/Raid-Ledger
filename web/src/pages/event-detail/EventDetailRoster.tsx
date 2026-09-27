@@ -1,7 +1,9 @@
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import { UserLink } from '../../components/common/UserLink';
 import { AnonymousDiscordName } from '../../components/common/AnonymousDiscordName';
 import { toAvatarUser } from '../../lib/avatar';
+import { guestProfileLink } from '../../lib/guest-profile-link';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
 import { RoleIcon } from '../../components/shared/RoleIcon';
 import { PluginSlot } from '../../plugins';
@@ -62,11 +64,18 @@ function RunningLateBadge({ signup }: { signup: Pick<SignupItem, 'runningLate' |
     );
 }
 
+/** Anonymous Discord signup → the ROK-381 guest profile, the same link its roster slot card uses (ROK-1694). */
 function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
-    return <AnonymousDiscordName name={signup.discordUsername ?? signup.user.username} />;
+    const name = signup.discordUsername ?? signup.user.username;
+    const { to, state } = guestProfileLink({ username: name, discordId: signup.user.discordId, avatarHash: signup.user.avatar });
+    return (
+        <Link to={to} state={state} className="group inline-flex min-w-0 rounded">
+            <AnonymousDiscordName name={name} className="flex items-center gap-1.5 text-sm text-muted group-hover:text-foreground transition-colors" />
+        </Link>
+    );
 }
 
-/** An anonymous Discord signup has no member row (API sends user.id 0) — never link it to a profile. */
+/** An anonymous Discord signup has no member row (API sends user.id 0) — it links to the guest profile, not a member one. */
 function isAnonymousSignup(signup: SignupItem): boolean {
     return Boolean(signup.isAnonymous) || !signup.user.id;
 }
