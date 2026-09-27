@@ -12,6 +12,7 @@
 | GitHub CI Job | Local Equivalent | Script |
 |---------------|------------------|--------|
 | Build | `npm run build` (all workspaces) | `validate-ci.sh` |
+| Bundle size budget (`lint` job, after Build web) | `node scripts/check-bundle-size.mjs` — gzip budget per web chunk; runs in `--static` and `--full`. Reading the table, raising a budget, `npm run analyze -w web`: [bundle-budget.md](bundle-budget.md) | `validate-ci.sh` |
 | TypeScript | `npx tsc --noEmit` (api + web) | `validate-ci.sh` |
 | Lint | `npm run lint` (api + web) | `validate-ci.sh` |
 | Unit tests | `npm run test:cov -w api`, `vitest run --coverage` (web) | `validate-ci.sh` |

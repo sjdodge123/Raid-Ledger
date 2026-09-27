@@ -227,6 +227,8 @@ assert_out_matches 'Migration validation.*SKIPPED' "Migration row"
 assert_out_absent 'Migration validation.*PASS' "Migration row must never read PASS"
 assert_out_matches 'Container startup.*SKIPPED' "Container row"
 assert_out_absent 'Container startup.*PASS' "Container row must never read PASS"
+assert_out_matches 'Bundle size budget.*SKIPPED' "Bundle size budget row (ROK-1154)"
+assert_out_absent 'Bundle size budget.*PASS' "Bundle size budget row must never read PASS"
 
 # ===== AC2: --only-unit --no-coverage =====
 
