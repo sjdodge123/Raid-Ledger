@@ -60,9 +60,14 @@ describe('agedBoardPostGameIds — which groups the sweep retires by age', () =>
 
   // `<=` on the cutoff: a post exactly 7 days old is due. The param is the
   // cutoff itself, so a cap measured from the wrong constant (14) fails here.
-  it('selects posts that opened on or before the 7-day cutoff', () => {
+  // Both sides compare as timestamptz: `posted_at` is a naive column written
+  // by the DB's `now()` in its session zone, so a bare `posted_at <= $3`
+  // against a UTC instant is off by that zone's offset on a non-UTC DB.
+  it('selects posts that opened on or before the 7-day cutoff, as instants', () => {
     const { sql, params } = rendered();
-    expect(sql).toContain('"lfg_group_messages"."posted_at" <= $3');
+    expect(sql).toContain(
+      '"lfg_group_messages"."posted_at"::timestamptz <= $3::timestamptz',
+    );
     expect(params[2]).toBe(new Date(NOW.getTime() - 7 * DAY_MS).toISOString());
   });
 });

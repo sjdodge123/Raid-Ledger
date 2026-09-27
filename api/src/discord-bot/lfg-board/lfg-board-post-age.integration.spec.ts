@@ -19,7 +19,7 @@
  * `Expected: ["expired", "expired"] Received: ["active", "active"]` — not on a
  * timeout.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -110,11 +110,15 @@ async function boardRows(gameId: number): Promise<LfmMessageRow[]> {
     .orderBy(schema.lfgGroupMessages.postedAt);
 }
 
-/** Pretend the post opened `days` ago. */
+/**
+ * Pretend the post opened `days` ago. Written with the DB's own `now()`, the
+ * same clock as the column's `DEFAULT now()` — a JS `Date` would store a UTC
+ * wall-clock, which only agrees with production rows on a UTC database.
+ */
 async function backdatePost(rowId: string, days: number): Promise<void> {
   await testApp.db
     .update(schema.lfgGroupMessages)
-    .set({ postedAt: new Date(Date.now() - days * DAY_MS) })
+    .set({ postedAt: sql`now() - make_interval(days => ${days}::int)` })
     .where(eq(schema.lfgGroupMessages.id, rowId));
 }
 
