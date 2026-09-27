@@ -22,20 +22,20 @@ export function LineupAbortedBanner({ abortedAt, reason }: Props): JSX.Element |
         <div
             data-testid="lineup-aborted-banner"
             role="status"
-            className="mb-4 px-4 py-3 rounded-lg border border-red-500/40 bg-red-500/10 text-red-100"
+            className="mb-4 px-4 py-3 rounded-lg border border-danger/40 bg-danger/10 text-secondary"
         >
-            <p className="text-sm font-semibold text-red-200">
+            <p className="text-sm font-semibold text-danger">
                 This lineup was cancelled.
             </p>
             {reason ? (
-                <div className="mt-1 text-sm text-red-100/90">
+                <div className="mt-1 text-sm text-secondary">
                     <span className="font-medium">Reason:</span>{' '}
                     <span data-testid="lineup-aborted-reason">
                         <MarkdownText text={reason} />
                     </span>
                 </div>
             ) : (
-                <p className="mt-1 text-sm text-red-100/80">
+                <p className="mt-1 text-sm text-secondary">
                     No reason was provided. Nominations and votes are closed.
                 </p>
             )}

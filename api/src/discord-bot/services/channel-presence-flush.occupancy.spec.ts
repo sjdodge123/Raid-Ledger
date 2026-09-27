@@ -31,6 +31,7 @@ jest.mock('../discord-bot-client.messages.helpers', () => ({
   __esModule: true,
   sendEmbeds: jest.fn(),
   editEmbeds: jest.fn(),
+  deleteMessage: jest.fn(),
   isUnknownMessage: jest.fn(() => false),
 }));
 jest.mock('./ad-hoc-notification.helpers', () => ({
@@ -68,12 +69,20 @@ jest.mock('./channel-presence-flush.helpers', () => ({
 
 import { flushChannel } from './channel-presence-flush';
 import { findLinkedEvents, resolveRoom } from './channel-presence-room.helpers';
-import { sendEmbeds } from '../discord-bot-client.messages.helpers';
+import {
+  deleteMessage,
+  editEmbeds,
+  sendEmbeds,
+} from '../discord-bot-client.messages.helpers';
 import {
   buildContext,
   resolveNotificationChannel,
 } from './ad-hoc-notification.helpers';
-import { findOpenRow, openRow } from './channel-presence-store.helpers';
+import {
+  closeRow,
+  findOpenRow,
+  openRow,
+} from './channel-presence-store.helpers';
 import {
   closeAllOccupancy,
   reconcileOccupancy,
@@ -413,5 +422,204 @@ describe('an unbound row still recaps its room', () => {
 
     expect(m.hydrateRoomRecap).not.toHaveBeenCalled();
     expect(recapInput().room).toBeNull();
+  });
+});
+
+/**
+ * ROK-1692 — a room that empties under two minutes after it opened, with no
+ * game detected and no linked event, has its card DELETED instead of recapped.
+ * The decision is taken only once the binding's grace (5 min here) has run out.
+ */
+const GRACE_MS = 5 * 60_000;
+const EMPTIED = new Date(NOW - GRACE_MS);
+const QUIET: RoomRecap = {
+  spanMs: 8_000,
+  members: [{ displayName: 'Pariah', seconds: 8 }],
+  activities: [],
+};
+/** A visit of `ms` that emptied at `emptySince` (default: a grace ago). */
+const visit = (ms: number, emptySince: Date | null = EMPTIED) => {
+  const endedAt = emptySince ?? new Date(NOW);
+  m.findOpenRow.mockResolvedValue(
+    presenceRow({
+      openedAt: new Date(endedAt.getTime() - ms),
+      emptySince,
+      payloadHash: 'live',
+    }),
+  );
+};
+
+describe('a brief visit is deleted, not recapped (ROK-1692)', () => {
+  beforeEach(() => {
+    m.resolveRoom.mockResolvedValue(room({ memberCount: 0 }) as never);
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('deletes the card and closes the row brief once the grace has run out', async () => {
+    visit(8_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      'tc-1',
+      'msg-1',
+    );
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'brief', EMPTIED);
+    expect(m.renderRecapMessage).not.toHaveBeenCalled();
+    expect(editEmbeds).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the recap and an empty close when the delete fails', async () => {
+    visit(8_000);
+    jest
+      .mocked(deleteMessage)
+      .mockRejectedValueOnce(new Error('Missing Permissions'));
+
+    await expect(flushChannel(flush())).resolves.toBeNull();
+
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'empty', EMPTIED);
+    expect(closeRow).not.toHaveBeenCalledWith(db, 'row-1', 'brief', EMPTIED);
+  });
+
+  it('recaps and keeps the card during the grace, so a reconnect re-lives it', async () => {
+    visit(8_000, null);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(closeRow).not.toHaveBeenCalled();
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the flush reports when an empty room must be re-checked (ROK-1692)', () => {
+  beforeEach(() => {
+    m.resolveRoom.mockResolvedValue(room({ memberCount: 0 }) as never);
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('returns the instant the grace runs out while the room is inside it', async () => {
+    visit(8_000, null);
+
+    await expect(flushChannel(flush())).resolves.toBe(NOW + GRACE_MS);
+  });
+
+  it('returns null once the grace has run out and the row closed', async () => {
+    visit(120_000);
+
+    await expect(flushChannel(flush())).resolves.toBeNull();
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'empty', EMPTIED);
+  });
+
+  it('returns null for a live room', async () => {
+    m.resolveRoom.mockResolvedValue(room() as never);
+    visit(8_000, null);
+
+    await expect(flushChannel(flush())).resolves.toBeNull();
+  });
+});
+
+/**
+ * A rejoin that lands after the grace but before the re-check retires the row
+ * on the JOIN side (ROK-1498). A brief visit's card must be deleted there too,
+ * or its "<1m" recap stays in the channel forever beside the fresh card.
+ */
+describe('a rejoin after the grace never strands a brief card (ROK-1692)', () => {
+  beforeEach(() => {
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('deletes the brief card, closes it brief and posts a fresh one', async () => {
+    visit(8_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      'tc-1',
+      'msg-1',
+    );
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'brief', EMPTIED);
+    expect(closeRow).not.toHaveBeenCalledWith(db, 'row-1', 'stale', EMPTIED);
+    expect(m.sendEmbeds).toHaveBeenCalledTimes(1);
+    expect(editEmbeds).not.toHaveBeenCalled();
+  });
+
+  it('still closes a real session stale and deletes nothing', async () => {
+    visit(120_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'stale', EMPTIED);
+    expect(m.sendEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the stale close when the delete fails', async () => {
+    visit(8_000);
+    jest
+      .mocked(deleteMessage)
+      .mockRejectedValueOnce(new Error('Missing Permissions'));
+
+    await flushChannel(flush());
+
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'stale', EMPTIED);
+    expect(m.sendEmbeds).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('a visit that is not brief recaps exactly as before (ROK-1692)', () => {
+  beforeEach(() => {
+    m.resolveRoom.mockResolvedValue(room({ memberCount: 0 }) as never);
+    m.hydrateRoomRecap.mockResolvedValue(QUIET);
+  });
+
+  it('recaps and closes empty once the visit reaches two minutes', async () => {
+    visit(120_000);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(recapInput().room).toBe(QUIET);
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'empty', EMPTIED);
+  });
+
+  it('recaps a short visit when a game was detected', async () => {
+    visit(20_000);
+    m.hydrateRoomRecap.mockResolvedValue({
+      ...QUIET,
+      activities: [{ name: 'Valheim', seconds: 20 }],
+    });
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+    expect(closeRow).toHaveBeenCalledWith(db, 'row-1', 'empty', EMPTIED);
+  });
+
+  it('recaps a short visit when an event is linked to the room', async () => {
+    visit(20_000);
+    m.hydrateRecap.mockResolvedValue([{ id: 900 }] as never);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(editEmbeds).toHaveBeenCalledTimes(1);
+  });
+
+  it('recaps a short visit while a linked session is still live', async () => {
+    visit(20_000);
+    m.findLinkedEvents.mockResolvedValue([
+      { id: 901, gameId: 7, adHocStatus: 'live' },
+    ]);
+
+    await flushChannel(flush());
+
+    expect(deleteMessage).not.toHaveBeenCalled();
+    expect(closeRow).not.toHaveBeenCalled();
   });
 });

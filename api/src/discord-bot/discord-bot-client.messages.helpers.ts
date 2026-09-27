@@ -85,6 +85,21 @@ export async function editEmbeds(
 }
 
 /**
+ * Delete a tracked presence message (ROK-1692 — a brief visit leaves no card).
+ *
+ * Errors propagate; the caller decides which are survivable. `messages.delete`
+ * takes the id directly, so no fetch round-trip is spent on a doomed message.
+ */
+export async function deleteMessage(
+  client: Client | null,
+  channelId: string,
+  messageId: string,
+): Promise<void> {
+  const channel = await fetchTextChannel(client, channelId);
+  await channel.messages.delete(messageId);
+}
+
+/**
  * Is this Discord's "Unknown Message" (10008)?
  *
  * Exported because BOTH presence paths need it and must react identically: the

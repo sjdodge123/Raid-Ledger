@@ -24,7 +24,7 @@ export function EventDetailContentSections({
                 >
                     {inst.shortName || inst.name}
                     {inst.minimumLevel != null && (
-                        <span className="text-emerald-500/60">
+                        <span className="text-success">
                             Lv{inst.minimumLevel}{inst.maximumLevel ? `-${inst.maximumLevel}` : '+'}
                         </span>
                     )}

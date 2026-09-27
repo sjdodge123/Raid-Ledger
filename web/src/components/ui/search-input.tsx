@@ -7,7 +7,8 @@
  *   hidden so there is exactly one clear affordance.
  * - A decorative leading magnifier and, while there is text, a 44px
  *   `Button ghost iconOnly` named "Clear search" that empties the box,
- *   refocuses it and fires `onSearch('')` at once.
+ *   refocuses it and fires `onSearch('')` at once. On `fieldSize="sm"` it is
+ *   the `sm` Button, so it fits the 36px frame from `lg`.
  * - `onChange` hands back the string. `onSearch` is the optional debounced
  *   callback (`debounceMs`, default 300) — it never fires on mount.
  * - `label` becomes `aria-label`; inside a `Field` omit it.
@@ -57,7 +58,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         inner.current?.focus();
     };
     const clearButton = value !== '' && !rest.disabled ? (
-        <Button iconOnly aria-label="Clear search" variant="ghost" onClick={clear}>
+        <Button iconOnly aria-label="Clear search" variant="ghost" size={rest.fieldSize === 'sm' ? 'sm' : undefined} onClick={clear}>
             <XMarkIcon className="w-5 h-5" aria-hidden="true" />
         </Button>
     ) : undefined;

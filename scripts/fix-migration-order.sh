@@ -11,8 +11,18 @@
 # and get merged out of chronological order.
 #
 # Usage:
-#   ./scripts/fix-migration-order.sh          # Check + auto-fix
-#   ./scripts/fix-migration-order.sh --check  # Check only (exit 1 if bad)
+#   ./scripts/fix-migration-order.sh                        # Check + auto-fix
+#   ./scripts/fix-migration-order.sh --check                # Check only (exit 1 if bad)
+#   ./scripts/fix-migration-order.sh --against <ref>        # Auto-fix vs an explicit base
+#   ./scripts/fix-migration-order.sh --check --against <ref> # + merge-order guard, check only
+#
+# ROK-1693: the neighbour check below cannot see a NEW entry inserted
+# mid-journal with an older `when` (0176_lfg_invites merged after 0177 and
+# never reached prod). scripts/check-migration-merge-order.mjs compares new
+# entries against the base (--against <ref>, else the merge base with
+# origin/main). Fix mode runs it FIRST: it re-stamps stale tail entries and
+# stops on a mid-journal one, before the neighbour pass could bump an
+# already-merged entry (which would make Drizzle re-run it).
 
 set -euo pipefail
 
@@ -26,8 +36,30 @@ if [ ! -f "$JOURNAL_PATH" ]; then
 fi
 
 CHECK_ONLY=false
-if [ "${1:-}" = "--check" ]; then
-    CHECK_ONLY=true
+AGAINST=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --check) CHECK_ONLY=true ;;
+        --against) AGAINST="${2:?--against needs a git ref}"; shift ;;
+        *) echo "ERROR: unknown argument: $1"; exit 1 ;;
+    esac
+    shift
+done
+
+GUARD="$SCRIPT_DIR/scripts/check-migration-merge-order.mjs"
+if $CHECK_ONLY; then
+    if [ -n "$AGAINST" ]; then
+        node "$GUARD" --base "$AGAINST" || exit 1
+    fi
+else
+    guard_args=(--fix)
+    if [ -n "$AGAINST" ]; then guard_args+=(--base "$AGAINST"); fi
+    guard_rc=0
+    node "$GUARD" "${guard_args[@]}" || guard_rc=$?
+    # 3 = base unresolvable: fatal only when the caller named the base.
+    if [ "$guard_rc" -eq 1 ] || { [ "$guard_rc" -ne 0 ] && [ -n "$AGAINST" ]; }; then
+        exit 1
+    fi
 fi
 
 # Use Node.js (already available in this repo) to parse and fix the JSON

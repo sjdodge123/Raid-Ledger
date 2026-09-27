@@ -26,12 +26,15 @@ burned 161k tokens and returned nothing; the Lead then did the same job in two `
    time. `RL_AGENT_ID` is a hash of it; a different string orphans your slot.
 3. **Slot URLs only** (`https://slot-N.gamernight.net`). Never per-slug / `public_url`.
 4. **One runner job per slot. Two heavy jobs fleet-wide, max.**
-5. Poll `rl_task_status` every 60–90 s with `log_tail_bytes: 0`. Never `rl_task_wait` as a walk-away.
+5. Wait with the **blocking `rl_task_wait` tool call** (≤120 s per call, repeated until the task is
+   terminal), or `rl_claim_wait` for a queued claim. This matches CLAUDE.md "Lead context discipline"
+   rule 2. **Never use a shell sleep of any spelling, and never `run_in_background` / a background
+   timer.** The Bash tool blocks long sleeps, and every background task you finish wakes the Lead at
+   full context. That happened repeatedly on 2026-09-27.
    **There is NO ticker, timer or wake signal for a sub-agent.** Fleet tasks do not push. If you end
-   your turn "waiting for the next tick", you have PARKED the run — it keeps executing on the fleet
-   with nobody watching, and only the Lead noticing will restart you. This has happened twice.
-   To pace polls, sleep *inside* your turn (a foreground `sleep 60` in Bash) and keep going. The only
-   thing that ends your turn is a finished deliverable or a handoff you have written.
+   your turn "waiting for the next tick", you have PARKED the run: it keeps executing on the fleet
+   with nobody watching, and only the Lead noticing will restart you. This has happened twice. The
+   only thing that ends your turn is a finished deliverable or a handoff you have written.
 6. **Never** push, open a PR, merge, or run `rl-infra/deploy.sh` (that SSHes as the operator; agent SSH
    is closed by ROK-1338 PR-3).
 7. **Never drive a login form or handle a credential value.** Harness auth only

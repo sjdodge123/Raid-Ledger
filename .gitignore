@@ -34,6 +34,8 @@ scripts/*
 !scripts/env-lock.sh
 !scripts/fix-migration-order.sh
 !scripts/reconcile-migrations.mjs
+!scripts/check-migration-merge-order.mjs
+!scripts/check-migration-merge-order.spec.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/setup-branch-protection.sh
