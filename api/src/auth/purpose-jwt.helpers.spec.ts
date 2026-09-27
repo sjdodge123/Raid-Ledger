@@ -37,6 +37,20 @@ describe('purpose-jwt.helpers', () => {
     ).toBe(7);
   });
 
+  it('gives every token a random 9-byte jti, so same-second mints differ', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now());
+    let a: string, b: string;
+    try {
+      a = signPurposeJwt(jwt, 'magic-link', { sub: 7 }, '15m');
+      b = signPurposeJwt(jwt, 'magic-link', { sub: 7 }, '15m');
+    } finally {
+      now.mockRestore();
+    }
+    expect(a).not.toBe(b);
+    const jti = (t: string) => jwt.decode<Record<string, unknown>>(t).jti;
+    expect(jti(a)).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]{12}$/));
+  });
+
   it('is rejected by a plain JWT_SECRET verify (the 5 direct-verify sites)', () => {
     const token = signPurposeJwt(jwt, 'magic-link', { sub: 7 }, '15m');
     expect(() => jwt.verify(token)).toThrow('invalid signature');

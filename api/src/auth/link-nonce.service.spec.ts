@@ -31,7 +31,22 @@ describe('LinkNonceService.mint', () => {
     const decoded = jwt.decode<Record<string, unknown>>(
       service.mint('discord', 7).nonce,
     );
-    expect(Object.keys(decoded).sort()).toEqual(['exp', 'iat', 'sub']);
+    expect(Object.keys(decoded).sort()).toEqual(['exp', 'iat', 'jti', 'sub']);
+  });
+
+  it('mints distinct nonces for one user in the same second (random jti)', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now());
+    let a: string, b: string;
+    try {
+      a = service.mint('discord', 7).nonce;
+      b = service.mint('discord', 7).nonce;
+    } finally {
+      now.mockRestore();
+    }
+    expect(a).not.toBe(b);
+    const jti = (t: string) => jwt.decode<Record<string, unknown>>(t).jti;
+    expect(jti(a)).toEqual(expect.stringMatching(/^[A-Za-z0-9_-]{12}$/));
+    expect(jti(b)).not.toBe(jti(a));
   });
 
   it('is not verifiable with the plain JWT_SECRET', () => {

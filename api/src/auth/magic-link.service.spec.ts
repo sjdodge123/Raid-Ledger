@@ -66,11 +66,12 @@ async function redeemError(token: string): Promise<UnauthorizedException> {
 }
 
 describe('MagicLinkService.generateLink (ROK-1366 AC1)', () => {
-  it('signs only {sub, magicLink} with a 15-minute expiry', async () => {
+  it('signs only {sub, magicLink} plus a random jti, with a 15-minute expiry', async () => {
     const decoded = jwt.decode<Record<string, number>>(await mintToken());
     expect(Object.keys(decoded).sort()).toEqual([
       'exp',
       'iat',
+      'jti',
       'magicLink',
       'sub',
     ]);
@@ -98,7 +99,26 @@ describe('MagicLinkService.generateLink (ROK-1366 AC1)', () => {
       { sub: 1, username: 'a', role: 'member', magicLink: true },
       { expiresIn: '15m' },
     );
-    expect((await mintToken()).length).toBeLessThanOrEqual(legacy.length);
+    const token = await mintToken();
+    expect(jwt.decode<Record<string, unknown>>(token).jti).toEqual(
+      expect.stringMatching(/^[A-Za-z0-9_-]{12}$/),
+    );
+    expect(token.length).toBeLessThanOrEqual(legacy.length);
+  });
+
+  it('mints distinct links for one user in the same second, each spending only itself', async () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now());
+    let a: string, b: string;
+    try {
+      [a, b] = [await mintToken(), await mintToken()];
+    } finally {
+      now.mockRestore();
+    }
+    expect(a).not.toBe(b);
+    await service.redeem(a);
+    expect(db.values).toHaveBeenCalledTimes(1);
+    expect(db.values).toHaveBeenCalledWith({ tokenHash: hashToken(a) });
+    expect(hashToken(b)).not.toBe(hashToken(a));
   });
 
   it('returns null and signs nothing for an unknown user', async () => {

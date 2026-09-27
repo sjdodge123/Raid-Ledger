@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import type { JwtService } from '@nestjs/jwt';
 
 /**
@@ -28,14 +28,26 @@ function purposeSecret(purpose: JwtPurpose): string {
   return derivePurposeSecret(base, purpose);
 }
 
-/** Sign `payload` for `purpose`. `expiresIn` is seconds or a vercel/ms span. */
+/** Random `jti` bytes: 9 bytes → 12 base64url chars (keeps AC1's length cap). */
+const JTI_BYTES = 9;
+
+/**
+ * Sign `payload` for `purpose`. `expiresIn` is seconds or a vercel/ms span.
+ * Every token carries a random `jti`, so two mints for the same user in the
+ * same second are never byte-identical — single-use consumption hashes the
+ * whole token, and identical tokens would spend each other.
+ */
 export function signPurposeJwt(
   jwt: JwtService,
   purpose: JwtPurpose,
   payload: Record<string, unknown>,
   expiresIn: number | `${number}${'s' | 'm' | 'h'}`,
 ): string {
-  return jwt.sign(payload, { secret: purposeSecret(purpose), expiresIn });
+  return jwt.sign(payload, {
+    secret: purposeSecret(purpose),
+    expiresIn,
+    jwtid: randomBytes(JTI_BYTES).toString('base64url'),
+  });
 }
 
 /** Verify a `purpose` token. Throws (jsonwebtoken errors) on any failure. */
