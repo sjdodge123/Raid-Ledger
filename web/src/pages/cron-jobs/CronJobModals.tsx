@@ -1,8 +1,8 @@
 import type { JSX } from 'react';
 import { useState } from 'react';
 import type { CronJobDto, CronJobExecutionDto } from '@raid-ledger/contract';
-import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../components/ui/button';
+import { Modal } from '../../components/ui/modal';
 import { Field } from '../../components/ui/field';
 import { Select } from '../../components/ui/select';
 import { useCronJobs, useCronJobExecutions } from '../../hooks/use-cron-jobs';
@@ -20,7 +20,7 @@ function ExecutionStatusBadge({ status }: { status: string }): JSX.Element {
     return <span className={`text-xs font-medium ${styles[status] || 'text-muted'}`}>{status}</span>;
 }
 
-/** Execution history modal for a cron job */
+/** Execution history modal for a cron job — the shared Modal (tech-debt [28]). */
 export function ExecutionHistoryModal({
     job,
     onClose,
@@ -32,35 +32,10 @@ export function ExecutionHistoryModal({
     const tz = useTimezoneStore((s) => s.resolved);
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div
-                className="bg-panel border border-edge rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <ExecutionHistoryHeader job={job} onClose={onClose} />
-                <ExecutionHistoryBody executions={executions} isLoading={isLoading} tz={tz} />
-            </div>
-        </div>
-    );
-}
-
-function ExecutionHistoryHeader({ job, onClose }: { job: CronJobDto; onClose: () => void }): JSX.Element {
-    return (
-        <div className="flex items-center justify-between px-6 py-4 border-b border-edge/50">
-            <div>
-                <h3 className="text-lg font-semibold text-foreground">Execution History</h3>
-                <p className="text-sm text-muted mt-0.5">{job.description || job.name}</p>
-            </div>
-            <CloseButton onClose={onClose} />
-        </div>
-    );
-}
-
-function CloseButton({ onClose }: { onClose: () => void }): JSX.Element {
-    return (
-        <Button variant="ghost" size="sm" iconOnly aria-label="Close" onClick={onClose}>
-            <XMarkIcon className="w-5 h-5" />
-        </Button>
+        <Modal isOpen onClose={onClose} title="Execution History" maxWidth="max-w-2xl">
+            <p className="text-sm text-muted mb-3">{job.description || job.name}</p>
+            <ExecutionHistoryBody executions={executions} isLoading={isLoading} tz={tz} />
+        </Modal>
     );
 }
 
@@ -68,7 +43,7 @@ function ExecutionHistoryBody({ executions, isLoading, tz }: {
     executions: CronJobExecutionDto[] | undefined; isLoading: boolean; tz: string;
 }): JSX.Element {
     return (
-        <div className="overflow-y-auto max-h-[60vh] p-4">
+        <div className="overflow-x-auto">
             {isLoading && <p className="text-muted text-sm text-center py-8">Loading...</p>}
             {!isLoading && (!executions || executions.length === 0) && (
                 <p className="text-muted text-sm text-center py-8">No executions recorded yet.</p>
@@ -128,58 +103,30 @@ export function EditScheduleModal({
         updateSchedule.mutate({ id: job.id, cronExpression: selectedExpression }, { onSuccess: () => onClose() });
     };
 
+    const saveDisabled = selectedExpression === job.cronExpression || selectedExpression === normalizedExpression;
     return (
-        <EditScheduleOverlay onClose={onClose}>
-            <EditScheduleHeader job={job} onClose={onClose} />
+        <Modal isOpen onClose={onClose} title={`Edit Schedule: ${formatJobName(job.name)}`}
+            footer={<ScheduleActions onClose={onClose} onSave={handleSave} isSaving={updateSchedule.isPending} disabled={saveDisabled} />}>
             <EditScheduleBody job={job} tz={tz} selectedExpression={selectedExpression}
-                isCustomExpression={isCustomExpression} normalizedExpression={normalizedExpression}
-                onExpressionChange={setSelectedExpression} onSave={handleSave}
-                onClose={onClose} isSaving={updateSchedule.isPending} />
-        </EditScheduleOverlay>
+                isCustomExpression={isCustomExpression} onExpressionChange={setSelectedExpression} />
+        </Modal>
     );
 }
 
-function EditScheduleOverlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }): JSX.Element {
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
-            <div className="bg-panel border border-edge rounded-xl shadow-xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-                {children}
-            </div>
-        </div>
-    );
-}
-
-/** Header for the edit schedule modal */
-function EditScheduleHeader({ job, onClose }: { job: CronJobDto; onClose: () => void }): JSX.Element {
-    return (
-        <div className="flex items-center justify-between px-6 py-4 border-b border-edge/50">
-            <div>
-                <p className="text-xs font-medium text-muted uppercase tracking-wide">Edit Schedule</p>
-                <h3 className="text-lg font-semibold text-foreground">{formatJobName(job.name)}</h3>
-            </div>
-            <CloseButton onClose={onClose} />
-        </div>
-    );
-}
-
-/** Body for the edit schedule modal */
+/** Body for the edit schedule modal; its Cancel/Save sit in the Modal footer. */
 function EditScheduleBody({
-    job, tz, selectedExpression, isCustomExpression, normalizedExpression,
-    onExpressionChange, onSave, onClose, isSaving,
+    job, tz, selectedExpression, isCustomExpression, onExpressionChange,
 }: {
     job: CronJobDto; tz: string; selectedExpression: string; isCustomExpression: boolean;
-    normalizedExpression: string; onExpressionChange: (expr: string) => void;
-    onSave: () => void; onClose: () => void; isSaving: boolean;
+    onExpressionChange: (expr: string) => void;
 }): JSX.Element {
     return (
-        <div className="p-6 space-y-4">
-            {job.description && <p className="text-sm text-muted -mt-1">{job.description}</p>}
+        <div className="space-y-4">
+            {job.description && <p className="text-sm text-muted">{job.description}</p>}
             <RunTimesGrid job={job} tz={tz} />
             <IntervalSelector selectedExpression={selectedExpression} onExpressionChange={onExpressionChange}
                 isCustomExpression={isCustomExpression} jobExpression={job.cronExpression} />
             <ScheduleRevertWarning />
-            <ScheduleActions onClose={onClose} onSave={onSave} isSaving={isSaving}
-                disabled={selectedExpression === job.cronExpression || selectedExpression === normalizedExpression} />
         </div>
     );
 }
@@ -227,11 +174,11 @@ function ScheduleActions({ onClose, onSave, isSaving, disabled }: {
     onClose: () => void; onSave: () => void; isSaving: boolean; disabled: boolean;
 }): JSX.Element {
     return (
-        <div className="flex justify-end gap-3">
+        <>
             <Button variant="secondary" onClick={onClose}>Cancel</Button>
             <Button variant="primary" onClick={onSave} loading={isSaving} loadingLabel="Saving…" disabled={disabled}>
                 Save
             </Button>
-        </div>
+        </>
     );
 }
