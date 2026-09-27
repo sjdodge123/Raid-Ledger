@@ -115,10 +115,6 @@ describe('deriveViability', () => {
 });
 
 describe('expiry constant', () => {
-  it('is a single global 7-day horizon (ROK-1691; was 14)', () => {
-    expect(LFG_EXPIRY_DAYS).toBe(7);
-  });
-
   it('computes an expiry exactly LFG_EXPIRY_DAYS after the supplied instant', () => {
     const from = new Date('2026-01-01T00:00:00.000Z');
     expect(computeExpiresAt(from).toISOString()).toBe(

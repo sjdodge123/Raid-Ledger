@@ -146,8 +146,9 @@ export const LFG_BOARD_INTRO_LEGACY_TITLES: readonly string[] = [
  * composer's `Post an LFG` button pinned on this post, `/lfg`, or the site),
  * how `+1` works (interest, not a commitment), the three horizons and how long
  * each lasts, how to withdraw, and how posts end. The day counts are read
- * from `lfg.constants.ts` (ROK-1691), so the copy cannot drift from the clock. The old "you cannot post
- * here yourself" line is gone — the composer now lets a member start one.
+ * from `lfg.constants.ts` (ROK-1691), so the copy cannot drift from the clock.
+ * The old "you cannot post here yourself" line is gone — the composer now lets
+ * a member start one.
  *
  * `LfgComposerPinService` rewrites an older intro to this text when it sets
  * the composer buttons, so boards seeded before this copy pick it up.

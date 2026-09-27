@@ -12,27 +12,19 @@
  * end-to-end walk (sweep → expired render → archived thread) is
  * `lfg-board-post-age.integration.spec.ts`.
  */
-import {
-  LFG_EXPIRY_DAYS,
-  LFG_POST_MAX_AGE_DAYS,
-  computePostAgeCutoff,
-} from './lfg.constants';
+import { computePostAgeCutoff } from './lfg.constants';
 import { agedBoardPostGameIds } from './lfg-post-age.helpers';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NOW = new Date('2026-09-26T12:00:00.000Z');
 
-describe('ROK-1691 — the week horizon and the board post-age cap', () => {
-  // Mutation: set LFG_EXPIRY_DAYS back to 14 and this fails on the value.
-  it('makes "This week" a 7-day hand', () => {
-    expect(LFG_EXPIRY_DAYS).toBe(7);
-  });
-
-  it('caps a board post at 7 days from when it opened', () => {
-    expect(LFG_POST_MAX_AGE_DAYS).toBe(7);
-  });
-
-  it('puts the cutoff exactly LFG_POST_MAX_AGE_DAYS before now', () => {
+// The day counts themselves are pinned where a player reads them: the board
+// intro renders both constants, and `lfg-board.copy.spec.ts` /
+// `lfg-board-toggle.listener.spec.ts` assert "next 7 days" and "7 days after
+// they open" on the rendered text.
+describe('computePostAgeCutoff (ROK-1691)', () => {
+  // Mutation: set LFG_POST_MAX_AGE_DAYS to 14 and this fails on the instant.
+  it('puts the cutoff 7 days before now', () => {
     expect(computePostAgeCutoff(NOW).toISOString()).toBe(
       new Date(NOW.getTime() - 7 * DAY_MS).toISOString(),
     );
