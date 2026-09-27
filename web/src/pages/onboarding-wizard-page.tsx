@@ -5,9 +5,7 @@ import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useCompleteOnboardingFte } from '../hooks/use-onboarding-fte';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useUserHeartedGames } from '../hooks/use-user-profile';
-import { useSystemStatus } from '../hooks/use-system-status';
 import { toast } from '../lib/toast';
-import { isDiscordLinked } from '../lib/avatar';
 import { ConnectStep } from '../components/onboarding/connect-step';
 import { SteamStep } from '../components/onboarding/steam-step';
 import { DiscordJoinStep } from '../components/onboarding/discord-join-step';
@@ -16,45 +14,10 @@ import { CharacterStep } from '../components/onboarding/character-step';
 import { GameTimeStep } from '../components/onboarding/gametime-step';
 import { ConnectionStep } from '../components/onboarding/connection-step';
 import { AvatarThemeStep } from '../components/onboarding/avatar-theme-step';
-import { useGuildMembership } from '../hooks/use-discord-onboarding';
-import { useSteamLink } from '../hooks/use-steam-link';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 import type { StepDef } from './onboarding-wizard/onboarding-types';
 import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs';
-
-/** Determines which conditional steps are needed based on user/discord/steam state */
-function useConditionalStepFlags(user: { discordId: string } | null): {
-    needsConnect: boolean; needsDiscordJoin: boolean; needsSteamConnect: boolean;
-} {
-    const { data: systemStatus } = useSystemStatus();
-    const discordConfigured = systemStatus?.discordConfigured ?? false;
-
-    const needsConnect = useMemo(() => {
-        if (!user || !discordConfigured) return false;
-        return !isDiscordLinked(user.discordId);
-    }, [user, discordConfigured]);
-
-    const { data: guildMembership } = useGuildMembership(
-        discordConfigured && !!user && isDiscordLinked(user.discordId),
-    );
-
-    const needsDiscordJoin = useMemo(() => {
-        if (!discordConfigured || !user || !isDiscordLinked(user.discordId)) return false;
-        // Fail open while membership is unknown (loading or errored): a member
-        // sees the step flicker away, but a non-member can never race past it.
-        if (!guildMembership) return true;
-        return !guildMembership.isMember;
-    }, [discordConfigured, user, guildMembership]);
-
-    const { steamStatus } = useSteamLink();
-    const needsSteamConnect = useMemo(() => {
-        if (!systemStatus?.steamConfigured) return false;
-        if (steamStatus.isLoading) return false;
-        return steamStatus.data?.linked !== true;
-    }, [systemStatus?.steamConfigured, steamStatus.isLoading, steamStatus.data?.linked]);
-
-    return { needsConnect, needsDiscordJoin, needsSteamConnect };
-}
+import { useConditionalStepFlags } from './onboarding-wizard/use-conditional-step-flags';
 
 /** Resolves hearted games against the game registry to find qualifying games */
 function useQualifyingGames(userId: number | undefined): GameRegistryDto[] {
@@ -189,7 +152,7 @@ export function OnboardingWizardPage(): JSX.Element | null {
     const { user } = useAuth();
     const completeOnboarding = useCompleteOnboardingFte();
     const isRerun = searchParams.get('rerun') === '1';
-    const { needsConnect, needsDiscordJoin, needsSteamConnect } = useConditionalStepFlags(user ?? null);
+    const { needsConnect, needsDiscordJoin, needsSteamConnect, settled } = useConditionalStepFlags(user ?? null);
     const qualifyingGames = useQualifyingGames(user?.id);
     const [currentStep, setCurrentStep] = useState(0);
     const [extraCharCounts, setExtraCharCounts] = useState<Record<string, number>>({});
@@ -206,6 +169,9 @@ export function OnboardingWizardPage(): JSX.Element | null {
 
     const shouldRedirect = !isRerun && ((user && isAdmin(user)) || user?.onboardingCompletedAt);
     if (shouldRedirect) return <Navigate to="/calendar" replace />;
+    // Tech-debt [12]: the step list must be final before step 1 shows —
+    // design-system §4.6, `null` while a gate query resolves.
+    if (!settled) return null;
 
     return (
         <WizardShell currentStep={currentStep} steps={steps} isFinalStep={currentStep === steps.length - 1}
