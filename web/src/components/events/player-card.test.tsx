@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { PlayerCard } from './player-card';
 import { formatRole } from '../../lib/role-colors';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
@@ -180,5 +180,49 @@ describe('PlayerCard — running-late badge (ROK-1379 follow-up)', () => {
         renderCard({ player });
         expect(screen.getByTitle('Tentative — may not attend')).toBeInTheDocument();
         expect(screen.getByTitle('Running late')).toBeInTheDocument();
+    });
+});
+
+function ProfileProbe() {
+    const location = useLocation();
+    return (
+        <>
+            <div data-testid="probe-path">{location.pathname}</div>
+            <div data-testid="probe-state">{JSON.stringify(location.state ?? null)}</div>
+        </>
+    );
+}
+
+/** Render the card on a route, click its name link, and return where it landed. */
+function followNameLink(player: RosterAssignmentResponse, href: string) {
+    const { container } = render(
+        <MemoryRouter initialEntries={['/events/1']}>
+            <Routes>
+                <Route path="/events/1" element={<PlayerCard player={player} />} />
+                <Route path="/users/:id" element={<ProfileProbe />} />
+            </Routes>
+        </MemoryRouter>,
+    );
+    const links = container.querySelectorAll(`a[href="${href}"]`);
+    expect(links, `the player name must link to ${href}`).toHaveLength(1);
+    fireEvent.click(links[0]);
+    return {
+        path: screen.getByTestId('probe-path').textContent,
+        state: JSON.parse(screen.getByTestId('probe-state').textContent ?? 'null') as unknown,
+    };
+}
+
+// ROK-1694 Option B (operator ruling 2026-09-27): slot cards keep ROK-381's guest-profile link.
+describe('PlayerCard — profile link (ROK-381 guest profile, ROK-1694)', () => {
+    it('an account-less Discord signup (userId 0) links to the ROK-381 guest profile with guest state', () => {
+        const player = createMockPlayer({ userId: 0, username: 'DiscordGuy', discordId: '999', avatar: null });
+        expect(followNameLink(player, '/users/0')).toEqual({
+            path: '/users/0',
+            state: { guest: true, username: 'DiscordGuy', discordId: '999', avatarHash: null },
+        });
+    });
+
+    it('a member links to /users/<id> with no guest state', () => {
+        expect(followNameLink(createMockPlayer(), '/users/10')).toEqual({ path: '/users/10', state: null });
     });
 });

@@ -1,6 +1,9 @@
 import type { JSX } from 'react';
+import { Link } from 'react-router-dom';
 import { UserLink } from '../../components/common/UserLink';
+import { AnonymousDiscordName } from '../../components/common/AnonymousDiscordName';
 import { toAvatarUser } from '../../lib/avatar';
+import { guestProfileLink } from '../../lib/guest-profile-link';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
 import { RoleIcon } from '../../components/shared/RoleIcon';
 import { PluginSlot } from '../../plugins';
@@ -13,7 +16,10 @@ interface SignupItem {
     status: string;
     confirmationStatus: string;
     isAnonymous?: boolean;
+    /** Anonymous Discord signups (ROK-137): the API fills these, and sends user.avatar as null */
+    discordUserId?: string | null;
     discordUsername?: string | null;
+    discordAvatarHash?: string | null;
     /** ROK-847: Preferred roles the player is willing to play */
     preferredRoles?: string[] | null;
     user: {
@@ -61,13 +67,33 @@ function RunningLateBadge({ signup }: { signup: Pick<SignupItem, 'runningLate' |
     );
 }
 
+/**
+ * Anonymous Discord signup → the ROK-381 guest profile, the same link its roster slot card uses (ROK-1694).
+ * The API hardcodes `user.avatar: null` for these; the real hash is `discordAvatarHash` (the slot's `player.avatar`).
+ */
 function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
+    const name = signup.discordUsername ?? signup.user.username;
+    const { to, state } = guestProfileLink({
+        username: name,
+        discordId: signup.discordUserId ?? signup.user.discordId,
+        avatarHash: signup.discordAvatarHash ?? signup.user.avatar,
+    });
     return (
-        <span className="flex items-center gap-1.5 text-sm text-muted">
-            <span>{signup.discordUsername ?? signup.user.username}</span>
-            <span className="text-xs text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
-        </span>
+        <Link to={to} state={state} className="group inline-flex min-w-0 rounded">
+            <AnonymousDiscordName name={name} className="flex items-center gap-1.5 text-sm text-muted group-hover:text-foreground transition-colors" />
+        </Link>
     );
+}
+
+/** An anonymous Discord signup has no member row (API sends user.id 0) — it links to the guest profile, not a member one. */
+function isAnonymousSignup(signup: SignupItem): boolean {
+    return Boolean(signup.isAnonymous) || !signup.user.id;
+}
+
+/** Member → profile UserLink; anonymous Discord signup → name + "via Discord" chip (ROK-1694). */
+function SignupIdentity({ signup, event }: { signup: SignupItem; event: EventResponseDto }) {
+    if (isAnonymousSignup(signup)) return <AnonymousUserLabel signup={signup} />;
+    return <UserLink userId={signup.user.id} username={signup.user.username} user={toAvatarUser(signup.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />;
 }
 
 /** Render a single signup entry with UserLink and optional character card */
@@ -77,9 +103,7 @@ function SignupEntry({ signup, event, showBadge }: {
     return (
         <div className="space-y-1">
             <div className="flex items-center gap-2">
-                {signup.isAnonymous
-                    ? <AnonymousUserLabel signup={signup} />
-                    : <UserLink userId={signup.user.id} username={signup.user.username} user={toAvatarUser(signup.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />}
+                <SignupIdentity signup={signup} event={event} />
                 <RolePreferenceBadges roles={signup.preferredRoles} />
                 {showBadge && <span className={showBadge.className}>{showBadge.text}</span>}
                 <RunningLateBadge signup={signup} />
@@ -130,7 +154,7 @@ function ConfirmedGroup({ signups, event }: { signups: SignupItem[]; event: Even
                 {signups.map((s) => (
                     <div key={s.id}>
                         <div className="flex items-center gap-2">
-                            <UserLink userId={s.user.id} username={s.user.username} user={toAvatarUser(s.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />
+                            <SignupIdentity signup={s} event={event} />
                             <RolePreferenceBadges roles={s.preferredRoles} />
                             <RunningLateBadge signup={s} />
                             <PluginSlot name="event-detail:signup-warnings" context={{ characterLevel: s.character?.level, contentInstances: event.contentInstances ?? [], gameSlug: event.game?.slug }} />
@@ -171,7 +195,7 @@ function SimpleSignupGroup({ signups, event, title, icon, itemClass, badge }: {
             <div className="event-detail-roster__list">
                 {signups.map((s) => (
                     <div key={s.id} className={`event-detail-roster__item flex items-center gap-2 ${itemClass ?? ''}`}>
-                        {s.isAnonymous ? <AnonymousUserLabel signup={s} /> : <UserLink userId={s.user.id} username={s.user.username} user={toAvatarUser(s.user)} gameId={event.game?.id ?? undefined} showAvatar size="md" />}
+                        <SignupIdentity signup={s} event={event} />
                         {badge && <span className={badge.className}>{badge.text}</span>}
                         <RunningLateBadge signup={s} />
                     </div>

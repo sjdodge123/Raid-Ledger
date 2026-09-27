@@ -11,6 +11,7 @@ import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { Link } from 'react-router-dom';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 import { toAvatarUser } from '../../lib/avatar';
+import { guestProfileLink } from '../../lib/guest-profile-link';
 import type { AvatarUser } from '../../lib/avatar';
 import { formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
@@ -57,14 +58,18 @@ function buildAvatarUser(player: RosterAssignmentResponse): {
     return { avatarUser: base, gameId: undefined };
 }
 
+/** Member → /users/<id>; account-less Discord signup (userId 0) → ROK-381 guest profile. */
+function playerProfileLink(player: RosterAssignmentResponse) {
+    if (player.userId !== 0) return { to: `/users/${player.userId}`, state: undefined };
+    return guestProfileLink({ username: player.username, discordId: player.discordId, avatarHash: player.avatar });
+}
+
 function PlayerNameLink({ player }: { player: RosterAssignmentResponse }) {
+    const { to, state } = playerProfileLink(player);
     return (
         <Link
-            to={`/users/${player.userId}`}
-            state={player.userId === 0 ? {
-                guest: true, username: player.username,
-                discordId: player.discordId, avatarHash: player.avatar,
-            } : undefined}
+            to={to}
+            state={state}
             className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
             title={player.username} onClick={(e) => e.stopPropagation()}>
             {player.username}
