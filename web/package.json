@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "analyze": "ANALYZE=1 vite build",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prettier:check": "prettier --check \"src/**/*.{ts,tsx}\"",
@@ -17,9 +18,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@m-lab/ndt7": "^0.1.5",
     "@date-fns/tz": "^1.5.0",
     "@heroicons/react": "^2.2.0",
+    "@m-lab/ndt7": "^0.1.5",
     "@sentry/react": "^10.73.0",
     "@tanstack/react-query": "^5.103.1",
     "date-fns": "^4.4.0",
@@ -53,6 +54,7 @@
     "globals": "^17.12.0",
     "jsdom": "^30.1.0",
     "msw": "^2.15.0",
+    "rollup-plugin-visualizer": "^7.1.1",
     "tailwindcss": "^4.1.18",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.69.0",

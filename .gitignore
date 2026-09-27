@@ -153,5 +153,8 @@ build-state.yaml
 
 # ROK-1160: the drill report artefact is produced per run, never committed.
 restore-drill-report.json
+# ROK-1154: `npm run analyze -w web` treemap. Written here, never into
+# web/dist, which Dockerfile.allinone ships to nginx.
+web/.bundle-report/
 # ROK-1527: flag file that switches the opt-in integration heap probe on
 api/.rl-heap-probe
