@@ -32,9 +32,10 @@ export type LfgState = z.infer<typeof LfgStateSchema>;
  * Three horizons, one vocabulary on every surface — `Right now` · `Tonight` ·
  * `This week`:
  *
- * - `week` is the original ROK-1451 semantics — a quiet 14-day intent.
+ * - `week` is the original ROK-1451 semantics — a quiet intent on the API's
+ *   `LFG_EXPIRY_DAYS` horizon (7 days since ROK-1691).
  * - `now` is an on-demand intent that lapses in 30 or 60 minutes and is
- *   refreshed only on ITS OWN horizon, never to the weekly 14 days.
+ *   refreshed only on ITS OWN horizon, never to the weekly 7 days.
  * - `tonight` (ROK-1616) means "later today": it expires at 04:00 local the
  *   NEXT day in the community timezone, so a hand raised at 3pm outlives a
  *   games night that runs past midnight. It is emphatically NOT a 60-minute
@@ -65,7 +66,7 @@ export const CreateLfgIntentSchema = z
         /** ID of the game the caller wants to play. Must exist in `games`. */
         gameId: z.number().int().positive(),
         /**
-         * `week` (default, 14 days), `now` (30/60 minutes) or `tonight`
+         * `week` (default, 7 days), `now` (30/60 minutes) or `tonight`
          * (ROK-1616 — 04:00 local next day, community timezone).
          */
         urgency: LfgUrgencySchema.default('week'),

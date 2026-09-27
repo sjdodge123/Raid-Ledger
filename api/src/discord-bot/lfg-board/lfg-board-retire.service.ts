@@ -5,7 +5,7 @@
  * group's only Discord surface, and deleting it strands people mid-coordination.
  * That is right for the GROUP and wrong for the ADMIN, who disables the board
  * because it is cluttered or in the wrong channel and then watches it stay
- * populated for up to the 14-day intent horizon. "Off" did not look off.
+ * populated for up to the week intent horizon. "Off" did not look off.
  *
  * The resolution is neither of the two obvious ones. Each open post gets a
  * FAREWELL edit — the ordinary terminal render plus `LFG_BOARD_RETIRED_NOTE`,

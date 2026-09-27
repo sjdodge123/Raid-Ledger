@@ -436,7 +436,7 @@ describe('LfgInviteService.decline (D12)', () => {
 /**
  * M1 — the preference read itself, un-mocked. `recipientOptedOut` decides
  * whether a row is EVER written, so a channel it fails to notice spends the
- * group cap, the recipient's 24h budget and the 14-day horizon on a DM that
+ * group cap, the recipient's 24h budget and the no-repeat horizon on a DM that
  * `NotificationService.create` silently drops.
  */
 describe('recipientOptedOut — every preference that silences the invite (M1)', () => {

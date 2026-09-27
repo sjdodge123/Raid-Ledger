@@ -356,7 +356,7 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
       );
     });
 
-    it('burns the SAME 14-day dedup key for a now wave (A12, unchanged)', async () => {
+    it('burns the SAME LFG_EXPIRY_DAYS dedup key for a now wave (A12, unchanged)', async () => {
       const h = makeService({ recipientIds: [11] });
 
       await h.service.handleLfmReached(nowPayload);

@@ -222,7 +222,7 @@ describe('LFG → LFM transition', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe('+1 expiry refresh', () => {
-  it('pushes expires_at ~14 days out for EVERY active intent on the game', async () => {
+  it('pushes expires_at ~LFG_EXPIRY_DAYS (7) days out for EVERY active intent on the game', async () => {
     const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Helldivers');
 
