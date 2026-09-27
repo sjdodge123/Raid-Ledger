@@ -155,7 +155,9 @@ export class SteamAuthController {
     const claims = await this.linkNonceService.consume('steam', nonce);
     if (!claims) {
       const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
-      res.redirect(`${clientUrl}/profile?steam=error&message=${msg}`);
+      res.redirect(
+        `${clientUrl}/profile/integrations?steam=error&message=${msg}`,
+      );
       return;
     }
     const returnTo = validateSteamReturnTo(claims.returnTo);

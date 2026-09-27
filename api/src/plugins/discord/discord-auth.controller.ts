@@ -217,7 +217,7 @@ export class DiscordAuthController {
     const claims = await this.linkNonceService.consume('discord', nonce);
     if (!claims) {
       res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE)}`,
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE)}`,
       );
       return;
     }

@@ -299,7 +299,7 @@ describe('SteamAuthController', () => {
 
         expect(res.redirect).toHaveBeenCalledTimes(1);
         expect(res.redirect).toHaveBeenCalledWith(
-          `https://raid.gamernight.net/profile?steam=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
+          `https://raid.gamernight.net/profile/integrations?steam=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
         );
         expect(res.status).not.toHaveBeenCalled();
         expect(mocks.settings.isSteamConfigured).not.toHaveBeenCalled();

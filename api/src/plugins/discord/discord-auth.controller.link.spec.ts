@@ -109,7 +109,7 @@ describe('DiscordAuthController — GET /auth/discord/link?nonce= (ROK-1630)', (
       await ctrl.discordLink(nonce, req, res);
 
       expect(redirectedTo(res)).toBe(
-        `${CLIENT_URL}/profile?linked=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
+        `${CLIENT_URL}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
       );
       expect(res.status).not.toHaveBeenCalled();
       expect(m.getDiscordOAuthConfig).not.toHaveBeenCalled();

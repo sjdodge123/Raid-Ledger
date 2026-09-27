@@ -75,7 +75,7 @@ function clientUrl(): string {
 /** The one Location every GET-hop miss must produce. */
 function errorLanding(provider: Provider): string {
   const flag = provider === 'discord' ? 'linked' : 'steam';
-  return `${clientUrl()}/profile?${flag}=error&message=${EXPIRED_COPY}`;
+  return `${clientUrl()}/profile/integrations?${flag}=error&message=${EXPIRED_COPY}`;
 }
 
 function start(provider: Provider, bearer?: string, body?: object) {
