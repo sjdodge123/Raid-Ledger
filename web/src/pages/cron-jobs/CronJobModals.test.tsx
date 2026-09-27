@@ -105,6 +105,7 @@ describe('EditScheduleModal (ROK-1653 G4b)', () => {
         // One ×, the Modal's own — the bespoke header "Close" button is gone.
         expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
         const close = screen.getByRole('button', { name: 'Close modal' });
+        expect(close).toHaveAttribute('type', 'button');
         expect(close.querySelector('svg')).not.toBeNull();
         await user.click(close);
         expect(onClose).toHaveBeenCalledTimes(1);
