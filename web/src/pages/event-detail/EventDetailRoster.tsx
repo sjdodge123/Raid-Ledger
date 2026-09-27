@@ -65,7 +65,7 @@ function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
     return (
         <span className="flex items-center gap-1.5 text-sm text-muted">
             <span>{signup.discordUsername ?? signup.user.username}</span>
-            <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
+            <span className="text-xs text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
         </span>
     );
 }
