@@ -10,6 +10,23 @@ export interface VisibilityToggleProps {
   onChange: (next: 'public' | 'private') => void;
 }
 
+type Visibility = VisibilityToggleProps['value'];
+
+/**
+ * 44px tap target; the checked option takes its status token (success = open to all,
+ * warning = invite-only) as a tint behind foreground text, with the full-strength token
+ * border as the non-colour-text indicator. Tokens flip with every scheme.
+ */
+const OPTION = 'flex-1 min-h-[44px] px-3 py-2 text-sm rounded-lg border transition-colors';
+const CHECKED: Record<Visibility, string> = {
+  public: 'bg-success/15 border-success text-foreground',
+  private: 'bg-warning/15 border-warning text-foreground',
+};
+const UNCHECKED = 'bg-panel border-edge text-secondary hover:bg-overlay';
+
+const optionClass = (option: Visibility, value: Visibility): string =>
+  `${OPTION} ${option === value ? CHECKED[option] : UNCHECKED}`;
+
 /** Render a labeled segmented control for lineup visibility. */
 export function VisibilityToggle({
   value,
@@ -29,11 +46,7 @@ export function VisibilityToggle({
           aria-checked={value === 'public'}
           onClick={() => onChange('public')}
           data-testid="visibility-public"
-          className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-            value === 'public'
-              ? 'bg-emerald-600 text-white border-emerald-500'
-              : 'bg-panel border-edge text-secondary hover:bg-overlay'
-          }`}
+          className={optionClass('public', value)}
         >
           Public
         </button>
@@ -43,11 +56,7 @@ export function VisibilityToggle({
           aria-checked={value === 'private'}
           onClick={() => onChange('private')}
           data-testid="visibility-private"
-          className={`flex-1 px-3 py-2 text-sm rounded-lg border transition-colors ${
-            value === 'private'
-              ? 'bg-amber-600 text-white border-amber-500'
-              : 'bg-panel border-edge text-secondary hover:bg-overlay'
-          }`}
+          className={optionClass('private', value)}
         >
           Private
         </button>
