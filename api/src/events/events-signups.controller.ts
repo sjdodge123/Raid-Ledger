@@ -107,7 +107,9 @@ export class EventsSignupsController {
     return this.signupsService.getRosterWithAssignments(eventId);
   }
 
+  /** ROK-1629 AC1 — members only; availability windows are not public. */
   @Get(':id/roster/availability')
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async getRosterAvailability(
     @Param('id', ParseIntPipe) eventId: number,
     @Query() query: Record<string, string>,

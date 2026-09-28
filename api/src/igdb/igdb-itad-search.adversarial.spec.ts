@@ -17,7 +17,7 @@ function makeMockDeps(overrides: Partial<ItadSearchDeps> = {}): ItadSearchDeps {
     lookupSteamAppIds: jest.fn().mockResolvedValue(new Map()),
     enrichFromIgdb: jest.fn().mockResolvedValue(null),
     getAdultFilter: jest.fn().mockResolvedValue(false),
-    isBannedOrHidden: jest.fn().mockResolvedValue(false),
+    findBannedOrHiddenSlugs: jest.fn().mockResolvedValue(new Set()),
     upsertGame: jest
       .fn()
       .mockImplementation((g) => Promise.resolve({ ...g, id: 1 })),
@@ -199,10 +199,10 @@ describe('executeItadSearch — error paths', () => {
     );
   });
 
-  it('propagates when isBannedOrHidden throws', async () => {
+  it('propagates when findBannedOrHiddenSlugs throws', async () => {
     const deps = makeMockDeps({
       searchItad: jest.fn().mockResolvedValue([makeGame()]),
-      isBannedOrHidden: jest
+      findBannedOrHiddenSlugs: jest
         .fn()
         .mockRejectedValue(new Error('DB connection lost')),
     });
@@ -323,7 +323,9 @@ describe('executeItadSearch — combined filters', () => {
 
     const deps = makeMockDeps({
       searchItad: jest.fn().mockResolvedValue(games),
-      isBannedOrHidden: jest.fn().mockResolvedValue(true),
+      findBannedOrHiddenSlugs: jest
+        .fn()
+        .mockResolvedValue(new Set(['banned-a', 'banned-b'])),
     });
 
     const result = await executeItadSearch(deps, 'test');
