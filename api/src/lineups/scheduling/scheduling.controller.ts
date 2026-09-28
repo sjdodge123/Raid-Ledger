@@ -269,7 +269,11 @@ export class SchedulingController {
     @Param('matchId', ParseIntPipe) matchId: number,
     @Req() req: AuthRequest,
   ): Promise<void> {
-    await this.schedulingService.retractAllVotes(matchId, req.user!.id);
+    await this.schedulingService.retractAllVotes(
+      matchId,
+      req.user!.id,
+      req.user!.role,
+    );
   }
 
   /**
