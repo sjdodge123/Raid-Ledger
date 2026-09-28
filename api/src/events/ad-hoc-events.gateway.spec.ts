@@ -213,4 +213,13 @@ describe('AdHocEventsGateway — magic-link handshake (ROK-1366 AC5)', () => {
     const client = handshakeWith(magic);
     expect(client.disconnect).toHaveBeenCalledWith(true);
   });
+
+  it('disconnects a legacy magic-link token signed with JWT_SECRET', () => {
+    // Links minted before the purpose-secret switch were signed with
+    // JWT_SECRET; the secret alone cannot reject them (mirrors JwtStrategy).
+    const signer = new JwtService({ secret: MAGIC_SPEC_SECRET });
+    const legacy = signer.sign({ sub: 1, username: 'test', magicLink: true });
+    const client = handshakeWith(legacy);
+    expect(client.disconnect).toHaveBeenCalledWith(true);
+  });
 });
