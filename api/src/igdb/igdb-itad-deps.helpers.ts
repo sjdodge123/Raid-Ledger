@@ -3,7 +3,7 @@
  * Constructs the ItadSearchDeps interface used by executeItadSearch.
  */
 import { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { ItadService } from '../itad/itad.service';
@@ -45,7 +45,8 @@ export function buildItadSearchDeps(
     lookupSteamAppIds: (games) => params.itadService.lookupSteamAppIds(games),
     enrichFromIgdb: (appId) => enrichViaExternalGames(params.queryIgdb, appId),
     getAdultFilter: params.getAdultFilter,
-    isBannedOrHidden: (slug) => checkBannedOrHidden(params.db, slug),
+    findBannedOrHiddenSlugs: (slugs) =>
+      findBannedOrHiddenSlugs(params.db, slugs),
     upsertGame: (game) => upsertItadGame(params.db, game),
     onUnenriched: params.onUnenriched,
     onGameUpserted: params.onGameUpserted,
@@ -105,18 +106,24 @@ async function enrichViaExternalGames(
   }
 }
 
-/** Check if a game slug is banned or hidden in the database. */
-async function checkBannedOrHidden(
+/**
+ * Return the subset of `slugs` that are banned or hidden, in one query
+ * (READLOGS:D2 — was one SELECT per search result). `games.slug` is unique,
+ * so this matches the old per-slug `limit(1)` check exactly.
+ */
+async function findBannedOrHiddenSlugs(
   db: PostgresJsDatabase<typeof schema>,
-  slug: string,
-): Promise<boolean> {
+  slugs: string[],
+): Promise<Set<string>> {
+  if (slugs.length === 0) return new Set();
   const rows = await db
-    .select({
-      hidden: schema.games.hidden,
-      banned: schema.games.banned,
-    })
+    .select({ slug: schema.games.slug })
     .from(schema.games)
-    .where(eq(schema.games.slug, slug))
-    .limit(1);
-  return rows.length > 0 && (rows[0].hidden || rows[0].banned);
+    .where(
+      and(
+        inArray(schema.games.slug, slugs),
+        or(eq(schema.games.hidden, true), eq(schema.games.banned, true)),
+      ),
+    );
+  return new Set(rows.map((r) => r.slug));
 }

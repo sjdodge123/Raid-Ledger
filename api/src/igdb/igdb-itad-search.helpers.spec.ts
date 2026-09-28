@@ -16,7 +16,7 @@ function makeMockDeps(overrides: Partial<ItadSearchDeps> = {}): ItadSearchDeps {
     lookupSteamAppIds: jest.fn().mockResolvedValue(new Map()),
     enrichFromIgdb: jest.fn().mockResolvedValue(null),
     getAdultFilter: jest.fn().mockResolvedValue(false),
-    isBannedOrHidden: jest.fn().mockResolvedValue(false),
+    findBannedOrHiddenSlugs: jest.fn().mockResolvedValue(new Set()),
     upsertGame: jest
       .fn()
       .mockImplementation((g) => Promise.resolve({ ...g, id: 1 })),
@@ -188,10 +188,10 @@ describe('executeItadSearch', () => {
   it('excludes banned/hidden games', async () => {
     const deps = makeMockDeps({
       searchItad: jest.fn().mockResolvedValue([GAME_A, GAME_B]),
-      isBannedOrHidden: jest
+      findBannedOrHiddenSlugs: jest
         .fn()
-        .mockImplementation((slug: string) =>
-          Promise.resolve(slug === 'game-b'),
+        .mockImplementation((slugs: string[]) =>
+          Promise.resolve(new Set(slugs.filter((s) => s === 'game-b'))),
         ),
     });
 
@@ -199,6 +199,19 @@ describe('executeItadSearch', () => {
 
     expect(result.games).toHaveLength(1);
     expect(result.games[0].name).toBe('Game A');
+  });
+
+  it('checks banned/hidden once for the whole result set (READLOGS:D2)', async () => {
+    const findBannedOrHiddenSlugs = jest.fn().mockResolvedValue(new Set());
+    const deps = makeMockDeps({
+      searchItad: jest.fn().mockResolvedValue([GAME_A, GAME_B]),
+      findBannedOrHiddenSlugs,
+    });
+
+    await executeItadSearch(deps, 'game');
+
+    expect(findBannedOrHiddenSlugs).toHaveBeenCalledTimes(1);
+    expect(findBannedOrHiddenSlugs).toHaveBeenCalledWith(['game-a', 'game-b']);
   });
 
   it('includes all games when adult filter is off', async () => {
