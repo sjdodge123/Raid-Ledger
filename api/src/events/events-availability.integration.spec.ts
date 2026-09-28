@@ -14,6 +14,8 @@ import {
   createFutureEvent,
 } from './signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
+import { eq } from 'drizzle-orm';
+import { clearAuthUserCache } from '../auth/auth-user-cache';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -102,9 +104,9 @@ async function testRosterAvailabilityReturnsUsers() {
     .send({});
   expect(signup.status).toBe(201);
 
-  const res = await testApp.request.get(
-    `/events/${eventId}/roster/availability`,
-  );
+  const res = await testApp.request
+    .get(`/events/${eventId}/roster/availability`)
+    .set('Authorization', `Bearer ${token}`);
 
   expect(res.status).toBe(200);
   expect(res.body.eventId).toBe(eventId);
@@ -133,9 +135,9 @@ async function testRosterAvailabilityEmptySignups() {
     })
     .returning();
 
-  const res = await testApp.request.get(
-    `/events/${event.id}/roster/availability`,
-  );
+  const res = await testApp.request
+    .get(`/events/${event.id}/roster/availability`)
+    .set('Authorization', `Bearer ${adminToken}`);
 
   expect(res.status).toBe(200);
   expect(res.body.users).toEqual([]);
@@ -260,8 +262,45 @@ async function testVariantContextNullsWithoutCharacters() {
 // ─── R7: 404 for non-existent event ────────────────────────────────────
 
 async function testRosterAvailability404() {
-  const res = await testApp.request.get('/events/999999/roster/availability');
+  const res = await testApp.request
+    .get('/events/999999/roster/availability')
+    .set('Authorization', `Bearer ${adminToken}`);
   expect(res.status).toBe(404);
+}
+
+// ─── R8/R9: ROK-1629 AC1 — availability is members-only ────────────────
+
+async function testRosterAvailabilityAnonymous401() {
+  const eventId = await createFutureEvent(testApp, adminToken);
+
+  const res = await testApp.request.get(
+    `/events/${eventId}/roster/availability`,
+  );
+
+  expect(res.status).toBe(401);
+  expect(res.body.users).toBeUndefined();
+}
+
+async function testRosterAvailabilityDeactivated403() {
+  const eventId = await createFutureEvent(testApp, adminToken);
+  const { userId, token } = await createMemberAndLogin(
+    testApp,
+    'avail_deact',
+    'avail_deact@test.local',
+  );
+  await testApp.db
+    .update(schema.users)
+    .set({ deactivatedAt: new Date() })
+    .where(eq(schema.users.id, userId));
+  clearAuthUserCache();
+
+  const res = await testApp.request
+    .get(`/events/${eventId}/roster/availability`)
+    .set('Authorization', `Bearer ${token}`);
+
+  expect(res.status).toBe(403);
+  expect(res.body.code).toBe('USER_DEACTIVATED');
+  expect(res.body.users).toBeUndefined();
 }
 
 async function testAggregateGameTime404() {
@@ -292,6 +331,10 @@ describe('getRosterAvailability (integration)', () => {
     testRosterAvailabilityEmptySignups());
   it('returns 404 for non-existent event (R7)', () =>
     testRosterAvailability404());
+  it('rejects an anonymous caller with 401 (R8, ROK-1629)', () =>
+    testRosterAvailabilityAnonymous401());
+  it('rejects a deactivated member with 403 (R9, ROK-1629)', () =>
+    testRosterAvailabilityDeactivated403());
 });
 
 describe('getAggregateGameTime (integration)', () => {
