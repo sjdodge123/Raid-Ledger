@@ -1,12 +1,16 @@
 /**
  * FK reassignment helpers for game deduplication cleanup (ROK-1008).
  * Moves foreign key references from loser game rows to the winner,
- * handling unique constraint violations by skipping conflicting rows.
+ * preventing unique-constraint collisions by pre-deleting conflicting rows.
  */
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import { updateJsonbGameIds } from './igdb-dedup-jsonb-game-ids.helpers';
+import {
+  demoteDuplicateMains,
+  dropCollidingChannelBindings,
+} from './igdb-dedup-partial-index.helpers';
 
 /**
  * The transaction handle Drizzle hands a `db.transaction` callback.
@@ -154,6 +158,9 @@ export async function reassignMiscFks(
   winnerId: number,
 ): Promise<void> {
   await safeReassign(tx, 'discord_game_mappings', 'game_id', loserId, winnerId);
+  // Partial unique index — pre-delete the loser's colliding bindings (the
+  // winner's are kept) so the UPDATE cannot raise 23505 and poison the tx.
+  await dropCollidingChannelBindings(tx, loserId, winnerId);
   await safeReassign(tx, 'channel_bindings', 'game_id', loserId, winnerId);
   await deleteAndReassign(tx, 'game_interests', 'game_id', loserId, winnerId);
   await safeReassign(
@@ -231,32 +238,6 @@ async function mergeActivityRollups(
 }
 
 /**
- * Clear `is_main` on the loser's characters where the same user already has a
- * main on the winner, so the partial unique index cannot see two mains for one
- * (user, game) after reassignment.
- */
-async function demoteDuplicateMains(
-  tx: Tx,
-  loserId: number,
-  winnerId: number,
-): Promise<void> {
-  await tx.execute(
-    sql.raw(
-      `UPDATE characters l
-          SET is_main = false
-        WHERE l.game_id = ${loserId}
-          AND l.is_main = true
-          AND EXISTS (
-            SELECT 1 FROM characters w
-             WHERE w.game_id = ${winnerId}
-               AND w.user_id = l.user_id
-               AND w.is_main = true
-          )`,
-    ),
-  );
-}
-
-/**
  * Delete rows referencing the loser outright (for RESTRICT FKs whose rows are
  * meaningless once the group is merged). Savepoint-protected so a missing table
  * on an older schema cannot abort the enclosing transaction.
@@ -297,7 +278,11 @@ async function deleteAndReassign(
   await safeReassign(tx, table, column, loserId, winnerId);
 }
 
-/** Simple FK reassignment (no unique constraints to worry about). */
+/**
+ * Simple FK reassignment. The savepoint only covers a MISSING table on an older
+ * schema — it does not contain a constraint violation under postgres.js, so any
+ * unique collision must be prevented by a pre-step before this runs.
+ */
 async function safeReassign(
   tx: Tx,
   table: string,
