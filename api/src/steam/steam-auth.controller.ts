@@ -140,6 +140,14 @@ export class SteamAuthController {
     res.redirect(`${clientUrl}${returnTo}?steam=error&message=${msg}`);
   }
 
+  /** Every GET-hop miss: one 302 to the integrations error landing (D7). */
+  private redirectLinkExpired(res: Response, clientUrl: string): void {
+    const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
+    res.redirect(
+      `${clientUrl}/profile/integrations?steam=error&message=${msg}`,
+    );
+  }
+
   /**
    * GET /auth/steam/link?nonce= — initiates Steam OpenID 2.0 linking. The
    * nonce (POST /auth/steam/link/start, ROK-1630) is single-use and carries
@@ -162,10 +170,7 @@ export class SteamAuthController {
       res,
     );
     if (!claims) {
-      const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
-      res.redirect(
-        `${clientUrl}/profile/integrations?steam=error&message=${msg}`,
-      );
+      this.redirectLinkExpired(res, clientUrl);
       return;
     }
     const returnTo = validateSteamReturnTo(claims.returnTo);
@@ -173,8 +178,18 @@ export class SteamAuthController {
       this.redirectSteamNotConfigured(res, clientUrl, returnTo);
       return;
     }
+    this.redirectToSteamOpenId(req, res, claims.userId, returnTo);
+  }
+
+  /** 302 to Steam OpenID with a signed `steam_link` state in return_to. */
+  private redirectToSteamOpenId(
+    req: Request,
+    res: Response,
+    userId: number,
+    returnTo: string,
+  ): void {
     const state = this.signState({
-      userId: claims.userId,
+      userId,
       action: 'steam_link',
       timestamp: Date.now(),
       returnTo,

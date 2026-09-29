@@ -64,8 +64,12 @@ describe('LinkStartController', () => {
     ['a non-object body', 'token=abc'],
   ])('rejects %s with 400 and mints nothing (AC12)', (_label, body) => {
     const { ctrl, mint } = setup();
-    expect(() => ctrl.startDiscordLink(req, body, mockRes())).toThrow(BadRequestException);
-    expect(() => ctrl.startSteamLink(req, body, mockRes())).toThrow(BadRequestException);
+    expect(() => ctrl.startDiscordLink(req, body, mockRes())).toThrow(
+      BadRequestException,
+    );
+    expect(() => ctrl.startSteamLink(req, body, mockRes())).toThrow(
+      BadRequestException,
+    );
     expect(mint).not.toHaveBeenCalled();
   });
 

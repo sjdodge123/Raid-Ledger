@@ -60,7 +60,8 @@ function mockRes(): Response {
 }
 
 /** The browser-binding cookie POST /link/start sets: sha256(nonce), hex. */
-const sha256 = (v: string) => crypto.createHash('sha256').update(v).digest('hex');
+const sha256 = (v: string) =>
+  crypto.createHash('sha256').update(v).digest('hex');
 
 function reqWith(cookies?: Record<string, string>): Request {
   return {

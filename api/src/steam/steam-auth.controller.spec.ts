@@ -24,7 +24,8 @@ import type { AuthenticatedExpressRequest } from '../auth/types';
 const LINK_EXPIRED_COPY = 'Link request expired. Please try again.';
 
 /** The browser-binding cookie POST /link/start sets: sha256(nonce), hex. */
-const sha256 = (v: string) => crypto.createHash('sha256').update(v).digest('hex');
+const sha256 = (v: string) =>
+  crypto.createHash('sha256').update(v).digest('hex');
 const boundTo = (nonce: string) => ({ rl_link_steam: sha256(nonce) });
 
 function createMockResponse(): Response {
