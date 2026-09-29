@@ -10,7 +10,7 @@
  * the cron hits — against a real PostgreSQL database, and assert on the rows
  * the pipeline actually writes (`notifications`, `event_reminders_sent`).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -99,25 +99,54 @@ async function markPhase1Reminded(
   );
 }
 
-/** All escalation ("No-show Alert") notifications sent to the creator. */
-async function escalations(testApp: TestApp, creatorId: number) {
-  return testApp.db
-    .select()
-    .from(schema.notifications)
+/** Move a user's signup to the bench (a `roster_assignments` bench row). */
+async function benchSignup(testApp: TestApp, eventId: number, userId: number) {
+  const [signup] = await testApp.db
+    .select({ id: schema.eventSignups.id })
+    .from(schema.eventSignups)
     .where(
       and(
-        eq(schema.notifications.userId, creatorId),
-        eq(schema.notifications.type, 'missed_event_nudge'),
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, userId),
       ),
     );
+  await testApp.db
+    .insert(schema.rosterAssignments)
+    .values({ eventId, signupId: signup.id, role: 'bench' });
 }
 
-/** Names listed in the most recent escalation payload. */
+/** All escalation ("No-show Alert") notifications sent to the creator. */
+async function escalations(testApp: TestApp, creatorId: number) {
+  return (
+    testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(
+        and(
+          eq(schema.notifications.userId, creatorId),
+          eq(schema.notifications.type, 'missed_event_nudge'),
+        ),
+      )
+      // Oldest first, so escalatedNames' "most recent" is the last row by time,
+      // not whatever order the planner happens to return (TDB:384).
+      .orderBy(asc(schema.notifications.createdAt))
+  );
+}
+
+/**
+ * Names listed in the most recent escalation payload, sorted — the payload's
+ * order is not part of the contract, so assertions must not depend on it.
+ */
 function escalatedNames(rows: Array<{ payload: unknown }>): string[] {
   const payload = rows[rows.length - 1].payload as {
     absentPlayers: Array<{ displayName: string }>;
   };
-  return payload.absentPlayers.map((p) => p.displayName);
+  return payload.absentPlayers.map((p) => p.displayName).sort();
+}
+
+/** User ids from an unordered select, sorted so assertions are order-free. */
+function sortedUserIds(rows: Array<{ userId: number }>): number[] {
+  return rows.map((r) => r.userId).sort((a, b) => a - b);
 }
 
 /** Phase 1 nudge rows recorded for an event. */
@@ -183,7 +212,7 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
       await runCronTick();
 
       const reminded = await phase1Rows(testApp, event.id);
-      expect(reminded.map((r) => r.userId)).toEqual([absent.id]);
+      expect(sortedUserIds(reminded)).toEqual([absent.id]);
     });
 
     it('nudges the running-late player once the extended window expires', async () => {
@@ -196,7 +225,7 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
       await runCronTick();
 
       const reminded = await phase1Rows(testApp, event.id);
-      expect(reminded.map((r) => r.userId)).toEqual([late.id]);
+      expect(sortedUserIds(reminded)).toEqual([late.id]);
     });
   });
 
@@ -293,8 +322,62 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
 
       const alerts = await escalations(testApp, creator.id);
       expect(alerts).toHaveLength(1);
-      expect(escalatedNames(alerts).sort()).toEqual(['LateOne', 'LateTwo']);
+      expect(escalatedNames(alerts)).toEqual(['LateOne', 'LateTwo']);
       expect(await escalationDedupRows(testApp, event.id)).toHaveLength(1);
+    });
+  });
+
+  // =================================================================
+  // TDB:372 — nudged at +5, then benched / roached-out before +15
+  // =================================================================
+
+  describe('players who left the active roster after the Phase 1 nudge', () => {
+    it('does not name a reminded player who was moved to the bench', async () => {
+      const creator = testApp.seed.adminUser;
+      const benched = await createPlayer(testApp, 'BenchedPlayer');
+      const absent = await createPlayer(testApp, 'AbsentPlayer');
+      const event = await createLiveEvent(testApp, creator.id, 16, 2);
+      await signUp(testApp, event.id, benched.id, {});
+      await signUp(testApp, event.id, absent.id);
+      await markPhase1Reminded(testApp, event.id, [benched.id, absent.id]);
+      await benchSignup(testApp, event.id, benched.id);
+
+      await runCronTick();
+
+      const alerts = await escalations(testApp, creator.id);
+      expect(alerts).toHaveLength(1);
+      expect(escalatedNames(alerts)).toEqual(['AbsentPlayer']);
+    });
+
+    it('does not name a reminded player who roached out', async () => {
+      const creator = testApp.seed.adminUser;
+      const roach = await createPlayer(testApp, 'RoachPlayer');
+      const absent = await createPlayer(testApp, 'AbsentPlayer');
+      // Backfills the roach's slot after the +5 nudge. A roached-out signup
+      // does not count toward capacity, so without the backfill the roster is
+      // no longer full and Phase 2 is suppressed before the filter under test
+      // is ever reached. Not Phase-1-reminded, so never a Phase 2 candidate.
+      const backfill = await createPlayer(testApp, 'BackfillPlayer');
+      const event = await createLiveEvent(testApp, creator.id, 16, 2);
+      await signUp(testApp, event.id, roach.id);
+      await signUp(testApp, event.id, absent.id);
+      await markPhase1Reminded(testApp, event.id, [roach.id, absent.id]);
+      await signUp(testApp, event.id, backfill.id);
+      await testApp.db
+        .update(schema.eventSignups)
+        .set({ status: 'roached_out', roachedOutAt: new Date() })
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, event.id),
+            eq(schema.eventSignups.userId, roach.id),
+          ),
+        );
+
+      await runCronTick();
+
+      const alerts = await escalations(testApp, creator.id);
+      expect(alerts).toHaveLength(1);
+      expect(escalatedNames(alerts)).toEqual(['AbsentPlayer']);
     });
   });
 
