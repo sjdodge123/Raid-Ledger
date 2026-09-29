@@ -153,10 +153,7 @@ async function fetchNonBenchSignups(
     })
     .from(schema.eventSignups)
     .where(
-      and(
-        eq(schema.eventSignups.eventId, eventId),
-        activeNonBenchSignup(),
-      ),
+      and(eq(schema.eventSignups.eventId, eventId), activeNonBenchSignup()),
     );
 }
 

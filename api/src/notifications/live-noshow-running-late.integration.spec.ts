@@ -99,6 +99,22 @@ async function markPhase1Reminded(
   );
 }
 
+/** Move a user's signup to the bench (a `roster_assignments` bench row). */
+async function benchSignup(testApp: TestApp, eventId: number, userId: number) {
+  const [signup] = await testApp.db
+    .select({ id: schema.eventSignups.id })
+    .from(schema.eventSignups)
+    .where(
+      and(
+        eq(schema.eventSignups.eventId, eventId),
+        eq(schema.eventSignups.userId, userId),
+      ),
+    );
+  await testApp.db
+    .insert(schema.rosterAssignments)
+    .values({ eventId, signupId: signup.id, role: 'bench' });
+}
+
 /** All escalation ("No-show Alert") notifications sent to the creator. */
 async function escalations(testApp: TestApp, creatorId: number) {
   return (
@@ -308,6 +324,54 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
       expect(alerts).toHaveLength(1);
       expect(escalatedNames(alerts)).toEqual(['LateOne', 'LateTwo']);
       expect(await escalationDedupRows(testApp, event.id)).toHaveLength(1);
+    });
+  });
+
+  // =================================================================
+  // TDB:372 — nudged at +5, then benched / roached-out before +15
+  // =================================================================
+
+  describe('players who left the active roster after the Phase 1 nudge', () => {
+    it('does not name a reminded player who was moved to the bench', async () => {
+      const creator = testApp.seed.adminUser;
+      const benched = await createPlayer(testApp, 'BenchedPlayer');
+      const absent = await createPlayer(testApp, 'AbsentPlayer');
+      const event = await createLiveEvent(testApp, creator.id, 16, 2);
+      await signUp(testApp, event.id, benched.id, {});
+      await signUp(testApp, event.id, absent.id);
+      await markPhase1Reminded(testApp, event.id, [benched.id, absent.id]);
+      await benchSignup(testApp, event.id, benched.id);
+
+      await runCronTick();
+
+      const alerts = await escalations(testApp, creator.id);
+      expect(alerts).toHaveLength(1);
+      expect(escalatedNames(alerts)).toEqual(['AbsentPlayer']);
+    });
+
+    it('does not name a reminded player who roached out', async () => {
+      const creator = testApp.seed.adminUser;
+      const roach = await createPlayer(testApp, 'RoachPlayer');
+      const absent = await createPlayer(testApp, 'AbsentPlayer');
+      const event = await createLiveEvent(testApp, creator.id, 16, 2);
+      await signUp(testApp, event.id, roach.id);
+      await signUp(testApp, event.id, absent.id);
+      await markPhase1Reminded(testApp, event.id, [roach.id, absent.id]);
+      await testApp.db
+        .update(schema.eventSignups)
+        .set({ status: 'roached_out', roachedOutAt: new Date() })
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, event.id),
+            eq(schema.eventSignups.userId, roach.id),
+          ),
+        );
+
+      await runCronTick();
+
+      const alerts = await escalations(testApp, creator.id);
+      expect(alerts).toHaveLength(1);
+      expect(escalatedNames(alerts)).toEqual(['AbsentPlayer']);
     });
   });
 
