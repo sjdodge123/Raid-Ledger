@@ -127,7 +127,7 @@ describe('RosterBuilder a11y — clear & remove announcements (ROK-342)', () => 
         );
         const healerName = screen.queryByText('HealerA');
         if (healerName) {
-            fireEvent.click(healerName.closest('[class*="min-h"]') ?? healerName);
+            fireEvent.click(screen.queryByRole('button', { name: /\(HealerA\)$/ }) ?? healerName);
             const removeBtn = screen.queryByText('Remove');
             if (removeBtn) {
                 fireEvent.click(removeBtn);
