@@ -588,8 +588,40 @@ describe('SchedulingService', () => {
   describe('retractAllVotes', () => {
     it('calls delete for matching match and user', async () => {
       mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
-      const result = await service.retractAllVotes(10, 1);
+      // assertCallerMayVote — public lineup
+      mockDb.limit.mockResolvedValueOnce([LINEUP_VIS_ROW]);
+      const result = await service.retractAllVotes(10, 1, 'member');
       expect(result).toBeUndefined();
+      expect(mockDb.delete).toHaveBeenCalled();
+    });
+
+    // TDB:189 — retract runs the same participation gate as vote/suggest.
+    it('rejects a non-invitee retract on a private lineup', async () => {
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      // assertCallerMayVote — private lineup, caller is not the creator
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 1, createdBy: 999, visibility: 'private' },
+      ]);
+      // isInvitee — no invitee row
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await expect(service.retractAllVotes(10, 1, 'member')).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockDb.delete).not.toHaveBeenCalled();
+    });
+
+    // Retract stays allowed on an expired poll: the gate runs WITHOUT the
+    // match argument, so assertPollOpen is not applied (TDB:189 scope).
+    it('still retracts on an archived (expired) public lineup', async () => {
+      mockDb.limit.mockResolvedValueOnce([SCHEDULING_MATCH]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ...LINEUP_VIS_ROW, status: 'archived', phaseDeadline: null },
+      ]);
+      await expect(
+        service.retractAllVotes(10, 1, 'member'),
+      ).resolves.toBeUndefined();
+      expect(mockDb.delete).toHaveBeenCalled();
     });
 
     it('throws for non-scheduling match', async () => {

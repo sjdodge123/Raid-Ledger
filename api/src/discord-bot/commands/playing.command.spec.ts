@@ -272,3 +272,39 @@ describe('PlayingCommand — shared chrome (ROK-1477)', () => {
     expect((await embedData(null)).color).toBe(colorForState('done'));
   });
 });
+
+/** The string values a drizzle predicate binds (ilike binds its pattern raw). */
+function boundStrings(predicate: unknown): string[] {
+  const chunks = (predicate as { queryChunks: unknown[] }).queryChunks;
+  return chunks.flatMap((chunk) => {
+    if (typeof chunk === 'string') return [chunk];
+    const value = (chunk as { value?: unknown } | null)?.value;
+    return typeof value === 'string' ? [value] : [];
+  });
+}
+
+describe('PlayingCommand — LIKE wildcards in the game name (TDB:960)', () => {
+  it.each([
+    ['%', '\\%'],
+    ['W_W', 'W\\_W'],
+    ['back\\slash', 'back\\\\slash'],
+  ])(
+    'binds "%s" escaped as "%s" so it cannot match an arbitrary game',
+    async (typed, expected) => {
+      const detector = createDetector();
+      const { db, limitFn } = createDbAndModule(detector);
+      limitFn.mockResolvedValueOnce([]);
+      const module = await buildModule(db, detector);
+      const command = module.get(PlayingCommand);
+      await command.handleInteraction(makeChatInteraction(typed) as never);
+      const chain = db.select.mock.results[0].value as { where: jest.Mock };
+      const predicate: unknown = chain.where.mock.calls[0][0];
+      expect(boundStrings(predicate)).toContain(expected);
+      // The override itself keeps what the user typed, unescaped.
+      expect(detector.setManualOverride).toHaveBeenCalledWith(
+        'user-discord-1',
+        typed,
+      );
+    },
+  );
+});
