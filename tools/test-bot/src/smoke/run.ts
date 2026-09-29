@@ -32,6 +32,7 @@ import { privateLineupTests } from "./tests/private-lineup.test.js";
 import { lineupTiebreakerOpenTests } from "./tests/lineup-tiebreaker-open.test.js";
 import { lineupAbortTests } from "./tests/lineup-abort.test.js";
 import { schedulingPollCardTests } from "./tests/lineup-scheduling-poll-card.test.js";
+import { lineupRedecideOrphanCardTests } from "./tests/lineup-redecide-orphan-card.test.js";
 import { standalonePollReminderTests } from "./tests/standalone-poll-reminders.test.js";
 import { reschedulePollLockInTests } from "./tests/reschedule-poll-lockin.test.js";
 import { schedulingPollEmbedLifecycleTests } from "./tests/scheduling-poll-embed-lifecycle.test.js";
@@ -174,6 +175,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lineupTiebreakerOpenTests,
     ...lineupAbortTests,
     ...schedulingPollCardTests,
+    ...lineupRedecideOrphanCardTests,
     ...standalonePollReminderTests,
     ...reschedulePollLockInTests,
     ...schedulingPollEmbedLifecycleTests,

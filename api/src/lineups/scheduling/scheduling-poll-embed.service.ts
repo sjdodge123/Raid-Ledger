@@ -29,7 +29,9 @@ import { resolveLineupChannel } from '../lineup-notification-channel.helpers';
 import {
   LINEUP_MATCH_EVENTS,
   type MatchEnteredSchedulingPayload,
+  type PollCardsOrphanedPayload,
 } from '../lineups-scheduling-hook.helpers';
+import { deleteOrphanedPollCards } from './scheduling-poll-orphan.helpers';
 import {
   loadMatchForInitialPost,
   claimEmbedSlot,
@@ -88,6 +90,22 @@ export class SchedulingPollEmbedService {
           err instanceof Error ? err.message : String(err)
         }`,
       ),
+    );
+  }
+
+  /**
+   * A re-decide wiped matches that owned poll cards (TDB:571): delete the
+   * cards so no live poll points at a match that no longer exists.
+   * Fire-and-forget, like the entered-scheduling listener above.
+   *
+   * @param payload - The cards the committed wipe orphaned.
+   */
+  @OnEvent(LINEUP_MATCH_EVENTS.POLL_CARDS_ORPHANED)
+  onPollCardsOrphaned(payload: PollCardsOrphanedPayload): void {
+    void deleteOrphanedPollCards(
+      this.clientService,
+      payload.cards,
+      this.logger,
     );
   }
 
@@ -211,7 +229,7 @@ export class SchedulingPollEmbedService {
       if (messageId === null) await releaseEmbedClaim(this.db, matchId);
     }
     if (messageId !== null) {
-      await this.storeEmbedRef(matchId, messageId, target);
+      if (!(await this.storeRefOrDropCard(matchId, messageId, target))) return;
       // ROK-1554: a suggestion or vote that landed while Discord was still
       // acknowledging the post was dropped by `updateEmbed` (no message id
       // yet) and nothing re-synced the card. Re-render once from fresh data.
@@ -357,15 +375,39 @@ export class SchedulingPollEmbedService {
     return loadEmbedData(this.db, { ...input, clientUrl });
   }
 
-  /** Store the Discord message reference on the match row. */
+  /**
+   * Store the ref for a card that just landed (TDB:571). A re-decide that
+   * wiped the match mid-send leaves no row to store it on, so the card is
+   * deleted — otherwise it stays live pointing at a match that is gone.
+   *
+   * @returns False when the card was dropped; the caller skips the refresh.
+   */
+  private async storeRefOrDropCard(
+    matchId: number,
+    messageId: string,
+    channelId: string,
+  ): Promise<boolean> {
+    if (await this.storeEmbedRef(matchId, messageId, channelId)) return true;
+    const card = { channelId, messageId };
+    await deleteOrphanedPollCards(this.clientService, [card], this.logger);
+    return false;
+  }
+
+  /**
+   * Store the Discord message reference on the match row.
+   *
+   * @returns False when no row matched — the match was deleted mid-send.
+   */
   private async storeEmbedRef(
     matchId: number,
     messageId: string,
     channelId: string,
-  ): Promise<void> {
-    await this.db
+  ): Promise<boolean> {
+    const rows = await this.db
       .update(schema.communityLineupMatches)
       .set({ embedMessageId: messageId, embedChannelId: channelId })
-      .where(eq(schema.communityLineupMatches.id, matchId));
+      .where(eq(schema.communityLineupMatches.id, matchId))
+      .returning({ id: schema.communityLineupMatches.id });
+    return rows.length > 0;
   }
 }

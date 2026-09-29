@@ -29,6 +29,7 @@ import {
 } from './scheduling-poll-state.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type TerminalArgs = Parameters<typeof resolvePollTerminalState>;
 
 /**
  * Load every independent input the poll page needs in one parallel round and
@@ -92,21 +93,13 @@ export async function assembleSchedulePollResponse(
   callerRole: string | null,
 ): Promise<SchedulePollPageResponseDto> {
   const { pollMatch, lineup, members, slots, voterCount } = inputs;
-  const votes = await findScheduleVotes(
-    db,
-    slots.map((s) => s.id),
-  );
-  const slotConflicts = userId
-    ? await findSlotConflicts(db, userId, slots)
-    : undefined;
-  const terminal = await resolvePollTerminalState(
-    db,
-    pollMatch,
-    lineup,
-    slots,
-    userId ? { id: userId, role: callerRole } : null,
-    votes,
-  );
+  // TDB:1443: the viewer's conflict lookup is independent of the votes ->
+  // terminal-state chain (terminal state needs `votes`), so overlap the two.
+  const viewer = userId ? { id: userId, role: callerRole } : null;
+  const [slotConflicts, { votes, terminal }] = await Promise.all([
+    userId ? findSlotConflicts(db, userId, slots) : undefined,
+    loadVotesAndTerminalState(db, pollMatch, lineup, slots, viewer),
+  ]);
   return {
     ...terminal,
     ...buildPollResponse(
@@ -125,4 +118,27 @@ export async function assembleSchedulePollResponse(
       ? lineup.phaseDeadline.toISOString()
       : null,
   };
+}
+
+/** Votes, then the terminal state that is derived from them (TDB:1443). */
+async function loadVotesAndTerminalState(
+  db: Db,
+  pollMatch: TerminalArgs[1],
+  lineup: TerminalArgs[2],
+  slots: TerminalArgs[3],
+  viewer: TerminalArgs[4],
+) {
+  const votes = await findScheduleVotes(
+    db,
+    slots.map((s) => s.id),
+  );
+  const terminal = await resolvePollTerminalState(
+    db,
+    pollMatch,
+    lineup,
+    slots,
+    viewer,
+    votes,
+  );
+  return { votes, terminal };
 }

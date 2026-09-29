@@ -3,13 +3,17 @@
  * Each test picks its own voice channel and creates/cleans up bindings.
  */
 import { joinVoice, leaveVoice, getVoiceMembers } from '../../helpers/voice.js';
-import { getClient } from '../../client.js';
 import {
   pollForCondition,
   pollForEmbed,
   waitForEmbedUpdate,
 } from '../../helpers/polling.js';
-import { readLastMessages, type SimpleEmbed, type SimpleMessage } from '../../helpers/messages.js';
+import {
+  messageExists,
+  readLastMessages,
+  type SimpleEmbed,
+  type SimpleMessage,
+} from '../../helpers/messages.js';
 import {
   assertConditionNeverMet,
   createBinding,
@@ -745,27 +749,6 @@ async function assertFoldsIntoRecap(
       `Completions fold into the existing presence message (AC7/D9) — a lobby ` +
       `session must never post a second card.`,
   );
-}
-
-/**
- * Does Discord still have this message? A REST fetch (never the cache) that
- * answers 10008 "Unknown Message" means it was deleted.
- */
-async function messageExists(
-  channelId: string,
-  messageId: string,
-): Promise<boolean> {
-  const channel = await getClient().channels.fetch(channelId);
-  if (!channel?.isTextBased()) {
-    throw new Error(`Channel ${channelId} is not a text channel`);
-  }
-  try {
-    await channel.messages.fetch({ message: messageId, force: true });
-    return true;
-  } catch (err) {
-    if ((err as { code?: unknown }).code === 10008) return false;
-    throw err;
-  }
 }
 
 /**
