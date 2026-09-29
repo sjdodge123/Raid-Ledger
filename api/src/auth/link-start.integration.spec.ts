@@ -9,6 +9,10 @@
  * legacy `?token=`) must be the SAME 302 to the profile error landing with
  * the operator-ruled copy (OQ4), and must not touch the user row.
  *
+ * PR #1384 follow-up: /link/start also sets `rl_link_<provider>` =
+ * sha256(nonce), and the hop only honours a nonce from the browser holding
+ * that cookie — a forwarded nonce (no/other cookie) is the same miss.
+ *
  * Discord OAuth config is stubbed on the app's SettingsService instance (the
  * one DiscordAuthController holds); Steam is configured for real via
  * `setSteamApiKey`, as `steam-auth.integration.spec.ts` does. supertest does
@@ -84,14 +88,45 @@ function start(provider: Provider, bearer?: string, body?: object) {
   return body === undefined ? req : req.send(body);
 }
 
-async function mintNonce(provider: Provider, body: object = {}) {
-  const res = await start(provider, adminToken, body);
-  expect(res.status).toBe(200);
-  return (res.body as { nonce: string }).nonce;
+const cookieName = (p: Provider) => `rl_link_${p}`;
+const sha256 = (v: string) =>
+  crypto.createHash('sha256').update(v).digest('hex');
+
+/** The `Cookie:` header a browser holding `nonce`'s binding would send. */
+const boundCookie = (p: Provider, nonce: string) =>
+  `${cookieName(p)}=${sha256(nonce)}`;
+
+/** The response's Set-Cookie line for `rl_link_<p>`, if any. */
+function linkSetCookie(
+  res: { headers: Record<string, unknown> },
+  p: Provider,
+): string | undefined {
+  const raw = res.headers['set-cookie'];
+  const lines = Array.isArray(raw) ? (raw as string[]) : [];
+  return lines.find((l) => l.startsWith(`${cookieName(p)}=`));
 }
 
-function hop(provider: Provider, query: Record<string, string>) {
-  return testApp.request.get(`/auth/${provider}/link`).query(query);
+/** Mint via POST /link/start; returns the nonce + the cookie it set. */
+async function mintBound(provider: Provider, body: object = {}) {
+  const res = await start(provider, adminToken, body);
+  expect(res.status).toBe(200);
+  const nonce = (res.body as { nonce: string }).nonce;
+  const setCookie = linkSetCookie(res, provider);
+  expect(setCookie).toBeDefined();
+  return { nonce, cookie: (setCookie as string).split(';')[0] };
+}
+
+async function mintNonce(provider: Provider, body: object = {}) {
+  return (await mintBound(provider, body)).nonce;
+}
+
+function hop(
+  provider: Provider,
+  query: Record<string, string>,
+  cookie?: string,
+) {
+  const req = testApp.request.get(`/auth/${provider}/link`).query(query);
+  return cookie ? req.set('Cookie', cookie) : req;
 }
 
 /** Decode a `{data, signature}` OAuth state and check its HMAC (JWT_SECRET). */
@@ -174,7 +209,8 @@ describe.each(PROVIDERS)('POST /auth/%s/link/start (AC11, AC12)', (p) => {
 
 describe('GET /auth/discord/link?nonce= (AC13)', () => {
   it('302s to Discord authorize with a signed {userId, action:link} state', async () => {
-    const res = await hop('discord', { nonce: await mintNonce('discord') });
+    const { nonce, cookie } = await mintBound('discord');
+    const res = await hop('discord', { nonce }, cookie);
 
     expect(res.status).toBe(302);
     const loc = new URL(res.headers.location);
@@ -203,7 +239,8 @@ describe('GET /auth/steam/link?nonce= (AC11, AC13)', () => {
     'returnTo %s binds %s into the signed state',
     async (_l, returnTo, want) => {
       const body = returnTo === undefined ? {} : { returnTo };
-      const res = await hop('steam', { nonce: await mintNonce('steam', body) });
+      const { nonce, cookie } = await mintBound('steam', body);
+      const res = await hop('steam', { nonce }, cookie);
 
       expect(res.status).toBe(302);
       const loc = new URL(res.headers.location);
@@ -224,46 +261,75 @@ describe('GET /auth/steam/link?nonce= (AC11, AC13)', () => {
 
 // ── AC14 — every miss is the same error 302 and changes nothing ──────────────
 
-type MissQuery = (p: Provider) => Promise<Record<string, string>>;
+/** A miss: the query plus the Cookie header its browser sends (if any). */
+type Miss = { query: Record<string, string>; cookie?: string };
+type MissQuery = (p: Provider) => Promise<Miss>;
 
 const other = (p: Provider): Provider =>
   p === 'discord' ? 'steam' : 'discord';
 
+/** A nonce with the matching cookie — so only the nonce check can reject. */
+const withBinding = (p: Provider, nonce: string): Miss => ({
+  query: { nonce },
+  cookie: boundCookie(p, nonce),
+});
+
 const MISSES: [string, MissQuery][] = [
   [
-    'a replayed nonce',
+    'a replayed nonce (same browser, cookie re-sent)',
     async (p) => {
-      const nonce = await mintNonce(p);
-      expect((await hop(p, { nonce })).headers.location).not.toBe(
+      const { nonce, cookie } = await mintBound(p);
+      expect((await hop(p, { nonce }, cookie)).headers.location).not.toBe(
         errorLanding(p),
       );
-      return { nonce };
+      return { query: { nonce }, cookie };
     },
   ],
   [
     'an expired nonce',
     (p) =>
-      Promise.resolve({
-        nonce: signPurposeJwt(
-          signer,
-          `link-nonce:${p}`,
-          {
-            sub: testApp.seed.adminUser.id,
-            iat: Math.floor(Date.now() / 1000) - 600,
-          },
-          LINK_NONCE_TTL_SECONDS,
+      Promise.resolve(
+        withBinding(
+          p,
+          signPurposeJwt(
+            signer,
+            `link-nonce:${p}`,
+            {
+              sub: testApp.seed.adminUser.id,
+              iat: Math.floor(Date.now() / 1000) - 600,
+            },
+            LINK_NONCE_TTL_SECONDS,
+          ),
         ),
-      }),
+      ),
   ],
   [
     'a cross-provider nonce',
-    async (p) => ({ nonce: await mintNonce(other(p)) }),
+    async (p) => withBinding(p, await mintNonce(other(p))),
   ],
-  ['a missing nonce', () => Promise.resolve({})],
-  ['a garbage nonce', () => Promise.resolve({ nonce: 'garbage' })],
+  ['a missing nonce', () => Promise.resolve({ query: {} })],
+  ['a garbage nonce', (p) => Promise.resolve(withBinding(p, 'garbage'))],
   [
     'a legacy ?token=<access JWT>',
-    () => Promise.resolve({ token: adminToken }),
+    () => Promise.resolve({ query: { token: adminToken } }),
+  ],
+  [
+    'a fresh nonce forwarded to a browser with no cookie',
+    async (p) => ({ query: { nonce: await mintNonce(p) } }),
+  ],
+  [
+    "a fresh nonce presented with another nonce's cookie",
+    async (p) => ({
+      query: { nonce: await mintNonce(p) },
+      cookie: (await mintBound(p)).cookie,
+    }),
+  ],
+  [
+    "a fresh nonce presented with the other provider's cookie",
+    async (p) => {
+      const { nonce } = await mintBound(p);
+      return { query: { nonce }, cookie: boundCookie(other(p), nonce) };
+    },
   ],
 ];
 
@@ -271,10 +337,10 @@ describe.each(PROVIDERS)('GET /auth/%s/link misses (AC14)', (p) => {
   it.each(MISSES)(
     '%s → the error-landing 302, user row unchanged',
     async (_label, build) => {
-      const query = await build(p);
+      const { query, cookie } = await build(p);
       const before = await adminRow();
 
-      const res = await hop(p, query);
+      const res = await hop(p, query, cookie);
 
       expect(res.status).toBe(302);
       expect(res.headers.location).toBe(errorLanding(p));
@@ -284,6 +350,45 @@ describe.each(PROVIDERS)('GET /auth/%s/link misses (AC14)', (p) => {
       expect(await adminRow()).toEqual(before);
     },
   );
+});
+
+// ── PR #1384 follow-up — the nonce is bound to the minting browser ─────────
+
+describe.each(PROVIDERS)('%s link nonce browser binding', (p) => {
+  it('POST /link/start sets an httpOnly, Lax, 120s cookie of sha256(nonce)', async () => {
+    const res = await start(p, adminToken, {});
+    const nonce = (res.body as { nonce: string }).nonce;
+    const setCookie = linkSetCookie(res, p) ?? '';
+
+    expect(setCookie.split(';')[0]).toBe(boundCookie(p, nonce));
+    expect(setCookie).toMatch(/;\s*HttpOnly/i);
+    expect(setCookie).toMatch(/;\s*SameSite=Lax/i);
+    expect(setCookie).toMatch(/;\s*Path=\/(;|$)/);
+    expect(setCookie).toMatch(/;\s*Max-Age=120(;|$)/);
+    expect(setCookie).not.toContain(nonce);
+  });
+
+  it('a forwarded (cookie-less) hop does not spend the nonce', async () => {
+    const { nonce, cookie } = await mintBound(p);
+
+    const forwarded = await hop(p, { nonce });
+    expect(forwarded.headers.location).toBe(errorLanding(p));
+
+    const owner = await hop(p, { nonce }, cookie);
+    expect(owner.status).toBe(302);
+    expect(owner.headers.location).not.toBe(errorLanding(p));
+  });
+
+  it('a matched hop clears the cookie', async () => {
+    const { nonce, cookie } = await mintBound(p);
+
+    const res = await hop(p, { nonce }, cookie);
+
+    expect(res.headers.location).not.toBe(errorLanding(p));
+    const cleared = linkSetCookie(res, p) ?? '';
+    expect(cleared.split(';')[0]).toBe(`${cookieName(p)}=`);
+    expect(cleared).toMatch(/Expires=Thu, 01 Jan 1970/);
+  });
 });
 
 // ── AC15 — neither GET hop can read ?token= ──────────────────────────────────
