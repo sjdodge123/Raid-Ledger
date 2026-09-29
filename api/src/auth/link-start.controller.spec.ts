@@ -3,16 +3,23 @@
  * The HTTP round trip (401 unauth/magic bearer, nonce -> 302) is covered by
  * link-start.integration.spec.ts.
  */
+import * as crypto from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { AuthGuard } from '@nestjs/passport';
 import { LinkStartController } from './link-start.controller';
 import type { LinkNonceService } from './link-nonce.service';
 import type { AuthenticatedExpressRequest } from './types';
+import type { Response } from 'express';
 import { RATE_LIMIT_TIERS } from '../throttler/rate-limit.decorator';
 
 const MINTED = { nonce: 'n0nce', expiresIn: 120 };
 const req = { user: { id: 5 } } as unknown as AuthenticatedExpressRequest;
+const NONCE_HASH = crypto.createHash('sha256').update('n0nce').digest('hex');
+
+function mockRes(): Response {
+  return { cookie: jest.fn() } as unknown as Response;
+}
 
 function setup() {
   const linkNonce = { mint: jest.fn().mockReturnValue(MINTED) };
@@ -28,7 +35,7 @@ describe('LinkStartController', () => {
       'mints a discord nonce for the bearer user (body %j)',
       (body) => {
         const { ctrl, mint } = setup();
-        expect(ctrl.startDiscordLink(req, body)).toEqual(MINTED);
+        expect(ctrl.startDiscordLink(req, body, mockRes())).toEqual(MINTED);
         expect(mint).toHaveBeenCalledWith('discord', 5);
       },
     );
@@ -45,7 +52,7 @@ describe('LinkStartController', () => {
     ])('binds returnTo %j into the nonce as %j', (returnTo, bound) => {
       const { ctrl, mint } = setup();
       const body = returnTo === undefined ? {} : { returnTo };
-      expect(ctrl.startSteamLink(req, body)).toEqual(MINTED);
+      expect(ctrl.startSteamLink(req, body, mockRes())).toEqual(MINTED);
       expect(mint).toHaveBeenCalledWith('steam', 5, bound);
     });
   });
@@ -57,9 +64,38 @@ describe('LinkStartController', () => {
     ['a non-object body', 'token=abc'],
   ])('rejects %s with 400 and mints nothing (AC12)', (_label, body) => {
     const { ctrl, mint } = setup();
-    expect(() => ctrl.startDiscordLink(req, body)).toThrow(BadRequestException);
-    expect(() => ctrl.startSteamLink(req, body)).toThrow(BadRequestException);
+    expect(() => ctrl.startDiscordLink(req, body, mockRes())).toThrow(BadRequestException);
+    expect(() => ctrl.startSteamLink(req, body, mockRes())).toThrow(BadRequestException);
     expect(mint).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['startDiscordLink', 'rl_link_discord'],
+    ['startSteamLink', 'rl_link_steam'],
+  ] as const)(
+    '%s binds the nonce to this browser with an httpOnly %s cookie',
+    (method, cookieName) => {
+      const { ctrl } = setup();
+      const res = mockRes();
+      ctrl[method](req, {}, res);
+      expect(res.cookie).toHaveBeenCalledTimes(1);
+      expect(res.cookie).toHaveBeenCalledWith(cookieName, NONCE_HASH, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 120_000,
+      });
+    },
+  );
+
+  it('sets no cookie when the body is rejected', () => {
+    const { ctrl } = setup();
+    const res = mockRes();
+    expect(() => ctrl.startDiscordLink(req, { token: 'x' }, res)).toThrow(
+      BadRequestException,
+    );
+    expect(res.cookie).not.toHaveBeenCalled();
   });
 
   it.each(['startDiscordLink', 'startSteamLink'] as const)(

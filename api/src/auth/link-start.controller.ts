@@ -6,8 +6,10 @@ import {
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import {
   LinkStartRequestSchema,
@@ -17,6 +19,7 @@ import {
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { validateSteamReturnTo } from '../steam/steam-link-returnto.helpers';
 import { LinkNonceService } from './link-nonce.service';
+import { setLinkNonceCookie } from './link-nonce-cookie.helpers';
 import type { AuthenticatedExpressRequest } from './types';
 
 /**
@@ -32,7 +35,10 @@ function parseStartBody(body: unknown): LinkStartRequestDto {
 
 /**
  * ROK-1630: mint the single-use nonce the browser carries to
- * GET /auth/{provider}/link?nonce=, replacing `?token=<access JWT>`.
+ * GET /auth/{provider}/link?nonce=, replacing `?token=<access JWT>`. The
+ * response also sets the `rl_link_<provider>` cookie that binds the nonce to
+ * this browser (see link-nonce-cookie.helpers.ts), so the web POST must send
+ * `credentials: 'include'`.
  */
 @Controller('auth')
 export class LinkStartController {
@@ -46,9 +52,12 @@ export class LinkStartController {
   startDiscordLink(
     @Req() req: AuthenticatedExpressRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
   ): LinkStartResponseDto {
     parseStartBody(body);
-    return this.linkNonceService.mint('discord', req.user.id);
+    const minted = this.linkNonceService.mint('discord', req.user.id);
+    setLinkNonceCookie(res, 'discord', minted.nonce);
+    return minted;
   }
 
   /** POST /auth/steam/link/start — body `{returnTo?}`, allowlisted here. */
@@ -59,12 +68,15 @@ export class LinkStartController {
   startSteamLink(
     @Req() req: AuthenticatedExpressRequest,
     @Body() body: unknown,
+    @Res({ passthrough: true }) res: Response,
   ): LinkStartResponseDto {
     const { returnTo } = parseStartBody(body);
-    return this.linkNonceService.mint(
+    const minted = this.linkNonceService.mint(
       'steam',
       req.user.id,
       validateSteamReturnTo(returnTo),
     );
+    setLinkNonceCookie(res, 'steam', minted.nonce);
+    return minted;
   }
 }

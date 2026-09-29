@@ -3,6 +3,7 @@
  * POST /auth/discord/link/start, never a `?token=<access JWT>`. Every miss is
  * the same 302 to the profile error landing (D7) — no JSON 401 dead-end.
  */
+import * as crypto from 'crypto';
 import { Test } from '@nestjs/testing';
 import { Logger } from '@nestjs/common';
 import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
@@ -53,10 +54,25 @@ function mockRes(): Response {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
     redirect: jest.fn(),
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
   } as unknown as Response;
 }
 
-const req = { headers: { host: 'raid.test' }, query: {} } as unknown as Request;
+/** The browser-binding cookie POST /link/start sets: sha256(nonce), hex. */
+const sha256 = (v: string) => crypto.createHash('sha256').update(v).digest('hex');
+
+function reqWith(cookies?: Record<string, string>): Request {
+  return {
+    headers: { host: 'raid.test' },
+    query: {},
+    cookies,
+  } as unknown as Request;
+}
+
+/** The browser that started the link: holds the cookie for 'good-nonce'. */
+const req = reqWith({ rl_link_discord: sha256('good-nonce') });
+const EXPIRED_LANDING = `${CLIENT_URL}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`;
 
 function redirectedTo(res: Response): string {
   const calls = (res.redirect as jest.Mock).mock.calls as string[][];
@@ -108,13 +124,42 @@ describe('DiscordAuthController — GET /auth/discord/link?nonce= (ROK-1630)', (
 
       await ctrl.discordLink(nonce, req, res);
 
-      expect(redirectedTo(res)).toBe(
-        `${CLIENT_URL}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
-      );
+      expect(redirectedTo(res)).toBe(EXPIRED_LANDING);
       expect(res.status).not.toHaveBeenCalled();
       expect(m.getDiscordOAuthConfig).not.toHaveBeenCalled();
     },
   );
+
+  it.each<[string, Record<string, string> | undefined]>([
+    ['no binding cookie (a forwarded link)', undefined],
+    ['a cookie for a different nonce', { rl_link_discord: sha256('other') }],
+    ['the raw nonce instead of its hash', { rl_link_discord: 'good-nonce' }],
+    ['only the steam cookie', { rl_link_steam: sha256('good-nonce') }],
+  ])(
+    'redirects %s to the error landing without consuming the nonce',
+    async (_label, cookies) => {
+      m.consume.mockResolvedValue({ userId: 7 });
+      const res = mockRes();
+
+      await ctrl.discordLink('good-nonce', reqWith(cookies), res);
+
+      expect(redirectedTo(res)).toBe(EXPIRED_LANDING);
+      expect(m.consume).not.toHaveBeenCalled();
+      expect(m.getDiscordOAuthConfig).not.toHaveBeenCalled();
+    },
+  );
+
+  it('clears the binding cookie once it has been matched', async () => {
+    m.consume.mockResolvedValue({ userId: 7 });
+    const res = mockRes();
+
+    await ctrl.discordLink('good-nonce', req, res);
+
+    expect(res.clearCookie).toHaveBeenCalledWith(
+      'rl_link_discord',
+      expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }),
+    );
+  });
 
   it('declares @Query("nonce") and no @Query("token")', () => {
     const args = Reflect.getMetadata(

@@ -38,6 +38,7 @@ import {
   LinkNonceService,
   LINK_REQUEST_EXPIRED_MESSAGE,
 } from '../../auth/link-nonce.service';
+import { consumeBrowserBoundNonce } from '../../auth/link-nonce-cookie.helpers';
 
 interface RequestWithUser extends Request {
   user: {
@@ -205,7 +206,7 @@ export class DiscordAuthController {
     res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
   }
 
-  /** GET /auth/discord/link?nonce= — single-use nonce from POST .../link/start (ROK-1630). */
+  /** GET /auth/discord/link?nonce= — single-use nonce from POST .../link/start (ROK-1630), bound to the minting browser's cookie. */
   @RateLimit('auth')
   @Get('discord/link')
   async discordLink(
@@ -214,7 +215,13 @@ export class DiscordAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    const claims = await this.linkNonceService.consume('discord', nonce);
+    const claims = await consumeBrowserBoundNonce(
+      this.linkNonceService,
+      'discord',
+      nonce,
+      req,
+      res,
+    );
     if (!claims) {
       res.redirect(
         `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE)}`,

@@ -23,6 +23,7 @@ import {
   LinkNonceService,
   LINK_REQUEST_EXPIRED_MESSAGE,
 } from '../auth/link-nonce.service';
+import { consumeBrowserBoundNonce } from '../auth/link-nonce-cookie.helpers';
 import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
@@ -142,7 +143,8 @@ export class SteamAuthController {
   /**
    * GET /auth/steam/link?nonce= — initiates Steam OpenID 2.0 linking. The
    * nonce (POST /auth/steam/link/start, ROK-1630) is single-use and carries
-   * the user id + allowlisted returnTo; every miss gets the same error 302.
+   * the user id + allowlisted returnTo, and only counts from the browser that
+   * holds its cookie; every miss gets the same error 302.
    */
   @RateLimit('auth')
   @Get('link')
@@ -152,7 +154,13 @@ export class SteamAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    const claims = await this.linkNonceService.consume('steam', nonce);
+    const claims = await consumeBrowserBoundNonce(
+      this.linkNonceService,
+      'steam',
+      nonce,
+      req,
+      res,
+    );
     if (!claims) {
       const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
       res.redirect(
