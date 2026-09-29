@@ -22,6 +22,8 @@ import dotenv from 'dotenv';
 import { AUTH_DIR, STORAGE_STATE_PATH, TOKEN_FILE_PATH } from './auth-paths';
 import { resolveApiUrl, resolveWebUrl } from './smoke/target';
 import { browserSetupHint } from './smoke/browser-preflight';
+import { fetchWithRetry } from './smoke/fetch-retry';
+import { gotoWithRetry } from './smoke/goto-retry';
 
 // ROK-1234 follow-up: `bootstrap-admin.ts --reset-password` rotates the admin
 // password and writes it back to the project root `.env`. Load that file here
@@ -49,7 +51,7 @@ async function archiveStaleSmokeLineups(
     token: string,
 ): Promise<void> {
     try {
-        const res = await fetch(`${apiBase}/admin/test/reset-lineups`, {
+        const res = await fetchWithRetry(`${apiBase}/admin/test/reset-lineups`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -99,8 +101,11 @@ export default async function globalSetup(_config: FullConfig) {
     // Ensure .auth directory exists
     fs.mkdirSync(AUTH_DIR, { recursive: true });
 
-    // 1. Authenticate via API to get JWT
-    const loginRes = await fetch(`${API_BASE}/auth/local`, {
+    // 1. Authenticate via API to get JWT. Every fetch in this file goes through
+    // fetchWithRetry (TDB:1325): all four are POSTs, so a retry happens ONLY on
+    // a connect-phase fault where the request provably never reached the API —
+    // never on a mid-flight reset that may already have logged in or reset.
+    const loginRes = await fetchWithRetry(`${API_BASE}/auth/local`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
@@ -127,7 +132,7 @@ export default async function globalSetup(_config: FullConfig) {
     // previous standalone demo/install call. Non-fatal — falls back
     // to demo/install if the reset endpoint isn't available yet
     // (covers branches that haven't deployed ROK-1186 in their API).
-    const resetRes = await fetch(`${API_BASE}/admin/test/reset-to-seed`, {
+    const resetRes = await fetchWithRetry(`${API_BASE}/admin/test/reset-to-seed`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -152,7 +157,7 @@ export default async function globalSetup(_config: FullConfig) {
         console.warn(
             `Reset-to-seed returned ${resetRes.status}: ${body} — falling back to demo/install`,
         );
-        const seedRes = await fetch(`${API_BASE}/admin/settings/demo/install`, {
+        const seedRes = await fetchWithRetry(`${API_BASE}/admin/settings/demo/install`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -180,8 +185,11 @@ export default async function globalSetup(_config: FullConfig) {
     const context = await browser.newContext();
     const page = await context.newPage();
 
-    // Navigate to the app so localStorage is associated with the correct origin
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    // Navigate to the app so localStorage is associated with the correct origin.
+    // One retry on a net::ERR_* transport drop (TDB:1325) — the base.ts fixture
+    // wrap does not reach global setup, and a dropped connect here fails the
+    // whole run before a single spec starts.
+    await gotoWithRetry(page.goto.bind(page), BASE_URL, { waitUntil: 'domcontentloaded' });
 
     // Set the JWT token in localStorage (matching use-auth.ts TOKEN_KEY)
     await page.evaluate((token) => {
