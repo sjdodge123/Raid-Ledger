@@ -5,6 +5,7 @@
 import {
   DEFAULT_CHANNEL_PREFS,
   type ChannelPrefs,
+  type NotificationType,
 } from '../drizzle/schema/notification-preferences';
 import * as schema from '../drizzle/schema';
 import type {
@@ -30,13 +31,16 @@ export function mapNotificationToDto(
   };
 }
 
-/** Map preferences row to DTO, merging stored JSONB with defaults to handle new types. */
-export function mapPreferencesToDto(
-  row: typeof schema.userNotificationPreferences.$inferSelect,
-): NotificationPreferencesDto {
-  const stored = (row.channelPrefs ?? {}) as Partial<ChannelPrefs>;
+/**
+ * Resolve a stored `channel_prefs` JSONB over `DEFAULT_CHANNEL_PREFS` (TDB:899).
+ * A type missing from an older row — or a user with no row (`null`/`undefined`)
+ * — resolves to its default. EVERY preference reader (in-app, single DM, batch
+ * DM, LFG invite) goes through this so the send paths and the settings UI agree.
+ */
+export function resolveChannelPrefs(stored: unknown): ChannelPrefs {
   const merged: ChannelPrefs = { ...DEFAULT_CHANNEL_PREFS };
-  for (const [type, channels] of Object.entries(stored)) {
+  const entries = Object.entries((stored ?? {}) as Partial<ChannelPrefs>);
+  for (const [type, channels] of entries) {
     const notifType = type as keyof ChannelPrefs;
     if (merged[notifType] && channels) {
       merged[notifType] = {
@@ -45,5 +49,22 @@ export function mapPreferencesToDto(
       };
     }
   }
-  return { userId: row.userId, channelPrefs: merged };
+  return merged;
+}
+
+/** Types whose resolved Discord channel is OFF for a stored prefs value. */
+export function discordDisabledTypes(stored: unknown): Set<NotificationType> {
+  const resolved = resolveChannelPrefs(stored);
+  const types = Object.keys(resolved) as NotificationType[];
+  return new Set(types.filter((type) => resolved[type].discord === false));
+}
+
+/** Map preferences row to DTO, merging stored JSONB with defaults to handle new types. */
+export function mapPreferencesToDto(
+  row: typeof schema.userNotificationPreferences.$inferSelect,
+): NotificationPreferencesDto {
+  return {
+    userId: row.userId,
+    channelPrefs: resolveChannelPrefs(row.channelPrefs),
+  };
 }

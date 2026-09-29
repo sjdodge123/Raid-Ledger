@@ -14,6 +14,7 @@ import {
   isDiscordSnowflake,
   type DiscordNotificationJobData,
 } from './discord-notification.constants';
+import { discordDisabledTypes } from './notification-mapping.helpers';
 
 export interface DispatchManyInput {
   notificationId: string;
@@ -46,7 +47,11 @@ async function loadDiscordIds(
   return out;
 }
 
-/** Load set of notification types disabled on Discord per user, in one query. */
+/**
+ * Load the set of notification types disabled on Discord per user, in one
+ * query. Resolved over DEFAULT_CHANNEL_PREFS (TDB:899) — a user with no row
+ * gets the defaults, matching the single-DM path.
+ */
 async function loadDisabledTypes(
   db: PostgresJsDatabase<typeof schema>,
   userIds: number[],
@@ -55,16 +60,10 @@ async function loadDisabledTypes(
     .select()
     .from(schema.userNotificationPreferences)
     .where(inArray(schema.userNotificationPreferences.userId, userIds));
+  const stored = new Map(rows.map((row) => [row.userId, row.channelPrefs]));
   const out = new Map<number, Set<NotificationType>>();
-  for (const row of rows) {
-    const prefs = row.channelPrefs as Record<string, Record<string, boolean>>;
-    const disabled = new Set<NotificationType>();
-    for (const [type, channels] of Object.entries(prefs)) {
-      if (channels && channels.discord === false)
-        disabled.add(type as NotificationType);
-    }
-    out.set(row.userId, disabled);
-  }
+  for (const userId of userIds)
+    out.set(userId, discordDisabledTypes(stored.get(userId)));
   return out;
 }
 

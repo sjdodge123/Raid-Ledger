@@ -2,11 +2,11 @@
  * ROK-1471 D11 — pins the preference read path that actually decides whether
  * an `lfg_invite` DM goes out.
  *
- * `DiscordNotificationService` reads the STORED prefs and does NOT merge
- * `DEFAULT_CHANNEL_PREFS`, so the semantics are opt-OUT: a row written before
- * `lfg_invite` existed has no key, and a missing key SENDS. That is the
- * intended default for this type — pinned here so a future change to merge
- * defaults (which would make an opt-IN default silently dead) fails loudly.
+ * `DiscordNotificationService` resolves the stored prefs over
+ * `DEFAULT_CHANNEL_PREFS` (TDB:899), so a row written before `lfg_invite`
+ * existed has no key and takes the default — discord ON, i.e. opt-OUT: a
+ * missing key SENDS. The default itself is pinned below, so flipping it to an
+ * opt-IN default (which would silence every pre-existing row) fails loudly.
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';

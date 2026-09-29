@@ -31,6 +31,7 @@
 import { and, eq, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { activeNonBenchSignup } from './live-noshow-scope.helpers';
 
 /** Grace granted (minutes) when a player marks running late without an ETA. */
 export const DEFAULT_LATE_GRACE_MIN = 15;
@@ -43,6 +44,10 @@ export type LateGraceByUserId = Map<number, number>;
  *
  * Only rows with `running_late_at` set are returned; anonymous Discord signups
  * (`user_id IS NULL`) are skipped because the late marker is user-scoped.
+ *
+ * Scoped by {@link activeNonBenchSignup}, the same population Phase 1 reads
+ * the marker from: `status = 'signed_up'` and not on the bench. Without that, a player benched or roached-out between
+ * +5 and +15 would still get Phase 2 grace that Phase 1 never granted (TDB:372).
  */
 export async function fetchLateGraceByUserId(
   db: PostgresJsDatabase<typeof schema>,
@@ -58,6 +63,7 @@ export async function fetchLateGraceByUserId(
       and(
         eq(schema.eventSignups.eventId, eventId),
         isNotNull(schema.eventSignups.runningLateAt),
+        activeNonBenchSignup(),
       ),
     );
   const grace: LateGraceByUserId = new Map();

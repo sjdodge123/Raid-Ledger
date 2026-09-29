@@ -347,8 +347,11 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
       );
     });
 
-    it('should enqueue system notification when no prefs row exists (defaults apply)', async () => {
-      // No prefs row → dispatch skips type check → proceeds to bot check
+    it('should skip system notification when no prefs row exists (defaults apply: system is discord OFF)', async () => {
+      // TDB:899 — no prefs row resolves to DEFAULT_CHANNEL_PREFS, the same as
+      // the in-app path; `system` defaults to discord:false. No production
+      // path dispatches `system` through dispatch() (autoDisableDiscord
+      // inserts it directly), so this changes no live delivery.
       mockDb.limit
         .mockResolvedValueOnce([{ discordId: '222222222222222222' }])
         .mockResolvedValueOnce([]); // No prefs
@@ -363,7 +366,8 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
         message: 'No prefs test',
       });
 
-      expect(result).toBe(true);
+      expect(result).toBe(false);
+      expect(mockQueue.add).not.toHaveBeenCalled();
     });
   });
 });
