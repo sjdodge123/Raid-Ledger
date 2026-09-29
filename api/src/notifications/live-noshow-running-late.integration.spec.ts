@@ -353,10 +353,16 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
       const creator = testApp.seed.adminUser;
       const roach = await createPlayer(testApp, 'RoachPlayer');
       const absent = await createPlayer(testApp, 'AbsentPlayer');
+      // Backfills the roach's slot after the +5 nudge. A roached-out signup
+      // does not count toward capacity, so without the backfill the roster is
+      // no longer full and Phase 2 is suppressed before the filter under test
+      // is ever reached. Not Phase-1-reminded, so never a Phase 2 candidate.
+      const backfill = await createPlayer(testApp, 'BackfillPlayer');
       const event = await createLiveEvent(testApp, creator.id, 16, 2);
       await signUp(testApp, event.id, roach.id);
       await signUp(testApp, event.id, absent.id);
       await markPhase1Reminded(testApp, event.id, [roach.id, absent.id]);
+      await signUp(testApp, event.id, backfill.id);
       await testApp.db
         .update(schema.eventSignups)
         .set({ status: 'roached_out', roachedOutAt: new Date() })
