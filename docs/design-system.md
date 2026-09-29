@@ -383,6 +383,15 @@ the Filters FAB's neutral surface (`bg-surface`/`border-edge-strong`) are tokens
 because surfaces drifted before: one shared component does not guarantee identical surfaces — check them
 side by side.
 
+**A clickable card that holds its own controls** (a name link, a Remove button) uses a **stretched
+button** (TDB:1949): the card's action is a native `<button type="button">` with an `aria-label`,
+`absolute inset-0 rounded-lg` plus `FOCUS_RING` (`form-classes.ts`), as the card's FIRST child inside a
+`relative` frame; the inner link / button get `relative` so — later in DOM order — they paint and take
+clicks above it, no z-index. Never make the frame a `role="button"` / `tabIndex` div around them — that
+is axe `nested-interactive`. Adopters: `PlayerCard` (`onClick`), `RosterSlot` (raises the card's controls
+with `[&_a]:relative [&_button]:relative`). Trade-off: a `title` tooltip on a non-raised child (a badge)
+sits under the button and does not show.
+
 **Light / Dark** — the frame is tokens and flips; the artwork does not (`GradientOverlay` stays dark so
 white titles stay legible over the *image*; anything on the art needs `.badge-overlay`). Detail:
 `design-system-tokens.md` §3.
