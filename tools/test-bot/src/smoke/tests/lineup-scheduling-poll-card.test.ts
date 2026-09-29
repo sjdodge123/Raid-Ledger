@@ -21,13 +21,13 @@ interface LineupPayload {
   [k: string]: unknown;
 }
 
-interface MatchPayload {
+export interface MatchPayload {
   id: number;
   [k: string]: unknown;
 }
 
 /** ROK-1461 author line for an open scheduling poll. */
-const POLL_OPEN = 'POLL OPEN';
+export const POLL_OPEN = 'POLL OPEN';
 
 /**
  * Resolve the channel the poll card routes to.
@@ -36,7 +36,7 @@ const POLL_OPEN = 'POLL OPEN';
  * channel → default announcement channel), so polling `defaultChannelId`
  * blindly times out on an environment that configured a lineup channel.
  */
-async function resolveLineupChannelId(
+export async function resolveLineupChannelId(
   api: ApiClient,
   fallback: string,
 ): Promise<string> {
@@ -49,7 +49,7 @@ async function resolveLineupChannelId(
 }
 
 /** Archive any active lineup so a fresh one can be created. */
-async function archiveAllLineups(api: ApiClient): Promise<void> {
+export async function archiveAllLineups(api: ApiClient): Promise<void> {
   try {
     const active = await api.get<{ id: number }>('/lineups/active');
     if (active?.id) {
@@ -62,7 +62,7 @@ async function archiveAllLineups(api: ApiClient): Promise<void> {
   }
 }
 
-async function deleteLineup(api: ApiClient, id: number): Promise<void> {
+export async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
     return api
       .patch(`/lineups/${id}/status`, { status: 'archived' })
@@ -74,7 +74,7 @@ async function deleteLineup(api: ApiClient, id: number): Promise<void> {
  * Build a lineup whose single nominated game clears the match threshold,
  * then advance it to `decided` so the match enters the scheduling phase.
  */
-async function buildDecidedLineup(
+export async function buildDecidedLineup(
   api: ApiClient,
   title: string,
 ): Promise<LineupPayload> {
@@ -105,7 +105,7 @@ async function buildDecidedLineup(
  * `/lineups/:id/matches` groups by phase — `scheduling` is the bucket a
  * threshold-clearing match lands in (ROK-937).
  */
-async function loadSchedulingMatch(
+export async function loadSchedulingMatch(
   api: ApiClient,
   lineupId: number,
 ): Promise<MatchPayload> {
@@ -134,7 +134,7 @@ function assertPollLink(
 }
 
 /** The card must announce itself as an OPEN poll (ROK-1461 author line). */
-function assertPollOpen(embed: SimpleEmbed): void {
+export function assertPollOpen(embed: SimpleEmbed): void {
   if (!(embed.author ?? '').includes(POLL_OPEN)) {
     throw new Error(
       `Expected the poll card author to contain "${POLL_OPEN}", got "${embed.author}"`,
