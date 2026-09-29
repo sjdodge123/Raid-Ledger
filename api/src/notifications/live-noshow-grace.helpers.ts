@@ -28,7 +28,7 @@
  * deliberately not sent. Making stragglers re-reportable would require moving
  * the dedup from creator-keyed to per-named-user (see ROK-1424 review).
  */
-import { and, eq, isNotNull } from 'drizzle-orm';
+import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
@@ -43,6 +43,11 @@ export type LateGraceByUserId = Map<number, number>;
  *
  * Only rows with `running_late_at` set are returned; anonymous Discord signups
  * (`user_id IS NULL`) are skipped because the late marker is user-scoped.
+ *
+ * Scoped to the same population Phase 1 reads the marker from
+ * (`fetchNonBenchSignups` in live-noshow.helpers.ts): `status = 'signed_up'`
+ * and not on the bench. Without that, a player benched or roached-out between
+ * +5 and +15 would still get Phase 2 grace that Phase 1 never granted (TDB:372).
  */
 export async function fetchLateGraceByUserId(
   db: PostgresJsDatabase<typeof schema>,
@@ -58,6 +63,8 @@ export async function fetchLateGraceByUserId(
       and(
         eq(schema.eventSignups.eventId, eventId),
         isNotNull(schema.eventSignups.runningLateAt),
+        eq(schema.eventSignups.status, 'signed_up'),
+        sql`NOT EXISTS (SELECT 1 FROM ${schema.rosterAssignments} WHERE ${schema.rosterAssignments.eventId} = ${schema.eventSignups.eventId} AND ${schema.rosterAssignments.signupId} = ${schema.eventSignups.id} AND ${schema.rosterAssignments.role} = 'bench')`,
       ),
     );
   const grace: LateGraceByUserId = new Map();
