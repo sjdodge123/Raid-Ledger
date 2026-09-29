@@ -1,6 +1,7 @@
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import React from 'react';
 import { RosterCard } from './RosterCard';
+import { FOCUS_RING } from '../ui/form-classes';
 
 interface RosterSlotProps {
     role: RosterRole;
@@ -56,36 +57,38 @@ function resolveRemoveFn(item: RosterAssignmentResponse, onRemove?: (id: number)
     return undefined;
 }
 
+/** Accessible name of the slot's action; keeps the visible "Join" / "Assign" word (WCAG 2.5.3). */
+function slotActionLabel(role: RosterRole, position: number, item: RosterAssignmentResponse | undefined, isAdmin: boolean) {
+    if (item) return `Manage ${role} slot ${position} (${item.username})`;
+    return `${isAdmin ? 'Assign' : 'Join'} ${role} slot ${position}`;
+}
+
 export const RosterSlot = React.memo(function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove }: RosterSlotProps) {
     const handleClick = () => {
         if (!item && onJoinClick) { onJoinClick(role, position); return; }
         if (onAdminClick) onAdminClick(role, position);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent): void => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleClick();
-        }
-    };
-
     const isClickable = !!onAdminClick || (!item && !!onJoinClick);
     const isTentative = item?.signupStatus === 'tentative';
     const isDeparted = item?.signupStatus === 'departed';
     const glowClass = isCurrentUser && !isDeparted ? 'ring-2 ring-emerald-400/60 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse-subtle' : '';
-    const focusClass = isClickable ? 'focus-visible:ring-2 focus-visible:ring-emerald-500' : '';
     const badgeBg = isDeparted ? 'bg-red-600' : isTentative ? 'bg-amber-600' : color;
     const badgeContent = isDeparted ? `\u{1F6AA} ${position}` : isTentative ? `\u23F3 ${position}` : position;
 
     return (
-        <div onClick={handleClick}
-            {...(isClickable ? { role: 'button', tabIndex: 0, onKeyDown: handleKeyDown } : {})}
-            className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${focusClass} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
+        <div className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
+            {/* TDB:1949 — a stretched native button BESIDE the card, never around its name link / Remove button (axe nested-interactive). */}
+            {isClickable && (
+                <button type="button" onClick={handleClick} aria-label={slotActionLabel(role, position, item, !!onAdminClick)}
+                    className={`absolute inset-0 cursor-pointer rounded-lg ${FOCUS_RING}`} />
+            )}
             <span className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${badgeBg} text-foreground`}>
                 {badgeContent}
             </span>
             {item ? (
-                <div className="p-1"><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} /></div>
+                // `relative` lifts the card's link + Remove button above the stretched slot button.
+                <div className={`p-1${isClickable ? ' [&_a]:relative [&_button]:relative' : ''}`}><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} /></div>
             ) : (
                 <EmptySlotContent isClickable={isClickable} isAdmin={!!onAdminClick} />
             )}
