@@ -3,7 +3,6 @@ import type { IgdbGameDto } from "@raid-ledger/contract";
 import type { BindingPurpose, ChannelType } from "@raid-ledger/contract";
 import {
   AUTO_CLOSE_HELP,
-  BINDING_PURPOSE_LABELS,
   MIN_PLAYERS_CONSEQUENCE,
   MIN_PLAYERS_HELP,
   autoCloseLabel,
@@ -15,33 +14,7 @@ import { Checkbox } from "../ui/checkbox";
 import { Field } from "../ui/field";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
-
-/**
- * Purpose options a channel of each type may legally carry (ROK-1415 invariant).
- * Labels come from the contract so the `/bind` reply and this select cannot
- * drift apart (ROK-1462 AC5).
- */
-const PURPOSE_OPTIONS: Record<
-  ChannelType,
-  { value: BindingPurpose; label: string }[]
-> = {
-  voice: [
-    {
-      value: "game-voice-monitor",
-      label: BINDING_PURPOSE_LABELS["game-voice-monitor"],
-    },
-    { value: "general-lobby", label: BINDING_PURPOSE_LABELS["general-lobby"] },
-  ],
-  text: [
-    {
-      value: "game-announcements",
-      label: BINDING_PURPOSE_LABELS["game-announcements"],
-    },
-  ],
-  forum: [
-    { value: "lfg-board", label: BINDING_PURPOSE_LABELS["lfg-board"] },
-  ],
-};
+import { PURPOSE_OPTIONS } from "./binding-form.helpers";
 
 const PURPOSE_HINT =
   "Voice + a game = Activity Monitor · Voice, no game = General Lobby · " +
