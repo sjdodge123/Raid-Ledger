@@ -1960,3 +1960,7 @@ same day (#1278, #1279, #1280).
   Suggested: run both writes in one `this.db.transaction(...)`, passing `tx` to `muteDiscordDms`.
 - **[low, unconfirmed]** Discord smoke `dm` on fleet slot 1 (env notif-0928). The second of two runs failed "AI Chat: Session times out after 5 min inactivity -> welcome menu" (0 buttons after expiry) and "AI Chat: Back returns to parent menu, Home returns to welcome" (no `ai:back` button). Both passed in run 1. The branch touches no ai-chat code. These have not been reproduced in isolation, so their cause is unknown. The same runs also hit the documented await-processing 409 drain-timeout family (see the earlier entries), on different tests each run.
   Suggested: run `SMOKE_NAME_FILTER='AI Chat'` in a loop on a clean main env before labelling it a flake.
+
+### 2026-09-29 — fix/web-flows-0929 (surfaced during the B08 fleet gate)
+- **[med]** fleet `rl_validate_ci fleet:true` (`validate-ci.sh --fleet`) does not run `npm install` / `npm ci`. The slot-2 runner's `/workspace/node_modules` (`node_modules/.package-lock.json` dated 2026-09-05) predates #1377, so Build failed with `vite.config.ts(53,17): error TS2307: Cannot find module 'rollup-plugin-visualizer'` (task 04885d5cff39). Pre-existing on any branch: the dependency landed on main in #1377 and the runner never reinstalled.
+  Suggested: in the `--fleet` path, run `npm ci` when `package-lock.json` differs from `node_modules/.package-lock.json` (or always before Build).
