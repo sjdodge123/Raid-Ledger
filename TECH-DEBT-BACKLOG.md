@@ -1950,3 +1950,7 @@ same day (#1278, #1279, #1280).
   Suggested: make the card's own action a real button sibling rather than a wrapper, or stop propagation explicitly, and add an axe/vitest nesting assertion.
 - **[low]** `web/src/pages/user-profile/user-profile-extra-sections.tsx:~104` (`GuestProfile`): when the Discord avatar image fails to load (a stale or invalid `avatarHash`), the image is hidden and **no initials fallback** renders. A real guest whose avatar hash went stale sees a blank avatar. Seen with seeded data during ROK-1694 verification.
   Suggested: render the same initials fallback other avatars use when `onError` fires.
+
+### 2026-09-28 — fix/notif-0928 (surfaced during TDB:899 prefs-resolution fix)
+- **[med]** `api/src/notifications/discord-notification.service.ts:~331-352` (`autoDisableDiscord`): after repeated DM failures it writes `discord: false` only for the keys already present in the stored `channel_prefs` row. Every Discord send path now resolves prefs over `DEFAULT_CHANNEL_PREFS` (TDB:899), so a type missing from that row resolves to its default, and most defaults are discord ON. A user who was auto-disabled can therefore still get DMs for any type added after their row was written. This predates TDB:899: before it, a missing key was also read as "send".
+  Suggested: build the disabled row from `resolveChannelPrefs(currentPrefs)` so that every `NOTIFICATION_TYPES` key gets `discord: false`, and add a unit assertion that the written row has a `discord:false` entry for every type.
