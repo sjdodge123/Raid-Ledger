@@ -102,7 +102,7 @@ report_snapshot_drift() {
     echo "$added" | sed 's/^/  /'
     local f
     for f in $added; do
-      case "$f" in *.sql) sed -n '1,40p' "$DRIFT_TMP/migrations/$f" ;; esac
+      case "$f" in *.sql) sed -n '1,40p' "$DRIFT_TMP/migrations/$f"; echo ;; esac
     done
     echo -e "${RED}Run 'npm run db:generate -w api' and commit the result.${NC}"
     return 1
