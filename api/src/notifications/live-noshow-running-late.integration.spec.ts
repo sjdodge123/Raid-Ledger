@@ -10,7 +10,7 @@
  * the cron hits — against a real PostgreSQL database, and assert on the rows
  * the pipeline actually writes (`notifications`, `event_reminders_sent`).
  */
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
@@ -101,23 +101,36 @@ async function markPhase1Reminded(
 
 /** All escalation ("No-show Alert") notifications sent to the creator. */
 async function escalations(testApp: TestApp, creatorId: number) {
-  return testApp.db
-    .select()
-    .from(schema.notifications)
-    .where(
-      and(
-        eq(schema.notifications.userId, creatorId),
-        eq(schema.notifications.type, 'missed_event_nudge'),
-      ),
-    );
+  return (
+    testApp.db
+      .select()
+      .from(schema.notifications)
+      .where(
+        and(
+          eq(schema.notifications.userId, creatorId),
+          eq(schema.notifications.type, 'missed_event_nudge'),
+        ),
+      )
+      // Oldest first, so escalatedNames' "most recent" is the last row by time,
+      // not whatever order the planner happens to return (TDB:384).
+      .orderBy(asc(schema.notifications.createdAt))
+  );
 }
 
-/** Names listed in the most recent escalation payload. */
+/**
+ * Names listed in the most recent escalation payload, sorted — the payload's
+ * order is not part of the contract, so assertions must not depend on it.
+ */
 function escalatedNames(rows: Array<{ payload: unknown }>): string[] {
   const payload = rows[rows.length - 1].payload as {
     absentPlayers: Array<{ displayName: string }>;
   };
-  return payload.absentPlayers.map((p) => p.displayName);
+  return payload.absentPlayers.map((p) => p.displayName).sort();
+}
+
+/** User ids from an unordered select, sorted so assertions are order-free. */
+function sortedUserIds(rows: Array<{ userId: number }>): number[] {
+  return rows.map((r) => r.userId).sort((a, b) => a - b);
 }
 
 /** Phase 1 nudge rows recorded for an event. */
@@ -183,7 +196,7 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
       await runCronTick();
 
       const reminded = await phase1Rows(testApp, event.id);
-      expect(reminded.map((r) => r.userId)).toEqual([absent.id]);
+      expect(sortedUserIds(reminded)).toEqual([absent.id]);
     });
 
     it('nudges the running-late player once the extended window expires', async () => {
@@ -196,7 +209,7 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
       await runCronTick();
 
       const reminded = await phase1Rows(testApp, event.id);
-      expect(reminded.map((r) => r.userId)).toEqual([late.id]);
+      expect(sortedUserIds(reminded)).toEqual([late.id]);
     });
   });
 
@@ -293,7 +306,7 @@ describe('Regression: ROK-1424 — running-late grace window (integration)', () 
 
       const alerts = await escalations(testApp, creator.id);
       expect(alerts).toHaveLength(1);
-      expect(escalatedNames(alerts).sort()).toEqual(['LateOne', 'LateTwo']);
+      expect(escalatedNames(alerts)).toEqual(['LateOne', 'LateTwo']);
       expect(await escalationDedupRows(testApp, event.id)).toHaveLength(1);
     });
   });
