@@ -180,7 +180,7 @@ describe('LiveNoShowService — batching', () => {
         jest
           .fn()
           .mockReturnValue(
-            makeSelectFromWhere([{ userId: 10 }, { userId: 11 }]),
+            makeSelectFromJoinWhere([{ userId: 10 }, { userId: 11 }]),
           ),
         // fetchLateGraceByUserId (ROK-1424) -- nobody running late
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
@@ -268,10 +268,11 @@ describe('LiveNoShowService — batching', () => {
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])), // hasReminderBeenSent
         // isRosterAtCapacity: at capacity
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
+        // getPhase1RemindedUserIds
         jest
           .fn()
           .mockReturnValue(
-            makeSelectFromWhere([{ userId: 10 }, { userId: 11 }]),
+            makeSelectFromJoinWhere([{ userId: 10 }, { userId: 11 }]),
           ),
         // fetchLateGraceByUserId (ROK-1424) -- nobody running late
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
@@ -385,7 +386,7 @@ describe('LiveNoShowService — batching', () => {
         // isRosterAtCapacity: at capacity
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds
-        jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
+        jest.fn().mockReturnValue(makeSelectFromJoinWhere([{ userId: 10 }])),
         // fetchLateGraceByUserId (ROK-1424) -- nobody running late
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs -- user has null discordId
@@ -458,7 +459,7 @@ describe('LiveNoShowService — batching', () => {
         // isRosterAtCapacity: at capacity
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds
-        jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 10 }])),
+        jest.fn().mockReturnValue(makeSelectFromJoinWhere([{ userId: 10 }])),
         // fetchLateGraceByUserId (ROK-1424) -- nobody running late
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs -- user not found

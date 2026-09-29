@@ -8,6 +8,8 @@
  * cannot reach — notably non-positive `lateMinutes`, which no writer produces
  * today and which would otherwise go untested until someone adds one.
  */
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import {
@@ -126,5 +128,30 @@ describe('fetchLateGraceByUserId', () => {
     );
     expect(grace.size).toBe(1);
     expect(grace.has(2)).toBe(true);
+  });
+
+  it('only grants grace to signed-up, non-bench signups (mirrors Phase 1)', async () => {
+    // TDB:372 — Phase 1 reads the marker off fetchNonBenchSignups (status
+    // 'signed_up' + not benched). Phase 2 must apply the same filter, or a user
+    // benched / roached-out between +5 and +15 still suppresses the alert.
+    let predicate: SQL | undefined;
+    const db = {
+      select: () => ({
+        from: () => ({
+          where: (w: SQL) => {
+            predicate = w;
+            return Promise.resolve([]);
+          },
+        }),
+      }),
+    } as unknown as PostgresJsDatabase<typeof schema>;
+    await fetchLateGraceByUserId(db, 42);
+    const query = new PgDialect().sqlToQuery(predicate as SQL);
+    expect(query.sql).toContain('"event_signups"."status" = $');
+    expect(query.params).toContain('signed_up');
+    expect(query.sql).toMatch(
+      /NOT EXISTS \(SELECT 1 FROM "roster_assignments"/,
+    );
+    expect(query.sql).toContain(`"roster_assignments"."role" = 'bench'`);
   });
 });

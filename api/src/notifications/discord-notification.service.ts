@@ -15,6 +15,7 @@ import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { deactivateUserViaModuleRef } from './discord-notification-deactivate.helpers';
 import { resolveUserTimezone } from './timezone.helpers';
+import { discordDisabledTypes } from './notification-mapping.helpers';
 import {
   DISCORD_NOTIFICATION_QUEUE,
   RATE_LIMIT_WINDOW_MS,
@@ -161,13 +162,8 @@ export class DiscordNotificationService {
       .from(schema.userNotificationPreferences)
       .where(eq(schema.userNotificationPreferences.userId, userId))
       .limit(1);
-    if (!prefs) return false;
-    const channelPrefs = prefs.channelPrefs as Record<
-      string,
-      Record<string, boolean>
-    >;
-    const typePrefs = channelPrefs[type];
-    if (typePrefs && typePrefs.discord === false) {
+    // TDB:899 — resolve over the defaults (no row ⇒ defaults), like in-app.
+    if (discordDisabledTypes(prefs?.channelPrefs).has(type)) {
       this.logger.debug(
         `User ${userId}: Discord disabled for ${type}, skipping`,
       );

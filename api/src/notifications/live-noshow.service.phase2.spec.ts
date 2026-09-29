@@ -216,7 +216,7 @@ describe('LiveNoShowService — phase2', () => {
           jest
             .fn()
             .mockReturnValue(
-              makeSelectFromWhere(
+              makeSelectFromJoinWhere(
                 phase1Reminded.map((uid) => ({ userId: uid })),
               ),
             ),
@@ -496,7 +496,7 @@ describe('LiveNoShowService — phase2', () => {
         // isRosterAtCapacity: count active signups -- at capacity
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ count: 10 }])),
         // getPhase1RemindedUserIds -- creator user 1 was reminded
-        jest.fn().mockReturnValue(makeSelectFromWhere([{ userId: 1 }])),
+        jest.fn().mockReturnValue(makeSelectFromJoinWhere([{ userId: 1 }])),
         // fetchLateGraceByUserId (ROK-1424) -- nobody running late
         jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // fetchPhase2Data: batch discord IDs

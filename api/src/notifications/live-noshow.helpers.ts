@@ -8,6 +8,7 @@ import * as schema from '../drizzle/schema';
 import { resolveEventCapacity } from '../events/signups-signup.helpers';
 import { resolveDisplayName } from '../users/display-name.helpers';
 import { activeUsersFilter } from '../users/users-active.helpers';
+import { activeNonBenchSignup } from './live-noshow-scope.helpers';
 
 /** Minimum voice presence (seconds) to count as "showed up". */
 export const PRESENCE_THRESHOLD_SEC = 120;
@@ -53,7 +54,15 @@ function mapToLiveEvent(r: {
   };
 }
 
-/** Find live scheduled events where now >= startTime + 5 min. */
+/**
+ * Find live scheduled events where now >= startTime + 5 min.
+ *
+ * Only events still running (now <= extendedUntil ?? endTime) are returned.
+ * Intentional consequence (TDB:378): on a short event, a running-late grace
+ * deferral can push the Phase 2 deadline to or past the event's end, and the
+ * escalation then never fires — a "their slot is free to PUG" alert is
+ * useless once the event is over.
+ */
 export async function findLiveEventsInNoShowWindow(
   db: PostgresJsDatabase<typeof schema>,
   now: Date,
@@ -144,11 +153,7 @@ async function fetchNonBenchSignups(
     })
     .from(schema.eventSignups)
     .where(
-      and(
-        eq(schema.eventSignups.eventId, eventId),
-        eq(schema.eventSignups.status, 'signed_up'),
-        sql`NOT EXISTS (SELECT 1 FROM ${schema.rosterAssignments} WHERE ${schema.rosterAssignments.eventId} = ${schema.eventSignups.eventId} AND ${schema.rosterAssignments.signupId} = ${schema.eventSignups.id} AND ${schema.rosterAssignments.role} = 'bench')`,
-      ),
+      and(eq(schema.eventSignups.eventId, eventId), activeNonBenchSignup()),
     );
 }
 
@@ -211,7 +216,11 @@ export async function getAbsentSignedUpPlayers(
   return absent;
 }
 
-/** Get user IDs that received Phase 1 (noshow_reminder) for an event. */
+/**
+ * Get user IDs that received Phase 1 (noshow_reminder) for an event and are
+ * STILL active, non-bench signups. A player benched or roached-out after the
+ * nudge must not be named in the Phase 2 "slot is free to PUG" alert (TDB:372).
+ */
 export async function getPhase1RemindedUserIds(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
@@ -219,10 +228,18 @@ export async function getPhase1RemindedUserIds(
   const rows = await db
     .select({ userId: schema.eventRemindersSent.userId })
     .from(schema.eventRemindersSent)
+    .innerJoin(
+      schema.eventSignups,
+      and(
+        eq(schema.eventSignups.eventId, schema.eventRemindersSent.eventId),
+        eq(schema.eventSignups.userId, schema.eventRemindersSent.userId),
+      ),
+    )
     .where(
       and(
         eq(schema.eventRemindersSent.eventId, eventId),
         eq(schema.eventRemindersSent.reminderType, 'noshow_reminder'),
+        activeNonBenchSignup(),
       ),
     );
   return rows.map((r) => r.userId);
