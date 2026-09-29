@@ -53,6 +53,9 @@ export function useUpdateUserProfile() {
  * runs. The wizard navigates away in that callback, and AuthGuard reads the
  * cache — a stale (not-completed) user bounced it straight back to
  * /onboarding. The invalidation still runs to reconcile with the server.
+ * The patch also makes the wizard's own completed-user redirect true, so the
+ * wizard skips that redirect while this mutation is pending or succeeded —
+ * otherwise it could replace the per-call invite-claim navigate.
  */
 export function useCompleteOnboardingFte() {
     const queryClient = useQueryClient();
