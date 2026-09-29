@@ -10,12 +10,13 @@
  * and `invite_code` is already gone from sessionStorage, so the claim is lost.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { JSX } from 'react';
 import type { CompleteOnboardingResponseDto } from '@raid-ledger/contract';
 import type { User } from '../hooks/use-auth';
+import { toast } from '../lib/toast';
 import { OnboardingWizardPage } from './onboarding-wizard-page';
 
 const mockFetchApi = vi.fn();
@@ -126,5 +127,23 @@ describe('OnboardingWizardPage — invite claim survives completion (TDB:982)', 
             screen.getByTestId('location').textContent,
             "the wizard's completed-user redirect must not replace the invite claim",
         ).toBe(INVITE_CLAIM);
+    });
+
+    it('Escape while Complete is pending neither re-POSTs nor replaces the Complete navigation', async () => {
+        renderWizard();
+        for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        let land!: (value: CompleteOnboardingResponseDto) => void;
+        mockFetchApi.mockReturnValue(new Promise<CompleteOnboardingResponseDto>((resolve) => { land = resolve; }));
+        fireEvent.click(screen.getByRole('button', { name: 'Complete' }));
+        await screen.findByRole('button', { name: 'Completing...' });
+
+        fireEvent.keyDown(window, { key: 'Escape' });
+        await act(async () => {});
+        const completePosts = mockFetchApi.mock.calls.filter(([url]) => url === '/users/me/complete-onboarding');
+        expect(completePosts.length, 'Escape during a pending Complete must not fire a second complete POST').toBe(1);
+
+        await act(async () => { land({ success: true, onboardingCompletedAt: COMPLETED_AT } as CompleteOnboardingResponseDto); });
+        await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(INVITE_CLAIM));
+        expect(toast.info, 'Complete must not be reported as a skip').not.toHaveBeenCalled();
     });
 });

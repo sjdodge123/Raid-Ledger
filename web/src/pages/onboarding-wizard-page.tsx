@@ -123,6 +123,8 @@ function useCompletionHandlers(completeOnboarding: ReturnType<typeof useComplete
 } {
     const navigate = useNavigate();
     const handleSkipAll = useCallback(() => {
+        // Escape stays armed during a Complete: a second mutate would re-POST and drop Complete's onSuccess.
+        if (completeOnboarding.isPending) return;
         completeOnboarding.mutate(undefined, {
             onSuccess: () => {
                 toast.info('Setup skipped. You can update your profile anytime.');
