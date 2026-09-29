@@ -16,6 +16,7 @@ import type { AvatarUser } from '../../lib/avatar';
 import { formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { RoleIcon } from '../shared/RoleIcon';
+import { FOCUS_RING } from '../ui/form-classes';
 
 export interface PlayerCardProps {
     /** Player data from roster assignments */
@@ -26,6 +27,8 @@ export interface PlayerCardProps {
     showRole?: boolean;
     /** Click handler (e.g. assign in modal) */
     onClick?: () => void;
+    /** Accessible name of the card's click action (default: `Select <username>`) */
+    clickLabel?: string;
     /** Admin remove handler */
     onRemove?: () => void;
     /** Accent left-border color string (e.g. for matching-role highlight) */
@@ -64,13 +67,16 @@ function playerProfileLink(player: RosterAssignmentResponse) {
     return guestProfileLink({ username: player.username, discordId: player.discordId, avatarHash: player.avatar });
 }
 
-function PlayerNameLink({ player }: { player: RosterAssignmentResponse }) {
+/** `relative` lifts a control above the card's stretched action button (see CardActionButton). */
+const raise = (raised: boolean) => (raised ? ' relative' : '');
+
+function PlayerNameLink({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
     const { to, state } = playerProfileLink(player);
     return (
         <Link
             to={to}
             state={state}
-            className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
+            className={`truncate font-medium text-foreground hover:text-indigo-400 transition-colors${raise(raised)}`}
             title={player.username} onClick={(e) => e.stopPropagation()}>
             {player.username}
         </Link>
@@ -103,10 +109,10 @@ function PlayerCharacterInfo({ player }: { player: RosterAssignmentResponse }) {
     );
 }
 
-function RemoveButton({ username, onRemove }: { username: string; onRemove: () => void }) {
+function RemoveButton({ username, onRemove, raised }: { username: string; onRemove: () => void; raised: boolean }) {
     return (
         <button onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
+            className={`shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors${raise(raised)}`}
             aria-label={`Remove ${username} from slot`} title="Remove from slot">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -115,38 +121,56 @@ function RemoveButton({ username, onRemove }: { username: string; onRemove: () =
     );
 }
 
-export function PlayerCard({ player, size = 'default', onClick, onRemove, matchAccent }: PlayerCardProps) {
-    const { avatarUser, gameId } = buildAvatarUser(player);
-    const isCompact = size === 'compact';
-    const avatarSize = isCompact ? 'h-8 w-8' : 'h-10 w-10';
+/**
+ * TDB:1949 — the card's own action is a stretched native <button> that is a SIBLING of the
+ * name link and the Remove button, never their ancestor (axe `nested-interactive`). It covers
+ * the card (`absolute inset-0`); the link and Remove button are `relative` and come later in
+ * DOM order, so they paint and hit-test above it without a z-index. Enter/Space come free.
+ */
+function CardActionButton({ label, onClick }: { label: string; onClick: () => void }) {
+    return (
+        <button type="button" onClick={onClick} aria-label={label}
+            className={`absolute inset-0 cursor-pointer rounded-lg ${FOCUS_RING}`} />
+    );
+}
+
+function PlayerCardBody({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
     const isTentative = player.signupStatus === 'tentative';
     const isRunningLate = player.runningLate === true;
     const lateTitle = player.lateMinutes ? `Running late (+${player.lateMinutes} min)` : 'Running late';
     const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 0 ? player.preferredRoles : null;
+    return (
+        <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+                <PlayerNameLink player={player} raised={raised} />
+                {isTentative && (
+                    <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title="Tentative — may not attend">&#x23F3;</span>
+                )}
+                {isRunningLate && (
+                    <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
+                )}
+                {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} />}
+            </div>
+            <PlayerCharacterInfo player={player} />
+        </div>
+    );
+}
+
+export function PlayerCard({ player, size = 'default', onClick, clickLabel, onRemove, matchAccent }: PlayerCardProps) {
+    const { avatarUser, gameId } = buildAvatarUser(player);
+    const isCompact = size === 'compact';
+    const clickable = !!onClick;
     const borderStyle = matchAccent ? { borderLeft: `3px solid ${matchAccent}` } : undefined;
 
     return (
         <div className={`flex items-center gap-3 rounded-lg border border-edge bg-panel/50
                 ${isCompact ? 'p-2' : 'p-2.5'}
-                ${onClick ? 'cursor-pointer hover:bg-panel transition-colors' : 'transition-all'}`}
-            style={borderStyle} onClick={onClick}
-            role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
-            onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}>
-            <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={avatarSize} />
-            <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                    <PlayerNameLink player={player} />
-                    {isTentative && (
-                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title="Tentative — may not attend">&#x23F3;</span>
-                    )}
-                    {isRunningLate && (
-                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
-                    )}
-                    {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} />}
-                </div>
-                <PlayerCharacterInfo player={player} />
-            </div>
-            {onRemove && <RemoveButton username={player.username} onRemove={onRemove} />}
+                ${clickable ? 'relative cursor-pointer hover:bg-panel transition-colors' : 'transition-all'}`}
+            style={borderStyle}>
+            {onClick && <CardActionButton label={clickLabel ?? `Select ${player.username}`} onClick={onClick} />}
+            <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={isCompact ? 'h-8 w-8' : 'h-10 w-10'} />
+            <PlayerCardBody player={player} raised={clickable} />
+            {onRemove && <RemoveButton username={player.username} onRemove={onRemove} raised={clickable} />}
         </div>
     );
 }
