@@ -12,6 +12,7 @@
 import { and, count, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { isDiscordSnowflake } from '../notifications/discord-notification.constants';
+import { resolveChannelPrefs } from '../notifications/notification-mapping.helpers';
 import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
 import { LFG_INVITE_NOTIFICATION_TYPE } from './lfg-invite.constants';
 
@@ -109,9 +110,10 @@ export async function recipientHasLinkedDiscord(
 }
 
 /**
- * The stored preferences for the invite type, read the way the delivery path
- * reads them: ONLY a literal `false` opts out; a missing key or a missing row
- * sends (D2, T-A9).
+ * The preferences for the invite type, resolved over DEFAULT_CHANNEL_PREFS
+ * exactly as the delivery path resolves them (TDB:899): ONLY a `false` opts
+ * out; a missing key or a missing row takes the type's default, which is ON
+ * for both LFG invite types, so it sends (D2, T-A9).
  *
  * TWO keys can silence the invite, and both must be checked BEFORE the row is
  * written (§10 — the budget must not be spent on a DM that cannot land):
@@ -131,10 +133,10 @@ export async function recipientOptedOut(
     .from(schema.userNotificationPreferences)
     .where(eq(schema.userNotificationPreferences.userId, userId))
     .limit(1);
-  const typePrefs = (
-    row?.prefs as Partial<Record<string, Partial<Record<string, boolean>>>>
-  )?.[LFG_INVITE_NOTIFICATION_TYPE];
-  return typePrefs?.discord === false || typePrefs?.inApp === false;
+  const typePrefs = resolveChannelPrefs(row?.prefs)[
+    LFG_INVITE_NOTIFICATION_TYPE
+  ];
+  return typePrefs.discord === false || typePrefs.inApp === false;
 }
 
 /** Already in the group — the same read the affinity DM uses (§10). */
