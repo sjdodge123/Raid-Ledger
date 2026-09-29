@@ -733,6 +733,34 @@ function describeMatchingRaceAndIdempotency() {
     }
   });
 
+  it('re-decide returns the poll card of the scheduling match it wiped (TDB:571)', async () => {
+    const { lineupId } = await seedLineupReadyForMatching({
+      voterCount: 5,
+      threshold: 35,
+      tag: 'orphan-card',
+    });
+    const first = await buildMatchesForLineup(testApp.db, lineupId);
+    expect(first.orphanedCards).toEqual([]);
+    const [wipedId] = first.schedulingMatchIds;
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ embedChannelId: 'chan-571', embedMessageId: 'msg-571' })
+      .where(eq(schema.communityLineupMatches.id, wipedId));
+
+    const second = await buildMatchesForLineup(testApp.db, lineupId);
+
+    expect(second.orphanedCards).toEqual([
+      { channelId: 'chan-571', messageId: 'msg-571' },
+    ]);
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches.map((m) => m.id)).toEqual(second.schedulingMatchIds);
+    expect(matches[0].id).not.toBe(wipedId);
+    expect(matches[0].embedMessageId).toBeNull();
+  });
+
   it('5x parallel buildMatchesForLineup does not throw uq_match_member_user', async () => {
     const { lineupId, voterIds } = await seedLineupReadyForMatching({
       voterCount: 5,

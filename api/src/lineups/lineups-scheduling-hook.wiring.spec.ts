@@ -98,9 +98,7 @@ describe('scheduling-phase announcements (ROK-1473)', () => {
 
   describe('runMatchingAlgorithm (voting → decided, tiebreaker resolve)', () => {
     it('announces every match the pass moved into scheduling', async () => {
-      (buildMatchesForLineup as jest.Mock).mockResolvedValue(
-        built([11, 12]),
-      );
+      (buildMatchesForLineup as jest.Mock).mockResolvedValue(built([11, 12]));
 
       await runMatchingAlgorithm(db, LINEUP_ID, logger, events);
 

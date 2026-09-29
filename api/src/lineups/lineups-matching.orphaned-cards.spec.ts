@@ -8,10 +8,7 @@
  * back to its caller so they can be deleted AFTER the transaction commits.
  */
 import { buildMatchesForLineup } from './lineups-matching.helpers';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   countVotesPerGame,
   countDistinctVoters,
