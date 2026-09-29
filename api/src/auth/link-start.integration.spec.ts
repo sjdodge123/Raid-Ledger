@@ -391,6 +391,82 @@ describe.each(PROVIDERS)('%s link nonce browser binding', (p) => {
   });
 });
 
+// ── PR #1384 review — the signed state is bound to the hop browser ─────────
+
+/** The signed state a matched hop put in its 302 (Discord or Steam shape). */
+function hopState(p: Provider, location: string): string {
+  const loc = new URL(location);
+  if (p === 'discord') return loc.searchParams.get('state') as string;
+  const back = new URL(loc.searchParams.get('openid.return_to') as string);
+  return back.searchParams.get('state') as string;
+}
+
+function stateSetCookie(
+  res: { headers: Record<string, unknown> },
+  p: Provider,
+) {
+  const raw = res.headers['set-cookie'];
+  const lines = Array.isArray(raw) ? (raw as string[]) : [];
+  return lines.find((l) => l.startsWith(`rl_link_state_${p}=`));
+}
+
+/** The attacker's own matched hop: the state its 302 carries. */
+async function boundHop(p: Provider) {
+  const { nonce, cookie } = await mintBound(p);
+  const res = await hop(p, { nonce }, cookie);
+  expect(res.status).toBe(302);
+  return { res, state: hopState(p, res.headers.location) };
+}
+
+function callback(p: Provider, state: string, cookie?: string) {
+  const query = p === 'discord' ? { code: 'forwarded-code', state } : { state };
+  const req = testApp.request.get(`/auth/${p}/link/callback`).query(query);
+  return cookie ? req.set('Cookie', cookie) : req;
+}
+
+/** Where a callback refused as unbound lands (returnTo defaults to /profile). */
+function callbackExpired(p: Provider): string {
+  const flag = p === 'discord' ? 'linked' : 'steam';
+  return `${clientUrl()}/profile?${flag}=error&message=${EXPIRED_COPY}`;
+}
+
+describe.each(PROVIDERS)('%s link callback state binding', (p) => {
+  it('a matched hop sets an httpOnly, Lax, 10-minute cookie of sha256(state.r)', async () => {
+    const { res, state } = await boundHop(p);
+    const r = decodeSignedState(state).r;
+    const setCookie = stateSetCookie(res, p) ?? '';
+
+    expect(typeof r).toBe('string');
+    expect(setCookie.split(';')[0]).toBe(
+      `rl_link_state_${p}=${sha256(r as string)}`,
+    );
+    expect(setCookie).toMatch(/;\s*HttpOnly/i);
+    expect(setCookie).toMatch(/;\s*SameSite=Lax/i);
+    expect(setCookie).toMatch(/;\s*Path=\/(;|$)/);
+    expect(setCookie).toMatch(/;\s*Max-Age=600(;|$)/);
+  });
+
+  it.each<[string, string | undefined]>([
+    ['with no state cookie (a forwarded provider URL)', undefined],
+    [
+      'with a state cookie for a different r',
+      `rl_link_state_${p}=${sha256('x')}`,
+    ],
+  ])(
+    'refuses a valid state %s and leaves the user row alone',
+    async (_l, cookie) => {
+      const { state } = await boundHop(p);
+      const before = await adminRow();
+
+      const res = await callback(p, state, cookie);
+
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toBe(callbackExpired(p));
+      expect(await adminRow()).toEqual(before);
+    },
+  );
+});
+
 // ── AC15 — neither GET hop can read ?token= ──────────────────────────────────
 
 /** The `data` of every route-param decorator on a handler, e.g. 'nonce'. */
