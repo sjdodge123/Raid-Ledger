@@ -36,6 +36,8 @@ scripts/*
 !scripts/reconcile-migrations.mjs
 !scripts/check-migration-merge-order.mjs
 !scripts/check-migration-merge-order.spec.mjs
+!scripts/check-migration-snapshot-chain.mjs
+!scripts/check-migration-snapshot-chain.spec.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
 !scripts/setup-branch-protection.sh
