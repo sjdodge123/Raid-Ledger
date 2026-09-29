@@ -53,7 +53,15 @@ function mapToLiveEvent(r: {
   };
 }
 
-/** Find live scheduled events where now >= startTime + 5 min. */
+/**
+ * Find live scheduled events where now >= startTime + 5 min.
+ *
+ * Only events still running (now <= extendedUntil ?? endTime) are returned.
+ * Intentional consequence (TDB:378): on a short event, a running-late grace
+ * deferral can push the Phase 2 deadline to or past the event's end, and the
+ * escalation then never fires — a "their slot is free to PUG" alert is
+ * useless once the event is over.
+ */
 export async function findLiveEventsInNoShowWindow(
   db: PostgresJsDatabase<typeof schema>,
   now: Date,
