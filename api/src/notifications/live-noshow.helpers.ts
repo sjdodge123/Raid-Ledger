@@ -8,6 +8,7 @@ import * as schema from '../drizzle/schema';
 import { resolveEventCapacity } from '../events/signups-signup.helpers';
 import { resolveDisplayName } from '../users/display-name.helpers';
 import { activeUsersFilter } from '../users/users-active.helpers';
+import { activeNonBenchSignup } from './live-noshow-scope.helpers';
 
 /** Minimum voice presence (seconds) to count as "showed up". */
 export const PRESENCE_THRESHOLD_SEC = 120;
@@ -154,8 +155,7 @@ async function fetchNonBenchSignups(
     .where(
       and(
         eq(schema.eventSignups.eventId, eventId),
-        eq(schema.eventSignups.status, 'signed_up'),
-        sql`NOT EXISTS (SELECT 1 FROM ${schema.rosterAssignments} WHERE ${schema.rosterAssignments.eventId} = ${schema.eventSignups.eventId} AND ${schema.rosterAssignments.signupId} = ${schema.eventSignups.id} AND ${schema.rosterAssignments.role} = 'bench')`,
+        activeNonBenchSignup(),
       ),
     );
 }
@@ -219,7 +219,11 @@ export async function getAbsentSignedUpPlayers(
   return absent;
 }
 
-/** Get user IDs that received Phase 1 (noshow_reminder) for an event. */
+/**
+ * Get user IDs that received Phase 1 (noshow_reminder) for an event and are
+ * STILL active, non-bench signups. A player benched or roached-out after the
+ * nudge must not be named in the Phase 2 "slot is free to PUG" alert (TDB:372).
+ */
 export async function getPhase1RemindedUserIds(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
@@ -227,10 +231,18 @@ export async function getPhase1RemindedUserIds(
   const rows = await db
     .select({ userId: schema.eventRemindersSent.userId })
     .from(schema.eventRemindersSent)
+    .innerJoin(
+      schema.eventSignups,
+      and(
+        eq(schema.eventSignups.eventId, schema.eventRemindersSent.eventId),
+        eq(schema.eventSignups.userId, schema.eventRemindersSent.userId),
+      ),
+    )
     .where(
       and(
         eq(schema.eventRemindersSent.eventId, eventId),
         eq(schema.eventRemindersSent.reminderType, 'noshow_reminder'),
+        activeNonBenchSignup(),
       ),
     );
   return rows.map((r) => r.userId);
