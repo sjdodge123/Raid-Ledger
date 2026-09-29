@@ -2,7 +2,7 @@
  * Match query helpers for community lineup decided view (ROK-937).
  * Provides database queries for match data retrieval.
  */
-import { and, eq, inArray, sql, getTableColumns } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql, getTableColumns } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
@@ -50,7 +50,8 @@ export function findMatchesByLineup(db: Db, lineupId: number) {
       schema.games,
       eq(schema.communityLineupMatches.gameId, schema.games.id),
     )
-    .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    .where(eq(schema.communityLineupMatches.lineupId, lineupId))
+    .orderBy(asc(schema.communityLineupMatches.id));
 }
 
 /** Find all members for given match IDs with display names. */

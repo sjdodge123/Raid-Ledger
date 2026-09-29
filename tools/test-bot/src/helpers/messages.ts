@@ -160,3 +160,24 @@ export async function readDMs(
   const msgs = await dmChannel.messages.fetch({ limit: count });
   return msgs.map(toSimpleMessage).reverse();
 }
+
+/**
+ * Does Discord still have this message? A REST fetch (never the cache) that
+ * answers 10008 "Unknown Message" means it was deleted.
+ */
+export async function messageExists(
+  channelId: string,
+  messageId: string,
+): Promise<boolean> {
+  const channel = await getClient().channels.fetch(channelId);
+  if (!channel?.isTextBased()) {
+    throw new Error(`Channel ${channelId} is not a text channel`);
+  }
+  try {
+    await channel.messages.fetch({ message: messageId, force: true });
+    return true;
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 10008) return false;
+    throw err;
+  }
+}

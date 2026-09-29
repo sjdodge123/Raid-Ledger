@@ -69,7 +69,8 @@ export async function checkBuildingQuorum(
   settings: SettingsService,
   lineup: LineupRow,
 ): Promise<QuorumResult> {
-  const expected = await loadQuorumGatingVoters(db, lineup);
+  // TDB:460: only the floor and total feed both branches. The gating-voter
+  // roster is loaded after the count target, which never needs it.
   const totalNominations = await countNominations(db, lineup.id);
   const floor = await readMinNominations(settings);
 
@@ -95,6 +96,7 @@ export async function checkBuildingQuorum(
     if (target.ready) return target;
   }
 
+  const expected = await loadQuorumGatingVoters(db, lineup);
   if (expected.length < 2) {
     return { ready: false, reason: 'solo lineup; manual advance required' };
   }
