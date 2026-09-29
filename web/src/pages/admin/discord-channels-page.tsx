@@ -50,6 +50,8 @@ function useBindingHandlers() {
         bindings, handleUpdate, handleCreate, handleDelete,
         isUpdating: updateBinding.isPending, isDeleting: deleteBinding.isPending, isCreating: createBinding.isPending,
         updateError: updateBinding.error?.message ?? null, createError: createBinding.error?.message ?? null,
+        // TDB:259: a row editor opening/closing drops the previous row's PATCH error.
+        resetUpdateError: () => updateBinding.reset(),
     };
 }
 
@@ -154,7 +156,8 @@ function ChannelBindingsSection({ handlers, channels }: {
                 </div>
             ) : (
                 <ChannelBindingList bindings={bindings.data?.data ?? []} onUpdate={handlers.handleUpdate} onDelete={handlers.handleDelete}
-                    isUpdating={handlers.isUpdating} isDeleting={handlers.isDeleting} updateError={handlers.updateError} />
+                    isUpdating={handlers.isUpdating} isDeleting={handlers.isDeleting} updateError={handlers.updateError}
+                    onEditingChange={handlers.resetUpdateError} />
             )}
             <div className="mt-4">
                 <BindingCreateForm channels={channels} onCreate={handlers.handleCreate} isCreating={handlers.isCreating} createError={handlers.createError} />
