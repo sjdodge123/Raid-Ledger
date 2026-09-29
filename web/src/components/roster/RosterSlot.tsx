@@ -87,8 +87,8 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
                 {badgeContent}
             </span>
             {item ? (
-                // `relative` lifts the card's link + Remove button above the stretched slot button.
-                <div className={`p-1${isClickable ? ' [&_a]:relative [&_button]:relative' : ''}`}><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} /></div>
+                // raiseControls lifts the card's link, Remove button and titled badges above the stretched slot button.
+                <div className="p-1"><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} raiseControls={isClickable} /></div>
             ) : (
                 <EmptySlotContent isClickable={isClickable} isAdmin={!!onAdminClick} />
             )}

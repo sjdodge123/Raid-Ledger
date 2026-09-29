@@ -11,8 +11,8 @@ import { RosterSlot } from './RosterSlot';
 
 // Mock RosterCard to avoid pulling in the full dependency tree
 vi.mock('./RosterCard', () => ({
-    RosterCard: ({ item }: { item: { username: string } }) => (
-        <div data-testid="roster-card">{item.username}</div>
+    RosterCard: ({ item, raiseControls }: { item: { username: string }; raiseControls?: boolean }) => (
+        <div data-testid="roster-card" data-raise-controls={String(!!raiseControls)}>{item.username}</div>
     ),
 }));
 
@@ -165,5 +165,13 @@ describe('RosterSlot — departed signup treatment (ROK-1237)', () => {
         );
         const slot = container.querySelector('.rounded-lg');
         expect(slot?.className ?? '').not.toContain('animate-pulse-subtle');
+    });
+
+    // B08: the slot's stretched button covers the card, so the card raises its link, Remove and titled badges.
+    it('asks the card to raise its controls only when the slot is clickable', () => {
+        const { rerender } = render(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} onAdminClick={vi.fn()} />);
+        expect(screen.getByTestId('roster-card')).toHaveAttribute('data-raise-controls', 'true');
+        rerender(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} />);
+        expect(screen.getByTestId('roster-card')).toHaveAttribute('data-raise-controls', 'false');
     });
 });

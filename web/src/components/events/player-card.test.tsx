@@ -307,3 +307,48 @@ describe('PlayerCard — clickable card (TDB:1949)', () => {
         expect(container.firstElementChild).toHaveClass('transition-all');
     });
 });
+
+/** Every titled, non-interactive decoration: tentative, running late, preferred roles, character line. */
+function badgedPlayer() {
+    return createMockPlayer({
+        signupStatus: 'tentative', runningLate: true, lateMinutes: 10, preferredRoles: ['tank', 'healer'],
+        character: { id: '00000000-0000-4000-8000-000000000001', name: 'Thrall', className: 'Shaman', role: 'dps', avatarUrl: null },
+    });
+}
+
+/** Titled decorations that would sit UNDER the stretched action: not positioned, or earlier in DOM order. */
+function coveredTooltips(container: HTMLElement) {
+    const action = container.querySelector('button[class*="inset-0"]');
+    return [...container.querySelectorAll('[title]')]
+        .filter((el) => !el.matches(INTERACTIVE))
+        .filter((el) => !el.classList.contains('relative')
+            || !(action && action.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))
+        .map((el) => el.getAttribute('title'));
+}
+
+// Lead ruling (B08): titled badges rise above the stretched action so their tooltip shows on hover;
+// a click landing exactly on a badge does not fire the card action.
+describe('PlayerCard — titled badges above the stretched action (TDB:1949)', () => {
+    it('onClick card: every titled badge is positioned and later in DOM order than the action', () => {
+        const { container } = renderCard({ player: badgedPlayer(), onClick: vi.fn() });
+        expect(container.querySelectorAll('[title]:not(a):not(button)').length).toBe(4);
+        expect(coveredTooltips(container), 'titled badges covered by the card action').toEqual([]);
+    });
+
+    it('raiseControls (an ancestor owns the action, e.g. RosterSlot): link, Remove and badges are raised', () => {
+        const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn(), raiseControls: true });
+        const unraised = [...container.querySelectorAll('[title]')].filter((el) => !el.classList.contains('relative'));
+        expect(unraised.map((el) => el.getAttribute('title')), 'titled elements left under an ancestor action').toEqual([]);
+        expect(container.firstElementChild, 'the card itself owns no action').not.toHaveClass('relative');
+    });
+
+    it('the raised character line hugs its text so the card action keeps the rest of the row', () => {
+        const { container } = renderCard({ player: badgedPlayer(), onClick: vi.fn() });
+        expect(container.querySelector('p[title]')).toHaveClass('relative', 'w-fit', 'max-w-full');
+    });
+
+    it('a non-clickable card with every badge raises nothing (identical to main)', () => {
+        const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn() });
+        expect(container.querySelector('.relative, .w-fit'), 'non-clickable cards keep their original classes').toBeNull();
+    });
+});
