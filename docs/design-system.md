@@ -388,8 +388,8 @@ button** (TDB:1949): the card's action is a native `<button type="button">` with
 `absolute inset-0 rounded-lg` plus `FOCUS_RING` (`form-classes.ts`), as the card's FIRST child inside a
 `relative` frame; the inner link / button get `relative` so — later in DOM order — they paint and take
 clicks above it, no z-index. Never make the frame a `role="button"` / `tabIndex` div around them — that
-is axe `nested-interactive`. Adopters: `PlayerCard` (`onClick`), `RosterSlot` (owns the button and passes
-`raiseControls` through `RosterCard`, so `PlayerCard` raises its controls). Titled, non-interactive
+is axe `nested-interactive`. Adopter: `RosterSlot` (owns the button and passes `raiseControls` through
+`RosterCard`, so `PlayerCard` raises its controls; `PlayerCard` itself has no card action). Titled, non-interactive
 decoration (a badge, the character line) is raised too, so its `title` tooltip still shows on hover.
 Trade-off (accepted, B08): a click landing exactly on a raised badge is a dead zone and does not fire the card action.
 Rendered example: `/dev/design-system` → Overlays and containers → "Stretched-button card".

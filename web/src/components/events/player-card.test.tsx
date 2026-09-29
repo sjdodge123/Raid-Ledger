@@ -1,7 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { axe } from 'vitest-axe';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { PlayerCard } from './player-card';
 import { formatRole } from '../../lib/role-colors';
@@ -99,13 +97,13 @@ describe('PlayerCard — FlexibilityBadges boundary inputs', () => {
     });
 
     it('does not render a role icon for an unrecognized role string', () => {
-        const player = createMockPlayer({ preferredRoles: ['support'] });
+        const player = createMockPlayer({ preferredRoles: ['support'] as unknown as RosterAssignmentResponse['preferredRoles'] });
         renderCard({ player });
         expect(screen.queryByAltText('support')).not.toBeInTheDocument();
     });
 
     it('renders only recognized role icons when mixed with unknown roles', () => {
-        const player = createMockPlayer({ preferredRoles: ['tank', 'support'] });
+        const player = createMockPlayer({ preferredRoles: ['tank', 'support'] as unknown as RosterAssignmentResponse['preferredRoles'] });
         renderCard({ player });
         expect(screen.getByAltText('tank')).toBeInTheDocument();
         expect(screen.queryByAltText('support')).not.toBeInTheDocument();
@@ -229,78 +227,9 @@ describe('PlayerCard — profile link (ROK-381 guest profile, ROK-1694)', () => 
     });
 });
 
-/** Everything a keyboard or AT user can land on. */
-const INTERACTIVE = 'a[href], button, input, select, textarea, [role="button"], [tabindex]';
-
-/** Interactive elements that sit inside another interactive element (axe `nested-interactive`). */
-function nestedInteractive(container: HTMLElement) {
-    return [...container.querySelectorAll(INTERACTIVE)]
-        .filter((el) => el.parentElement?.closest(INTERACTIVE))
-        .map((el) => `${el.tagName.toLowerCase()} "${el.textContent || el.getAttribute('aria-label')}"`);
-}
-
-/** A clickable, removable card on an event route, with the profile route mounted. */
-function renderClickableCard() {
-    const onClick = vi.fn();
-    const onRemove = vi.fn();
-    const player = createMockPlayer({ signupStatus: 'tentative', preferredRoles: ['tank'] });
-    const utils = render(
-        <MemoryRouter initialEntries={['/events/1']}>
-            <Routes>
-                <Route path="/events/1" element={<PlayerCard player={player} size="compact" onClick={onClick} onRemove={onRemove} />} />
-                <Route path="/users/:id" element={<ProfileProbe />} />
-            </Routes>
-        </MemoryRouter>,
-    );
-    return { ...utils, onClick, onRemove };
-}
-
-// TDB:1949 — the card action is a native button beside the link and Remove, never their ancestor.
-describe('PlayerCard — clickable card (TDB:1949)', () => {
-    it('no interactive element is nested inside another (axe nested-interactive)', async () => {
-        const { container } = renderClickableCard();
-        expect(nestedInteractive(container), 'controls nested inside another control').toEqual([]);
-        expect(await axe(container)).toHaveNoViolations();
-    });
-
-    it('clicking the card action fires onClick only', async () => {
-        const { onClick, onRemove } = renderClickableCard();
-        const action = screen.getByRole('button', { name: 'Select TestPlayer' });
-        expect(action.tagName).toBe('BUTTON');
-        await userEvent.click(action);
-        expect(onClick).toHaveBeenCalledTimes(1);
-        expect(onRemove).not.toHaveBeenCalled();
-    });
-
-    it('Enter and Space on the focused card action fire onClick', async () => {
-        const user = userEvent.setup();
-        const { onClick } = renderClickableCard();
-        screen.getByRole('button', { name: 'Select TestPlayer' }).focus();
-        await user.keyboard('{Enter}');
-        await user.keyboard(' ');
-        expect(onClick).toHaveBeenCalledTimes(2);
-    });
-
-    it('Remove removes without firing onClick', async () => {
-        const { onClick, onRemove } = renderClickableCard();
-        await userEvent.click(screen.getByRole('button', { name: 'Remove TestPlayer from slot' }));
-        expect(onRemove).toHaveBeenCalledTimes(1);
-        expect(onClick).not.toHaveBeenCalled();
-    });
-
-    it('the name link navigates to the profile without firing onClick', async () => {
-        const { onClick } = renderClickableCard();
-        await userEvent.click(screen.getByRole('link', { name: 'TestPlayer' }));
-        expect(screen.getByTestId('probe-path')).toHaveTextContent('/users/10');
-        expect(onClick).not.toHaveBeenCalled();
-    });
-
-    it('uses clickLabel as the action name when given', () => {
-        renderCard({ player: createMockPlayer(), onClick: vi.fn(), clickLabel: 'Assign TestPlayer' });
-        expect(screen.getByRole('button', { name: 'Assign TestPlayer' })).toBeInTheDocument();
-    });
-
-    it('a non-clickable card renders no action button and raises nothing', () => {
+// TDB:1949 — PlayerCard owns no card action; an ancestor (RosterSlot) owns the stretched button.
+describe('PlayerCard — non-clickable rendering (TDB:1949)', () => {
+    it('renders no card action and raises nothing', () => {
         const { container } = renderCard({ player: createMockPlayer(), onRemove: vi.fn() });
         expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Remove TestPlayer from slot']);
         expect(container.querySelector('.relative'), 'non-clickable cards keep their original classes').toBeNull();
@@ -316,34 +245,19 @@ function badgedPlayer() {
     });
 }
 
-/** Titled decorations that would sit UNDER the stretched action: not positioned, or earlier in DOM order. */
-function coveredTooltips(container: HTMLElement) {
-    const action = container.querySelector('button[class*="inset-0"]');
-    return [...container.querySelectorAll('[title]')]
-        .filter((el) => !el.matches(INTERACTIVE))
-        .filter((el) => !el.classList.contains('relative')
-            || !(action && action.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING))
-        .map((el) => el.getAttribute('title'));
-}
-
 // Lead ruling (B08): titled badges rise above the stretched action so their tooltip shows on hover;
 // a click landing exactly on a badge does not fire the card action.
 describe('PlayerCard — titled badges above the stretched action (TDB:1949)', () => {
-    it('onClick card: every titled badge is positioned and later in DOM order than the action', () => {
-        const { container } = renderCard({ player: badgedPlayer(), onClick: vi.fn() });
-        expect(container.querySelectorAll('[title]:not(a):not(button)').length).toBe(4);
-        expect(coveredTooltips(container), 'titled badges covered by the card action').toEqual([]);
-    });
-
     it('raiseControls (an ancestor owns the action, e.g. RosterSlot): link, Remove and badges are raised', () => {
         const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn(), raiseControls: true });
+        expect(container.querySelectorAll('[title]:not(a):not(button)').length).toBe(4);
         const unraised = [...container.querySelectorAll('[title]')].filter((el) => !el.classList.contains('relative'));
         expect(unraised.map((el) => el.getAttribute('title')), 'titled elements left under an ancestor action').toEqual([]);
         expect(container.firstElementChild, 'the card itself owns no action').not.toHaveClass('relative');
     });
 
     it('the raised character line hugs its text so the card action keeps the rest of the row', () => {
-        const { container } = renderCard({ player: badgedPlayer(), onClick: vi.fn() });
+        const { container } = renderCard({ player: badgedPlayer(), raiseControls: true });
         expect(container.querySelector('p[title]')).toHaveClass('relative', 'w-fit', 'max-w-full');
     });
 

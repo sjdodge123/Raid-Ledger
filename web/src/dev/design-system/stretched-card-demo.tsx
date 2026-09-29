@@ -5,7 +5,8 @@
  * <button> stretched over the card (`absolute inset-0`) as its FIRST child, and
  * the link, the secondary button and the titled badge are `relative` and later
  * in DOM order, so they paint and take clicks above it — no z-index, no
- * role="button" wrapper (axe `nested-interactive`). Same idiom as PlayerCard.
+ * role="button" wrapper (axe `nested-interactive`). Same idiom as RosterSlot,
+ * which raises PlayerCard's controls via `raiseControls`.
  * Tokens only, so it flips with the colour family.
  */
 import { useState, type JSX } from 'react';

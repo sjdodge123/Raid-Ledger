@@ -16,7 +16,6 @@ import type { AvatarUser } from '../../lib/avatar';
 import { formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { RoleIcon } from '../shared/RoleIcon';
-import { FOCUS_RING } from '../ui/form-classes';
 
 export interface PlayerCardProps {
     /** Player data from roster assignments */
@@ -25,10 +24,6 @@ export interface PlayerCardProps {
     size?: 'compact' | 'default';
     /** Whether to display the role badge */
     showRole?: boolean;
-    /** Click handler (e.g. assign in modal) */
-    onClick?: () => void;
-    /** Accessible name of the card's click action (default: `Select <username>`) */
-    clickLabel?: string;
     /** Admin remove handler */
     onRemove?: () => void;
     /** Accent left-border color string (e.g. for matching-role highlight) */
@@ -70,8 +65,8 @@ function playerProfileLink(player: RosterAssignmentResponse) {
 }
 
 /**
- * `relative` lifts a control — or a titled badge, so its tooltip shows on hover — above the stretched
- * action button (see CardActionButton). Trade-off: a click exactly on a raised badge skips the action.
+ * `relative` lifts a control — or a titled badge, so its tooltip shows on hover — above an ancestor's
+ * stretched action button (RosterSlot, TDB:1949). Trade-off: a click exactly on a raised badge skips the action.
  */
 const raise = (raised: boolean) => (raised ? ' relative' : '');
 
@@ -127,19 +122,6 @@ function RemoveButton({ username, onRemove, raised }: { username: string; onRemo
     );
 }
 
-/**
- * TDB:1949 — the card's own action is a stretched native <button> that is a SIBLING of the
- * name link and the Remove button, never their ancestor (axe `nested-interactive`). It covers
- * the card (`absolute inset-0`); the link and Remove button are `relative` and come later in
- * DOM order, so they paint and hit-test above it without a z-index. Enter/Space come free.
- */
-function CardActionButton({ label, onClick }: { label: string; onClick: () => void }) {
-    return (
-        <button type="button" onClick={onClick} aria-label={label}
-            className={`absolute inset-0 cursor-pointer rounded-lg ${FOCUS_RING}`} />
-    );
-}
-
 function PlayerCardBody({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
     const isTentative = player.signupStatus === 'tentative';
     const isRunningLate = player.runningLate === true;
@@ -162,19 +144,17 @@ function PlayerCardBody({ player, raised }: { player: RosterAssignmentResponse; 
     );
 }
 
-export function PlayerCard({ player, size = 'default', onClick, clickLabel, onRemove, matchAccent, raiseControls = false }: PlayerCardProps) {
+export function PlayerCard({ player, size = 'default', onRemove, matchAccent, raiseControls = false }: PlayerCardProps) {
     const { avatarUser, gameId } = buildAvatarUser(player);
     const isCompact = size === 'compact';
-    const clickable = !!onClick;
-    const raised = clickable || raiseControls;
+    const raised = raiseControls;
     const borderStyle = matchAccent ? { borderLeft: `3px solid ${matchAccent}` } : undefined;
 
     return (
         <div className={`flex items-center gap-3 rounded-lg border border-edge bg-panel/50
                 ${isCompact ? 'p-2' : 'p-2.5'}
-                ${clickable ? 'relative cursor-pointer hover:bg-panel transition-colors' : 'transition-all'}`}
+                transition-all`}
             style={borderStyle}>
-            {onClick && <CardActionButton label={clickLabel ?? `Select ${player.username}`} onClick={onClick} />}
             <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={isCompact ? 'h-8 w-8' : 'h-10 w-10'} />
             <PlayerCardBody player={player} raised={raised} />
             {onRemove && <RemoveButton username={player.username} onRemove={onRemove} raised={raised} />}
