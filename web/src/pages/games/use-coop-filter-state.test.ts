@@ -33,12 +33,15 @@ describe('useCoopFilterState', () => {
         window.sessionStorage.setItem(KEY, '{not json');
         const { result } = renderHook(() => useCoopFilterState());
         expect(result.current[0]).toEqual({});
+        // Documented eviction: a bad blob must not be re-read on every mount.
+        expect(window.sessionStorage.getItem(KEY)).toBeNull();
     });
 
     it('falls back to empty filters when the stored blob is not an object', () => {
         window.sessionStorage.setItem(KEY, JSON.stringify('couchCoop'));
         const { result } = renderHook(() => useCoopFilterState());
         expect(result.current[0]).toEqual({});
+        expect(window.sessionStorage.getItem(KEY)).toBeNull();
     });
 
     it('keeps only known keys with the right type from a tampered blob', () => {

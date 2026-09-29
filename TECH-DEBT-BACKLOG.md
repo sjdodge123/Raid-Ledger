@@ -1960,3 +1960,7 @@ same day (#1278, #1279, #1280).
   Suggested: run both writes in one `this.db.transaction(...)`, passing `tx` to `muteDiscordDms`.
 - **[low, unconfirmed]** Discord smoke `dm` on fleet slot 1 (env notif-0928). The second of two runs failed "AI Chat: Session times out after 5 min inactivity -> welcome menu" (0 buttons after expiry) and "AI Chat: Back returns to parent menu, Home returns to welcome" (no `ai:back` button). Both passed in run 1. The branch touches no ai-chat code. These have not been reproduced in isolation, so their cause is unknown. The same runs also hit the documented await-processing 409 drain-timeout family (see the earlier entries), on different tests each run.
   Suggested: run `SMOKE_NAME_FILTER='AI Chat'` in a loop on a clean main env before labelling it a flake.
+
+### 2026-09-29 — fix/web-cleanup-0929 (surfaced during B32 review)
+- **[nit]** `api/src/ai/ai-admin.controller.ts:62`: `GET /admin/ai/models` has no web consumer. TDB:1869 deleted `AiModelSelector` and `useAiModels`, which were its only callers, so the endpoint (and its `llmService.listModels()` call) is now dead API surface. The same B32 review also confirmed that TDB:261 is only partly done: this branch extracted the shared binding purpose maps, but the classifier-gate and config-prune duplication between the create and edit forms (and the client-vs-server config prune) is still open.
+  Suggested: delete the endpoint, or wire a model picker if one is wanted; keep TDB:261 open for the classifier-gate / config-prune part.
