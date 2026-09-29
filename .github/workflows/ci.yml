@@ -242,6 +242,13 @@ jobs:
       - name: Migration snapshot prevId chain guard
         run: node scripts/check-migration-snapshot-chain.mjs
 
+      # TDB:1167: schema.ts must match the latest meta snapshot. Runs
+      # `drizzle-kit generate` against a temp copy of the migrations dir (no
+      # dry-run exists) and fails if it would emit a migration — a schema edit
+      # shipped without `npm run db:generate -w api`. No DB, ~1s.
+      - name: Migration snapshot drift check
+        run: bash scripts/validate-migrations.sh --drift-only
+
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
     runs-on: ubuntu-latest
