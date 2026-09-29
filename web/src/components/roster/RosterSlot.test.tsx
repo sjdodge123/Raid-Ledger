@@ -192,3 +192,12 @@ describe('RosterSlot — position badge forwards its click (TDB:1949)', () => {
         expect(onAdminClick, 'the badge paints above the stretched button and must not swallow the click').toHaveBeenCalledWith('tank', 1);
     });
 });
+
+describe('RosterSlot — stretched action covers the whole frame (TDB:1949)', () => {
+    it('reaches over the 1px border ring, so a click on the border is not a dead strip under the pointer', () => {
+        render(<RosterSlot role="tank" position={1} color="bg-blue-500" onJoinClick={vi.fn()} />);
+        const classes = screen.getByRole('button', { name: 'Join tank slot 1' }).className.split(' ');
+        expect(classes, 'inset-0 stops at the border; the action must use -inset-px').toContain('-inset-px');
+        expect(classes).not.toContain('inset-0');
+    });
+});

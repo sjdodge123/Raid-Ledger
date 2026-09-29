@@ -555,7 +555,9 @@ describe('DesignSystemPage — stretched-button card', () => {
         const interactive = 'a[href], button, [role="button"], [tabindex]';
         const nested = [...card.querySelectorAll(interactive)].filter((el) => el.parentElement?.closest(interactive));
         expect(nested, 'controls nested inside another control').toEqual([]);
-        fireEvent.click(within(card).getByRole('button', { name: 'Manage tank slot 1 (Thrall)' }));
+        const action = within(card).getByRole('button', { name: 'Manage tank slot 1 (Thrall)' });
+        expect(action.className.split(' '), 'the gallery card renders the StretchedAction primitive').toContain('-inset-px');
+        fireEvent.click(action);
         expect(card).toHaveTextContent('Last click: card action');
         fireEvent.click(within(card).getByRole('button', { name: 'Remove Thrall from slot' }));
         expect(card).toHaveTextContent('Last click: Remove');

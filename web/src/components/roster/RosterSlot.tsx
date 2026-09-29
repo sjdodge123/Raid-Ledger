@@ -1,7 +1,7 @@
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import React from 'react';
 import { RosterCard } from './RosterCard';
-import { FOCUS_RING } from '../ui/form-classes';
+import { StretchedAction } from '../ui/stretched-action';
 
 interface RosterSlotProps {
     role: RosterRole;
@@ -92,10 +92,7 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
     return (
         <div className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
             {/* TDB:1949 — a stretched native button BESIDE the card, never around its name link / Remove button (axe nested-interactive). */}
-            {isClickable && (
-                <button type="button" onClick={handleClick} aria-label={slotActionLabel(role, position, item, !!onAdminClick)}
-                    className={`absolute inset-0 cursor-pointer rounded-lg ${FOCUS_RING}`} />
-            )}
+            {isClickable && <StretchedAction onClick={handleClick} label={slotActionLabel(role, position, item, !!onAdminClick)} />}
             <PositionBadge className={badgeBg} onClick={isClickable ? handleClick : undefined}>{badgeContent}</PositionBadge>
             {item ? (
                 // raiseControls lifts the card's link, Remove button and titled badges above the stretched slot button.

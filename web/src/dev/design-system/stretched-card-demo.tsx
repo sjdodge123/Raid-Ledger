@@ -1,16 +1,17 @@
 /**
  * Stretched-button card for /dev/design-system (docs/design-system.md §4.2, TDB:1949).
  *
- * A clickable card that holds its own controls: the card's action is a native
- * <button> stretched over the card (`absolute inset-0`) as its FIRST child, and
- * the link, the secondary button and the titled badge are `relative` and later
- * in DOM order, so they paint and take clicks above it — no z-index, no
- * role="button" wrapper (axe `nested-interactive`). Same idiom as RosterSlot,
+ * A clickable card that holds its own controls: the card's action is the
+ * `StretchedAction` primitive (`components/ui/stretched-action.tsx` — a native
+ * button over the card and its 1px border, `absolute -inset-px`) as its FIRST
+ * child, and the link, the secondary button and the titled badge are `relative`
+ * and later in DOM order, so they paint and take clicks above it — no z-index,
+ * no role="button" wrapper (axe `nested-interactive`). Same idiom as RosterSlot,
  * which raises PlayerCard's controls via `raiseControls`.
  * Tokens only, so it flips with the colour family.
  */
 import { useState, type JSX } from 'react';
-import { FOCUS_RING } from '../../components/ui/form-classes';
+import { StretchedAction } from '../../components/ui/stretched-action';
 import { StateFrame } from './design-system-bits';
 
 export function StretchedCardDemo(): JSX.Element {
@@ -22,8 +23,7 @@ export function StretchedCardDemo(): JSX.Element {
         >
             <div className="w-full space-y-2" data-testid="ds-stretched-card">
                 <div className="relative flex items-center gap-3 rounded-lg border border-edge bg-panel/50 p-2.5 hover:bg-panel transition-colors">
-                    <button type="button" aria-label="Manage tank slot 1 (Thrall)" onClick={() => setLast('card action')}
-                        className={`absolute inset-0 cursor-pointer rounded-lg ${FOCUS_RING}`} />
+                    <StretchedAction label="Manage tank slot 1 (Thrall)" onClick={() => setLast('card action')} />
                     <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-overlay text-xs font-semibold text-secondary">T</span>
                     <div className="flex min-w-0 flex-1 items-center gap-1.5">
                         <a href="#overlays" onClick={(e) => { e.preventDefault(); setLast('name link'); }}
