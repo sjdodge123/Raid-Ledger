@@ -72,12 +72,14 @@ function GuestProfileHeader({
   communityName: string;
 }): JSX.Element {
   // TDB:1951: a broken Discord avatar falls back to the initials, not nothing.
-  const [imgFailed, setImgFailed] = useState(false);
+  // Tracked per URL, so a new avatarUrl gets a fresh load attempt.
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imgFailed = !!avatarUrl && failedUrl === avatarUrl;
   return (
     <div className="user-profile-header">
       {avatarUrl && !imgFailed ? (
         <img src={avatarUrl} alt={username} className="user-profile-avatar"
-          onError={() => setImgFailed(true)} />
+          onError={() => setFailedUrl(avatarUrl)} />
       ) : (
         <div className="user-profile-avatar user-profile-avatar--initials">{username.charAt(0).toUpperCase()}</div>
       )}
