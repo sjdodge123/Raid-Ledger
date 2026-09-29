@@ -125,7 +125,7 @@ export const communityLineupScheduleSlots = pgTable(
   {
     id: serial('id').primaryKey(),
     matchId: integer('match_id').notNull(),
-    proposedTime: timestamp('proposed_time').notNull(),
+    proposedTime: timestamp('proposed_time', { withTimezone: true }).notNull(),
     overlapScore: numeric('overlap_score', {
       precision: 5,
       scale: 2,
