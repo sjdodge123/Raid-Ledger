@@ -65,10 +65,12 @@ function sharedRefresh(): Promise<RefreshOutcome> {
 /**
  * Like `ensureFreshToken`, but reports WHY a refresh produced no token, and
  * shares the same single-flight request. While impersonating it never touches
- * the network and reports 'rejected' (the refresh cookie is the admin's).
+ * the network (the refresh cookie is the admin's, and refreshing would swap
+ * the bearer back to the admin) and reports 'indeterminate': the admin's
+ * session was not probed, so nothing is proven about it (#1384).
  */
 export function refreshWithOutcome(): Promise<RefreshOutcome> {
-  if (isImpersonating()) return Promise.resolve({ kind: 'rejected' });
+  if (isImpersonating()) return Promise.resolve(INDETERMINATE);
   return sharedRefresh();
 }
 

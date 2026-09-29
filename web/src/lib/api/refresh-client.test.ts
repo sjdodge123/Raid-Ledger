@@ -147,3 +147,23 @@ describe('refreshWithOutcome (ROK-1366 #1384 tri-state refresh)', () => {
         expect(await ensureFreshToken()).toBeNull();
     });
 });
+
+describe('refreshWithOutcome while impersonating (ROK-1366 #1384)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('reports indeterminate and never hits the network while impersonating', async () => {
+        let refreshCalls = 0;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return HttpResponse.json({ access_token: 'should-not-happen' });
+            }),
+        );
+        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token');
+
+        expect(await refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
+        expect(refreshCalls).toBe(0);
+    });
+});

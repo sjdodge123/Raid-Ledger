@@ -148,19 +148,6 @@ describe('ROK-1366 OQ6: a stored session decides whether to redeem', () => {
     expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe(jwtFor(ADMIN));
   });
 
-  it("redeems the admin's own link over an expired impersonation, ending it", async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
-    meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(ADMIN));
-
-    expect(seen.calls).toBe(1);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
-    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBeNull();
-  });
-
   it("redeems the same user's link over their own expired token", async () => {
     localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
     meReturns(401);
@@ -218,18 +205,6 @@ describe('ROK-1366 OQ6: an expired or unverifiable stored token never blocks a r
     expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
   });
 
-  it("redeems the impersonated user's link over an expired impersonation, ending it", async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
-    meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(USER_A));
-
-    expect(seen.calls, 'an expired impersonation must not block the link').toBe(1);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
-    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBeNull();
-  });
 });
 
 /**
@@ -386,6 +361,40 @@ describe('ROK-1366 #1384: an indeterminate refresh never swaps a stored session'
     await startMagicLinkRedeem(linkFor(USER_B));
 
     expectKept(seen, stored, 'an unparseable refresh 200 must not spend the link or swap the session');
+  });
+});
+
+/**
+ * #1384 review fix (supersedes the 2026-09-27 OQ6 impersonation cases): while
+ * impersonating, the refresh cookie is the admin's and is still live, but the
+ * client may not probe it (it would swap the bearer back to the admin). An
+ * unprobed refresh is 'unknown', so an expired impersonation blocks every
+ * link — the admin's, the impersonated user's, or an attacker's.
+ */
+describe('ROK-1366 #1384: an expired impersonation never lets a link swap the admin session', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  it.each([
+    ['the admin', ADMIN],
+    ['the impersonated user', USER_A],
+    ['another user (planted link)', USER_B],
+  ])("keeps the impersonation and never redeems %s's link", async (_who, sub) => {
+    const impersonated = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, impersonated);
+    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
+    meReturns(401);
+    const refresh = refreshReturns(200);
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(sub));
+
+    expect(refresh.calls, "the admin's refresh cookie must not be probed while impersonating").toBe(0);
+    expect(seen.calls, "an expired impersonation must not let a link replace the admin's live session").toBe(0);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(impersonated);
+    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe(jwtFor(ADMIN));
   });
 });
 
