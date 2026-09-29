@@ -15,17 +15,6 @@ vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
-/** Lets one test make the refresh helper itself throw (#1384 unknown path). */
-const refreshControl = vi.hoisted(() => ({ throws: false }));
-vi.mock('./api/refresh-client', async (importOriginal) => {
-  const real = await importOriginal<typeof import('./api/refresh-client')>();
-  return {
-    ...real,
-    ensureFreshToken: () =>
-      refreshControl.throws ? Promise.reject(new Error('refresh blew up')) : real.ensureFreshToken(),
-  };
-});
-
 const API_BASE = 'http://localhost:3000';
 const REDEEM = `${API_BASE}/auth/redeem-magic-link`;
 const MAGIC = 'magic.jwt.raw';
@@ -290,7 +279,6 @@ describe('ROK-1366 #1384: a refreshable session blocks a planted link', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
-    refreshControl.throws = false;
   });
 
   it('keeps the session and never redeems when the expired token refreshes', async () => {
@@ -333,18 +321,71 @@ describe('ROK-1366 #1384: a refreshable session blocks a planted link', () => {
     expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('discord');
   });
 
-  it('keeps the stored session and skips the redeem when the refresh throws', async () => {
+  it('redeems when the refresh rejects with a 403', async () => {
+    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
+    meReturns(401);
+    refreshReturns(403);
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expect(seen.calls, 'a 403 from /auth/refresh means there is no session to keep').toBe(1);
+  });
+});
+
+/**
+ * #1384 review fix: only a 401/403 from /auth/refresh proves the session is
+ * gone. A 429 (an attacker on the victim's NAT can drain the shared refresh
+ * bucket), a 5xx, a network error or an unparseable 200 is indeterminate —
+ * the stored session is kept and the link is left unspent.
+ */
+describe('ROK-1366 #1384: an indeterminate refresh never swaps a stored session', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+  });
+
+  function expectKept(seen: Seen, stored: string, why: string): void {
+    expect(seen.calls, why).toBe(0);
+    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
+    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+  }
+
+  it.each([429, 500, 502, 503])('keeps the session and skips the redeem on a %i from /auth/refresh', async (status) => {
     const stored = jwtFor(USER_A);
     localStorage.setItem(ACCESS_TOKEN_KEY, stored);
     meReturns(401);
-    refreshControl.throws = true;
+    const refresh = refreshReturns(status);
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expect(refresh.calls).toBe(1);
+    expectKept(seen, stored, `a ${status} from /auth/refresh must not spend the link or swap the session`);
+  });
+
+  it('keeps the session and skips the redeem when /auth/refresh is unreachable', async () => {
+    const stored = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+    meReturns(401);
+    server.use(http.post(`${API_BASE}/auth/refresh`, () => HttpResponse.error()));
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await expect(startMagicLinkRedeem(linkFor(USER_B))).resolves.toBeUndefined();
 
-    expect(seen.calls, 'an indeterminate refresh must not spend the link or swap the session').toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
-    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+    expectKept(seen, stored, 'a network error on refresh must not spend the link or swap the session');
+  });
+
+  it('keeps the session and skips the redeem when /auth/refresh answers 200 with a malformed body', async () => {
+    const stored = jwtFor(USER_A);
+    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
+    meReturns(401);
+    server.use(http.post(`${API_BASE}/auth/refresh`, () => HttpResponse.json({ nope: true })));
+    const seen = redeemReturns(200, { access_token: 'session.jwt' });
+
+    await startMagicLinkRedeem(linkFor(USER_B));
+
+    expectKept(seen, stored, 'an unparseable refresh 200 must not spend the link or swap the session');
   });
 });
 

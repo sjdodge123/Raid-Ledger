@@ -1,7 +1,7 @@
 import { TokenResponseSchema, type RedeemMagicLinkDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from './config';
 import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './api/auth-storage-keys';
-import { ensureFreshToken } from './api/refresh-client';
+import { refreshWithOutcome } from './api/refresh-client';
 import { clearSilentGuard, getAuthMethod, setAuthMethod } from './api/silent-reauth';
 
 /**
@@ -38,15 +38,14 @@ async function probeStoredToken(stored: string): Promise<StoredSession> {
 /**
  * #1384 (operator ruling 2026-09-28): a session the refresh cookie can still
  * renew is VALID — the 1h access token expiring must not let a planted link
- * swap it (login CSRF). Only a refresh that really fails leaves 'none'; one
- * that throws is 'unknown'.
+ * swap it (login CSRF). Only a refresh the server rejects (401/403) leaves
+ * 'none'. A 429, 5xx, network error or bad body is 'unknown': the refresh
+ * bucket is shared per IP, so anyone on the victim's NAT can force a 429.
  */
 async function probeRefreshSession(): Promise<StoredSession> {
-  try {
-    return (await ensureFreshToken()) ? 'valid' : 'none';
-  } catch {
-    return 'unknown';
-  }
+  const outcome = await refreshWithOutcome();
+  if (outcome.kind === 'ok') return 'valid';
+  return outcome.kind === 'rejected' ? 'none' : 'unknown';
 }
 
 async function checkStoredSession(): Promise<StoredSession> {
@@ -85,8 +84,8 @@ function adoptSession(accessToken: string): void {
  * OQ6 (operator ruling 2026-09-27) + #1384 (2026-09-28): redeem only when no
  * session exists — no stored token, or /auth/me rejects it (401/403) AND the
  * refresh cookie cannot renew it — whoever the link is for. A valid or
- * refreshable session is kept, and so is one a transient /auth/me failure or
- * a throwing refresh could not judge — the link is left unspent (its
+ * refreshable session is kept, and so is one a transient /auth/me or refresh
+ * failure could not judge — the link is left unspent (its
  * fragment is already gone).
  */
 async function runRedeem(token: string): Promise<void> {
