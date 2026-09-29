@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { act, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/contract';
 import { ChannelBindingList } from './ChannelBindingList';
@@ -39,6 +39,14 @@ function PageLikeHarness({ onUpdate }: { onUpdate: UpdateFn }) {
       onUpdate={handleUpdate} onDelete={vi.fn()} isUpdating={false} isDeleting={false}
       updateError={updateError} onEditingChange={() => setUpdateError(null)} />
   );
+}
+
+/** A PATCH the test settles by hand, so another row can be opened while it is in flight. */
+function deferred() {
+  let resolve!: (v: unknown) => void;
+  let reject!: (e: Error) => void;
+  const promise = new Promise<unknown>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
 }
 
 function rows() {
@@ -103,5 +111,37 @@ describe('ChannelBindingList — a failed save does not follow the admin to anot
 
     expect(screen.getByText('Edit Config: #lobby-b')).toBeInTheDocument();
     expect(screen.queryByText(CONFLICT)).not.toBeInTheDocument();
+  });
+});
+
+describe('ChannelBindingList — a save settling after the admin moved rows stays with its own row', () => {
+  /** Row A saved (PATCH in flight), then row B's editor opened. */
+  async function saveRowAThenOpenRowB(user: ReturnType<typeof userEvent.setup>) {
+    const save = deferred();
+    render(<PageLikeHarness onUpdate={() => save.promise} />);
+    await openAndSaveRowA(user);
+    await user.click(within(rows().rowB).getByRole('button', { name: 'Edit' }));
+    expect(screen.getByText('Edit Config: #lobby-b')).toBeInTheDocument();
+    return save;
+  }
+
+  it('row A save resolves while row B is open: row B stays open', async () => {
+    const user = userEvent.setup();
+    const save = await saveRowAThenOpenRowB(user);
+
+    await act(async () => { save.resolve({ data: lobby('a', 'lobby-a') }); await save.promise; });
+
+    expect(within(rows().rowB).getAllByRole('button')[0]).toHaveTextContent('Close');
+    expect(screen.queryByText('Edit Config: #lobby-b')).toBeInTheDocument();
+  });
+
+  it('row A save rejects while row B is open: row B does not show row A\'s error', async () => {
+    const user = userEvent.setup();
+    const save = await saveRowAThenOpenRowB(user);
+
+    await act(async () => { save.reject(new Error(CONFLICT)); await save.promise.catch(() => {}); });
+
+    expect(screen.getByText('Edit Config: #lobby-b')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

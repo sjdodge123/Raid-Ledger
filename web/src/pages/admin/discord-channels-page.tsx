@@ -50,8 +50,10 @@ function useBindingHandlers() {
         bindings, handleUpdate, handleCreate, handleDelete,
         isUpdating: updateBinding.isPending, isDeleting: deleteBinding.isPending, isCreating: createBinding.isPending,
         updateError: updateBinding.error?.message ?? null, createError: createBinding.error?.message ?? null,
-        // TDB:259: a row editor opening/closing drops the previous row's PATCH error.
-        resetUpdateError: () => updateBinding.reset(),
+        // TDB:259: a row editor opening/closing drops the previous row's PATCH error — but never
+        // while a PATCH is in flight: reset() would detach it (isUpdating drops early, so the
+        // reopened form can double-submit, and a later rejection only reaches the toast).
+        resetUpdateError: () => { if (!updateBinding.isPending) updateBinding.reset(); },
     };
 }
 
