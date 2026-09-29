@@ -391,7 +391,10 @@ clicks above it, no z-index. Never make the frame a `role="button"` / `tabIndex`
 is axe `nested-interactive`. Adopter: `RosterSlot` (owns the button and passes `raiseControls` through
 `RosterCard`, so `PlayerCard` raises its controls; `PlayerCard` itself has no card action). Titled, non-interactive
 decoration (a badge, the character line) is raised too, so its `title` tooltip still shows on hover.
-Trade-off (accepted, B08): a click landing exactly on a raised badge is a dead zone and does not fire the card action.
+It also takes `cursor-default`, so the frame's `cursor-pointer` never promises a click it will not deliver.
+Trade-off (accepted): a click landing exactly on a raised badge is a dead zone and does not fire the card action.
+Decoration the adopter itself paints above the button (RosterSlot's overhanging position badge) forwards its
+click to the action instead, so it keeps the pointer.
 Rendered example: `/dev/design-system` → Overlays and containers → "Stretched-button card".
 
 **Light / Dark** — the frame is tokens and flips; the artwork does not (`GradientOverlay` stays dark so

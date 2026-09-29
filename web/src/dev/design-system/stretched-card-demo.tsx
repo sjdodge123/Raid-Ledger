@@ -28,7 +28,7 @@ export function StretchedCardDemo(): JSX.Element {
                     <div className="flex min-w-0 flex-1 items-center gap-1.5">
                         <a href="#overlays" onClick={(e) => { e.preventDefault(); setLast('name link'); }}
                             className="relative truncate font-medium text-foreground hover:underline">Thrall</a>
-                        <span className="relative shrink-0 rounded-full bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning" title="Tentative — may not attend">&#x23F3;</span>
+                        <span className="relative cursor-default shrink-0 rounded-full bg-warning/15 px-1.5 py-0.5 text-xs font-medium text-warning" title="Tentative — may not attend">&#x23F3;</span>
                     </div>
                     <button type="button" aria-label="Remove Thrall from slot" onClick={() => setLast('Remove')}
                         className="relative shrink-0 min-h-[44px] rounded px-3 text-xs text-dim hover:bg-danger/20 hover:text-danger transition-colors">Remove</button>

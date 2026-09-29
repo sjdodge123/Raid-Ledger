@@ -64,11 +64,13 @@ function playerProfileLink(player: RosterAssignmentResponse) {
     return guestProfileLink({ username: player.username, discordId: player.discordId, avatarHash: player.avatar });
 }
 
-/**
- * `relative` lifts a control — or a titled badge, so its tooltip shows on hover — above an ancestor's
- * stretched action button (RosterSlot, TDB:1949). Trade-off: a click exactly on a raised badge skips the action.
- */
+/** `relative` lifts a control above an ancestor's stretched action button (RosterSlot, TDB:1949). */
 const raise = (raised: boolean) => (raised ? ' relative' : '');
+/**
+ * A titled badge is raised too, so its tooltip shows on hover. It takes no click, so `cursor-default` stops it
+ * inheriting the frame's `cursor-pointer`. Trade-off: a click exactly on a raised badge skips the action.
+ */
+const raiseBadge = (raised: boolean) => (raised ? ' relative cursor-default' : '');
 
 function PlayerNameLink({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
     const { to, state } = playerProfileLink(player);
@@ -85,7 +87,7 @@ function PlayerNameLink({ player, raised }: { player: RosterAssignmentResponse; 
 
 function FlexibilityBadges({ preferredRoles, raised }: { preferredRoles: string[]; raised: boolean }) {
     return (
-        <span className={`flex shrink-0 items-center gap-0.5${raise(raised)}`} title={`Prefers: ${preferredRoles.map(formatRole).join(', ')}`}>
+        <span className={`flex shrink-0 items-center gap-0.5${raiseBadge(raised)}`} title={`Prefers: ${preferredRoles.map(formatRole).join(', ')}`}>
             {preferredRoles.map((r, i) => (
                 <span key={`${r}-${i}`} className="inline-flex items-center"><RoleIcon role={r} size="w-5 h-5" /></span>
             ))}
@@ -97,7 +99,7 @@ function PlayerCharacterInfo({ player, raised }: { player: RosterAssignmentRespo
     if (!player.character) return null;
     return (
         // Raised, the line hugs its text (w-fit) so the card action keeps the rest of the row.
-        <p className={`flex items-center gap-1 truncate text-xs text-muted${raised ? ' relative w-fit max-w-full' : ''}`}
+        <p className={`flex items-center gap-1 truncate text-xs text-muted${raised ? ' relative w-fit max-w-full cursor-default' : ''}`}
             title={[player.character.name, player.character.className].filter(Boolean).join(' \u2022 ')}>
             {getClassIconUrl(player.character.className) && (
                 <img src={getClassIconUrl(player.character.className)!} alt="" className="w-3.5 h-3.5 rounded-sm flex-shrink-0" />
@@ -132,10 +134,10 @@ function PlayerCardBody({ player, raised }: { player: RosterAssignmentResponse; 
             <div className="flex flex-wrap items-center gap-1.5">
                 <PlayerNameLink player={player} raised={raised} />
                 {isTentative && (
-                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raise(raised)}`} title="Tentative — may not attend">&#x23F3;</span>
+                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raiseBadge(raised)}`} title="Tentative — may not attend">&#x23F3;</span>
                 )}
                 {isRunningLate && (
-                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raise(raised)}`} title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
+                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raiseBadge(raised)}`} title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
                 )}
                 {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} raised={raised} />}
             </div>
@@ -147,7 +149,6 @@ function PlayerCardBody({ player, raised }: { player: RosterAssignmentResponse; 
 export function PlayerCard({ player, size = 'default', onRemove, matchAccent, raiseControls = false }: PlayerCardProps) {
     const { avatarUser, gameId } = buildAvatarUser(player);
     const isCompact = size === 'compact';
-    const raised = raiseControls;
     const borderStyle = matchAccent ? { borderLeft: `3px solid ${matchAccent}` } : undefined;
 
     return (
@@ -156,8 +157,8 @@ export function PlayerCard({ player, size = 'default', onRemove, matchAccent, ra
                 transition-all`}
             style={borderStyle}>
             <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={isCompact ? 'h-8 w-8' : 'h-10 w-10'} />
-            <PlayerCardBody player={player} raised={raised} />
-            {onRemove && <RemoveButton username={player.username} onRemove={onRemove} raised={raised} />}
+            <PlayerCardBody player={player} raised={raiseControls} />
+            {onRemove && <RemoveButton username={player.username} onRemove={onRemove} raised={raiseControls} />}
         </div>
     );
 }

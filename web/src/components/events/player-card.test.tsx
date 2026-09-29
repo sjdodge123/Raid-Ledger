@@ -245,8 +245,8 @@ function badgedPlayer() {
     });
 }
 
-// Lead ruling (B08): titled badges rise above the stretched action so their tooltip shows on hover;
-// a click landing exactly on a badge does not fire the card action.
+// Titled badges rise above the stretched action so their tooltip shows on hover; they take no click, so
+// they drop the frame's pointer cursor. A click landing exactly on a badge does not fire the card action.
 describe('PlayerCard — titled badges above the stretched action (TDB:1949)', () => {
     it('raiseControls (an ancestor owns the action, e.g. RosterSlot): link, Remove and badges are raised', () => {
         const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn(), raiseControls: true });
@@ -254,6 +254,8 @@ describe('PlayerCard — titled badges above the stretched action (TDB:1949)', (
         const unraised = [...container.querySelectorAll('[title]')].filter((el) => !el.classList.contains('relative'));
         expect(unraised.map((el) => el.getAttribute('title')), 'titled elements left under an ancestor action').toEqual([]);
         expect(container.firstElementChild, 'the card itself owns no action').not.toHaveClass('relative');
+        const pointerBadges = [...container.querySelectorAll('[title]:not(a):not(button)')].filter((el) => !el.classList.contains('cursor-default'));
+        expect(pointerBadges.map((el) => el.getAttribute('title')), 'raised badges take no click, so they must not inherit the pointer cursor').toEqual([]);
     });
 
     it('the raised character line hugs its text so the card action keeps the rest of the row', () => {
@@ -263,6 +265,6 @@ describe('PlayerCard — titled badges above the stretched action (TDB:1949)', (
 
     it('a non-clickable card with every badge raises nothing (identical to main)', () => {
         const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn() });
-        expect(container.querySelector('.relative, .w-fit'), 'non-clickable cards keep their original classes').toBeNull();
+        expect(container.querySelector('.relative, .w-fit, .cursor-default'), 'non-clickable cards keep their original classes').toBeNull();
     });
 });
