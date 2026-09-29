@@ -70,9 +70,31 @@ async function raceBehindBlocker(
       throw ROLLBACK;
     })
     .catch((err: unknown) => {
-      if (err !== ROLLBACK) throw err;
+      if ((err as Error)?.message !== ROLLBACK.message) throw err;
     });
   return (await settled).map(outcome).sort();
+}
+
+/** A `voting` lineup owned by `userId`, plus a second game to vote on. */
+async function seedVotingLineup(
+  db: Db,
+  userId: number,
+): Promise<{ lineupId: number; gameB: number }> {
+  const [other] = await db
+    .insert(schema.games)
+    .values({ name: 'Toggle Race B', slug: `toggle-race-b-${Date.now()}` })
+    .returning();
+  const [lineup] = await db
+    .insert(schema.communityLineups)
+    .values({
+      title: 'Toggle race',
+      status: 'voting',
+      visibility: 'public',
+      createdBy: userId,
+      publicSlug: `tglrace${Date.now() % 1e8}`,
+    })
+    .returning();
+  return { lineupId: lineup.id, gameB: other.id };
 }
 
 function describeToggleVoteRace() {
@@ -89,22 +111,7 @@ function describeToggleVoteRace() {
   beforeEach(async () => {
     userId = testApp.seed.adminUser.id;
     gameA = testApp.seed.game.id;
-    const [other] = await testApp.db
-      .insert(schema.games)
-      .values({ name: 'Toggle Race B', slug: `toggle-race-b-${Date.now()}` })
-      .returning();
-    gameB = other.id;
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Toggle race',
-        status: 'voting',
-        visibility: 'public',
-        createdBy: userId,
-        publicSlug: `tglrace${Date.now() % 1e8}`,
-      })
-      .returning();
-    lineupId = lineup.id;
+    ({ lineupId, gameB } = await seedVotingLineup(testApp.db, userId));
   });
 
   afterEach(async () => {
