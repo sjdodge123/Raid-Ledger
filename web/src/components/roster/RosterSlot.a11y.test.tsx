@@ -5,6 +5,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { axe } from 'vitest-axe';
+import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { RosterSlot } from './RosterSlot';
 
 // Mirrors the real card's interactive content (name link + Remove button) so axe
@@ -18,7 +19,7 @@ vi.mock('./RosterCard', () => ({
     ),
 }));
 
-function createAssignment() {
+function createAssignment(): RosterAssignmentResponse {
     return {
         id: 1,
         signupId: 100,
@@ -30,7 +31,7 @@ function createAssignment() {
         position: 1,
         isOverride: false,
         character: null,
-        signupStatus: 'confirmed' as const,
+        signupStatus: 'signed_up',
     };
 }
 

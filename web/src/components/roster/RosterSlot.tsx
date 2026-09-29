@@ -63,6 +63,19 @@ function slotActionLabel(role: RosterRole, position: number, item: RosterAssignm
     return `${isAdmin ? 'Assign' : 'Join'} ${role} slot ${position}`;
 }
 
+/**
+ * The badge paints above the stretched button and overhangs the frame (-top-2), so pointer-events-none
+ * would still leave its top half dead: it forwards its own click instead (keyboard users have the button).
+ */
+function PositionBadge({ className, onClick, children }: { className: string; onClick?: () => void; children: React.ReactNode }) {
+    return (
+        <span onClick={onClick} data-testid="roster-slot-badge"
+            className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${className} text-foreground`}>
+            {children}
+        </span>
+    );
+}
+
 export const RosterSlot = React.memo(function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove }: RosterSlotProps) {
     const handleClick = () => {
         if (!item && onJoinClick) { onJoinClick(role, position); return; }
@@ -83,9 +96,7 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
                 <button type="button" onClick={handleClick} aria-label={slotActionLabel(role, position, item, !!onAdminClick)}
                     className={`absolute inset-0 cursor-pointer rounded-lg ${FOCUS_RING}`} />
             )}
-            <span className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${badgeBg} text-foreground`}>
-                {badgeContent}
-            </span>
+            <PositionBadge className={badgeBg} onClick={isClickable ? handleClick : undefined}>{badgeContent}</PositionBadge>
             {item ? (
                 // raiseControls lifts the card's link, Remove button and titled badges above the stretched slot button.
                 <div className="p-1"><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} raiseControls={isClickable} /></div>

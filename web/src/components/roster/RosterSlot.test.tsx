@@ -5,8 +5,9 @@
  * role="button" div around it.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { RosterSlot } from './RosterSlot';
 
 // Mock RosterCard to avoid pulling in the full dependency tree
@@ -16,7 +17,7 @@ vi.mock('./RosterCard', () => ({
     ),
 }));
 
-function createAssignment(overrides: Record<string, unknown> = {}) {
+function createAssignment(overrides: Partial<RosterAssignmentResponse> = {}): RosterAssignmentResponse {
     return {
         id: 1,
         signupId: 100,
@@ -28,7 +29,7 @@ function createAssignment(overrides: Record<string, unknown> = {}) {
         position: 1,
         isOverride: false,
         character: null,
-        signupStatus: 'confirmed' as const,
+        signupStatus: 'signed_up',
         ...overrides,
     };
 }
@@ -167,11 +168,27 @@ describe('RosterSlot — departed signup treatment (ROK-1237)', () => {
         expect(slot?.className ?? '').not.toContain('animate-pulse-subtle');
     });
 
-    // B08: the slot's stretched button covers the card, so the card raises its link, Remove and titled badges.
+    // The slot's stretched button covers the card, so the card raises its link, Remove and titled badges.
     it('asks the card to raise its controls only when the slot is clickable', () => {
         const { rerender } = render(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} onAdminClick={vi.fn()} />);
         expect(screen.getByTestId('roster-card')).toHaveAttribute('data-raise-controls', 'true');
         rerender(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} />);
         expect(screen.getByTestId('roster-card')).toHaveAttribute('data-raise-controls', 'false');
+    });
+});
+
+describe('RosterSlot — position badge forwards its click (TDB:1949)', () => {
+    it('a click on the position badge of an empty Join slot fires the join action', () => {
+        const onJoinClick = vi.fn();
+        render(<RosterSlot role="tank" position={1} color="bg-blue-500" onJoinClick={onJoinClick} />);
+        fireEvent.click(screen.getByTestId('roster-slot-badge'));
+        expect(onJoinClick, 'the badge paints above the stretched button and must not swallow the click').toHaveBeenCalledWith('tank', 1);
+    });
+
+    it('a click on the position badge of a filled Manage slot fires the admin action', () => {
+        const onAdminClick = vi.fn();
+        render(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} onAdminClick={onAdminClick} />);
+        fireEvent.click(screen.getByTestId('roster-slot-badge'));
+        expect(onAdminClick, 'the badge paints above the stretched button and must not swallow the click').toHaveBeenCalledWith('tank', 1);
     });
 });
