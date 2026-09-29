@@ -709,7 +709,10 @@ function describeMatchingRaceAndIdempotency() {
 
     // ROK-1473: the pass now RETURNS the ids it moved into `scheduling` so
     // the caller can announce them post-commit (the Discord poll card).
-    const schedulingIds = await buildMatchesForLineup(testApp.db, lineupId);
+    const { schedulingMatchIds: schedulingIds } = await buildMatchesForLineup(
+      testApp.db,
+      lineupId,
+    );
 
     const matches = await testApp.db
       .select()
@@ -863,7 +866,10 @@ function describeMatchingRaceAndIdempotency() {
     // Today this rejects with PostgresError 23505 on uq_match_member_user.
     // After Commit 3 (.onConflictDoNothing()) it resolves cleanly — and since
     // ROK-1473 it resolves with the ids that entered `scheduling`.
-    const schedulingIds = await buildMatchesForLineup(testApp.db, lineupId);
+    const { schedulingMatchIds: schedulingIds } = await buildMatchesForLineup(
+      testApp.db,
+      lineupId,
+    );
 
     const matches = await testApp.db
       .select()

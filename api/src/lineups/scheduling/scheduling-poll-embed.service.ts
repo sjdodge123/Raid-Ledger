@@ -29,7 +29,9 @@ import { resolveLineupChannel } from '../lineup-notification-channel.helpers';
 import {
   LINEUP_MATCH_EVENTS,
   type MatchEnteredSchedulingPayload,
+  type PollCardsOrphanedPayload,
 } from '../lineups-scheduling-hook.helpers';
+import { deleteOrphanedPollCards } from './scheduling-poll-orphan.helpers';
 import {
   loadMatchForInitialPost,
   claimEmbedSlot,
@@ -88,6 +90,22 @@ export class SchedulingPollEmbedService {
           err instanceof Error ? err.message : String(err)
         }`,
       ),
+    );
+  }
+
+  /**
+   * A re-decide wiped matches that owned poll cards (TDB:571): delete the
+   * cards so no live poll points at a match that no longer exists.
+   * Fire-and-forget, like the entered-scheduling listener above.
+   *
+   * @param payload - The cards the committed wipe orphaned.
+   */
+  @OnEvent(LINEUP_MATCH_EVENTS.POLL_CARDS_ORPHANED)
+  onPollCardsOrphaned(payload: PollCardsOrphanedPayload): void {
+    void deleteOrphanedPollCards(
+      this.clientService,
+      payload.cards,
+      this.logger,
     );
   }
 

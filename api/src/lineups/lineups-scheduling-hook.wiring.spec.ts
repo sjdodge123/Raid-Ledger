@@ -81,9 +81,26 @@ describe('scheduling-phase announcements (ROK-1473)', () => {
       .map(([, payload]) => (payload as { matchId: number }).matchId);
   }
 
+  /** Orphaned-card payloads emitted after the matching pass (TDB:571). */
+  function orphanedCardEmits(): unknown[] {
+    return emit.mock.calls
+      .filter(([name]) => name === LINEUP_MATCH_EVENTS.POLL_CARDS_ORPHANED)
+      .map(([, payload]) => payload);
+  }
+
+  /** What `buildMatchesForLineup` resolves with. */
+  function built(
+    schedulingMatchIds: number[],
+    orphanedCards: { channelId: string; messageId: string }[] = [],
+  ) {
+    return { schedulingMatchIds, orphanedCards };
+  }
+
   describe('runMatchingAlgorithm (voting → decided, tiebreaker resolve)', () => {
     it('announces every match the pass moved into scheduling', async () => {
-      (buildMatchesForLineup as jest.Mock).mockResolvedValue([11, 12]);
+      (buildMatchesForLineup as jest.Mock).mockResolvedValue(
+        built([11, 12]),
+      );
 
       await runMatchingAlgorithm(db, LINEUP_ID, logger, events);
 
@@ -91,7 +108,7 @@ describe('scheduling-phase announcements (ROK-1473)', () => {
     });
 
     it('stays silent when no match cleared the threshold', async () => {
-      (buildMatchesForLineup as jest.Mock).mockResolvedValue([]);
+      (buildMatchesForLineup as jest.Mock).mockResolvedValue(built([]));
 
       await runMatchingAlgorithm(db, LINEUP_ID, logger, events);
 
@@ -107,6 +124,27 @@ describe('scheduling-phase announcements (ROK-1473)', () => {
         runMatchingAlgorithm(db, LINEUP_ID, logger, events),
       ).resolves.toBeUndefined();
       expect(announcedMatchIds()).toEqual([]);
+      expect(orphanedCardEmits()).toEqual([]);
+    });
+
+    it('hands the cards a re-decide wiped to the Discord layer (TDB:571)', async () => {
+      const card = { channelId: 'chan-1', messageId: 'msg-1' };
+      (buildMatchesForLineup as jest.Mock).mockResolvedValue(
+        built([11], [card]),
+      );
+
+      await runMatchingAlgorithm(db, LINEUP_ID, logger, events);
+
+      expect(orphanedCardEmits()).toEqual([{ cards: [card] }]);
+      expect(announcedMatchIds()).toEqual([11]);
+    });
+
+    it('emits no orphan event when the wipe removed no card', async () => {
+      (buildMatchesForLineup as jest.Mock).mockResolvedValue(built([11]));
+
+      await runMatchingAlgorithm(db, LINEUP_ID, logger, events);
+
+      expect(orphanedCardEmits()).toEqual([]);
     });
   });
 
