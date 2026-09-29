@@ -20,11 +20,18 @@ export class LinkStartError extends Error {
  * it unlocks. Authenticates ONLY through the Bearer header (`fetchWithAuth`,
  * which also refreshes once on a 401), so the session JWT never rides in a
  * URL. `returnTo` is Steam-only and allowlisted server-side.
+ *
+ * ROK-1366: the response sets the httpOnly `rl_link_<provider>` cookie that
+ * binds the nonce to this browser (the GET hop is refused without it). A
+ * cross-origin Set-Cookie is only stored for a credentialed request, so this
+ * call states `credentials: 'include'` itself rather than relying on the
+ * shared transport's default.
  */
 export async function startAccountLink(provider: LinkProvider, returnTo?: string): Promise<string> {
     const body = returnTo ? { returnTo } : {};
     const response = await fetchWithAuth(`/auth/${provider}/link/start`, {
         method: 'POST',
+        credentials: 'include',
         body: JSON.stringify(body),
     });
     if (!response.ok) throw new LinkStartError(response.status);

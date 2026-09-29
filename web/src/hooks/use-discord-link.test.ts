@@ -53,6 +53,9 @@ describe('useDiscordLink (ROK-1630 AC16)', () => {
         expect(init.method).toBe('POST');
         expect(init.headers.Authorization).toBe('Bearer access-jwt');
         expect(JSON.parse(String(init.body))).toEqual({});
+        // ROK-1366: the response sets the rl_link_discord binding cookie; a
+        // cross-origin Set-Cookie is only stored for a credentialed request.
+        expect(init.credentials).toBe('include');
     });
 
     it('navigates to the ?nonce= hop, never a ?token= URL', async () => {

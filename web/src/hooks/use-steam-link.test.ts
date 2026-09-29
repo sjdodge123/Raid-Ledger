@@ -241,6 +241,8 @@ describe('useSteamLink().linkSteam (ROK-1630 AC16)', () => {
         expect(call![1].method).toBe('POST');
         expect(call![1].headers.Authorization).toBe('Bearer test-jwt');
         expect(JSON.parse(String(call![1].body))).toEqual({ returnTo: '/onboarding' });
+        // ROK-1366: credentialed, so the browser stores the rl_link_steam binding cookie.
+        expect(call![1].credentials).toBe('include');
         expect(navigations).toEqual([`${API_BASE_URL}/auth/steam/link?nonce=${encodeURIComponent('st/eam')}`]);
     });
 
