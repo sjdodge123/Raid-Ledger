@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { axe } from 'vitest-axe';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { PlayerCard } from './player-card';
 import { formatRole } from '../../lib/role-colors';
@@ -224,5 +226,84 @@ describe('PlayerCard — profile link (ROK-381 guest profile, ROK-1694)', () => 
 
     it('a member links to /users/<id> with no guest state', () => {
         expect(followNameLink(createMockPlayer(), '/users/10')).toEqual({ path: '/users/10', state: null });
+    });
+});
+
+/** Everything a keyboard or AT user can land on. */
+const INTERACTIVE = 'a[href], button, input, select, textarea, [role="button"], [tabindex]';
+
+/** Interactive elements that sit inside another interactive element (axe `nested-interactive`). */
+function nestedInteractive(container: HTMLElement) {
+    return [...container.querySelectorAll(INTERACTIVE)]
+        .filter((el) => el.parentElement?.closest(INTERACTIVE))
+        .map((el) => `${el.tagName.toLowerCase()} "${el.textContent || el.getAttribute('aria-label')}"`);
+}
+
+/** A clickable, removable card on an event route, with the profile route mounted. */
+function renderClickableCard() {
+    const onClick = vi.fn();
+    const onRemove = vi.fn();
+    const player = createMockPlayer({ signupStatus: 'tentative', preferredRoles: ['tank'] });
+    const utils = render(
+        <MemoryRouter initialEntries={['/events/1']}>
+            <Routes>
+                <Route path="/events/1" element={<PlayerCard player={player} size="compact" onClick={onClick} onRemove={onRemove} />} />
+                <Route path="/users/:id" element={<ProfileProbe />} />
+            </Routes>
+        </MemoryRouter>,
+    );
+    return { ...utils, onClick, onRemove };
+}
+
+// TDB:1949 — the card action is a native button beside the link and Remove, never their ancestor.
+describe('PlayerCard — clickable card (TDB:1949)', () => {
+    it('no interactive element is nested inside another (axe nested-interactive)', async () => {
+        const { container } = renderClickableCard();
+        expect(nestedInteractive(container), 'controls nested inside another control').toEqual([]);
+        expect(await axe(container)).toHaveNoViolations();
+    });
+
+    it('clicking the card action fires onClick only', async () => {
+        const { onClick, onRemove } = renderClickableCard();
+        const action = screen.getByRole('button', { name: 'Select TestPlayer' });
+        expect(action.tagName).toBe('BUTTON');
+        await userEvent.click(action);
+        expect(onClick).toHaveBeenCalledTimes(1);
+        expect(onRemove).not.toHaveBeenCalled();
+    });
+
+    it('Enter and Space on the focused card action fire onClick', async () => {
+        const user = userEvent.setup();
+        const { onClick } = renderClickableCard();
+        screen.getByRole('button', { name: 'Select TestPlayer' }).focus();
+        await user.keyboard('{Enter}');
+        await user.keyboard(' ');
+        expect(onClick).toHaveBeenCalledTimes(2);
+    });
+
+    it('Remove removes without firing onClick', async () => {
+        const { onClick, onRemove } = renderClickableCard();
+        await userEvent.click(screen.getByRole('button', { name: 'Remove TestPlayer from slot' }));
+        expect(onRemove).toHaveBeenCalledTimes(1);
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('the name link navigates to the profile without firing onClick', async () => {
+        const { onClick } = renderClickableCard();
+        await userEvent.click(screen.getByRole('link', { name: 'TestPlayer' }));
+        expect(screen.getByTestId('probe-path')).toHaveTextContent('/users/10');
+        expect(onClick).not.toHaveBeenCalled();
+    });
+
+    it('uses clickLabel as the action name when given', () => {
+        renderCard({ player: createMockPlayer(), onClick: vi.fn(), clickLabel: 'Assign TestPlayer' });
+        expect(screen.getByRole('button', { name: 'Assign TestPlayer' })).toBeInTheDocument();
+    });
+
+    it('a non-clickable card renders no action button and raises nothing', () => {
+        const { container } = renderCard({ player: createMockPlayer(), onRemove: vi.fn() });
+        expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Remove TestPlayer from slot']);
+        expect(container.querySelector('.relative'), 'non-clickable cards keep their original classes').toBeNull();
+        expect(container.firstElementChild).toHaveClass('transition-all');
     });
 });
