@@ -235,6 +235,13 @@ jobs:
       - name: Migration merge-order guard
         run: node scripts/check-migration-merge-order.mjs --base HEAD^1
 
+      # TDB:1150: every meta/NNNN_snapshot.json's prevId must be the id of the
+      # snapshot before it (numeric order; gaps are normal). drizzle-kit only
+      # aborts on a prevId collision, so a broken link (0102 pointed at a tag
+      # string, 0112 at no snapshot) otherwise survives silently.
+      - name: Migration snapshot prevId chain guard
+        run: node scripts/check-migration-snapshot-chain.mjs
+
   # ─── Unit Tests (API) ──────────────────────────────────────────────
   unit-tests-api:
     runs-on: ubuntu-latest

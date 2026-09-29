@@ -1222,6 +1222,9 @@ run_migration_validation() {
   # silently SKIPPED by Drizzle on every DB past that entry (0176 never reached
   # prod). `|| return 1` so the guard's exit 3 is never read as a run_step code.
   node "$REPO_ROOT/scripts/check-migration-merge-order.mjs" || return 1
+  # TDB:1150: each snapshot's prevId must be the previous snapshot's id —
+  # drizzle-kit never checks the link, only prevId collisions.
+  node "$REPO_ROOT/scripts/check-migration-snapshot-chain.mjs" || return 1
   # ROK-1343: Mutagen sync on the rl-infra fleet runner strips POSIX exec
   # bits even though git stores `scripts/validate-migrations.sh` as 100755.
   # GitHub CI honors the git mode; the fleet does not. Re-assert +x defensively
