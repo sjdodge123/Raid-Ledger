@@ -76,8 +76,12 @@ export default defineConfig({
          * "Error reading storage state ... ENOENT". */
         storageState: STORAGE_STATE_PATH,
 
-        /* Collect trace when retrying the failed test */
-        trace: 'on-first-retry',
+        /* Trace policy. GitHub CI and local runs keep 'on-first-retry'.
+         * Fleet runs (remote target) use 'retain-on-failure' (TDB:1855): a
+         * fleet gate is often read once, after the fact, and a failure that
+         * did not reproduce on retry left no trace at all. It records every
+         * test and discards passing ones, so it costs fleet runtime/disk. */
+        trace: IS_REMOTE_TARGET ? 'retain-on-failure' : 'on-first-retry',
 
         /* Screenshot on failure */
         screenshot: 'only-on-failure',

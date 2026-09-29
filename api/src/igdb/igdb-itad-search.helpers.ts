@@ -24,7 +24,9 @@ export interface ItadSearchDeps {
   ) => Promise<Map<string, number>>;
   enrichFromIgdb: (steamAppId: number) => Promise<IgdbEnrichedData | null>;
   getAdultFilter: () => Promise<boolean>;
-  isBannedOrHidden: (slug: string) => Promise<boolean>;
+  /** READLOGS:D2: batch lookup — returns the subset of `slugs` that are
+   * banned or hidden, in ONE query for the whole result set. */
+  findBannedOrHiddenSlugs: (slugs: string[]) => Promise<Set<string>>;
   upsertGame: (game: GameDetailDto) => Promise<GameDetailDto>;
   /** ROK-986: Callback when a game is upserted without IGDB data. */
   onUnenriched?: (gameId: number) => void;
@@ -154,18 +156,15 @@ function applyPostFilters(
   );
 }
 
-/** Remove banned/hidden games by slug. */
+/** Remove banned/hidden games by slug (one batched lookup, READLOGS:D2). */
 async function removeHidden(
   deps: ItadSearchDeps,
   games: GameDetailDto[],
 ): Promise<GameDetailDto[]> {
-  const results: GameDetailDto[] = [];
-  for (const game of games) {
-    if (!(await deps.isBannedOrHidden(game.slug))) {
-      results.push(game);
-    }
-  }
-  return results;
+  if (games.length === 0) return games;
+  const slugs = [...new Set(games.map((g) => g.slug))];
+  const excluded = await deps.findBannedOrHiddenSlugs(slugs);
+  return games.filter((g) => !excluded.has(g.slug));
 }
 
 /** Upsert all games to DB to get real IDs. */
