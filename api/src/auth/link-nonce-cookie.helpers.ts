@@ -32,7 +32,8 @@ function hashNonce(nonce: string): string {
   return crypto.createHash('sha256').update(nonce).digest('hex');
 }
 
-function cookieAttrs(): CookieOptions {
+/** Shared by the nonce cookie and the state cookie (link-state-cookie.helpers). */
+export function linkCookieAttrs(): CookieOptions {
   return {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -48,7 +49,7 @@ export function setLinkNonceCookie(
   nonce: string,
 ): void {
   res.cookie(linkNonceCookieName(provider), hashNonce(nonce), {
-    ...cookieAttrs(),
+    ...linkCookieAttrs(),
     maxAge: LINK_NONCE_TTL_SECONDS * 1000,
   });
 }
@@ -57,7 +58,7 @@ export function setLinkNonceCookie(
  * Read a cookie. Prefers cookie-parser's `req.cookies` (main.ts), falling
  * back to the raw header — the integration test app never runs main.ts.
  */
-function readCookie(req: Request, name: string): string | null {
+export function readCookie(req: Request, name: string): string | null {
   const parsed = (req.cookies ?? {}) as Record<string, unknown>;
   if (typeof parsed[name] === 'string') return parsed[name];
   const header = req.headers?.cookie;
@@ -99,6 +100,6 @@ export async function consumeBrowserBoundNonce(
   res: Response,
 ): Promise<LinkNonceClaims | null> {
   if (!nonce || !cookieMatches(req, provider, nonce)) return null;
-  res.clearCookie(linkNonceCookieName(provider), cookieAttrs());
+  res.clearCookie(linkNonceCookieName(provider), linkCookieAttrs());
   return linkNonceService.consume(provider, nonce);
 }

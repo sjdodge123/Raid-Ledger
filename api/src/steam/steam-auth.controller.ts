@@ -25,6 +25,10 @@ import {
 } from '../auth/link-nonce.service';
 import { consumeBrowserBoundNonce } from '../auth/link-nonce-cookie.helpers';
 import {
+  assertLinkStateBoundToBrowser,
+  bindLinkStateToBrowser,
+} from '../auth/link-state-cookie.helpers';
+import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
   getPlayerSummary,
@@ -193,6 +197,8 @@ export class SteamAuthController {
       action: 'steam_link',
       timestamp: Date.now(),
       returnTo,
+      // Binds the state to this browser through the callback (ROK-1366).
+      r: bindLinkStateToBrowser(res, 'steam'),
     });
     const callbackUrl = `${this.getApiBaseUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
     res.redirect(buildSteamOpenIdUrl(callbackUrl));
@@ -212,7 +218,11 @@ export class SteamAuthController {
     const clientUrl = this.getClientUrl(req);
     const returnTo = this.extractReturnToFromState(query.state);
     try {
-      const { userId, steamId } = await this.processLinkCallback(query);
+      const { userId, steamId } = await this.processLinkCallback(
+        query,
+        req,
+        res,
+      );
       const isPublic = await this.checkAndSyncSteam(userId, steamId);
       const privacyParam = isPublic ? '' : '&steam_private=true';
       res.redirect(`${clientUrl}${returnTo}?steam=success${privacyParam}`);
@@ -235,11 +245,14 @@ export class SteamAuthController {
   /** Process the Steam link callback: verify state, verify OpenID, link account. */
   private async processLinkCallback(
     query: Record<string, string>,
+    req: Request,
+    res: Response,
   ): Promise<{ userId: number; steamId: string }> {
     if (!query.state) throw new Error('Missing state parameter');
     const stateData = this.verifyState(query.state);
     if (!stateData || stateData.action !== 'steam_link')
       throw new Error('Invalid or tampered state parameter');
+    assertLinkStateBoundToBrowser(req, res, 'steam', stateData.r);
     const userId = stateData.userId as number;
     const steamId = await verifySteamOpenId(query);
     if (!steamId) throw new Error('Steam verification failed');
