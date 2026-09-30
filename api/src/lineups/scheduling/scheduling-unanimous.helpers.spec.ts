@@ -111,7 +111,7 @@ describe('scheduling-unanimous.helpers', () => {
       );
 
       expect(text).toContain(
-        `to_char(s.proposed_time, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "proposedTime"`,
+        `to_char(s.proposed_time AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "proposedTime"`,
       );
     });
 

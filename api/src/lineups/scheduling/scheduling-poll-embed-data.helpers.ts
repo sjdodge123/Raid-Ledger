@@ -78,8 +78,13 @@ export async function loadLockedInTime(
 ): Promise<string | null> {
   if (status !== 'locked_in' || !linkedEventId) return null;
   // `events.duration` is a tsrange — its lower bound is the start time.
+  // It is zone-less UTC, and a raw `sql` read hands back a bare string that
+  // `new Date()` parses as LOCAL time (TDB:1489: off by the host's offset
+  // off-UTC) — `to_char` spells the `Z` out, as the column's `fromDriver` does.
   const [event] = await db
-    .select({ startTime: sql<string>`lower(${schema.events.duration})` })
+    .select({
+      startTime: sql<string>`to_char(lower(${schema.events.duration}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+    })
     .from(schema.events)
     .where(eq(schema.events.id, linkedEventId))
     .limit(1);
