@@ -127,6 +127,7 @@ const KNOWN_SPEC_HELPER_FIXTURES = [
   'discord-bot/listeners/voice-state.rok-1445.spec-helpers.ts',
   'discord-bot/listeners/voice-state.rok-697.spawn.spec-helpers.ts',
   'discord-bot/services/ad-hoc-event.service.spec-helpers.ts',
+  'discord-bot/services/channel-presence-embed.service.spec-helpers.ts',
   'discord-bot/services/scheduled-event.service.spec-helpers.ts',
   'discord-bot/services/voice-attendance.service.spec-helpers.ts',
   'events/og-meta.service.spec-helpers.ts',
@@ -135,6 +136,7 @@ const KNOWN_SPEC_HELPER_FIXTURES = [
   'lfg/lfg-reads.integration.spec-helpers.ts',
   'lfg/lfg.integration.spec-helpers.ts',
   'notifications/recruitment-reminder.service.spec-helpers.ts',
+  'users/game-time.integration.spec-helpers.ts',
 ];
 
 function productionFiles(): string[] {
