@@ -15,6 +15,7 @@ import { setup } from "./setup.js";
 import type { SmokeTest, TestContext, TestResult } from "./types.js";
 import { channelEmbedTests } from "./tests/channel-embeds.test.js";
 import { dmNotificationTests } from "./tests/dm-notifications.test.js";
+import { dmEmbedRenderTests } from "./tests/dm-embed-render.test.js";
 import { voiceActivityTests } from "./tests/voice-activity.test.js";
 import { interactionFlowTests } from "./tests/interaction-flows.test.js";
 import { rosterCalculationTests } from "./tests/roster-calculation.test.js";
@@ -160,6 +161,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...pushContentTests,
     ...rosterCalculationTests,
     ...dmNotificationTests,
+    ...dmEmbedRenderTests,
     ...voiceActivityTests,
     ...interactionFlowTests,
     ...slashCommandTests,
