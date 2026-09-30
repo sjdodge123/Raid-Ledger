@@ -132,8 +132,7 @@ export async function editDmEmbed(
     await msg.edit({ embeds: [embed], components });
   } catch (error) {
     logger.warn(
-      'Failed to edit reschedule DM embed: %s',
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to edit reschedule DM embed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }
@@ -152,8 +151,7 @@ export async function editDmEmbedFromSelect(
     await botMessage.edit({ embeds: [embed], components });
   } catch (error) {
     logger.warn(
-      'Failed to edit reschedule DM embed from select: %s',
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to edit reschedule DM embed from select: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }

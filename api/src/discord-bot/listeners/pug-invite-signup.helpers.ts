@@ -49,17 +49,11 @@ async function createLinkedPugSignup(
       { slotRole: role as SlotRole },
     );
     deps.logger.log(
-      'Created signup %d for PUG %s (linked user %d) on event %d',
-      result.id,
-      slot.discordUsername,
-      linkedUser.id,
-      slot.eventId,
+      `Created signup ${result.id} for PUG ${slot.discordUsername} (linked user ${linkedUser.id}) on event ${slot.eventId}`,
     );
   } catch (err) {
     deps.logger.warn(
-      'Failed to create signup for PUG %s: %s',
-      slot.discordUsername,
-      err instanceof Error ? err.message : 'Unknown error',
+      `Failed to create signup for PUG ${slot.discordUsername}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
   }
 }
@@ -92,18 +86,12 @@ async function createAnonymousPugSignup(
       const effectiveRole = await resolveEffectiveRole(deps, slot, role);
       await assignAnonymousRoster(deps, slot.eventId, signup.id, effectiveRole);
       deps.logger.log(
-        'Created anonymous signup %d for PUG %s on event %d (%s)',
-        signup.id,
-        slot.discordUsername,
-        slot.eventId,
-        effectiveRole,
+        `Created anonymous signup ${signup.id} for PUG ${slot.discordUsername} on event ${slot.eventId} (${effectiveRole})`,
       );
     }
   } catch (err) {
     deps.logger.warn(
-      'Failed to create anonymous signup for PUG %s: %s',
-      slot.discordUsername,
-      err instanceof Error ? err.message : 'Unknown error',
+      `Failed to create anonymous signup for PUG ${slot.discordUsername}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
   }
 }

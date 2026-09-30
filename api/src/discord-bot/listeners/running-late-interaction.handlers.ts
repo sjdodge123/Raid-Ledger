@@ -20,6 +20,7 @@ import type { SettingsService } from '../../settings/settings.service';
 import { RUNNING_LATE_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
 import { findLinkedUser } from './signup-interaction.helpers';
+import { errorMessage, errorStack } from '../../common/error-format.helpers';
 
 /** Dependencies for the running-late interaction handlers (ROK-1379). */
 export interface RunningLateDeps {
@@ -173,9 +174,8 @@ export async function updateChannelEmbeds(
     }
   } catch (error) {
     deps.logger.error(
-      'Failed to update channel embeds for event %d:',
-      eventId,
-      error,
+      `Failed to update channel embeds for event ${eventId}`,
+      errorStack(error),
     );
   }
 }
@@ -233,10 +233,7 @@ async function rerenderRecord(
     );
   } catch (err) {
     deps.logger.warn(
-      'Failed to update embed message %s for event %d: %s',
-      record.messageId,
-      eventId,
-      err instanceof Error ? err.message : 'Unknown',
+      `Failed to update embed message ${record.messageId} for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
     );
   }
 }
@@ -252,9 +249,7 @@ export async function safeEditReply(
   } catch (error: unknown) {
     if (isDiscordInteractionError(error)) {
       logger.warn(
-        'Interaction editReply failed (code %d): %s',
-        (error as { code: number }).code,
-        (error as Error).message,
+        `Interaction editReply failed (code ${(error as { code: number }).code}): ${(error as Error).message}`,
       );
       return;
     }
@@ -301,8 +296,7 @@ export async function clearRunningLateOnVoiceJoin(
     }
   } catch (error) {
     deps.logger.warn(
-      'Voice-join running-late auto-clear failed: %s',
-      error instanceof Error ? error.message : String(error),
+      `Voice-join running-late auto-clear failed: ${errorMessage(error)}`,
     );
   }
 }

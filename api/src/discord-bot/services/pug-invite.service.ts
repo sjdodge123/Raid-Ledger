@@ -24,6 +24,7 @@ import {
   resolveInviteChannel,
   claimPugSlotsInDb,
 } from './pug-invite.member-helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /**
  * Handles PUG invite flow via Discord bot (ROK-292).
@@ -64,10 +65,8 @@ export class PugInviteService {
       );
     } catch (error) {
       this.logger.error(
-        'Failed to process PUG invite for %s (slot: %s):',
-        discordUsername,
-        pugSlotId,
-        error,
+        `Failed to process PUG invite for ${discordUsername} (slot: ${pugSlotId})`,
+        errorStack(error),
       );
     }
   }
@@ -230,7 +229,7 @@ export class PugInviteService {
       });
       return invite.url;
     } catch (error) {
-      this.logger.error('Failed to generate server invite:', error);
+      this.logger.error('Failed to generate server invite', errorStack(error));
       return null;
     }
   }
@@ -255,10 +254,8 @@ export class PugInviteService {
       );
     } catch (error) {
       this.logger.error(
-        'Failed to auto-invite %s for slot %s:',
-        discordUsername,
-        slot.id,
-        error,
+        `Failed to auto-invite ${discordUsername} for slot ${slot.id}`,
+        errorStack(error),
       );
     }
   }
@@ -273,9 +270,7 @@ export class PugInviteService {
       await this.clientService.sendEmbedDM(targetDiscordId, embed, row);
     } catch (error) {
       this.logger.warn(
-        `Failed to send ${label} DM to %s: %s`,
-        targetDiscordId,
-        error instanceof Error ? error.message : 'Unknown error',
+        `Failed to send ${label} DM to ${targetDiscordId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

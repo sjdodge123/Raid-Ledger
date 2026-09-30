@@ -125,10 +125,7 @@ async function recordPollMatch(
     `);
   } catch (error) {
     deps.logger.warn(
-      'Follow-up match back-reference failed (%d -> %d): %s',
-      eventId,
-      matchId,
-      errMsg(error),
+      `Follow-up match back-reference failed (${eventId} -> ${matchId}): ${errMsg(error)}`,
     );
   }
 }
@@ -165,9 +162,7 @@ async function openFollowupPoll(
   } catch (error) {
     await releasePollChoice(deps.db, event.id);
     deps.logger.warn(
-      'Follow-up poll create failed (%d): %s',
-      event.id,
-      errMsg(error),
+      `Follow-up poll create failed (${event.id}): ${errMsg(error)}`,
     );
     await interaction.editReply({
       content: "Couldn't start the poll — try again.",
@@ -191,9 +186,7 @@ async function fanOutPoll(
     );
   } catch (error) {
     deps.logger.warn(
-      'Follow-up poll fan-out failed (%d): %s',
-      event.id,
-      errMsg(error),
+      `Follow-up poll fan-out failed (${event.id}): ${errMsg(error)}`,
     );
   }
 }
