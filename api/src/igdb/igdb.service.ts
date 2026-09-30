@@ -22,8 +22,7 @@ import {
   reEnrichSingleGameById,
 } from './igdb-enqueue.helpers';
 import { CronJobService } from '../cron-jobs/cron-job.service';
-import { ItadService } from '../itad/itad.service';
-import type { ItadFetchOptions } from '../itad/itad-http.util';
+import { ItadService, type ItadFetchOptions } from '../itad/itad.service';
 import { GameTasteService } from '../game-taste/game-taste.service';
 import {
   IGDB_CONFIG,

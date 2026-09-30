@@ -7,6 +7,8 @@ import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
 import { itadFetch, itadPost, type ItadFetchOptions } from './itad-http.util';
+
+export type { ItadFetchOptions } from './itad-http.util';
 import type {
   ItadGame,
   ItadLookupResponse,
