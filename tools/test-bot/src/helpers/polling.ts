@@ -74,17 +74,35 @@ export function firstFreshMatch(
   return msgs.find((m) => !excludeIds?.has(m.id) && predicate(m));
 }
 
+/** Reads a snapshot makes before giving up on truncated Discord responses. */
+const SNAPSHOT_ATTEMPTS = 3;
+
 /**
  * Ids of a channel's recent messages, for `PollOptions.excludeIds`. Take it
- * BEFORE the mutation that posts the card under test. A truncated read is a
- * miss (logged by `readOrMiss`), which yields an empty fence.
+ * BEFORE the mutation that posts the card under test (Discord caps a fetch
+ * at 100, which covers many runs' leftover cards).
+ *
+ * Unlike a poll tick, a truncated read is NOT counted as an empty result: an
+ * empty fence lets a prior run's card match, which false-passes any probe
+ * that card also satisfies. It is re-read, and after SNAPSHOT_ATTEMPTS
+ * truncated reads the SyntaxError propagates. Any other error propagates at
+ * once.
  */
 export async function snapshotMessageIds(
   channelId: string,
   count = DEFAULT_FETCH_COUNT,
+  read: ChannelReader = readLastMessages,
 ): Promise<Set<string>> {
-  const msgs = await readOrMiss(channelId, count, 'snapshotMessageIds');
-  return new Set(msgs.map((m) => m.id));
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return new Set((await read(channelId, count)).map((m) => m.id));
+    } catch (err) {
+      if (!(err instanceof SyntaxError) || attempt >= SNAPSHOT_ATTEMPTS) throw err;
+      console.warn(
+        `  [snapshotMessageIds] channel ${channelId}: unparseable Discord response (${err.message}) — re-reading (attempt ${attempt}/${SNAPSHOT_ATTEMPTS})`,
+      );
+    }
+  }
 }
 
 /**

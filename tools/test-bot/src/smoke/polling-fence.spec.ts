@@ -6,21 +6,25 @@
  * the same href (TDB:571 / TDB:1459). Ids snapshotted before the mutation
  * under test must never match; the fresh card after them must.
  *
+ * snapshotMessageIds() — the fence itself never fails OPEN: a truncated
+ * Discord read is re-read, never returned as an empty fence that would let a
+ * prior run's card match.
+ *
  * Pure — messages are literals; no Discord connection, no env.
  *
  * Run: npx tsx src/smoke/polling-fence.spec.ts
  */
 import assert from 'node:assert/strict';
 
-import { firstFreshMatch } from '../helpers/polling.js';
+import { firstFreshMatch, snapshotMessageIds } from '../helpers/polling.js';
 import type { SimpleMessage } from '../helpers/messages.js';
 
 let passed = 0;
 let failed = 0;
 
-function test(name: string, fn: () => void) {
+async function test(name: string, fn: () => void | Promise<void>) {
   try {
-    fn();
+    await fn();
     passed++;
     console.log(`  PASS  ${name}`);
   } catch (err) {
@@ -45,18 +49,48 @@ const GHOST = card('ghost', `prior run [Vote now](${HREF})`);
 const NOISE = card('noise', 'an unrelated card');
 const FRESH = card('fresh', `this run [Vote now](${HREF})`);
 
-test('without a fence the oldest match wins (the ghost this guards against)', () => {
+await test('without a fence the oldest match wins (the ghost this guards against)', () => {
   assert.equal(firstFreshMatch([GHOST, NOISE, FRESH], linksHref)?.id, 'ghost');
 });
 
-test('skips an excluded older match and returns the fresh one', () => {
+await test('skips an excluded older match and returns the fresh one', () => {
   const match = firstFreshMatch([GHOST, NOISE, FRESH], linksHref, new Set(['ghost']));
   assert.equal(match?.id, 'fresh', `expected the fresh card, got ${match?.id ?? 'no match'}`);
 });
 
-test('returns undefined when only excluded messages match', () => {
+await test('returns undefined when only excluded messages match', () => {
   const match = firstFreshMatch([GHOST, NOISE], linksHref, new Set(['ghost', 'noise']));
   assert.equal(match, undefined, `expected no match, got ${match?.id}`);
+});
+
+const truncated = () => new SyntaxError('Unterminated string in JSON at position 139778');
+
+/** A channel reader that throws a truncation `failures` times, then serves `msgs`. */
+function flakyReader(failures: number, msgs: SimpleMessage[]) {
+  let calls = 0;
+  const read = async (): Promise<SimpleMessage[]> => {
+    calls++;
+    if (calls <= failures) throw truncated();
+    return msgs;
+  };
+  return { read, calls: () => calls };
+}
+
+await test('snapshotMessageIds re-reads a truncated response instead of fencing nothing', async () => {
+  const reader = flakyReader(1, [GHOST, NOISE]);
+  const ids = await snapshotMessageIds('chan', 100, reader.read);
+  assert.deepEqual([...ids], ['ghost', 'noise'], `expected the re-read's ids, got [${[...ids]}]`);
+  assert.equal(reader.calls(), 2, `expected 2 reads, got ${reader.calls()}`);
+});
+
+await test('snapshotMessageIds throws after repeated truncation, never an empty fence', async () => {
+  const reader = flakyReader(99, [GHOST]);
+  const outcome = await snapshotMessageIds('chan', 100, reader.read).then(
+    (ids) => `resolved to a fence of ${ids.size} id(s)`,
+    (err: unknown) => err,
+  );
+  assert.ok(outcome instanceof SyntaxError, `expected the SyntaxError to propagate, got ${String(outcome)}`);
+  assert.equal(reader.calls(), 3, `expected 3 reads, got ${reader.calls()}`);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
