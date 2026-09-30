@@ -16,6 +16,7 @@ import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
 import type { AuthenticatedExpressRequest } from '../auth/types';
@@ -324,6 +325,27 @@ describe('SteamAuthController', () => {
         'boom',
       );
       expect(setUserMock).toHaveBeenCalledWith({ id: '7' });
+    });
+  });
+
+  describe('POST /auth/steam/sync-wishlist — ITAD fetch options', () => {
+    it('passes the fail-fast ITAD limit so a 429 pause cannot outlast the proxy timeout', async () => {
+      mocks.wishlist.syncWishlist.mockResolvedValue({
+        totalWishlisted: 0,
+        matched: 0,
+        newInterests: 0,
+        removed: 0,
+      });
+      const req = {
+        user: { id: 99 },
+      } as unknown as AuthenticatedExpressRequest;
+
+      await controller.syncWishlist(req);
+
+      expect(mocks.wishlist.syncWishlist).toHaveBeenCalledWith(
+        99,
+        ITAD_INTERACTIVE_FETCH,
+      );
     });
   });
 });
