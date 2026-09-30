@@ -14,7 +14,7 @@
 import type { LfgMemberDto, LfgUrgency } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 
-/** The seven columns a roster read selects. */
+/** The eight columns a roster read selects. */
 export const MEMBER_COLUMNS = {
   userId: schema.users.id,
   username: schema.users.username,
