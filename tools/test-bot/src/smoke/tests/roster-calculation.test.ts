@@ -14,7 +14,6 @@ import {
   channelForGame,
   awaitProcessing,
 } from '../fixtures.js';
-import { assertEmbedHasField } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 const MMO_SLOTS = {
@@ -245,9 +244,6 @@ const tentativeDisplacement: SmokeTest = {
       );
       const embed = dispMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
-      const desc = embed.description ?? '';
-      // Verify bench section exists with the displaced tentative player
-      const hasBench = /Bench/i.test(desc);
       // Verify 6 total signups
       const totalSignups = signupCountOf(embed) ?? 0;
       if (totalSignups < 5) {

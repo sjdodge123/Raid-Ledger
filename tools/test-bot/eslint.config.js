@@ -34,9 +34,8 @@ export default tseslint.config(
   {
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
-      // 12 pre-existing hits across 6 files on first run (TECH-DEBT-BACKLOG
-      // 2026-09-07 fix/rok-1516). Warn until they are cleaned up, then 'error'.
-      '@typescript-eslint/no-unused-vars': 'warn',
+      // '^_' keeps the documented stub params in src/helpers/interactions.ts legal.
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
       'max-lines-per-function': ['warn', { max: 30, skipBlankLines: true, skipComments: true }],
     },
