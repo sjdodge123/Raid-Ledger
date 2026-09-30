@@ -51,6 +51,14 @@ export function acquireItadSlot(): Promise<void> {
   return turn;
 }
 
+/**
+ * Wall-clock time the current (or most recent) 429 pause ends; 0 before the
+ * first pause. Lets a caller's own timeout exclude time spent waiting it out.
+ */
+export function itadPausedUntil(): number {
+  return pausedUntil;
+}
+
 /** Hold every ITAD caller for `ms` from now (never shortens a longer pause). */
 export function pauseItadRequests(ms: number): void {
   pausedUntil = Math.max(pausedUntil, Date.now() + ms);
