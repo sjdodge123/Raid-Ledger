@@ -262,7 +262,7 @@ describe('RunningLateInteractionListener', () => {
     });
     it('logs the notify fan-out failure with the event id and reason interpolated', async () => {
       const warn = jest
-        .spyOn(Logger.prototype, 'warn')
+        .spyOn((listener as unknown as { logger: Logger }).logger, 'warn')
         .mockImplementation(() => undefined);
       mockRunningLateService.notifyRunningLate.mockRejectedValue(
         new Error('notification service down'),
@@ -282,7 +282,6 @@ describe('RunningLateInteractionListener', () => {
       expect(warn).toHaveBeenCalledWith(
         `Failed to notify attendees of running-late for event ${EVENT_ID}: notification service down`,
       );
-      warn.mockRestore();
     });
   });
 
@@ -438,7 +437,7 @@ describe('RunningLateInteractionListener', () => {
 
     it('logs the action failure with the event id and passes the stack, not the error as context', async () => {
       const error = jest
-        .spyOn(Logger.prototype, 'error')
+        .spyOn((listener as unknown as { logger: Logger }).logger, 'error')
         .mockImplementation(() => undefined);
       mockFindLinkedUser.mockResolvedValue({ id: ATTENDEE_ID });
       const boom = new Error('DB Error');
@@ -450,7 +449,6 @@ describe('RunningLateInteractionListener', () => {
         `Error handling running late for event ${EVENT_ID}`,
         boom.stack,
       );
-      error.mockRestore();
     });
   });
 

@@ -170,14 +170,13 @@ describe('VoiceAttendanceService', () => {
 
     it('warns with the channel id interpolated when guildId is null', async () => {
       const warn = jest
-        .spyOn(Logger.prototype, 'warn')
+        .spyOn((service as unknown as { logger: Logger }).logger, 'warn')
         .mockImplementation(() => undefined);
       mockGetGuildId.mockReturnValue(null);
       await service.findActiveScheduledEvents('voice-ch-1');
       expect(warn).toHaveBeenCalledWith(
         '[voice-pipe] findActive: no guildId, channelId=voice-ch-1',
       );
-      warn.mockRestore();
     });
 
     it('delegates to findActiveEventsForChannel with correct args', async () => {
