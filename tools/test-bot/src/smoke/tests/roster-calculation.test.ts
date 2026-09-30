@@ -244,7 +244,9 @@ const tentativeDisplacement: SmokeTest = {
       );
       const embed = dispMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
-      // Verify 6 total signups
+      // Only checks that 5+ signups reached the roster. The displacement itself
+      // (tentative user on Bench, confirmed user in the dps slot) is not asserted
+      // yet: see TECH-DEBT-BACKLOG.md, 2026-09-30.
       const totalSignups = signupCountOf(embed) ?? 0;
       if (totalSignups < 5) {
         throw new Error(
