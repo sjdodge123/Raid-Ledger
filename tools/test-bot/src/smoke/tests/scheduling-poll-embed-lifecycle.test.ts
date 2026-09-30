@@ -178,6 +178,7 @@ const voteMovesTheCount: SmokeTest = {
             (card.description ?? '').includes('Closes <t:');
         },
         ctx.config.timeoutMs,
+        { excludeIds: put.ghostIds },
       );
 
       const slot = await suggestSlot(ctx, put); // auto-votes → 1 voter
@@ -210,6 +211,7 @@ const cancelShowsReason: SmokeTest = {
         put.channelId,
         (m) => cardOf(put, m) !== undefined,
         ctx.config.timeoutMs,
+        { excludeIds: put.ghostIds },
       );
 
       const reason = `Smoke ROK 1549 ${Date.now()}`;
