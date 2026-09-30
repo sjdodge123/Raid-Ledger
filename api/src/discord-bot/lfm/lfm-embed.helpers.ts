@@ -183,11 +183,6 @@ export interface LfmEmbedResult {
   content: string;
 }
 
-/** Context URL first, then the deployment-wide fallback. */
-function resolveClientUrl(context: EmbedContext): string | undefined {
-  return context.clientUrl || process.env.CLIENT_URL;
-}
-
 /** The ONE definition of viable — `deriveViability`, never a local threshold. */
 function isViable(group: LfmGroupView): boolean {
   return deriveViability(group.memberCount, group.viabilityThreshold ?? null);
@@ -455,7 +450,7 @@ export function buildLfmEmbed(
   now: number = Date.now(),
   options: LfmEmbedOptions = {},
 ): LfmEmbedResult {
-  const clientUrl = resolveClientUrl(context);
+  const clientUrl = context.clientUrl ?? undefined;
   const embed = createChannelEmbed({
     state: chromeState(group),
     communityName: context.communityName,
