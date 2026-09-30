@@ -19,6 +19,7 @@ import {
 import {
   addPersonalizedFields,
   PERSONALIZED_FIELD_NAMES,
+  personalizedFieldName,
   type PersonalizedKind,
 } from './embed-personalized.helpers';
 
@@ -36,6 +37,14 @@ function dmEmbed() {
 describe('PERSONALIZED_FIELD_NAMES', () => {
   it('exposes at least one canonical marker name', () => {
     expect(personalizedNames().length).toBeGreaterThan(0);
+  });
+});
+
+describe('personalizedFieldName', () => {
+  // Design pin: the approved embed-system design (DM grammar) renders the
+  // owned-game field with the BOOKS glyph U+1F4DA. Kept a literal on purpose.
+  it('names the owned field with the library glyph', () => {
+    expect(personalizedFieldName('owned')).toBe('\u{1F4DA} In your library');
   });
 });
 

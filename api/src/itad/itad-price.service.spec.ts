@@ -197,6 +197,22 @@ describe('ItadPriceService', () => {
         '/games/overview/v2',
         { key: 'my-api-key' },
         ['uuid-game-abc'],
+        {},
+      );
+    });
+
+    it('forwards fetch options (e.g. the interactive fail-fast limit)', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('my-api-key');
+      cacheUtil.getCachedPrice.mockResolvedValue(null);
+      itadPost.mockResolvedValue(FAKE_RESPONSE);
+
+      await service.getOverview('uuid-game-abc', { maxPauseWaitMs: 5_000 });
+
+      expect(itadPost).toHaveBeenCalledWith(
+        '/games/overview/v2',
+        { key: 'my-api-key' },
+        ['uuid-game-abc'],
+        { maxPauseWaitMs: 5_000 },
       );
     });
 

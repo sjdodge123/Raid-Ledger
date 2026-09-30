@@ -320,7 +320,7 @@ describe('AC: itadTags defaults to empty array when getGameInfo returns null', (
 });
 
 describe('AC: getGameInfo failure degrades gracefully — game still enriched', () => {
-  it('still enriches game with empty tags when getGameInfo throws', async () => {
+  it('still enriches the game but keeps its existing tags when getGameInfo throws', async () => {
     const games = [{ id: 72, steamAppId: 602 }];
     const mockDb = createEnrichMockDb(games);
     const itadGame = makeItadGame({ id: 'uuid-info-fail' });
@@ -339,10 +339,9 @@ describe('AC: getGameInfo failure degrades gracefully — game still enriched', 
     expect(result).toBe(1);
     expect(mockDb.update).toHaveBeenCalledTimes(1);
     expect(mockDb.updateSet).toHaveBeenCalledWith(
-      expect.objectContaining({
-        itadGameId: 'uuid-info-fail',
-        itadTags: [],
-      }),
+      expect.objectContaining({ itadGameId: 'uuid-info-fail' }),
     );
+    // A rate-limited/failed info call must not wipe tags stored earlier.
+    expect(mockDb.updateSet.mock.calls[0][0]).not.toHaveProperty('itadTags');
   });
 });

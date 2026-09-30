@@ -19,6 +19,7 @@ import {
   colorForState,
   type EmbedState as ChromeState,
 } from '../embeds/embed-chrome.helpers';
+import { personalizedFieldName } from '../embeds/embed-personalized.helpers';
 
 const OPEN = '▸'; // ▸
 const DOTTED = '◌'; // ◌
@@ -31,7 +32,7 @@ const ARROW = '↗'; // ↗
 const CALENDAR = '\u{1F4C6}'; // 📆
 const ENVELOPE = '✉'; // ✉
 /** Canonical personalized field name — DM-only (embed-personalized.helpers.ts). */
-const PERSONALIZED_FIELD = '\u{1F3AE} In your library';
+const PERSONALIZED_FIELD = personalizedFieldName('owned');
 
 const CLIENT_URL = 'http://localhost:5173';
 const GAME_ID = 7;

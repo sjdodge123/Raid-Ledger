@@ -616,6 +616,9 @@ describe('DiscordNotificationEmbedService — core', () => {
   // bot-to-bot DMs outright (50007 — `dm-notifications.test.ts:1-9` and
   // `:272-284` both record this, which is why that whole file asserts on API
   // rows and plaintext, never on a DM embed). A11's documented fallback.
+  // The builder's OUTPUT is now smoke-tested too, through the DEMO_MODE render
+  // seam (`tools/test-bot/src/smoke/tests/dm-embed-render.test.ts`); that
+  // covers what the builder renders, not the DM that is actually sent.
   //
   // Not a tautology, because the chain is pinned in three independent places:
   // `notification-embed.helpers.state.spec.ts` pins the table against §4's

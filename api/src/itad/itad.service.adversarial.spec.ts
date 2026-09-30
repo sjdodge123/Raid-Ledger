@@ -165,6 +165,7 @@ describe('ItadService — adversarial', () => {
       expect(itadFetch).toHaveBeenCalledWith(
         '/games/search/v1',
         expect.objectContaining({ title: '' }),
+        {},
       );
     });
 
@@ -178,6 +179,7 @@ describe('ItadService — adversarial', () => {
       expect(itadFetch).toHaveBeenCalledWith(
         '/games/search/v1',
         expect.objectContaining({ results: '5' }),
+        {},
       );
     });
   });

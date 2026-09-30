@@ -348,7 +348,7 @@ describe('LfgBoardToggleListener — intro-post idempotence (E3)', () => {
   });
 });
 
-describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
+describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4): disable, retire and ENABLED', () => {
   // ROK-1523 amends E4: disabling no longer LEAVES the board alone, it retires
   // it. The provisioning half of E4 is unchanged and still asserted — nothing
   // is resolved, created or stored on the way out.
@@ -421,7 +421,9 @@ describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
     // and the handler's own guard would no longer cover the pass's failures.
     expect(settled).toBe(true);
   });
+});
 
+describe('LfgBoardToggleListener — no-ops and failures (ROK-1471 A4)', () => {
   it('does nothing when the bot is not connected', async () => {
     const h = harness({ connected: false });
 
@@ -562,7 +564,9 @@ describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6)', () 
 
     expect(h.settings.get(INTRO_KEY)).toBe('intro-100');
   });
+});
 
+describe('LfgBoardToggleListener — intro rediscovery (ROK-1492 AC2 / D6): seed and scan', () => {
   it('seeds one intro when the scan finds nothing', async () => {
     const h = harness({ active: [] });
 
