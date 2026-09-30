@@ -5,15 +5,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { axe } from 'vitest-axe';
+import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { RosterSlot } from './RosterSlot';
 
+// Mirrors the real card's interactive content (name link + Remove button) so axe
+// can see a nested-interactive violation if the slot ever wraps it again (TDB:1949).
 vi.mock('./RosterCard', () => ({
-    RosterCard: ({ item }: { item: { username: string } }) => (
-        <div>{item.username}</div>
+    RosterCard: ({ item, onRemove }: { item: { username: string; userId: number }; onRemove?: () => void }) => (
+        <div>
+            <a href={`/users/${item.userId}`}>{item.username}</a>
+            {onRemove && <button type="button" aria-label={`Remove ${item.username} from slot`} onClick={onRemove} />}
+        </div>
     ),
 }));
 
-function createAssignment() {
+function createAssignment(): RosterAssignmentResponse {
     return {
         id: 1,
         signupId: 100,
@@ -25,7 +31,7 @@ function createAssignment() {
         position: 1,
         isOverride: false,
         character: null,
-        signupStatus: 'confirmed' as const,
+        signupStatus: 'signed_up',
     };
 }
 
@@ -57,6 +63,7 @@ describe('RosterSlot — axe accessibility (ROK-881)', () => {
                 item={createAssignment()}
                 color="bg-green-500"
                 onAdminClick={vi.fn()}
+                onRemove={vi.fn()}
             />,
         );
         expect(await axe(container)).toHaveNoViolations();
