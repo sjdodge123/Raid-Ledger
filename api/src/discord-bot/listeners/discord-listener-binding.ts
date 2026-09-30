@@ -16,13 +16,25 @@ interface GatewayEmitter {
 
 type GatewayHandler = (...args: never[]) => void;
 
-/** A gateway event name paired with the handler to attach for it. */
+/** Type-only brand: no value carries it except what `gatewayBinding()` returns. */
+declare const gatewayBindingBrand: unique symbol;
+
+/**
+ * A gateway event name paired with the handler to attach for it.
+ *
+ * Branded because `GatewayHandler` accepts ANY function structurally — a raw
+ * `{ event, handler }` literal would typecheck with a handler whose signature
+ * does not match the event (TDB:366). Only the factory can mint one.
+ */
 interface GatewayBinding {
+  readonly [gatewayBindingBrand]: true;
   event: keyof ClientEvents;
   handler: GatewayHandler;
 }
 
-interface AttachedBinding extends GatewayBinding {
+interface AttachedBinding {
+  event: keyof ClientEvents;
+  handler: GatewayHandler;
   emitter: GatewayEmitter;
 }
 
@@ -34,7 +46,7 @@ export function gatewayBinding<E extends keyof ClientEvents>(
   event: E,
   handler: (...args: ClientEvents[E]) => void,
 ): GatewayBinding {
-  return { event, handler: handler as GatewayHandler };
+  return { event, handler: handler as GatewayHandler } as GatewayBinding;
 }
 
 /**
@@ -78,7 +90,11 @@ export class DiscordListenerBinding {
     const emitter = client as unknown as GatewayEmitter;
     for (const binding of bindings) {
       emitter.on(binding.event, binding.handler);
-      this.attached.push({ ...binding, emitter });
+      this.attached.push({
+        event: binding.event,
+        handler: binding.handler,
+        emitter,
+      });
     }
     this.logger.log(
       `${this.label}: attached ${bindings.length} gateway handler(s) [${bindings
