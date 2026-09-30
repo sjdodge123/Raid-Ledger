@@ -34,9 +34,12 @@ import {
   flushEmbedQueue,
   channelForTest,
   channelForGame,
-  enableScheduledEvents,
-  disableScheduledEvents,
 } from "../fixtures.js";
+import {
+  acquireScheduledEvents,
+  releaseScheduledEvents,
+  releaseScheduledEventsAndRethrow,
+} from "../scheduled-events-toggle.js";
 import type { SmokeTest, TestContext } from "../types.js";
 import type { ApiClient } from "../api.js";
 import {
@@ -177,10 +180,12 @@ const pollStartSuppressesEvent: SmokeTest = {
   name: "ROK-1370: poll start flips embed to RESCHEDULING and tears down the Scheduled Event",
   category: "flow",
   async run(ctx) {
-    await enableScheduledEvents(ctx.api);
     const ch = channelForTest(ctx, 0);
     const gameId = ch.gameId ?? (await resolveGameId(ctx));
-    const ev = await createEvent(ctx.api, "resched-start", { gameId });
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, "resched-start", { gameId }).catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await pollForEmbed(
         ch.channelId,
@@ -210,7 +215,7 @@ const pollStartSuppressesEvent: SmokeTest = {
         { intervalMs: 2000 },
       );
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -220,10 +225,12 @@ const lockInRestoresEventRepeatably: SmokeTest = {
   name: "ROK-1370: lock-in restores the live embed + Scheduled Event, repeatably",
   category: "flow",
   async run(ctx) {
-    await enableScheduledEvents(ctx.api);
     const ch = channelForTest(ctx, 1);
     const gameId = ch.gameId ?? (await resolveGameId(ctx));
-    const ev = await createEvent(ctx.api, "resched-cycle", { gameId });
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, "resched-cycle", { gameId }).catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await pollForEmbed(
         ch.channelId,
@@ -273,7 +280,7 @@ const lockInRestoresEventRepeatably: SmokeTest = {
         );
       }
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
