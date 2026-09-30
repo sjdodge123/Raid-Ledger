@@ -1,7 +1,7 @@
 /**
  * ROK-1435 — `channelId` on the weekly-digest settings body must be a Discord
- * snowflake (17–20 digits) or null. The contract package has no test runner
- * of its own; this spec mirrors the convention in `lineup.schema.spec.ts`.
+ * snowflake (17–20 digits) or null. Runs under the contract workspace's own
+ * vitest config (`npm test -w @raid-ledger/contract`).
  */
 import { describe, it, expect } from 'vitest';
 import { WeeklyDigestSettingsSchema } from '../weekly-digest-settings.schema.js';
