@@ -8,11 +8,6 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import {
-  persistCreatedEmbedRef,
-  loadCreatedEmbedRef,
-  editCreatedEmbedSafe,
-} from './lineup-notification-refresh.helpers';
-import {
   dispatchMatchMemberDM,
   dispatchRallyInterestDM,
   dispatchNominationRemovedDM,
@@ -21,25 +16,13 @@ import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
-import {
-  buildCreatedEmbed,
-  buildVotingOpenEmbed,
-  type EmbedContext,
-  type NominationEntry,
-  type LineupPhase,
-} from './lineup-notification-embed.helpers';
+import type { NominationEntry } from './lineup-notification-embed.helpers';
 import { notifyLineupAborted as dispatchLineupAborted } from './lineup-notification-aborted.helpers';
-import { fanOutVotingDMs } from './lineup-notification-dm-batch.helpers';
 import {
-  routeLineupCreatedIfPrivate,
-  routeVotingOpenIfPrivate,
-} from './lineup-notification-routing.helpers';
-import {
-  postChannelEmbed,
-  resolveEmbedCtx,
-  resolveCreatedCtx,
-  type DispatchDeps,
-} from './lineup-notification-dispatch.helpers';
+  orchestrateLineupCreated,
+  refreshCreatedEmbedFor,
+  orchestrateVotingOpen,
+} from './lineup-notification-phase-open.helpers';
 import {
   orchestrateMilestone,
   orchestrateMatchesFound,
@@ -103,11 +86,6 @@ export class LineupNotificationService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  private get dispatchDeps(): DispatchDeps {
-    const { db, settingsService, botClient, dedupService } = this;
-    return { db, settingsService, botClient, dedupService };
-  }
-
   private get orchestrationDeps(): OrchestrationDeps {
     const {
       db,
@@ -126,49 +104,20 @@ export class LineupNotificationService {
   }
 
   /**
-   * ROK-1374 (Lane B): the composed deps the tie orchestrators need.
+   * ROK-1374: the composed deps the tie orchestrators need.
    *
    * Public because `notifyTieDetected` / `notifyTieDecided` /
    * `notifyTieExpired` live in `lineup-notification-tie.helpers.ts` — this
-   * file is at its 300-line ceiling, so it exposes the composition root
-   * rather than growing three more methods.
+   * file was at its 300-line ceiling when they landed, so it exposes the
+   * composition root rather than growing three more methods.
    */
   get tieDeps(): OrchestrationDeps {
     return this.orchestrationDeps;
   }
 
-  private resolveCtx(
-    lineupId: number,
-    phase: LineupPhase,
-    overrides?: { title?: string; description?: string | null },
-  ): Promise<EmbedContext> {
-    return resolveEmbedCtx(this.dispatchDeps, lineupId, phase, overrides);
-  }
-
   /** AC-1: Post channel embed when lineup is created. */
   async notifyLineupCreated(lineup: LineupInfo): Promise<void> {
-    const routedPrivate = await routeLineupCreatedIfPrivate(
-      this.db,
-      this.notificationService,
-      this.dedupService,
-      lineup,
-    );
-    if (routedPrivate) return;
-    const ctx = await resolveCreatedCtx(this.dispatchDeps, lineup);
-    const sent = await this.postChannelEmbed(
-      `lineup-created:${lineup.id}`,
-      () => buildCreatedEmbed(ctx, lineup.targetDate),
-      ctx,
-      lineup.channelOverrideId,
-    );
-    if (sent) {
-      await persistCreatedEmbedRef(
-        this.db,
-        lineup.id,
-        sent.channelId,
-        sent.messageId,
-      );
-    }
+    await orchestrateLineupCreated(this.orchestrationDeps, lineup);
   }
 
   /**
@@ -177,17 +126,7 @@ export class LineupNotificationService {
    * Silent no-op if no stored message ref (e.g. channel not configured at creation).
    */
   async refreshCreatedEmbed(lineup: LineupInfo): Promise<void> {
-    const ref = await loadCreatedEmbedRef(this.db, lineup.id);
-    if (!ref) return;
-    const ctx = await resolveCreatedCtx(this.dispatchDeps, lineup);
-    const built = buildCreatedEmbed(ctx, ref.targetDate ?? undefined);
-    await editCreatedEmbedSafe(
-      this.botClient,
-      this.logger,
-      lineup.id,
-      ref,
-      built.embed,
-    );
+    await refreshCreatedEmbedFor(this.orchestrationDeps, this.logger, lineup);
   }
 
   /** AC-2: Post channel embed at nomination milestones (25/50/100%). */
@@ -211,30 +150,7 @@ export class LineupNotificationService {
     lineup: LineupInfo,
     games: { id: number; name: string }[],
   ): Promise<void> {
-    const clientUrl = await this.settingsService.getClientUrl();
-    const routedPrivate = await routeVotingOpenIfPrivate(
-      this.db,
-      this.notificationService,
-      this.dedupService,
-      lineup,
-      games,
-      clientUrl,
-    );
-    if (routedPrivate) return;
-    const ctx = await this.resolveCtx(lineup.id, 'voting');
-    await this.postChannelEmbed(
-      `lineup-voting:${lineup.id}`,
-      () => buildVotingOpenEmbed(ctx, games, lineup.votingDeadline),
-      ctx,
-    );
-    await fanOutVotingDMs(
-      this.db,
-      this.notificationService,
-      this.dedupService,
-      lineup,
-      games,
-      clientUrl,
-    );
+    await orchestrateVotingOpen(this.orchestrationDeps, lineup, games);
   }
 
   /** ROK-1117: Post tiebreaker-open channel embed + DMs to expected voters. */
@@ -345,21 +261,6 @@ export class LineupNotificationService {
       this.dedupService,
       this.notificationService,
       { lineupId, gameId, gameName, userId, operatorName },
-    );
-  }
-
-  private postChannelEmbed(
-    dedupKey: string,
-    build: Parameters<typeof postChannelEmbed>[2],
-    ctx: EmbedContext,
-    overrideId?: string | null,
-  ): ReturnType<typeof postChannelEmbed> {
-    return postChannelEmbed(
-      this.dispatchDeps,
-      dedupKey,
-      build,
-      ctx,
-      overrideId,
     );
   }
 }
