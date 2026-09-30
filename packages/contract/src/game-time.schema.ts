@@ -102,14 +102,27 @@ export const GameTimeAbsenceSchema = z.object({
 });
 export type GameTimeAbsence = z.infer<typeof GameTimeAbsenceSchema>;
 
+const ABSENCE_DATE_KEYS: PropertyKey[] = ['startDate', 'endDate'];
+
 /**
  * Absence input schema (for creating absences).
+ * Both dates are strict ISO calendar dates (YYYY-MM-DD) and the range may not
+ * end before it starts. The order check only runs once both dates parsed, so
+ * a malformed date reports one issue on its own field.
  */
-export const GameTimeAbsenceInputSchema = z.object({
-  startDate: z.string(),
-  endDate: z.string(),
-  reason: z.string().max(255).optional(),
-});
+export const GameTimeAbsenceInputSchema = z
+  .object({
+    startDate: z.iso.date(),
+    endDate: z.iso.date(),
+    reason: z.string().max(255).optional(),
+  })
+  // ISO dates compare correctly as strings.
+  .refine((v) => v.endDate >= v.startDate, {
+    message: 'endDate must be on or after startDate',
+    path: ['endDate'],
+    when: ({ issues }) =>
+      !issues.some((i) => ABSENCE_DATE_KEYS.includes(i.path?.[0] ?? '')),
+  });
 export type GameTimeAbsenceInput = z.infer<typeof GameTimeAbsenceInputSchema>;
 
 /**
