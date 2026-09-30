@@ -66,6 +66,7 @@ import {
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
 import { isAnswering } from './scheduling-stance.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 @Injectable()
 export class SchedulingService {
@@ -175,10 +176,8 @@ export class SchedulingService {
       });
     } catch (err) {
       this.logger.warn(
-        'Auto-vote failed for slot %d user %d: %s',
-        slotId,
-        userId,
-        err,
+        `Auto-vote failed for slot ${slotId} user ${userId}`,
+        errorStack(err),
       );
     }
   }
