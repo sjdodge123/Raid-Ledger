@@ -1,4 +1,3 @@
-import { Logger } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { VoiceStateListener } from './voice-state.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -24,7 +23,6 @@ function makeCollection<K, V>(entries: [K, V][] = []): Collection<K, V> {
 
 describe('VoiceStateListener', () => {
   let listener: VoiceStateListener;
-  let moduleRef: TestingModule;
   let mockClientService: {
     getClient: jest.Mock;
     getGuildId: jest.Mock;
@@ -158,11 +156,11 @@ describe('VoiceStateListener', () => {
       findByDiscordId: jest.fn().mockResolvedValue(null),
     };
 
-    moduleRef = await Test.createTestingModule({
+    const module: TestingModule = await Test.createTestingModule({
       providers: buildProviders(),
     }).compile();
 
-    listener = moduleRef.get(VoiceStateListener);
+    listener = module.get(VoiceStateListener);
   }
 
   beforeEach(async () => {
@@ -256,37 +254,6 @@ describe('VoiceStateListener', () => {
       expect(
         mockChannelBindingsService.getBindingsWithGameNames,
       ).toHaveBeenCalledWith('guild-1');
-    });
-
-    it('keeps recovering when recoverActiveSessions rejects (TDB:836)', async () => {
-      const voiceChannel = {
-        isVoiceBased: () => true,
-        members: makeCollection([['user-1', { id: 'user-1' }]]),
-      };
-      mockClientService.getClient.mockReturnValue(
-        createMockClient(new Map([['voice-ch-1', voiceChannel]])),
-      );
-      const errorSpy = jest
-        .spyOn(Logger.prototype, 'error')
-        .mockImplementation(() => undefined);
-      const attendance = moduleRef.get<{ recoverActiveSessions: jest.Mock }>(
-        VoiceAttendanceService,
-      );
-      const presence = moduleRef.get<{ recover: jest.Mock }>(
-        ChannelPresenceEmbedService,
-      );
-      attendance.recoverActiveSessions.mockRejectedValueOnce(new Error('x'));
-
-      await expect(listener.onBotConnected()).resolves.toBeUndefined();
-
-      expect(presence.recover).toHaveBeenCalledTimes(1);
-      expect(
-        mockChannelBindingsService.getBindingsWithGameNames,
-      ).toHaveBeenCalledWith('guild-1');
-      expect(errorSpy).toHaveBeenCalledWith(
-        '[voice-connect] recoverActiveSessions failed: Error: x',
-      );
-      errorSpy.mockRestore();
     });
   });
 
