@@ -37,8 +37,9 @@ const DELETED_KEY_RE = new RegExp(
 );
 /**
  * `.setColor(0x34d399)` / `.setColor(3462041)` — a palette bypass. Scanned over
- * whole-file text with `s`+`g` so a literal wrapped onto the next line by
- * prettier is still caught (ROK-1459 review F6).
+ * COMMENT-STRIPPED whole-file text with `s`+`g`: a literal wrapped onto the
+ * next line by prettier is still caught (ROK-1459 review F6), while a comment
+ * that merely names one cannot trip the guard.
  */
 const NUMERIC_SET_COLOR_RE = /\.setColor\(\s*(?:0[xX][0-9a-fA-F]+|\d+)/gs;
 /** A bare 6-digit hex colour literal anywhere in the bot's source. */
@@ -89,20 +90,21 @@ function collectTsFiles(dir: string): string[] {
   return results;
 }
 
-/** Every `file:line — text` in `files` whose WHOLE-FILE text matches `re`. */
-function scanWholeFile(files: string[], re: RegExp): string[] {
-  const hits: string[] = [];
-  for (const filePath of files) {
-    const text = readFileSync(filePath, 'utf-8');
-    for (const match of text.matchAll(re)) {
-      const line = text.slice(0, match.index).split('\n').length;
-      hits.push(
-        `${relative(SRC_DIR, filePath)}:${line} — ${match[0].replace(/\s+/g, ' ')}`,
-      );
-    }
-  }
-  return hits;
+/**
+ * Every `relPath:line — text` where `re` matches `text` as a WHOLE, so one
+ * match may span lines; the line is where the match starts. `matchAll` needs a
+ * GLOBAL regex.
+ */
+function wholeTextHits(text: string, relPath: string, re: RegExp): string[] {
+  return [...text.matchAll(re)].map((match) => {
+    const line = text.slice(0, match.index).split('\n').length;
+    return `${relPath}:${line} — ${match[0].replace(/\s+/g, ' ')}`;
+  });
 }
+
+/** How the scanners read a file; a parameter so the proofs can feed fixtures. */
+type ReadSource = (filePath: string) => string;
+const readSource: ReadSource = (filePath) => readFileSync(filePath, 'utf-8');
 
 /** Every `file:line — text` in `files` whose line matches `re`. */
 function scan(files: string[], re: RegExp): string[] {
@@ -118,26 +120,67 @@ function scan(files: string[], re: RegExp): string[] {
   return hits;
 }
 
-/**
- * Blank out block and line comments, PRESERVING line numbers so a hit still
- * reports the file:line a human can jump to.
+/*
+ * Literal and comment patterns for `stripComments`. Quote characters are
+ * written as `\x27` / `\x22` / `\x60` so these sources hold no raw quote that
+ * the stripper, run over this very file, could misread.
  *
- * String literals are deliberately left in: stripping them needs a scanner
- * that also understands regex literals, and over-reporting a forbidden token
- * inside a string is the safe direction to err. Same reasoning as
- * `personalized-surface.guard.spec.ts`; this variant additionally keeps line
- * numbers stable by replacing a block comment with spaces rather than nothing.
+ * A regex literal is recognised only where one can start (after an operator,
+ * an opening bracket, a keyword or a line start), which tells it apart from
+ * division.
+ */
+const REGEX_LITERAL = String.raw`(?<=(?:^|[(,=:[!&|?{};]|\b(?:return|typeof|case|throw|await|yield|void|delete))\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*`;
+const QUOTED_STRING = String.raw`\x27(?:\\.|[^\x27\\\n])*\x27|\x22(?:\\.|[^\x22\\\n])*\x22`;
+const TEMPLATE_LITERAL = String.raw`\x60(?:\\.|\$\{(?:[^{}\x60]|\x60(?:\\.|[^\x60\\])*\x60)*\}|[^\x60\\])*\x60`;
+const COMMENT = String.raw`(\/\*[\s\S]*?\*\/|\/\/[^\n]*)`;
+const LITERAL_OR_COMMENT_RE = new RegExp(
+  [REGEX_LITERAL, QUOTED_STRING, TEMPLATE_LITERAL, COMMENT].join('|'),
+  'gm',
+);
+
+/**
+ * Blank out block and line comments, PRESERVING line and column positions so
+ * a hit still reports the file:line a human can jump to.
+ *
+ * One left-to-right pass that consumes string, template and regex literals
+ * whole and keeps them verbatim, so a comment marker inside one (a URL in a
+ * string, an escaped slash pair in a regex) can no longer open a "comment"
+ * that blanks real code. Keeping literals is also the safe direction: a
+ * forbidden token inside a string is over-reported, never hidden. When
+ * written, the output matched TypeScript's own comment ranges on every `.ts`
+ * file under `api/src`.
  */
 function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
-    .replace(/(^|[^:])\/\/[^\n]*/g, (_match, prefix: string) => prefix);
+  return source.replace(
+    LITERAL_OR_COMMENT_RE,
+    (match: string, comment: string | undefined) =>
+      comment === undefined ? match : comment.replace(/[^\n]/g, ' '),
+  );
 }
 
 /** The ROK-1446 `channel-presence*.ts` sources (D14). */
 function channelPresenceFiles(): string[] {
   return collectTsFiles(PRESENCE_DIR).filter((file) =>
     PRESENCE_FILE_RE.test(file),
+  );
+}
+
+/**
+ * `wholeTextHits` over each file's COMMENT-STRIPPED text. Whole-file rather
+ * than per-line so a prettier-wrapped call is still one match; stripped so
+ * prose that names a forbidden literal is not one. Pass a GLOBAL regex.
+ */
+function scanWholeFileStripped(
+  files: string[],
+  re: RegExp,
+  read: ReadSource = readSource,
+): string[] {
+  return files.flatMap((filePath) =>
+    wholeTextHits(
+      stripComments(read(filePath)),
+      relative(SRC_DIR, filePath),
+      re,
+    ),
   );
 }
 
@@ -167,14 +210,54 @@ describe('EMBED_COLORS palette guard (AC6)', () => {
   });
 
   it('no production code passes a numeric literal to setColor', () => {
-    expect(scanWholeFile(files, NUMERIC_SET_COLOR_RE)).toEqual([]);
+    expect(scanWholeFileStripped(files, NUMERIC_SET_COLOR_RE)).toEqual([]);
   });
 
   it('no bot source file hard-codes a hex colour outside the palette', () => {
     const botFiles = collectTsFiles(join(SRC_DIR, 'discord-bot')).filter(
       (f) => !HEX_LITERAL_ALLOWLIST.some((allowed) => f.endsWith(allowed)),
     );
-    expect(scanWholeFile(botFiles, BARE_HEX_COLOR_RE)).toEqual([]);
+    expect(scanWholeFileStripped(botFiles, BARE_HEX_COLOR_RE)).toEqual([]);
+  });
+
+  // Both whole-file scans once ran over RAW text, so a comment naming a
+  // literal turned them red. The fixture path never touches disk: `read` is
+  // stubbed, and spec files are outside the walk, so these strings are inert.
+  const FIXTURE = join(SRC_DIR, 'fixture.ts');
+  const scanFixture = (source: string, re: RegExp) =>
+    scanWholeFileStripped([FIXTURE], re, () => source);
+
+  it('ignores palette literals that appear only in comments', () => {
+    const source =
+      '/* legacy 0xdeadbe and .setColor(0x34d399) */\n' +
+      '// .setColor(0x123456)\nconst x = 1;';
+    // Control: over RAW text (the old scan) the same fixture trips both.
+    const raw = (re: RegExp) => wholeTextHits(source, 'fixture.ts', re);
+    expect(raw(NUMERIC_SET_COLOR_RE)).toHaveLength(2);
+    expect(raw(BARE_HEX_COLOR_RE)).toHaveLength(3);
+    expect(scanFixture(source, NUMERIC_SET_COLOR_RE)).toEqual([]);
+    expect(scanFixture(source, BARE_HEX_COLOR_RE)).toEqual([]);
+  });
+
+  // A comment marker inside a string or regex literal, or a `/*` inside a line
+  // comment, once opened a phantom comment that blanked the real code after it.
+  it('never lets a comment marker inside a literal or line comment hide code', () => {
+    const source =
+      '// see /x/*\nembed.setColor(0x111111);\n' +
+      "const s = 'a//b'; embed.setColor(0x222222);\n" +
+      'const r = /^https?:\\/\\//; embed.setColor(0x333333);\n// */';
+    expect(scanFixture(source, NUMERIC_SET_COLOR_RE)).toEqual([
+      'fixture.ts:2 — .setColor(0x111111',
+      'fixture.ts:3 — .setColor(0x222222',
+      'fixture.ts:4 — .setColor(0x333333',
+    ]);
+  });
+
+  it('still catches a numeric setColor that prettier wrapped onto a new line', () => {
+    const source = 'embed.setColor(\n  0x123456,\n);';
+    expect(scanFixture(source, NUMERIC_SET_COLOR_RE)).toEqual([
+      'fixture.ts:1 — .setColor( 0x123456',
+    ]);
   });
 
   it('exposes exactly the five state colours', () => {
