@@ -18,6 +18,7 @@ import {
   resolveRecurrenceGroupId,
 } from './event-create.helpers';
 import { buildLifecyclePayload } from './event-response.helpers';
+import { warnWithStack } from '../common/error-format.helpers';
 
 interface CreateFlowDeps {
   db: PostgresJsDatabase<typeof schema>;
@@ -48,9 +49,10 @@ function maybeTriggerFollowupFanout(
     endedEventId,
     { eventId: newEventId },
     creatorId,
-  ).catch((err) =>
-    deps.logger.warn(
-      `Follow-up fan-out failed for ended event ${endedEventId}: ${err instanceof Error ? err.message : String(err)}`,
+  ).catch(
+    warnWithStack(
+      deps.logger,
+      `Follow-up fan-out failed for ended event ${endedEventId}`,
     ),
   );
 }
@@ -159,9 +161,10 @@ export async function runCreateEvent(
     for (const eventId of result.allEventIds ?? []) {
       activityLog
         .log('event', eventId, 'event_created', creatorId, { title: dto.title })
-        .catch((err) =>
-          deps.logger.warn(
-            `Activity log failed for event ${eventId}: ${err instanceof Error ? err.message : String(err)}`,
+        .catch(
+          warnWithStack(
+            deps.logger,
+            `Activity log failed for event ${eventId}`,
           ),
         );
     }

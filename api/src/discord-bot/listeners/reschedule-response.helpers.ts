@@ -117,14 +117,6 @@ export function parseRoleSelectParts(parts: string[]): {
   return { characterId, signupStatus };
 }
 
-/**
- * Second argument for Nest `Logger.error(message, stack)`: the stack of an
- * Error, or the stringified value when something else was thrown.
- */
-export function errorStack(error: unknown): string | undefined {
-  return error instanceof Error ? error.stack : String(error);
-}
-
 /** Edit the original DM embed to show confirmed/declined state. */
 export async function editDmEmbed(
   interaction: ButtonInteraction,

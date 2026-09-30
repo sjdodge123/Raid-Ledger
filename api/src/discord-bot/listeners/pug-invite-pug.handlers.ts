@@ -18,6 +18,7 @@ import {
 } from './pug-invite.helpers';
 import { showPugRoleSelect } from './pug-invite-pug-select.handlers';
 import { createPugSignup } from './pug-invite-signup.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 
@@ -36,7 +37,7 @@ export async function handlePugButtonInteraction(
   } catch (error) {
     deps.logger.error(
       `Error handling PUG button for slot ${pugSlotId}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,

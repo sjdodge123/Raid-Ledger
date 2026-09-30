@@ -14,6 +14,7 @@ import {
   findLinkedUser,
   showMemberRoleSelect,
 } from './pug-invite-member.handlers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /** Context for member select menu operations. */
 interface MemberSelectCtx {
@@ -35,7 +36,7 @@ export async function handleMemberCharacterSelectMenu(
   } catch (error) {
     deps.logger.error(
       `Error handling member char select for event ${eventIdStr}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,
@@ -57,7 +58,7 @@ export async function handleMemberRoleSelectMenu(
   } catch (error) {
     deps.logger.error(
       `Error handling member role select for event ${eventIdStr}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,

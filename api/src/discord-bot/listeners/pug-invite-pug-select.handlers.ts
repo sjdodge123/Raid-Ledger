@@ -17,6 +17,7 @@ import {
   capitalizeRole,
 } from './pug-invite.helpers';
 import { createPugSignup } from './pug-invite-signup.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 
@@ -32,7 +33,7 @@ export async function handlePugCharacterSelectMenu(
   } catch (error) {
     deps.logger.error(
       `Error handling PUG char select for slot ${pugSlotId}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,
@@ -54,7 +55,7 @@ export async function handlePugRoleSelectMenu(
   } catch (error) {
     deps.logger.error(
       `Error handling PUG role select for slot ${pugSlotId}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,

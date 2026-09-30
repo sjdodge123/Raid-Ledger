@@ -18,6 +18,7 @@ import {
   buildRoleSelectRow,
   buildRoleSelectContent,
 } from './pug-invite.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /** Handle member invite Accept/Decline button interaction. */
 export async function handleMemberInviteButton(
@@ -38,7 +39,7 @@ export async function handleMemberInviteButton(
   } catch (error) {
     deps.logger.error(
       `Error handling member invite for event ${eventId}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,

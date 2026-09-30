@@ -26,6 +26,7 @@ import {
   validateRoachOutContext,
   type RoachOutDeps,
 } from './roach-out-interaction.handlers';
+import { errorMessage, errorStack } from '../../common/error-format.helpers';
 
 /**
  * Handles "Roach Out" button interactions on event reminder DMs (ROK-378).
@@ -86,7 +87,7 @@ export class RoachOutInteractionListener {
       await this.routeRoachOut(interaction, parsed);
     } catch (error) {
       this.logger.error(
-        `Error handling roach out for event ${parsed.eventId}: ${errorText(error)}`,
+        `Error handling roach out for event ${parsed.eventId}`,
         errorStack(error),
       );
       await safeEditReplyHelper(
@@ -110,7 +111,7 @@ export class RoachOutInteractionListener {
       return true;
     } catch (error) {
       this.logger.warn(
-        `Failed to defer roach out interaction: ${errorText(error)}`,
+        `Failed to defer roach out interaction: ${errorMessage(error)}`,
       );
       return false;
     }
@@ -247,19 +248,11 @@ export class RoachOutInteractionListener {
       return "You're not signed up for this event.";
     }
     this.logger.error(
-      `Failed to cancel signup for event ${eventId}: ${errorText(error)}`,
+      `Failed to cancel signup for event ${eventId}`,
       errorStack(error),
     );
     return 'Something went wrong. Please try again later.';
   }
-}
-
-function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function errorStack(error: unknown): string | undefined {
-  return error instanceof Error ? error.stack : undefined;
 }
 
 interface RoachOutButtonParsed {

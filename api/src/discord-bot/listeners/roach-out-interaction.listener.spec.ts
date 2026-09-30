@@ -531,7 +531,7 @@ function buttonRoutingFailureTests() {
       content: 'Something went wrong. Please try again.',
     });
     expect(errorSpy).toHaveBeenCalledWith(
-      'Error handling roach out for event 42: DB Error',
+      'Error handling roach out for event 42',
       failure.stack,
     );
   });
@@ -572,7 +572,7 @@ function confirmNotFoundTests() {
       components: [],
     });
     expect(errorSpy).toHaveBeenCalledWith(
-      'Failed to cancel signup for event 42: Constraint violation',
+      'Failed to cancel signup for event 42',
       failure.stack,
     );
   });

@@ -38,6 +38,7 @@ import {
   handleMemberRoleSelectMenu,
 } from './pug-invite-member-select.handlers';
 import { handleJoinEventButton } from './pug-invite-join.handlers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /** Button ID prefix for the "Join Event" button on invite unfurls (ROK-263) */
 const PUG_JOIN_PREFIX = 'pug_join';
@@ -125,7 +126,7 @@ export class PugInviteListener {
     } catch (error) {
       this.logger.error(
         `Failed to claim PUG slots for user ${payload.userId} (discord: ${payload.discordId})`,
-        error instanceof Error ? error.stack : String(error),
+        errorStack(error),
       );
     }
   }
@@ -156,7 +157,7 @@ export class PugInviteListener {
       this.handleGuildMemberAdd(member).catch((err: unknown) => {
         this.logger.error(
           `Error handling guildMemberAdd for ${member.user.username}`,
-          err instanceof Error ? err.stack : String(err),
+          errorStack(err),
         );
       });
     };

@@ -20,6 +20,7 @@ import type { SettingsService } from '../../settings/settings.service';
 import { RUNNING_LATE_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
 import { findLinkedUser } from './signup-interaction.helpers';
+import { errorMessage, errorStack } from '../../common/error-format.helpers';
 
 /** Dependencies for the running-late interaction handlers (ROK-1379). */
 export interface RunningLateDeps {
@@ -174,7 +175,7 @@ export async function updateChannelEmbeds(
   } catch (error) {
     deps.logger.error(
       `Failed to update channel embeds for event ${eventId}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
   }
 }
@@ -295,7 +296,7 @@ export async function clearRunningLateOnVoiceJoin(
     }
   } catch (error) {
     deps.logger.warn(
-      `Voice-join running-late auto-clear failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Voice-join running-late auto-clear failed: ${errorMessage(error)}`,
     );
   }
 }

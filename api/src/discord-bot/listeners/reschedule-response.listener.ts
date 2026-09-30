@@ -31,7 +31,6 @@ import {
   editDmEmbed,
   editDmEmbedFromSelect,
   safeEditReply,
-  errorStack,
 } from './reschedule-response.helpers';
 import {
   handleLinkedConfirm,
@@ -44,6 +43,7 @@ import {
   handleRoleSelect as doRoleSelect,
   type SelectCtx,
 } from './reschedule-roster.handlers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /**
  * Handles Confirm / Decline button interactions on reschedule DMs (ROK-537).

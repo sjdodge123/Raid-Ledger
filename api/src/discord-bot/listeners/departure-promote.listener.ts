@@ -24,6 +24,7 @@ import {
   buildPromoteResultText,
   type DeparturePromoteDeps,
 } from './departure-promote.handlers';
+import { errorMessage, errorStack } from '../../common/error-format.helpers';
 
 /**
  * Handles "Promote from Bench" / "Leave Empty" button interactions
@@ -81,7 +82,7 @@ export class DeparturePromoteListener {
       await interaction.deferUpdate();
     } catch (error) {
       this.logger.warn(
-        `Failed to defer departure promote: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to defer departure promote: ${errorMessage(error)}`,
       );
       return;
     }
@@ -106,7 +107,7 @@ export class DeparturePromoteListener {
     } catch (error) {
       this.logger.error(
         `Error handling departure promote for event ${parsed.eventId}`,
-        error instanceof Error ? error.stack : String(error),
+        errorStack(error),
       );
       await editDMResult(
         interaction,

@@ -20,6 +20,7 @@ import type {
 import type { SettingsService } from '../../settings/settings.service';
 import { ROACH_OUT_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
+import { errorStack } from '../../common/error-format.helpers';
 
 /** Dependencies for roach-out handlers. */
 export interface RoachOutDeps {
@@ -138,7 +139,7 @@ export async function updateChannelEmbeds(
   } catch (error) {
     deps.logger.error(
       `Failed to update channel embeds for event ${eventId}`,
-      error instanceof Error ? error.stack : String(error),
+      errorStack(error),
     );
   }
 }
