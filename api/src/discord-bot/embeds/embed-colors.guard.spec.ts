@@ -120,20 +120,42 @@ function scan(files: string[], re: RegExp): string[] {
   return hits;
 }
 
-/**
- * Blank out block and line comments, PRESERVING line numbers so a hit still
- * reports the file:line a human can jump to.
+/*
+ * Literal and comment patterns for `stripComments`. Quote characters are
+ * written as `\x27` / `\x22` / `\x60` so these sources hold no raw quote that
+ * the stripper, run over this very file, could misread.
  *
- * String literals are deliberately left in: stripping them needs a scanner
- * that also understands regex literals, and over-reporting a forbidden token
- * inside a string is the safe direction to err. Same reasoning as
- * `personalized-surface.guard.spec.ts`; this variant additionally keeps line
- * numbers stable by replacing a block comment with spaces rather than nothing.
+ * A regex literal is recognised only where one can start (after an operator,
+ * an opening bracket, a keyword or a line start), which tells it apart from
+ * division.
+ */
+const REGEX_LITERAL = String.raw`(?<=(?:^|[(,=:[!&|?{};]|\b(?:return|typeof|case|throw|await|yield|void|delete))\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*`;
+const QUOTED_STRING = String.raw`\x27(?:\\.|[^\x27\\\n])*\x27|\x22(?:\\.|[^\x22\\\n])*\x22`;
+const TEMPLATE_LITERAL = String.raw`\x60(?:\\.|\$\{(?:[^{}\x60]|\x60(?:\\.|[^\x60\\])*\x60)*\}|[^\x60\\])*\x60`;
+const COMMENT = String.raw`(\/\*[\s\S]*?\*\/|\/\/[^\n]*)`;
+const LITERAL_OR_COMMENT_RE = new RegExp(
+  [REGEX_LITERAL, QUOTED_STRING, TEMPLATE_LITERAL, COMMENT].join('|'),
+  'gm',
+);
+
+/**
+ * Blank out block and line comments, PRESERVING line and column positions so
+ * a hit still reports the file:line a human can jump to.
+ *
+ * One left-to-right pass that consumes string, template and regex literals
+ * whole and keeps them verbatim, so a comment marker inside one (a URL in a
+ * string, an escaped slash pair in a regex) can no longer open a "comment"
+ * that blanks real code. Keeping literals is also the safe direction: a
+ * forbidden token inside a string is over-reported, never hidden. When
+ * written, the output matched TypeScript's own comment ranges on every `.ts`
+ * file under `api/src`.
  */
 function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, (block) => block.replace(/[^\n]/g, ' '))
-    .replace(/(^|[^:])\/\/[^\n]*/g, (_match, prefix: string) => prefix);
+  return source.replace(
+    LITERAL_OR_COMMENT_RE,
+    (match: string, comment: string | undefined) =>
+      comment === undefined ? match : comment.replace(/[^\n]/g, ' '),
+  );
 }
 
 /** The ROK-1446 `channel-presence*.ts` sources (D14). */
@@ -215,6 +237,20 @@ describe('EMBED_COLORS palette guard (AC6)', () => {
     expect(raw(BARE_HEX_COLOR_RE)).toHaveLength(3);
     expect(scanFixture(source, NUMERIC_SET_COLOR_RE)).toEqual([]);
     expect(scanFixture(source, BARE_HEX_COLOR_RE)).toEqual([]);
+  });
+
+  // A comment marker inside a string or regex literal, or a `/*` inside a line
+  // comment, once opened a phantom comment that blanked the real code after it.
+  it('never lets a comment marker inside a literal or line comment hide code', () => {
+    const source =
+      '// see /x/*\nembed.setColor(0x111111);\n' +
+      "const s = 'a//b'; embed.setColor(0x222222);\n" +
+      'const r = /^https?:\\/\\//; embed.setColor(0x333333);\n// */';
+    expect(scanFixture(source, NUMERIC_SET_COLOR_RE)).toEqual([
+      'fixture.ts:2 — .setColor(0x111111',
+      'fixture.ts:3 — .setColor(0x222222',
+      'fixture.ts:4 — .setColor(0x333333',
+    ]);
   });
 
   it('still catches a numeric setColor that prettier wrapped onto a new line', () => {
