@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthToken, useAuth, isAdmin } from '../use-auth';
 import { adminFetch } from './admin-fetch';
 import type {
-    AiStatusDto, AiModelDto, AiUsageDto, AiTestConnectionDto,
+    AiStatusDto, AiUsageDto, AiTestConnectionDto,
     AiProviderInfoDto, AiOllamaSetupDto,
 } from '@raid-ledger/contract';
 
@@ -16,16 +16,6 @@ export function useAiStatus() {
         queryFn: () => adminFetch('/admin/ai/status'),
         enabled: !!getAuthToken(),
         staleTime: 30_000,
-    });
-}
-
-/** Query the list of available AI models. */
-export function useAiModels() {
-    return useQuery<AiModelDto[]>({
-        queryKey: [...AI_KEY, 'models'],
-        queryFn: () => adminFetch('/admin/ai/models'),
-        enabled: !!getAuthToken(),
-        staleTime: 60_000,
     });
 }
 

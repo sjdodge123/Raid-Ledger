@@ -709,7 +709,10 @@ function describeMatchingRaceAndIdempotency() {
 
     // ROK-1473: the pass now RETURNS the ids it moved into `scheduling` so
     // the caller can announce them post-commit (the Discord poll card).
-    const schedulingIds = await buildMatchesForLineup(testApp.db, lineupId);
+    const { schedulingMatchIds: schedulingIds } = await buildMatchesForLineup(
+      testApp.db,
+      lineupId,
+    );
 
     const matches = await testApp.db
       .select()
@@ -728,6 +731,34 @@ function describeMatchingRaceAndIdempotency() {
       expect(member.source).toBe('voted');
       expect(voterIds).toContain(member.userId);
     }
+  });
+
+  it('re-decide returns the poll card of the scheduling match it wiped (TDB:571)', async () => {
+    const { lineupId } = await seedLineupReadyForMatching({
+      voterCount: 5,
+      threshold: 35,
+      tag: 'orphan-card',
+    });
+    const first = await buildMatchesForLineup(testApp.db, lineupId);
+    expect(first.orphanedCards).toEqual([]);
+    const [wipedId] = first.schedulingMatchIds;
+    await testApp.db
+      .update(schema.communityLineupMatches)
+      .set({ embedChannelId: 'chan-571', embedMessageId: 'msg-571' })
+      .where(eq(schema.communityLineupMatches.id, wipedId));
+
+    const second = await buildMatchesForLineup(testApp.db, lineupId);
+
+    expect(second.orphanedCards).toEqual([
+      { channelId: 'chan-571', messageId: 'msg-571' },
+    ]);
+    const matches = await testApp.db
+      .select()
+      .from(schema.communityLineupMatches)
+      .where(eq(schema.communityLineupMatches.lineupId, lineupId));
+    expect(matches.map((m) => m.id)).toEqual(second.schedulingMatchIds);
+    expect(matches[0].id).not.toBe(wipedId);
+    expect(matches[0].embedMessageId).toBeNull();
   });
 
   it('5x parallel buildMatchesForLineup does not throw uq_match_member_user', async () => {
@@ -863,7 +894,10 @@ function describeMatchingRaceAndIdempotency() {
     // Today this rejects with PostgresError 23505 on uq_match_member_user.
     // After Commit 3 (.onConflictDoNothing()) it resolves cleanly — and since
     // ROK-1473 it resolves with the ids that entered `scheduling`.
-    const schedulingIds = await buildMatchesForLineup(testApp.db, lineupId);
+    const { schedulingMatchIds: schedulingIds } = await buildMatchesForLineup(
+      testApp.db,
+      lineupId,
+    );
 
     const matches = await testApp.db
       .select()

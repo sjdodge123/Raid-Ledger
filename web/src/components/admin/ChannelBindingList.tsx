@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/contract';
 import { classifyBindingTriple } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
@@ -25,6 +25,13 @@ interface ChannelBindingListProps {
   isDeleting: boolean;
   /** ROK-1416: a rejected PATCH surfaced inside the open edit form (form stays open). */
   updateError?: string | null;
+  /**
+   * TDB:259: fires whenever a row's editor opens, closes or switches rows. The
+   * page resets its update mutation here — `updateError` is one value shared by
+   * every row, so without it row A's rejected save reappears in row B's form.
+   * The list additionally shows `updateError` only in the row that last saved.
+   */
+  onEditingChange?: (id: string | null) => void;
 }
 
 /** ROK-1415/1416: any triple the shared classifier rejects renders as INERT. */
@@ -129,11 +136,40 @@ function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpda
     );
 }
 
+function isThenable(value: unknown): value is Promise<unknown> {
+    return !!value && typeof (value as { then?: unknown }).then === 'function';
+}
+
+/**
+ * Which row's editor is open, and which row saved last. ROK-1416: collapse the
+ * row only once the PATCH resolves so a rejected save (400/409) keeps the form
+ * open with its error instead of vanishing. A void return (fire-and-forget)
+ * closes synchronously. Both the collapse and the error belong to the SAVED
+ * row: if the admin has moved to another row meanwhile, that row stays open
+ * and never shows the saved row's rejection.
+ */
+function useBindingEditor(
+    onUpdate: ChannelBindingListProps['onUpdate'], onEditingChange: ChannelBindingListProps['onEditingChange'],
+) {
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [savedId, setSavedId] = useState<string | null>(null);
+    // Read when the PATCH settles: the promise callback's closure holds the render-time editingId.
+    const editingRef = useRef<string | null>(null);
+    const changeEditing = (id: string | null) => { editingRef.current = id; setEditingId(id); onEditingChange?.(id); };
+    const handleSave = (id: string, dto: UpdateChannelBindingDto) => {
+        setSavedId(id);
+        const result: unknown = onUpdate(id, dto);
+        if (!isThenable(result)) { changeEditing(null); return; }
+        result.then(() => { if (editingRef.current === id) changeEditing(null); }).catch(() => {});
+    };
+    return { editingId, savedId, changeEditing, handleSave };
+}
+
 /**
  * Table of all channel bindings with inline editing, inert-binding repair, and delete.
  */
-export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, isDeleting, updateError }: ChannelBindingListProps) {
-    const [editingId, setEditingId] = useState<string | null>(null);
+export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, isDeleting, updateError, onEditingChange }: ChannelBindingListProps) {
+    const { editingId, savedId, changeEditing, handleSave } = useBindingEditor(onUpdate, onEditingChange);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const multiMonitorChannels = useMultiMonitorChannels(bindings);
@@ -148,24 +184,13 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
     }
 
     const handleDelete = (id: string) => { setDeletingId(id); onDelete(id); };
-    // ROK-1416: collapse the row only once the PATCH resolves so a rejected save
-    // (400/409) keeps the form open with its error instead of vanishing. A void
-    // return (unit tests / fire-and-forget) closes synchronously as before.
-    const handleSave = (id: string, dto: UpdateChannelBindingDto) => {
-        const result: unknown = onUpdate(id, dto);
-        if (result && typeof (result as { then?: unknown }).then === 'function') {
-            (result as Promise<unknown>).then(() => setEditingId(null)).catch(() => {});
-        } else {
-            setEditingId(null);
-        }
-    };
 
     return (
         <div className="space-y-3">
             {bindings.map((binding) => (
-                <BindingRow key={binding.id} binding={binding} editingId={editingId} setEditingId={setEditingId}
+                <BindingRow key={binding.id} binding={binding} editingId={editingId} setEditingId={changeEditing}
                     onSave={handleSave} onDelete={handleDelete} isUpdating={isUpdating} isDeleting={isDeleting} deletingId={deletingId}
-                    updateError={updateError}
+                    updateError={savedId === binding.id ? updateError : null}
                     hasMultiMonitor={binding.bindingPurpose === 'game-voice-monitor' && multiMonitorChannels.has(binding.channelId)} />
             ))}
         </div>

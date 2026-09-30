@@ -10,9 +10,18 @@ import {
   countDistinctVoters,
 } from './lineups-query.helpers';
 import { resolvePlayerCap } from './lineups-match-response.helpers';
+import type { OrphanedPollCard } from './lineups-scheduling-hook.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** What one matching pass hands its caller to act on after commit. */
+export interface MatchingPassResult {
+  /** Ids this pass wrote in `scheduling` status (ROK-1473). */
+  schedulingMatchIds: number[];
+  /** Poll cards owned by matches the wipe deleted (TDB:571). */
+  orphanedCards: OrphanedPollCard[];
+}
 
 /** Fit category based on voter count vs game capacity. */
 export type FitCategory =
@@ -36,6 +45,10 @@ export type FitCategory =
  * INSERT and the lineup ended up wired to a stale match row whose `linkedEvent`
  * / scheduling slots still pointed at the old game's poll (wrong-game-link).
  *
+ * TDB:571: a wiped `scheduling` match may already own a Discord poll card.
+ * The wipe returns those card refs so the caller can delete the cards after
+ * commit — the same collect-then-announce rule as the ids above.
+ *
  * Caller note: `runMatchingAlgorithm` invokes this AFTER `applyStatusUpdate`
  * has flipped the lineup row to `decided`. `scheduled`/`archived` matches are
  * preserved (only `suggested`/`scheduling` are wiped) because those statuses
@@ -44,7 +57,7 @@ export type FitCategory =
 export async function buildMatchesForLineup(
   db: Db,
   lineupId: number,
-): Promise<number[]> {
+): Promise<MatchingPassResult> {
   const [lineup] = await db
     .select({
       matchThreshold: schema.communityLineups.matchThreshold,
@@ -53,43 +66,62 @@ export async function buildMatchesForLineup(
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.id, lineupId))
     .limit(1);
-  if (!lineup) return [];
+  if (!lineup) return { schedulingMatchIds: [], orphanedCards: [] };
 
-  const threshold = lineup.matchThreshold ?? 35;
-  // ROK-1302: when scheduling is disabled, threshold-met matches must NOT
-  // enter 'scheduling' status — the lineup terminates at Decided.
-  const canSchedule = lineup.includeSchedulingPhase ?? true;
   const [voteCounts, voterRows] = await Promise.all([
     countVotesPerGame(db, lineupId),
     countDistinctVoters(db, lineupId),
   ]);
+  return rebuildMatches(db, lineupId, {
+    voteCounts,
+    totalVoters: voterRows[0]?.total ?? 0,
+    threshold: lineup.matchThreshold ?? 35,
+    // ROK-1302: when scheduling is disabled, threshold-met matches must NOT
+    // enter 'scheduling' status — the lineup terminates at Decided.
+    canSchedule: lineup.includeSchedulingPhase ?? true,
+  });
+}
 
-  const totalVoters = voterRows[0]?.total ?? 0;
+/** Inputs of one wipe-then-insert pass. */
+interface RebuildInput {
+  voteCounts: { gameId: number; voteCount: number }[];
+  totalVoters: number;
+  threshold: number;
+  canSchedule: boolean;
+}
 
-  // ROK-1225 / ROK-1306: wipe-then-insert runs inside ONE transaction so
-  // concurrent auto-advance callers can't interleave a stale-match wipe with
-  // another caller's fresh insert. The wipe must ALSO run for zero-vote
-  // re-decides (operator force-decides via tiebreaker / decidedGameId) so
-  // stale `suggested`/`scheduling` rows from a prior decide can't survive.
-  const schedulingMatchIds: number[] = [];
-  await db.transaction(async (tx) => {
-    schedulingMatchIds.length = 0;
-    await wipeStaleMatches(tx, lineupId);
-    if (totalVoters === 0) return;
-    for (const vc of voteCounts) {
+/**
+ * ROK-1225 / ROK-1306: wipe-then-insert runs inside ONE transaction so
+ * concurrent auto-advance callers can't interleave a stale-match wipe with
+ * another caller's fresh insert. The wipe must ALSO run for zero-vote
+ * re-decides (operator force-decides via tiebreaker / decidedGameId) so
+ * stale `suggested`/`scheduling` rows from a prior decide can't survive.
+ */
+async function rebuildMatches(
+  db: Db,
+  lineupId: number,
+  input: RebuildInput,
+): Promise<MatchingPassResult> {
+  return db.transaction(async (tx) => {
+    const result: MatchingPassResult = {
+      schedulingMatchIds: [],
+      orphanedCards: await wipeStaleMatches(tx, lineupId),
+    };
+    if (input.totalVoters === 0) return result;
+    for (const vc of input.voteCounts) {
       if (vc.voteCount === 0) continue;
       const id = await insertMatch(
         tx,
         lineupId,
         vc,
-        totalVoters,
-        threshold,
-        canSchedule,
+        input.totalVoters,
+        input.threshold,
+        input.canSchedule,
       );
-      if (id !== null) schedulingMatchIds.push(id);
+      if (id !== null) result.schedulingMatchIds.push(id);
     }
+    return result;
   });
-  return schedulingMatchIds;
 }
 
 /**
@@ -97,9 +129,15 @@ export async function buildMatchesForLineup(
  * lineup so the upcoming insert pass starts from a clean slate. FK cascade
  * clears `community_lineup_match_members` and `community_lineup_schedule_slots`.
  * `scheduled`/`archived` rows are intentionally preserved.
+ *
+ * @returns The poll cards the deleted rows owned (TDB:571), read by the
+ * DELETE itself so no concurrent writer can slip a card in between.
  */
-async function wipeStaleMatches(tx: Tx, lineupId: number): Promise<void> {
-  await tx
+async function wipeStaleMatches(
+  tx: Tx,
+  lineupId: number,
+): Promise<OrphanedPollCard[]> {
+  const wiped = await tx
     .delete(schema.communityLineupMatches)
     .where(
       and(
@@ -109,7 +147,16 @@ async function wipeStaleMatches(tx: Tx, lineupId: number): Promise<void> {
           'scheduling',
         ]),
       ),
-    );
+    )
+    .returning({
+      embedChannelId: schema.communityLineupMatches.embedChannelId,
+      embedMessageId: schema.communityLineupMatches.embedMessageId,
+    });
+  return wiped.flatMap((row) =>
+    row.embedChannelId && row.embedMessageId
+      ? [{ channelId: row.embedChannelId, messageId: row.embedMessageId }]
+      : [],
+  );
 }
 
 /**

@@ -122,6 +122,8 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
       visibility?: 'public' | 'private' | null;
       /** Rows the conditional claim UPDATE returns ([] = someone else won). */
       claim?: { id: number }[];
+      /** Rows the ref-store UPDATE returns ([] = the match was wiped mid-send). */
+      store?: { id: number }[];
     } = {},
   ): void {
     const visibility =
@@ -130,7 +132,9 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
       .mockResolvedValueOnce([match])
       .mockResolvedValueOnce(visibility === null ? [] : [{ visibility }])
       .mockResolvedValueOnce([{ name: 'Elden Ring', coverUrl: null }]);
-    mockDb.returning.mockResolvedValueOnce(opts.claim ?? [{ id: MATCH_ID }]);
+    mockDb.returning
+      .mockResolvedValueOnce(opts.claim ?? [{ id: MATCH_ID }])
+      .mockResolvedValueOnce(opts.store ?? [{ id: MATCH_ID }]);
   }
 
   it('posts exactly one poll card into the lineup channel', async () => {
@@ -317,6 +321,28 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     const sendOrder = sendEmbed.mock.invocationCallOrder[0];
     const editOrder = editEmbed.mock.invocationCallOrder[0];
     expect(editOrder).toBeGreaterThan(sendOrder);
+  });
+
+  it('deletes the card it just sent when a re-decide wiped the match mid-send (TDB:571)', async () => {
+    // The claim won, the card landed, then the re-decide's DELETE committed
+    // before the ref store: the store UPDATE matches no row. The fresh card
+    // points at a deleted match id, so it must be removed, not left live.
+    queueRows(matchRow(), { store: [] });
+    const { clientService } = service as unknown as {
+      clientService: { deleteMessage: jest.Mock; editEmbed: jest.Mock };
+    };
+    clientService.deleteMessage = jest.fn().mockResolvedValue(undefined);
+
+    service.onMatchEnteredScheduling({ matchId: MATCH_ID });
+    await flush();
+
+    expect(sendEmbed).toHaveBeenCalledTimes(1);
+    expect(clientService.deleteMessage).toHaveBeenCalledWith(
+      LINEUP_CHANNEL,
+      'msg-77',
+    );
+    // Nothing to re-render: the post-send refresh is skipped.
+    expect(clientService.editEmbed).not.toHaveBeenCalled();
   });
 
   it('keeps the claim when the card was sent but the store failed', async () => {

@@ -58,7 +58,9 @@ export async function countUserVotes(
 
 /**
  * Toggle a vote for a game in a lineup.
- * Uses a transaction to prevent race conditions on the vote limit.
+ * `lockVoterStar` is the first statement so two concurrent toggles by the same
+ * voter serialise (TDB:1064) instead of racing into `uq_lineup_vote_user_game`
+ * or past the vote cap.
  * @param maxVotes - per-lineup vote cap (from lineup.maxVotesPerPlayer).
  * @returns 'added' if the vote was cast, 'removed' if it was toggled off.
  */
@@ -70,6 +72,7 @@ export async function toggleVote(
   maxVotes: number = DEFAULT_MAX_VOTES,
 ): Promise<'added' | 'removed'> {
   return db.transaction(async (tx) => {
+    await lockVoterStar(tx, lineupId, userId);
     const existing = await findExistingVote(tx, lineupId, userId, gameId);
     if (existing) {
       await deleteVote(tx, existing.id);
