@@ -15,12 +15,15 @@ import {
   applyEmbedChrome,
   createChannelEmbed,
 } from '../embeds/embed-chrome.helpers';
-import { addPersonalizedFields } from '../embeds/embed-personalized.helpers';
+import {
+  addPersonalizedFields,
+  personalizedFieldName,
+} from '../embeds/embed-personalized.helpers';
 import { createInviteDmEmbed } from './pug-invite-chrome.helpers';
 
 const OWNED = {
   kind: 'owned',
-  name: '\u{1F3AE} In your library',
+  name: personalizedFieldName('owned'),
   value: '142 hrs played',
 } as const;
 
@@ -38,7 +41,7 @@ describe('invite DM personalization guard (AC4)', () => {
     addPersonalizedFields(embed, [OWNED]);
 
     expect((embed.toJSON().fields ?? [])[0]).toMatchObject({
-      name: '\u{1F3AE} In your library',
+      name: personalizedFieldName('owned'),
       value: '142 hrs played',
     });
   });
