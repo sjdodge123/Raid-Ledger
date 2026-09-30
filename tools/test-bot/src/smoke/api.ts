@@ -75,6 +75,9 @@ export class ApiClient {
    */
   private relogin?: () => Promise<string>;
 
+  /** The re-login in flight; every request that hit the same expiry awaits it. */
+  private reloginInFlight?: Promise<void>;
+
   constructor(
     private baseUrl: string,
     private token: string,
@@ -120,18 +123,19 @@ export class ApiClient {
    * Send once and return the 2xx response, or throw the verb's error.
    *
    * A 401 on a login-made client means the JWT expired mid-suite (1h
-   * lifetime): re-login ONCE, swap the token and re-send ONCE. The API
-   * rejects a 401 before any handler runs, so the re-send cannot apply a
+   * lifetime): refresh the token (see `refreshToken`) and re-send ONCE. The
+   * API rejects a 401 before any handler runs, so the re-send cannot apply a
    * mutation twice. A second 401 throws the normal error; a failed re-login
    * throws the original 401 error with the re-login failure as its cause.
    * No other status is ever re-sent.
    */
   private async request(method: Method, path: string, body?: string): Promise<Response> {
+    const sentWith = this.token;
     let res = await this.send(method, path, body);
     if (res.status === 401 && this.relogin) {
       const original = await httpError(method, path, res);
       try {
-        this.token = await this.relogin();
+        await this.refreshToken(this.relogin, sentWith);
       } catch (err) {
         throw new Error(original.message, { cause: err });
       }
@@ -139,6 +143,26 @@ export class ApiClient {
     }
     if (!res.ok) throw await httpError(method, path, res);
     return res;
+  }
+
+  /**
+   * Replace the `stale` token, single-flight. One client is shared by up to
+   * SMOKE_CONCURRENCY tests, so an expiry 401s every request in flight; each
+   * re-logging in on its own would burst POST /auth/local, which is
+   * rate-limited (10/min outside test envs) and would turn the expiry into a
+   * 429. All of them await ONE re-login instead, and a request whose token
+   * was already replaced after it was sent just re-sends.
+   */
+  private refreshToken(relogin: () => Promise<string>, stale: string): Promise<void> {
+    if (this.token !== stale) return Promise.resolve();
+    this.reloginInFlight ??= relogin()
+      .then((fresh) => {
+        this.token = fresh;
+      })
+      .finally(() => {
+        this.reloginInFlight = undefined;
+      });
+    return this.reloginInFlight;
   }
 
   private send(method: Method, path: string, body?: string): Promise<Response> {

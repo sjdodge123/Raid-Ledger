@@ -11,7 +11,9 @@
  *
  * A 401 on a client made by `ApiClient.login()` (the JWT expired mid-suite)
  * re-logs in ONCE and re-sends ONCE. A bare-JWT client never re-logs in, a
- * failed re-login surfaces the original 401, and nothing ever loops.
+ * failed re-login surfaces the original 401, and nothing ever loops. Requests
+ * that 401 on the same expiry share one re-login (POST /auth/local is
+ * rate-limited), and a 401 for an already-replaced token just re-sends.
  *
  * Pure — global fetch is replaced by a stub; no network, no API, no env.
  *
@@ -180,6 +182,58 @@ await test('401 → re-login → 401 throws the normal error after exactly 3 fet
   const err = await rejectionOf(client.post('/events/7/signup', {}), 'post()');
   assert.equal(calls.length, 3, `must re-login at most once: expected 3 fetches, got ${calls.length}`);
   assert.equal(messageOf(err), 'POST /events/7/signup → 401: {"message":"Unauthorized"}');
+});
+
+/**
+ * A stub where token-1 has expired: /auth/local mints token-2, a request
+ * carrying token-1 gets a 401, anything else gets VALID. A request to
+ * `holdPath` is answered only once `hold` resolves, so a test can land its
+ * 401 after another request has already refreshed the token.
+ */
+function stubExpiredToken(holdPath?: string, hold?: Promise<void>): Call[] {
+  const calls: Call[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const call = { url: String(input), auth: new Headers(init?.headers).get('Authorization') };
+    calls.push(call);
+    const canned = call.url.endsWith('/auth/local')
+      ? loginOk('token-2')
+      : call.auth === 'Bearer token-1'
+        ? UNAUTHORIZED
+        : { body: VALID };
+    if (holdPath && call.url === `${BASE}${holdPath}`) await hold;
+    return new Response(canned.body, { status: canned.status ?? 200 });
+  }) as typeof fetch;
+  return calls;
+}
+
+function loginCount(calls: Call[]): number {
+  return calls.filter((c) => c.url.endsWith('/auth/local')).length;
+}
+
+await test('concurrent 401s from one expiry share a single re-login', async () => {
+  const client = await loginClient();
+  const calls = stubExpiredToken();
+  const results = await Promise.all(
+    ['/events/1', '/events/2', '/events/3'].map((p) => client.get(p).catch((e: unknown) => e)),
+  );
+  assert.equal(loginCount(calls), 1, `expected ONE shared re-login, got ${loginCount(calls)}`);
+  for (const r of results) {
+    assert.deepEqual(r, { name: 'café' }, `expected every re-send to succeed, got ${messageOf(r)}`);
+  }
+});
+
+await test('a 401 landing after the token was refreshed re-sends without re-logging in', async () => {
+  const client = await loginClient();
+  let release!: () => void;
+  const hold = new Promise<void>((resolve) => (release = resolve));
+  const calls = stubExpiredToken('/events/late', hold);
+  const late = client.get('/events/late').catch((e: unknown) => e);
+  await client.get('/events/7'); // 401 → re-login → token-2, while /late is held
+  release();
+  const result = await late;
+  assert.equal(loginCount(calls), 1, `the late 401 must reuse token-2: expected 1 re-login, got ${loginCount(calls)}`);
+  assert.deepEqual(result, { name: 'café' }, `expected the late re-send to succeed, got ${messageOf(result)}`);
+  assert.equal(calls.at(-1)?.auth, 'Bearer token-2', 'the late re-send must carry the refreshed token');
 });
 
 globalThis.fetch = realFetch;
