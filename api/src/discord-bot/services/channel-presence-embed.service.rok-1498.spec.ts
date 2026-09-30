@@ -1,15 +1,16 @@
 /**
- * ROK-1446 (Lane A) — the flush loop, restart adoption and the close ladder.
+ * ChannelPresenceEmbedService — the D8 close ladder, split out of
+ * `channel-presence-embed.service.spec.ts` for file size.
  *
- * What is mocked here is only the BOUNDARY: Discord transport, the store's
- * SQL, and `resolveRoom`. The render itself — `buildChannelPresenceEmbeds`,
- * `buildRecapEmbeds`, `applyBudget` — runs for real, deliberately, because the
- * D5 dirty check hashes the rendered payload. Mocking the render would make
- * "an unchanged payload issues no edit" pass against a constant, which is
- * exactly the could-never-have-failed shape this story keeps finding.
+ * Holds three D8 blocks:
+ *   - empty → recap → close (ROK-1446): the grace stamp, the close once the
+ *     grace has elapsed, and the deleted-binding recap;
+ *   - rejoin inside the grace, and the event-ended recap (ROK-1446);
+ *   - rejoin after the grace (ROK-1498): a new message, never a resurrected
+ *     stale row, with the exact grace boundary treated as expired.
  *
- * Every assertion below was verified by mutating the finished implementation;
- * the mutation table is in `handover-ROK-1446-laneA-service.md`.
+ * Only the boundary is mocked, with the same setup as the base spec; see
+ * its header for why the render runs for real.
  */
 import {
   mocked,

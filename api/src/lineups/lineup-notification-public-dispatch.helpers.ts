@@ -62,7 +62,8 @@ export interface OrchestrationDeps {
   settingsService: SettingsService;
 }
 
-function dispatchDeps(deps: OrchestrationDeps): DispatchDeps {
+/** Narrow the orchestration deps to what the dispatch helpers read. */
+export function dispatchDeps(deps: OrchestrationDeps): DispatchDeps {
   const { db, settingsService, botClient, dedupService } = deps;
   return { db, settingsService, botClient, dedupService };
 }

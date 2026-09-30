@@ -3,8 +3,8 @@
  * (AC-1), the created-embed refresh (ROK-1063) and voting open (AC-3).
  * Extracted from the service to keep it under the 300-line ESLint ceiling.
  *
- * OrchestrationDeps structurally satisfies DispatchDeps, so the dispatch
- * helpers take it directly.
+ * The dispatch helpers get the narrowed `dispatchDeps(deps)`, as in the
+ * public-dispatch orchestrators.
  */
 import type { Logger } from '@nestjs/common';
 import {
@@ -26,7 +26,10 @@ import {
   resolveEmbedCtx,
   resolveCreatedCtx,
 } from './lineup-notification-dispatch.helpers';
-import type { OrchestrationDeps } from './lineup-notification-public-dispatch.helpers';
+import {
+  dispatchDeps,
+  type OrchestrationDeps,
+} from './lineup-notification-public-dispatch.helpers';
 import type { LineupInfo } from './lineup-notification.service';
 
 /** AC-1: Post channel embed when lineup is created. */
@@ -41,9 +44,9 @@ export async function orchestrateLineupCreated(
     lineup,
   );
   if (routedPrivate) return;
-  const ctx = await resolveCreatedCtx(deps, lineup);
+  const ctx = await resolveCreatedCtx(dispatchDeps(deps), lineup);
   const sent = await postChannelEmbed(
-    deps,
+    dispatchDeps(deps),
     `lineup-created:${lineup.id}`,
     () => buildCreatedEmbed(ctx, lineup.targetDate),
     ctx,
@@ -71,7 +74,7 @@ export async function refreshCreatedEmbedFor(
 ): Promise<void> {
   const ref = await loadCreatedEmbedRef(deps.db, lineup.id);
   if (!ref) return;
-  const ctx = await resolveCreatedCtx(deps, lineup);
+  const ctx = await resolveCreatedCtx(dispatchDeps(deps), lineup);
   const built = buildCreatedEmbed(ctx, ref.targetDate ?? undefined);
   await editCreatedEmbedSafe(
     deps.botClient,
@@ -88,9 +91,9 @@ async function postVotingOpenEmbed(
   lineup: LineupInfo,
   games: { id: number; name: string }[],
 ): Promise<void> {
-  const ctx = await resolveEmbedCtx(deps, lineup.id, 'voting');
+  const ctx = await resolveEmbedCtx(dispatchDeps(deps), lineup.id, 'voting');
   await postChannelEmbed(
-    deps,
+    dispatchDeps(deps),
     `lineup-voting:${lineup.id}`,
     () => buildVotingOpenEmbed(ctx, games, lineup.votingDeadline),
     ctx,
