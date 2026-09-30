@@ -1,5 +1,9 @@
 import type { ModuleRef } from '@nestjs/core';
-import { cleanupScheduledEventsForTest } from './demo-test-scheduled-event.helpers';
+import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
+import {
+  cleanupScheduledEventsForTest,
+  triggerScheduledEventCompletionForTest,
+} from './demo-test-scheduled-event.helpers';
 
 /**
  * ROK-1623 AC2 — the smoke cleanup must only delete scheduled events the
@@ -97,7 +101,9 @@ describe('cleanupScheduledEventsForTest (ROK-1623 ownership filter)', () => {
       reason: 'bot-identity-unresolved',
     });
   });
+});
 
+describe('cleanupScheduledEventsForTest (ROK-1623) - failed delete and no guild', () => {
   it('counts a failed delete of an owned event without throwing', async () => {
     const mine = makeEvent(
       '1',
@@ -132,5 +138,20 @@ describe('cleanupScheduledEventsForTest (ROK-1623 ownership filter)', () => {
       total: 0,
       reason: 'no-guild',
     });
+  });
+});
+
+describe('triggerScheduledEventCompletionForTest (ROK-944)', () => {
+  it('runs completeExpiredEvents once on the non-strict ScheduledEventService', async () => {
+    const completeExpiredEvents = jest.fn().mockResolvedValue(undefined);
+    const get = jest.fn().mockReturnValue({ completeExpiredEvents });
+
+    const result = await triggerScheduledEventCompletionForTest({
+      get,
+    } as unknown as ModuleRef);
+
+    expect(result).toEqual({ success: true });
+    expect(get).toHaveBeenCalledWith(ScheduledEventService, { strict: false });
+    expect(completeExpiredEvents).toHaveBeenCalledTimes(1);
   });
 });
