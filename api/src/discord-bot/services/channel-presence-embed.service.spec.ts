@@ -1,5 +1,5 @@
 /**
- * ROK-1446 (Lane A) — the flush loop, restart adoption and the close ladder.
+ * ROK-1446 — the flush loop, restart adoption and the close ladder.
  *
  * What is mocked here is only the BOUNDARY: Discord transport, the store's
  * SQL, and `resolveRoom`. The render itself — `buildChannelPresenceEmbeds`,
@@ -8,8 +8,7 @@
  * "an unchanged payload issues no edit" pass against a constant, which is
  * exactly the could-never-have-failed shape this story keeps finding.
  *
- * Every assertion below was verified by mutating the finished implementation;
- * the mutation table is in `handover-ROK-1446-laneA-service.md`.
+ * Every assertion below was verified by mutating the finished implementation.
  */
 import { PRESENCE_FLUSH_INTERVAL_MS } from './channel-presence-embed.service';
 import {
@@ -245,10 +244,10 @@ describe('ChannelPresenceEmbedService — D7 restart re-adoption', () => {
 });
 
 /**
- * The failure paths the Lane 1 review found: every one of them is a case where
- * a TRANSIENT fault (a Discord 5xx, a cold channel cache, a DB blip) produced a
- * PERMANENT or destructive outcome. Each assertion below was proved by mutating
- * the finished implementation — see `handover-ROK-1446-fix-service2.md`.
+ * The failure paths an ROK-1446 review found: every one of them is a case
+ * where a TRANSIENT fault (a Discord 5xx, a cold channel cache, a DB blip)
+ * produced a PERMANENT or destructive outcome. Each assertion below was proved
+ * by mutating the finished implementation.
  */
 describe('ChannelPresenceEmbedService — transient faults stay transient', () => {
   it('still becomes ready, and still flushes, when listOpenRows rejects (S-3)', async () => {

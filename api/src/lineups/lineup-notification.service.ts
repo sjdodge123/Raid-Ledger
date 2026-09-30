@@ -104,12 +104,12 @@ export class LineupNotificationService {
   }
 
   /**
-   * ROK-1374 (Lane B): the composed deps the tie orchestrators need.
+   * ROK-1374: the composed deps the tie orchestrators need.
    *
    * Public because `notifyTieDetected` / `notifyTieDecided` /
    * `notifyTieExpired` live in `lineup-notification-tie.helpers.ts` — this
-   * file is at its 300-line ceiling, so it exposes the composition root
-   * rather than growing three more methods.
+   * file was at its 300-line ceiling when they landed, so it exposes the
+   * composition root rather than growing three more methods.
    */
   get tieDeps(): OrchestrationDeps {
     return this.orchestrationDeps;
