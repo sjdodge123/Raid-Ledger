@@ -30,6 +30,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ItadService } from '../../itad/itad.service';
+import { ITAD_INTERACTIVE_FETCH } from '../../itad/itad.constants';
 import { IgdbService } from '../../igdb/igdb.service';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema';
@@ -326,7 +327,9 @@ export class SteamLinkListener implements OnModuleDestroy {
     return discoverGameBySteamAppId(
       {
         db: this.db,
-        lookupBySteamAppId: (id) => this.itadService.lookupBySteamAppId(id),
+        // Interactive: a user is waiting on the bot's reply to their link.
+        lookupBySteamAppId: (id) =>
+          this.itadService.lookupBySteamAppId(id, ITAD_INTERACTIVE_FETCH),
         adultFilterEnabled: adultFilter,
       },
       appId,

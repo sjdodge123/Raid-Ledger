@@ -174,7 +174,13 @@ describe('ItadPriceSyncService — adversarial', () => {
 
       await expect(service.syncPricing()).resolves.not.toThrow();
 
-      expect(mockItadPriceService.getOverviewBatch).toHaveBeenCalledTimes(3);
+      // Three first-pass attempts, then each failed chunk retried once at
+      // the end of the phase.
+      const calls = mockItadPriceService.getOverviewBatch.mock.calls;
+      expect(calls).toHaveLength(6);
+      expect(calls.slice(3).map((c) => c[0])).toEqual(
+        calls.slice(0, 3).map((c) => c[0]),
+      );
     });
   });
 
