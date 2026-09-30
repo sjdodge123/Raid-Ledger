@@ -414,7 +414,6 @@ describe('ItadPriceSyncService', () => {
       expect(infoCallsFor('game-uuid-3')).toHaveLength(2);
       expect(result).toEqual({ degraded: true });
     });
-
   });
 
   describe('cron schedule', () => {
