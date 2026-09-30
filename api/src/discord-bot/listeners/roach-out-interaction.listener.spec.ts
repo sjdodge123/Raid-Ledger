@@ -1,3 +1,4 @@
+import { Logger, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { RoachOutInteractionListener } from './roach-out-interaction.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -125,6 +126,12 @@ async function setupRoachOutModule() {
   listener = instance as TestableRoachOutInteractionListener;
 }
 
+/** Spy on the listener's own logger (a fresh instance per test, so no leak). */
+function spyLogger(level: 'log' | 'warn' | 'error') {
+  const { logger } = listener as unknown as { logger: Logger };
+  return jest.spyOn(logger, level).mockImplementation(() => undefined);
+}
+
 describe('RoachOutInteractionListener', () => {
   beforeEach(async () => {
     await setupRoachOutModule();
@@ -157,6 +164,7 @@ describe('RoachOutInteractionListener', () => {
   describe('handleButtonInteraction — routing', () => {
     buttonRoutingIgnoreTests();
     buttonRoutingDeferTests();
+    buttonRoutingFailureTests();
   });
 
   describe('handleRoachOutClick — event not found', () => {
@@ -341,6 +349,7 @@ function roachOutClickTests() {
 
 function confirmTests() {
   it('should remove signup and confirm on successful roach out', async () => {
+    const logSpy = spyLogger('log');
     mockDb.limit.mockResolvedValueOnce([
       { id: 42, title: 'Mythic Raid', cancelledAt: null },
     ]);
@@ -363,6 +372,9 @@ function confirmTests() {
         ),
         components: [],
       }),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      'Discord user discord-user-123 roached out of event 42',
     );
   });
 
@@ -488,8 +500,11 @@ function buttonRoutingDeferTests() {
     await listener['handleButtonInteraction'](interaction);
     expect(mockSignupsService.findByDiscordUser).not.toHaveBeenCalled();
   });
+}
 
+function buttonRoutingFailureTests() {
   it('should return early when deferUpdate throws for cancel', async () => {
+    const warnSpy = spyLogger('warn');
     const interaction = makeButtonInteraction(
       `${ROACH_OUT_BUTTON_IDS.CANCEL}:42`,
     );
@@ -499,10 +514,15 @@ function buttonRoutingDeferTests() {
     await expect(
       listener['handleButtonInteraction'](interaction),
     ).resolves.not.toThrow();
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to defer roach out interaction: Unknown Interaction',
+    );
   });
 
   it('should call safeEditReply with error when action throws', async () => {
-    mockDb.limit.mockRejectedValueOnce(new Error('DB Error'));
+    const errorSpy = spyLogger('error');
+    const failure = new Error('DB Error');
+    mockDb.limit.mockRejectedValueOnce(failure);
     const interaction = makeButtonInteraction(
       `${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:42`,
     );
@@ -510,6 +530,10 @@ function buttonRoutingDeferTests() {
     expect(interaction.editReply).toHaveBeenCalledWith({
       content: 'Something went wrong. Please try again.',
     });
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Error handling roach out for event 42: DB Error',
+      failure.stack,
+    );
   });
 }
 
@@ -539,26 +563,48 @@ function confirmNotFoundTests() {
     });
   });
 
-  it('should reply gracefully when cancelByDiscordUser throws', async () => {
-    mockDb.limit.mockResolvedValueOnce([
-      { id: 42, title: 'Mythic Raid', cancelledAt: null },
-    ]);
-    mockSignupsService.findByDiscordUser.mockResolvedValue({
-      id: 1,
-      status: 'signed_up',
+  it('replies with the generic error and logs it when cancelByDiscordUser fails unexpectedly', async () => {
+    const errorSpy = spyLogger('error');
+    const failure = new Error('Constraint violation');
+    const interaction = await confirmWithCancelFailure(failure);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'Something went wrong. Please try again later.',
+      components: [],
     });
-    mockSignupsService.cancelByDiscordUser.mockRejectedValueOnce(
-      new Error('Constraint violation'),
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Failed to cancel signup for event 42: Constraint violation',
+      failure.stack,
     );
-    const interaction = makeButtonInteraction(
-      `${ROACH_OUT_BUTTON_IDS.CONFIRM}:42`,
+  });
+
+  it('replies "not signed up" when cancelByDiscordUser finds no signup', async () => {
+    const errorSpy = spyLogger('error');
+    const interaction = await confirmWithCancelFailure(
+      new NotFoundException('Signup not found for Discord user on event 42'),
     );
-    await listener['handleConfirm'](interaction, 42);
     expect(interaction.editReply).toHaveBeenCalledWith({
       content: "You're not signed up for this event.",
       components: [],
     });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
+}
+
+/** Confirm a roach out whose signup cancel rejects with `failure`. */
+async function confirmWithCancelFailure(failure: Error) {
+  mockDb.limit.mockResolvedValueOnce([
+    { id: 42, title: 'Mythic Raid', cancelledAt: null },
+  ]);
+  mockSignupsService.findByDiscordUser.mockResolvedValue({
+    id: 1,
+    status: 'signed_up',
+  });
+  mockSignupsService.cancelByDiscordUser.mockRejectedValueOnce(failure);
+  const interaction = makeButtonInteraction(
+    `${ROACH_OUT_BUTTON_IDS.CONFIRM}:42`,
+  );
+  await listener['handleConfirm'](interaction, 42);
+  return interaction;
 }
 
 function discordInteractionErrorTests() {
