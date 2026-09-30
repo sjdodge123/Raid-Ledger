@@ -23,7 +23,20 @@ import { Logger } from '@nestjs/common';
 export const LINEUP_MATCH_EVENTS = {
   /** A match was written to `status: 'scheduling'` (payload below). */
   ENTERED_SCHEDULING: 'lineup.match.entered-scheduling',
+  /** A re-decide wiped matches that owned poll cards (TDB:571). */
+  POLL_CARDS_ORPHANED: 'lineup.match.poll-cards-orphaned',
 } as const;
+
+/** A Discord poll card left behind by a wiped match (TDB:571). */
+export interface OrphanedPollCard {
+  channelId: string;
+  messageId: string;
+}
+
+/** Payload of {@link LINEUP_MATCH_EVENTS.POLL_CARDS_ORPHANED}. */
+export interface PollCardsOrphanedPayload {
+  cards: OrphanedPollCard[];
+}
 
 /** Payload of {@link LINEUP_MATCH_EVENTS.ENTERED_SCHEDULING}. */
 export interface MatchEnteredSchedulingPayload {
@@ -59,5 +72,28 @@ export function fireMatchEnteredScheduling(
         `Failed to announce scheduling phase for match ${matchId}: ${msg}`,
       );
     }
+  }
+}
+
+/**
+ * Hand the poll cards a re-decide wiped to the Discord layer for deletion
+ * (TDB:571). Same contract as {@link fireMatchEnteredScheduling}: call after
+ * the wipe commits, outside any transaction; failures are logged, not thrown.
+ *
+ * @param events - Application event bus.
+ * @param cards - Cards whose match rows the wipe deleted (may be empty).
+ */
+export function fireOrphanedPollCards(
+  events: EventEmitter2,
+  cards: OrphanedPollCard[],
+): void {
+  if (cards.length === 0) return;
+  try {
+    events.emit(LINEUP_MATCH_EVENTS.POLL_CARDS_ORPHANED, {
+      cards,
+    } satisfies PollCardsOrphanedPayload);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`Failed to hand off ${cards.length} orphaned cards: ${msg}`);
   }
 }

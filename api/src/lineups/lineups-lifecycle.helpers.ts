@@ -27,7 +27,10 @@ import {
   buildAdvanceStateUpdate,
 } from './lineups-phase.helpers';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
-import { fireMatchEnteredScheduling } from './lineups-scheduling-hook.helpers';
+import {
+  fireMatchEnteredScheduling,
+  fireOrphanedPollCards,
+} from './lineups-scheduling-hook.helpers';
 import { addInvitees } from './lineups-invitees.helpers';
 import { insertWithSlugRetry } from './public-lineup-slug.helpers';
 import { extractErrorDetail } from '../common/pg-error.helpers';
@@ -194,6 +197,8 @@ export async function applyStatusUpdate(
  * the shared hook once `buildMatchesForLineup`'s transaction has committed,
  * so `SchedulingPollEmbedService` posts their Discord poll card. A matching
  * failure announces nothing — there is no committed match to advertise.
+ * TDB:571: cards owned by matches the re-decide wiped go out for deletion
+ * the same way, after commit.
  *
  * @param db - Drizzle handle.
  * @param lineupId - Lineup transitioning to 'decided'.
@@ -207,9 +212,10 @@ export async function runMatchingAlgorithm(
   events: EventEmitter2,
 ): Promise<void> {
   try {
-    // `?? []` — several specs mock the helper without a return value.
-    const schedulingMatchIds =
-      (await buildMatchesForLineup(db, lineupId)) ?? [];
+    // `?? {}` — several specs mock the helper without a return value.
+    const { schedulingMatchIds = [], orphanedCards = [] } =
+      (await buildMatchesForLineup(db, lineupId)) ?? {};
+    fireOrphanedPollCards(events, orphanedCards);
     fireMatchEnteredScheduling(events, schedulingMatchIds);
   } catch (err: unknown) {
     logger.error(

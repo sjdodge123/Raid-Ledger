@@ -14,9 +14,10 @@
  * it is what makes "clicking the badge does not open the game details" an
  * assertion about the markup rather than about a side effect.
  *
- * `role="link"` is kept explicitly (a shipped a11y assertion pins it) and the
- * click still stops propagating so an enclosing tile handler never also fires.
- * `preventDefault()` is NOT kept — it would cancel the anchor's own navigation.
+ * No explicit `role="link"` — an `<a href>` already has the implicit link role
+ * (TDB:1004). The click still stops propagating so an enclosing tile handler
+ * never also fires. `preventDefault()` is NOT kept — it would cancel the
+ * anchor's own navigation.
  *
  * The visible copy is the source of truth for the count (D9) — no count
  * attribute — and the `aria-label` repeats it verbatim so screen-reader users
@@ -99,7 +100,6 @@ function LfgChipButton({
     return (
         <Link
             to={`/lfg/${gameSlug}`}
-            role="link"
             data-testid="lfg-chip"
             data-lfg-state={effectiveState}
             data-lfg-now={nowAttr(nowCount)}
