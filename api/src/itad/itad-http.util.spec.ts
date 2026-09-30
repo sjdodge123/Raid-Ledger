@@ -446,6 +446,29 @@ describe('ITAD interactive fail-fast (maxPauseWaitMs)', () => {
     await background;
   });
 
+  it('resolves null when a long pause starts while it is still queued', async () => {
+    // '/slow' answers 429 at t=100ms, while '/bg' waits at the head of the
+    // queue and the interactive call is queued behind it.
+    mockFetch.mockImplementation((url: string) => {
+      if (new URL(url).pathname !== '/slow') {
+        return Promise.resolve(res(200, { ok: true }));
+      }
+      const limited = res(429, undefined, { 'Retry-After': '30' });
+      return new Promise((r) => setTimeout(() => r(limited), 100));
+    });
+    const slow = util.itadFetch('/slow', { key: 'k' });
+    const background = util.itadFetch('/bg', { key: 'k' });
+    const search = track(
+      util.itadFetch('/search', { key: 'k' }, ITAD_INTERACTIVE_FETCH),
+    );
+    await jest.advanceTimersByTimeAsync(ITAD_RATE_LIMIT_MS);
+
+    expect(search).toEqual({ settled: true, value: null });
+    expect(fetchedPaths()).toEqual(['/slow']);
+    await jest.advanceTimersByTimeAsync(ITAD_RETRY_AFTER_MAX_MS * 5);
+    await Promise.all([slow, background]);
+  });
+
   it.each([
     [
       'itadFetch',

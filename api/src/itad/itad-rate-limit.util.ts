@@ -17,6 +17,8 @@ let pausedUntil = 0;
 let pauseEpoch = 0;
 /** Tail of the FIFO of callers waiting for a slot. */
 let queue: Promise<void> = Promise.resolve();
+/** Notified on every new pause, so a fail-fast caller still queued can quit. */
+const pauseWatchers = new Set<() => void>();
 
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -31,11 +33,15 @@ function nextAllowedAt(): number {
  * pause was raised meanwhile, so a 429 that lands while a queued caller is
  * already sleeping still holds that caller.
  */
+function pauseExceeds(maxPauseWaitMs: number): boolean {
+  return pausedUntil - Date.now() > maxPauseWaitMs;
+}
+
 async function waitForTurn(maxPauseWaitMs: number): Promise<boolean> {
   let seenEpoch = -1;
   while (seenEpoch !== pauseEpoch) {
     seenEpoch = pauseEpoch;
-    if (pausedUntil - Date.now() > maxPauseWaitMs) return false;
+    if (pauseExceeds(maxPauseWaitMs)) return false;
     const waitMs = nextAllowedAt() - Date.now();
     if (waitMs > 0) await sleep(waitMs);
   }
@@ -49,18 +55,40 @@ async function waitForTurn(maxPauseWaitMs: number): Promise<boolean> {
  *
  * Resolves false, without taking a slot, when a 429 pause would hold this
  * caller for longer than `maxPauseWaitMs`, checked on arrival and again
- * whenever a new pause is raised while it waits at the head of the queue.
- * Interactive callers use this to fail fast instead of holding an HTTP
- * request open for up to `ITAD_RETRY_AFTER_MAX_MS`.
+ * whenever a new pause is raised while it is still queued. Interactive
+ * callers use this to fail fast instead of holding an HTTP request open for
+ * up to `ITAD_RETRY_AFTER_MAX_MS`.
  */
 export function acquireItadSlot(maxPauseWaitMs = Infinity): Promise<boolean> {
-  if (pausedUntil - Date.now() > maxPauseWaitMs) return Promise.resolve(false);
-  const turn = queue.then(() => waitForTurn(maxPauseWaitMs));
+  if (pauseExceeds(maxPauseWaitMs)) return Promise.resolve(false);
+  const ticket = { abandoned: false };
+  const turn = queue.then(() =>
+    ticket.abandoned ? false : waitForTurn(maxPauseWaitMs),
+  );
   queue = turn.then(
     () => undefined,
     () => undefined,
   );
-  return turn;
+  if (maxPauseWaitMs === Infinity) return turn;
+  return abandonOnLongPause(turn, ticket, maxPauseWaitMs);
+}
+
+/** Resolve false as soon as a pause raised while queued exceeds the limit. */
+function abandonOnLongPause(
+  turn: Promise<boolean>,
+  ticket: { abandoned: boolean },
+  maxPauseWaitMs: number,
+): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const watcher = (): void => {
+      if (!pauseExceeds(maxPauseWaitMs)) return;
+      ticket.abandoned = true;
+      pauseWatchers.delete(watcher);
+      resolve(false);
+    };
+    pauseWatchers.add(watcher);
+    turn.then(resolve, reject).finally(() => pauseWatchers.delete(watcher));
+  });
 }
 
 /**
@@ -75,6 +103,7 @@ export function itadPausedUntil(): number {
 export function pauseItadRequests(ms: number): void {
   pausedUntil = Math.max(pausedUntil, Date.now() + ms);
   pauseEpoch++;
+  for (const watcher of [...pauseWatchers]) watcher();
 }
 
 /**
