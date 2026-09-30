@@ -148,8 +148,11 @@ describe('ItadPriceSyncService', () => {
 
       await service.syncPricing();
 
-      // Both chunks attempted despite first failing
-      expect(mockItadPriceService.getOverviewBatch).toHaveBeenCalledTimes(2);
+      // Both chunks attempted despite the first failing, then the failed
+      // chunk is retried once at the end of the phase.
+      const calls = mockItadPriceService.getOverviewBatch.mock.calls;
+      expect(calls.map((c) => (c[0] as string[]).length)).toEqual([50, 25, 50]);
+      expect(calls[2][0]).toEqual(calls[0][0]);
     });
   });
 
@@ -346,6 +349,85 @@ describe('ItadPriceSyncService', () => {
       });
 
       expect(fnSignaledDegraded || perfLoggedDegraded).toBe(true);
+    });
+  });
+
+  // ─── End-of-phase retries (ITAD 429 bursts) + cron slot ──────────────────
+  describe('end-of-phase retries', () => {
+    function seedGames(count: number): void {
+      const games = Array.from({ length: count }, (_, i) => ({
+        id: i + 1,
+        itadGameId: `game-uuid-${i + 1}`,
+      }));
+      mockDb.where.mockResolvedValueOnce(games);
+      mockDb.returning.mockResolvedValue([]);
+    }
+
+    function infoCallsFor(id: string): unknown[][] {
+      return mockItadService.getGameInfo.mock.calls.filter((c) => c[0] === id);
+    }
+
+    it('retries a failed pricing chunk at the end of the phase; a recovered run is not degraded', async () => {
+      seedGames(75);
+      mockItadPriceService.getOverviewBatch
+        .mockRejectedValueOnce(new Error('ITAD overview fetch failed'))
+        .mockResolvedValue([]);
+      mockItadService.getGameInfo.mockResolvedValue({ earlyAccess: false });
+
+      const result = await service.syncPricing();
+
+      const calls = mockItadPriceService.getOverviewBatch.mock.calls;
+      expect(calls.map((c) => (c[0] as string[]).length)).toEqual([50, 25, 50]);
+      expect(calls[2][0]).toEqual(calls[0][0]);
+      expect(result).toBeUndefined();
+    });
+
+    it('retries a failed earlyAccess game in a tail pass; a recovered run is not degraded', async () => {
+      seedGames(10);
+      mockItadPriceService.getOverviewBatch.mockResolvedValue([]);
+      let failedOnce = false;
+      mockItadService.getGameInfo.mockImplementation((id: string) => {
+        if (id === 'game-uuid-3' && !failedOnce) {
+          failedOnce = true;
+          return Promise.reject(new Error('timeout'));
+        }
+        return Promise.resolve({ earlyAccess: true });
+      });
+
+      const result = await service.syncPricing();
+
+      expect(infoCallsFor('game-uuid-3')).toHaveLength(2);
+      expect(result).toBeUndefined();
+    });
+
+    it('still flags degraded when an earlyAccess game fails the tail pass too', async () => {
+      seedGames(10);
+      mockItadPriceService.getOverviewBatch.mockResolvedValue([]);
+      mockItadService.getGameInfo.mockImplementation((id: string) =>
+        id === 'game-uuid-3'
+          ? Promise.reject(new Error('timeout'))
+          : Promise.resolve({ earlyAccess: true }),
+      );
+
+      const result = await service.syncPricing();
+
+      expect(infoCallsFor('game-uuid-3')).toHaveLength(2);
+      expect(result).toEqual({ degraded: true });
+    });
+
+  });
+
+  describe('cron schedule', () => {
+    it('schedules the cron at :07 past every 4th hour, off the top-of-hour burst', () => {
+      const handler = Object.getOwnPropertyDescriptor(
+        ItadPriceSyncService.prototype,
+        'scheduledSync',
+      )?.value as object;
+      // Key set by @nestjs/schedule's @Cron (SCHEDULE_CRON_OPTIONS).
+      const opts = Reflect.getMetadata('SCHEDULE_CRON_OPTIONS', handler) as {
+        cronTime: string;
+      };
+      expect(opts.cronTime).toBe('7 */4 * * *');
     });
   });
 
