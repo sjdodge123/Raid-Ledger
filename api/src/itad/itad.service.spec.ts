@@ -359,6 +359,7 @@ describe('ItadService', () => {
         '/lookup/shop/61/id/v1',
         expect.objectContaining({ key: 'test-key', shops: '61' }),
         ['uuid-1'],
+        {},
       );
     });
 
@@ -387,6 +388,24 @@ describe('ItadService', () => {
       ]);
 
       expect(result.size).toBe(0);
+    });
+  });
+
+  describe('lookupSteamAppIds — fetch options', () => {
+    it('forwards fetch options (e.g. the interactive fail-fast limit)', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      itadPost.mockResolvedValue({});
+
+      await service.lookupSteamAppIds([{ id: 'uuid-1', slug: 'elden-ring' }], {
+        maxPauseWaitMs: 5_000,
+      });
+
+      expect(itadPost).toHaveBeenCalledWith(
+        '/lookup/shop/61/id/v1',
+        expect.objectContaining({ shops: '61' }),
+        ['uuid-1'],
+        { maxPauseWaitMs: 5_000 },
+      );
     });
   });
 });
