@@ -11,6 +11,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import type { Logger } from '@nestjs/common';
 import type { ButtonInteraction, Message } from 'discord.js';
 import { EventEmitter } from 'node:events';
 
@@ -289,4 +290,45 @@ function buttonRoutingTests() {
 
     expect(interaction.deferUpdate).not.toHaveBeenCalled();
   });
+
+  it('logs an interpolated message with the error stack when promote throws', async () => {
+    const errorSpy = jest
+      .spyOn(listenerLogger(), 'error')
+      .mockImplementation(() => undefined);
+    const boom = new Error('db down');
+    mockDb.limit.mockRejectedValueOnce(boom);
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:7:tank:1`,
+    );
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Error handling departure promote for event 7',
+      boom.stack,
+    );
+  });
+
+  it('interpolates the defer failure reason into the warning', async () => {
+    const warnSpy = jest
+      .spyOn(listenerLogger(), 'warn')
+      .mockImplementation(() => undefined);
+    const interaction = makeMockInteraction(
+      `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:7:tank:1`,
+    );
+    (interaction.deferUpdate as jest.Mock).mockRejectedValueOnce(
+      new Error('Unknown interaction'),
+    );
+
+    await listener.handleButtonInteraction(interaction);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to defer departure promote: Unknown interaction',
+    );
+  });
+}
+
+/** The listener's private Nest logger, for spying on log output. */
+function listenerLogger(): Logger {
+  return (listener as unknown as { logger: Logger }).logger;
 }

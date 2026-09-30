@@ -43,6 +43,7 @@ import {
   handleRoleSelect as doRoleSelect,
   type SelectCtx,
 } from './reschedule-roster.handlers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /**
  * Handles Confirm / Decline button interactions on reschedule DMs (ROK-537).
@@ -110,7 +111,7 @@ export class RescheduleResponseListener {
     try {
       await this.routeButton(action, i, eventId);
     } catch (error) {
-      this.logger.error('Reschedule error event %d:', eventId, error);
+      this.logger.error(`Reschedule error event ${eventId}`, errorStack(error));
       await safeEditReply(i, {
         content: 'Something went wrong. Please try again.',
       });
@@ -213,7 +214,7 @@ export class RescheduleResponseListener {
         await this.handleRoleSelect(i, eventId, characterId, signupStatus);
       }
     } catch (error) {
-      this.logger.error('Select error event %d:', eventId, error);
+      this.logger.error(`Select error event ${eventId}`, errorStack(error));
       await safeEditReply(i, {
         content: 'Something went wrong. Please try again.',
         components: [],

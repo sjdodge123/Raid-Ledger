@@ -237,10 +237,7 @@ async function resolveMultiBindingEvents(
 ): Promise<Array<{ eventId: number; gameId: number | null }>> {
   const gameIds = extractGameIds(matched);
   logger.debug(
-    '[voice-pipe] findActive: %d binding(s) channelId=%s gameIds=%s',
-    matched.length,
-    channelId,
-    gameIds ? gameIds.join(',') : 'all',
+    `[voice-pipe] findActive: ${matched.length} binding(s) channelId=${channelId} gameIds=${gameIds ? gameIds.join(',') : 'all'}`,
   );
   const events = gameIds
     ? await queryActiveEventsMultiGame(db, gameIds, now)
@@ -250,9 +247,7 @@ async function resolveMultiBindingEvents(
   // differs from (or is null vs) the binding's stored gameId. Deduped by id.
   const merged = await unionSeriesEvents(db, matched, events, now);
   logger.debug(
-    '[voice-pipe] findActive: %d active event(s) for channelId=%s',
-    merged.length,
-    channelId,
+    `[voice-pipe] findActive: ${merged.length} active event(s) for channelId=${channelId}`,
   );
   return merged;
 }
@@ -276,14 +271,11 @@ async function resolveDefaultVoiceEvents(
   logger: Logger,
 ): Promise<Array<{ eventId: number; gameId: number | null }>> {
   logger.debug(
-    '[voice-pipe] findActive: default voice match channelId=%s',
-    channelId,
+    `[voice-pipe] findActive: default voice match channelId=${channelId}`,
   );
   const events = await queryActiveEvents(db, null, now);
   logger.debug(
-    '[voice-pipe] findActive: %d active event(s) for channelId=%s',
-    events.length,
-    channelId,
+    `[voice-pipe] findActive: ${events.length} active event(s) for channelId=${channelId}`,
   );
   return events;
 }

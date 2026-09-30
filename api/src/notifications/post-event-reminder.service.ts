@@ -112,8 +112,7 @@ export class PostEventReminderService {
     const discordId = pug.user_discord_id || pug.discord_user_id;
     if (!discordId) {
       this.logger.debug(
-        'No Discord ID for PUG slot %s, skipping',
-        pug.pug_slot_id,
+        `No Discord ID for PUG slot ${pug.pug_slot_id}, skipping`,
       );
       return null;
     }
@@ -226,16 +225,11 @@ export class PostEventReminderService {
     try {
       await this.clientService.sendEmbedDM(discordId, embed);
       this.logger.log(
-        'Sent post-event reminder to %s for event %d (slot: %s)',
-        discordId,
-        pug.event_id,
-        pug.pug_slot_id,
+        `Sent post-event reminder to ${discordId} for event ${pug.event_id} (slot: ${pug.pug_slot_id})`,
       );
     } catch (error) {
       this.logger.warn(
-        'Failed to send post-event reminder to %s: %s',
-        discordId,
-        error instanceof Error ? error.message : 'Unknown error',
+        `Failed to send post-event reminder to ${discordId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }
