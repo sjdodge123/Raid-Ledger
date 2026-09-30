@@ -28,8 +28,11 @@ import {
   isRescheduleAction,
   isSelectAction,
   parseRoleSelectParts,
+  lookupRescheduleEvent,
+  findLinkedUserByDiscordId,
+  dmEditFor,
+  selectDmEditFor,
   editDmEmbed,
-  editDmEmbedFromSelect,
   safeEditReply,
 } from './reschedule-response.helpers';
 import {
@@ -137,12 +140,12 @@ export class RescheduleResponseListener {
   ): Promise<void> {
     const v = await this.validateSignup(i, eventId);
     if (!v) return;
-    const linkedUser = await this.findLinkedUser(i.user.id);
+    const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
     const ctx = {
       deps: this.deps,
       interaction: i,
       event: v.event,
-      editDm: this.makeDmEdit(),
+      editDm: dmEditFor(this.logger),
     };
     if (linkedUser) await handleLinkedConfirm(ctx, linkedUser);
     else await handleUnlinkedConfirm(ctx);
@@ -154,12 +157,12 @@ export class RescheduleResponseListener {
   ): Promise<void> {
     const v = await this.validateSignup(i, eventId);
     if (!v) return;
-    const linkedUser = await this.findLinkedUser(i.user.id);
+    const linkedUser = await findLinkedUserByDiscordId(this.db, i.user.id);
     const ctx = {
       deps: this.deps,
       interaction: i,
       event: v.event,
-      editDm: this.makeDmEdit(),
+      editDm: dmEditFor(this.logger),
     };
     if (linkedUser) await handleLinkedTentative(ctx, linkedUser);
     else await handleUnlinkedTentative(ctx);
@@ -229,8 +232,8 @@ export class RescheduleResponseListener {
       deps: this.deps,
       interaction: i,
       eventId,
-      lookupEvent: this.lookupEvent.bind(this),
-      editDm: this.makeSelectDmEdit(),
+      lookupEvent: (id) => lookupRescheduleEvent(this.db, id),
+      editDm: selectDmEditFor(this.logger),
     };
   }
 
@@ -259,7 +262,7 @@ export class RescheduleResponseListener {
     i: ButtonInteraction,
     eventId: number,
   ): Promise<{ event: EventRow; signup: { id: number } } | null> {
-    const event = await this.lookupEvent(eventId);
+    const event = await lookupRescheduleEvent(this.db, eventId);
     if (!event) {
       await i.editReply({ content: 'Event not found.' });
       return null;
@@ -277,45 +280,5 @@ export class RescheduleResponseListener {
       return null;
     }
     return { event, signup };
-  }
-
-  private async lookupEvent(eventId: number): Promise<EventRow | null> {
-    const [event] = await this.db
-      .select({
-        id: schema.events.id,
-        title: schema.events.title,
-        cancelledAt: schema.events.cancelledAt,
-        gameId: schema.events.gameId,
-        slotConfig: schema.events.slotConfig,
-      })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-    return event ?? null;
-  }
-
-  private async findLinkedUser(
-    discordId: string,
-  ): Promise<{ id: number } | null> {
-    const [user] = await this.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.discordId, discordId))
-      .limit(1);
-    return user ?? null;
-  }
-
-  private makeDmEdit() {
-    const logger = this.logger;
-    return (i: ButtonInteraction, s: 'confirmed' | 'tentative' | 'declined') =>
-      editDmEmbed(i, s, logger);
-  }
-
-  private makeSelectDmEdit() {
-    const logger = this.logger;
-    return (
-      i: StringSelectMenuInteraction,
-      s: 'confirmed' | 'tentative' | 'declined',
-    ) => editDmEmbedFromSelect(i, s, logger);
   }
 }
