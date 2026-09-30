@@ -10,6 +10,7 @@ import { GameSearchInput } from '../events/game-search-input';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Select } from '../ui/select';
+import { PURPOSE_BY_TYPE, PURPOSE_OPTIONS } from './binding-form.helpers';
 
 export interface BindingChannelOption {
     id: string;
@@ -23,19 +24,6 @@ interface BindingCreateFormProps {
     isCreating: boolean;
     createError?: string | null;
 }
-
-const PURPOSE_LABELS: Record<BindingPurpose, string> = {
-    'game-announcements': 'Announcements',
-    'game-voice-monitor': 'Activity Monitor',
-    'general-lobby': 'General Lobby',
-    'lfg-board': 'LFG board',
-};
-
-const PURPOSE_BY_TYPE: Record<ChannelType, BindingPurpose[]> = {
-    voice: ['game-voice-monitor', 'general-lobby'],
-    text: ['game-announcements'],
-    forum: ['lfg-board'],
-};
 
 function ChannelSelect({ channels, value, onChange }: {
     channels: BindingChannelOption[]; value: string; onChange: (id: string) => void;
@@ -56,11 +44,11 @@ function ChannelSelect({ channels, value, onChange }: {
 function PurposeSelect({ channelType, value, onChange }: {
     channelType: ChannelType | undefined; value: BindingPurpose; onChange: (p: BindingPurpose) => void;
 }) {
-    const options = channelType ? PURPOSE_BY_TYPE[channelType] : [];
+    const options = channelType ? PURPOSE_OPTIONS[channelType] : [];
     return (
         <Field id="new-binding-purpose" label="Purpose">
             <Select value={value} disabled={!channelType} onChange={(e) => onChange(e.target.value as BindingPurpose)}>
-                {options.map((p) => <option key={p} value={p}>{PURPOSE_LABELS[p]}</option>)}
+                {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </Select>
         </Field>
     );

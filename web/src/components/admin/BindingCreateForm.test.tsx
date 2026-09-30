@@ -59,6 +59,27 @@ describe("BindingCreateForm — fields", () => {
   });
 });
 
+/** [value, visible label] pairs of the Purpose select, in order. */
+function purposeOptions(): [string, string][] {
+  const select = screen.getByRole("combobox", { name: "Purpose" }) as HTMLSelectElement;
+  return Array.from(select.options).map((o) => [o.value, o.textContent ?? ""]);
+}
+
+describe("BindingCreateForm — purpose options per channel type (TDB:261 pin)", () => {
+  it("offers the contract-labelled purposes a voice or text channel may carry, voice default first", () => {
+    renderOpen();
+    fireEvent.change(channelSelect(), { target: { value: "v-1" } });
+    expect(purposeOptions()).toEqual([
+      ["game-voice-monitor", "Activity Monitor"],
+      ["general-lobby", "General Lobby"],
+    ]);
+    expect(screen.getByRole("combobox", { name: "Purpose" })).toHaveValue("game-voice-monitor");
+
+    fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+    expect(purposeOptions()).toEqual([["game-announcements", "Announcements"]]);
+  });
+});
+
 describe("BindingCreateForm — pending and error", () => {
   // ROK-1652 ruling 7: a pending Create is Button `loading` — aria-disabled +
   // aria-busy (focus stays) and the click is swallowed.
