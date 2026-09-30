@@ -36,9 +36,7 @@ export async function safeDeferUpdate(
     return true;
   } catch (error) {
     logger.warn(
-      'Failed to defer update for interaction %s: %s',
-      interaction.id,
-      error,
+      `Failed to defer update for interaction ${interaction.id}: ${error instanceof Error ? error.message : String(error)}`,
     );
     return false;
   }
@@ -56,9 +54,7 @@ export async function safeDeferReply(
     return true;
   } catch (error) {
     logger.warn(
-      'Failed to defer reply for interaction %s: %s',
-      interaction.id,
-      error,
+      `Failed to defer reply for interaction ${interaction.id}: ${error instanceof Error ? error.message : String(error)}`,
     );
     return false;
   }

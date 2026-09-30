@@ -64,10 +64,8 @@ export class PugInviteService {
       );
     } catch (error) {
       this.logger.error(
-        'Failed to process PUG invite for %s (slot: %s):',
-        discordUsername,
-        pugSlotId,
-        error,
+        `Failed to process PUG invite for ${discordUsername} (slot: ${pugSlotId})`,
+        error instanceof Error ? error.stack : String(error),
       );
     }
   }
@@ -230,7 +228,10 @@ export class PugInviteService {
       });
       return invite.url;
     } catch (error) {
-      this.logger.error('Failed to generate server invite:', error);
+      this.logger.error(
+        'Failed to generate server invite',
+        error instanceof Error ? error.stack : String(error),
+      );
       return null;
     }
   }
@@ -255,10 +256,8 @@ export class PugInviteService {
       );
     } catch (error) {
       this.logger.error(
-        'Failed to auto-invite %s for slot %s:',
-        discordUsername,
-        slot.id,
-        error,
+        `Failed to auto-invite ${discordUsername} for slot ${slot.id}`,
+        error instanceof Error ? error.stack : String(error),
       );
     }
   }
@@ -273,9 +272,7 @@ export class PugInviteService {
       await this.clientService.sendEmbedDM(targetDiscordId, embed, row);
     } catch (error) {
       this.logger.warn(
-        `Failed to send ${label} DM to %s: %s`,
-        targetDiscordId,
-        error instanceof Error ? error.message : 'Unknown error',
+        `Failed to send ${label} DM to ${targetDiscordId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

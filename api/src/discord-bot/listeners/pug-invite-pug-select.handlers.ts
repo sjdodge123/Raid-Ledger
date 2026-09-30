@@ -31,9 +31,8 @@ export async function handlePugCharacterSelectMenu(
     await doPugCharacterSelect(deps, interaction, pugSlotId);
   } catch (error) {
     deps.logger.error(
-      'Error handling PUG char select for slot %s:',
-      pugSlotId,
-      error,
+      `Error handling PUG char select for slot ${pugSlotId}`,
+      error instanceof Error ? error.stack : String(error),
     );
     await safeErrorReply(
       interaction,
@@ -54,9 +53,8 @@ export async function handlePugRoleSelectMenu(
     await doPugRoleSelect(deps, interaction, pugSlotId, characterName);
   } catch (error) {
     deps.logger.error(
-      'Error handling PUG role select for slot %s:',
-      pugSlotId,
-      error,
+      `Error handling PUG role select for slot ${pugSlotId}`,
+      error instanceof Error ? error.stack : String(error),
     );
     await safeErrorReply(
       interaction,
@@ -212,10 +210,7 @@ async function replyCharAccepted(
     components: [],
   });
   deps.logger.log(
-    'PUG %s accepted invite as %s for event %d',
-    slot.discordUsername,
-    charName,
-    slot.eventId,
+    `PUG ${slot.discordUsername} accepted invite as ${charName} for event ${slot.eventId}`,
   );
 }
 
@@ -278,10 +273,7 @@ async function replyRoleAccepted(
     components: [],
   });
   deps.logger.log(
-    'PUG %s accepted invite as %s for event %d',
-    slot.discordUsername,
-    selectedRole,
-    slot.eventId,
+    `PUG ${slot.discordUsername} accepted invite as ${selectedRole} for event ${slot.eventId}`,
   );
 }
 

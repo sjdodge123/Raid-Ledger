@@ -98,15 +98,12 @@ export class PugInviteListener {
   async handlePugSlotCreated(payload: PugSlotCreatedPayload): Promise<void> {
     if (!payload.discordUsername) {
       this.logger.debug(
-        'Skipping anonymous PUG slot for event %d (invite link flow)',
-        payload.eventId,
+        `Skipping anonymous PUG slot for event ${payload.eventId} (invite link flow)`,
       );
       return;
     }
     this.logger.debug(
-      'Processing PUG slot created: %s for event %d',
-      payload.discordUsername,
-      payload.eventId,
+      `Processing PUG slot created: ${payload.discordUsername} for event ${payload.eventId}`,
     );
     await this.pugInviteService.processPugSlotCreated(
       payload.pugSlotId,
@@ -127,10 +124,8 @@ export class PugInviteListener {
       );
     } catch (error) {
       this.logger.error(
-        'Failed to claim PUG slots for user %d (discord: %s):',
-        payload.userId,
-        payload.discordId,
-        error,
+        `Failed to claim PUG slots for user ${payload.userId} (discord: ${payload.discordId})`,
+        error instanceof Error ? error.stack : String(error),
       );
     }
   }
@@ -141,9 +136,7 @@ export class PugInviteListener {
     payload: MemberInviteCreatedPayload,
   ): Promise<void> {
     this.logger.debug(
-      'Processing member invite: event %d -> Discord %s',
-      payload.eventId,
-      payload.targetDiscordId,
+      `Processing member invite: event ${payload.eventId} -> Discord ${payload.targetDiscordId}`,
     );
     await this.pugInviteService.sendMemberInviteDm(
       payload.eventId,
@@ -162,9 +155,8 @@ export class PugInviteListener {
     this.boundGuildMemberAddHandler = (member: GuildMember) => {
       this.handleGuildMemberAdd(member).catch((err: unknown) => {
         this.logger.error(
-          'Error handling guildMemberAdd for %s:',
-          member.user.username,
-          err,
+          `Error handling guildMemberAdd for ${member.user.username}`,
+          err instanceof Error ? err.stack : String(err),
         );
       });
     };
@@ -191,9 +183,7 @@ export class PugInviteListener {
 
   private async handleGuildMemberAdd(member: GuildMember): Promise<void> {
     this.logger.debug(
-      'New guild member: %s (%s)',
-      member.user.username,
-      member.user.id,
+      `New guild member: ${member.user.username} (${member.user.id})`,
     );
     await this.pugInviteService.handleNewGuildMember(
       member.user.id,

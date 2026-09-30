@@ -80,7 +80,9 @@ export class DeparturePromoteListener {
     try {
       await interaction.deferUpdate();
     } catch (error) {
-      this.logger.warn('Failed to defer departure promote: %s', error);
+      this.logger.warn(
+        `Failed to defer departure promote: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return;
     }
     await this.routeDepartureAction(interaction, parsed);
@@ -103,9 +105,8 @@ export class DeparturePromoteListener {
       }
     } catch (error) {
       this.logger.error(
-        'Error handling departure promote for event %d:',
-        parsed.eventId,
-        error,
+        `Error handling departure promote for event ${parsed.eventId}`,
+        error instanceof Error ? error.stack : String(error),
       );
       await editDMResult(
         interaction,
