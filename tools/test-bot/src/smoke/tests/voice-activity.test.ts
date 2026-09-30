@@ -42,6 +42,7 @@ import {
   SmokeAssertionError,
 } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { awaitProcessingLogged, pollClassifiedMetrics, resolveMonitorGameId } from '../voice-fixtures.js';
 
 /**
  * ROK-1447: the Quick Play chrome palette — `EMBED_COLORS.SIGNUP_CONFIRMATION`
@@ -115,7 +116,7 @@ const voiceJoinDetected: SmokeTest = {
   name: 'Voice join triggers attendance session',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 0, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
+    await withVoiceBinding(ctx, 0, 'game-voice-monitor', await resolveMonitorGameId(ctx), async (vChId) => {
       await joinVoice(vChId);
       try {
         await pollForCondition(
@@ -138,7 +139,7 @@ const voiceLeaveRecorded: SmokeTest = {
   name: 'Voice leave ends attendance session',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 1, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
+    await withVoiceBinding(ctx, 1, 'game-voice-monitor', await resolveMonitorGameId(ctx), async (vChId) => {
       await joinVoice(vChId);
       // Wait until bot appears in voice, then leave
       await pollForCondition(
@@ -978,12 +979,8 @@ const metricsVoicePopulated: SmokeTest = {
   name: 'Event metrics roster shows voice data (ROK-852)',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 2, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
-      const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
-        '/admin/settings/games?limit=1',
-      );
-      const gameId = gamesRes.data[0]?.id;
-      if (!gameId) throw new Error('No games in DB for voice metrics test');
+    const gameId = await resolveMonitorGameId(ctx);
+    await withVoiceBinding(ctx, 2, 'game-voice-monitor', gameId, async (vChId) => {
 
       const ev = await createEvent(ctx.api, 'metrics-voice', {
         gameId,
@@ -1090,7 +1087,7 @@ async function rok943ClassifyAllStatuses(ctx: TestContext) {
     await rok943SignupUsers(ctx, ev.id, users, fakeIds);
     await rok943InjectSessions(ctx, ev.id, users, fakeIds, start, end);
     await triggerClassify(ctx.api, ev.id);
-    await awaitProcessing(ctx.api);
+    await awaitProcessingLogged(ctx.api, 'ROK-943');
     await rok943AssertMetrics(ctx, ev.id);
   } finally {
     await deleteEvent(ctx.api, ev.id);
@@ -1167,7 +1164,7 @@ type Metrics = {
 
 /** Assert every classification and attendance status appears in metrics. */
 async function rok943AssertMetrics(ctx: TestContext, eventId: number) {
-  const m = await ctx.api.get<Metrics>(`/events/${eventId}/metrics`);
+  const m = await pollClassifiedMetrics<Metrics>(ctx, eventId);
 
   // --- Attendance donut ---
   // 8 signups: 7 explicit + event creator (admin, auto-signed-up, unmarked)
@@ -1344,9 +1341,8 @@ const attendancePipelineE2E: SmokeTest = {
   name: 'Attendance pipeline: signup → real voice → classify → attended (ROK-985)',
   category: 'voice',
   async run(ctx) {
-    await withVoiceBinding(ctx, 3, 'game-voice-monitor', ctx.games[0]?.id, async (vChId) => {
-      const gameId = ctx.games[0]?.id;
-      if (!gameId) throw new Error('No games for ROK-985 test');
+    const gameId = await resolveMonitorGameId(ctx);
+    await withVoiceBinding(ctx, 3, 'game-voice-monitor', gameId, async (vChId) => {
 
       // Live event — started 5 min ago, ends in 55 min
       const ev = await createEvent(ctx.api, 'rok985-e2e', {
