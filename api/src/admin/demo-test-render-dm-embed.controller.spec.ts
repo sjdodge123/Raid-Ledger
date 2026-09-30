@@ -52,19 +52,19 @@ type EmbedJson = {
   color?: number;
 };
 
+const originalDemoMode = process.env.DEMO_MODE;
+
+beforeEach(() => {
+  delete process.env.CLIENT_URL;
+  process.env.DEMO_MODE = 'true';
+});
+
+afterEach(() => {
+  if (originalDemoMode === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = originalDemoMode;
+});
+
 describe('DemoTestRenderDmEmbedController — POST /admin/test/render-dm-embed', () => {
-  const originalDemoMode = process.env.DEMO_MODE;
-
-  beforeEach(() => {
-    delete process.env.CLIENT_URL;
-    process.env.DEMO_MODE = 'true';
-  });
-
-  afterEach(() => {
-    if (originalDemoMode === undefined) delete process.env.DEMO_MODE;
-    else process.env.DEMO_MODE = originalDemoMode;
-  });
-
   it('refuses outside DEMO_MODE (env flag off)', async () => {
     process.env.DEMO_MODE = 'false';
     await expect(
@@ -105,5 +105,33 @@ describe('DemoTestRenderDmEmbedController — POST /admin/test/render-dm-embed',
     expect(result.communityName).toBe('Raid Ledger');
     expect(embed.author?.name).toBe('Raid Ledger');
     expect(embed.footer?.text).toBe('Raid Ledger · Event Reminder');
+  });
+});
+
+describe('render-dm-embed — input bounds and row order', () => {
+  it('rejects an empty message with 400 (the builder throws on it)', async () => {
+    await expect(
+      makeController().renderDmEmbed({ ...REMINDER_BODY, message: '' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects a title the emoji prefix would push past 256 with 400', async () => {
+    await expect(
+      makeController().renderDmEmbed({
+        ...REMINDER_BODY,
+        title: 'x'.repeat(251),
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('orders rows as sendEmbedDM does: extra rows first, primary row last', async () => {
+    const result = await makeController().renderDmEmbed(REMINDER_BODY);
+    const labels = result.components.map((r) =>
+      r.components.map((c) => ('label' in c ? c.label : undefined)),
+    );
+
+    expect(labels).toHaveLength(2);
+    expect(labels[0]).toEqual(['Roach Out', 'Running Late']);
+    expect(labels[labels.length - 1]).toContain('Adjust Notifications');
   });
 });

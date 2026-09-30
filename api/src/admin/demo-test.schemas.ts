@@ -259,11 +259,14 @@ export const ClearAiSuggestionsSchema = z.object({
 /**
  * Body for `/admin/test/render-dm-embed`: the fields the DM processor hands
  * `DiscordNotificationEmbedService.buildNotificationEmbed` (the notification
- * id is fixed by the seam). Title/message caps are Discord's embed limits.
+ * id is fixed by the seam). Bounds match what the builder accepts, so bad
+ * input is a 400 here rather than a builder throw (500): the description is
+ * 1..4096 chars, and the title is 256 minus room for the `<emoji> ` prefix
+ * the builder adds (at most 3 UTF-16 units today, so 250 leaves headroom).
  */
 export const RenderDmEmbedSchema = z.object({
   type: z.enum(NOTIFICATION_TYPES),
-  title: z.string().min(1).max(256),
-  message: z.string().max(4096),
+  title: z.string().min(1).max(250),
+  message: z.string().min(1).max(4096),
   payload: z.record(z.string(), z.unknown()).optional(),
 });

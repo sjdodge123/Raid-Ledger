@@ -73,10 +73,12 @@ export class DemoTestRenderDmEmbedController {
       { notificationId: RENDER_NOTIFICATION_ID, ...input },
       communityName,
     );
+    // Row order mirrors `DiscordBotClientService.sendEmbedDM`: the
+    // type-specific extra rows first, the primary row last.
     return {
       communityName,
       embed: embed.toJSON(),
-      components: [row, ...(rows ?? [])].map((r) => r.toJSON()),
+      components: [...(rows ?? []), row].map((r) => r.toJSON()),
     };
   }
 }
