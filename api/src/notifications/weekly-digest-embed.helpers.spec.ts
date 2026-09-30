@@ -7,6 +7,7 @@
  */
 import { embedLength, type APIEmbedField } from 'discord.js';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
+import { personalizedFieldName } from '../discord-bot/embeds/embed-personalized.helpers';
 import type {
   DigestDealLine,
   DigestLfgLine,
@@ -326,7 +327,7 @@ describe('buildWeeklyDigestEmbed — privacy and mentions', () => {
   it('is a channel embed that refuses a personalized field', () => {
     expect(() =>
       build(full()).addFields({
-        name: '\u{1F3AE} In your library',
+        name: personalizedFieldName('owned'),
         value: 'x',
       }),
     ).toThrow('personalized field on channel embed');

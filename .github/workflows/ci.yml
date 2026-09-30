@@ -90,6 +90,7 @@ jobs:
               - 'packages/contract/**'
             contract:
               - 'packages/*/package.json'
+              - 'package-lock.json'
               - 'packages/contract/**'
             smoke_tests:
               - 'web/src/**'
@@ -318,6 +319,37 @@ jobs:
         run: npx vitest run --coverage
         working-directory: web
 
+  # TDB:1246: the contract schema specs had no runner anywhere; this job runs them.
+  unit-tests-contract:
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: >-
+      github.event_name == 'push' ||
+      needs.detect-changes.outputs.contract == 'true'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Cache node_modules
+        uses: actions/cache@v6
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test contract schemas
+        run: npm test -w @raid-ledger/contract
+
   # ─── Tools Unit Tests (MCP servers) ───────────────────────────────
   # The MCP-server workspaces under tools/ each ship a Vitest suite that is the
   # behavioral gate for tooling changes. Before ROK-1362 only mcp-rl-fleet ran
@@ -384,18 +416,19 @@ jobs:
   # ─── Unit Tests (summary — required status check) ─────────────────
   unit-tests:
     runs-on: ubuntu-latest
-    needs: [unit-tests-api, unit-tests-web]
+    needs: [unit-tests-api, unit-tests-web, unit-tests-contract]
     if: always()
     steps:
       - name: Check results
         run: |
           API="${{ needs.unit-tests-api.result }}"
           WEB="${{ needs.unit-tests-web.result }}"
-          if [ "$API" = "failure" ] || [ "$WEB" = "failure" ]; then
-            echo "Unit tests failed (api=$API, web=$WEB)"
+          CONTRACT="${{ needs.unit-tests-contract.result }}"
+          if [ "$API" = "failure" ] || [ "$WEB" = "failure" ] || [ "$CONTRACT" = "failure" ]; then
+            echo "Unit tests failed (api=$API, web=$WEB, contract=$CONTRACT)"
             exit 1
           fi
-          echo "Unit tests passed (api=$API, web=$WEB)"
+          echo "Unit tests passed (api=$API, web=$WEB, contract=$CONTRACT)"
 
   # ─── Integration Tests (sharded) ───────────────────────────────────
   integration-test-shard:

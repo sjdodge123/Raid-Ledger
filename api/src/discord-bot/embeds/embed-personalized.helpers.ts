@@ -29,7 +29,7 @@ export interface PersonalizedField {
 
 /** Canonical field name per kind — the only names this module emits. */
 const KIND_FIELD_NAMES: Record<PersonalizedKind, string> = {
-  owned: '\u{1F3AE} In your library',
+  owned: '\u{1F4DA} In your library',
   wishlist: '\u{2B50} On your wishlist',
   hearted: '\u{1F49B} You hearted this',
 };
