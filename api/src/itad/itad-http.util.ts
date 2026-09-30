@@ -13,6 +13,7 @@ import {
   ITAD_BASE_URL,
   ITAD_MAX_RETRIES,
   ITAD_BACKOFF_INITIAL_MS,
+  ITAD_DEFAULT_MAX_PAUSE_WAIT_MS,
 } from './itad.constants';
 import {
   acquireItadSlot,
@@ -62,8 +63,9 @@ export interface ItadFetchOptions {
   throwOnExhausted?: boolean;
   /**
    * Resolve null (or reject, with `throwOnExhausted`) instead of waiting when
-   * a 429 pause would hold the call longer than this. Unset = wait it out.
-   * User-facing paths pass `ITAD_INTERACTIVE_FETCH`.
+   * a 429 pause would hold the call longer than this. Unset = fail fast
+   * (`ITAD_DEFAULT_MAX_PAUSE_WAIT_MS`); only background work that never holds
+   * an HTTP request passes `ITAD_BACKGROUND_FETCH` to wait the pause out.
    */
   maxPauseWaitMs?: number;
 }
@@ -136,7 +138,8 @@ async function requestWithRetry<T>(
   opts: Pick<ItadFetchOptions, 'maxPauseWaitMs'>,
 ): Promise<T | null | typeof EXHAUSTED> {
   for (let attempt = 0; attempt <= ITAD_MAX_RETRIES; attempt++) {
-    if (!(await acquireItadSlot(opts.maxPauseWaitMs))) {
+    const maxWait = opts.maxPauseWaitMs ?? ITAD_DEFAULT_MAX_PAUSE_WAIT_MS;
+    if (!(await acquireItadSlot(maxWait))) {
       logger.warn(`${label} rate-limit pause too long, giving up: ${path}`);
       return EXHAUSTED;
     }

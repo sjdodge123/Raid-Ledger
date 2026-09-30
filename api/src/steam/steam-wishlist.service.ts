@@ -20,6 +20,7 @@ import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
 import { ItadService } from '../itad/itad.service';
 import type { ItadFetchOptions } from '../itad/itad-http.util';
+import { ITAD_BACKGROUND_FETCH } from '../itad/itad.constants';
 import { getWishlist, getPlayerSummary } from './steam-http.util';
 import {
   discoverGameViaItad,
@@ -52,9 +53,9 @@ export class SteamWishlistService {
   /**
    * Sync a user's Steam wishlist to game_interests.
    * Adds new entries and removes ones no longer wishlisted.
-   * @param opts - ITAD fetch options for discovery; the default waits out a 429
-   *   pause (cron, post-link sync), the manual sync endpoint passes
-   *   `ITAD_INTERACTIVE_FETCH` so the HTTP request fails fast instead
+   * @param opts - ITAD fetch options for discovery; the default fails fast on
+   *   a long 429 pause (manual sync endpoint). Background callers (cron,
+   *   post-link sync) pass `ITAD_BACKGROUND_FETCH` to wait it out.
    */
   async syncWishlist(
     userId: number,
@@ -286,7 +287,8 @@ export class SteamWishlistService {
     let totalNewInterests = 0;
     for (const user of users) {
       try {
-        const result = await this.syncWishlist(user.id);
+        // Background (cron): ITAD discovery waits out a 429 pause.
+        const result = await this.syncWishlist(user.id, ITAD_BACKGROUND_FETCH);
         totalNewInterests += result.newInterests;
         usersProcessed++;
       } catch (error) {

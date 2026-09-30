@@ -124,7 +124,7 @@ export class ItadService {
   /**
    * Batch-resolve ITAD game UUIDs to Steam App IDs via shop lookup.
    * @param games - Array of { id, slug } from ITAD search results
-   * @param opts - Fetch options; user-facing callers pass `ITAD_INTERACTIVE_FETCH`
+   * @param opts - Fetch options; the default fails fast on a long 429 pause
    * @returns Map of ITAD UUID to Steam App ID (number)
    */
   async lookupSteamAppIds(

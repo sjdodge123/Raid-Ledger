@@ -7,6 +7,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadService } from './itad.service';
 import { itadPausedUntil } from './itad-rate-limit.util';
+import { ITAD_BACKGROUND_FETCH } from './itad.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -86,9 +87,13 @@ function fetchSlice(itadService: ItadService, slice: EarlyAccessGame[]) {
   return Promise.allSettled(
     slice.map((game) =>
       withCallTimeout(
-        // A rate-limited call must count as failed (and reach the tail
-        // pass), not resolve null as if the game were missing from ITAD.
-        itadService.getGameInfo(game.itadGameId, { throwOnExhausted: true }),
+        // Background (price-sync cron): waits out a 429 pause. A rate-limited
+        // call must count as failed (and reach the tail pass), not resolve
+        // null as if the game were missing from ITAD.
+        itadService.getGameInfo(game.itadGameId, {
+          ...ITAD_BACKGROUND_FETCH,
+          throwOnExhausted: true,
+        }),
         EARLY_ACCESS_CALL_TIMEOUT_MS,
       ),
     ),

@@ -151,7 +151,8 @@ export async function enrichSyncedGamesWithItad(
 
 /** Info extracted from ITAD getGameInfo endpoint. */
 interface ItadEnrichInfo {
-  tags: string[];
+  /** undefined = info unavailable (rate-limited/error): keep existing tags. */
+  tags: string[] | undefined;
   earlyAccess: boolean | undefined;
 }
 
@@ -164,7 +165,7 @@ async function fetchInfoGracefully(
     const info = await getGameInfo(itadId);
     return { tags: info?.tags ?? [], earlyAccess: info?.earlyAccess };
   } catch {
-    return { tags: [], earlyAccess: undefined };
+    return { tags: undefined, earlyAccess: undefined };
   }
 }
 
@@ -178,8 +179,8 @@ async function updateGameWithItadData(
   const values: Record<string, unknown> = {
     itadGameId: itadGame.id,
     itadBoxartUrl: itadGame.assets?.boxart ?? null,
-    itadTags: info.tags,
   };
+  if (info.tags !== undefined) values.itadTags = info.tags;
   if (info.earlyAccess !== undefined) {
     values.earlyAccess = info.earlyAccess;
   }

@@ -18,6 +18,7 @@ import { ItadPriceService } from './itad-price.service';
 import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import type { ItadOverviewGameEntry } from './itad-price.types';
+import { ITAD_BACKGROUND_FETCH } from './itad.constants';
 import { enrichEarlyAccessPhase } from './itad-early-access-sync.helpers';
 import { processPricingChunks } from './itad-price-sync.helpers';
 import { perfLog } from '../common/perf-logger';
@@ -224,7 +225,11 @@ export class ItadPriceSyncService
   ): Promise<boolean> {
     try {
       const itadIds = chunk.map((g) => g.itadGameId);
-      const entries = await this.itadPriceService.getOverviewBatch(itadIds);
+      // Background (price-sync cron): waits out a 429 pause.
+      const entries = await this.itadPriceService.getOverviewBatch(
+        itadIds,
+        ITAD_BACKGROUND_FETCH,
+      );
       const entryMap = new Map(entries.map((e) => [e.id, e]));
 
       await this.updateGamesWithPricing(chunk, entryMap);

@@ -78,6 +78,7 @@ export class ItadPriceService {
    */
   async getOverviewBatch(
     itadGameIds: string[],
+    opts: ItadFetchOptions = {},
   ): Promise<ItadOverviewGameEntry[]> {
     if (itadGameIds.length === 0) return [];
     const apiKey = await this.getApiKey();
@@ -86,7 +87,7 @@ export class ItadPriceService {
     const { cached, missingIds } = await this.checkBatchCache(itadGameIds);
     if (missingIds.length === 0) return cached;
 
-    const fetched = await this.fetchBatchFromItad(apiKey, missingIds);
+    const fetched = await this.fetchBatchFromItad(apiKey, missingIds, opts);
     return [...cached, ...fetched];
   }
 
@@ -116,11 +117,13 @@ export class ItadPriceService {
   private async fetchBatchFromItad(
     apiKey: string,
     ids: string[],
+    opts: ItadFetchOptions,
   ): Promise<ItadOverviewGameEntry[]> {
     const response = await itadPost<ItadOverviewResponse>(
       '/games/overview/v2',
       { key: apiKey },
       ids,
+      opts,
     );
     if (response === null) throw new ItadOverviewFetchError(ids.length);
     if (!response.prices?.length) return [];
