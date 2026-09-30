@@ -16,6 +16,12 @@ export const ITAD_INFO_CACHE_TTL = 86_400;
 export const ITAD_MAX_RETRIES = 3;
 /** Initial backoff delay on 429 (ms) — doubles each retry */
 export const ITAD_BACKOFF_INITIAL_MS = 500;
+/**
+ * Ceiling on a server-supplied `Retry-After` wait (ms). A 429 pauses every
+ * ITAD caller for this long at most, so a hostile or buggy header cannot
+ * stall the syncs indefinitely.
+ */
+export const ITAD_RETRY_AFTER_MAX_MS = 60_000;
 
 /** Redis cache TTL for price/overview results (3h) */
 export const ITAD_PRICE_CACHE_TTL = 10_800;
