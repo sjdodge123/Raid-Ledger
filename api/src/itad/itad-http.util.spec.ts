@@ -3,15 +3,20 @@
  * Covers itadPost (batch POST) and itadFetch (GET) retry behaviour:
  * 429 + 5xx (incl. Cloudflare 521/522/524) + network errors are retried
  * with exponential backoff; final failure preserves the `T | null` contract.
+ * Also covers the shared request pacer and 429 `Retry-After` handling.
  */
-import { ITAD_MAX_RETRIES } from './itad.constants';
+import {
+  ITAD_BACKOFF_INITIAL_MS,
+  ITAD_MAX_RETRIES,
+  ITAD_RATE_LIMIT_MS,
+  ITAD_RETRY_AFTER_MAX_MS,
+} from './itad.constants';
 
 // Mock global fetch before importing
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const { itadPost, itadFetch } = require('./itad-http.util') as {
+interface HttpUtil {
   itadPost: <T>(
     path: string,
     params: Record<string, string>,
@@ -21,13 +26,21 @@ const { itadPost, itadFetch } = require('./itad-http.util') as {
     path: string,
     params: Record<string, string>,
   ) => Promise<T | null>;
-};
+}
 
-/** Build a fake fetch Response for a given status. */
-function res(status: number, body?: unknown) {
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { itadPost, itadFetch } = require('./itad-http.util') as HttpUtil;
+
+/** Build a fake fetch Response for a given status (+ optional headers). */
+function res(
+  status: number,
+  body?: unknown,
+  headers: Record<string, string> = {},
+) {
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers(headers),
     json: () => Promise.resolve(body),
   };
 }
@@ -231,4 +244,134 @@ describe('itadFetch', () => {
     expect(result).toBeNull();
     expect(mockFetch).toHaveBeenCalledTimes(ITAD_MAX_RETRIES + 1);
   });
+});
+
+/**
+ * Timing tests. Each test gets a FRESH copy of the util (pacer state is
+ * module-global) and fake timers pinned to T0, so every fetch start time can
+ * be asserted as an exact offset from T0.
+ */
+const T0 = Date.parse('2026-09-29T12:00:00Z');
+
+function loadFreshUtil(): HttpUtil {
+  let util = {} as HttpUtil;
+  jest.isolateModules(() => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    util = require('./itad-http.util') as HttpUtil;
+  });
+  return util;
+}
+
+/**
+ * Serve `responses` in order (then 200s) and record each fetch's start time
+ * as an offset from T0.
+ */
+function scriptFetch(...responses: ReturnType<typeof res>[]): number[] {
+  const offsets: number[] = [];
+  mockFetch.mockImplementation(() => {
+    offsets.push(Date.now() - T0);
+    return Promise.resolve(responses.shift() ?? res(200, { ok: true }));
+  });
+  return offsets;
+}
+
+describe('ITAD request pacing', () => {
+  let util: HttpUtil;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    jest.useFakeTimers({ now: T0 });
+    util = loadFreshUtil();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('spaces 5 concurrent callers by ITAD_RATE_LIMIT_MS', async () => {
+    const offsets = scriptFetch();
+
+    const calls = [0, 1, 2, 3, 4].map((i) =>
+      util.itadFetch('/games/info/v2', { key: 'k', id: `g${i}` }),
+    );
+    await jest.advanceTimersByTimeAsync(ITAD_RATE_LIMIT_MS * 5);
+    await Promise.all(calls);
+
+    expect(offsets).toEqual([0, 1, 2, 3, 4].map((i) => i * ITAD_RATE_LIMIT_MS));
+  });
+
+  it('a 429 holds every queued caller until Retry-After elapses', async () => {
+    const offsets = scriptFetch(res(429, undefined, { 'Retry-After': '2' }));
+
+    const first = util.itadFetch('/a', { key: 'k' });
+    const second = util.itadFetch('/b', { key: 'k' });
+    await jest.advanceTimersByTimeAsync(2_000 + ITAD_RATE_LIMIT_MS);
+    await Promise.all([first, second]);
+
+    const paths = mockFetch.mock.calls.map(
+      ([url]) => new URL(url as string).pathname,
+    );
+    expect(paths).toEqual(['/a', '/b', '/a']);
+    expect(offsets).toEqual([0, 2_000, 2_000 + ITAD_RATE_LIMIT_MS]);
+  });
+});
+
+describe('ITAD 429 Retry-After', () => {
+  let util: HttpUtil;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    jest.useFakeTimers({ now: T0 });
+    util = loadFreshUtil();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** One 429 with `headers`, then a 200; returns the fetch start offsets. */
+  async function retryOffsets(
+    headers: Record<string, string>,
+    call: () => Promise<unknown> = () => util.itadFetch('/x', { key: 'k' }),
+  ): Promise<number[]> {
+    const offsets = scriptFetch(res(429, undefined, headers));
+    const pending = call();
+    await jest.advanceTimersByTimeAsync(ITAD_RETRY_AFTER_MAX_MS + 1_000);
+    await expect(pending).resolves.toEqual({ ok: true });
+    return offsets;
+  }
+
+  it('waits the delta-seconds value before retrying', async () => {
+    expect(await retryOffsets({ 'Retry-After': '5' })).toEqual([0, 5_000]);
+  });
+
+  it('waits until an HTTP-date value before retrying', async () => {
+    const at = new Date(T0 + 10_000).toUTCString();
+    expect(await retryOffsets({ 'Retry-After': at })).toEqual([0, 10_000]);
+  });
+
+  it('caps a long Retry-After at ITAD_RETRY_AFTER_MAX_MS', async () => {
+    expect(await retryOffsets({ 'Retry-After': '3600' })).toEqual([
+      0,
+      ITAD_RETRY_AFTER_MAX_MS,
+    ]);
+  });
+
+  it('honours Retry-After on itadPost too', async () => {
+    const post = () => util.itadPost('/lookup/shop/61/id/v1', { key: 'k' }, []);
+    expect(await retryOffsets({ 'Retry-After': '3' }, post)).toEqual([
+      0, 3_000,
+    ]);
+  });
+
+  it.each([
+    ['missing', {}],
+    ['unparseable', { 'Retry-After': 'soon' }],
+    ['a past HTTP-date', { 'Retry-After': new Date(T0 - 5_000).toUTCString() }],
+  ])(
+    'falls back to exponential backoff when the header is %s',
+    async (_label, headers: Record<string, string>) => {
+      expect(await retryOffsets(headers)).toEqual([0, ITAD_BACKOFF_INITIAL_MS]);
+    },
+  );
 });
