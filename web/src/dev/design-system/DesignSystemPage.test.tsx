@@ -541,3 +541,26 @@ describe('DesignSystemPage — ROK-1648 L13 dev-gallery demos', () => {
         expect(within(forms).queryByText('Picked logo.png · 2 picks'), 'the same file picked again must bump the counter').not.toBeNull();
     });
 });
+
+// §4.2 / TDB:1949 — the rendered stretched-button card: sibling controls, never nested.
+describe('DesignSystemPage — stretched-button card', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('the card action, the name link and Remove are siblings, each firing only itself', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const card = screen.getByTestId('ds-stretched-card');
+        const interactive = 'a[href], button, [role="button"], [tabindex]';
+        const nested = [...card.querySelectorAll(interactive)].filter((el) => el.parentElement?.closest(interactive));
+        expect(nested, 'controls nested inside another control').toEqual([]);
+        const action = within(card).getByRole('button', { name: 'Manage tank slot 1 (Thrall)' });
+        expect(action.className.split(' '), 'the gallery card renders the StretchedAction primitive').toContain('-inset-px');
+        fireEvent.click(action);
+        expect(card).toHaveTextContent('Last click: card action');
+        fireEvent.click(within(card).getByRole('button', { name: 'Remove Thrall from slot' }));
+        expect(card).toHaveTextContent('Last click: Remove');
+        expect(within(card).getByTitle('Tentative — may not attend')).toHaveClass('relative');
+    });
+});

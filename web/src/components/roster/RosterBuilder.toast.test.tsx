@@ -29,8 +29,7 @@ function assignFirstSlot(playerPool: RosterAssignmentResponse[]) {
             canEdit={true}
         />
     );
-    const assignSlots = screen.getAllByText('Assign');
-    fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
+    fireEvent.click(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0]);
     const modal = document.querySelector('[role="dialog"]');
     const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
     expect(modalAssignBtn).toBeTruthy();
@@ -65,8 +64,7 @@ describe('RosterBuilder — MMO slot toast (ROK-487)', () => {
         renderWithRouter(
             <RosterBuilder pool={[tankPlayer]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
         );
-        const assignSlots = screen.getAllByText('Assign');
-        fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
+        fireEvent.click(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0]);
         const modal = document.querySelector('[role="dialog"]');
         const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
         expect(modalAssignBtn).toBeTruthy();
