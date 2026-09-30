@@ -16,6 +16,7 @@ import {
   enrichChunkEarlyAccess,
   enrichEarlyAccessPhase,
 } from './itad-early-access-sync.helpers';
+import { ItadRetriesExhaustedError } from './itad-http.util';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 type ItadServiceLike = {
@@ -76,6 +77,25 @@ describe('enrichChunkEarlyAccess — per-call timeout (ROK-1197)', () => {
     // The hung call must be counted as a failure, not silently dropped.
     expect((result as { failed: number }).failed).toBeGreaterThanOrEqual(1);
   }, 12_000);
+
+  it('counts a rate-limited (retries exhausted) call as failed, not as "not in ITAD"', async () => {
+    // Mirrors ItadService.getGameInfo: rejects only when asked to, otherwise
+    // an exhausted call resolves null exactly like a game ITAD doesn't know.
+    itadService.getGameInfo.mockImplementation(
+      (_id: string, opts?: { throwOnExhausted?: boolean }) =>
+        opts?.throwOnExhausted
+          ? Promise.reject(new ItadRetriesExhaustedError('/games/info/v2'))
+          : Promise.resolve(null),
+    );
+
+    const result = await enrichChunkEarlyAccess(
+      mockDb as never,
+      itadService as never,
+      buildChunk(2),
+    );
+
+    expect(result).toMatchObject({ updated: 0, failed: 2 });
+  });
 
   it('counts thrown getGameInfo errors in the failed counter', async () => {
     const chunk = buildChunk(4);

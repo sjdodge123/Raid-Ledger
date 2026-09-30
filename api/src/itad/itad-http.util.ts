@@ -45,13 +45,36 @@ function backoffMs(attempt: number): number {
   return ITAD_BACKOFF_INITIAL_MS * 2 ** attempt;
 }
 
+/** Rejection used by `throwOnExhausted` once every retry has been spent. */
+export class ItadRetriesExhaustedError extends Error {
+  constructor(path: string) {
+    super(`ITAD retries exhausted: ${path}`);
+    this.name = 'ItadRetriesExhaustedError';
+  }
+}
+
+export interface ItadFetchOptions {
+  /**
+   * Reject with `ItadRetriesExhaustedError` instead of resolving null when
+   * retries run out (429/5xx/network), so a sync can tell "rate-limited,
+   * try again" apart from "not in ITAD" (a non-retriable status, still null).
+   */
+  throwOnExhausted?: boolean;
+}
+
 /** Generic ITAD fetch with rate limiting + 429 backoff */
 export async function itadFetch<T>(
   path: string,
   params: Record<string, string>,
+  opts: ItadFetchOptions = {},
 ): Promise<T | null> {
   const init: RequestInit = { headers: { 'User-Agent': USER_AGENT } };
-  return requestWithRetry<T>(path, buildUrl(path, params), init, 'ITAD');
+  const url = buildUrl(path, params);
+  const data = await requestWithRetry<T>(path, url, init, 'ITAD');
+  if (data === EXHAUSTED && opts.throwOnExhausted) {
+    throw new ItadRetriesExhaustedError(path);
+  }
+  return data === EXHAUSTED ? null : data;
 }
 
 /**
@@ -71,7 +94,13 @@ export async function itadPost<T>(
     headers: { 'User-Agent': USER_AGENT, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   };
-  return requestWithRetry<T>(path, buildUrl(path, params), init, 'ITAD POST');
+  const data = await requestWithRetry<T>(
+    path,
+    buildUrl(path, params),
+    init,
+    'ITAD POST',
+  );
+  return data === EXHAUSTED ? null : data;
 }
 
 function buildUrl(path: string, params: Record<string, string>): string {
@@ -84,13 +113,16 @@ interface FetchResult<T> {
   retry: boolean;
 }
 
-/** Paced attempt loop shared by GET and POST; null after the last retry. */
+/** Marks "every retry spent" apart from a non-retriable null response. */
+const EXHAUSTED = Symbol('itad-retries-exhausted');
+
+/** Paced attempt loop shared by GET and POST; EXHAUSTED after the last retry. */
 async function requestWithRetry<T>(
   path: string,
   url: string,
   init: RequestInit,
   label: string,
-): Promise<T | null> {
+): Promise<T | null | typeof EXHAUSTED> {
   for (let attempt = 0; attempt <= ITAD_MAX_RETRIES; attempt++) {
     await acquireItadSlot();
     const result = await attemptRequest<T>(url, init, attempt, label);
@@ -99,7 +131,7 @@ async function requestWithRetry<T>(
   logger.warn(
     `${label} request failed after ${ITAD_MAX_RETRIES + 1} attempts: ${path}`,
   );
-  return null;
+  return EXHAUSTED;
 }
 
 /**

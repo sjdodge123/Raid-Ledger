@@ -96,6 +96,20 @@ describe('ItadService', () => {
       expect(itadFetch).not.toHaveBeenCalled();
     });
 
+    it('forwards throwOnExhausted so a rate-limited call rejects instead of resolving null', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      cacheUtil.getCachedInfo.mockResolvedValue(null);
+      itadFetch.mockResolvedValue(FAKE_GAME_INFO);
+
+      await service.getGameInfo('uuid-123', { throwOnExhausted: true });
+
+      expect(itadFetch).toHaveBeenCalledWith(
+        '/games/info/v2',
+        expect.objectContaining({ id: 'uuid-123' }),
+        { throwOnExhausted: true },
+      );
+    });
+
     it('calls itadFetch and caches result on cache miss', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-key');
       cacheUtil.getCachedLookup.mockResolvedValue(null);
@@ -257,6 +271,7 @@ describe('ItadService', () => {
           key: 'test-key',
           id: 'uuid-123',
         }),
+        {},
       );
       expect(cacheUtil.setCachedInfo).toHaveBeenCalledWith(
         mockRedis,

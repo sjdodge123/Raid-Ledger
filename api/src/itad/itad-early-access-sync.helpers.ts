@@ -84,7 +84,9 @@ function fetchSlice(itadService: ItadService, slice: EarlyAccessGame[]) {
   return Promise.allSettled(
     slice.map((game) =>
       withCallTimeout(
-        itadService.getGameInfo(game.itadGameId),
+        // A rate-limited call must count as failed (and reach the tail
+        // pass), not resolve null as if the game were missing from ITAD.
+        itadService.getGameInfo(game.itadGameId, { throwOnExhausted: true }),
         EARLY_ACCESS_CALL_TIMEOUT_MS,
       ),
     ),

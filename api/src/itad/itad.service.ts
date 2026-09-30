@@ -6,7 +6,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
-import { itadFetch, itadPost } from './itad-http.util';
+import { itadFetch, itadPost, type ItadFetchOptions } from './itad-http.util';
 import type {
   ItadGame,
   ItadLookupResponse,
@@ -94,17 +94,21 @@ export class ItadService {
   }
 
   /** Get full ITAD game info by ITAD UUID. Returns null if not found or unconfigured. */
-  async getGameInfo(itadId: string): Promise<ItadGameInfo | null> {
+  async getGameInfo(
+    itadId: string,
+    opts: ItadFetchOptions = {},
+  ): Promise<ItadGameInfo | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
 
     const cached = await getCachedInfo<ItadGameInfo>(this.redis, itadId);
     if (cached) return cached;
 
-    const result = await itadFetch<ItadGameInfo>('/games/info/v2', {
-      key: apiKey,
-      id: itadId,
-    });
+    const result = await itadFetch<ItadGameInfo>(
+      '/games/info/v2',
+      { key: apiKey, id: itadId },
+      opts,
+    );
 
     if (!result) return null;
 

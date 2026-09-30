@@ -25,6 +25,7 @@ interface HttpUtil {
   itadFetch: <T>(
     path: string,
     params: Record<string, string>,
+    opts?: { throwOnExhausted?: boolean },
   ) => Promise<T | null>;
 }
 
@@ -178,6 +179,31 @@ describe('itadPost retries', () => {
 
     expect(result).toBeNull();
     expect(mockFetch).toHaveBeenCalledTimes(ITAD_MAX_RETRIES + 1);
+  });
+
+  it('rejects instead of resolving null after exhausting retries when throwOnExhausted is set', async () => {
+    mockFetch.mockResolvedValue(res(524));
+
+    const pending = runFast(() =>
+      itadFetch('/games/info/v2', { key: 'k' }, { throwOnExhausted: true }),
+    );
+
+    await expect(pending).rejects.toThrow(
+      'ITAD retries exhausted: /games/info/v2',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(ITAD_MAX_RETRIES + 1);
+  });
+
+  it('still resolves null on a non-retriable 404 when throwOnExhausted is set', async () => {
+    mockFetch.mockResolvedValue(res(404));
+
+    const result = await itadFetch(
+      '/games/info/v2',
+      { key: 'k' },
+      { throwOnExhausted: true },
+    );
+
+    expect(result).toBeNull();
   });
 });
 
