@@ -60,8 +60,14 @@ export interface MetricsPollSource {
 
 /**
  * Read `/events/:id/metrics` until classification is visible, bounded by
- * `ctx.config.timeoutMs`. `await-processing` returning does not guarantee
- * the classify writes are readable yet, so a single read raced them.
+ * `ctx.config.timeoutMs`.
+ *
+ * This is a guard, not the fix for TDB:1076 (`attended: expected 4, got 0`).
+ * POST /admin/test/trigger-classify awaits the classify and auto-populate
+ * writes before it returns, so they are normally committed by the first
+ * read. If the flake recurs, the cause is more likely unclassified sessions
+ * or grace handling: read it from the `await-processing settled` log line
+ * and the last-read dump this logs on timeout.
  *
  * On timeout this returns the LAST read instead of throwing, so the caller's
  * own assertions fail naming expected vs actual rather than "timed out". A
@@ -89,7 +95,7 @@ export async function pollClassifiedMetrics<M extends ClassifiedMetricsShape>(
   } catch (err) {
     if (err === readErr || last === undefined) throw err;
     console.warn(
-      `  [voice] ${path} not classified within ${ctx.config.timeoutMs}ms — asserting on the last read`,
+      `  [voice] ${path} not classified within ${ctx.config.timeoutMs}ms — asserting on the last read: ${JSON.stringify(last)}`,
     );
     return last;
   }

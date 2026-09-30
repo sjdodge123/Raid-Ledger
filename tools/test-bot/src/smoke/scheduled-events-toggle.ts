@@ -58,7 +58,10 @@ export function createToggleRefcount<A>(ops: ToggleOps<A>): ToggleRefcount<A> {
       await ops.enable(arg);
     } catch (err) {
       // A rejected acquire is not a hold: its caller never reaches the
-      // `finally` that would release it.
+      // `finally` that would release it. The production `enable`
+      // (`enableScheduledEvents`) swallows every error today, so only an
+      // injected `enable` reaches this branch; it is kept so the refcount
+      // stays correct if that swallow is ever removed.
       count -= 1;
       throw err;
     }
