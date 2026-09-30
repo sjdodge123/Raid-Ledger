@@ -25,7 +25,7 @@ import {
   assertConditionNeverMet,
 } from '../fixtures.js';
 import { pollForCondition } from '../../helpers/polling.js';
-import { isMilestoneCardFor } from '../lineup-milestone-match.js';
+import { isLeftoverLineup, isMilestoneCardFor } from '../lineup-milestone-match.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
 import type { SimpleMessage } from '../../helpers/messages.js';
@@ -57,20 +57,9 @@ const OWN_TITLE_PREFIXES = [
   'Concurrent B ',
 ];
 
-/** Lineups created at or after this instant belong to the current run. */
+/** Lineups stamped at or after this instant belong to the current run; never archived here. */
 const RUN_STARTED_AT = Date.now();
 
-/**
- * A leftover from an EARLIER run of this file: one of its own prefixes with a
- * creation stamp before this run started (or no stamp at all). Tests in this
- * file run concurrently, so this run's lineups are never archived here.
- */
-function isOwnLeftover(title: string | undefined): boolean {
-  const prefix = OWN_TITLE_PREFIXES.find((p) => title?.startsWith(p));
-  if (!prefix || !title) return false;
-  const stamp = Number(title.slice(prefix.length));
-  return !Number.isFinite(stamp) || stamp < RUN_STARTED_AT;
-}
 
 /**
  * Best-effort archival of this file's leftover active lineups. Scoped, not
@@ -84,7 +73,8 @@ async function archiveOwnLeftoverLineups(api: ApiClient): Promise<void> {
     >('/lineups/active');
     const list = Array.isArray(res) ? res : res ? [res] : [];
     for (const row of list) {
-      if (!row?.id || !isOwnLeftover(row.title)) continue;
+      if (!row?.id) continue;
+      if (!isLeftoverLineup(row.title, OWN_TITLE_PREFIXES, RUN_STARTED_AT)) continue;
       await api
         .patch(`/lineups/${row.id}/status`, { status: 'archived' })
         .catch(() => null);

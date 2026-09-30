@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 
 import type { SimpleEmbed } from '../helpers/messages.js';
-import { isMilestoneCardFor } from './lineup-milestone-match.js';
+import { isLeftoverLineup, isMilestoneCardFor } from './lineup-milestone-match.js';
 
 let passed = 0;
 let failed = 0;
@@ -86,6 +86,31 @@ test('rejects a nomination-milestone card for another lineup', () => {
     isMilestoneCardFor(other, TITLE),
     false,
     'a milestone card for a different lineup title must not match',
+  );
+});
+
+console.log('\nisLeftoverLineup\n');
+
+const PREFIXES = ['Private Smoke ', 'Private MS-check '];
+const RUN_START = 1_727_700_000_000;
+
+test('matches an own-prefix lineup stamped before this run', () => {
+  assert.equal(isLeftoverLineup(`Private Smoke ${RUN_START - 1}`, PREFIXES, RUN_START), true);
+});
+
+test('never matches a lineup this run created', () => {
+  assert.equal(
+    isLeftoverLineup(`Private MS-check ${RUN_START + 5}`, PREFIXES, RUN_START),
+    false,
+    'a concurrent sibling test in this run must not be archived',
+  );
+});
+
+test("never matches another file's lineup", () => {
+  assert.equal(
+    isLeftoverLineup(`Private Tie ${RUN_START - 1}`, PREFIXES, RUN_START),
+    false,
+    'lineups outside the own prefixes must not be archived',
   );
 });
 

@@ -1,5 +1,7 @@
 /**
- * Structural match for a lineup's nomination-milestone channel card.
+ * Pure lineup matchers for the private-lineup smoke (tests/private-lineup.test.ts).
+ *
+ * isMilestoneCardFor: structural match for a lineup's nomination-milestone card.
  *
  * The API builds it with `createLineupEmbed(ctx, 'milestone',
  * 'Nomination Milestone')` (api/src/lineups/lineup-notification-embed.helpers.ts),
@@ -25,4 +27,21 @@ export function isMilestoneCardFor(
   return (
     footer.endsWith(MILESTONE_FOOTER_LABEL) && (embed.title ?? '').includes(title)
   );
+}
+
+/**
+ * True for a lineup left active by an EARLIER run of a smoke file: its title
+ * is `<prefix><Date.now()>` for one of `prefixes`, stamped before
+ * `runStartedAt` (or unstamped). Lineups this run created are never matched,
+ * because the file's tests run concurrently and must not archive each other.
+ */
+export function isLeftoverLineup(
+  title: string | undefined,
+  prefixes: readonly string[],
+  runStartedAt: number,
+): boolean {
+  const prefix = prefixes.find((p) => title?.startsWith(p));
+  if (!prefix || !title) return false;
+  const stamp = Number(title.slice(prefix.length));
+  return !Number.isFinite(stamp) || stamp < runStartedAt;
 }
