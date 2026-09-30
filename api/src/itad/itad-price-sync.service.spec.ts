@@ -21,6 +21,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { perfLog } from '../common/perf-logger';
 import type { ItadOverviewGameEntry } from './itad-price.types';
+import { ITAD_BACKGROUND_FETCH } from './itad.constants';
 
 describe('ItadPriceSyncService', () => {
   let service: ItadPriceSyncService;
@@ -96,10 +97,10 @@ describe('ItadPriceSyncService', () => {
 
       await service.syncPricing();
 
-      expect(mockItadPriceService.getOverviewBatch).toHaveBeenCalledWith([
-        'game-uuid-1',
-        'game-uuid-2',
-      ]);
+      expect(mockItadPriceService.getOverviewBatch).toHaveBeenCalledWith(
+        ['game-uuid-1', 'game-uuid-2'],
+        ITAD_BACKGROUND_FETCH,
+      );
 
       // Verify bulk pricing update was executed via db.execute()
       expect(mockDb.execute).toHaveBeenCalled();

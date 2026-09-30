@@ -6,7 +6,9 @@
  * Also covers the shared request pacer and 429 `Retry-After` handling.
  */
 import {
+  ITAD_BACKGROUND_FETCH,
   ITAD_BACKOFF_INITIAL_MS,
+  ITAD_DEFAULT_MAX_PAUSE_WAIT_MS,
   ITAD_INTERACTIVE_FETCH,
   ITAD_MAX_RETRIES,
   ITAD_RATE_LIMIT_MS,
@@ -360,7 +362,8 @@ describe('ITAD 429 Retry-After', () => {
   /** One 429 with `headers`, then a 200; returns the fetch start offsets. */
   async function retryOffsets(
     headers: Record<string, string>,
-    call: () => Promise<unknown> = () => util.itadFetch('/x', { key: 'k' }),
+    call: () => Promise<unknown> = () =>
+      util.itadFetch('/x', { key: 'k' }, ITAD_BACKGROUND_FETCH),
   ): Promise<number[]> {
     const offsets = scriptFetch(res(429, undefined, headers));
     const pending = call();
@@ -432,7 +435,11 @@ describe('ITAD interactive fail-fast (maxPauseWaitMs)', () => {
 
   it("resolves null at once while another caller's long 429 pause is active", async () => {
     scriptFetch(res(429, undefined, { 'Retry-After': '30' }));
-    const background = util.itadFetch('/bg', { key: 'k' });
+    const background = util.itadFetch(
+      '/bg',
+      { key: 'k' },
+      ITAD_BACKGROUND_FETCH,
+    );
     await jest.advanceTimersByTimeAsync(1);
 
     const search = track(
@@ -456,8 +463,12 @@ describe('ITAD interactive fail-fast (maxPauseWaitMs)', () => {
       const limited = res(429, undefined, { 'Retry-After': '30' });
       return new Promise((r) => setTimeout(() => r(limited), 100));
     });
-    const slow = util.itadFetch('/slow', { key: 'k' });
-    const background = util.itadFetch('/bg', { key: 'k' });
+    const slow = util.itadFetch('/slow', { key: 'k' }, ITAD_BACKGROUND_FETCH);
+    const background = util.itadFetch(
+      '/bg',
+      { key: 'k' },
+      ITAD_BACKGROUND_FETCH,
+    );
     const search = track(
       util.itadFetch('/search', { key: 'k' }, ITAD_INTERACTIVE_FETCH),
     );
@@ -497,6 +508,50 @@ describe('ITAD interactive fail-fast (maxPauseWaitMs)', () => {
 
     await expect(pending).resolves.toEqual({ ok: true });
     expect(offsets).toEqual([0, 2_000]);
+  });
+});
+
+describe('ITAD default fetch options (no maxPauseWaitMs)', () => {
+  let util: HttpUtil;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    jest.useFakeTimers({ now: T0 });
+    util = loadFreshUtil();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it.each([
+    ['itadFetch', () => util.itadFetch('/x', { key: 'k' })],
+    ['itadPost', () => util.itadPost('/x', { key: 'k' }, [])],
+  ])(
+    '%s with no options fails fast when a 429 pause exceeds the default limit',
+    async (_label, call: () => Promise<unknown>) => {
+      scriptFetch(res(429, undefined, { 'Retry-After': '30' }));
+      const pending = track(call());
+      await jest.advanceTimersByTimeAsync(ITAD_RATE_LIMIT_MS);
+
+      expect(pending).toEqual({ settled: true, value: null });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('ITAD_BACKGROUND_FETCH waits out the same 30s pause and retries', async () => {
+    const offsets = scriptFetch(res(429, undefined, { 'Retry-After': '30' }));
+    const pending = util.itadFetch('/x', { key: 'k' }, ITAD_BACKGROUND_FETCH);
+    await jest.advanceTimersByTimeAsync(30_000);
+
+    await expect(pending).resolves.toEqual({ ok: true });
+    expect(offsets).toEqual([0, 30_000]);
+  });
+
+  it('ITAD_INTERACTIVE_FETCH spells out the default limit', () => {
+    expect(ITAD_INTERACTIVE_FETCH).toEqual({
+      maxPauseWaitMs: ITAD_DEFAULT_MAX_PAUSE_WAIT_MS,
+    });
   });
 });
 

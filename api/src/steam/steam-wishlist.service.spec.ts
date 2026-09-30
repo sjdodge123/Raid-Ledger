@@ -9,7 +9,10 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import * as steamHttp from './steam-http.util';
 import * as discovery from './steam-itad-discovery.helpers';
-import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
+import {
+  ITAD_BACKGROUND_FETCH,
+  ITAD_INTERACTIVE_FETCH,
+} from '../itad/itad.constants';
 
 jest.mock('./steam-http.util');
 
@@ -386,7 +389,7 @@ describe('SteamWishlistService — ITAD fetch options on discovery', () => {
     );
   });
 
-  it('cron sync looks up with the wait-it-out default, not the fail-fast limit', async () => {
+  it('cron sync looks up with the background ITAD wait, not the fail-fast default', async () => {
     jest.useFakeTimers();
     // linked users, findMatchingGames, fetchExistingWishlistIds
     db.where
@@ -402,6 +405,6 @@ describe('SteamWishlistService — ITAD fetch options on discovery', () => {
     });
 
     expect(lookupBySteamAppId).toHaveBeenCalledTimes(1);
-    expect(lookupBySteamAppId).toHaveBeenCalledWith(300, {});
+    expect(lookupBySteamAppId).toHaveBeenCalledWith(300, ITAD_BACKGROUND_FETCH);
   });
 });

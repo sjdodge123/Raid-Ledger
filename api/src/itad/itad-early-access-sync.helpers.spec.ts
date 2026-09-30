@@ -17,6 +17,7 @@ import {
   enrichEarlyAccessPhase,
 } from './itad-early-access-sync.helpers';
 import { ItadRetriesExhaustedError } from './itad-http.util';
+import { ITAD_BACKGROUND_FETCH } from './itad.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 type ItadServiceLike = {
@@ -95,6 +96,21 @@ describe('enrichChunkEarlyAccess — per-call timeout (ROK-1197)', () => {
     );
 
     expect(result).toMatchObject({ updated: 0, failed: 2 });
+  });
+
+  it('fetches with the background ITAD wait (cron), still rejecting on exhaustion', async () => {
+    itadService.getGameInfo.mockResolvedValue({ earlyAccess: true });
+
+    await enrichChunkEarlyAccess(
+      mockDb as never,
+      itadService as never,
+      buildChunk(1),
+    );
+
+    expect(itadService.getGameInfo).toHaveBeenCalledWith(expect.any(String), {
+      ...ITAD_BACKGROUND_FETCH,
+      throwOnExhausted: true,
+    });
   });
 
   it('counts thrown getGameInfo errors in the failed counter', async () => {
