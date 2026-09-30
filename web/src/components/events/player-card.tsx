@@ -24,12 +24,12 @@ export interface PlayerCardProps {
     size?: 'compact' | 'default';
     /** Whether to display the role badge */
     showRole?: boolean;
-    /** Click handler (e.g. assign in modal) */
-    onClick?: () => void;
     /** Admin remove handler */
     onRemove?: () => void;
     /** Accent left-border color string (e.g. for matching-role highlight) */
     matchAccent?: string;
+    /** An ANCESTOR owns a stretched action button over this card (RosterSlot): raise the link, Remove and titled badges above it */
+    raiseControls?: boolean;
 }
 
 /** Build an AvatarUser that includes character portrait when available */
@@ -64,22 +64,30 @@ function playerProfileLink(player: RosterAssignmentResponse) {
     return guestProfileLink({ username: player.username, discordId: player.discordId, avatarHash: player.avatar });
 }
 
-function PlayerNameLink({ player }: { player: RosterAssignmentResponse }) {
+/** `relative` lifts a control above an ancestor's stretched action button (RosterSlot, TDB:1949). */
+const raise = (raised: boolean) => (raised ? ' relative' : '');
+/**
+ * A titled badge is raised too, so its tooltip shows on hover. It takes no click, so `cursor-default` stops it
+ * inheriting the frame's `cursor-pointer`. Trade-off: a click exactly on a raised badge skips the action.
+ */
+const raiseBadge = (raised: boolean) => (raised ? ' relative cursor-default' : '');
+
+function PlayerNameLink({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
     const { to, state } = playerProfileLink(player);
     return (
         <Link
             to={to}
             state={state}
-            className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
+            className={`truncate font-medium text-foreground hover:text-indigo-400 transition-colors${raise(raised)}`}
             title={player.username} onClick={(e) => e.stopPropagation()}>
             {player.username}
         </Link>
     );
 }
 
-function FlexibilityBadges({ preferredRoles }: { preferredRoles: string[] }) {
+function FlexibilityBadges({ preferredRoles, raised }: { preferredRoles: string[]; raised: boolean }) {
     return (
-        <span className="flex shrink-0 items-center gap-0.5" title={`Prefers: ${preferredRoles.map(formatRole).join(', ')}`}>
+        <span className={`flex shrink-0 items-center gap-0.5${raiseBadge(raised)}`} title={`Prefers: ${preferredRoles.map(formatRole).join(', ')}`}>
             {preferredRoles.map((r, i) => (
                 <span key={`${r}-${i}`} className="inline-flex items-center"><RoleIcon role={r} size="w-5 h-5" /></span>
             ))}
@@ -87,10 +95,11 @@ function FlexibilityBadges({ preferredRoles }: { preferredRoles: string[] }) {
     );
 }
 
-function PlayerCharacterInfo({ player }: { player: RosterAssignmentResponse }) {
+function PlayerCharacterInfo({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
     if (!player.character) return null;
     return (
-        <p className="flex items-center gap-1 truncate text-xs text-muted"
+        // Raised, the line hugs its text (w-fit) so the card action keeps the rest of the row.
+        <p className={`flex items-center gap-1 truncate text-xs text-muted${raised ? ' relative w-fit max-w-full cursor-default' : ''}`}
             title={[player.character.name, player.character.className].filter(Boolean).join(' \u2022 ')}>
             {getClassIconUrl(player.character.className) && (
                 <img src={getClassIconUrl(player.character.className)!} alt="" className="w-3.5 h-3.5 rounded-sm flex-shrink-0" />
@@ -103,10 +112,10 @@ function PlayerCharacterInfo({ player }: { player: RosterAssignmentResponse }) {
     );
 }
 
-function RemoveButton({ username, onRemove }: { username: string; onRemove: () => void }) {
+function RemoveButton({ username, onRemove, raised }: { username: string; onRemove: () => void; raised: boolean }) {
     return (
         <button onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className="shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
+            className={`shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors${raise(raised)}`}
             aria-label={`Remove ${username} from slot`} title="Remove from slot">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -115,38 +124,41 @@ function RemoveButton({ username, onRemove }: { username: string; onRemove: () =
     );
 }
 
-export function PlayerCard({ player, size = 'default', onClick, onRemove, matchAccent }: PlayerCardProps) {
-    const { avatarUser, gameId } = buildAvatarUser(player);
-    const isCompact = size === 'compact';
-    const avatarSize = isCompact ? 'h-8 w-8' : 'h-10 w-10';
+function PlayerCardBody({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
     const isTentative = player.signupStatus === 'tentative';
     const isRunningLate = player.runningLate === true;
     const lateTitle = player.lateMinutes ? `Running late (+${player.lateMinutes} min)` : 'Running late';
     const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 0 ? player.preferredRoles : null;
+    return (
+        <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+                <PlayerNameLink player={player} raised={raised} />
+                {isTentative && (
+                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raiseBadge(raised)}`} title="Tentative — may not attend">&#x23F3;</span>
+                )}
+                {isRunningLate && (
+                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raiseBadge(raised)}`} title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
+                )}
+                {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} raised={raised} />}
+            </div>
+            <PlayerCharacterInfo player={player} raised={raised} />
+        </div>
+    );
+}
+
+export function PlayerCard({ player, size = 'default', onRemove, matchAccent, raiseControls = false }: PlayerCardProps) {
+    const { avatarUser, gameId } = buildAvatarUser(player);
+    const isCompact = size === 'compact';
     const borderStyle = matchAccent ? { borderLeft: `3px solid ${matchAccent}` } : undefined;
 
     return (
         <div className={`flex items-center gap-3 rounded-lg border border-edge bg-panel/50
                 ${isCompact ? 'p-2' : 'p-2.5'}
-                ${onClick ? 'cursor-pointer hover:bg-panel transition-colors' : 'transition-all'}`}
-            style={borderStyle} onClick={onClick}
-            role={onClick ? 'button' : undefined} tabIndex={onClick ? 0 : undefined}
-            onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); } : undefined}>
-            <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={avatarSize} />
-            <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                    <PlayerNameLink player={player} />
-                    {isTentative && (
-                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title="Tentative — may not attend">&#x23F3;</span>
-                    )}
-                    {isRunningLate && (
-                        <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400" title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
-                    )}
-                    {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} />}
-                </div>
-                <PlayerCharacterInfo player={player} />
-            </div>
-            {onRemove && <RemoveButton username={player.username} onRemove={onRemove} />}
+                transition-all`}
+            style={borderStyle}>
+            <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={isCompact ? 'h-8 w-8' : 'h-10 w-10'} />
+            <PlayerCardBody player={player} raised={raiseControls} />
+            {onRemove && <RemoveButton username={player.username} onRemove={onRemove} raised={raiseControls} />}
         </div>
     );
 }

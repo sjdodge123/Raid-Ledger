@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api-client';
 import { useDebouncedValue } from './use-debounced-value';
+import type { User } from './use-auth';
 import type {
     CheckDisplayNameResponseDto,
     CompleteOnboardingResponseDto,
@@ -46,6 +47,15 @@ export function useUpdateUserProfile() {
 /**
  * Hook for completing FTE onboarding.
  * ROK-219: Used in the final step of the FTE wizard.
+ *
+ * TDB:982: the cached auth/me user is patched with the response's
+ * `onboardingCompletedAt` synchronously, before any per-call `onSuccess`
+ * runs. The wizard navigates away in that callback, and AuthGuard reads the
+ * cache — a stale (not-completed) user bounced it straight back to
+ * /onboarding. The invalidation still runs to reconcile with the server.
+ * The patch also makes the wizard's own completed-user redirect true, so the
+ * wizard skips that redirect while this mutation is pending or succeeded —
+ * otherwise it could replace the per-call invite-claim navigate.
  */
 export function useCompleteOnboardingFte() {
     const queryClient = useQueryClient();
@@ -55,8 +65,11 @@ export function useCompleteOnboardingFte() {
             fetchApi<CompleteOnboardingResponseDto>('/users/me/complete-onboarding', {
                 method: 'POST',
             }),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        onSuccess: (data) => {
+            queryClient.setQueryData<User | null>(['auth', 'me'], (prev) =>
+                prev ? { ...prev, onboardingCompletedAt: data.onboardingCompletedAt } : prev,
+            );
+            void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
         },
     });
 }

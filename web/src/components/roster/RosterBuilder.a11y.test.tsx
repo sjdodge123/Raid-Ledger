@@ -125,16 +125,10 @@ describe('RosterBuilder a11y — clear & remove announcements (ROK-342)', () => 
         renderWithRouter(
             <RosterBuilder pool={[]} assignments={assigned} onRosterChange={vi.fn()} canEdit={true} />,
         );
-        const healerName = screen.queryByText('HealerA');
-        if (healerName) {
-            fireEvent.click(healerName.closest('[class*="min-h"]') ?? healerName);
-            const removeBtn = screen.queryByText('Remove');
-            if (removeBtn) {
-                fireEvent.click(removeBtn);
-                await waitForRaf();
-                expect(politeRegion.textContent).toContain('HealerA');
-                expect(politeRegion.textContent).toContain('unassigned');
-            }
-        }
+        // Open the filled slot's assignment popup, then unassign its occupant.
+        fireEvent.click(screen.getByRole('button', { name: 'Manage healer slot 1 (HealerA)' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Unassign' }));
+        await waitForRaf();
+        expect(politeRegion.textContent).toContain('HealerA moved to unassigned');
     });
 });
