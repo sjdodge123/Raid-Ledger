@@ -1,5 +1,6 @@
 /**
- * ROK-1494 A11 / ROK-1505 — the FIRST post of a group's message.
+ * ROK-1494 A11 / ROK-1505 — posting a group's message: the first post, and
+ * the E3 replacement of one a human deleted (`replaceDeletedPost`).
  *
  * Extracted verbatim out of `LfmEmbedService` (which sat at 292 of its 300
  * counted lines) so the service keeps the orchestration — the per-game chain,
@@ -8,7 +9,8 @@
  *
  * Nothing here catches: every caller is one of the service's entry points,
  * each of which already warns-and-swallows so an emitter-side throw can never
- * become a 500 on someone's signup.
+ * become a 500 on someone's signup. The replacement's `finally` restores the
+ * dropped row and then lets the throw carry on to that entry point.
  */
 import type { EmbedContext } from '../services/discord-embed.factory';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
@@ -25,7 +27,13 @@ import {
   type ThreadBoundEmitter,
 } from '../thread-mirror/thread-mirror.constants';
 import { buildLfmEmbed, type LfmGroupView } from './lfm-embed.helpers';
-import { insertLfmMessage, LFM_FLOOR } from './lfm-embed.db-helpers';
+import {
+  deleteLfmMessage,
+  insertLfmMessage,
+  LFM_FLOOR,
+  restoreLfmMessage,
+  type LfmMessageRow,
+} from './lfm-embed.db-helpers';
 
 /** Everything a first post needs, handed over by the service per call. */
 export interface LfmPostDeps {
@@ -56,25 +64,62 @@ export interface LfmPostDeps {
  * @param deps - The service's collaborators plus the embed chrome context.
  * @param gameId - Game whose group is being posted.
  * @param view - The render to post.
+ * @returns true only when a message was posted AND a row now tracks it.
  */
 export async function postNew(
   deps: LfmPostDeps,
   gameId: number,
   view: LfmGroupView,
-): Promise<void> {
+): Promise<boolean> {
   const surface = await resolveLfgBoardSurface(deps.surfaceDeps, gameId);
-  if (!surface) return; // E2 — warned inside the resolver, never thrown.
+  if (!surface) return false; // E2 — warned inside the resolver, never thrown.
   const lfg = view.state !== 'playing' && view.memberCount < LFM_FLOOR; // D3 — a playing group always posts (ROK-1695)
   if (surface.kind === 'forum') {
-    if (await postForum(deps, gameId, surface, view)) return;
-    if (lfg) return; // D3 — a refused forum post has no text fallback at LFG.
+    if (await postForum(deps, gameId, surface, view)) return true;
+    if (lfg) return false; // D3 — a refused forum post has no text fallback at LFG.
     const text = await resolveLfmChannel(deps.channelDeps, gameId);
-    if (!text) return;
+    if (!text) return false;
     await postText(deps, gameId, text, view);
-    return;
+    return true;
   }
-  if (lfg) return; // D3 — no forum resolved: a one-hand group posts nowhere.
+  if (lfg) return false; // D3 — no forum resolved: a one-hand group posts nowhere.
   await postText(deps, gameId, surface, view);
+  return true;
+}
+
+/**
+ * E3 — replace a still-open group's message that a human deleted (TDB:954).
+ *
+ * The row is dropped first because the partial unique index allows one open
+ * row per game, so the replacement's insert would otherwise collide. When no
+ * replacement row lands — no surface, no channel, or `sendEmbed`/`postThread`
+ * throws — the ORIGINAL row is put back. Without it the group has no row at
+ * all, and every later GROUP_CHANGED returns early (E4), so the group never
+ * gets a live message again.
+ *
+ * D3 nuance: when `postNew` deliberately skips (a one-hand group on a text
+ * surface) the original row is restored as well. That is accepted: nothing
+ * visible changes in Discord, and the next event re-heals or closes the row.
+ *
+ * A throw still propagates after the restore; the service's entry points warn
+ * and swallow it.
+ *
+ * @param deps - The service's collaborators plus the embed chrome context.
+ * @param row - The tracking row whose Discord message is gone.
+ * @param view - The render to post in its place.
+ */
+export async function replaceDeletedPost(
+  deps: LfmPostDeps,
+  row: LfmMessageRow,
+  view: LfmGroupView,
+): Promise<void> {
+  await deleteLfmMessage(deps.db, row.id);
+  let tracked = false;
+  try {
+    tracked = await postNew(deps, row.gameId, view);
+  } finally {
+    if (!tracked) await restoreLfmMessage(deps.db, row);
+  }
 }
 
 /**
