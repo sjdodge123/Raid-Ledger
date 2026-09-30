@@ -16,10 +16,27 @@ describe('StretchedAction', () => {
     it('stretches over the frame border with the shared focus ring and no fill', () => {
         render(<StretchedAction label="Manage" />);
         // Pinned as a literal: comparing the constant to itself would pass whatever it said.
-        const expected = 'absolute -inset-px cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/80';
+        const expected = 'absolute -inset-px cursor-pointer rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success/80 focus-visible:ring-offset-2 focus-visible:ring-offset-surface';
         expect(screen.getByRole('button')).toHaveAttribute('class', expected);
         expect(STRETCHED_ACTION_CLASS).toBe(expected);
         expect(STRETCHED_ACTION_CLASS, 'no visual fill — the card underneath is the look').not.toMatch(/\bbg-/);
+    });
+
+    it('stands its focus ring off the frame so a frame ring (the current-user glow) cannot hide it', () => {
+        render(<StretchedAction label="Manage" />);
+        const classes = screen.getByRole('button').className.split(' ');
+        expect(classes, 'a flush ring at -inset-px lands exactly on the frame ring-2').toEqual(
+            expect.arrayContaining(['focus-visible:ring-offset-2', 'focus-visible:ring-offset-surface']),
+        );
+    });
+
+    it('keeps `label` as the only accessible name', () => {
+        // TS never excess-checks hyphenated JSX attributes, so the props Omit cannot stop these
+        // at compile time; the render order (fixed attributes after the spread) has to.
+        render(<><span id="other">Other</span><StretchedAction label="Join" aria-label="Other" /></>);
+        expect(screen.getByRole('button').getAttribute('aria-label'), 'a passed aria-label overrode label').toBe('Join');
+        render(<StretchedAction label="Assign" aria-labelledby="other" />);
+        expect(screen.getAllByRole('button')[1], 'a passed aria-labelledby replaced label').toHaveAccessibleName('Assign');
     });
 
     it('fires onClick and never submits a surrounding form', () => {
