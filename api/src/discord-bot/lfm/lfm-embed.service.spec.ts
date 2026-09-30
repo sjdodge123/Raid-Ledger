@@ -284,6 +284,27 @@ describe('E3 — the Discord message was deleted by a human', () => {
     expect(openRow()?.messageId).toBe('msg-new');
   });
 
+  it('E3 — a replacement that fails keeps the row, so the next change heals it (TDB:954)', async () => {
+    seedOpenRow();
+    client.editEmbed.mockRejectedValue(new Error('Unknown Message'));
+    client.sendEmbed.mockRejectedValue(new Error('Missing Access'));
+
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+
+    // Without the restore this is [] and E4 swallows every later change.
+    expect(allRows().map((r) => [r.id, r.state, r.messageId])).toEqual([
+      ['row-1', 'open', 'msg-1'],
+    ]);
+
+    client.sendEmbed.mockResolvedValue({ id: 'msg-new' });
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+
+    expect(client.sendEmbed).toHaveBeenCalledTimes(2);
+    expect(allRows().map((r) => [r.state, r.messageId])).toEqual([
+      ['open', 'msg-new'],
+    ]);
+  });
+
   it('E3 — a human-deleted message on a TERMINAL edit just closes the row', async () => {
     seedOpenRow({ lastMemberCount: 4 });
     // The group really is over — the expiry re-read sees nobody.
