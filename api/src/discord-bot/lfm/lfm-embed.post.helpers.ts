@@ -9,9 +9,11 @@
  *
  * Nothing here catches: every caller is one of the service's entry points,
  * each of which already warns-and-swallows so an emitter-side throw can never
- * become a 500 on someone's signup. The replacement's `finally` restores the
- * dropped row and then lets the throw carry on to that entry point.
+ * become a 500 on someone's signup. The replacement restores the dropped row
+ * and then lets the post's throw carry on to that entry point; the one thing
+ * it swallows (and warns) is a restore that fails while that throw is live.
  */
+import { Logger } from '@nestjs/common';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgBoardService } from '../lfg-board/lfg-board.service';
@@ -34,6 +36,8 @@ import {
   restoreLfmMessage,
   type LfmMessageRow,
 } from './lfm-embed.db-helpers';
+
+const logger = new Logger('LfmEmbedPost');
 
 /** Everything a first post needs, handed over by the service per call. */
 export interface LfmPostDeps {
@@ -102,7 +106,14 @@ export async function postNew(
  * visible changes in Discord, and the next event re-heals or closes the row.
  *
  * A throw still propagates after the restore; the service's entry points warn
- * and swallow it.
+ * and swallow it. If the restore itself fails while that throw is live, the
+ * restore error is warned here and the POST error is the one rethrown, so the
+ * entry point's warn names the real cause (e.g. `Missing Access`).
+ *
+ * Accepted gap: on the text path `sendEmbed` can succeed and the insert then
+ * throw. The stale row is restored, the posted message is left untracked, and
+ * the next heal posts another. That needs a Discord write to succeed and the
+ * DB write right after it to fail; before TDB:954 the row was lost outright.
  *
  * @param deps - The service's collaborators plus the embed chrome context.
  * @param row - The tracking row whose Discord message is gone.
@@ -114,11 +125,29 @@ export async function replaceDeletedPost(
   view: LfmGroupView,
 ): Promise<void> {
   await deleteLfmMessage(deps.db, row.id);
-  let tracked = false;
+  let tracked: boolean;
   try {
     tracked = await postNew(deps, row.gameId, view);
-  } finally {
-    if (!tracked) await restoreLfmMessage(deps.db, row);
+  } catch (err) {
+    await restoreWhileThrowing(deps.db, row);
+    throw err;
+  }
+  if (!tracked) await restoreLfmMessage(deps.db, row);
+}
+
+/** Put the row back while a post error is live — that error must win. */
+async function restoreWhileThrowing(
+  db: LfgDb,
+  row: LfmMessageRow,
+): Promise<void> {
+  try {
+    await restoreLfmMessage(db, row);
+  } catch (restoreErr) {
+    const message =
+      restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
+    logger.warn(
+      `Failed to restore the LFM row ${row.id} for game ${row.gameId}: ${message}`,
+    );
   }
 }
 

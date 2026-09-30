@@ -25,6 +25,7 @@
  * heal restores the ORIGINAL row whenever one did not — otherwise the group is
  * left untracked and every later change returns early (E4).
  */
+import { Logger } from '@nestjs/common';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import { resolveLfgBoardSurface } from '../lfg-board/lfg-board-surface.helpers';
 import { resolveLfmChannel } from './lfm-channel.helpers';
@@ -212,13 +213,13 @@ describe('postNew — reports whether a row now tracks the post (TDB:954)', () =
   });
 });
 
-describe('replaceDeletedPost — the E3 heal never drops a row it cannot replace (TDB:954)', () => {
-  function useTextSurface(): void {
-    jest
-      .mocked(resolveLfgBoardSurface)
-      .mockResolvedValue({ kind: 'text', ...TEXT });
-  }
+function useTextSurface(): void {
+  jest
+    .mocked(resolveLfgBoardSurface)
+    .mockResolvedValue({ kind: 'text', ...TEXT });
+}
 
+describe('replaceDeletedPost — the E3 heal never drops a row it cannot replace (TDB:954)', () => {
   it('restores the ORIGINAL row and rethrows when sendEmbed rejects', async () => {
     useTextSurface();
     const { deps, sendEmbed } = makeDeps();
@@ -231,6 +232,24 @@ describe('replaceDeletedPost — the E3 heal never drops a row it cannot replace
       [deps.db, DELETED_ROW],
     ]);
     expect(jest.mocked(restoreLfmMessage).mock.calls[0][1]).toBe(DELETED_ROW);
+  });
+
+  it('rethrows the POST error, not the restore error, when both fail', async () => {
+    useTextSurface();
+    const { deps, sendEmbed } = makeDeps();
+    sendEmbed.mockRejectedValue(new Error('Missing Access'));
+    jest
+      .mocked(restoreLfmMessage)
+      .mockRejectedValueOnce(new Error('connection reset'));
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    await expect(
+      replaceDeletedPost(deps, DELETED_ROW, TWO_HANDS),
+    ).rejects.toThrow('Missing Access');
+    expect(warn.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining('connection reset'),
+    ]);
+    warn.mockRestore();
   });
 
   it('restores the row when no surface resolves', async () => {
