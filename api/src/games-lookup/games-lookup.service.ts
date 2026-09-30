@@ -89,9 +89,11 @@ export class GamesLookupService {
   }
 
   private async upsertFromItad(itadGame: ItadGame): Promise<GameDetailDto> {
-    const steamMap = await this.itadService.lookupSteamAppIds([
-      { id: itadGame.id, slug: itadGame.slug },
-    ]);
+    // Interactive: same user request as the search; a long 429 pause saves the row without a Steam app id.
+    const steamMap = await this.itadService.lookupSteamAppIds(
+      [{ id: itadGame.id, slug: itadGame.slug }],
+      ITAD_INTERACTIVE_FETCH,
+    );
     const steamAppId = steamMap.get(itadGame.id) ?? null;
     const existingId = await this.findOrInsertItadRow(itadGame, steamAppId);
     return this.fetchDetailById(existingId);

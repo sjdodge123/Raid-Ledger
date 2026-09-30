@@ -46,7 +46,8 @@ export function buildItadSearchDeps(
 ): ItadSearchDeps {
   return {
     searchItad: (q) => searchAndMapItad(params.itadService, q),
-    lookupSteamAppIds: (games) => params.itadService.lookupSteamAppIds(games),
+    lookupSteamAppIds: (games) =>
+      params.itadService.lookupSteamAppIds(games, ITAD_INTERACTIVE_FETCH),
     enrichFromIgdb: (appId) => enrichViaExternalGames(params.queryIgdb, appId),
     getAdultFilter: params.getAdultFilter,
     findBannedOrHiddenSlugs: (slugs) =>

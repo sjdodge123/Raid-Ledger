@@ -171,6 +171,8 @@ export class SteamWishlistService {
       'true';
     return {
       db: this.db,
+      // Waits out a 429 pause (cron, post-link and manual sync alike): a fail-fast
+      // miss reads as "not in ITAD" and leaves the item unmatched until the next sync.
       lookupBySteamAppId: (id) => this.itadService!.lookupBySteamAppId(id),
       queryIgdb: this.igdbService
         ? (body) => this.igdbService!.queryIgdb(body)

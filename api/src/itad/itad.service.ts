@@ -124,10 +124,12 @@ export class ItadService {
   /**
    * Batch-resolve ITAD game UUIDs to Steam App IDs via shop lookup.
    * @param games - Array of { id, slug } from ITAD search results
+   * @param opts - Fetch options; user-facing callers pass `ITAD_INTERACTIVE_FETCH`
    * @returns Map of ITAD UUID to Steam App ID (number)
    */
   async lookupSteamAppIds(
     games: { id: string; slug: string }[],
+    opts: ItadFetchOptions = {},
   ): Promise<Map<string, number>> {
     const result = new Map<string, number>();
     if (games.length === 0) return result;
@@ -141,6 +143,7 @@ export class ItadService {
       `/lookup/shop/${shopId}/id/v1`,
       { key: apiKey, shops: shopId },
       itadIds,
+      opts,
     );
 
     if (!response) return result;
