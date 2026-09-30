@@ -48,9 +48,7 @@ export class PostEventFollowupPromptService {
       await this.clientService.sendEmbedDM(gate!.discord_id!, embed, row);
     } catch (error) {
       this.logger.warn(
-        'Failed to send follow-up prompt for event %d: %s',
-        event.id,
-        error instanceof Error ? error.message : 'Unknown error',
+        `Failed to send follow-up prompt for event ${event.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

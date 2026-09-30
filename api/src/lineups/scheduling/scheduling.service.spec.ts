@@ -211,9 +211,17 @@ describe('SchedulingService', () => {
 
       it('succeeds even if auto-vote throws', async () => {
         mockSuggestSlotFlow(true);
-        voteSpy.mockRejectedValueOnce(new Error('DB constraint'));
+        const boom = new Error('DB constraint');
+        voteSpy.mockRejectedValueOnce(boom);
+        const { logger } = service as unknown as { logger: Logger };
+        const warn = jest.spyOn(logger, 'warn').mockImplementation(() => {});
         const result = await service.suggestSlot(10, SLOT_TIME, 7);
         expect(result).toMatchObject({ id: 42 });
+        // The swallowed failure keeps its stack as the trailing argument.
+        expect(warn).toHaveBeenCalledWith(
+          'Auto-vote failed for slot 42 user 7',
+          boom.stack,
+        );
       });
 
       it('does not call insertScheduleVote when userId is undefined', async () => {

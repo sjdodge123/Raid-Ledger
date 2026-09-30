@@ -18,6 +18,7 @@ import {
 } from './pug-invite.helpers';
 import { showPugRoleSelect } from './pug-invite-pug-select.handlers';
 import { createPugSignup } from './pug-invite-signup.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 
@@ -35,9 +36,8 @@ export async function handlePugButtonInteraction(
     await routePugAction(deps, interaction, action, pugSlotId);
   } catch (error) {
     deps.logger.error(
-      'Error handling PUG button for slot %s:',
-      pugSlotId,
-      error,
+      `Error handling PUG button for slot ${pugSlotId}`,
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,
@@ -138,10 +138,7 @@ async function handlePugDecline(
   await safeEditDmEmbed(interaction, buildDeclinedEmbed());
   await interaction.editReply({ content: 'Declined.' });
   deps.logger.log(
-    'PUG %s declined invite for event %d (slot: %s)',
-    slot.discordUsername,
-    slot.eventId,
-    slot.id,
+    `PUG ${slot.discordUsername} declined invite for event ${slot.eventId} (slot: ${slot.id})`,
   );
 }
 
@@ -233,8 +230,6 @@ async function finalizePugAccept(
   await safeEditDmEmbed(interaction, embed);
   await interaction.editReply({ content: 'Accepted!' });
   deps.logger.log(
-    'PUG %s accepted invite for event %d',
-    slot.discordUsername,
-    slot.eventId,
+    `PUG ${slot.discordUsername} accepted invite for event ${slot.eventId}`,
   );
 }
