@@ -191,17 +191,20 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     expect(res.body.pollStatus).toBe('locked_in');
     // The linked event's start — not the top-voted slot — is the answer to
     // "when is it?", because lock-in is free to pick any slot.
+    // `events.duration` is a zone-less tsrange holding UTC wall-clock time.
+    // Read its lower bound with the `Z` spelled out by Postgres: a bare
+    // `lower(duration)` string fed to `new Date()` parses as the jest
+    // worker's LOCAL time, so under a non-UTC TZ the expectation itself
+    // would drift by the host offset (TDB:1489) and mask a reader regression.
     const [event] = await testApp.db
-      .select({ start: sql<string>`lower(${schema.events.duration})` })
+      .select({
+        start: sql<string>`to_char(lower(${schema.events.duration}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      })
       .from(schema.events)
       .where(eq(schema.events.id, eventId));
+    expect(event.start).toBe(poll.slotTime.toISOString());
     expect(res.body.lockedInTime).not.toBeNull();
-    expect(res.body.lockedInTime).toBe(new Date(event.start).toISOString());
-    // NOT asserted against `poll.slotTime`: `events.duration` is a naive
-    // tsrange, so the stored start is the slot time shifted by the runner's
-    // TZ offset. That shift is the events-service's business (pre-existing,
-    // unchanged by ROK-1545) — what this story owns is that the page reports
-    // the EVENT's start rather than the top-voted slot.
+    expect(res.body.lockedInTime).toBe(event.start);
     expect(res.body.canVote).toBe(false);
     expect(res.body.match.linkedEventId).toBe(eventId);
   });
