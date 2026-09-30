@@ -11,17 +11,25 @@
  * Every assertion below was verified by mutating the finished implementation;
  * the mutation table is in `handover-ROK-1446-laneA-service.md`.
  */
-import type { Logger } from '@nestjs/common';
-import { DiscordAPIError } from 'discord.js';
-import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../../drizzle/schema';
+import { PRESENCE_FLUSH_INTERVAL_MS } from './channel-presence-embed.service';
 import {
-  ChannelPresenceEmbedService,
-  PRESENCE_FLUSH_INTERVAL_MS,
-} from './channel-presence-embed.service';
-import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
-import type { ResolvedRoom, RoomGroup } from './channel-presence-room.helpers';
-import type { PresenceRow } from './channel-presence-store.helpers';
+  mocked,
+  VOICE,
+  TEXT,
+  MESSAGE,
+  BINDING,
+  NOW,
+  OPENED_AT,
+  unknownMessage,
+  short,
+  room,
+  presenceRow,
+  loggerErrors,
+  loggerWarnings,
+  build,
+  ready,
+  installPresenceHooks,
+} from './channel-presence-embed.service.spec-helpers';
 
 jest.mock('./channel-presence-room.helpers', () => ({
   __esModule: true,
@@ -70,254 +78,7 @@ jest.mock('./channel-presence-store.helpers', () => ({
   listOpenRows: jest.fn(),
 }));
 
-import {
-  findLinkedEvents,
-  recapEvents,
-  resolveRoom,
-} from './channel-presence-room.helpers';
-import {
-  editEmbeds,
-  fetchMessageOrNull,
-  sendEmbeds,
-} from '../discord-bot-client.messages.helpers';
-import {
-  buildContext,
-  buildEmbedEventData,
-  resolveNotificationChannel,
-} from './ad-hoc-notification.helpers';
-import {
-  clearEmpty,
-  closeRow,
-  findOpenRow,
-  listOpenRows,
-  markEmpty,
-  openRow,
-  savePayloadHash,
-} from './channel-presence-store.helpers';
-
-const mocked = {
-  resolveRoom: jest.mocked(resolveRoom),
-  findLinkedEvents: jest.mocked(findLinkedEvents),
-  recapEvents: jest.mocked(recapEvents),
-  sendEmbeds: jest.mocked(sendEmbeds),
-  editEmbeds: jest.mocked(editEmbeds),
-  fetchMessageOrNull: jest.mocked(fetchMessageOrNull),
-  buildContext: jest.mocked(buildContext),
-  resolveNotificationChannel: jest.mocked(resolveNotificationChannel),
-  buildEmbedEventData: jest.mocked(buildEmbedEventData),
-  findOpenRow: jest.mocked(findOpenRow),
-  openRow: jest.mocked(openRow),
-  markEmpty: jest.mocked(markEmpty),
-  clearEmpty: jest.mocked(clearEmpty),
-  closeRow: jest.mocked(closeRow),
-  savePayloadHash: jest.mocked(savePayloadHash),
-  listOpenRows: jest.mocked(listOpenRows),
-};
-
-const ANA = { displayName: 'ana', gameId: null, activityName: null };
-const GUILD = 'g-1';
-const VOICE = 'vc-1';
-const TEXT = 'tc-1';
-const MESSAGE = 'msg-1';
-const BINDING = 'b-1';
-const NOW = Date.parse('2026-09-02T18:00:00Z');
-const OPENED_AT = new Date('2026-09-02T17:30:00Z');
-
-const CONTEXT: EmbedContext = {
-  communityName: 'Gamer Saloon',
-  clientUrl: 'https://rl.example',
-  timezone: 'UTC',
-};
-
-/**
- * Discord's "Unknown Message". Built via the prototype because the transport's
- * predicate is `instanceof DiscordAPIError`, not a duck-typed `code` read.
- */
-function unknownMessage(): DiscordAPIError {
-  return Object.assign(Object.create(DiscordAPIError.prototype) as object, {
-    code: 10008,
-    message: 'Unknown Message',
-  }) as DiscordAPIError;
-}
-
-/** A group below `minPlayers` with no event — the amber render. */
-function short(gameName: string, names: string[]): RoomGroup {
-  return {
-    gameId: 7,
-    gameName,
-    memberIds: names.map((n) => `u-${n}`),
-    memberNames: names,
-    qualifying: false,
-    eventId: null,
-    eventData: null,
-    game: null,
-  };
-}
-
-function room(overrides: Partial<ResolvedRoom> = {}): ResolvedRoom & {
-  channelResolved: boolean;
-  members: NonNullable<ResolvedRoom['members']>;
-} {
-  return {
-    channelId: VOICE,
-    channelName: 'General',
-    memberCount: 2,
-    minPlayers: 3,
-    groups: [short('Valheim', ['ana', 'bo'])],
-    undetectedNames: [],
-    members: new Map([['ana', ANA]]),
-    channelResolved: true,
-    ...overrides,
-  };
-}
-
-function presenceRow(overrides: Partial<PresenceRow> = {}): PresenceRow {
-  return {
-    id: 'row-1',
-    guildId: GUILD,
-    voiceChannelId: VOICE,
-    bindingId: BINDING,
-    textChannelId: TEXT,
-    messageId: MESSAGE,
-    status: 'open',
-    payloadHash: null,
-    openedAt: OPENED_AT,
-    emptySince: null,
-    closedAt: null,
-    closeReason: null,
-    createdAt: OPENED_AT,
-    updatedAt: OPENED_AT,
-    ...overrides,
-  };
-}
-
-function eventData(id: number): EmbedEventData {
-  return {
-    id,
-    title: 'Valheim — Quick Play',
-    startTime: '2026-09-02T17:00:00Z',
-    endTime: '2026-09-02T19:00:00Z',
-    signupCount: 2,
-    signupMentions: [
-      {
-        displayName: 'ana',
-        role: null,
-        preferredRoles: null,
-        status: 'confirmed',
-      },
-      {
-        displayName: 'bo',
-        role: null,
-        preferredRoles: null,
-        status: 'confirmed',
-      },
-    ],
-    game: { id: 7, name: 'Valheim' },
-  };
-}
-
-/** Only the two calls the flush actually issues against the DB directly. */
-function fakeDb(): PostgresJsDatabase<typeof schema> {
-  return {
-    select: () => ({ from: () => ({ where: () => Promise.resolve([]) }) }),
-  } as unknown as PostgresJsDatabase<typeof schema>;
-}
-
-interface Harness {
-  service: ChannelPresenceEmbedService;
-  getBindingById: jest.Mock;
-  getBindingsWithGameNames: jest.Mock;
-  clientService: { getClient: jest.Mock; getGuildId: jest.Mock };
-}
-
-/**
- * Watch the service's own logger.
- *
- * Reaching for the private field is deliberate: the whole point of the S-4
- * `.catch()` is that the rejection is HANDLED, and "handled" is only
- * observable as this log line.
- */
-function loggerErrors(service: ChannelPresenceEmbedService): jest.SpyInstance {
-  const { logger } = service as unknown as { logger: Logger };
-  return jest.spyOn(logger, 'error').mockImplementation(() => undefined);
-}
-
-/** The same reach for the private logger, for the lines warn-level carries. */
-function loggerWarnings(
-  service: ChannelPresenceEmbedService,
-): jest.SpyInstance {
-  const { logger } = service as unknown as { logger: Logger };
-  return jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
-}
-
-function lobbyBindingRecord(): Record<string, unknown> {
-  return {
-    id: BINDING,
-    channelId: VOICE,
-    gameId: null,
-    gameName: null,
-    bindingPurpose: 'general-lobby',
-    recurrenceGroupId: null,
-    config: { minPlayers: 3, gracePeriod: 5 },
-  };
-}
-
-function build(
-  bindings: Record<string, unknown>[] = [lobbyBindingRecord()],
-): Harness {
-  const getBindingsWithGameNames = jest.fn().mockResolvedValue(bindings);
-  const getBindingById = jest.fn().mockResolvedValue(bindings[0] ?? null);
-  const clientService = {
-    // A shape `resolveVoiceChannel` can actually walk: the unbound close path
-    // now asks Discord for the channel's name instead of hard-coding null.
-    getClient: jest.fn().mockReturnValue({ guilds: { cache: new Map() } }),
-    getGuildId: jest.fn().mockReturnValue(GUILD),
-  };
-  const service = new ChannelPresenceEmbedService(
-    fakeDb(),
-    clientService as never,
-    {} as never,
-    { getBindingsWithGameNames, getBindingById } as never,
-    {} as never,
-    {} as never,
-    { executeWithTracking: jest.fn() } as never,
-  );
-  return { service, getBindingById, getBindingsWithGameNames, clientService };
-}
-
-/** A service that has already adopted its open rows, so flushes may post. */
-async function ready(bindings?: Record<string, unknown>[]): Promise<Harness> {
-  const harness = build(bindings);
-  mocked.listOpenRows.mockResolvedValue([]);
-  await harness.service.recover();
-  return harness;
-}
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  jest.useFakeTimers();
-  jest.setSystemTime(NOW);
-  mocked.buildContext.mockResolvedValue(CONTEXT);
-  mocked.resolveNotificationChannel.mockResolvedValue(TEXT);
-  mocked.resolveRoom.mockResolvedValue(room());
-  mocked.findLinkedEvents.mockResolvedValue([]);
-  mocked.recapEvents.mockResolvedValue([]);
-  mocked.listOpenRows.mockResolvedValue([]);
-  mocked.findOpenRow.mockResolvedValue(null);
-  mocked.buildEmbedEventData.mockResolvedValue(eventData(900));
-  mocked.sendEmbeds.mockResolvedValue({ id: MESSAGE } as never);
-  mocked.editEmbeds.mockResolvedValue({ id: MESSAGE } as never);
-  mocked.openRow.mockImplementation((_db, input) =>
-    Promise.resolve({
-      row: presenceRow({ messageId: input.messageId }),
-      created: true,
-    }),
-  );
-});
-
-afterEach(() => {
-  jest.useRealTimers();
-});
+installPresenceHooks();
 
 describe('ChannelPresenceEmbedService — D5 flush loop', () => {
   it('shares the 5s cadence the per-event cards drain on', () => {
@@ -369,7 +130,9 @@ describe('ChannelPresenceEmbedService — D5 flush loop', () => {
 
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
   });
+});
 
+describe('ChannelPresenceEmbedService — D5 flush loop: re-render and resilience', () => {
   it('DOES edit when the same room resolves to a different roster', async () => {
     const { service } = await ready();
     mocked.findOpenRow.mockResolvedValue(presenceRow());
@@ -478,177 +241,6 @@ describe('ChannelPresenceEmbedService — D7 restart re-adoption', () => {
     await service.reapStaleRows();
 
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
-  const empty = (): ReturnType<typeof room> =>
-    room({ memberCount: 0, groups: [] });
-
-  it('stamps empty_since and renders the recap without closing inside the grace', async () => {
-    const { service } = await ready();
-    mocked.resolveRoom.mockResolvedValue(empty());
-    mocked.findOpenRow.mockResolvedValue(presenceRow());
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.markEmpty).toHaveBeenCalledTimes(1);
-    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    const embeds = mocked.editEmbeds.mock.calls[0][3];
-    expect(embeds[0].data.title).toContain('session ended');
-    expect(mocked.closeRow).not.toHaveBeenCalled();
-  });
-
-  it('closes once the binding grace has elapsed and no session is live', async () => {
-    const { service } = await ready();
-    mocked.resolveRoom.mockResolvedValue(empty());
-    mocked.findOpenRow.mockResolvedValue(
-      presenceRow({ emptySince: new Date(NOW - 5 * 60_000) }),
-    );
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.closeRow).toHaveBeenCalledWith(
-      expect.anything(),
-      'row-1',
-      'empty',
-      expect.any(Date),
-    );
-  });
-
-  it('keeps the message open past the grace while a session is still live', async () => {
-    const { service } = await ready();
-    mocked.resolveRoom.mockResolvedValue(empty());
-    mocked.findOpenRow.mockResolvedValue(
-      presenceRow({ emptySince: new Date(NOW - 60 * 60_000) }),
-    );
-    mocked.findLinkedEvents.mockResolvedValue([
-      { id: 900, gameId: 7, adHocStatus: 'grace_period' },
-    ]);
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.closeRow).not.toHaveBeenCalled();
-  });
-
-  it('flips the SAME message back to live when someone rejoins in the grace', async () => {
-    const { service } = await ready();
-    mocked.findOpenRow.mockResolvedValue(
-      presenceRow({ emptySince: new Date(NOW - 60_000) }),
-    );
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.clearEmpty).toHaveBeenCalledWith(expect.anything(), 'row-1');
-    expect(mocked.sendEmbeds).not.toHaveBeenCalled();
-    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.editEmbeds.mock.calls[0][2]).toBe(MESSAGE);
-    const embeds = mocked.editEmbeds.mock.calls[0][3];
-    expect(embeds[0].data.title).not.toContain('session ended');
-  });
-
-  it('posts a NEW message — and closes the old row stale — when someone joins after the grace elapsed on a row nothing closed (ROK-1498)', async () => {
-    const { service } = await ready();
-    mocked.findOpenRow.mockResolvedValue(
-      presenceRow({ emptySince: new Date(NOW - 10 * 60 * 60_000) }),
-    );
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.closeRow).toHaveBeenCalledWith(
-      expect.anything(),
-      'row-1',
-      'stale',
-      expect.any(Date),
-    );
-    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.sendEmbeds.mock.calls[0][1]).toBe(TEXT);
-    expect(mocked.editEmbeds).not.toHaveBeenCalled();
-    expect(mocked.clearEmpty).not.toHaveBeenCalled();
-    expect(mocked.openRow).toHaveBeenCalledTimes(1);
-    const embeds = mocked.sendEmbeds.mock.calls[0][2];
-    expect(embeds[0].data.title).not.toContain('session ended');
-  });
-
-  it('does not resurrect a stale row even while a linked session is still live/grace_period (ROK-1498)', async () => {
-    const { service } = await ready();
-    mocked.findOpenRow.mockResolvedValue(
-      presenceRow({ emptySince: new Date(NOW - 10 * 60 * 60_000) }),
-    );
-    mocked.findLinkedEvents.mockResolvedValue([
-      { id: 900, gameId: 7, adHocStatus: 'grace_period' },
-    ]);
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.closeRow).toHaveBeenCalledWith(
-      expect.anything(),
-      'row-1',
-      'stale',
-      expect.any(Date),
-    );
-    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.editEmbeds).not.toHaveBeenCalled();
-  });
-
-  it('treats the exact grace boundary as expired, matching isCloseDue (ROK-1498)', async () => {
-    const { service } = await ready();
-    mocked.findOpenRow.mockResolvedValue(
-      presenceRow({ emptySince: new Date(NOW - 5 * 60_000) }),
-    );
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.closeRow).toHaveBeenCalledWith(
-      expect.anything(),
-      'row-1',
-      'stale',
-      expect.any(Date),
-    );
-    expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.editEmbeds).not.toHaveBeenCalled();
-  });
-
-  it('re-renders the recap when onEventEnded fires for the binding', async () => {
-    const { service, getBindingById } = await ready();
-    mocked.resolveRoom.mockResolvedValue(empty());
-    mocked.findOpenRow.mockResolvedValue(presenceRow());
-    mocked.recapEvents.mockResolvedValue([
-      { id: 900, gameId: 7, adHocStatus: 'ended' },
-    ]);
-
-    service.onEventEnded(BINDING);
-    await service.flushNow();
-
-    expect(getBindingById).toHaveBeenCalledWith(BINDING);
-    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    const embeds = mocked.editEmbeds.mock.calls[0][3];
-    expect(embeds).toHaveLength(2);
-    expect(embeds[1].data.author?.name).toContain('ENDED');
-  });
-
-  it('recaps and closes a row whose binding has been deleted', async () => {
-    const { service } = await ready([]);
-    mocked.findOpenRow.mockResolvedValue(presenceRow());
-
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(mocked.resolveRoom).not.toHaveBeenCalled();
-    expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.closeRow).toHaveBeenCalledWith(
-      expect.anything(),
-      'row-1',
-      'unbound',
-      expect.any(Date),
-    );
   });
 });
 
