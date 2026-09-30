@@ -101,6 +101,25 @@ export async function notifyRemovedUser(
   });
 }
 
+/** `.catch` handler: warns `msg` with the failure's reason appended. */
+function logWarnReason(logger: Logger, msg: string) {
+  return (err: unknown) =>
+    logger.warn(
+      `${msg}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+    );
+}
+
+/** Fire both roster notification fan-outs; each failure is warned on its own. */
+function sendRosterNotifications(
+  args: Parameters<typeof notifH.notifyRoleChanges>,
+  logger: Logger,
+): void {
+  const reassign = 'Failed to send roster reassign notifications';
+  const assign = 'Failed to send roster assignment notifications';
+  notifH.notifyRoleChanges(...args).catch(logWarnReason(logger, reassign));
+  notifH.notifyNewAssignments(...args).catch(logWarnReason(logger, assign));
+}
+
 export function fireRosterNotifications(
   notificationService: NotificationService,
   eventId: number,
@@ -111,27 +130,20 @@ export function fireRosterNotifications(
   fetchNotificationCtx: (eventId: number) => Promise<Record<string, string>>,
   logger: Logger,
 ) {
-  const logError = (msg: string) => (err: unknown) =>
-    logger.warn(
-      `${msg}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-    );
   fetchNotificationCtx(eventId)
-    .then((extra) => {
-      const args = [
-        notificationService,
-        eventId,
-        eventTitle,
-        assignments,
-        signupByUserId,
-        oldRoleBySignupId,
-        extra,
-      ] as const;
-      notifH
-        .notifyRoleChanges(...args)
-        .catch(logError('Failed to send roster reassign notifications'));
-      notifH
-        .notifyNewAssignments(...args)
-        .catch(logError('Failed to send roster assignment notifications'));
-    })
-    .catch(logError('Failed to fetch notification context'));
+    .then((extra) =>
+      sendRosterNotifications(
+        [
+          notificationService,
+          eventId,
+          eventTitle,
+          assignments,
+          signupByUserId,
+          oldRoleBySignupId,
+          extra,
+        ],
+        logger,
+      ),
+    )
+    .catch(logWarnReason(logger, 'Failed to fetch notification context'));
 }

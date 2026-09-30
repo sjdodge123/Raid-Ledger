@@ -3,6 +3,7 @@
  * follow-up fan-out or activity-log write never fails event creation, and
  * is warned with its stack so the swallowed rejection stays traceable.
  */
+import type { Logger } from '@nestjs/common';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import { runCreateEvent } from './event-create-flow.helpers';
 import { runFollowupFanout } from '../notifications/post-event-followup-fanout.helpers';
@@ -32,7 +33,10 @@ function makeDeps() {
   return {
     db: {} as never,
     eventEmitter: { emit: jest.fn() } as never,
-    logger: { log: jest.fn(), warn: jest.fn() },
+    logger: {
+      log: jest.fn(),
+      warn: jest.fn(),
+    } as unknown as jest.Mocked<Logger>,
     findByIds: jest.fn((ids: number[]) =>
       Promise.resolve(ids.map((id) => ({ id }) as never)),
     ),
