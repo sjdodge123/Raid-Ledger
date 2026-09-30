@@ -40,6 +40,10 @@ export default tseslint.config(
   {
     // Nest Logger never interpolates %s/%d — see eslint.no-printf-logger.mjs.
     // Specs are exempt: jest titles and mock fixtures legitimately carry %s.
+    // Flat config REPLACES rule options instead of merging them: a later
+    // block that sets `no-restricted-syntax` for any api .ts file must spread
+    // `...noPrintfLoggerSyntax` into its options, or the guard silently
+    // switches off for those files.
     files: ['**/*.ts'],
     ignores: ['**/*.spec.ts', '**/*.spec-helpers.ts'],
     rules: {

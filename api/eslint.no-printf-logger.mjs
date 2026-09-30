@@ -3,8 +3,9 @@
  * Bans printf-style placeholders in Nest logger messages.
  *
  * Nest's Logger does NOT interpolate: `logger.warn('Signup %s failed', id)`
- * prints the literal `%s` and treats `id` as the log CONTEXT, so the value
- * never reaches the log line. Build the message with a template literal
+ * keeps the literal `%s` in the message and emits `id` as a separate message
+ * line (or as the log context, on a context-less logger), so the value never
+ * lands where the placeholder is. Build the message with a template literal
  * instead: `logger.warn(`Signup ${id} failed`)`.
  *
  * Matches `.log/.warn/.error/.debug/.verbose/.fatal` on any receiver whose
@@ -27,7 +28,8 @@ const LOGGER_CALL =
 
 export const PRINTF_LOGGER_MESSAGE =
   'Nest Logger does not interpolate printf placeholders (%s/%d/...): the ' +
-  'value is printed as the log context and the message keeps a literal %s. ' +
+  'value is emitted as a separate message line (or as the context on a ' +
+  'context-less logger) and the message keeps a literal %s. ' +
   'Use a template literal: logger.warn(`Signup ${id} failed`).';
 
 /** `no-restricted-syntax` entries; spread them into the rule's options. */
