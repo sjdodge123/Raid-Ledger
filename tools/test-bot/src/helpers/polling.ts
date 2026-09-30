@@ -23,6 +23,13 @@ export interface PollOptions extends RenderRuleOptions {
   backoff?: boolean;
   /** Max messages to fetch per poll (default 100). */
   fetchCount?: number;
+  /**
+   * Message ids that must never match — a `snapshotMessageIds` taken BEFORE
+   * the mutation under test. Reads are oldest-first and the first match wins,
+   * so an id/path-only predicate otherwise settles on a prior run's card
+   * carrying the same seeded href (TDB:571 / TDB:1459).
+   */
+  excludeIds?: ReadonlySet<string>;
 }
 
 const DEFAULT_INTERVAL = 2000;
@@ -58,6 +65,28 @@ export async function readOrMiss(
   }
 }
 
+/** The first message that is not excluded and satisfies `predicate`. */
+export function firstFreshMatch(
+  msgs: readonly SimpleMessage[],
+  predicate: (msg: SimpleMessage) => boolean,
+  excludeIds?: ReadonlySet<string>,
+): SimpleMessage | undefined {
+  return msgs.find((m) => !excludeIds?.has(m.id) && predicate(m));
+}
+
+/**
+ * Ids of a channel's recent messages, for `PollOptions.excludeIds`. Take it
+ * BEFORE the mutation that posts the card under test. A truncated read is a
+ * miss (logged by `readOrMiss`), which yields an empty fence.
+ */
+export async function snapshotMessageIds(
+  channelId: string,
+  count = DEFAULT_FETCH_COUNT,
+): Promise<Set<string>> {
+  const msgs = await readOrMiss(channelId, count, 'snapshotMessageIds');
+  return new Set(msgs.map((m) => m.id));
+}
+
 /**
  * Poll a channel for a message matching a predicate.
  * Uses exponential backoff (2s -> 4s -> 8s cap) by default.
@@ -77,7 +106,7 @@ export async function pollForEmbed(
 
   while (Date.now() < deadline) {
     const msgs = await readOrMiss(channelId, fetchCount, 'pollForEmbed');
-    const match = msgs.find(predicate);
+    const match = firstFreshMatch(msgs, predicate, opts?.excludeIds);
     if (match) return sweepRenderRules(match, opts);
 
     const remaining = deadline - Date.now();
