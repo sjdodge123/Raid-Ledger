@@ -113,10 +113,6 @@ async function insertAssignment(
     isOverride: 0,
   });
   deps.logger.log(
-    'Auto-slotted signup %d into %s:%d for event %d (reschedule confirm)',
-    signupId,
-    role,
-    position,
-    eventId,
+    `Auto-slotted signup ${signupId} into ${role}:${position} for event ${eventId} (reschedule confirm)`,
   );
 }

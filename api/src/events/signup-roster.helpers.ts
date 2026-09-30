@@ -278,11 +278,7 @@ async function deletePugSlotsByDiscord(
 
   if (result.length > 0) {
     logger.log(
-      'Cleaned up %d stale PUG slot(s) for user %d (discord: %s) on event %d',
-      result.length,
-      userId,
-      user.discordId,
-      eventId,
+      `Cleaned up ${result.length} stale PUG slot(s) for user ${userId} (discord: ${user.discordId}) on event ${eventId}`,
     );
   }
 }

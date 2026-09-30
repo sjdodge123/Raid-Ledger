@@ -195,8 +195,7 @@ export async function editDMResult(
     await msg.edit({ embeds: [embed], components });
   } catch (error) {
     logger.warn(
-      'Failed to edit departure promote DM: %s',
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to edit departure promote DM: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }

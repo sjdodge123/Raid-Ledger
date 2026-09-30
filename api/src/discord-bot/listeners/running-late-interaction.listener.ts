@@ -32,6 +32,7 @@ import {
   type RunningLateDeps,
   type RunningLateEvent,
 } from './running-late-interaction.handlers';
+import { errorMessage, errorStack } from '../../common/error-format.helpers';
 
 const LINK_MSG =
   'Link your Raid Ledger account first — open the app and connect Discord.';
@@ -108,9 +109,8 @@ export class RunningLateInteractionListener {
       await this.route(interaction, parsed);
     } catch (error) {
       this.logger.error(
-        'Error handling running late for event %d:',
-        parsed.eventId,
-        error,
+        `Error handling running late for event ${parsed.eventId}`,
+        errorStack(error),
       );
       await safeEditReply(
         interaction,
@@ -154,7 +154,9 @@ export class RunningLateInteractionListener {
       }
       return true;
     } catch (error) {
-      this.logger.warn('Failed to defer running late interaction: %s', error);
+      this.logger.warn(
+        `Failed to defer running late interaction: ${errorMessage(error)}`,
+      );
       return false;
     }
   }
@@ -247,9 +249,7 @@ export class RunningLateInteractionListener {
         );
       } catch (error) {
         this.logger.warn(
-          'Failed to notify attendees of running-late for event %d: %s',
-          event.id,
-          error instanceof Error ? error.message : error,
+          `Failed to notify attendees of running-late for event ${event.id}: ${errorMessage(error)}`,
         );
       }
     }
