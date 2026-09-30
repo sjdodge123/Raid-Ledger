@@ -9,6 +9,10 @@
  * Background: discord-smoke run 36177266463 failed with a bare
  * `Unterminated string in JSON at position 139778` that named no request.
  *
+ * A 401 on a client made by `ApiClient.login()` (the JWT expired mid-suite)
+ * re-logs in ONCE and re-sends ONCE. A bare-JWT client never re-logs in, a
+ * failed re-login surfaces the original 401, and nothing ever loops.
+ *
  * Pure — global fetch is replaced by a stub; no network, no API, no env.
  *
  * Run: npx tsx src/smoke/api.spec.ts
@@ -52,11 +56,14 @@ function bodyOf(next: Canned): string | ReadableStream<Uint8Array> {
   });
 }
 
+/** One stubbed fetch: the URL and the Authorization header it carried. */
+type Call = { url: string; auth: string | null };
+
 /** Replace global fetch with a stub that serves `responses` in order. */
-function stubFetch(responses: Canned[]): string[] {
-  const calls: string[] = [];
-  globalThis.fetch = (async (input: string | URL | Request) => {
-    calls.push(String(input));
+function stubFetch(responses: Canned[]): Call[] {
+  const calls: Call[] = [];
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({ url: String(input), auth: new Headers(init?.headers).get('Authorization') });
     const next = responses[Math.min(calls.length - 1, responses.length - 1)];
     return new Response(bodyOf(next), {
       status: next.status ?? 200,
@@ -123,6 +130,57 @@ for (const method of ['post', 'put', 'patch'] as const) {
     );
   });
 }
+
+/** A login response minting `token`. */
+function loginOk(token: string): Canned {
+  return { body: JSON.stringify({ access_token: token, user: { id: 9 } }) };
+}
+
+/** A client made by login() (so it may re-login), with its own fetch stub. */
+async function loginClient(): Promise<ApiClient> {
+  stubFetch([loginOk('token-1')]);
+  return ApiClient.login(BASE, 'admin@test', 'pw');
+}
+
+const UNAUTHORIZED: Canned = { status: 401, body: '{"message":"Unauthorized"}' };
+
+await test('a login client re-logs in once on a 401 and returns the re-sent body', async () => {
+  const client = await loginClient();
+  const calls = stubFetch([UNAUTHORIZED, loginOk('token-2'), { body: VALID }]);
+  const result = await client.get<{ name: string }>('/events/7').catch((e: unknown) => e);
+  assert.deepEqual(result, { name: 'café' }, `expected the re-sent body, got ${messageOf(result)}`);
+  assert.deepEqual(
+    calls.map((c) => c.url),
+    [`${BASE}/events/7`, `${BASE}/auth/local`, `${BASE}/events/7`],
+    'expected call → re-login → re-send',
+  );
+  assert.equal(calls[2].auth, 'Bearer token-2', 'the re-send must carry the fresh token');
+});
+
+await test('a failed re-login throws the original 401 with the re-login failure as cause', async () => {
+  const client = await loginClient();
+  const calls = stubFetch([UNAUTHORIZED, { status: 500, body: '{}' }, { body: VALID }]);
+  const err = await rejectionOf(client.get('/events/7'), 'get()');
+  assert.equal(calls.length, 2, `expected 2 fetches (call + re-login), got ${calls.length}`);
+  assert.equal(messageOf(err), 'GET /events/7 → 401');
+  const cause = err instanceof Error ? err.cause : undefined;
+  assert.equal(messageOf(cause), 'Login failed: 500', 'the re-login failure must be the cause');
+});
+
+await test('a bare-token client throws on a 401 without re-logging in', async () => {
+  const calls = stubFetch([UNAUTHORIZED, loginOk('token-2'), { body: VALID }]);
+  const err = await rejectionOf(api.get('/events/7'), 'get()');
+  assert.equal(messageOf(err), 'GET /events/7 → 401');
+  assert.equal(calls.length, 1, `a bare-token client must not re-login: expected 1 fetch, got ${calls.length}`);
+});
+
+await test('401 → re-login → 401 throws the normal error after exactly 3 fetches', async () => {
+  const client = await loginClient();
+  const calls = stubFetch([UNAUTHORIZED, loginOk('token-2'), UNAUTHORIZED, loginOk('token-3'), { body: VALID }]);
+  const err = await rejectionOf(client.post('/events/7/signup', {}), 'post()');
+  assert.equal(calls.length, 3, `must re-login at most once: expected 3 fetches, got ${calls.length}`);
+  assert.equal(messageOf(err), 'POST /events/7/signup → 401: {"message":"Unauthorized"}');
+});
 
 globalThis.fetch = realFetch;
 
