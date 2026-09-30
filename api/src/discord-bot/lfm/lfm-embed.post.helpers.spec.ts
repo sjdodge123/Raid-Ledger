@@ -19,19 +19,36 @@
  *  - **(c) playing at 0, forum refused, falls back to text.** The other D3
  *    exit — a refused forum post at LFG has no text fallback, but a playing
  *    group is not LFG.
+ *
+ * TDB:954 — the E3 heal (`replaceDeletedPost`) drops the tracking row before
+ * posting its replacement. `postNew` now reports whether a row landed, and the
+ * heal restores the ORIGINAL row whenever one did not — otherwise the group is
+ * left untracked and every later change returns early (E4).
  */
+import { Logger } from '@nestjs/common';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import { resolveLfgBoardSurface } from '../lfg-board/lfg-board-surface.helpers';
 import { resolveLfmChannel } from './lfm-channel.helpers';
-import { insertLfmMessage } from './lfm-embed.db-helpers';
+import {
+  deleteLfmMessage,
+  insertLfmMessage,
+  restoreLfmMessage,
+  type LfmMessageRow,
+} from './lfm-embed.db-helpers';
 import type { LfmGroupView } from './lfm-embed.helpers';
-import { postNew, type LfmPostDeps } from './lfm-embed.post.helpers';
+import {
+  postNew,
+  replaceDeletedPost,
+  type LfmPostDeps,
+} from './lfm-embed.post.helpers';
 
 jest.mock('../lfg-board/lfg-board-surface.helpers');
 jest.mock('./lfm-channel.helpers');
 jest.mock('./lfm-embed.db-helpers', () => ({
   ...jest.requireActual<object>('./lfm-embed.db-helpers'),
   insertLfmMessage: jest.fn(),
+  deleteLfmMessage: jest.fn(),
+  restoreLfmMessage: jest.fn(),
 }));
 
 const GAME_ID = 12;
@@ -135,5 +152,139 @@ describe('postNew — D3 floor vs a playing group (ROK-1695)', () => {
       CONTEXT,
     );
     expect(sentTo(sendEmbed)).toEqual(['chan-text']);
+  });
+});
+
+/** A two-hand render: above the D3 floor, so every surface may post it. */
+const TWO_HANDS = view({ memberCount: 2, memberNames: ['Bosco', 'Karl'] });
+
+/** The tracking row whose Discord message a human deleted. */
+const DELETED_ROW: LfmMessageRow = {
+  id: 'row-1',
+  gameId: GAME_ID,
+  guildId: GUILD_ID,
+  channelId: 'chan-text',
+  messageId: 'msg-gone',
+  state: 'open',
+  lastMemberCount: 2,
+  threadId: null,
+  postKind: 'text',
+  postedAt: new Date('2026-09-01T10:00:00.000Z'),
+  updatedAt: new Date('2026-09-01T10:00:00.000Z'),
+  closedAt: null,
+};
+
+describe('postNew — reports whether a row now tracks the post (TDB:954)', () => {
+  it('returns true after a text post', async () => {
+    jest
+      .mocked(resolveLfgBoardSurface)
+      .mockResolvedValue({ kind: 'text', ...TEXT });
+    const { deps } = makeDeps();
+
+    await expect(postNew(deps, GAME_ID, TWO_HANDS)).resolves.toBe(true);
+  });
+
+  it('returns true after a forum post', async () => {
+    jest.mocked(resolveLfgBoardSurface).mockResolvedValue(FORUM);
+    const { deps, postThread, sendEmbed } = makeDeps();
+    postThread.mockResolvedValue({
+      threadId: 'thread-9',
+      starterMessageId: 'starter-9',
+    });
+
+    await expect(postNew(deps, GAME_ID, TWO_HANDS)).resolves.toBe(true);
+    expect(sentTo(sendEmbed)).toEqual([]);
+  });
+
+  it('returns false when D3 keeps a one-hand open group off text', async () => {
+    jest
+      .mocked(resolveLfgBoardSurface)
+      .mockResolvedValue({ kind: 'text', ...TEXT });
+    const { deps } = makeDeps();
+
+    await expect(postNew(deps, GAME_ID, view({}))).resolves.toBe(false);
+  });
+
+  it('returns false when no surface resolves', async () => {
+    jest.mocked(resolveLfgBoardSurface).mockResolvedValue(null);
+    const { deps } = makeDeps();
+
+    await expect(postNew(deps, GAME_ID, TWO_HANDS)).resolves.toBe(false);
+  });
+});
+
+function useTextSurface(): void {
+  jest
+    .mocked(resolveLfgBoardSurface)
+    .mockResolvedValue({ kind: 'text', ...TEXT });
+}
+
+describe('replaceDeletedPost — the E3 heal never drops a row it cannot replace (TDB:954)', () => {
+  it('restores the ORIGINAL row and rethrows when sendEmbed rejects', async () => {
+    useTextSurface();
+    const { deps, sendEmbed } = makeDeps();
+    sendEmbed.mockRejectedValue(new Error('Missing Access'));
+
+    await expect(
+      replaceDeletedPost(deps, DELETED_ROW, TWO_HANDS),
+    ).rejects.toThrow('Missing Access');
+    expect(jest.mocked(restoreLfmMessage).mock.calls).toEqual([
+      [deps.db, DELETED_ROW],
+    ]);
+    expect(jest.mocked(restoreLfmMessage).mock.calls[0][1]).toBe(DELETED_ROW);
+  });
+
+  it('rethrows the POST error, not the restore error, when both fail', async () => {
+    useTextSurface();
+    const { deps, sendEmbed } = makeDeps();
+    sendEmbed.mockRejectedValue(new Error('Missing Access'));
+    jest
+      .mocked(restoreLfmMessage)
+      .mockRejectedValueOnce(new Error('connection reset'));
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    await expect(
+      replaceDeletedPost(deps, DELETED_ROW, TWO_HANDS),
+    ).rejects.toThrow('Missing Access');
+    expect(warn.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringContaining('connection reset'),
+    ]);
+    warn.mockRestore();
+  });
+
+  it('restores the row when no surface resolves', async () => {
+    jest.mocked(resolveLfgBoardSurface).mockResolvedValue(null);
+    const { deps } = makeDeps();
+
+    await replaceDeletedPost(deps, DELETED_ROW, TWO_HANDS);
+
+    expect(jest.mocked(restoreLfmMessage).mock.calls).toEqual([
+      [deps.db, DELETED_ROW],
+    ]);
+  });
+
+  it('does not restore once the replacement is tracked', async () => {
+    useTextSurface();
+    const { deps } = makeDeps();
+
+    await replaceDeletedPost(deps, DELETED_ROW, TWO_HANDS);
+
+    expect(insertLfmMessage).toHaveBeenCalledWith(
+      deps.db,
+      expect.objectContaining({ gameId: GAME_ID, messageId: 'msg-new' }),
+    );
+    expect(restoreLfmMessage).not.toHaveBeenCalled();
+  });
+
+  it('drops the row BEFORE posting, so the replacement clears the unique index', async () => {
+    useTextSurface();
+    const { deps, sendEmbed } = makeDeps();
+
+    await replaceDeletedPost(deps, DELETED_ROW, TWO_HANDS);
+
+    expect(deleteLfmMessage).toHaveBeenCalledWith(deps.db, 'row-1');
+    expect(
+      jest.mocked(deleteLfmMessage).mock.invocationCallOrder[0],
+    ).toBeLessThan(sendEmbed.mock.invocationCallOrder[0]);
   });
 });

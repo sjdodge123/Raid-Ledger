@@ -209,6 +209,23 @@ export async function deleteLfmMessage(db: LfgDb, id: string): Promise<void> {
 }
 
 /**
+ * Put back a row `deleteLfmMessage` dropped when its replacement never landed
+ * (E3 heal that failed or skipped), so the next change event still finds it.
+ *
+ * The FULL row, not an input: same `id` and `posted_at`, because
+ * `latestConversionTarget` bounds on `posted_at`. Unlike `insertLfmMessage`
+ * this DOES swallow a conflict: if a replacement open row already landed under
+ * `uq_lfg_group_messages_game_open`, the group has its live message and the
+ * restore is correctly a no-op rather than a bug to surface.
+ */
+export async function restoreLfmMessage(
+  db: LfgDb,
+  row: LfmMessageRow,
+): Promise<void> {
+  await db.insert(schema.lfgGroupMessages).values(row).onConflictDoNothing();
+}
+
+/**
  * The games row, badge columns and all.
  *
  * The whole row rather than a projection: `getGroupSummary` takes a full row,
