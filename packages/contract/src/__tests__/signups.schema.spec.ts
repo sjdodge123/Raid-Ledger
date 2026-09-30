@@ -6,8 +6,8 @@
  *   - `runningLateAt` (nullable datetime)
  *   - `lateMinutes` (nullable positive int — column exists, unset in v1)
  *
- * The contract package has no test runner of its own; this spec mirrors the
- * convention in `lineup.schema.spec.ts`.
+ * Runs under the contract workspace's own vitest config
+ * (`npm test -w @raid-ledger/contract`).
  */
 import { describe, it, expect } from 'vitest';
 import { SignupResponseSchema } from '../signups.schema.js';

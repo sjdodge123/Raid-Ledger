@@ -61,6 +61,9 @@ import { SettingsModule } from '../settings/settings.module';
     NotificationDedupService,
     RosterNotificationBufferService,
     DiscordNotificationService,
+    // The DEMO_MODE render seam (`/admin/test/render-dm-embed`) runs the real
+    // DM embed builder so smoke tests can assert DM chrome without a DM.
+    DiscordNotificationEmbedService,
     GameAffinityNotificationService,
     LfgAffinityDmService,
     LineupLfgBridgeService,

@@ -2,6 +2,7 @@
  * Shared type definitions for the GameTime feature.
  * Extracted from game-time.service.ts for file size compliance (ROK-711).
  */
+import type { GameTimeAbsence } from '@raid-ledger/contract';
 
 export interface TemplateSlot {
   dayOfWeek: number;
@@ -44,12 +45,8 @@ export interface OverrideRecord {
   status: string;
 }
 
-export interface AbsenceRecord {
-  id: number;
-  startDate: string;
-  endDate: string;
-  reason: string | null;
-}
+/** Absence row as returned by the API; the contract owns the shape. */
+export type AbsenceRecord = GameTimeAbsence;
 
 /** Shape of signed-up event rows returned by the week query. */
 export interface SignedUpEventRow {
