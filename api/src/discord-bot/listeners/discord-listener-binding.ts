@@ -17,7 +17,7 @@ interface GatewayEmitter {
 type GatewayHandler = (...args: never[]) => void;
 
 /** A gateway event name paired with the handler to attach for it. */
-export interface GatewayBinding {
+interface GatewayBinding {
   event: keyof ClientEvents;
   handler: GatewayHandler;
 }
