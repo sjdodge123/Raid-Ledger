@@ -2,6 +2,7 @@ import {
   VoiceAttendanceService,
   classifyVoiceSession,
 } from './voice-attendance.service';
+import { Logger } from '@nestjs/common';
 import type { MockDb } from '../../common/testing/drizzle-mock';
 import * as flushH from './voice-attendance-flush.helpers';
 import {
@@ -165,6 +166,18 @@ describe('VoiceAttendanceService', () => {
       const result = await service.findActiveScheduledEvents('voice-ch-1');
       expect(result).toEqual([]);
       expect(mockFindActive).not.toHaveBeenCalled();
+    });
+
+    it('warns with the channel id interpolated when guildId is null', async () => {
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      mockGetGuildId.mockReturnValue(null);
+      await service.findActiveScheduledEvents('voice-ch-1');
+      expect(warn).toHaveBeenCalledWith(
+        '[voice-pipe] findActive: no guildId, channelId=voice-ch-1',
+      );
+      warn.mockRestore();
     });
 
     it('delegates to findActiveEventsForChannel with correct args', async () => {
