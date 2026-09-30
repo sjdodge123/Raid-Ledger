@@ -7,9 +7,12 @@
  * buttons and link point at a match id that no longer exists, so it must be
  * DELETED from the channel, and match B must get its own fresh card.
  *
- * Shared-guild isolation: every active lineup is archived first, and every
- * assertion is keyed to THIS lineup's id, so a sibling env's or an earlier
- * run's poll cards in the same channel can never satisfy or fail it.
+ * Shared-guild isolation: keying on the lineup id is NOT enough. CI reseeds
+ * the same lineup and match ids every run, and `deleteLineup` leaves the
+ * run's fresh card B in the shared channel, so an earlier run's card links a
+ * byte-identical `/community-lineup/7/schedule/3`. Every read is therefore
+ * fenced to messages posted AFTER a snapshot taken before the lineup exists
+ * (the `ghostIds` pattern from reschedule-poll-lockin.test.ts).
  */
 import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
 import {
@@ -29,6 +32,27 @@ import {
   resolveLineupChannelId,
 } from './lineup-scheduling-poll-card.test.js';
 
+/** Messages snapshotted before the lineup exists (a full fetch window). */
+const FENCE_SNAPSHOT_COUNT = 100;
+
+/** True only for a message this run posted. */
+type Fence = (m: SimpleMessage) => boolean;
+
+/**
+ * Snapshot the channel before this run posts anything; admit only messages
+ * newer than the newest one already there. Snowflakes grow with time, so this
+ * excludes every snapshotted id AND any older ghost a later read reaches once
+ * other messages are deleted and the 100-message window slides back.
+ */
+async function snapshotFence(channelId: string): Promise<Fence> {
+  const msgs = await readLastMessages(channelId, FENCE_SNAPSHOT_COUNT);
+  const newest = msgs.reduce((max, m) => {
+    const id = BigInt(m.id);
+    return id > max ? id : max;
+  }, 0n);
+  return (m) => BigInt(m.id) > newest;
+}
+
 /** The card's masked-link path for one scheduling match. */
 function pollPath(lineupId: number, matchId: number): string {
   return `/community-lineup/${lineupId}/schedule/${matchId}`;
@@ -41,21 +65,22 @@ function cardsLinking(msgs: SimpleMessage[], fragment: string): SimpleMessage[] 
   );
 }
 
-/** Wait for a card linking `path`; name the missing card on timeout. */
+/** Wait for a card THIS run posted linking `path`; name it on timeout. */
 async function awaitCard(
   ctx: TestContext,
   channelId: string,
+  fresh: Fence,
   path: string,
   label: string,
 ): Promise<SimpleMessage> {
   try {
     return await pollForEmbed(
       channelId,
-      (m) => cardsLinking([m], path).length > 0,
+      (m) => fresh(m) && cardsLinking([m], path).length > 0,
       ctx.config.timeoutMs,
     );
   } catch {
-    throw new Error(`Expected ${label} linking ${path} in ${channelId}; none posted`);
+    throw new Error(`Expected ${label} linking ${path} in ${channelId}; none posted this run`);
   }
 }
 
@@ -78,17 +103,21 @@ async function awaitCardDeleted(
   }
 }
 
-/** Exactly one OPEN card for the lineup remains, and it links match B. */
+/**
+ * Of the cards THIS run posted, card A is gone and exactly one OPEN card
+ * remains, linking match B. Earlier runs' identical cards are fenced out.
+ */
 async function assertOnlyFreshCard(
   channelId: string,
+  fresh: Fence,
   lineupId: number,
   pathA: string,
   pathB: string,
 ): Promise<void> {
-  const msgs = await readLastMessages(channelId, 100);
+  const msgs = (await readLastMessages(channelId, FENCE_SNAPSHOT_COUNT)).filter(fresh);
   const stale = cardsLinking(msgs, pathA);
   if (stale.length > 0) {
-    throw new Error(`Expected no card linking ${pathA} after re-decide, found ${stale.length}`);
+    throw new Error(`Expected no card linking ${pathA} after re-decide, found ${stale.length} posted this run`);
   }
   const open = cardsLinking(msgs, `/community-lineup/${lineupId}/schedule/`).filter(
     (m) => m.embeds.some((e) => (e.author ?? '').includes(POLL_OPEN)),
@@ -96,7 +125,7 @@ async function assertOnlyFreshCard(
   const linksB = open.every((m) => cardsLinking([m], pathB).length > 0);
   if (open.length !== 1 || !linksB) {
     throw new Error(
-      `Expected exactly 1 ${POLL_OPEN} card for lineup ${lineupId} linking ${pathB}, found ${open.length}`,
+      `Expected exactly 1 ${POLL_OPEN} card posted this run for lineup ${lineupId} linking ${pathB}, found ${open.length}`,
     );
   }
 }
@@ -113,13 +142,14 @@ const redecideDeletesOrphanedCard: SmokeTest = {
   category: 'embed',
   async run(ctx: TestContext) {
     await archiveAllLineups(ctx.api);
+    const channelId = await resolveLineupChannelId(ctx.api, ctx.defaultChannelId);
+    const fresh = await snapshotFence(channelId);
     const lineup = await buildDecidedLineup(ctx.api, `Re-decide Card ${Date.now()}`);
     try {
       await awaitProcessing(ctx.api);
-      const channelId = await resolveLineupChannelId(ctx.api, ctx.defaultChannelId);
       const matchA = await loadSchedulingMatch(ctx.api, lineup.id);
       const pathA = pollPath(lineup.id, matchA.id);
-      const cardA = await awaitCard(ctx, channelId, pathA, 'the first poll card');
+      const cardA = await awaitCard(ctx, channelId, fresh, pathA, 'the first poll card');
 
       await redecide(ctx, lineup.id);
       await awaitCardDeleted(ctx, channelId, cardA, pathA);
@@ -129,10 +159,10 @@ const redecideDeletesOrphanedCard: SmokeTest = {
         throw new Error(`Expected the re-decide to replace match ${matchA.id}, got the same id`);
       }
       const pathB = pollPath(lineup.id, matchB.id);
-      const cardB = await awaitCard(ctx, channelId, pathB, 'a fresh poll card');
+      const cardB = await awaitCard(ctx, channelId, fresh, pathB, 'a fresh poll card');
       const embedB = cardB.embeds.find((e) => (e.description ?? '').includes(pathB));
       if (embedB) assertPollOpen(embedB);
-      await assertOnlyFreshCard(channelId, lineup.id, pathA, pathB);
+      await assertOnlyFreshCard(channelId, fresh, lineup.id, pathA, pathB);
     } finally {
       await deleteLineup(ctx.api, lineup.id);
     }
