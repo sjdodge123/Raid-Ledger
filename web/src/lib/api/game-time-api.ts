@@ -1,4 +1,5 @@
 import type {
+    GameTimeAbsence,
     GameTimeConfirmResponse,
     GameTimeResponse,
     GameTimeTemplateInput,
@@ -67,14 +68,6 @@ export async function saveMyGameTimeOverrides(
     });
 }
 
-/** Absence shape returned from the API */
-interface AbsenceRecord {
-    id: number;
-    startDate: string;
-    endDate: string;
-    reason: string | null;
-}
-
 /** Create an absence range */
 export async function createGameTimeAbsence(
     input: {
@@ -82,8 +75,8 @@ export async function createGameTimeAbsence(
         endDate: string;
         reason?: string;
     },
-): Promise<AbsenceRecord> {
-    const response = await fetchApi<{ data: AbsenceRecord }>(
+): Promise<GameTimeAbsence> {
+    const response = await fetchApi<{ data: GameTimeAbsence }>(
         '/users/me/game-time/absences',
         { method: 'POST', body: JSON.stringify(input) },
     );
@@ -104,9 +97,9 @@ export async function deleteGameTimeAbsence(
  * Sends the browser timezone offset so "expired" is evaluated in the user's
  * local day, not raw UTC.
  */
-export async function getGameTimeAbsences(): Promise<AbsenceRecord[]> {
+export async function getGameTimeAbsences(): Promise<GameTimeAbsence[]> {
     const tzOffset = String(new Date().getTimezoneOffset());
-    const response = await fetchApi<{ data: AbsenceRecord[] }>(
+    const response = await fetchApi<{ data: GameTimeAbsence[] }>(
         `/users/me/game-time/absences?tzOffset=${tzOffset}`,
     );
     return response.data;
