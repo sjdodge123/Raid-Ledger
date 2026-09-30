@@ -123,6 +123,8 @@ function useCompletionHandlers(completeOnboarding: ReturnType<typeof useComplete
 } {
     const navigate = useNavigate();
     const handleSkipAll = useCallback(() => {
+        // Escape stays armed during a Complete: a second mutate would re-POST and drop Complete's onSuccess.
+        if (completeOnboarding.isPending) return;
         completeOnboarding.mutate(undefined, {
             onSuccess: () => {
                 toast.info('Setup skipped. You can update your profile anytime.');
@@ -167,7 +169,9 @@ export function OnboardingWizardPage(): JSX.Element | null {
     const { handleSkipAll, handleComplete } = useCompletionHandlers(completeOnboarding);
     useEscapeDismiss(handleSkipAll, settled);
 
-    const shouldRedirect = !isRerun && ((user && isAdmin(user)) || user?.onboardingCompletedAt);
+    // TDB:982: once Complete / Skip All is in flight or done, its own navigate owns the redirect
+    // (maybe an invite claim). The auth/me patch landing with it must not trip this one first.
+    const shouldRedirect = !isRerun && !completeOnboarding.isPending && !completeOnboarding.isSuccess && ((user && isAdmin(user)) || user?.onboardingCompletedAt);
     if (shouldRedirect) return <Navigate to="/calendar" replace />;
     // Tech-debt [12]: the step list must be final before step 1 shows —
     // design-system §4.6, `null` while a gate query resolves.

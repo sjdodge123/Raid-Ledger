@@ -55,8 +55,7 @@ export class OgMetaService {
       return await this.inviteService.resolveInvite(code);
     } catch (err) {
       this.logger.warn(
-        'Failed to resolve invite for OG tags: %s',
-        err instanceof Error ? err.message : 'Unknown error',
+        `Failed to resolve invite for OG tags: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
       return this.renderFallbackHtml(
         'Raid Ledger',

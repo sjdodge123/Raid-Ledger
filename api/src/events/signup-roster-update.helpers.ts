@@ -195,8 +195,7 @@ type NotifyArgs = [
 function logNotifyError(label: string) {
   return (err: unknown) =>
     logger.warn(
-      `Failed to send ${label} notifications: %s`,
-      err instanceof Error ? err.message : 'Unknown error',
+      `Failed to send ${label} notifications: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
 }
 

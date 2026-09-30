@@ -106,8 +106,7 @@ describe('RosterBuilder', () => {
             <RosterBuilder pool={mockPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
         );
 
-        const slotElements = screen.getAllByText('Assign');
-        fireEvent.click(slotElements[0].closest('div[class*="min-h"]')!);
+        fireEvent.click(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0]);
 
         expect(screen.getByText(/Assign to/)).toBeInTheDocument();
     });

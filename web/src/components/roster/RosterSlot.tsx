@@ -1,6 +1,7 @@
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import React from 'react';
 import { RosterCard } from './RosterCard';
+import { StretchedAction } from '../ui/stretched-action';
 
 interface RosterSlotProps {
     role: RosterRole;
@@ -56,36 +57,46 @@ function resolveRemoveFn(item: RosterAssignmentResponse, onRemove?: (id: number)
     return undefined;
 }
 
+/** Accessible name of the slot's action; keeps the visible "Join" / "Assign" word (WCAG 2.5.3). */
+function slotActionLabel(role: RosterRole, position: number, item: RosterAssignmentResponse | undefined, isAdmin: boolean) {
+    if (item) return `Manage ${role} slot ${position} (${item.username})`;
+    return `${isAdmin ? 'Assign' : 'Join'} ${role} slot ${position}`;
+}
+
+/**
+ * The badge paints above the stretched button and overhangs the frame (-top-2), so pointer-events-none
+ * would still leave its top half dead: it forwards its own click instead (keyboard users have the button).
+ */
+function PositionBadge({ className, onClick, children }: { className: string; onClick?: () => void; children: React.ReactNode }) {
+    return (
+        <span onClick={onClick} data-testid="roster-slot-badge"
+            className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${className} text-foreground`}>
+            {children}
+        </span>
+    );
+}
+
 export const RosterSlot = React.memo(function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove }: RosterSlotProps) {
     const handleClick = () => {
         if (!item && onJoinClick) { onJoinClick(role, position); return; }
         if (onAdminClick) onAdminClick(role, position);
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent): void => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleClick();
-        }
-    };
-
     const isClickable = !!onAdminClick || (!item && !!onJoinClick);
     const isTentative = item?.signupStatus === 'tentative';
     const isDeparted = item?.signupStatus === 'departed';
     const glowClass = isCurrentUser && !isDeparted ? 'ring-2 ring-emerald-400/60 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse-subtle' : '';
-    const focusClass = isClickable ? 'focus-visible:ring-2 focus-visible:ring-emerald-500' : '';
     const badgeBg = isDeparted ? 'bg-red-600' : isTentative ? 'bg-amber-600' : color;
     const badgeContent = isDeparted ? `\u{1F6AA} ${position}` : isTentative ? `\u23F3 ${position}` : position;
 
     return (
-        <div onClick={handleClick}
-            {...(isClickable ? { role: 'button', tabIndex: 0, onKeyDown: handleKeyDown } : {})}
-            className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${focusClass} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
-            <span className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${badgeBg} text-foreground`}>
-                {badgeContent}
-            </span>
+        <div className={`relative min-h-[60px] rounded-lg border transition-all ${isClickable ? 'cursor-pointer' : ''} ${glowClass} ${slotBorderClass(item, isCurrentUser, isClickable)}`}>
+            {/* TDB:1949 — a stretched native button BESIDE the card, never around its name link / Remove button (axe nested-interactive). */}
+            {isClickable && <StretchedAction onClick={handleClick} label={slotActionLabel(role, position, item, !!onAdminClick)} />}
+            <PositionBadge className={badgeBg} onClick={isClickable ? handleClick : undefined}>{badgeContent}</PositionBadge>
             {item ? (
-                <div className="p-1"><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} /></div>
+                // raiseControls lifts the card's link, Remove button and titled badges above the stretched slot button.
+                <div className="p-1"><RosterCard item={item} onRemove={resolveRemoveFn(item, onRemove, isCurrentUser, onSelfRemove)} raiseControls={isClickable} /></div>
             ) : (
                 <EmptySlotContent isClickable={isClickable} isAdmin={!!onAdminClick} />
             )}

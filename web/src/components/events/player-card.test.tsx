@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { PlayerCard } from './player-card';
@@ -97,13 +97,13 @@ describe('PlayerCard — FlexibilityBadges boundary inputs', () => {
     });
 
     it('does not render a role icon for an unrecognized role string', () => {
-        const player = createMockPlayer({ preferredRoles: ['support'] });
+        const player = createMockPlayer({ preferredRoles: ['support'] as unknown as RosterAssignmentResponse['preferredRoles'] });
         renderCard({ player });
         expect(screen.queryByAltText('support')).not.toBeInTheDocument();
     });
 
     it('renders only recognized role icons when mixed with unknown roles', () => {
-        const player = createMockPlayer({ preferredRoles: ['tank', 'support'] });
+        const player = createMockPlayer({ preferredRoles: ['tank', 'support'] as unknown as RosterAssignmentResponse['preferredRoles'] });
         renderCard({ player });
         expect(screen.getByAltText('tank')).toBeInTheDocument();
         expect(screen.queryByAltText('support')).not.toBeInTheDocument();
@@ -224,5 +224,47 @@ describe('PlayerCard — profile link (ROK-381 guest profile, ROK-1694)', () => 
 
     it('a member links to /users/<id> with no guest state', () => {
         expect(followNameLink(createMockPlayer(), '/users/10')).toEqual({ path: '/users/10', state: null });
+    });
+});
+
+// TDB:1949 — PlayerCard owns no card action; an ancestor (RosterSlot) owns the stretched button.
+describe('PlayerCard — non-clickable rendering (TDB:1949)', () => {
+    it('renders no card action and raises nothing', () => {
+        const { container } = renderCard({ player: createMockPlayer(), onRemove: vi.fn() });
+        expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Remove TestPlayer from slot']);
+        expect(container.querySelector('.relative'), 'non-clickable cards keep their original classes').toBeNull();
+        expect(container.firstElementChild).toHaveClass('transition-all');
+    });
+});
+
+/** Every titled, non-interactive decoration: tentative, running late, preferred roles, character line. */
+function badgedPlayer() {
+    return createMockPlayer({
+        signupStatus: 'tentative', runningLate: true, lateMinutes: 10, preferredRoles: ['tank', 'healer'],
+        character: { id: '00000000-0000-4000-8000-000000000001', name: 'Thrall', className: 'Shaman', role: 'dps', avatarUrl: null },
+    });
+}
+
+// Titled badges rise above the stretched action so their tooltip shows on hover; they take no click, so
+// they drop the frame's pointer cursor. A click landing exactly on a badge does not fire the card action.
+describe('PlayerCard — titled badges above the stretched action (TDB:1949)', () => {
+    it('raiseControls (an ancestor owns the action, e.g. RosterSlot): link, Remove and badges are raised', () => {
+        const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn(), raiseControls: true });
+        expect(container.querySelectorAll('[title]:not(a):not(button)').length).toBe(4);
+        const unraised = [...container.querySelectorAll('[title]')].filter((el) => !el.classList.contains('relative'));
+        expect(unraised.map((el) => el.getAttribute('title')), 'titled elements left under an ancestor action').toEqual([]);
+        expect(container.firstElementChild, 'the card itself owns no action').not.toHaveClass('relative');
+        const pointerBadges = [...container.querySelectorAll('[title]:not(a):not(button)')].filter((el) => !el.classList.contains('cursor-default'));
+        expect(pointerBadges.map((el) => el.getAttribute('title')), 'raised badges take no click, so they must not inherit the pointer cursor').toEqual([]);
+    });
+
+    it('the raised character line hugs its text so the card action keeps the rest of the row', () => {
+        const { container } = renderCard({ player: badgedPlayer(), raiseControls: true });
+        expect(container.querySelector('p[title]')).toHaveClass('relative', 'w-fit', 'max-w-full');
+    });
+
+    it('a non-clickable card with every badge raises nothing (identical to main)', () => {
+        const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn() });
+        expect(container.querySelector('.relative, .w-fit, .cursor-default'), 'non-clickable cards keep their original classes').toBeNull();
     });
 });

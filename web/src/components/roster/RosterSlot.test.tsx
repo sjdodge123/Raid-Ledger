@@ -1,20 +1,23 @@
 /**
  * Unit tests for RosterSlot keyboard accessibility (ROK-881).
- * Verifies that clickable slots are keyboard-navigable with
- * role="button", tabIndex, and Enter/Space handlers.
+ * Verifies that clickable slots are keyboard-navigable: since TDB:1949 the slot
+ * action is a native <button> (tabbable, Enter/Space) beside the card, not a
+ * role="button" div around it.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { RosterSlot } from './RosterSlot';
 
 // Mock RosterCard to avoid pulling in the full dependency tree
 vi.mock('./RosterCard', () => ({
-    RosterCard: ({ item }: { item: { username: string } }) => (
-        <div data-testid="roster-card">{item.username}</div>
+    RosterCard: ({ item, raiseControls }: { item: { username: string }; raiseControls?: boolean }) => (
+        <div data-testid="roster-card" data-raise-controls={String(!!raiseControls)}>{item.username}</div>
     ),
 }));
 
-function createAssignment(overrides: Record<string, unknown> = {}) {
+function createAssignment(overrides: Partial<RosterAssignmentResponse> = {}): RosterAssignmentResponse {
     return {
         id: 1,
         signupId: 100,
@@ -26,13 +29,13 @@ function createAssignment(overrides: Record<string, unknown> = {}) {
         position: 1,
         isOverride: false,
         character: null,
-        signupStatus: 'confirmed' as const,
+        signupStatus: 'signed_up',
         ...overrides,
     };
 }
 
 describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
-    it('has role="button" and tabIndex when clickable (empty + onJoinClick)', () => {
+    it('is a native, tabbable button when clickable (empty + onJoinClick)', () => {
         render(
             <RosterSlot
                 role="tank"
@@ -41,11 +44,12 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
                 onJoinClick={vi.fn()}
             />,
         );
-        const slot = screen.getByRole('button');
-        expect(slot).toHaveAttribute('tabindex', '0');
+        const slot = screen.getByRole('button', { name: 'Join tank slot 1' });
+        expect(slot.tagName).toBe('BUTTON');
+        expect(slot.tabIndex).toBe(0);
     });
 
-    it('has role="button" and tabIndex when admin-clickable with item', () => {
+    it('is a native, tabbable button when admin-clickable with item', () => {
         render(
             <RosterSlot
                 role="tank"
@@ -55,8 +59,9 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
                 onAdminClick={vi.fn()}
             />,
         );
-        const slot = screen.getByRole('button');
-        expect(slot).toHaveAttribute('tabindex', '0');
+        const slot = screen.getByRole('button', { name: 'Manage tank slot 1 (Player1)' });
+        expect(slot.tagName).toBe('BUTTON');
+        expect(slot.tabIndex).toBe(0);
     });
 
     it('does NOT have role="button" when not clickable', () => {
@@ -72,7 +77,7 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
         expect(slot).not.toHaveAttribute('tabindex');
     });
 
-    it('fires onJoinClick on Enter key for empty clickable slot', () => {
+    it('fires onJoinClick on Enter key for empty clickable slot', async () => {
         const onJoinClick = vi.fn();
         render(
             <RosterSlot
@@ -82,12 +87,12 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
                 onJoinClick={onJoinClick}
             />,
         );
-        const slot = screen.getByRole('button');
-        fireEvent.keyDown(slot, { key: 'Enter' });
+        screen.getByRole('button').focus();
+        await userEvent.setup().keyboard('{Enter}');
         expect(onJoinClick).toHaveBeenCalledWith('tank', 1);
     });
 
-    it('fires onJoinClick on Space key for empty clickable slot', () => {
+    it('fires onJoinClick on Space key for empty clickable slot', async () => {
         const onJoinClick = vi.fn();
         render(
             <RosterSlot
@@ -97,12 +102,12 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
                 onJoinClick={onJoinClick}
             />,
         );
-        const slot = screen.getByRole('button');
-        fireEvent.keyDown(slot, { key: ' ' });
+        screen.getByRole('button').focus();
+        await userEvent.setup().keyboard(' ');
         expect(onJoinClick).toHaveBeenCalledWith('tank', 1);
     });
 
-    it('fires onAdminClick on Enter key for admin-clickable slot', () => {
+    it('fires onAdminClick on Enter key for admin-clickable slot', async () => {
         const onAdminClick = vi.fn();
         render(
             <RosterSlot
@@ -113,13 +118,13 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
                 onAdminClick={onAdminClick}
             />,
         );
-        const slot = screen.getByRole('button');
-        fireEvent.keyDown(slot, { key: 'Enter' });
+        screen.getByRole('button').focus();
+        await userEvent.setup().keyboard('{Enter}');
         expect(onAdminClick).toHaveBeenCalledWith('healer', 2);
     });
 
     it('has focus-visible ring class when clickable', () => {
-        const { container } = render(
+        render(
             <RosterSlot
                 role="tank"
                 position={1}
@@ -127,8 +132,7 @@ describe('RosterSlot — keyboard accessibility (ROK-881)', () => {
                 onJoinClick={vi.fn()}
             />,
         );
-        const slot = container.querySelector('[role="button"]');
-        expect(slot?.className).toContain('focus-visible:ring-2');
+        expect(screen.getByRole('button').className).toContain('focus-visible:ring-2');
     });
 });
 
@@ -162,5 +166,38 @@ describe('RosterSlot — departed signup treatment (ROK-1237)', () => {
         );
         const slot = container.querySelector('.rounded-lg');
         expect(slot?.className ?? '').not.toContain('animate-pulse-subtle');
+    });
+
+    // The slot's stretched button covers the card, so the card raises its link, Remove and titled badges.
+    it('asks the card to raise its controls only when the slot is clickable', () => {
+        const { rerender } = render(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} onAdminClick={vi.fn()} />);
+        expect(screen.getByTestId('roster-card')).toHaveAttribute('data-raise-controls', 'true');
+        rerender(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} />);
+        expect(screen.getByTestId('roster-card')).toHaveAttribute('data-raise-controls', 'false');
+    });
+});
+
+describe('RosterSlot — position badge forwards its click (TDB:1949)', () => {
+    it('a click on the position badge of an empty Join slot fires the join action', () => {
+        const onJoinClick = vi.fn();
+        render(<RosterSlot role="tank" position={1} color="bg-blue-500" onJoinClick={onJoinClick} />);
+        fireEvent.click(screen.getByTestId('roster-slot-badge'));
+        expect(onJoinClick, 'the badge paints above the stretched button and must not swallow the click').toHaveBeenCalledWith('tank', 1);
+    });
+
+    it('a click on the position badge of a filled Manage slot fires the admin action', () => {
+        const onAdminClick = vi.fn();
+        render(<RosterSlot role="tank" position={1} color="bg-blue-500" item={createAssignment()} onAdminClick={onAdminClick} />);
+        fireEvent.click(screen.getByTestId('roster-slot-badge'));
+        expect(onAdminClick, 'the badge paints above the stretched button and must not swallow the click').toHaveBeenCalledWith('tank', 1);
+    });
+});
+
+describe('RosterSlot — stretched action covers the whole frame (TDB:1949)', () => {
+    it('reaches over the 1px border ring, so a click on the border is not a dead strip under the pointer', () => {
+        render(<RosterSlot role="tank" position={1} color="bg-blue-500" onJoinClick={vi.fn()} />);
+        const classes = screen.getByRole('button', { name: 'Join tank slot 1' }).className.split(' ');
+        expect(classes, 'inset-0 stops at the border; the action must use -inset-px').toContain('-inset-px');
+        expect(classes).not.toContain('inset-0');
     });
 });

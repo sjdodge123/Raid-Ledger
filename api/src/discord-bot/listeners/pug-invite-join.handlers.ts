@@ -4,6 +4,7 @@ import * as schema from '../../drizzle/schema';
 import type { PugRole } from '@raid-ledger/contract';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import { safeDeferReply, safeErrorReply } from './pug-invite.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /**
  * Handle "Join Event" button from invite link unfurl (ROK-263).
@@ -18,9 +19,8 @@ export async function handleJoinEventButton(
     await doJoinEvent(deps, interaction, inviteCode);
   } catch (error) {
     deps.logger.error(
-      'Error handling Join Event for invite %s:',
-      inviteCode,
-      error,
+      `Error handling Join Event for invite ${inviteCode}`,
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,
@@ -149,9 +149,6 @@ async function createSignupAndCleanup(
     content: `You've joined **${eventTitle}**! Check the event page for details.`,
   });
   deps.logger.log(
-    'Discord user %s joined event %d via invite link %s',
-    interaction.user.username,
-    slot.eventId,
-    slot.id,
+    `Discord user ${interaction.user.username} joined event ${slot.eventId} via invite link ${slot.id}`,
   );
 }

@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { MessageFlags } from 'discord.js';
 import type { ButtonInteraction } from 'discord.js';
@@ -26,6 +26,7 @@ import {
   validateRoachOutContext,
   type RoachOutDeps,
 } from './roach-out-interaction.handlers';
+import { errorMessage, errorStack } from '../../common/error-format.helpers';
 
 /**
  * Handles "Roach Out" button interactions on event reminder DMs (ROK-378).
@@ -86,9 +87,8 @@ export class RoachOutInteractionListener {
       await this.routeRoachOut(interaction, parsed);
     } catch (error) {
       this.logger.error(
-        'Error handling roach out for event %d:',
-        parsed.eventId,
-        error,
+        `Error handling roach out for event ${parsed.eventId}`,
+        errorStack(error),
       );
       await safeEditReplyHelper(
         interaction,
@@ -110,7 +110,9 @@ export class RoachOutInteractionListener {
       }
       return true;
     } catch (error) {
-      this.logger.warn('Failed to defer roach out interaction: %s', error);
+      this.logger.warn(
+        `Failed to defer roach out interaction: ${errorMessage(error)}`,
+      );
       return false;
     }
   }
@@ -174,9 +176,7 @@ export class RoachOutInteractionListener {
     });
     await updateChannelEmbedsHelper(this.deps, eventId);
     this.logger.log(
-      'Discord user %s roached out of event %d',
-      interaction.user.id,
-      eventId,
+      `Discord user ${interaction.user.id} roached out of event ${eventId}`,
     );
   }
 
@@ -231,16 +231,27 @@ export class RoachOutInteractionListener {
       );
       return true;
     } catch (error) {
-      this.logger.warn(
-        'Failed to cancel signup: %s',
-        error instanceof Error ? error.message : 'Unknown',
-      );
       await interaction.editReply({
-        content: "You're not signed up for this event.",
+        content: this.cancelFailureReply(eventId, error),
         components: [],
       });
       return false;
     }
+  }
+
+  /** Only a missing signup is the user's fault; anything else is a real failure. */
+  private cancelFailureReply(eventId: number, error: unknown): string {
+    if (error instanceof NotFoundException) {
+      this.logger.warn(
+        `Roach out found no signup to cancel for event ${eventId}: ${error.message}`,
+      );
+      return "You're not signed up for this event.";
+    }
+    this.logger.error(
+      `Failed to cancel signup for event ${eventId}`,
+      errorStack(error),
+    );
+    return 'Something went wrong. Please try again later.';
   }
 }
 

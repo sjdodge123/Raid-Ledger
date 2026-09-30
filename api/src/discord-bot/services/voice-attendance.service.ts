@@ -117,8 +117,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const guildId = this.clientService.getGuildId();
     if (!guildId) {
       this.logger.warn(
-        '[voice-pipe] findActive: no guildId, channelId=%s',
-        channelId,
+        `[voice-pipe] findActive: no guildId, channelId=${channelId}`,
       );
       return [];
     }
