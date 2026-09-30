@@ -30,9 +30,7 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
             />
         );
 
-        const joinLabels = screen.getAllByText('Join');
-        const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-        fireEvent.click(firstSlot);
+        fireEvent.click(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[0]);
 
         expect(mockSlotClick).toHaveBeenCalledTimes(1);
         expect(mockSlotClick).toHaveBeenCalledWith('tank', 1);
@@ -50,9 +48,7 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
             />
         );
 
-        const joinLabels = screen.getAllByText('Join');
-        const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-        fireEvent.click(firstSlot);
+        fireEvent.click(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[0]);
 
         expect(screen.queryByText('Join?')).not.toBeInTheDocument();
     });
@@ -69,14 +65,14 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
             />
         );
 
-        const joinLabels = screen.getAllByText('Join');
+        expect(screen.getAllByText('Join').length).toBeGreaterThan(1);
 
-        const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+        const firstSlot = screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[0];
         fireEvent.click(firstSlot);
         expect(mockSlotClick).toHaveBeenCalledTimes(1);
         expect(mockSlotClick).toHaveBeenCalledWith('tank', 1);
 
-        const secondSlot = joinLabels[1].closest('div[class*="min-h-[60px]"]')!;
+        const secondSlot = screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[1];
         fireEvent.click(secondSlot);
         expect(mockSlotClick).toHaveBeenCalledTimes(2);
         expect(mockSlotClick).toHaveBeenCalledWith('tank', 2);
@@ -113,7 +109,7 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
         expect(assignLabels.length).toBeGreaterThan(0);
         expect(screen.queryByText('Join')).not.toBeInTheDocument();
 
-        const firstSlot = assignLabels[0].closest('div[class*="min-h-[60px]"]')!;
+        const firstSlot = screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0];
         fireEvent.click(firstSlot);
 
         expect(screen.getByText(/Assign to/)).toBeInTheDocument();
