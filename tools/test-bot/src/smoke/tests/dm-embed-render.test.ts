@@ -14,7 +14,9 @@
  *  - footer = `<community> · <type label>`
  *  - colour = the state colour (constants below, copied from the API)
  *  - the description carries no raw Discord tokens
- *  - at least one button, and the embed passes the shared render rules
+ *  - button rows in the order `sendEmbedDM` sends them: type-specific rows
+ *    first (event_reminder's Roach Out row), the primary row last
+ *  - the embed passes the shared render rules
  */
 import {
   assertEmbedColor,
@@ -35,6 +37,9 @@ const CANCELLED_RED = 0xef4444;
 
 /** discord-api-types ComponentType.Button. */
 const BUTTON_COMPONENT_TYPE = 2;
+
+/** The primary row always ends with this link button (`buildActionRow`). */
+const ADJUST_LABEL = 'Adjust Notifications';
 
 /** Same fallback the API applies when no community name is configured. */
 const DEFAULT_COMMUNITY = 'Raid Ledger';
@@ -59,10 +64,12 @@ interface RenderCase {
   label: string;
   color: number;
   register: string;
+  /** A button on the type-specific row that must come BEFORE the primary row. */
+  extraRowLabel?: string;
 }
 
 const CASES: RenderCase[] = [
-  { type: 'event_reminder', label: 'Event Reminder', color: REMINDER_AMBER, register: 'needs_you amber' },
+  { type: 'event_reminder', label: 'Event Reminder', color: REMINDER_AMBER, register: 'needs_you amber', extraRowLabel: 'Roach Out' },
   { type: 'new_event', label: 'New Event', color: ANNOUNCEMENT_CYAN, register: 'announcing cyan' },
   { type: 'event_cancelled', label: 'Event Cancelled', color: CANCELLED_RED, register: 'cancelled red' },
 ];
@@ -114,10 +121,23 @@ function assertChrome(embed: SimpleEmbed, community: string, c: RenderCase) {
   assertEmbedRenderRules(embed);
 }
 
-function assertHasAnyButton(res: RenderedDmEmbed, c: RenderCase) {
-  const buttons = res.components.flatMap((r) => r.components ?? []);
-  if (!buttons.some((b) => b.type === BUTTON_COMPONENT_TYPE)) {
-    fail(`${c.type}: expected at least one button, got ${JSON.stringify(res.components)}`);
+function rowLabels(res: RenderedDmEmbed): string[][] {
+  return res.components.map((r) =>
+    (r.components ?? [])
+      .filter((b) => b.type === BUTTON_COMPONENT_TYPE)
+      .map((b) => b.label ?? ''),
+  );
+}
+
+/** Rows as `sendEmbedDM` sends them: type-specific rows first, primary last. */
+function assertButtonRows(res: RenderedDmEmbed, c: RenderCase) {
+  const rows = rowLabels(res);
+  const last = rows[rows.length - 1] ?? [];
+  if (!last.includes(ADJUST_LABEL)) {
+    fail(`${c.type}: expected the last row to be the primary row with "${ADJUST_LABEL}", got ${JSON.stringify(rows)}`);
+  }
+  if (c.extraRowLabel && !(rows.length > 1 && rows[0].includes(c.extraRowLabel))) {
+    fail(`${c.type}: expected a first row with "${c.extraRowLabel}" before the primary row, got ${JSON.stringify(rows)}`);
   }
 }
 
@@ -132,7 +152,7 @@ function renderTest(c: RenderCase): SmokeTest {
         fail(`${c.type}: seam resolved community "${res.communityName}", branding says "${community}"`);
       }
       assertChrome(toSimpleEmbed(res.embed), community, c);
-      assertHasAnyButton(res, c);
+      assertButtonRows(res, c);
     },
   };
 }
