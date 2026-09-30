@@ -3,13 +3,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
-import {
-  fetchWeekSignedUpEvents,
-  fetchSignupsPreview,
-  fetchOverrides,
-  fetchAbsences,
-  assembleCompositeView,
-} from './game-time-composite.helpers';
+import { buildCompositeViewResult } from './game-time-composite-view.helpers';
 import {
   fetchUpcomingSignedUpEvents,
   buildCommittedDbKeys,
@@ -18,14 +12,7 @@ import {
   resolveLocalToday,
   fetchAbsencesEndingOnOrAfter,
 } from './game-time-absence.helpers';
-import {
-  gameTimeAgeDays,
-  isGameTimeStale,
-} from './game-time-freshness.helpers';
-import {
-  stampGameTimeConfirmedAt,
-  fetchGameTimeConfirmedAt,
-} from './game-time-confirmation.helpers';
+import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 
 // Re-export types for backward compatibility
 export type {
@@ -269,63 +256,15 @@ export class GameTimeService {
     const cacheKey = `game-time:${userId}:${weekStart.toISOString()}:${tzOffset}`;
     const cached = this.getCached<CompositeViewResult>(cacheKey);
     if (cached) return cached;
-    const result = await this.buildCompositeResult(userId, weekStart, tzOffset);
-    this.setCache(cacheKey, result);
-    return result;
-  }
-
-  /** Fetch all data sources for composite view in parallel (including template). */
-  private async fetchAllCompositeData(
-    userId: number,
-    weekStart: Date,
-    weekEnd: Date,
-  ) {
-    const [startDate, endDate] = this.weekDateRange(weekStart, weekEnd);
-    return Promise.all([
-      this.getTemplate(userId),
-      fetchWeekSignedUpEvents(this.db, userId, weekStart, weekEnd),
-      fetchOverrides(this.db, userId, startDate, endDate),
-      fetchAbsences(this.db, userId, startDate, endDate),
-      fetchGameTimeConfirmedAt(this.db, userId),
-    ]);
-  }
-
-  /** Build the composite result from all data sources. */
-  private async buildCompositeResult(
-    userId: number,
-    weekStart: Date,
-    tzOffset: number,
-  ): Promise<CompositeViewResult> {
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 7);
-    const [template, signedUpEvents, overrideRows, absenceRows, confirmedAt] =
-      await this.fetchAllCompositeData(userId, weekStart, weekEnd);
-    const remapped = template.slots.map((s) => ({
-      ...s,
-      dayOfWeek: (s.dayOfWeek + 1) % 7,
-    }));
-    const signupsMap = await fetchSignupsPreview(this.db, [
-      ...new Set(signedUpEvents.map((e) => e.eventId)),
-    ]);
-    const view = assembleCompositeView(
-      remapped,
-      signedUpEvents,
-      overrideRows,
-      absenceRows,
-      signupsMap,
+    const result = await buildCompositeViewResult(
+      this.db,
+      (id) => this.getTemplate(id),
+      userId,
       weekStart,
-      weekEnd,
       tzOffset,
     );
-    return { ...view, ...this.freshnessFields(confirmedAt) };
-  }
-
-  /** Compute week date range strings for override/absence queries. */
-  private weekDateRange(weekStart: Date, weekEnd: Date): [string, string] {
-    return [
-      weekStart.toISOString().split('T')[0],
-      new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
-    ];
+    this.setCache(cacheKey, result);
+    return result;
   }
 
   /**
@@ -344,19 +283,5 @@ export class GameTimeService {
   /** Stamp game_time_confirmed_at to NOW for a user (ROK-999). */
   private async updateGameTimeConfirmedAt(userId: number): Promise<void> {
     await stampGameTimeConfirmedAt(this.db, userId);
-  }
-
-  /**
-   * Freshness fields on the composite view: whether the schedule is stale
-   * (ROK-999) and how many days old the confirmation is (ROK-1564).
-   */
-  private freshnessFields(confirmedAt: Date | null): {
-    gameTimeStale: boolean;
-    gameTimeAgeDays: number | null;
-  } {
-    return {
-      gameTimeStale: isGameTimeStale(confirmedAt),
-      gameTimeAgeDays: gameTimeAgeDays(confirmedAt),
-    };
   }
 }

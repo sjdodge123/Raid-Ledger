@@ -21,6 +21,7 @@ import {
 } from './discord-embed.factory';
 import { DiscordEmojiService } from './discord-emoji.service';
 import type { SchedulingPollEmbedData } from './discord-embed-scheduling.types';
+import { personalizedFieldName } from '../embeds/embed-personalized.helpers';
 
 const OPEN = '▸';
 const SOLID = '●';
@@ -34,7 +35,7 @@ const SIGNUP_EMERALD = 0x34d399;
 const SYSTEM_SLATE = 0x64748b;
 
 /** Canonical DM-only field name (embed-personalized.helpers.ts). */
-const PERSONALIZED_FIELD = '\u{1F3AE} In your library';
+const PERSONALIZED_FIELD = personalizedFieldName('owned');
 
 const CLIENT_URL = 'http://localhost:5173';
 const COMMUNITY = 'Test Guild';

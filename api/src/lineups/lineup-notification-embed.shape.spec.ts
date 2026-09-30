@@ -27,6 +27,7 @@ import {
   type NominationEntry,
 } from './lineup-notification-embed.helpers';
 import { buildAbortedEmbed } from './lineup-notification-aborted-embed.helpers';
+import { personalizedFieldName } from '../discord-bot/embeds/embed-personalized.helpers';
 
 const DIE = '\u{1F3B2}';
 const BALLOT = '\u{1F5F3}';
@@ -46,7 +47,7 @@ const SIGNUP_EMERALD = 0x34d399;
 const ERROR_RED = 0xef4444;
 
 /** Canonical DM-only field name (embed-personalized.helpers.ts). */
-const PERSONALIZED_FIELD = '\u{1F3AE} In your library';
+const PERSONALIZED_FIELD = personalizedFieldName('owned');
 
 const COMMUNITY = 'Test Guild';
 const BASE_URL = 'https://raid.example';

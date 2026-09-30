@@ -62,7 +62,8 @@ export interface OrchestrationDeps {
   settingsService: SettingsService;
 }
 
-function dispatchDeps(deps: OrchestrationDeps): DispatchDeps {
+/** Narrow the orchestration deps to what the dispatch helpers read. */
+export function dispatchDeps(deps: OrchestrationDeps): DispatchDeps {
   const { db, settingsService, botClient, dedupService } = deps;
   return { db, settingsService, botClient, dedupService };
 }
@@ -220,7 +221,7 @@ export async function orchestrateSchedulingOpen(
  * ROK-1624: `rosterNames` is the event's roster, NOT the match group — see
  * `resolveEventRosterNames`. The caller keeps the group in scope as
  * `members`, so the still-unruled AC4 line ("5 of 12 from the group") is one
- * extra argument from here; see HANDOVER.md.
+ * extra argument from here.
  */
 function eventCreatedBuilder(
   match: MatchInfo,

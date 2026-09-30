@@ -20,67 +20,67 @@ function mockModuleRef(overrides: Record<string, unknown>): ModuleRef {
   } as unknown as ModuleRef;
 }
 
-describe('demo-test-signups.helpers', () => {
-  describe('buildSignupDto', () => {
-    it('returns undefined without a dto', () => {
-      expect(buildSignupDto()).toBeUndefined();
-    });
+describe('demo-test-signups.helpers - buildSignupDto', () => {
+  it('returns undefined without a dto', () => {
+    expect(buildSignupDto()).toBeUndefined();
+  });
 
-    it('filters invalid roles and keeps valid ones', () => {
-      const dto = buildSignupDto({
-        preferredRoles: ['tank', 'bard', 'dps'],
-        characterId: 'c1',
-      });
-      expect(dto).toEqual({
-        preferredRoles: ['tank', 'dps'],
-        characterId: 'c1',
-      });
+  it('filters invalid roles and keeps valid ones', () => {
+    const dto = buildSignupDto({
+      preferredRoles: ['tank', 'bard', 'dps'],
+      characterId: 'c1',
     });
-
-    it('drops preferredRoles entirely when none are valid', () => {
-      const dto = buildSignupDto({ preferredRoles: ['bard'] });
-      expect(dto?.preferredRoles).toBeUndefined();
+    expect(dto).toEqual({
+      preferredRoles: ['tank', 'dps'],
+      characterId: 'c1',
     });
   });
 
-  describe('createSignupForTest', () => {
-    let db: MockDb;
+  it('drops preferredRoles entirely when none are valid', () => {
+    const dto = buildSignupDto({ preferredRoles: ['bard'] });
+    expect(dto?.preferredRoles).toBeUndefined();
+  });
+});
 
-    beforeEach(() => {
-      db = createDrizzleMock();
-    });
+describe('demo-test-signups.helpers - createSignupForTest', () => {
+  let db: MockDb;
 
-    it('delegates to SignupsService.signup with skipEndedCheck', async () => {
-      const signup = jest.fn().mockResolvedValue({ id: 42 });
-      const moduleRef = mockModuleRef({ SignupsService: { signup } });
-
-      const result = await createSignupForTest(
-        moduleRef,
-        db as unknown as Db,
-        7,
-        3,
-      );
-
-      expect(signup).toHaveBeenCalledWith(7, 3, undefined, {
-        skipEndedCheck: true,
-      });
-      expect(result).toEqual({ id: 42 });
-      expect(db.update).not.toHaveBeenCalled();
-    });
-
-    it('overrides the status in the DB for non-default statuses', async () => {
-      const signup = jest.fn().mockResolvedValue({ id: 42 });
-      const moduleRef = mockModuleRef({ SignupsService: { signup } });
-
-      await createSignupForTest(moduleRef, db as unknown as Db, 7, 3, {
-        status: 'tentative',
-      });
-
-      expect(db.update).toHaveBeenCalled();
-      expect(db.set).toHaveBeenCalledWith({ status: 'tentative' });
-    });
+  beforeEach(() => {
+    db = createDrizzleMock();
   });
 
+  it('delegates to SignupsService.signup with skipEndedCheck', async () => {
+    const signup = jest.fn().mockResolvedValue({ id: 42 });
+    const moduleRef = mockModuleRef({ SignupsService: { signup } });
+
+    const result = await createSignupForTest(
+      moduleRef,
+      db as unknown as Db,
+      7,
+      3,
+    );
+
+    expect(signup).toHaveBeenCalledWith(7, 3, undefined, {
+      skipEndedCheck: true,
+    });
+    expect(result).toEqual({ id: 42 });
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('overrides the status in the DB for non-default statuses', async () => {
+    const signup = jest.fn().mockResolvedValue({ id: 42 });
+    const moduleRef = mockModuleRef({ SignupsService: { signup } });
+
+    await createSignupForTest(moduleRef, db as unknown as Db, 7, 3, {
+      status: 'tentative',
+    });
+
+    expect(db.update).toHaveBeenCalled();
+    expect(db.set).toHaveBeenCalledWith({ status: 'tentative' });
+  });
+});
+
+describe('demo-test-signups.helpers - cancel and departure', () => {
   it('cancelSignupForTest delegates to SignupsRosterService.cancel', async () => {
     const cancel = jest.fn().mockResolvedValue(undefined);
     const moduleRef = mockModuleRef({ SignupsRosterService: { cancel } });
