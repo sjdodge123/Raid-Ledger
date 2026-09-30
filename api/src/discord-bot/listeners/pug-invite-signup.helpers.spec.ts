@@ -108,7 +108,11 @@ describe('PUG signup — anonymous path', () => {
       'dps',
     );
     expect(deps.db.insert).toHaveBeenCalledTimes(2);
-    expect(deps.logger.log).toHaveBeenCalled();
+    expect(deps.logger.log).toHaveBeenCalledWith(
+      expect.stringMatching(
+        /^Created anonymous signup 100 for PUG PugPlayer on event 1 \(\w+\)$/,
+      ),
+    );
   });
 
   it('should delegate to signupsService.signup for linked PUG', async () => {

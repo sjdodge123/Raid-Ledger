@@ -20,6 +20,7 @@ import type {
 import type { SettingsService } from '../../settings/settings.service';
 import { ROACH_OUT_BUTTON_IDS } from '../discord-bot.constants';
 import type { EmbedState } from '../discord-bot.constants';
+import { errorStack } from '../../common/error-format.helpers';
 
 /** Dependencies for roach-out handlers. */
 export interface RoachOutDeps {
@@ -89,9 +90,7 @@ export async function editReminderEmbed(
     await msg.edit({ embeds: [updatedEmbed], components });
   } catch (error) {
     logger.warn(
-      'Failed to edit reminder embed for event "%s": %s',
-      eventTitle,
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to edit reminder embed for event "${eventTitle}": ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }
@@ -139,9 +138,8 @@ export async function updateChannelEmbeds(
     await rerenderEmbedRecords(deps, records, eventData, context, eventId);
   } catch (error) {
     deps.logger.error(
-      'Failed to update channel embeds for event %d:',
-      eventId,
-      error,
+      `Failed to update channel embeds for event ${eventId}`,
+      errorStack(error),
     );
   }
 }
@@ -209,10 +207,7 @@ async function rerenderSingleRecord(
     );
   } catch (err) {
     deps.logger.warn(
-      'Failed to update embed message %s for event %d: %s',
-      record.messageId,
-      eventId,
-      err instanceof Error ? err.message : 'Unknown',
+      `Failed to update embed message ${record.messageId} for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
     );
   }
 }
@@ -273,9 +268,7 @@ export async function safeEditReply(
   } catch (error: unknown) {
     if (isDiscordInteractionError(error)) {
       logger.warn(
-        'Interaction editReply failed (code %d): %s',
-        (error as { code: number }).code,
-        (error as Error).message,
+        `Interaction editReply failed (code ${(error as { code: number }).code}): ${(error as Error).message}`,
       );
       return;
     }

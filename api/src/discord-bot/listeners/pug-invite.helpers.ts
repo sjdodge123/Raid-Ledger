@@ -15,6 +15,7 @@ import { PugsService } from '../../events/pugs.service';
 import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
 import { NOTIFICATION_EMBED_AUTHORS } from '../../notifications/notification-embed.helpers';
 import type { CharacterDto } from '@raid-ledger/contract';
+import { errorMessage } from '../../common/error-format.helpers';
 
 /** Dependencies shared across pug invite handler functions. */
 export interface PugInviteDeps {
@@ -36,9 +37,7 @@ export async function safeDeferUpdate(
     return true;
   } catch (error) {
     logger.warn(
-      'Failed to defer update for interaction %s: %s',
-      interaction.id,
-      error,
+      `Failed to defer update for interaction ${interaction.id}: ${errorMessage(error)}`,
     );
     return false;
   }
@@ -56,9 +55,7 @@ export async function safeDeferReply(
     return true;
   } catch (error) {
     logger.warn(
-      'Failed to defer reply for interaction %s: %s',
-      interaction.id,
-      error,
+      `Failed to defer reply for interaction ${interaction.id}: ${errorMessage(error)}`,
     );
     return false;
   }

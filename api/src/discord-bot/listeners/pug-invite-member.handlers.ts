@@ -18,6 +18,7 @@ import {
   buildRoleSelectRow,
   buildRoleSelectContent,
 } from './pug-invite.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 /** Handle member invite Accept/Decline button interaction. */
 export async function handleMemberInviteButton(
@@ -37,9 +38,8 @@ export async function handleMemberInviteButton(
     }
   } catch (error) {
     deps.logger.error(
-      'Error handling member invite for event %d:',
-      eventId,
-      error,
+      `Error handling member invite for event ${eventId}`,
+      errorStack(error),
     );
     await safeErrorReply(
       interaction,
@@ -131,16 +131,14 @@ async function handleMemberDecline(
   try {
     await deps.signupsService.cancelByDiscordUser(eventId, interaction.user.id);
     deps.logger.log(
-      'Cancelled signup for Discord user %s on event %d via decline',
-      interaction.user.id,
-      eventId,
+      `Cancelled signup for Discord user ${interaction.user.id} on event ${eventId} via decline`,
     );
   } catch {
     /* No signup to cancel */
   }
   await safeEditDmEmbed(interaction, buildDeclinedEmbed());
   await interaction.editReply({ content: 'Declined.' });
-  deps.logger.log('Member declined invite for event %d', eventId);
+  deps.logger.log(`Member declined invite for event ${eventId}`);
 }
 
 // --- Shared helpers ---
