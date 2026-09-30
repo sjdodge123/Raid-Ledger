@@ -85,6 +85,14 @@ export function startBindingCacheSweep(
   }, CACHE_SWEEP_MS);
 }
 
+/** Stops a sweep started by `startBindingCacheSweep`; returns the cleared handle. */
+export function stopBindingCacheSweep(
+  timer: ReturnType<typeof setInterval> | null,
+): null {
+  if (timer) clearInterval(timer);
+  return null;
+}
+
 export interface BindingHealthDeps {
   db: PostgresJsDatabase<typeof schema> | null;
   clientService: Pick<DiscordBotClientService, 'getGuildId'>;

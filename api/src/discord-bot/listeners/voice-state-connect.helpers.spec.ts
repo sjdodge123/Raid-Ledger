@@ -12,6 +12,7 @@ import {
   reportBindingHealth,
   runConnectRecoverySteps,
   startBindingCacheSweep,
+  stopBindingCacheSweep,
   type BindingHealthDeps,
   type ConnectRecoveryStep,
 } from './voice-state-connect.helpers';
@@ -240,8 +241,13 @@ describe('startBindingCacheSweep', () => {
 
     const timer = startBindingCacheSweep(cache);
     jest.advanceTimersByTime(10 * 60 * 1000);
-    clearInterval(timer);
 
     expect([...cache.keys()]).toEqual(['fresh']);
+    expect(stopBindingCacheSweep(timer)).toBeNull();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('stopping with no running sweep is a no-op', () => {
+    expect(stopBindingCacheSweep(null)).toBeNull();
   });
 });

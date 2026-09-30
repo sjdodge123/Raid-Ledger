@@ -50,6 +50,7 @@ import {
   reportBindingHealth,
   runConnectRecoverySteps,
   startBindingCacheSweep,
+  stopBindingCacheSweep,
 } from './voice-state-connect.helpers';
 import {
   handleChannelLeave,
@@ -208,10 +209,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
     clearTimerMap(this.debounceTimers);
     clearTimerMap(this.pendingRechecks);
     clearTimerMap(this.pendingSpawnTimers);
-    if (this.cacheSweepTimer) {
-      clearInterval(this.cacheSweepTimer);
-      this.cacheSweepTimer = null;
-    }
+    this.cacheSweepTimer = stopBindingCacheSweep(this.cacheSweepTimer);
   }
 
   private startCacheSweep(): void {
