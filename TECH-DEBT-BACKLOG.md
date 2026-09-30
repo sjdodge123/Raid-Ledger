@@ -1974,3 +1974,8 @@ same day (#1278, #1279, #1280).
   Suggested: drop the `export`.
 - **[nit]** web auth redirect (surfaced by the ROK-1366 plan root-cause workflow on env rok-1366, build 934dfed6d; existing AuthGuard behaviour, also on main): after a silent 401 fall-through (a spent or expired magic link, or a deep link to a missing object), `sessionStorage.authRedirect` keeps the old path (e.g. `/events/134`) and can bounce a later login to it.
   Suggested: clear `authRedirect` when the sign-in page mounts without a pending redirect intent, or validate it after login.
+
+### 2026-09-29 — fix/itad-429-0930 (surfaced during review of the ITAD 429 fix)
+
+- **low** `api/src/itad/itad-early-access-sync.helpers.ts:137` (`enrichEarlyAccessPhase`) / `api/src/itad/itad-price-sync.helpers.ts` (`processPricingChunks`) — no circuit breaker: in a sustained 429 storm every earlyAccess call and pricing chunk still waits out up to `ITAD_RETRY_AFTER_MAX_MS` per attempt, and the tail pass repeats the failures, so one run can take hours (overlap is now prevented by `waitForCompletion: true`). Suggested: stop the phase after K consecutive `ItadRetriesExhaustedError` / exhausted chunks and return `{ degraded: true }`.
+- **nit** `api/src/itad/itad-early-access-sync.helpers.ts:69` (`withCallTimeout`) — a call given up on for a non-pause reason is not cancelled, so its retries continue in the background and can overlap the tail-pass request for the same game. Suggested: thread an `AbortSignal` through `getGameInfo` → `itadFetch` and abort it when the budget expires.
