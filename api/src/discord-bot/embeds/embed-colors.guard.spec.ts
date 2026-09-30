@@ -37,8 +37,9 @@ const DELETED_KEY_RE = new RegExp(
 );
 /**
  * `.setColor(0x34d399)` / `.setColor(3462041)` — a palette bypass. Scanned over
- * whole-file text with `s`+`g` so a literal wrapped onto the next line by
- * prettier is still caught (ROK-1459 review F6).
+ * COMMENT-STRIPPED whole-file text with `s`+`g`: a literal wrapped onto the
+ * next line by prettier is still caught (ROK-1459 review F6), while a comment
+ * that merely names one cannot trip the guard.
  */
 const NUMERIC_SET_COLOR_RE = /\.setColor\(\s*(?:0[xX][0-9a-fA-F]+|\d+)/gs;
 /** A bare 6-digit hex colour literal anywhere in the bot's source. */
@@ -89,20 +90,21 @@ function collectTsFiles(dir: string): string[] {
   return results;
 }
 
-/** Every `file:line — text` in `files` whose WHOLE-FILE text matches `re`. */
-function scanWholeFile(files: string[], re: RegExp): string[] {
-  const hits: string[] = [];
-  for (const filePath of files) {
-    const text = readFileSync(filePath, 'utf-8');
-    for (const match of text.matchAll(re)) {
-      const line = text.slice(0, match.index).split('\n').length;
-      hits.push(
-        `${relative(SRC_DIR, filePath)}:${line} — ${match[0].replace(/\s+/g, ' ')}`,
-      );
-    }
-  }
-  return hits;
+/**
+ * Every `relPath:line — text` where `re` matches `text` as a WHOLE, so one
+ * match may span lines; the line is where the match starts. `matchAll` needs a
+ * GLOBAL regex.
+ */
+function wholeTextHits(text: string, relPath: string, re: RegExp): string[] {
+  return [...text.matchAll(re)].map((match) => {
+    const line = text.slice(0, match.index).split('\n').length;
+    return `${relPath}:${line} — ${match[0].replace(/\s+/g, ' ')}`;
+  });
 }
+
+/** How the scanners read a file; a parameter so the proofs can feed fixtures. */
+type ReadSource = (filePath: string) => string;
+const readSource: ReadSource = (filePath) => readFileSync(filePath, 'utf-8');
 
 /** Every `file:line — text` in `files` whose line matches `re`. */
 function scan(files: string[], re: RegExp): string[] {
@@ -141,6 +143,25 @@ function channelPresenceFiles(): string[] {
   );
 }
 
+/**
+ * `wholeTextHits` over each file's COMMENT-STRIPPED text. Whole-file rather
+ * than per-line so a prettier-wrapped call is still one match; stripped so
+ * prose that names a forbidden literal is not one. Pass a GLOBAL regex.
+ */
+function scanWholeFileStripped(
+  files: string[],
+  re: RegExp,
+  read: ReadSource = readSource,
+): string[] {
+  return files.flatMap((filePath) =>
+    wholeTextHits(
+      stripComments(read(filePath)),
+      relative(SRC_DIR, filePath),
+      re,
+    ),
+  );
+}
+
 /** `scan`, but over comment-stripped text. Pass a NON-global regex. */
 function scanStripped(files: string[], re: RegExp): string[] {
   const hits: string[] = [];
@@ -167,14 +188,40 @@ describe('EMBED_COLORS palette guard (AC6)', () => {
   });
 
   it('no production code passes a numeric literal to setColor', () => {
-    expect(scanWholeFile(files, NUMERIC_SET_COLOR_RE)).toEqual([]);
+    expect(scanWholeFileStripped(files, NUMERIC_SET_COLOR_RE)).toEqual([]);
   });
 
   it('no bot source file hard-codes a hex colour outside the palette', () => {
     const botFiles = collectTsFiles(join(SRC_DIR, 'discord-bot')).filter(
       (f) => !HEX_LITERAL_ALLOWLIST.some((allowed) => f.endsWith(allowed)),
     );
-    expect(scanWholeFile(botFiles, BARE_HEX_COLOR_RE)).toEqual([]);
+    expect(scanWholeFileStripped(botFiles, BARE_HEX_COLOR_RE)).toEqual([]);
+  });
+
+  // Both whole-file scans once ran over RAW text, so a comment naming a
+  // literal turned them red. The fixture path never touches disk: `read` is
+  // stubbed, and spec files are outside the walk, so these strings are inert.
+  const FIXTURE = join(SRC_DIR, 'fixture.ts');
+  const scanFixture = (source: string, re: RegExp) =>
+    scanWholeFileStripped([FIXTURE], re, () => source);
+
+  it('ignores palette literals that appear only in comments', () => {
+    const source =
+      '/* legacy 0xdeadbe and .setColor(0x34d399) */\n' +
+      '// .setColor(0x123456)\nconst x = 1;';
+    // Control: over RAW text (the old scan) the same fixture trips both.
+    const raw = (re: RegExp) => wholeTextHits(source, 'fixture.ts', re);
+    expect(raw(NUMERIC_SET_COLOR_RE)).toHaveLength(2);
+    expect(raw(BARE_HEX_COLOR_RE)).toHaveLength(3);
+    expect(scanFixture(source, NUMERIC_SET_COLOR_RE)).toEqual([]);
+    expect(scanFixture(source, BARE_HEX_COLOR_RE)).toEqual([]);
+  });
+
+  it('still catches a numeric setColor that prettier wrapped onto a new line', () => {
+    const source = 'embed.setColor(\n  0x123456,\n);';
+    expect(scanFixture(source, NUMERIC_SET_COLOR_RE)).toEqual([
+      'fixture.ts:1 — .setColor( 0x123456',
+    ]);
   });
 
   it('exposes exactly the five state colours', () => {
