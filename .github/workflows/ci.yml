@@ -90,6 +90,7 @@ jobs:
               - 'packages/contract/**'
             contract:
               - 'packages/*/package.json'
+              - 'package-lock.json'
               - 'packages/contract/**'
             smoke_tests:
               - 'web/src/**'

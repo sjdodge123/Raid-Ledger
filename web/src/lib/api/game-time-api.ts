@@ -1,5 +1,6 @@
 import type {
     GameTimeAbsence,
+    GameTimeAbsenceInput,
     GameTimeConfirmResponse,
     GameTimeResponse,
     GameTimeTemplateInput,
@@ -70,11 +71,7 @@ export async function saveMyGameTimeOverrides(
 
 /** Create an absence range */
 export async function createGameTimeAbsence(
-    input: {
-        startDate: string;
-        endDate: string;
-        reason?: string;
-    },
+    input: GameTimeAbsenceInput,
 ): Promise<GameTimeAbsence> {
     const response = await fetchApi<{ data: GameTimeAbsence }>(
         '/users/me/game-time/absences',
