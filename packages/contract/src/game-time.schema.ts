@@ -109,6 +109,10 @@ const ABSENCE_DATE_KEYS: PropertyKey[] = ['startDate', 'endDate'];
  * Both dates are strict ISO calendar dates (YYYY-MM-DD) and the range may not
  * end before it starts. The order check only runs once both dates parsed, so
  * a malformed date reports one issue on its own field.
+ *
+ * Supplying `when` replaces zod's default guard, so it must also skip a
+ * root-level issue (a missing body or a non-object input): otherwise the
+ * refine reads `endDate` off `undefined` and throws.
  */
 export const GameTimeAbsenceInputSchema = z
   .object({
@@ -121,7 +125,9 @@ export const GameTimeAbsenceInputSchema = z
     message: 'endDate must be on or after startDate',
     path: ['endDate'],
     when: ({ issues }) =>
-      !issues.some((i) => ABSENCE_DATE_KEYS.includes(i.path?.[0] ?? '')),
+      !issues.some(
+        (i) => !i.path?.length || ABSENCE_DATE_KEYS.includes(i.path[0]),
+      ),
   });
 export type GameTimeAbsenceInput = z.infer<typeof GameTimeAbsenceInputSchema>;
 

@@ -91,3 +91,40 @@ describe('GameTimeAbsenceInputSchema — reason', () => {
         ]);
     });
 });
+
+/**
+ * Parse outcome for any input, with a throw captured as data so a crash shows
+ * up in the assertion diff instead of aborting the test.
+ */
+function outcomeOf(input: unknown) {
+    try {
+        const result = GameTimeAbsenceInputSchema.safeParse(input);
+        if (result.success) return { success: true, issues: [] };
+        const issues = result.error.issues.map(({ path, code }) => ({
+            path,
+            code,
+        }));
+        return { success: false, issues };
+    } catch (err) {
+        return { threw: String(err) };
+    }
+}
+
+describe('GameTimeAbsenceInputSchema — non-object input', () => {
+    // A POST with no JSON body reaches the controller as `undefined`.
+    it.each([
+        { label: 'undefined', input: undefined },
+        { label: 'null', input: null },
+        { label: 'an array', input: [] },
+        { label: 'a string', input: 'x' },
+        { label: 'a number', input: 42 },
+    ])(
+        'reports only the root invalid_type issue for $label',
+        ({ input }) => {
+            expect(outcomeOf(input)).toEqual({
+                success: false,
+                issues: [{ path: [], code: 'invalid_type' }],
+            });
+        },
+    );
+});
