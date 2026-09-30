@@ -7,6 +7,7 @@
  */
 import {
   ITAD_BACKOFF_INITIAL_MS,
+  ITAD_INTERACTIVE_FETCH,
   ITAD_MAX_RETRIES,
   ITAD_RATE_LIMIT_MS,
   ITAD_RETRY_AFTER_MAX_MS,
@@ -21,11 +22,12 @@ interface HttpUtil {
     path: string,
     params: Record<string, string>,
     body: unknown,
+    opts?: { maxPauseWaitMs?: number },
   ) => Promise<T | null>;
   itadFetch: <T>(
     path: string,
     params: Record<string, string>,
-    opts?: { throwOnExhausted?: boolean },
+    opts?: { throwOnExhausted?: boolean; maxPauseWaitMs?: number },
   ) => Promise<T | null>;
 }
 
@@ -400,4 +402,118 @@ describe('ITAD 429 Retry-After', () => {
       expect(await retryOffsets(headers)).toEqual([0, ITAD_BACKOFF_INITIAL_MS]);
     },
   );
+});
+
+/** Observe a promise's outcome without awaiting it. */
+function track<T>(p: Promise<T>): { settled: boolean; value?: T } {
+  const state: { settled: boolean; value?: T } = { settled: false };
+  void p.then((value) => {
+    state.settled = true;
+    state.value = value;
+  });
+  return state;
+}
+
+describe('ITAD interactive fail-fast (maxPauseWaitMs)', () => {
+  let util: HttpUtil;
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    jest.useFakeTimers({ now: T0 });
+    util = loadFreshUtil();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  const fetchedPaths = (): string[] =>
+    mockFetch.mock.calls.map(([url]) => new URL(url as string).pathname);
+
+  it("resolves null at once while another caller's long 429 pause is active", async () => {
+    scriptFetch(res(429, undefined, { 'Retry-After': '30' }));
+    const background = util.itadFetch('/bg', { key: 'k' });
+    await jest.advanceTimersByTimeAsync(1);
+
+    const search = track(
+      util.itadFetch('/search', { key: 'k' }, ITAD_INTERACTIVE_FETCH),
+    );
+    await jest.advanceTimersByTimeAsync(ITAD_RATE_LIMIT_MS);
+
+    expect(search).toEqual({ settled: true, value: null });
+    expect(fetchedPaths()).toEqual(['/bg']);
+    await jest.advanceTimersByTimeAsync(30_000);
+    await background;
+  });
+
+  it.each([
+    [
+      'itadFetch',
+      () => util.itadFetch('/x', { key: 'k' }, ITAD_INTERACTIVE_FETCH),
+    ],
+    [
+      'itadPost',
+      () => util.itadPost('/x', { key: 'k' }, [], ITAD_INTERACTIVE_FETCH),
+    ],
+  ])(
+    '%s resolves null after its own 429 when Retry-After exceeds the limit',
+    async (_label, call: () => Promise<unknown>) => {
+      scriptFetch(res(429, undefined, { 'Retry-After': '30' }));
+      const pending = track(call());
+      await jest.advanceTimersByTimeAsync(ITAD_RATE_LIMIT_MS);
+
+      expect(pending).toEqual({ settled: true, value: null });
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('still waits out a Retry-After shorter than the limit', async () => {
+    const offsets = scriptFetch(res(429, undefined, { 'Retry-After': '2' }));
+    const pending = util.itadFetch('/x', { key: 'k' }, ITAD_INTERACTIVE_FETCH);
+    await jest.advanceTimersByTimeAsync(2_000);
+
+    await expect(pending).resolves.toEqual({ ok: true });
+    expect(offsets).toEqual([0, 2_000]);
+  });
+});
+
+describe('ITAD final attempt', () => {
+  /** Backoff slept between attempts: 500 + 1000 + 2000 with 3 retries. */
+  const retryWindowMs = ITAD_BACKOFF_INITIAL_MS * (2 ** ITAD_MAX_RETRIES - 1);
+  const attemptOffsets = [0, 1, 2, 3].map(
+    (n) => ITAD_BACKOFF_INITIAL_MS * (2 ** n - 1),
+  );
+
+  beforeEach(() => {
+    mockFetch.mockReset();
+    jest.useFakeTimers({ now: T0 });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('resolves null right after the last 5xx, with no backoff sleep after it', async () => {
+    const util = loadFreshUtil();
+    const offsets = scriptFetch(res(503), res(503), res(503), res(503));
+    const pending = track(util.itadFetch('/x', { key: 'k' }));
+    await jest.advanceTimersByTimeAsync(retryWindowMs);
+
+    expect(offsets).toEqual(attemptOffsets);
+    expect(pending).toEqual({ settled: true, value: null });
+  });
+
+  it('resolves null right after the last network error, with no sleep after it', async () => {
+    const util = loadFreshUtil();
+    const offsets: number[] = [];
+    mockFetch.mockImplementation(() => {
+      offsets.push(Date.now() - T0);
+      return Promise.reject(new Error('ECONNRESET'));
+    });
+    const pending = track(util.itadFetch('/x', { key: 'k' }));
+    await jest.advanceTimersByTimeAsync(retryWindowMs);
+
+    expect(offsets).toEqual(attemptOffsets);
+    expect(pending).toEqual({ settled: true, value: null });
+  });
 });

@@ -22,6 +22,13 @@ export const ITAD_BACKOFF_INITIAL_MS = 500;
  * stall the syncs indefinitely.
  */
 export const ITAD_RETRY_AFTER_MAX_MS = 60_000;
+/**
+ * Fetch options for user-facing ITAD calls (search, detail pricing, Steam-id
+ * lookup). They give up (resolve null) rather than wait out a 429 pause
+ * longer than this, so an HTTP request is not held open for up to
+ * `ITAD_RETRY_AFTER_MAX_MS` per attempt. A short `Retry-After` still retries.
+ */
+export const ITAD_INTERACTIVE_FETCH = { maxPauseWaitMs: 5_000 } as const;
 
 /** Redis cache TTL for price/overview results (3h) */
 export const ITAD_PRICE_CACHE_TTL = 10_800;

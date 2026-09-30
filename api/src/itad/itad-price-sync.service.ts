@@ -125,8 +125,13 @@ export class ItadPriceSyncService
   /**
    * Cron: sync ITAD pricing every 4 hours, at :07 past the hour so the run
    * does not share ITAD's rate window with top-of-the-hour jobs.
+   * waitForCompletion: a run that waits out long 429 pauses can outlast the
+   * 4h interval, and two overlapping runs would share one ITAD API key.
    */
-  @Cron('7 */4 * * *', { name: 'ItadPriceSyncService_syncPricing' })
+  @Cron('7 */4 * * *', {
+    name: 'ItadPriceSyncService_syncPricing',
+    waitForCompletion: true,
+  })
   async scheduledSync(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'ItadPriceSyncService_syncPricing',

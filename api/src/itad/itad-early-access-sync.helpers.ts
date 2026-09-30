@@ -62,9 +62,11 @@ export async function executeBulkEarlyAccessUpdate(
  * The deadline is `max(start, end of the latest ITAD 429 pause) + budgetMs`,
  * re-evaluated whenever the timer fires. A call that is legitimately waiting
  * out a `Retry-After` (up to `ITAD_RETRY_AFTER_MAX_MS`) is therefore not
- * counted as failed, and is not left running in the background after being
- * given up on; a call that hangs for any other reason still fails once it
- * has had a full budget of its own. Always clears the timer.
+ * counted as failed. A call that hangs for any other reason (slow upstream,
+ * long FIFO wait) fails once it has had a full budget of its own, but it is
+ * not cancelled: its request keeps retrying in the background, so the tail
+ * pass can briefly overlap it with a second request for the same game.
+ * Always clears the timer.
  */
 function withCallTimeout<T>(p: Promise<T>, budgetMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;

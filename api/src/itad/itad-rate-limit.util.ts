@@ -31,23 +31,35 @@ function nextAllowedAt(): number {
  * pause was raised meanwhile, so a 429 that lands while a queued caller is
  * already sleeping still holds that caller.
  */
-async function waitForTurn(): Promise<void> {
+async function waitForTurn(maxPauseWaitMs: number): Promise<boolean> {
   let seenEpoch = -1;
   while (seenEpoch !== pauseEpoch) {
     seenEpoch = pauseEpoch;
+    if (pausedUntil - Date.now() > maxPauseWaitMs) return false;
     const waitMs = nextAllowedAt() - Date.now();
     if (waitMs > 0) await sleep(waitMs);
   }
   lastStartAt = Date.now();
+  return true;
 }
 
 /**
  * Reserve the next request slot. Callers are served strictly in arrival order
  * and each start is at least `ITAD_RATE_LIMIT_MS` after the previous one.
+ *
+ * Resolves false, without taking a slot, when a 429 pause would hold this
+ * caller for longer than `maxPauseWaitMs`, checked on arrival and again
+ * whenever a new pause is raised while it waits at the head of the queue.
+ * Interactive callers use this to fail fast instead of holding an HTTP
+ * request open for up to `ITAD_RETRY_AFTER_MAX_MS`.
  */
-export function acquireItadSlot(): Promise<void> {
-  const turn = queue.then(waitForTurn);
-  queue = turn.catch(() => undefined);
+export function acquireItadSlot(maxPauseWaitMs = Infinity): Promise<boolean> {
+  if (pausedUntil - Date.now() > maxPauseWaitMs) return Promise.resolve(false);
+  const turn = queue.then(() => waitForTurn(maxPauseWaitMs));
+  queue = turn.then(
+    () => undefined,
+    () => undefined,
+  );
   return turn;
 }
 

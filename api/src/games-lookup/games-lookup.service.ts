@@ -10,7 +10,7 @@ import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 import { mapDbRowToDetail } from '../igdb/igdb.mappers';
 import { steamSourceOnChange } from '../igdb/igdb-upsert-sets.helpers';
-import type { ItadGame } from '../itad/itad.constants';
+import { ITAD_INTERACTIVE_FETCH, type ItadGame } from '../itad/itad.constants';
 import { keepSeedOwned } from './seed-owned-games.helpers';
 
 /**
@@ -78,7 +78,11 @@ export class GamesLookupService {
   }
 
   private async tryItadLookup(q: string): Promise<GameDetailDto | null> {
-    const hits = await this.itadService.searchGames(q, 5);
+    const hits = await this.itadService.searchGames(
+      q,
+      5,
+      ITAD_INTERACTIVE_FETCH,
+    );
     const first = hits.find((g) => g.type === 'game') ?? hits[0];
     if (!first) return null;
     return this.upsertFromItad(first);

@@ -9,6 +9,7 @@ jest.mock('../common/perf-logger', () => ({
 }));
 
 import { Test } from '@nestjs/testing';
+import { SCHEDULE_CRON_OPTIONS } from '@nestjs/schedule/dist/schedule.constants';
 import {
   ItadPriceSyncService,
   buildUpdateData,
@@ -417,16 +418,24 @@ describe('ItadPriceSyncService', () => {
   });
 
   describe('cron schedule', () => {
-    it('schedules the cron at :07 past every 4th hour, off the top-of-hour burst', () => {
+    function cronOptions(): { cronTime: string; waitForCompletion?: boolean } {
       const handler = Object.getOwnPropertyDescriptor(
         ItadPriceSyncService.prototype,
         'scheduledSync',
       )?.value as object;
-      // Key set by @nestjs/schedule's @Cron (SCHEDULE_CRON_OPTIONS).
-      const opts = Reflect.getMetadata('SCHEDULE_CRON_OPTIONS', handler) as {
+      return Reflect.getMetadata(SCHEDULE_CRON_OPTIONS, handler) as {
         cronTime: string;
+        waitForCompletion?: boolean;
       };
-      expect(opts.cronTime).toBe('7 */4 * * *');
+    }
+
+    it('schedules the cron at :07 past every 4th hour, off the top-of-hour burst', () => {
+      expect(cronOptions().cronTime).toBe('7 */4 * * *');
+    });
+
+    it('never starts a run while the previous one is still going', () => {
+      // A run waiting out long 429 pauses can outlast the 4h interval.
+      expect(cronOptions().waitForCompletion).toBe(true);
     });
   });
 

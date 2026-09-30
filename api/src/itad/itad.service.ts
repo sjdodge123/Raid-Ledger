@@ -51,17 +51,21 @@ export class ItadService {
   ) {}
 
   /** Look up an ITAD game by Steam App ID. Returns null if not found or unconfigured. */
-  async lookupBySteamAppId(appId: number): Promise<ItadGame | null> {
+  async lookupBySteamAppId(
+    appId: number,
+    opts: ItadFetchOptions = {},
+  ): Promise<ItadGame | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
 
     const cached = await getCachedLookup<ItadGame>(this.redis, appId);
     if (cached) return cached;
 
-    const result = await itadFetch<ItadLookupResponse>('/games/lookup/v1', {
-      key: apiKey,
-      appid: String(appId),
-    });
+    const result = await itadFetch<ItadLookupResponse>(
+      '/games/lookup/v1',
+      { key: apiKey, appid: String(appId) },
+      opts,
+    );
 
     if (!result?.found || !result.game) return null;
 
@@ -73,6 +77,7 @@ export class ItadService {
   async searchGames(
     title: string,
     limit = DEFAULT_SEARCH_LIMIT,
+    opts: ItadFetchOptions = {},
   ): Promise<ItadGame[]> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return [];
@@ -80,11 +85,11 @@ export class ItadService {
     const cached = await getCachedSearch<ItadGame[]>(this.redis, title, limit);
     if (cached) return cached;
 
-    const result = await itadFetch<ItadGame[]>('/games/search/v1', {
-      key: apiKey,
-      title,
-      results: String(limit),
-    });
+    const result = await itadFetch<ItadGame[]>(
+      '/games/search/v1',
+      { key: apiKey, title, results: String(limit) },
+      opts,
+    );
 
     const games = result ?? [];
     if (games.length > 0) {

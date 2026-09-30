@@ -60,6 +60,12 @@ export interface ItadFetchOptions {
    * try again" apart from "not in ITAD" (a non-retriable status, still null).
    */
   throwOnExhausted?: boolean;
+  /**
+   * Resolve null (or reject, with `throwOnExhausted`) instead of waiting when
+   * a 429 pause would hold the call longer than this. Unset = wait it out.
+   * User-facing paths pass `ITAD_INTERACTIVE_FETCH`.
+   */
+  maxPauseWaitMs?: number;
 }
 
 /** Generic ITAD fetch with rate limiting + 429 backoff */
@@ -70,7 +76,7 @@ export async function itadFetch<T>(
 ): Promise<T | null> {
   const init: RequestInit = { headers: { 'User-Agent': USER_AGENT } };
   const url = buildUrl(path, params);
-  const data = await requestWithRetry<T>(path, url, init, 'ITAD');
+  const data = await requestWithRetry<T>(path, url, init, 'ITAD', opts);
   if (data === EXHAUSTED && opts.throwOnExhausted) {
     throw new ItadRetriesExhaustedError(path);
   }
@@ -88,6 +94,7 @@ export async function itadPost<T>(
   path: string,
   params: Record<string, string>,
   body: unknown,
+  opts: Pick<ItadFetchOptions, 'maxPauseWaitMs'> = {},
 ): Promise<T | null> {
   const init: RequestInit = {
     method: 'POST',
@@ -99,6 +106,7 @@ export async function itadPost<T>(
     buildUrl(path, params),
     init,
     'ITAD POST',
+    opts,
   );
   return data === EXHAUSTED ? null : data;
 }
@@ -116,15 +124,22 @@ interface FetchResult<T> {
 /** Marks "every retry spent" apart from a non-retriable null response. */
 const EXHAUSTED = Symbol('itad-retries-exhausted');
 
-/** Paced attempt loop shared by GET and POST; EXHAUSTED after the last retry. */
+/**
+ * Paced attempt loop shared by GET and POST; EXHAUSTED after the last retry,
+ * or as soon as a 429 pause exceeds the caller's `maxPauseWaitMs`.
+ */
 async function requestWithRetry<T>(
   path: string,
   url: string,
   init: RequestInit,
   label: string,
+  opts: Pick<ItadFetchOptions, 'maxPauseWaitMs'>,
 ): Promise<T | null | typeof EXHAUSTED> {
   for (let attempt = 0; attempt <= ITAD_MAX_RETRIES; attempt++) {
-    await acquireItadSlot();
+    if (!(await acquireItadSlot(opts.maxPauseWaitMs))) {
+      logger.warn(`${label} rate-limit pause too long, giving up: ${path}`);
+      return EXHAUSTED;
+    }
     const result = await attemptRequest<T>(url, init, attempt, label);
     if (!result.retry) return result.data;
   }
@@ -134,9 +149,15 @@ async function requestWithRetry<T>(
   return EXHAUSTED;
 }
 
+/** True on the last attempt, after which nothing retries. */
+function isFinalAttempt(attempt: number): boolean {
+  return attempt >= ITAD_MAX_RETRIES;
+}
+
 /**
  * Wait out a retriable status. A 429 pauses every ITAD caller (the next
- * `acquireItadSlot` absorbs the wait); a 5xx only sleeps this caller.
+ * `acquireItadSlot` absorbs the wait, and the server asked for it even on the
+ * last attempt); a 5xx only sleeps this caller, and not after its last try.
  */
 async function delayRetry(
   response: Response,
@@ -153,7 +174,7 @@ async function delayRetry(
     `${label} ${response.status} — retrying in ${waitMs}ms (${source}, attempt ${attempt + 1})`,
   );
   if (response.status === 429) pauseItadRequests(waitMs);
-  else await sleep(waitMs);
+  else if (!isFinalAttempt(attempt)) await sleep(waitMs);
 }
 
 /** Attempt a single request; retriable statuses and network errors retry. */
@@ -179,7 +200,7 @@ async function attemptRequest<T>(
       `${label} network error: ${redactUrl(url)} — retrying in ${backoffMs(attempt)}ms (attempt ${attempt + 1})`,
       error,
     );
-    await sleep(backoffMs(attempt));
+    if (!isFinalAttempt(attempt)) await sleep(backoffMs(attempt));
     return { data: null, retry: true };
   }
 }
