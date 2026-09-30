@@ -1,4 +1,4 @@
-import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
+import type { LfgGroupSummaryDto, LfgMemberDto } from '@raid-ledger/contract';
 import { LfgCommand } from './lfg.command';
 import {
   LFG_BLOCKED_REPLY,
@@ -6,6 +6,7 @@ import {
   LFG_UNLINKED_REPLY,
 } from './lfg.command.helpers';
 import { readOpenGroupHorizon } from '../../lfg/lfg-group-horizon.helpers';
+import { listGroupMembers } from '../../lfg/lfg-query.helpers';
 
 // ROK-1656 — the open-group read is a real query the fake DB cannot answer;
 // it is pinned against Postgres in `lfg-now-spawn.integration.spec.ts`. Here
@@ -19,9 +20,35 @@ jest.mock('../../lfg/lfg-playing.helpers', () => ({
   ...jest.requireActual<object>('../../lfg/lfg-playing.helpers'),
   findOpenLfgNowEventId: jest.fn().mockResolvedValue(null),
 }));
+// The join reply's roster line reads the roster alone — no group detail.
+jest.mock('../../lfg/lfg-query.helpers', () => ({
+  ...jest.requireActual<object>('../../lfg/lfg-query.helpers'),
+  listGroupMembers: jest.fn(),
+}));
 const readOpen = readOpenGroupHorizon as jest.MockedFunction<
   typeof readOpenGroupHorizon
 >;
+const listMembers = listGroupMembers as jest.MockedFunction<
+  typeof listGroupMembers
+>;
+
+function member(userId: number, username: string, displayName: string | null) {
+  return {
+    userId,
+    username,
+    displayName,
+    avatarUrl: null,
+    urgency: 'week',
+    expiresAt: '2026-01-02T00:00:00.000Z',
+    joinedAt: '2026-01-01T00:00:00.000Z',
+  } satisfies LfgMemberDto;
+}
+
+beforeEach(() => {
+  listMembers
+    .mockReset()
+    .mockResolvedValue([member(7, 'ana', 'Ana'), member(8, 'bo', null)]);
+});
 
 type Row = Record<string, unknown>;
 
@@ -126,14 +153,6 @@ function makeLfgService(
     createIntent: jest.fn().mockResolvedValue({
       created: true,
       body: { group: summary() },
-    }),
-    getGroupDetail: jest.fn().mockResolvedValue({
-      ...summary(),
-      members: [
-        { userId: 7, username: 'ana', displayName: 'Ana' },
-        { userId: 8, username: 'bo', displayName: null },
-      ],
-      ownIntent: null,
     }),
     listGroups: jest.fn().mockResolvedValue([]),
     ...over,
@@ -415,7 +434,36 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
     await command.handleInteraction(interaction);
 
-    expect(lfgService.getGroupDetail).not.toHaveBeenCalled();
+    expect(listMembers).not.toHaveBeenCalled();
+  });
+
+  it('names the roster from the roster read alone, never the whole group detail', async () => {
+    // Present only so the assertion below can say it went unused; its roster
+    // differs from the roster read's, so the reply shows which one rendered.
+    const getGroupDetail = jest.fn().mockResolvedValue({
+      ...summary(),
+      members: [member(9, 'detail-only', null)],
+      ownIntent: null,
+    });
+    const lfgService = makeLfgService({ getGroupDetail });
+    const command = build(
+      [LINKED, [], [{ id: 42, name: 'Deep Rock Galactic' }]],
+      lfgService,
+    );
+    const { interaction, editReply } = makeInteraction('42');
+
+    await command.handleInteraction(interaction);
+
+    expect(getGroupDetail).not.toHaveBeenCalled();
+    expect(listMembers).toHaveBeenCalledWith(expect.anything(), 42);
+    const payload = editReply.mock.calls[0][0] as {
+      embeds: Array<{ toJSON: () => { description?: string } }>;
+    };
+    const description = payload.embeds[0].toJSON().description ?? '';
+    expect(description).toContain("That's 2 now");
+    expect(description).toContain('Ana');
+    expect(description).toContain('bo');
+    expect(description).not.toContain('detail-only');
   });
 
   /**
