@@ -20,6 +20,10 @@ import { RateLimit } from '../throttler/rate-limit.decorator';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import {
+  ITAD_BACKGROUND_FETCH,
+  ITAD_INTERACTIVE_FETCH,
+} from '../itad/itad.constants';
+import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
   getPlayerSummary,
@@ -270,11 +274,14 @@ export class SteamAuthController {
           `Auto-sync library after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
         );
       });
-      this.steamWishlistService.syncWishlist(userId).catch((err: unknown) => {
-        this.logger.warn(
-          `Auto-sync wishlist after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
+      // Background (fire-and-forget): ITAD discovery waits out a 429 pause.
+      this.steamWishlistService
+        .syncWishlist(userId, ITAD_BACKGROUND_FETCH)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Auto-sync wishlist after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
     }
     return isPublic;
   }
@@ -339,7 +346,12 @@ export class SteamAuthController {
   @UseGuards(AuthGuard('jwt'))
   async syncWishlist(@Req() req: AuthenticatedExpressRequest) {
     Sentry.setUser({ id: req.user.id.toString() });
-    const result = await this.steamWishlistService.syncWishlist(req.user.id);
+    // A user waits on this request (nginx proxy_read_timeout 120s), so ITAD
+    // discovery fails fast on a long 429 pause instead of waiting it out.
+    const result = await this.steamWishlistService.syncWishlist(
+      req.user.id,
+      ITAD_INTERACTIVE_FETCH,
+    );
     return {
       success: true,
       message: `Synced wishlist: ${result.matched} matched (${result.newInterests} new, ${result.removed} removed)`,

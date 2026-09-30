@@ -10,7 +10,11 @@ import { ItadService } from '../itad/itad.service';
 import type { IgdbApiGame } from './igdb.constants';
 import type { ItadSearchDeps } from './igdb-itad-search.helpers';
 import type { ItadSearchGame } from './igdb-itad-merge.helpers';
-import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
+import {
+  ITAD_INTERACTIVE_FETCH,
+  type ItadGame,
+  type ItadGameInfo,
+} from '../itad/itad.constants';
 import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
@@ -42,7 +46,8 @@ export function buildItadSearchDeps(
 ): ItadSearchDeps {
   return {
     searchItad: (q) => searchAndMapItad(params.itadService, q),
-    lookupSteamAppIds: (games) => params.itadService.lookupSteamAppIds(games),
+    lookupSteamAppIds: (games) =>
+      params.itadService.lookupSteamAppIds(games, ITAD_INTERACTIVE_FETCH),
     enrichFromIgdb: (appId) => enrichViaExternalGames(params.queryIgdb, appId),
     getAdultFilter: params.getAdultFilter,
     findBannedOrHiddenSlugs: (slugs) =>
@@ -58,7 +63,11 @@ async function searchAndMapItad(
   itadService: ItadService,
   query: string,
 ): Promise<ItadSearchGame[]> {
-  const results = await itadService.searchGames(query);
+  const results = await itadService.searchGames(
+    query,
+    undefined,
+    ITAD_INTERACTIVE_FETCH,
+  );
   return Promise.all(results.map((g) => mapItadGameToSearch(itadService, g)));
 }
 
@@ -67,7 +76,7 @@ async function mapItadGameToSearch(
   itadService: ItadService,
   game: ItadGame,
 ): Promise<ItadSearchGame> {
-  const info = await itadService.getGameInfo(game.id);
+  const info = await itadService.getGameInfo(game.id, ITAD_INTERACTIVE_FETCH);
   return mapToSearchGame(game, info);
 }
 

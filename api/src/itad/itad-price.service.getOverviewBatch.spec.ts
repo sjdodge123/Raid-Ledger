@@ -10,6 +10,7 @@ import type {
   ItadOverviewGameEntry,
   ItadOverviewResponse,
 } from './itad-price.types';
+import { ITAD_BACKGROUND_FETCH } from './itad.constants';
 
 jest.mock('./itad-http.util', () => ({
   itadPost: jest.fn(),
@@ -167,6 +168,7 @@ describe('ItadPriceService.getOverviewBatch', () => {
         '/games/overview/v2',
         { key: 'my-api-key' },
         expect.arrayContaining(['itad-a', 'itad-b']),
+        {},
       );
     });
 
@@ -224,12 +226,16 @@ describe('ItadPriceService.getOverviewBatch', () => {
         .mockResolvedValueOnce(null); // itad-b not cached
       itadPost.mockResolvedValue({ prices: [ENTRY_B], bundles: [] });
 
-      await service.getOverviewBatch(['itad-a', 'itad-b']);
+      await service.getOverviewBatch(
+        ['itad-a', 'itad-b'],
+        ITAD_BACKGROUND_FETCH,
+      );
 
       expect(itadPost).toHaveBeenCalledWith(
         '/games/overview/v2',
         expect.anything(),
         ['itad-b'],
+        ITAD_BACKGROUND_FETCH,
       );
     });
 

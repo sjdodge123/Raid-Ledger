@@ -23,6 +23,7 @@ import { IgdbService } from './igdb.service';
 import { ItadPriceService } from '../itad/itad-price.service';
 import { ItadService } from '../itad/itad.service';
 import { ITAD_PRICE_SYNC_QUEUE } from '../itad/itad-price-sync.constants';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 import { SettingsService } from '../settings/settings.service';
 import { handleBatchPricing } from './igdb-pricing-batch.handler';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
@@ -179,7 +180,8 @@ export class IgdbController {
       'true';
     const result = await resolveGameBySteamAppId(steamAppId, {
       db,
-      lookupBySteamAppId: (id) => this.itadService.lookupBySteamAppId(id),
+      lookupBySteamAppId: (id) =>
+        this.itadService.lookupBySteamAppId(id, ITAD_INTERACTIVE_FETCH),
       adultFilterEnabled: adultFilter,
     });
     if (!result) throw new NotFoundException('Game not found');
