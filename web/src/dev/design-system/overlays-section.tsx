@@ -1,7 +1,7 @@
 /**
  * Overlay + container primitives for /dev/design-system (ROK-1539):
  * Modal, BottomSheet, ScrollCollapsible, NavChip, CopyButton, MarkdownText,
- * and the FAB. ROK-1655 adds the pinned `footer` and the dirty-close
+ * the stretched-button card (§4.2, TDB:1949) and the FAB. ROK-1655 adds the pinned `footer` and the dirty-close
  * `closeGuard` (`useDirtyCloseGuard`) on both Modal and BottomSheet: type in
  * the form demos, then press Esc, tap the backdrop, × or Cancel to see
  * "Discard your changes?". ROK-1648 L13: each form demo also opens as a long
@@ -23,6 +23,7 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { useDirtyCloseGuard, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
+import { StretchedCardDemo } from './stretched-card-demo';
 
 const DEMO_BTN = 'px-3 py-2 rounded-lg text-sm font-medium bg-panel border border-edge text-secondary hover:bg-overlay transition-colors';
 
@@ -195,7 +196,7 @@ export function OverlaysSection(): JSX.Element {
         <Section
             id="overlays"
             title="Overlays and containers"
-            blurb="Modal / BottomSheet (each with a pinned footer and the dirty-close guard) / ScrollCollapsible / NavChip / CopyButton / MarkdownText / FAB. Buttons below open the real components."
+            blurb="Modal / BottomSheet (each with a pinned footer and the dirty-close guard) / ScrollCollapsible / stretched-button card / NavChip / CopyButton / MarkdownText / FAB. Buttons below open the real components."
         >
             <div data-testid="ds-overlays">
                 <StateGrid>
@@ -204,6 +205,7 @@ export function OverlaysSection(): JSX.Element {
                     <BottomSheetDemo />
                     <FormSheetDemo />
                     <CollapsibleDemo />
+                    <StretchedCardDemo />
                     <ChipsAndText />
                     <FabStatic />
                 </StateGrid>
