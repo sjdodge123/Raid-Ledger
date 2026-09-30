@@ -4,6 +4,7 @@ import eslintComments from '@eslint-community/eslint-plugin-eslint-comments/conf
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import { noPrintfLoggerSyntax } from './eslint.no-printf-logger.mjs';
 
 export default tseslint.config(
   {
@@ -34,6 +35,15 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
       'max-lines': ['error', { max: 300, skipBlankLines: true, skipComments: true }],
       'max-lines-per-function': ['warn', { max: 30, skipBlankLines: true, skipComments: true }],
+    },
+  },
+  {
+    // Nest Logger never interpolates %s/%d — see eslint.no-printf-logger.mjs.
+    // Specs are exempt: jest titles and mock fixtures legitimately carry %s.
+    files: ['**/*.ts'],
+    ignores: ['**/*.spec.ts', '**/*.spec-helpers.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...noPrintfLoggerSyntax],
     },
   },
   {
