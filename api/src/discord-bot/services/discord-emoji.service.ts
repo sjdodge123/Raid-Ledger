@@ -46,8 +46,7 @@ export class DiscordEmojiService {
       await this.syncAllEmojis();
     } catch (error) {
       this.logger.warn(
-        'Failed to sync emojis, falling back to Unicode: %s',
-        error instanceof Error ? error.message : 'Unknown error',
+        `Failed to sync emojis, falling back to Unicode: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       this.roleEmojisAvailable = false;
       this.classEmojisAvailable = false;
@@ -216,9 +215,7 @@ export class DiscordEmojiService {
       return false;
     } catch (error) {
       this.logger.warn(
-        'Failed to sync emoji %s: %s',
-        def.name,
-        formatDiscordError(error),
+        `Failed to sync emoji ${def.name}: ${formatDiscordError(error)}`,
       );
       return false;
     }
@@ -287,7 +284,7 @@ export class DiscordEmojiService {
     settingKey: SettingKey,
   ): Promise<string | null> {
     if (!fs.existsSync(filePath)) {
-      this.logger.error('Icon file not found: %s', filePath);
+      this.logger.error(`Icon file not found: ${filePath}`);
       return null;
     }
     const currentHash = this.fileHash(filePath);
@@ -324,11 +321,11 @@ export class DiscordEmojiService {
     const existing = guild.emojis.cache.get(cachedId);
     if (!existing) return null;
     if (cachedHash === currentHash) return `<:${existing.name}:${existing.id}>`;
-    this.logger.log('Asset changed for %s, replacing emoji', emojiName);
+    this.logger.log(`Asset changed for ${emojiName}, replacing emoji`);
     try {
       await existing.delete('Raid Ledger icon asset updated');
     } catch {
-      this.logger.warn('Could not delete stale emoji %s', emojiName);
+      this.logger.warn(`Could not delete stale emoji ${emojiName}`);
     }
     return null;
   }
@@ -340,12 +337,12 @@ export class DiscordEmojiService {
   ): Promise<void> {
     const existing = guild.emojis.cache.find((e) => e.name === emojiName);
     if (!existing) return;
-    this.logger.log('Replacing existing emoji %s (no hash match)', emojiName);
+    this.logger.log(`Replacing existing emoji ${emojiName} (no hash match)`);
     try {
       await existing.delete('Raid Ledger icon asset updated');
       await guild.emojis.fetch();
     } catch {
-      this.logger.warn('Could not delete existing emoji %s', emojiName);
+      this.logger.warn(`Could not delete existing emoji ${emojiName}`);
     }
   }
 
@@ -363,7 +360,7 @@ export class DiscordEmojiService {
       name: emojiName,
       reason: 'Raid Ledger icon',
     });
-    this.logger.log('Uploaded custom emoji: %s (ID: %s)', emoji.name, emoji.id);
+    this.logger.log(`Uploaded custom emoji: ${emoji.name} (ID: ${emoji.id})`);
     await this.settingsService.set(settingKey, `${emoji.id}:${currentHash}`);
     return `<:${emoji.name}:${emoji.id}>`;
   }

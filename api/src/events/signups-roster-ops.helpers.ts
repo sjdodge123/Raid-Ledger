@@ -112,7 +112,9 @@ export function fireRosterNotifications(
   logger: Logger,
 ) {
   const logError = (msg: string) => (err: unknown) =>
-    logger.warn(msg, err instanceof Error ? err.message : 'Unknown error');
+    logger.warn(
+      `${msg}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+    );
   fetchNotificationCtx(eventId)
     .then((extra) => {
       const args = [
@@ -126,10 +128,10 @@ export function fireRosterNotifications(
       ] as const;
       notifH
         .notifyRoleChanges(...args)
-        .catch(logError('Failed to send roster reassign notifications: %s'));
+        .catch(logError('Failed to send roster reassign notifications'));
       notifH
         .notifyNewAssignments(...args)
-        .catch(logError('Failed to send roster assignment notifications: %s'));
+        .catch(logError('Failed to send roster assignment notifications'));
     })
-    .catch(logError('Failed to fetch notification context: %s'));
+    .catch(logError('Failed to fetch notification context'));
 }

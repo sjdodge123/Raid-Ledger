@@ -178,10 +178,7 @@ export async function buildNewSignupResponse(
 ): Promise<SignupResponseDto> {
   cleanupMatchingPugSlots(db, eventId, userId).catch((err) =>
     logger.warn(
-      'Failed to cleanup PUG slots for user %d on event %d: %s',
-      userId,
-      eventId,
-      err instanceof Error ? err.message : 'Unknown error',
+      `Failed to cleanup PUG slots for user ${userId} on event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     ),
   );
   const character = characterId

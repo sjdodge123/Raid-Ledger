@@ -206,15 +206,12 @@ export class ShareService {
       messageId,
       embedState,
     });
-    this.logger.log('Shared event %d to channel %s', eventId, channelId);
+    this.logger.log(`Shared event ${eventId} to channel ${channelId}`);
   }
 
   private logShareFailure(eventId: number, channelId: string, error: unknown) {
     this.logger.warn(
-      'Failed to share event %d to channel %s: %s',
-      eventId,
-      channelId,
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to share event ${eventId} to channel ${channelId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 

@@ -175,10 +175,7 @@ export class SchedulingService {
       });
     } catch (err) {
       this.logger.warn(
-        'Auto-vote failed for slot %d user %d: %s',
-        slotId,
-        userId,
-        err,
+        `Auto-vote failed for slot ${slotId} user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }

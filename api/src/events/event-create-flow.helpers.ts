@@ -50,9 +50,7 @@ function maybeTriggerFollowupFanout(
     creatorId,
   ).catch((err) =>
     deps.logger.warn(
-      'Follow-up fan-out failed for ended event %d: %s',
-      endedEventId,
-      err,
+      `Follow-up fan-out failed for ended event ${endedEventId}: ${err instanceof Error ? err.message : String(err)}`,
     ),
   );
 }
@@ -163,9 +161,7 @@ export async function runCreateEvent(
         .log('event', eventId, 'event_created', creatorId, { title: dto.title })
         .catch((err) =>
           deps.logger.warn(
-            'Activity log failed for event %d: %s',
-            eventId,
-            err,
+            `Activity log failed for event ${eventId}: ${err instanceof Error ? err.message : String(err)}`,
           ),
         );
     }
