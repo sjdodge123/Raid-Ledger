@@ -19,6 +19,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
 import { IgdbService } from '../igdb/igdb.service';
 import { ItadService } from '../itad/itad.service';
+import type { ItadFetchOptions } from '../itad/itad-http.util';
 import { getWishlist, getPlayerSummary } from './steam-http.util';
 import {
   discoverGameViaItad,
@@ -51,8 +52,14 @@ export class SteamWishlistService {
   /**
    * Sync a user's Steam wishlist to game_interests.
    * Adds new entries and removes ones no longer wishlisted.
+   * @param opts - ITAD fetch options for discovery; the default waits out a 429
+   *   pause (cron, post-link sync), the manual sync endpoint passes
+   *   `ITAD_INTERACTIVE_FETCH` so the HTTP request fails fast instead
    */
-  async syncWishlist(userId: number): Promise<SteamWishlistSyncResultDto> {
+  async syncWishlist(
+    userId: number,
+    opts: ItadFetchOptions = {},
+  ): Promise<SteamWishlistSyncResultDto> {
     const { apiKey, steamId } = await this.validatePrereqs(userId);
     const profile = await getPlayerSummary(apiKey, steamId);
     if (profile && profile.communityvisibilitystate !== 3) {
@@ -67,7 +74,7 @@ export class SteamWishlistService {
     if (items.length === 0) {
       return this.handleEmptyWishlist(userId);
     }
-    return this.processWishlistItems(userId, items);
+    return this.processWishlistItems(userId, items, opts);
   }
 
   /** Validate user has Steam linked and API key exists. */
@@ -101,8 +108,12 @@ export class SteamWishlistService {
   private async processWishlistItems(
     userId: number,
     items: SteamWishlistItem[],
+    opts: ItadFetchOptions,
   ): Promise<SteamWishlistSyncResultDto> {
-    const { matchedGames, imported } = await this.matchWithBackfill(items);
+    const { matchedGames, imported } = await this.matchWithBackfill(
+      items,
+      opts,
+    );
     const existingIds = await fetchExistingWishlistIds(this.db, userId, schema);
     const diff = computeWishlistDiff({
       steamItems: items,
@@ -125,9 +136,12 @@ export class SteamWishlistService {
   }
 
   /** Match wishlist items to DB games, discovering unmatched via ITAD. */
-  private async matchWithBackfill(items: SteamWishlistItem[]) {
+  private async matchWithBackfill(
+    items: SteamWishlistItem[],
+    opts: ItadFetchOptions,
+  ) {
     let matchedGames = await this.findMatchingGames(items);
-    const imported = await this.discoverUnmatched(items, matchedGames);
+    const imported = await this.discoverUnmatched(items, matchedGames, opts);
     if (imported > 0) matchedGames = await this.findMatchingGames(items);
     return { matchedGames, imported };
   }
@@ -136,9 +150,10 @@ export class SteamWishlistService {
   private async discoverUnmatched(
     items: SteamWishlistItem[],
     matchedGames: { id: number; steamAppId: number | null }[],
+    opts: ItadFetchOptions = {},
   ): Promise<number> {
     if (!this.itadService) return 0;
-    const deps = await this.buildDiscoveryDeps();
+    const deps = await this.buildDiscoveryDeps(opts);
     if (!deps) return 0;
     const matchedAppIds = new Set(matchedGames.map((g) => g.steamAppId));
     const unmatched = items.filter((i) => !matchedAppIds.has(i.appid));
@@ -164,16 +179,21 @@ export class SteamWishlistService {
   }
 
   /** Build ITAD discovery dependencies. */
-  private async buildDiscoveryDeps(): Promise<DiscoveryDeps | null> {
+  private async buildDiscoveryDeps(
+    opts: ItadFetchOptions,
+  ): Promise<DiscoveryDeps | null> {
     if (!this.itadService) return null;
     const adultFilterEnabled =
       (await this.settingsService.get(SETTING_KEYS.IGDB_FILTER_ADULT)) ===
       'true';
     return {
       db: this.db,
-      // Waits out a 429 pause (cron, post-link and manual sync alike): a fail-fast
-      // miss reads as "not in ITAD" and leaves the item unmatched until the next sync.
-      lookupBySteamAppId: (id) => this.itadService!.lookupBySteamAppId(id),
+      // opts comes from the caller: cron and post-link sync wait out a 429 pause;
+      // the manual sync endpoint fails fast so the HTTP request stays under the
+      // proxy timeout. A fail-fast miss reads as "not in ITAD" and leaves the
+      // item unmatched until the next cron sync.
+      lookupBySteamAppId: (id) =>
+        this.itadService!.lookupBySteamAppId(id, opts),
       queryIgdb: this.igdbService
         ? (body) => this.igdbService!.queryIgdb(body)
         : undefined,

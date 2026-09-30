@@ -19,6 +19,7 @@ import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
@@ -339,7 +340,12 @@ export class SteamAuthController {
   @UseGuards(AuthGuard('jwt'))
   async syncWishlist(@Req() req: AuthenticatedExpressRequest) {
     Sentry.setUser({ id: req.user.id.toString() });
-    const result = await this.steamWishlistService.syncWishlist(req.user.id);
+    // A user waits on this request (nginx proxy_read_timeout 120s), so ITAD
+    // discovery fails fast on a long 429 pause instead of waiting it out.
+    const result = await this.steamWishlistService.syncWishlist(
+      req.user.id,
+      ITAD_INTERACTIVE_FETCH,
+    );
     return {
       success: true,
       message: `Synced wishlist: ${result.matched} matched (${result.newInterests} new, ${result.removed} removed)`,
