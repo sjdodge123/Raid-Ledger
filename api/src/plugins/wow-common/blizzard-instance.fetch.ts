@@ -2,7 +2,7 @@
  * High-level instance API orchestration helpers for BlizzardService.
  * Composes the lower-level helpers in blizzard-instance.helpers.ts.
  */
-import { NotFoundException } from '@nestjs/common';
+import { HttpException, NotFoundException } from '@nestjs/common';
 import type { WowGameVariant } from '@raid-ledger/contract';
 import type {
   InstanceListCacheData,
@@ -37,6 +37,20 @@ export async function fetchAllInstancesFromApi(
   };
 }
 
+/** A failed journal-instance call: an unknown id is a 404, the rest a 502. */
+function instanceDetailError(
+  status: number,
+  instanceId: number,
+): HttpException {
+  if (status === 404)
+    return new NotFoundException(`Instance ${instanceId} not found`);
+  return blizzardUpstreamError(
+    status,
+    'instances',
+    `Failed to fetch instance detail from Blizzard (${status}). Please try again later.`,
+  );
+}
+
 export async function fetchInstanceDetailFromApi(
   instanceId: number,
   region: string,
@@ -51,14 +65,7 @@ export async function fetchInstanceDetailFromApi(
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  if (res.status === 404)
-    throw new NotFoundException(`Instance ${instanceId} not found`);
-  if (!res.ok)
-    throw blizzardUpstreamError(
-      res.status,
-      'instances',
-      `Failed to fetch instance detail from Blizzard (${res.status}). Please try again later.`,
-    );
+  if (!res.ok) throw instanceDetailError(res.status, instanceId);
   const data = (await res.json()) as {
     id: number;
     name: string;

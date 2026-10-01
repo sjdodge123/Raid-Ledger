@@ -1,4 +1,4 @@
-import { BadGatewayException } from '@nestjs/common';
+import { BadGatewayException, NotFoundException } from '@nestjs/common';
 import { fetchInstanceDetailFromApi } from './blizzard-instance.fetch';
 
 /**
@@ -28,6 +28,16 @@ describe('fetchInstanceDetailFromApi — upstream failures', () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining('/data/wow/journal-instance/63?'),
       expect.anything(),
+    );
+  });
+
+  it('maps a 404 (unknown journal-instance id) to a 404, not a retry 502', async () => {
+    mockStatus(404);
+    const call = () => fetchInstanceDetailFromApi(63, 'us', 'retail', 'tok');
+    await expect(call()).rejects.toBeInstanceOf(NotFoundException);
+    await expect(call()).rejects.toHaveProperty(
+      'message',
+      'Instance 63 not found',
     );
   });
 
