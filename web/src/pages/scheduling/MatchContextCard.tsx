@@ -6,6 +6,7 @@ import type { JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { toAvatarUser } from '../../lib/avatar';
 import { AvatarWithFallback } from '../../components/shared/AvatarWithFallback';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface MatchContextCardProps {
   match: MatchDetailResponseDto;
@@ -83,6 +84,11 @@ export function MatchContextCard({ match, uniqueVoterCount }: MatchContextCardPr
         <img
           src={match.gameCoverUrl}
           alt={match.gameName}
+          width={COVER_INTRINSIC.width}
+          height={COVER_INTRINSIC.height}
+          loading="lazy"
+          decoding="async"
+          {...coverSrcSetProps(match.gameCoverUrl, '64px')}
           className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
         />
       )}
