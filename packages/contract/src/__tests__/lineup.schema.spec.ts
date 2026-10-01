@@ -8,9 +8,8 @@
  *     new `CommonGroundThemeSchema` enum.
  *   - ROK-1298: `votingEligibleCount` on `LineupDetailResponseSchema`.
  *
- * The contract package has no test runner of its own — these specs are
- * also exercised by api-side mirrors so jest picks them up under
- * `npm run test -w api`.
+ * Runs under the contract workspace's own vitest config
+ * (`npm test -w @raid-ledger/contract`).
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -178,6 +177,8 @@ function baseLineup(): Record<string, unknown> {
         totalVoters: 0,
         totalMembers: 12,
         myVotes: [],
+        myTopPickGameId: null,
+        decisionReason: null,
         unlinkedSteamCount: 0,
         unlinkedSteamMembers: [],
         createdAt: '2026-05-15T00:00:00.000Z',
@@ -190,6 +191,11 @@ function baseLineup(): Record<string, unknown> {
         stillWaitingOnVoters: [],
         publicShareEnabled: true,
         publicSlug: 'test-lineup',
+        includeSchedulingPhase: true,
+        nominationTargetPct: null,
+        nominationCap: 20,
+        nominationTargetDisarmedAt: null,
+        nominationTargetArmed: false,
         viewerSubmissions: {
             nominationsSubmittedAt: null,
             votesSubmittedAt: null,

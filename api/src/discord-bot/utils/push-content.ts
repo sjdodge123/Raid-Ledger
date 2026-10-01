@@ -45,33 +45,6 @@ export function buildCompletedPushContent(event: EmbedEventData): string {
 }
 
 /**
- * Build a plaintext push notification preview for an ad-hoc spawn embed.
- */
-export function buildAdHocSpawnPushContent(
-  event: { title: string; gameName?: string },
-  participantCount: number,
-): string {
-  const titleWithGame = buildTitleWithGame(event.title, event.gameName);
-  return truncateToFit(
-    `\uD83C\uDFAE ${titleWithGame} | ${participantCount} players`,
-    MAX_LENGTH,
-  );
-}
-
-/**
- * Build a plaintext push notification preview for an ad-hoc completed embed.
- */
-export function buildAdHocCompletedPushContent(
-  event: { title: string; gameName?: string },
-  durationStr: string,
-): string {
-  return truncateToFit(
-    `\u2705 ${event.title} -- Completed (${durationStr})`,
-    MAX_LENGTH,
-  );
-}
-
-/**
  * Format "Title -- Game", or just "Title" when there is no game -- or when the
  * title already carries the game name (ROK-1460: a Quick Play card read
  * `Satisfactory -- Satisfactory`, and `Lost Ark - Quick Play -- Lost Ark`).

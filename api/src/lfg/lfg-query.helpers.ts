@@ -29,10 +29,10 @@ import {
   type LfgMemberDto,
   type LfgPlayingNowDto,
   type LfgState,
-  type LfgUrgency,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
+import { MEMBER_COLUMNS, toMemberDto } from './lfg-member-projection.helpers';
 import { readPlayingNow } from './lfg-playing.helpers';
 import { LFG_LIST_LIMIT } from './lfg.constants';
 
@@ -292,29 +292,12 @@ export async function listGroupMembers(
   gameId: number,
 ): Promise<LfgMemberDto[]> {
   const rows = await db
-    .select({
-      userId: schema.users.id,
-      username: schema.users.username,
-      displayName: schema.users.displayName,
-      avatar: schema.users.avatar,
-      customAvatarUrl: schema.users.customAvatarUrl,
-      urgency: schema.lfgIntents.urgency,
-      expiresAt: schema.lfgIntents.expiresAt,
-      joinedAt: schema.lfgIntents.createdAt,
-    })
+    .select(MEMBER_COLUMNS)
     .from(schema.lfgIntents)
     .innerJoin(schema.users, eq(schema.users.id, schema.lfgIntents.userId))
     .where(and(eq(schema.lfgIntents.gameId, gameId), liveIntent(new Date())))
     .orderBy(asc(schema.lfgIntents.createdAt), asc(schema.lfgIntents.id));
-  return rows.map((r) => ({
-    userId: r.userId,
-    username: r.username,
-    displayName: r.displayName,
-    avatarUrl: r.customAvatarUrl ?? r.avatar,
-    urgency: r.urgency as LfgUrgency,
-    expiresAt: r.expiresAt.toISOString(),
-    joinedAt: r.joinedAt.toISOString(),
-  }));
+  return rows.map(toMemberDto);
 }
 
 /** Correlated count of eligible active intents for the joined `games` row.

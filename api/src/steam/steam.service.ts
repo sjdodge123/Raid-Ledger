@@ -136,6 +136,8 @@ export class SteamService {
 
     return {
       db: this.db,
+      // Default fail-fast: syncLibrary also serves the manual library sync
+      // endpoint, which holds an HTTP request.
       lookupBySteamAppId: (id) => this.itadService!.lookupBySteamAppId(id),
       queryIgdb: this.igdbService
         ? (body) => this.igdbService!.queryIgdb(body)
