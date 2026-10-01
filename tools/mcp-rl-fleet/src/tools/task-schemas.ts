@@ -90,6 +90,11 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   surface_hash?: string | null;
   /** ROK-1566 — set when Playwright passed but no sentinel could be named. */
   surface_error?: string;
+  /**
+   * TDB:1452 — set by applyStatusProjection on a terminal task whose exit code
+   * names its cause (today only the watchdog's 143); absent otherwise.
+   */
+  exit_reason?: string;
 }
 
 /** True when mcp_runtime_status is anything except 'running'. */

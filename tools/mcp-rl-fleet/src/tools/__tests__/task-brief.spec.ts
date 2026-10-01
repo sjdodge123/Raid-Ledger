@@ -287,7 +287,7 @@ describe('exit_reason names the watchdog on exit 143 (TDB:1452)', () => {
 
   it('executeStatus surfaces exit_reason on a terminal watchdog-killed task', async () => {
     execFileOk(terminal('failed', 143));
-    const r = (await executeStatus({ task_id: 'abc12345' })) as Record<string, unknown>;
+    const r = await executeStatus({ task_id: 'abc12345' });
     expect(r.exit_reason).toBe(WATCHDOG_EXIT_REASON);
     expect(r.script_exit_code).toBe(143);
   });
