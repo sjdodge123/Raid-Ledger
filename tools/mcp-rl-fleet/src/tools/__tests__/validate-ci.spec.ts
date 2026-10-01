@@ -335,8 +335,32 @@ describe('TDB:1452 — the dispatched watchdog budget defaults by run shape', ()
     expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 5400');
   });
 
-  it('keeps --timeout-seconds 1800 for a plain run', async () => {
+  it('keeps --timeout-seconds 1800 for a --static run', async () => {
     await validateCi.execute({ args: ['--static'], wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 1800');
+  });
+
+  // The headline TDB:1452 path: the BOOLEAN fleet param only becomes --fleet
+  // inside resolveArgs, so this goes red if the helper is fed params.args.
+  it('passes --timeout-seconds 5400 for a fleet:true dispatch (no raw args)', async () => {
+    await validateCi.execute({
+      fleet: true,
+      base_url: 'https://slot-1.gamernight.net',
+      admin_password: 'tdb1452-test-pw',
+      wait: false,
+    });
+    expect(dispatchedTimeoutFlag(), 'fleet:true must reach task-start as a long gate').toBe(
+      '--timeout-seconds 5400',
+    );
+  });
+
+  it('passes --timeout-seconds 5400 for a bare run (the script default is the full pipeline)', async () => {
+    await validateCi.execute({ wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 5400');
+  });
+
+  it('keeps --timeout-seconds 1800 when only_unit narrows the run', async () => {
+    await validateCi.execute({ only_unit: true, wait: false });
     expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 1800');
   });
 
