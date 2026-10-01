@@ -59,7 +59,7 @@ export async function fetchWeekSignedUpEvents(
 }
 
 /** Check if error is a missing table error (42P01). */
-function isMissingTableError(err: unknown): boolean {
+export function isMissingTableError(err: unknown): boolean {
   return (
     err instanceof Error &&
     'code' in err &&

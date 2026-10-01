@@ -5,7 +5,20 @@
  * are the whole bug — they get deterministic coverage here with an injected
  * clock, while the DB-backed filtering is covered in game-time.integration.spec.
  */
-import { resolveLocalToday } from './game-time-absence.helpers';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../drizzle/schema';
+import { createDrizzleMock } from '../common/testing/drizzle-mock';
+import {
+  fetchAbsencesEndingOnOrAfter,
+  resolveLocalToday,
+} from './game-time-absence.helpers';
+
+/** A db whose absence-list query (terminating at `.where()`) rejects. */
+function dbRejectingWith(err: unknown): PostgresJsDatabase<typeof schema> {
+  const mockDb = createDrizzleMock();
+  mockDb.where.mockRejectedValueOnce(err);
+  return mockDb as unknown as PostgresJsDatabase<typeof schema>;
+}
 
 describe('game-time-absence.helpers', () => {
   describe('Regression: ROK-1427 — resolveLocalToday', () => {
@@ -49,6 +62,32 @@ describe('game-time-absence.helpers', () => {
       expect(
         resolveLocalToday(-780, new Date('2025-12-31T13:00:00.000Z')),
       ).toBe('2026-01-01');
+    });
+  });
+
+  describe('Regression: fetchAbsencesEndingOnOrAfter missing-table guard', () => {
+    // The week-bounded fetchAbsences already swallowed 42P01; the absence-list
+    // query did not, so a missing game_time_absences table 500'd the endpoint.
+    it('returns [] when game_time_absences does not exist (42P01)', async () => {
+      const err = Object.assign(
+        new Error('relation "game_time_absences" does not exist'),
+        { code: '42P01' },
+      );
+
+      await expect(
+        fetchAbsencesEndingOnOrAfter(dbRejectingWith(err), 1, '2026-08-20'),
+      ).resolves.toEqual([]);
+    });
+
+    it('rethrows any other database error', async () => {
+      const err = Object.assign(
+        new Error('duplicate key value violates unique constraint'),
+        { code: '23505' },
+      );
+
+      await expect(
+        fetchAbsencesEndingOnOrAfter(dbRejectingWith(err), 1, '2026-08-20'),
+      ).rejects.toBe(err);
     });
   });
 });
