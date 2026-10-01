@@ -23,7 +23,12 @@ const SCRIPT = resolve(HERE, '..', '..', '..', '..', 'scripts', 'env-lock.sh');
 // exceeds vitest's 5s default and aborted a `--fleet` gate before integration
 // ever ran. Headroom is scoped to THESE bash-shelling suites, not the vitest
 // config, so a real hang anywhere else still fails at the default 5s.
+// The 20s is headroom for SLOW runs only: every body here is a synchronous
+// execFileSync, which vitest cannot interrupt (it compares elapsed time after
+// the body returns). A TRUE hang is bounded by SPAWN_TIMEOUT_MS on the child
+// instead, kept below the suite timeout so the child is killed first.
 const BASH_SPAWN_SUITE = { timeout: 20_000 } as const;
+const SPAWN_TIMEOUT_MS = 15_000;
 
 let stateDir: string;
 
@@ -32,6 +37,7 @@ function runScript(args: string[]): { stdout: string; stderr: string; status: nu
     const stdout = execFileSync('bash', [SCRIPT, ...args], {
       env: { ...process.env, RAID_LEDGER_STATE_DIR: stateDir },
       encoding: 'utf-8',
+      timeout: SPAWN_TIMEOUT_MS,
     });
     return { stdout, stderr: '', status: 0 };
   } catch (err) {
