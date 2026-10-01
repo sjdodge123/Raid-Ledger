@@ -388,6 +388,8 @@ describe('Community Insights (ROK-1099)', () => {
           String(call[0]).includes('churn'),
         );
         expect(churnLogCall).toBeDefined();
+        // The failure line carries the same job id the caller got back.
+        expect(String(churnLogCall?.[0])).toContain(result.jobId);
       } finally {
         findSpy.mockRestore();
         errorSpy.mockRestore();

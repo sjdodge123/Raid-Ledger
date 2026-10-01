@@ -32,6 +32,8 @@ export interface RefreshSnapshotDeps {
   clique: CliqueDetectionService;
   keyInsights: KeyInsightsService;
   logger?: Logger;
+  /** Correlation id stamped on every per-section failure log line. */
+  jobId?: string;
 }
 
 export interface RefreshSnapshotResult {
@@ -57,12 +59,10 @@ export async function runRefreshSnapshot(
   const snapshotDate = todayUtcIso();
   const results = await runAllSections(db, deps, snapshotDate, cfg.churn);
   throwIfAllRejected(results);
-  const sections = materializeSections(
-    results,
-    snapshotDate,
-    cfg.churn,
+  const sections = materializeSections(results, snapshotDate, cfg.churn, {
     logger,
-  );
+    jobId: deps.jobId,
+  });
   const keyInsights = buildKeyInsightsSection(
     deps.keyInsights,
     snapshotDate,
@@ -107,24 +107,27 @@ function materializeSections(
   r: SectionResults,
   snapshotDate: string,
   churn: ChurnSettings,
-  logger: Logger,
+  log: SectionLog,
 ) {
   return {
-    radar: settledRadar(r.radar, snapshotDate, logger),
-    engagement: settledEngagement(r.engagement, snapshotDate, logger),
-    churn: settledChurn(r.churn, snapshotDate, churn, logger),
-    socialGraph: settledSocial(r.social, snapshotDate, logger),
-    temporal: settledTemporal(r.temporal, snapshotDate, logger),
+    radar: settledRadar(r.radar, snapshotDate, log),
+    engagement: settledEngagement(r.engagement, snapshotDate, log),
+    churn: settledChurn(r.churn, snapshotDate, churn, log),
+    socialGraph: settledSocial(r.social, snapshotDate, log),
+    temporal: settledTemporal(r.temporal, snapshotDate, log),
   };
 }
 
+type SectionLog = { logger: Logger; jobId?: string };
+
 function logSectionFailure(
-  logger: Logger,
+  log: SectionLog,
   section: SectionId,
   reason: unknown,
 ): void {
-  logger.error(
-    `community-insights ${section} section failed`,
+  const job = log.jobId ? ` [job ${log.jobId}]` : '';
+  log.logger.error(
+    `community-insights ${section} section failed${job}`,
     reason instanceof Error ? reason.stack : String(reason),
   );
 }
@@ -181,10 +184,10 @@ async function upsertSnapshot(
 function settledRadar(
   r: PromiseSettledResult<CommunityRadarResponseDto>,
   snapshotDate: string,
-  logger: Logger,
+  log: SectionLog,
 ): CommunityRadarResponseDto {
   if (r.status === 'fulfilled') return r.value;
-  logSectionFailure(logger, 'radar', r.reason);
+  logSectionFailure(log, 'radar', r.reason);
   return {
     snapshotDate,
     axes: [],
@@ -197,10 +200,10 @@ function settledRadar(
 function settledEngagement(
   r: PromiseSettledResult<CommunityEngagementResponseDto>,
   snapshotDate: string,
-  logger: Logger,
+  log: SectionLog,
 ): CommunityEngagementResponseDto {
   if (r.status === 'fulfilled') return r.value;
-  logSectionFailure(logger, 'engagement', r.reason);
+  logSectionFailure(log, 'engagement', r.reason);
   return { snapshotDate, weeklyActiveUsers: [], intensityHistogram: [] };
 }
 
@@ -212,10 +215,10 @@ function settledChurn(
     baselineWeeks: number;
     recentWeeks: number;
   },
-  logger: Logger,
+  log: SectionLog,
 ): CommunityChurnResponseDto {
   if (r.status === 'fulfilled') return r.value;
-  logSectionFailure(logger, 'churn', r.reason);
+  logSectionFailure(log, 'churn', r.reason);
   return {
     snapshotDate,
     thresholdPct: settings.thresholdPct,
@@ -230,10 +233,10 @@ function settledChurn(
 function settledSocial(
   r: PromiseSettledResult<CommunitySocialGraphResponseDto>,
   snapshotDate: string,
-  logger: Logger,
+  log: SectionLog,
 ): CommunitySocialGraphResponseDto {
   if (r.status === 'fulfilled') return r.value;
-  logSectionFailure(logger, 'social-graph', r.reason);
+  logSectionFailure(log, 'social-graph', r.reason);
   return {
     snapshotDate,
     nodes: [],
@@ -246,10 +249,10 @@ function settledSocial(
 function settledTemporal(
   r: PromiseSettledResult<CommunityTemporalResponseDto>,
   snapshotDate: string,
-  logger: Logger,
+  log: SectionLog,
 ): CommunityTemporalResponseDto {
   if (r.status === 'fulfilled') return r.value;
-  logSectionFailure(logger, 'temporal', r.reason);
+  logSectionFailure(log, 'temporal', r.reason);
   return { snapshotDate, heatmap: [], peakHours: [] };
 }
 

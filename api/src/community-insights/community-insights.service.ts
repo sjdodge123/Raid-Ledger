@@ -50,19 +50,22 @@ export class CommunityInsightsService {
   }
 
   /**
-   * Rebuild today's snapshot. Returns a freshly-minted opaque job id so
-   * callers (admin refresh button) can correlate the trigger with the
-   * resulting row — the id is NOT persisted; it's cosmetic.
+   * Rebuild today's snapshot. Mints an opaque job id up front, stamps it
+   * on every per-section failure log line, and returns it so callers
+   * (admin refresh button) can correlate the trigger with those logs. The
+   * id is NOT persisted on the snapshot row.
    */
   async refreshSnapshot(): Promise<{ jobId: string; snapshotDate: string }> {
+    const jobId = randomUUID();
     const result = await runRefreshSnapshot(this.db, {
       settings: this.settings,
       churn: this.churn,
       clique: this.clique,
       keyInsights: this.keyInsights,
       logger: this.logger,
+      jobId,
     });
-    return { jobId: randomUUID(), snapshotDate: result.snapshotDate };
+    return { jobId, snapshotDate: result.snapshotDate };
   }
 
   /** Latest snapshot row or null if none has been produced yet. */
