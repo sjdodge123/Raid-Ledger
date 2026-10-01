@@ -10,7 +10,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and, gte } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { AbsenceRecord } from './game-time.types';
-import { isMissingTableError } from './game-time-composite.helpers';
+import { isMissingTableError } from '../common/pg-error.helpers';
 
 /**
  * Resolve "today" as a YYYY-MM-DD string in the caller's local timezone.

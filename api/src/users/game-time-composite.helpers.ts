@@ -5,6 +5,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { isMissingTableError } from '../common/pg-error.helpers';
 import type {
   CompositeSlot,
   SignedUpEventRow,
@@ -56,15 +57,6 @@ export async function fetchWeekSignedUpEvents(
         sql`${schema.events.duration} && ${weekRange}::tsrange`,
       ),
     );
-}
-
-/** Check if error is a missing table error (42P01). */
-export function isMissingTableError(err: unknown): boolean {
-  return (
-    err instanceof Error &&
-    'code' in err &&
-    (err as { code: string }).code === '42P01'
-  );
 }
 
 /** Fetch overrides for a week range. */
