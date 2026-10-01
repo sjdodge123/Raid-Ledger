@@ -12,9 +12,12 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
+  waitFor,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
+import { SchedulerRegistry } from '@nestjs/schedule';
+import { CronJob } from 'cron';
 import { CronJobService } from './cron-job.service';
 
 /** Insert a test cron job directly into DB and return its ID. */
@@ -34,6 +37,25 @@ async function insertTestJob(
     })
     .returning();
   return job.id;
+}
+
+/** Read one cron job row by id. */
+async function readJob(testApp: TestApp, jobId: number) {
+  const [job] = await testApp.db
+    .select()
+    .from(schema.cronJobs)
+    .where(eq(schema.cronJobs.id, jobId))
+    .limit(1);
+  return job;
+}
+
+/** Read a job's execution rows, newest first. */
+function readExecutions(testApp: TestApp, jobId: number) {
+  return testApp.db
+    .select()
+    .from(schema.cronJobExecutions)
+    .where(eq(schema.cronJobExecutions.cronJobId, jobId))
+    .orderBy(desc(schema.cronJobExecutions.startedAt));
 }
 
 function describeCronJob() {
@@ -82,14 +104,19 @@ function describeCronJob() {
       expect(executions[0].finishedAt).toBeDefined();
       expect(executions[0].error).toBeNull();
 
-      // Check that lastRunAt was updated on the job
-      const [updatedJob] = await testApp.db
-        .select()
-        .from(schema.cronJobs)
-        .where(eq(schema.cronJobs.id, jobId))
-        .limit(1);
+      // ROK-1380: a completed run hands last_run_at to the batched flusher,
+      // so nothing is written to the job row until a flush cycle runs.
+      const beforeFlush = await readJob(testApp, jobId);
+      expect(beforeFlush.lastRunAt).toBeNull();
 
-      expect(updatedJob.lastRunAt).toBeDefined();
+      await cronJobService.flushLastRunUpdates();
+
+      const afterFlush = await readJob(testApp, jobId);
+      expect(afterFlush.lastRunAt).not.toBeNull();
+      expect(afterFlush.lastRunAt!.getTime()).toBe(
+        executions[0].finishedAt!.getTime(),
+      );
+      expect(afterFlush.nextRunAt).not.toBeNull();
     });
 
     it('should record failed execution with error message', async () => {
@@ -305,6 +332,90 @@ function describeCronJob() {
     });
   }
   describe('no-op tracking (ROK-1042)', () => describeNoOpTracking());
+
+  // ===================================================================
+  // last_run_at write deferral (ROK-1380)
+  // ===================================================================
+
+  function describeLastRunDeferral() {
+    it('degraded run defers last_run_at until flush', async () => {
+      const jobId = await insertTestJob(testApp, 'test:degraded-deferred');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:degraded-deferred', () =>
+        Promise.resolve({ degraded: true as const }),
+      );
+
+      const executions = await readExecutions(testApp, jobId);
+      expect(executions.map((e) => e.status)).toEqual(['degraded']);
+      expect((await readJob(testApp, jobId)).lastRunAt).toBeNull();
+
+      await cronJobService.flushLastRunUpdates();
+
+      const flushed = await readJob(testApp, jobId);
+      expect(flushed.lastRunAt).not.toBeNull();
+      expect(flushed.lastRunAt!.getTime()).toBe(
+        executions[0].finishedAt!.getTime(),
+      );
+    });
+
+    it('failed run writes last_run_at immediately', async () => {
+      const jobId = await insertTestJob(testApp, 'test:failed-immediate');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:failed-immediate', () =>
+        Promise.reject(new Error('Immediate failure')),
+      );
+
+      const executions = await readExecutions(testApp, jobId);
+      expect(executions.map((e) => e.status)).toEqual(['failed']);
+      // No flush: a failure must reach the admin panel straight away.
+      const job = await readJob(testApp, jobId);
+      expect(job.lastRunAt).not.toBeNull();
+      expect(job.lastRunAt!.getTime()).toBe(
+        executions[0].finishedAt!.getTime(),
+      );
+    });
+  }
+  describe('last_run_at deferral (ROK-1380)', () => describeLastRunDeferral());
+
+  function describeTriggerLastRun() {
+    it('manual trigger of a core job writes last_run_at immediately', async () => {
+      const name = 'test:trigger-immediate';
+      const jobId = await insertTestJob(testApp, name);
+      const cronJobService = testApp.app.get(CronJobService);
+      const scheduler = testApp.app.get(SchedulerRegistry, { strict: false });
+      let tickFinished = false;
+      // Never started: only the trigger's fireOnTick runs this job.
+      scheduler.addCronJob(
+        name,
+        new CronJob('0 0 1 1 *', async () => {
+          await cronJobService.executeWithTracking(name, () =>
+            Promise.resolve(),
+          );
+          tickFinished = true;
+        }),
+      );
+      try {
+        await cronJobService.triggerJob(jobId);
+        // The core path fires fireOnTick without awaiting it.
+        await waitFor(() => {
+          expect(tickFinished).toBe(true);
+          return Promise.resolve();
+        });
+
+        const executions = await readExecutions(testApp, jobId);
+        expect(executions.map((e) => e.status)).toEqual(['completed']);
+        // No flush: an admin "Run now" must show its result straight away.
+        const job = await readJob(testApp, jobId);
+        expect(job.lastRunAt).not.toBeNull();
+      } finally {
+        scheduler.deleteCronJob(name);
+      }
+    });
+  }
+  describe('manual trigger last_run_at (ROK-1380)', () =>
+    describeTriggerLastRun());
 
   // ===================================================================
   // Execution Pruning
