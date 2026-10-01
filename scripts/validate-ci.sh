@@ -123,16 +123,15 @@ export GIT_CONFIG_PARAMETERS="'safe.directory=*'"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-# ROK-1326 fix-11: when this script runs inside the rl-infra fleet runner,
-# node_modules is intentionally Mutagen-excluded (large + OS-specific
-# binaries) so the freshly-claimed slot has an empty
-# /workspace/node_modules. Without `npm ci` the build step fails
-# immediately: 'sh: 1: tsc: not found' / 'sh: 1: nest: not found'. On
-# laptop runs node_modules is already populated by `npm install` at
-# worktree setup, so the guard is a no-op there.
-if [ ! -x "$REPO_ROOT/node_modules/.bin/tsc" ]; then
-  echo "[validate-ci] node_modules missing or incomplete — running npm ci..."
-  npm ci --silent --no-audit --no-fund 2>&1 | tail -5
+# ROK-1326 fix-11 / TDB:924: the fleet runner's node_modules is Mutagen-excluded,
+# so scripts/ci/ensure-runner-deps.sh installs (or refreshes) it there and is a
+# no-op on a laptop. Skipped under RL_VALIDATE_CI_DRY=1: the scripts/test
+# harnesses source this file and must never trigger an install.
+if [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
+  bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" || {
+    echo "[validate-ci] dependency install failed (see above)" >&2
+    exit 1
+  }
 fi
 
 # ---------------------------------------------------------------------------
