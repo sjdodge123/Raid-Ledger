@@ -131,7 +131,7 @@ export const WATCHDOG_EXIT_CODE = 143;
 
 /** The `exit_reason` a watchdog-killed task carries. */
 export const WATCHDOG_EXIT_REASON =
-  'killed by the gate watchdog (SIGTERM, exit 143) — raise timeout_seconds';
+  'killed by the gate watchdog (SIGTERM, exit 143) — raise timeout_seconds (max 7200)';
 
 /**
  * Name the cause of a terminal exit code when it is one we can identify.
