@@ -127,15 +127,18 @@ export class EphemeralVoiceService {
    * occupied (re-checks member count) — the reaper/idle path. Pass `force` for
    * cancel/delete, where the event is gone and the channel must not be orphaned
    * even if someone is still in it. Flushes attendance first.
+   * Resolves true only when the Discord channel was actually deleted — false
+   * when skipped (no channel, bot offline, occupied), already gone, or failed.
    */
   async destroyForEvent(
     ev: EphemeralEventRow,
     opts?: { force?: boolean },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const channelId = ev.ephemeralVoiceChannelId;
-    if (!channelId) return;
+    if (!channelId) return false;
     const guild = this.requireGuild();
-    if (!guild) return;
+    if (!guild) return false;
+    let deleted = false;
     try {
       if (
         !opts?.force &&
@@ -144,14 +147,14 @@ export class EphemeralVoiceService {
         this.logger.debug(
           `Skip reap: ephemeral channel ${channelId} (event ${ev.id}) occupied`,
         );
-        return;
+        return false;
       }
       await this.voiceAttendance
         ?.flushToDb()
         .catch((e) =>
           this.logger.warn(`Voice flush before reap failed: ${String(e)}`),
         );
-      await deleteVoiceChannel(guild, channelId);
+      deleted = await deleteVoiceChannel(guild, channelId);
       await clearEphemeralChannelId(this.db, ev.id);
       await this.repointAndResync(ev, await buildRepointData(this.db, ev));
       this.logger.log(
@@ -160,18 +163,20 @@ export class EphemeralVoiceService {
     } catch (err) {
       this.captureError('destroy', ev.id, err);
     }
+    return deleted;
   }
 
   /**
    * Reload the row + destroy. Idle processor passes no opts (occupancy-safe);
    * cancel/delete lifecycle passes `force` so the channel is never orphaned.
+   * Resolves `destroyForEvent`'s deleted flag; false when the event is gone.
    */
   async destroyById(
     eventId: number,
     opts?: { force?: boolean },
-  ): Promise<void> {
+  ): Promise<boolean> {
     const ev = await fetchEventForEphemeral(this.db, eventId);
-    if (ev) await this.destroyForEvent(ev, opts);
+    return ev ? this.destroyForEvent(ev, opts) : false;
   }
 
   /**
