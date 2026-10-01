@@ -253,10 +253,25 @@ async function applySuppressionPlan(
   if (plan.action === 'skip-capped') warnSkipCapped(eventId, plan.ceiling);
 }
 
+/**
+ * Drop throttle entries whose TTL has lapsed (`nowMs - at >= ttlMs`) so a
+ * hot-path warn Map stays bounded instead of accreting one key per event.
+ */
+export function pruneExpiredWarnings(
+  map: Map<number, number>,
+  nowMs: number,
+  ttlMs: number,
+): void {
+  for (const [key, at] of map) {
+    if (nowMs - at >= ttlMs) map.delete(key);
+  }
+}
+
 /** Throttled skip-capped warning (module-local Map, 30-min TTL per event). */
 function warnSkipCapped(eventId: number, ceiling: Date): void {
-  const last = skipCappedWarnedAt.get(eventId);
   const nowMs = Date.now();
+  pruneExpiredWarnings(skipCappedWarnedAt, nowMs, SKIP_CAPPED_WARN_TTL_MS);
+  const last = skipCappedWarnedAt.get(eventId);
   if (last && nowMs - last < SKIP_CAPPED_WARN_TTL_MS) return;
   skipCappedWarnedAt.set(eventId, nowMs);
   logger.warn(

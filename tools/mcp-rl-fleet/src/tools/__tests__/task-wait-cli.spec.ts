@@ -12,6 +12,7 @@ vi.mock('../task.js', () => ({
 }));
 
 import { runTaskWait } from '../task-wait-cli.js';
+import { WATCHDOG_EXIT_REASON } from '../task-brief.js';
 
 function status(over: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -82,6 +83,21 @@ describe('runTaskWait', () => {
 
     expect(lines[lines.length - 1]).toBe('FAIL abc12345 — Build:PASS,Unit:FAIL — sentinel=none');
     expect(code, 'a failed task must exit non-zero — expected 1').toBe(1);
+  });
+
+  it('names the exit_reason on the FAIL line of a watchdog-killed task (TDB:1452)', async () => {
+    executeStatus.mockResolvedValueOnce(
+      status({
+        mcp_runtime_status: 'failed',
+        script_exit_code: 143,
+        exit_reason: WATCHDOG_EXIT_REASON,
+      }),
+    );
+    const code = await runTaskWait(['abc12345'], deps);
+    expect(lines[lines.length - 1]).toBe(
+      `FAIL abc12345 —  — sentinel=none — ${WATCHDOG_EXIT_REASON}`,
+    );
+    expect(code).toBe(1);
   });
 
   it('reports a cancelled task as CANCELLED, exit 1', async () => {

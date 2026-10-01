@@ -23,9 +23,12 @@ import {
   deleteEvent,
   awaitProcessing,
   flushEmbedQueue,
-  enableScheduledEvents,
-  disableScheduledEvents,
 } from "../fixtures.js";
+import {
+  acquireScheduledEvents,
+  releaseScheduledEvents,
+  releaseScheduledEventsAndRethrow,
+} from "../scheduled-events-toggle.js";
 import type { ApiClient } from "../api.js";
 import type { SmokeTest, TestContext } from "../types.js";
 
@@ -108,8 +111,10 @@ const renameOnGameSetChangeUnset: SmokeTest = {
   category: "flow",
   async run(ctx: TestContext) {
     const { a: gameA, b: gameB } = await pickTwoGames(ctx);
-    await enableScheduledEvents(ctx.api);
-    const ev = await createEvent(ctx.api, "se-rename");
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, "se-rename").catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await awaitProcessing(ctx.api);
       // Capture the bound SE id from the initial (bare-title) name. 2× timeout:
@@ -142,7 +147,7 @@ const renameOnGameSetChangeUnset: SmokeTest = {
         );
       }
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },

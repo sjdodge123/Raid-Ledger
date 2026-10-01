@@ -7,7 +7,7 @@ export interface TestableSignupInteractionListener {
   onBotDisconnected: () => void;
   handleButtonInteraction: (interaction: unknown) => Promise<void>;
   handleSelectMenuInteraction: (interaction: unknown) => Promise<void>;
-  boundHandler: ((interaction: unknown) => void) | null;
+  binding: { attachedCount: number };
 }
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';

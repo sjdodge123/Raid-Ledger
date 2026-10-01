@@ -4,7 +4,7 @@ import {
   entersState,
   getVoiceConnection,
 } from '@discordjs/voice';
-import { getGuild, getVoiceChannel } from '../client.js';
+import { getVoiceChannel } from '../client.js';
 import { GUILD_ID } from '../config.js';
 
 /**
