@@ -6,6 +6,7 @@
 import { fetchGamePricing } from './igdb-pricing.helpers';
 import type { ItadPriceService } from '../itad/itad-price.service';
 import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 
 // ─── DB mock helpers ─────────────────────────────────────────────────────────
 
@@ -89,7 +90,11 @@ describe('fetchGamePricing — null paths', () => {
 
     await fetchGamePricing(db as never, svc as never, 7);
 
-    expect(svc.getOverview).toHaveBeenCalledWith('uuid-elden-ring');
+    // User-facing: must fail fast on a long 429 pause, not hold the request.
+    expect(svc.getOverview).toHaveBeenCalledWith(
+      'uuid-elden-ring',
+      ITAD_INTERACTIVE_FETCH,
+    );
   });
 });
 

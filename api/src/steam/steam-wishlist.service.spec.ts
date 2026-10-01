@@ -9,6 +9,10 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import * as steamHttp from './steam-http.util';
 import * as discovery from './steam-itad-discovery.helpers';
+import {
+  ITAD_BACKGROUND_FETCH,
+  ITAD_INTERACTIVE_FETCH,
+} from '../itad/itad.constants';
 
 jest.mock('./steam-http.util');
 
@@ -337,5 +341,70 @@ describe('SteamWishlistService — discovery steamAppIdSource (ROK-1680)', () =>
     await service['discoverUnmatched']([{ appid: 300 }] as never, []);
 
     expect(spy).toHaveBeenCalledWith(300, expect.any(Object), 'steam');
+  });
+});
+
+describe('SteamWishlistService — ITAD fetch options on discovery', () => {
+  let db: MockDb;
+  let lookupBySteamAppId: jest.Mock;
+  let service: SteamWishlistService;
+
+  beforeEach(() => {
+    db = createDrizzleMock();
+    db.query = {
+      users: {
+        findFirst: jest.fn().mockResolvedValue({ id: 1, steamId: '7656' }),
+      },
+    };
+    lookupBySteamAppId = jest.fn().mockResolvedValue(null);
+    service = new SteamWishlistService(
+      db as never,
+      {
+        getSteamApiKey: jest.fn().mockResolvedValue('test-api-key'),
+        get: jest.fn().mockResolvedValue('false'),
+      } as never,
+      undefined,
+      { lookupBySteamAppId } as never,
+    );
+    (steamHttp.getPlayerSummary as jest.Mock).mockResolvedValue({
+      communityvisibilitystate: 3,
+    });
+    // One wishlisted game that is not in the DB yet, so discovery runs.
+    (steamHttp.getWishlist as jest.Mock).mockResolvedValue([
+      { appid: 300, date_added: 1000 },
+    ]);
+  });
+
+  afterEach(() => jest.useRealTimers());
+
+  it('manual sync forwards the caller options to the Steam app id lookup', async () => {
+    // findMatchingGames, then fetchExistingWishlistIds
+    db.where.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+    await service.syncWishlist(1, ITAD_INTERACTIVE_FETCH);
+
+    expect(lookupBySteamAppId).toHaveBeenCalledWith(
+      300,
+      ITAD_INTERACTIVE_FETCH,
+    );
+  });
+
+  it('cron sync looks up with the background ITAD wait, not the fail-fast default', async () => {
+    jest.useFakeTimers();
+    // linked users, findMatchingGames, fetchExistingWishlistIds
+    db.where
+      .mockResolvedValueOnce([{ id: 1 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const run = service.syncAllLinkedUsersWishlist();
+    await jest.runAllTimersAsync(); // the 200ms gap between users
+    await expect(run).resolves.toEqual({
+      usersProcessed: 1,
+      totalNewInterests: 0,
+    });
+
+    expect(lookupBySteamAppId).toHaveBeenCalledTimes(1);
+    expect(lookupBySteamAppId).toHaveBeenCalledWith(300, ITAD_BACKGROUND_FETCH);
   });
 });

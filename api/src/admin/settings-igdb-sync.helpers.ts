@@ -23,6 +23,8 @@ export async function triggerIgdbSync(
   backfilled: number;
 }> {
   try {
+    // An admin waits on this request (nginx proxy_read_timeout 120s), so ITAD
+    // enrichment keeps the fail-fast default on a long 429 pause.
     const result = await igdbService.syncAllGames();
     return {
       success: true,

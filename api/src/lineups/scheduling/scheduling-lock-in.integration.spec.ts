@@ -15,7 +15,7 @@
  *   (c) a non-organiser member is refused (ROK-1610 AC3)
  *   (d) voting stays closed after expiry (AC3, second half)
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as bcrypt from 'bcrypt';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -24,6 +24,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { findSlotInMatch } from './scheduling-rally.helpers';
 
 /** Far enough out that the slot is always "future" (ROK-1610's gate). */
 const FUTURE_SLOT = new Date('2099-10-10T21:00:00.000Z');
@@ -204,21 +205,23 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(page.status).toBe(200);
     expect(page.body.pollStatus).toBe('locked_in');
-    // `lockedInTime` reads the EVENT (a UTC-normalised `tsrange`), while the
-    // slot list reads `proposed_time` (a naive timestamp). Those two agree only
-    // when the API process runs in UTC — on this runner (UTC-6) they differ by
-    // the offset, which is the drift documented in TECH-DEBT 2026-09-17 and is
-    // NOT this branch's doing. So the claim asserted here is "the poll is
-    // locked in to the event this lock-in created, at that event's start", and
-    // the slot↔event instant comparison waits for the column fix.
     expect(page.body.canLockIn).toBe(false);
-    // The EVENT carries the slot's instant correctly (a UTC-normalised
-    // `tsrange`); `lockedInTime` and the slot list each re-serialise the naive
-    // `proposed_time` column differently, so on a non-UTC runner the three
-    // disagree by the offset — TECH-DEBT 2026-09-17, not this branch. What is
-    // asserted here: the poll is locked in, names a time, and points at the
-    // event this lock-in created (checked below via `linkedEventId`).
-    expect(typeof page.body.lockedInTime).toBe('string');
+    // TDB:1489 — the slot, the event the lock-in created and `lockedInTime`
+    // name the SAME absolute instant. `lockedInTime` used to parse the
+    // zone-less `tsrange` bound as LOCAL time, so under a non-UTC `TZ` it
+    // disagreed with its own event by the host's offset.
+    const iso = FUTURE_SLOT.toISOString();
+    expect(page.body.lockedInTime).toBe(iso);
+    const slots = page.body.slots as Array<{
+      id: number;
+      proposedTime: string;
+    }>;
+    expect(slots.find((s) => s.id === poll.slotIds[0])?.proposedTime).toBe(iso);
+    const [event] = await testApp.db
+      .select({ duration: schema.events.duration })
+      .from(schema.events)
+      .where(eq(schema.events.id, created.body.eventId as number));
+    expect(event.duration[0].toISOString()).toBe(iso);
 
     const [match] = await testApp.db
       .select()
@@ -226,6 +229,42 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       .where(eq(schema.communityLineupMatches.id, poll.matchId));
     expect(match.status).toBe('scheduled');
     expect(match.linkedEventId).toBe(created.body.eventId);
+  });
+
+  it('holds each slot as an absolute instant, whatever the DB session zone (TDB:1489)', async () => {
+    // `proposed_time` was a zone-less `timestamp`: every SQL `NOW()`
+    // comparison and raw read then shifted by the session TimeZone's offset.
+    // One transaction pins a non-UTC session, so this fails on ANY host if the
+    // column reverts to `timestamp` OR a raw reader drops `AT TIME ZONE 'UTC'`.
+    const recentPast = new Date(Date.now() - 60 * 60 * 1000);
+    const poll = await seedExpiredPoll([FUTURE_SLOT, recentPast]);
+    const [futureId, pastId] = poll.slotIds;
+
+    const seen = await testApp.db.transaction(async (tx) => {
+      await tx.execute(sql`SET LOCAL TIME ZONE 'America/New_York'`);
+      const rows = (await tx.execute(sql`
+        SELECT s.id AS "slotId",
+               s.proposed_time = ${FUTURE_SLOT.toISOString()}::timestamptz
+                 AS "sameInstant",
+               s.proposed_time > NOW() AS "isFuture"
+        FROM community_lineup_schedule_slots s
+        WHERE s.match_id = ${poll.matchId}`)) as unknown as Array<{
+        slotId: number;
+        sameInstant: boolean;
+        isFuture: boolean;
+      }>;
+      const db = tx as unknown as typeof testApp.db;
+      return { rows, found: await findSlotInMatch(db, poll.matchId, futureId) };
+    });
+
+    const byId = new Map(seen.rows.map((r) => [Number(r.slotId), r]));
+    expect(byId.get(futureId)).toMatchObject({
+      sameInstant: true,
+      isFuture: true,
+    });
+    // A time that passed an hour ago read as ~3h AHEAD in New York before.
+    expect(byId.get(pastId)?.isFuture).toBe(false);
+    expect(seen.found?.proposedTime).toBe(FUTURE_SLOT.toISOString());
   });
 
   it('advertises the future leading slot to the organiser before they act', async () => {

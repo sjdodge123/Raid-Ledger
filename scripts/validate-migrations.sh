@@ -13,8 +13,17 @@
 # real error message on failure and matches what GitHub CI does at boot time
 # via `api/scripts/run-migrations-with-sentry.ts`. ROK-1335.
 #
+# Before any of that, a snapshot-drift check (TDB:1167, no Docker needed)
+# fails when schema.ts disagrees with the latest meta snapshot — i.e. a schema
+# edit shipped without `npm run db:generate -w api`.
+#
 # Usage:
-#   ./scripts/validate-migrations.sh
+#   ./scripts/validate-migrations.sh               # drift check + apply all migrations
+#   ./scripts/validate-migrations.sh --drift-only  # drift check only (no Docker, ~1s)
+#   ./scripts/validate-migrations.sh --skip-drift  # apply migrations only
+#
+# Test hooks: RL_DRIFT_SCHEMA / RL_DRIFT_MIGRATIONS_DIR override the schema
+# entry point / migrations dir the drift check reads (scripts/*.spec.mjs).
 # =============================================================================
 
 set -euo pipefail
@@ -28,12 +37,16 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 CONTAINER_NAME="rl-migrate-validate-$$"
+CONTAINER_STARTED=false
+DRIFT_TMP=""
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 cleanup() {
+  if [ -n "$DRIFT_TMP" ]; then rm -rf "$DRIFT_TMP"; fi
+  if [ "$CONTAINER_STARTED" != true ]; then return 0; fi
   if docker ps -q --filter "name=$CONTAINER_NAME" | grep -q .; then
     echo -e "${YELLOW}Cleaning up container ${CONTAINER_NAME}...${NC}"
     docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
@@ -54,8 +67,59 @@ preflight_check() {
   bash "$REPO_ROOT/scripts/fix-migration-order.sh" --check
 }
 
+# TDB:1167 — drizzle-kit 0.31 has no dry-run, so `generate` runs against a
+# throwaway COPY of the migrations dir; any file it adds there means schema.ts
+# and the latest snapshot disagree. The real migrations dir is never written.
+# drizzle-kit's exit status is NOT trusted: it exits 0 after crashing (a bad
+# --out, or a rename/drop ambiguity it cannot prompt about without a TTY), so
+# a pass needs BOTH an unchanged file list AND its "No schema changes" line.
+check_snapshot_drift() {
+  local schema="${RL_DRIFT_SCHEMA:-$REPO_ROOT/api/src/drizzle/schema.ts}"
+  local src="${RL_DRIFT_MIGRATIONS_DIR:-$REPO_ROOT/api/src/drizzle/migrations}"
+  local kit="$REPO_ROOT/node_modules/drizzle-kit/bin.cjs"
+  echo -e "${YELLOW}Pre-flight: checking schema.ts against the latest snapshot...${NC}"
+  if [ ! -f "$kit" ]; then
+    echo -e "${RED}drizzle-kit not installed at $kit — run npm ci first${NC}"
+    return 1
+  fi
+  DRIFT_TMP="$(mktemp -d "${TMPDIR:-/tmp}/rl-drift.XXXXXX")"
+  cp -R "$src" "$DRIFT_TMP/migrations"
+  (cd "$src" && find . -type f | sort) > "$DRIFT_TMP/before.txt"
+  # --out is relative on purpose: drizzle-kit prefixes "./" to it, which
+  # turns an absolute path into a missing one.
+  (cd "$DRIFT_TMP" && node "$kit" generate --dialect postgresql \
+    --schema "$schema" --out migrations < /dev/null > drizzle-kit.log 2>&1) || true
+  report_snapshot_drift
+}
+
+report_snapshot_drift() {
+  local added
+  added="$(cd "$DRIFT_TMP/migrations" && find . -type f | sort \
+    | comm -13 "$DRIFT_TMP/before.txt" -)"
+  if [ -n "$added" ]; then
+    echo -e "${RED}Snapshot drift: schema.ts differs from the latest snapshot.${NC}"
+    echo "drizzle-kit generate would add:"
+    echo "$added" | sed 's/^/  /'
+    local f
+    for f in $added; do
+      case "$f" in *.sql) sed -n '1,40p' "$DRIFT_TMP/migrations/$f"; echo ;; esac
+    done
+    echo -e "${RED}Run 'npm run db:generate -w api' and commit the result.${NC}"
+    return 1
+  fi
+  if ! grep -q 'No schema changes' "$DRIFT_TMP/drizzle-kit.log"; then
+    echo -e "${RED}drizzle-kit generate did not report 'No schema changes'.${NC}"
+    echo "A rename/drop it cannot resolve without a TTY also lands here —"
+    echo "run 'npm run db:generate -w api' in a terminal. Log tail:"
+    tail -n 25 "$DRIFT_TMP/drizzle-kit.log" >&2
+    return 1
+  fi
+  echo -e "${GREEN}No snapshot drift: schema.ts matches the latest snapshot${NC}"
+}
+
 start_postgres() {
   echo -e "${YELLOW}Starting temporary Postgres container...${NC}"
+  CONTAINER_STARTED=true
   docker run --rm -d \
     --name "$CONTAINER_NAME" \
     -e POSTGRES_USER=user \
@@ -129,8 +193,18 @@ run_migrations() {
 # ---------------------------------------------------------------------------
 
 main() {
+  local drift=true drift_only=false arg
+  for arg in "$@"; do
+    case "$arg" in
+      --drift-only) drift_only=true ;;
+      --skip-drift) drift=false ;;
+      *) echo -e "${RED}Unknown argument: $arg${NC}" >&2; exit 64 ;;
+    esac
+  done
   trap cleanup EXIT
 
+  if $drift || $drift_only; then check_snapshot_drift; fi
+  if $drift_only; then return 0; fi
   preflight_check
   start_postgres
 

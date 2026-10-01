@@ -8,7 +8,7 @@ import type { GameDetailDto } from '@raid-ledger/contract';
 import type * as schema from '../drizzle/schema';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import type { ItadService } from '../itad/itad.service';
-import type { ItadGame } from '../itad/itad.constants';
+import { ITAD_INTERACTIVE_FETCH, type ItadGame } from '../itad/itad.constants';
 import { buildItadSearchDeps } from './igdb-itad-deps.helpers';
 import { executeItadSearch } from './igdb-itad-search.helpers';
 
@@ -32,14 +32,17 @@ function resolveGamesSelect(db: MockDb, rows: { slug: string }[]): void {
   db.where.mockImplementation(thenable);
 }
 
-function buildDeps(db: MockDb, slugs: string[]) {
-  const itadService = {
+function mockItadService(slugs: string[]) {
+  return {
     searchGames: jest.fn().mockResolvedValue(slugs.map(itadGame)),
     getGameInfo: jest.fn().mockResolvedValue(null),
     lookupSteamAppIds: jest.fn().mockResolvedValue(new Map()),
-  } as unknown as ItadService;
+  };
+}
+
+function buildDeps(db: MockDb, slugs: string[], itad = mockItadService(slugs)) {
   const deps = buildItadSearchDeps({
-    itadService,
+    itadService: itad as unknown as ItadService,
     db: db as unknown as PostgresJsDatabase<typeof schema>,
     queryIgdb: jest.fn().mockResolvedValue([]),
     getAdultFilter: jest.fn().mockResolvedValue(false),
@@ -78,5 +81,33 @@ describe('buildItadSearchDeps — banned/hidden batching (READLOGS:D2)', () => {
     const result = await executeItadSearch(deps, 'game');
 
     expect(result.games.map((g) => g.slug)).toEqual(['game-a', 'game-c']);
+  });
+});
+
+describe('buildItadSearchDeps — interactive fail-fast', () => {
+  it('passes the interactive limit to every ITAD call a search makes', async () => {
+    const db = createDrizzleMock();
+    resolveGamesSelect(db, []);
+    const itad = mockItadService(['game-a', 'game-b']);
+    const deps = buildDeps(db, [], itad);
+
+    await executeItadSearch(deps, 'game');
+
+    expect(itad.searchGames).toHaveBeenCalledWith(
+      'game',
+      undefined,
+      ITAD_INTERACTIVE_FETCH,
+    );
+    expect(itad.getGameInfo.mock.calls).toEqual([
+      ['uuid-game-a', ITAD_INTERACTIVE_FETCH],
+      ['uuid-game-b', ITAD_INTERACTIVE_FETCH],
+    ]);
+    expect(itad.lookupSteamAppIds).toHaveBeenCalledWith(
+      [
+        { id: 'uuid-game-a', slug: 'game-a' },
+        { id: 'uuid-game-b', slug: 'game-b' },
+      ],
+      ITAD_INTERACTIVE_FETCH,
+    );
   });
 });

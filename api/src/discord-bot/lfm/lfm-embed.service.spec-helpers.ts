@@ -197,6 +197,14 @@ function wireStore(): void {
     rows = rows.filter((r) => r.id !== id);
     return Promise.resolve();
   });
+  // `onConflictDoNothing`: a row with the same id, or a replacement open row
+  // for the game, wins — the restore is then a no-op (TDB:954).
+  s.restoreLfmMessage.mockImplementation((_db, row) => {
+    if (!openRow(row.gameId) && !rows.some((r) => r.id === row.id)) {
+      rows.push(row);
+    }
+    return Promise.resolve();
+  });
   s.loadLfmGame.mockResolvedValue(gameRow());
   s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
   s.readConvertedGroup.mockResolvedValue([]);
