@@ -236,6 +236,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       logger: this.logger,
       reresolve: this.reresolveJob,
       onNoOp: (job) => this.lastRun.queueLiveness(job),
+      deferLastRun: (job, at) => this.lastRun.deferCompleted(job, at),
     };
   }
 
@@ -310,6 +311,9 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     this.logger.log(`Manually triggering cron job: ${job.name}`);
     const handler = findPluginHandler(job, this.pluginRegistry);
+    // "Run now" writes last_run_at immediately (ROK-1380). A mark left by a
+    // no-op/paused/failed manual run costs the next completed run one write.
+    this.lastRun.markImmediate(job.name);
     if (handler) {
       await this.executeWithTracking(job.name, handler);
     } else {

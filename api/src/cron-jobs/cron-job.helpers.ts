@@ -19,6 +19,12 @@ import {
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
 type Db = PostgresJsDatabase<typeof schema>;
 
+/**
+ * Queue a run's last_run_at for the batched flush (ROK-1380). Returns true
+ * when queued (skip the per-run UPDATE), false when the caller must write now.
+ */
+export type DeferLastRun = (job: CronJobRow, finishedAt: Date) => boolean;
+
 /** Compute the next fire time from a cron expression. */
 export function computeNextRun(cronExpression: string): Date | null {
   try {
@@ -95,6 +101,7 @@ async function recordExecution(
   error?: string,
   reresolve?: ReresolveJob,
   logger?: Logger,
+  deferLastRun?: DeferLastRun,
 ): Promise<void> {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
   const inserted = await insertExecutionRow(
@@ -107,6 +114,11 @@ async function recordExecution(
   );
   perfLog('CRON', jobName, durationMs, { status });
   if (!inserted) return;
+  // `inserted` is the rebound row after an FK retry, never the stale `job`.
+  if (deferLastRun?.(inserted, finishedAt)) {
+    inserted.lastRunAt = finishedAt;
+    return;
+  }
   const nextRunAt = computeNextRun(inserted.cronExpression);
   await db
     .update(schema.cronJobs)
@@ -155,7 +167,10 @@ export async function recordSkipped(
   perfLog('CRON', jobName, 0, { status: 'skipped' });
 }
 
-/** Record a completed execution and update job timestamps. */
+/**
+ * Record a completed execution. last_run_at is queued via `deferLastRun`
+ * when given (ROK-1380), else written immediately.
+ */
 export async function recordCompleted(
   db: Db,
   job: CronJobRow,
@@ -164,6 +179,7 @@ export async function recordCompleted(
   finishedAt: Date,
   reresolve?: ReresolveJob,
   logger?: Logger,
+  deferLastRun?: DeferLastRun,
 ): Promise<void> {
   await recordExecution(
     db,
@@ -175,6 +191,7 @@ export async function recordCompleted(
     undefined,
     reresolve,
     logger,
+    deferLastRun,
   );
 }
 
@@ -192,6 +209,7 @@ export async function recordDegraded(
   finishedAt: Date,
   reresolve?: ReresolveJob,
   logger?: Logger,
+  deferLastRun?: DeferLastRun,
 ): Promise<void> {
   await recordExecution(
     db,
@@ -203,6 +221,7 @@ export async function recordDegraded(
     undefined,
     reresolve,
     logger,
+    deferLastRun,
   );
 }
 
