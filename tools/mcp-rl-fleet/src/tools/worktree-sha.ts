@@ -35,11 +35,13 @@ export async function resolveWorktreeCommitSha(worktreePath?: string): Promise<s
 /**
  * `git -C <worktreePath> rev-parse --short HEAD`, trimmed.
  *
- * This is the EXACT spelling the settings.json pre-push hook uses to name
- * `/tmp/.playwright-verified-<sha>`. The abbreviation length is repo-derived
- * (8 chars in this repo today, and it grows), so truncating the 40-hex sha
- * ourselves would name the wrong file. Returns '' (never throws) when the path
- * is not a git checkout or the output does not look like a sha.
+ * Recorded in the task->sha map at dispatch and echoed in the sentinel body for
+ * forensics. It no longer names a sentinel: the pre-push hook keys only on the
+ * web-surface hash ({@link resolveWorktreeSurfaceHash}) since TDB:1416 retired
+ * the `/tmp/.playwright-verified-<sha>` fallback. Git's own abbreviation is
+ * kept (repo-derived, 8 chars today) so the recorded value matches what
+ * `git log --oneline` shows. Returns '' (never throws) when the path is not a
+ * git checkout or the output does not look like a sha.
  */
 export async function resolveWorktreeShortSha(worktreePath?: string): Promise<string> {
   const dir = worktreePath ?? process.cwd();
@@ -71,7 +73,8 @@ const SURFACE_HASH = /^(nosurface|[0-9a-f]{7,40})$/;
  *
  * Returns '' (never throws) when the script is missing, fails, or prints
  * anything that is not a hash or `nosurface` — the caller then records no
- * surface and the sentinel stays sha-keyed.
+ * surface, and a passing gate reports NOT verified with a `surface_error`
+ * (there is no name to write the sentinel under).
  */
 export async function resolveWorktreeSurfaceHash(worktreePath?: string): Promise<string> {
   const dir = worktreePath ?? process.cwd();

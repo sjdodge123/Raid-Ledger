@@ -27,7 +27,7 @@ import {
   awaitProcessing,
 } from '../fixtures.js';
 import type { ApiClient } from '../api.js';
-import type { SmokeTest, TestContext } from '../types.js';
+import type { SmokeTest } from '../types.js';
 
 // ---------------------------------------------------------------------------
 // Local fixtures — call feature/test endpoints the dev will build (ROK-1352).

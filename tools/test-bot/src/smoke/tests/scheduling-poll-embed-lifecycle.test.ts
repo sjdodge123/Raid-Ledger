@@ -25,17 +25,17 @@
  * queue (2s delay), so each mutation is followed by `awaitProcessing` before
  * any Discord assertion. Deterministic waits only — never fixed timers.
  */
-import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
-import { readLastMessages } from '../../helpers/messages.js';
+import {
+  pollForEmbed,
+  snapshotMessageIds,
+  waitForEmbedUpdate,
+} from '../../helpers/polling.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import { awaitProcessing, channelForGame, deleteEvent } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /** Author-line separator the embed helpers render (`·`). */
 const SEP = '·';
-
-/** Discord caps a fetch at 100 — covers many runs' leftover cards. */
-const GHOST_SNAPSHOT_COUNT = 100;
 
 interface CreatePollResponse {
   id: number;
@@ -73,9 +73,7 @@ async function resolveGameId(ctx: TestContext): Promise<number> {
 async function createPoll(ctx: TestContext): Promise<PollUnderTest> {
   const gameId = await resolveGameId(ctx);
   const channelId = channelForGame(ctx, gameId);
-  const ghostIds = new Set(
-    (await readLastMessages(channelId, GHOST_SNAPSHOT_COUNT)).map((m) => m.id),
-  );
+  const ghostIds = await snapshotMessageIds(channelId);
   const poll = await ctx.api.post<CreatePollResponse>('/scheduling-polls', {
     gameId,
     durationHours: 24,

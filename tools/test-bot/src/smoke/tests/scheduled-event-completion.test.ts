@@ -16,9 +16,12 @@ import {
   deleteEvent,
   awaitProcessing,
   flushEmbedQueue,
-  enableScheduledEvents,
-  disableScheduledEvents,
 } from '../fixtures.js';
+import {
+  acquireScheduledEvents,
+  releaseScheduledEvents,
+  releaseScheduledEventsAndRethrow,
+} from '../scheduled-events-toggle.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /** Force-set event times to the past via test endpoint (bypasses Zod validation). */
@@ -58,8 +61,10 @@ const scheduledEventCreatedOnEventCreate: SmokeTest = {
   name: 'Discord Scheduled Event is created when an event is created',
   category: 'flow',
   async run(ctx) {
-    await enableScheduledEvents(ctx.api);
-    const ev = await createEvent(ctx.api, 'se-create');
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, 'se-create').catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await awaitProcessing(ctx.api);
       // Poll for the Discord scheduled event to appear in the guild
@@ -74,7 +79,7 @@ const scheduledEventCreatedOnEventCreate: SmokeTest = {
         );
       }
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -84,8 +89,10 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
   name: 'ROK-944: Scheduled Event transitions to Completed after completion cron',
   category: 'flow',
   async run(ctx) {
-    await enableScheduledEvents(ctx.api);
-    const ev = await createEvent(ctx.api, 'se-complete');
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, 'se-complete').catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await awaitProcessing(ctx.api);
       // Wait for the Discord scheduled event to appear
@@ -123,7 +130,7 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
         { intervalMs: 2000 },
       );
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -133,8 +140,10 @@ const completionCronSkipsFutureEvents: SmokeTest = {
   name: 'Completion cron does not complete events with future end times',
   category: 'flow',
   async run(ctx) {
-    await enableScheduledEvents(ctx.api);
-    const ev = await createEvent(ctx.api, 'se-future');
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, 'se-future').catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await awaitProcessing(ctx.api);
       // Wait for the Discord scheduled event to appear
@@ -162,7 +171,7 @@ const completionCronSkipsFutureEvents: SmokeTest = {
         );
       }
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },

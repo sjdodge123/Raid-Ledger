@@ -173,3 +173,18 @@ describe('DiscordListenerBinding', () => {
     });
   });
 });
+
+describe('GatewayBinding brand (TDB:366)', () => {
+  it('rejects a hand-built binding whose handler does not match the event', () => {
+    const binding = new DiscordListenerBinding(makeSilentLogger(), 'brand');
+    const wrongSignature = (n: number): number => n;
+    const handBuilt = [
+      { event: 'interactionCreate' as const, handler: wrongSignature },
+    ];
+    // Type-level guard: if GatewayBinding loses its brand, this call
+    // typechecks again and tsc fails on the unused @ts-expect-error.
+    // @ts-expect-error only gatewayBinding() can mint a GatewayBinding
+    binding.attach(makeFakeClient(), handBuilt);
+    expect(binding.attachedCount).toBe(1);
+  });
+});
