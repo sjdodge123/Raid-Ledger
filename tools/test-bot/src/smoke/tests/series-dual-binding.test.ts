@@ -17,6 +17,7 @@
  * Deterministic polling only — no fixed-delay waits.
  */
 import { pollForEmbed } from '../../helpers/polling.js';
+import { assertBindSucceeded, type BindReply } from '../bind-reply.js';
 import { joinVoice, leaveVoice } from '../../helpers/voice.js';
 import {
   createEvent,
@@ -30,11 +31,6 @@ import type { SmokeTest, TestContext } from '../types.js';
 // ---------------------------------------------------------------------------
 // Types + helpers
 // ---------------------------------------------------------------------------
-
-interface SlashCommandResponse {
-  content?: string;
-  embeds?: { title?: string; description?: string }[];
-}
 
 interface BindingRow {
   id: string;
@@ -52,7 +48,7 @@ const GUILD_VOICE = 2;
  * Invoke /bind via the test harness for a series + channel. The channel is
  * passed in object form with its Discord `type` so FakeInteraction surfaces
  * voice vs text to the handler (the string form carries no type and always
- * resolves as text).
+ * resolves as text). Throws the /bind refusal text when no binding was saved.
  */
 async function bindSeriesChannel(
   ctx: TestContext,
@@ -60,7 +56,7 @@ async function bindSeriesChannel(
   channelId: string,
   channelType: typeof GUILD_TEXT | typeof GUILD_VOICE,
   gameName?: string,
-): Promise<SlashCommandResponse> {
+): Promise<BindReply> {
   const options: Record<string, unknown> = {
     series: seriesId,
     channel: { id: channelId, type: channelType },
@@ -69,13 +65,18 @@ async function bindSeriesChannel(
   // game-voice-monitor binding (ROK-1372 shouldDeriveSeriesGame is a no-op when
   // the game is explicit), which is the ROK-1390 incident shape.
   if (gameName) options.game = gameName;
-  return ctx.api.post<SlashCommandResponse>('/admin/test/slash-command', {
+  const res = await ctx.api.post<BindReply>('/admin/test/slash-command', {
     commandName: 'bind',
     options,
     discordUserId: ctx.operatorDiscordId,
     guildId: ctx.config.guildId,
     channelId,
   });
+  // /bind refuses through editReply, never a throw: fail here with its words.
+  const kind = channelType === GUILD_VOICE ? 'voice' : 'text';
+  const game = gameName ? ` game "${gameName}"` : '';
+  assertBindSucceeded(res, `series ${seriesId} -> ${kind} #${channelId}${game}`);
+  return res;
 }
 
 /** Fetch all channel bindings (admin API). */
