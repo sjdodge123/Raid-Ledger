@@ -1048,18 +1048,23 @@ restore_runner_exec_bits() {
 # binaries) so /workspace/node_modules is empty on every fresh claim.
 # Runs in the background from cmd_claim — claim returns to the user
 # immediately and deps populate while they read the claim output.
-# validate-ci.sh has the same guard as a fallback, so a fast follow-up
-# run won't hit the missing-tsc failure if this background install
-# hasn't finished yet — it'll just inherit the cost there instead.
+# The root install goes through scripts/ci/ensure-runner-deps.sh, the
+# same helper validate-ci.sh calls. It holds the shared install lock
+# (container /tmp) and the lockfile-sha256 marker in node_modules, so a
+# validate-ci run that starts before this background install finishes
+# waits for it and then skips, instead of running a second `npm ci` in
+# the same tree.
 install_runner_deps() {
     local slot="$1"
     [[ -z "$slot" ]] && return 0
     # `npm ci` is a clean-slate install — faster + more reproducible than
-    # `npm install` from a populated state. We skip when node_modules is
-    # already populated (prior session, or another concurrent claim
-    # finished the install). `2>&1 >/dev/null` keeps the background
-    # logging quiet so it doesn't tangle with the claim output the user
-    # is reading.
+    # `npm install` from a populated state. ensure-runner-deps.sh skips it
+    # when node_modules is current for this package-lock.json (prior
+    # session, or another concurrent claim finished the install) and
+    # re-installs when the lockfile changed since the last install. A
+    # branch that predates the helper falls back to the old tsc-present
+    # check. `2>&1 >/dev/null` keeps the background logging quiet so it
+    # doesn't tangle with the claim output the user is reading.
     #
     # ROK-1359: tools/test-bot is a STANDALONE package (not an npm
     # workspace), so the root `npm ci` above doesn't cover it. Pre-install
@@ -1067,8 +1072,12 @@ install_runner_deps() {
     # (ERR_MODULE_NOT_FOUND: @discordjs/voice) on a fresh runner. Same
     # skip-when-populated guard; validate-ci.sh has the same fallback.
     ssh_run run-on-runner -- bash -c \
-        '[ -x /workspace/node_modules/.bin/tsc ] || \
-           (cd /workspace && npm ci --silent --no-audit --no-fund); \
+        'if [ -f /workspace/scripts/ci/ensure-runner-deps.sh ]; then \
+           bash /workspace/scripts/ci/ensure-runner-deps.sh /workspace; \
+         else \
+           [ -x /workspace/node_modules/.bin/tsc ] || \
+             (cd /workspace && npm ci --silent --no-audit --no-fund); \
+         fi; \
          [ -d /workspace/tools/test-bot/node_modules ] || \
            (cd /workspace/tools/test-bot && npm ci --silent --no-audit --no-fund)' \
         >/dev/null 2>&1 || true
