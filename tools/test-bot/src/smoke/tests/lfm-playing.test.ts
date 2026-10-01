@@ -416,8 +416,9 @@ async function endSpawnedSession(run: Run): Promise<void> {
     if (res.ended && !res.channelDestroyed) {
       console.warn(
         `[lfm-playing] session ended for game ${run.game.id} but its temp ` +
-          `voice channel was NOT deleted — bot offline, channel already ` +
-          `gone, or the delete failed; it may be orphaned in the guild`,
+          `voice channel was NOT deleted — never created, bot offline, ` +
+          `already gone, or the delete failed; if it exists it may be ` +
+          `orphaned in the guild`,
       );
     }
     await awaitProcessing(run.ctx.api);
