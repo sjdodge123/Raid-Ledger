@@ -50,5 +50,7 @@ export const eventVoiceSessions = pgTable(
       'event_voice_sessions_event_discord_user_unique',
     ).on(table.eventId, table.discordUserId),
     eventIdx: index('idx_event_voice_sessions_event').on(table.eventId),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    userIdIdx: index('idx_event_voice_sessions_user_id').on(table.userId),
   }),
 );
