@@ -16,6 +16,7 @@ import type { ChurnDetectionService } from '../churn-detection.service';
 import type { CliqueDetectionService } from '../clique-detection.service';
 import type { KeyInsightsService } from '../key-insights.service';
 import { buildChurnSection } from './churn-section';
+import { readPriorRadarRows, stitchDriftForInsights } from './drift-history';
 import { buildEngagementSection } from './engagement-section';
 import { buildKeyInsightsSection } from './key-insights-section';
 import { buildRadarSection } from './radar-section';
@@ -63,11 +64,13 @@ export async function runRefreshSnapshot(
     logger,
     jobId: deps.jobId,
   });
-  const keyInsights = buildKeyInsightsSection(
-    deps.keyInsights,
-    snapshotDate,
-    sections,
-  );
+  // Key insights compare week-over-week, so they see the radar with prior
+  // weeks' drift stitched in; the stored radar keeps its single week.
+  const priorRows = await readPriorRadarRows(db, snapshotDate);
+  const keyInsights = buildKeyInsightsSection(deps.keyInsights, snapshotDate, {
+    ...sections,
+    radar: stitchDriftForInsights(priorRows, sections.radar, snapshotDate),
+  });
   await upsertSnapshot(db, snapshotDate, { ...sections, keyInsights });
   await pruneOlderThan(db, cfg.retentionDays);
   return { snapshotDate };
