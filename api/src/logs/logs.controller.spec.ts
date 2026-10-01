@@ -304,9 +304,13 @@ function describeLogsController() {
     });
 
     it('rejects before any header is set when the export is over the cap (413)', async () => {
-      mockLogsService.createExportStream.mockRejectedValue(
+      // Pre-handled, so a controller that forgot to await it fails the
+      // assertions below instead of crashing the run on an unhandled rejection.
+      const tooLarge = Promise.reject(
         new PayloadTooLargeException('exceeds maximum of 100 MB'),
       );
+      tooLarge.catch(() => undefined);
+      mockLogsService.createExportStream.mockReturnValue(tooLarge);
       const res = createMockResponse();
 
       await expect(
