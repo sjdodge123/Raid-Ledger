@@ -119,13 +119,22 @@ async function recordExecution(
     inserted.lastRunAt = finishedAt;
     return;
   }
-  const nextRunAt = computeNextRun(inserted.cronExpression);
+  await writeLastRunNow(db, inserted, finishedAt);
+}
+
+/** Write last_run_at/next_run_at now and mirror them on the cached row. */
+async function writeLastRunNow(
+  db: Db,
+  row: CronJobRow,
+  finishedAt: Date,
+): Promise<void> {
+  const nextRunAt = computeNextRun(row.cronExpression);
   await db
     .update(schema.cronJobs)
     .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
-    .where(eq(schema.cronJobs.id, inserted.id));
-  inserted.lastRunAt = finishedAt;
-  if (nextRunAt) inserted.nextRunAt = nextRunAt;
+    .where(eq(schema.cronJobs.id, row.id));
+  row.lastRunAt = finishedAt;
+  if (nextRunAt) row.nextRunAt = nextRunAt;
 }
 
 /** Record a no-op execution (handler ran but found nothing to do). */
