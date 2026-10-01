@@ -97,7 +97,8 @@ run_npm_ci() {
     echo "$PREFIX ERROR: mktemp failed" >&2
     return 1
   fi
-  (cd "$ROOT" && npm ci --silent --no-audit --no-fund) >"$log" 2>&1
+  # 9>&-: npm and anything it spawns must not inherit (and so outlive) the lock.
+  (cd "$ROOT" && npm ci --silent --no-audit --no-fund) >"$log" 2>&1 9>&-
   rc=$?
   if [ "$rc" -ne 0 ]; then
     echo "$PREFIX ERROR: npm ci failed (exit $rc); last 20 lines:" >&2
