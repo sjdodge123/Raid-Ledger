@@ -8,10 +8,17 @@
  * queue here, and admin manual triggers are marked so their run writes
  * immediately (the admin panel re-reads `last_run_at` right after "Run now").
  *
+ * Only high-frequency jobs defer (see `isDeferrableSchedule`): the write
+ * amplification comes from them, and the API registers no shutdown hooks, so
+ * a deploy drops whatever is still queued. A daily or weekly job writes its
+ * run at once rather than showing the previous run until the next one; a
+ * high-frequency job's lost value is replaced within one interval.
+ *
  * Plain class (no DI) owned by CronJobService, extracted to keep that file
  * under the 300-line cap.
  */
 import { Logger } from '@nestjs/common';
+import { CronTime } from 'cron';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { NOOP_LIVENESS_INTERVAL_MS } from './cron-job.constants';
@@ -20,6 +27,31 @@ import { shouldUpdateLiveness } from './cron-job.helpers';
 
 type CronJobRow = typeof schema.cronJobs.$inferSelect;
 type Db = PostgresJsDatabase<typeof schema>;
+
+/** Longest schedule interval whose completed runs are deferred. */
+export const DEFER_MAX_INTERVAL_MS = 15 * 60 * 1000;
+
+const deferrableBySchedule = new Map<string, boolean>();
+
+/**
+ * Whether a schedule fires at least every DEFER_MAX_INTERVAL_MS, judged by
+ * the gap between its next two fire times (cached per expression). An
+ * unparseable expression writes immediately.
+ */
+export function isDeferrableSchedule(cronExpression: string): boolean {
+  const cached = deferrableBySchedule.get(cronExpression);
+  if (cached !== undefined) return cached;
+  let deferrable = false;
+  try {
+    const [first, second] = new CronTime(cronExpression).sendAt(2);
+    const gapMs = second.toMillis() - first.toMillis();
+    deferrable = gapMs > 0 && gapMs <= DEFER_MAX_INTERVAL_MS;
+  } catch {
+    deferrable = false;
+  }
+  deferrableBySchedule.set(cronExpression, deferrable);
+  return deferrable;
+}
 
 /** One queued last_run_at write; next_run_at is derived at flush time. */
 export interface PendingLastRun {
@@ -51,12 +83,13 @@ export class LastRunBuffer {
 
   /**
    * Queue a completed/degraded run's last_run_at. Returns false — the caller
-   * must write now — when the job was marked immediate; the mark is consumed
-   * and any older queued value for the job is dropped so a later flush cannot
-   * roll the immediate write back.
+   * must write now — when the job was marked immediate (the mark is consumed)
+   * or its schedule is not high-frequency. Any older queued value for the job
+   * is then dropped so a later flush cannot roll the immediate write back.
    */
   deferCompleted(job: CronJobRow, finishedAt: Date): boolean {
-    if (this.immediate.delete(job.name)) {
+    const marked = this.immediate.delete(job.name);
+    if (marked || !isDeferrableSchedule(job.cronExpression)) {
       this.pending.delete(job.id);
       return false;
     }
