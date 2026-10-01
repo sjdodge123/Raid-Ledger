@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
 import { MemberAvatarGroup } from '../decided/MemberAvatarGroup';
 import type { SchedulingMode } from './scheduling-hero';
+import { coverSrcSetProps } from '../../../lib/igdb-image';
 
 export interface SchedulingGameRefBannerProps {
   match: MatchDetailResponseDto;
@@ -50,6 +51,8 @@ export function SchedulingGameRefBanner(
           src={match.gameCoverUrl}
           alt={match.gameName}
           className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
+          width={48} height={48} loading="lazy" decoding="async"
+          {...coverSrcSetProps(match.gameCoverUrl, '48px')}
         />
       )}
       <div className="min-w-0">
