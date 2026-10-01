@@ -294,7 +294,7 @@ assert_grep 'for spec in .*src/smoke/\*\.selftest\.ts' \
 # invoked — CI's web job and run_unit_tests both `cd web` first. Unrun tests are
 # not coverage.
 CURRENT_TEST_NAME="AC2: the unit step runs the scripts/smoke helper specs"
-assert_grep 'vitest run --config vitest\.config\.ts scripts/smoke' "$npx_argv_file" "the unit step must run the root-config scripts/smoke specs"
+assert_grep 'vitest run --config vitest\.config\.mts scripts/smoke' "$npx_argv_file" "the unit step must run the root-config scripts/smoke specs"
 
 # The runner recipe. `--fleet --with-e2e` (task de3ead1d639b) died at
 # "Unit tests (no coverage)": ONE in-band jest process walked into the V8 heap

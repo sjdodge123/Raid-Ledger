@@ -798,7 +798,7 @@ resolve_heap_mb() {
 # unless the caller already set NODE_OPTIONS, which then wins untouched.
 # ROK-1466 W4: scripts/smoke/*.spec.ts (target / auth-paths / login-retry /
 # browser-preflight, plus the ROK-1085 api-helpers cache tests) are included by
-# the ROOT vitest.config.ts, which nothing ever invoked — GitHub CI's web job
+# the ROOT vitest.config.mts, which nothing ever invoked — GitHub CI's web job
 # and this script both `cd web` first, picking up web/vitest.config.ts instead.
 # They are the only coverage the Playwright harness helpers have.
 # Args: $1 - NODE_OPTIONS to run under (defaults to the inherited value). The
@@ -809,7 +809,7 @@ run_smoke_helper_specs() {
   local node_opts="${1:-${NODE_OPTIONS:-}}"
   echo "--- scripts/smoke helper specs (root vitest config) ---"
   (cd "$REPO_ROOT" && NODE_OPTIONS="$node_opts" \
-     npx vitest run --config vitest.config.ts scripts/smoke)
+     npx vitest run --config vitest.config.mts scripts/smoke)
 }
 
 # Replace (or add) --max-old-space-size inside a NODE_OPTIONS string, leaving
