@@ -22,9 +22,17 @@ npm run test:integration -w api        # Uses Testcontainers (auto-manages Postg
 npm run test -w web                    # Run all
 cd web && npx vitest run --coverage    # With coverage enforcement
 
+# Contract schemas (Zod)
+npm test -w @raid-ledger/contract      # Run all
+
 # Smoke tests (Playwright)
 npx playwright test                    # Auto-starts dev server
 ```
+
+Contract schema specs live in `packages/contract/src/__tests__/*.spec.ts` and run
+under their own node-environment Vitest config (`packages/contract/vitest.config.ts`,
+which includes `src/**` only so the compiled `dist/` copies never run twice). CI's
+`unit-tests-contract` job and `validate-ci.sh --full` both run them.
 
 ## Coverage Thresholds
 

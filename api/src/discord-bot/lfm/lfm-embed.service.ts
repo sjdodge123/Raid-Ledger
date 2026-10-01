@@ -44,7 +44,11 @@ import { LfgGameChainService } from '../lfg-board/lfg-game-chain.service';
 import { LFG_BOARD_EVENTS } from '../lfg-board/lfg-board.constants';
 import type { LfgBoardSurfaceDeps } from '../lfg-board/lfg-board-surface.helpers';
 import type { LfmChannelDeps } from './lfm-channel.helpers';
-import { postNew, type LfmPostDeps } from './lfm-embed.post.helpers';
+import {
+  postNew,
+  replaceDeletedPost,
+  type LfmPostDeps,
+} from './lfm-embed.post.helpers';
 import {
   buildLfmEmbed,
   isTerminalRender,
@@ -61,7 +65,6 @@ import {
 } from './lfm-embed.views';
 import {
   closeLfmMessage,
-  deleteLfmMessage,
   findOpenLfmMessage,
   listOpenLfmMessages,
   listUntrackedLfmGames,
@@ -416,9 +419,10 @@ export class LfmEmbedService {
    * E3 — a human deleted the message.
    *
    * Still open: drop the row and post a replacement, so the group keeps a live
-   * message. Terminal: there is nothing left to keep alive, so just close the
-   * row — re-posting a final card into a channel someone deliberately cleared
-   * would be noise.
+   * message — and put the row back if no replacement lands (TDB:954).
+   * Terminal: there is nothing left to keep alive, so just close the row —
+   * re-posting a final card into a channel someone deliberately cleared would
+   * be noise.
    */
   private async healDeleted(
     row: LfmMessageRow,
@@ -429,15 +433,14 @@ export class LfmEmbedService {
       await closeLfmMessage(this.db, row.id, terminal, view.memberCount);
       return;
     }
-    await deleteLfmMessage(this.db, row.id);
-    await this.postNew(row.gameId, view);
+    await replaceDeletedPost(this.postDeps(await this.context()), row, view);
   }
 
   /**
    * Post the group's message and start tracking it (ROK-1471 D2). The surface
-   * decision lives in `lfm-embed.post.helpers.ts`; this is the service's one
-   * seam into it, so every caller — first post, heal, offline reconcile —
-   * hands over the same collaborators.
+   * decision lives in `lfm-embed.post.helpers.ts`; this is the seam the first
+   * post and the offline reconcile go through. The heal enters the same module
+   * via `replaceDeletedPost`, handing over the same `postDeps` bag.
    */
   private async postNew(gameId: number, view: LfmGroupView): Promise<void> {
     await postNew(this.postDeps(await this.context()), gameId, view);

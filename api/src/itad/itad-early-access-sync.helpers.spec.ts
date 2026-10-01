@@ -11,7 +11,13 @@
  * for >10s, and the helper must surface per-chunk telemetry the caller can
  * aggregate into a degraded-status signal (AC #5).
  */
-import { enrichChunkEarlyAccess } from './itad-early-access-sync.helpers';
+import {
+  EARLY_ACCESS_CALL_TIMEOUT_MS,
+  enrichChunkEarlyAccess,
+  enrichEarlyAccessPhase,
+} from './itad-early-access-sync.helpers';
+import { ItadRetriesExhaustedError } from './itad-http.util';
+import { ITAD_BACKGROUND_FETCH } from './itad.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 type ItadServiceLike = {
@@ -73,6 +79,40 @@ describe('enrichChunkEarlyAccess — per-call timeout (ROK-1197)', () => {
     expect((result as { failed: number }).failed).toBeGreaterThanOrEqual(1);
   }, 12_000);
 
+  it('counts a rate-limited (retries exhausted) call as failed, not as "not in ITAD"', async () => {
+    // Mirrors ItadService.getGameInfo: rejects only when asked to, otherwise
+    // an exhausted call resolves null exactly like a game ITAD doesn't know.
+    itadService.getGameInfo.mockImplementation(
+      (_id: string, opts?: { throwOnExhausted?: boolean }) =>
+        opts?.throwOnExhausted
+          ? Promise.reject(new ItadRetriesExhaustedError('/games/info/v2'))
+          : Promise.resolve(null),
+    );
+
+    const result = await enrichChunkEarlyAccess(
+      mockDb as never,
+      itadService as never,
+      buildChunk(2),
+    );
+
+    expect(result).toMatchObject({ updated: 0, failed: 2 });
+  });
+
+  it('fetches with the background ITAD wait (cron), still rejecting on exhaustion', async () => {
+    itadService.getGameInfo.mockResolvedValue({ earlyAccess: true });
+
+    await enrichChunkEarlyAccess(
+      mockDb as never,
+      itadService as never,
+      buildChunk(1),
+    );
+
+    expect(itadService.getGameInfo).toHaveBeenCalledWith(expect.any(String), {
+      ...ITAD_BACKGROUND_FETCH,
+      throwOnExhausted: true,
+    });
+  });
+
   it('counts thrown getGameInfo errors in the failed counter', async () => {
     const chunk = buildChunk(4);
     itadService.getGameInfo
@@ -92,5 +132,106 @@ describe('enrichChunkEarlyAccess — per-call timeout (ROK-1197)', () => {
       updated: 2,
       failed: 2,
     });
+  });
+});
+
+describe('enrichChunkEarlyAccess — call budget vs an ITAD 429 pause', () => {
+  // Fresh module registry per test: the pacer's pause state is module-global.
+  type Helpers = typeof import('./itad-early-access-sync.helpers');
+  type RateLimit = typeof import('./itad-rate-limit.util');
+  const T0 = Date.UTC(2020, 0, 1);
+  let helpers: Helpers;
+  let rateLimit: RateLimit;
+
+  beforeEach(() => {
+    jest.useFakeTimers({ now: T0 });
+    jest.isolateModules(() => {
+      rateLimit = jest.requireActual<RateLimit>('./itad-rate-limit.util');
+      helpers = jest.requireActual<Helpers>('./itad-early-access-sync.helpers');
+    });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /** getGameInfo that hits a 429 (pausing ITAD) then resolves later, or never. */
+  function pausedCall(pauseMs: number, resolveAfterMs: number | null) {
+    return jest.fn(() => {
+      rateLimit.pauseItadRequests(pauseMs);
+      return new Promise((resolve) => {
+        if (resolveAfterMs === null) return;
+        setTimeout(() => resolve({ earlyAccess: true }), resolveAfterMs);
+      });
+    });
+  }
+
+  it('does not fail a call that is waiting out a Retry-After longer than its budget', async () => {
+    const itadService = { getGameInfo: pausedCall(30_000, 31_000) };
+    const pending = helpers.enrichChunkEarlyAccess(
+      createDrizzleMock() as never,
+      itadService as never,
+      buildChunk(1),
+    );
+
+    await jest.advanceTimersByTimeAsync(31_000);
+
+    await expect(pending).resolves.toMatchObject({ updated: 1, failed: 0 });
+  });
+
+  it('still fails a hung call once it has had a full budget after the pause ends', async () => {
+    const itadService = { getGameInfo: pausedCall(10_000, null) };
+    let settled = false;
+    const pending = helpers
+      .enrichChunkEarlyAccess(
+        createDrizzleMock() as never,
+        itadService as never,
+        buildChunk(1),
+      )
+      .finally(() => {
+        settled = true;
+      });
+
+    await jest.advanceTimersByTimeAsync(
+      10_000 + EARLY_ACCESS_CALL_TIMEOUT_MS - 1,
+    );
+    expect(settled).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+
+    await expect(pending).resolves.toMatchObject({ updated: 0, failed: 1 });
+  });
+});
+
+describe('enrichEarlyAccessPhase — tail pass', () => {
+  it('retries failed games once at the end and only counts double failures', async () => {
+    const itadService = buildItadService();
+    const seen = new Set<string>();
+    itadService.getGameInfo.mockImplementation((id: string) => {
+      const first = !seen.has(id);
+      seen.add(id);
+      if (id === 'game-uuid-4') return Promise.reject(new Error('down'));
+      if (id === 'game-uuid-2' && first)
+        return Promise.reject(new Error('429'));
+      return Promise.resolve({ earlyAccess: true });
+    });
+    const chunk = buildChunk(4);
+
+    const result = await enrichEarlyAccessPhase(
+      createDrizzleMock() as never,
+      itadService as never,
+      [chunk.slice(0, 2), chunk.slice(2)],
+      () => undefined,
+    );
+
+    const calledIds = itadService.getGameInfo.mock.calls.map((c) => c[0]);
+    expect(calledIds).toEqual([
+      'game-uuid-1',
+      'game-uuid-2',
+      'game-uuid-3',
+      'game-uuid-4',
+      'game-uuid-2',
+      'game-uuid-4',
+    ]);
+    expect(result).toEqual({ updated: 3, failed: 1, retried: 2 });
   });
 });

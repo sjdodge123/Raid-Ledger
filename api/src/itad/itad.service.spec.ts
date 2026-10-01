@@ -96,6 +96,34 @@ describe('ItadService', () => {
       expect(itadFetch).not.toHaveBeenCalled();
     });
 
+    it('forwards throwOnExhausted so a rate-limited call rejects instead of resolving null', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      cacheUtil.getCachedInfo.mockResolvedValue(null);
+      itadFetch.mockResolvedValue(FAKE_GAME_INFO);
+
+      await service.getGameInfo('uuid-123', { throwOnExhausted: true });
+
+      expect(itadFetch).toHaveBeenCalledWith(
+        '/games/info/v2',
+        expect.objectContaining({ id: 'uuid-123' }),
+        { throwOnExhausted: true },
+      );
+    });
+
+    it('forwards fetch options (e.g. the interactive fail-fast limit)', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      cacheUtil.getCachedLookup.mockResolvedValue(null);
+      itadFetch.mockResolvedValue({ found: false });
+
+      await service.lookupBySteamAppId(1245620, { maxPauseWaitMs: 5_000 });
+
+      expect(itadFetch).toHaveBeenCalledWith(
+        '/games/lookup/v1',
+        expect.objectContaining({ appid: '1245620' }),
+        { maxPauseWaitMs: 5_000 },
+      );
+    });
+
     it('calls itadFetch and caches result on cache miss', async () => {
       mockSettings.getItadApiKey.mockResolvedValue('test-key');
       cacheUtil.getCachedLookup.mockResolvedValue(null);
@@ -113,6 +141,7 @@ describe('ItadService', () => {
           key: 'test-key',
           appid: '1245620',
         }),
+        {},
       );
       expect(cacheUtil.setCachedLookup).toHaveBeenCalledWith(
         mockRedis,
@@ -178,6 +207,7 @@ describe('ItadService', () => {
           title: 'elden ring',
           results: '10',
         }),
+        {},
       );
       expect(cacheUtil.setCachedSearch).toHaveBeenCalledWith(
         mockRedis,
@@ -197,6 +227,21 @@ describe('ItadService', () => {
       expect(itadFetch).toHaveBeenCalledWith(
         '/games/search/v1',
         expect.objectContaining({ results: '20' }),
+        {},
+      );
+    });
+
+    it('forwards fetch options (e.g. the interactive fail-fast limit)', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      cacheUtil.getCachedSearch.mockResolvedValue(null);
+      itadFetch.mockResolvedValue([]);
+
+      await service.searchGames('elden ring', 5, { maxPauseWaitMs: 5_000 });
+
+      expect(itadFetch).toHaveBeenCalledWith(
+        '/games/search/v1',
+        expect.objectContaining({ results: '5' }),
+        { maxPauseWaitMs: 5_000 },
       );
     });
 
@@ -257,6 +302,7 @@ describe('ItadService', () => {
           key: 'test-key',
           id: 'uuid-123',
         }),
+        {},
       );
       expect(cacheUtil.setCachedInfo).toHaveBeenCalledWith(
         mockRedis,
@@ -313,6 +359,7 @@ describe('ItadService', () => {
         '/lookup/shop/61/id/v1',
         expect.objectContaining({ key: 'test-key', shops: '61' }),
         ['uuid-1'],
+        {},
       );
     });
 
@@ -341,6 +388,24 @@ describe('ItadService', () => {
       ]);
 
       expect(result.size).toBe(0);
+    });
+  });
+
+  describe('lookupSteamAppIds — fetch options', () => {
+    it('forwards fetch options (e.g. the interactive fail-fast limit)', async () => {
+      mockSettings.getItadApiKey.mockResolvedValue('test-key');
+      itadPost.mockResolvedValue({});
+
+      await service.lookupSteamAppIds([{ id: 'uuid-1', slug: 'elden-ring' }], {
+        maxPauseWaitMs: 5_000,
+      });
+
+      expect(itadPost).toHaveBeenCalledWith(
+        '/lookup/shop/61/id/v1',
+        expect.objectContaining({ shops: '61' }),
+        ['uuid-1'],
+        { maxPauseWaitMs: 5_000 },
+      );
     });
   });
 });

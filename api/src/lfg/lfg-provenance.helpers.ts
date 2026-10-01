@@ -22,8 +22,9 @@
  * correct for what they describe — a group that is live right now.
  */
 import { and, asc, eq, type SQL } from 'drizzle-orm';
-import type { LfgMemberDto, LfgUrgency } from '@raid-ledger/contract';
+import type { LfgMemberDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { MEMBER_COLUMNS, toMemberDto } from './lfg-member-projection.helpers';
 import { eligibleUser, type LfgDb } from './lfg-query.helpers';
 // Type-only: erased at compile time, so the `lfg-write.helpers` -> this-file
 // import of `convertedToTarget` cannot become a runtime require cycle.
@@ -46,44 +47,6 @@ export function convertedToTarget(target: LfgConversionTarget): SQL {
   return target.pollId !== undefined
     ? eq(schema.lfgIntents.convertedToPollId, target.pollId)
     : eq(schema.lfgIntents.convertedToEventId, target.eventId as number);
-}
-
-/**
- * The seven columns `listGroupMembers` (`lfg-query.helpers.ts`) selects. Kept
- * identical so the two rosters render the same way whichever read produced
- * them.
- */
-const MEMBER_COLUMNS = {
-  userId: schema.users.id,
-  username: schema.users.username,
-  displayName: schema.users.displayName,
-  avatar: schema.users.avatar,
-  customAvatarUrl: schema.users.customAvatarUrl,
-  urgency: schema.lfgIntents.urgency,
-  expiresAt: schema.lfgIntents.expiresAt,
-  joinedAt: schema.lfgIntents.createdAt,
-};
-
-/** Project a selected row onto the wire DTO, exactly as the live read does. */
-function toMemberDto(row: {
-  userId: number;
-  username: string;
-  displayName: string | null;
-  avatar: string | null;
-  customAvatarUrl: string | null;
-  urgency: string;
-  expiresAt: Date;
-  joinedAt: Date;
-}): LfgMemberDto {
-  return {
-    userId: row.userId,
-    username: row.username,
-    displayName: row.displayName,
-    avatarUrl: row.customAvatarUrl ?? row.avatar,
-    urgency: row.urgency as LfgUrgency,
-    expiresAt: row.expiresAt.toISOString(),
-    joinedAt: row.joinedAt.toISOString(),
-  };
 }
 
 /**

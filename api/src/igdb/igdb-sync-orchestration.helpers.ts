@@ -11,6 +11,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type Redis from 'ioredis';
 import type * as schema from '../drizzle/schema';
 import type { ItadService } from '../itad/itad.service';
+import type { ItadFetchOptions } from '../itad/itad-http.util';
 import type { IgdbApiGame } from './igdb.constants';
 import {
   refreshExistingGames,
@@ -27,6 +28,8 @@ export interface SyncAllDeps {
   db: PostgresJsDatabase<typeof schema>;
   redis: Redis;
   itadService: ItadService;
+  /** ITAD fetch options for enrichment: default fail-fast (admin HTTP path). */
+  itadOpts?: ItadFetchOptions;
   queryIgdb: (body: string) => Promise<IgdbApiGame[]>;
   isAdultFilterEnabled: () => Promise<boolean>;
   onGameChanged: (gameId: number) => void;
@@ -60,8 +63,13 @@ export async function runSyncAllGames(
   const backfilled = await backfillMissingCovers(deps.db, deps.queryIgdb);
   const enriched = await enrichSyncedGamesWithItad(
     deps.db,
-    (id) => deps.itadService.lookupBySteamAppId(id),
-    (itadId) => deps.itadService.getGameInfo(itadId),
+    (id) => deps.itadService.lookupBySteamAppId(id, deps.itadOpts),
+    // Rate-limited info rejects, so enrichment keeps the row's existing tags.
+    (itadId) =>
+      deps.itadService.getGameInfo(itadId, {
+        ...deps.itadOpts,
+        throwOnExhausted: true,
+      }),
     deps.onGameChanged,
   );
   const reEnriched = await reEnrichGamesWithIgdb(deps.db, deps.queryIgdb);

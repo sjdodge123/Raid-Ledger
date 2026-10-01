@@ -20,6 +20,7 @@ import {
   loadPugInvitePersonalization,
 } from './pug-invite-personalization.helpers';
 import { buildPugInviteEmbed } from './pug-invite.helpers';
+import { personalizedFieldName } from '../embeds/embed-personalized.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -72,7 +73,7 @@ describe('loadPugInvitePersonalization', () => {
     expect(fields).toEqual([
       {
         kind: 'owned',
-        name: '\u{1F3AE} In your library',
+        name: personalizedFieldName('owned'),
         value: '142 hrs played',
       },
     ]);

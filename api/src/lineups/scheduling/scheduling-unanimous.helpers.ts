@@ -61,9 +61,10 @@ const EVERY_MEMBER_SAID_YES = sql`
  * Rows are ordered earliest-time-first so the service's one-DM-per-match cap
  * always picks the same slot.
  *
- * `proposed_time` is a zone-LESS `timestamp` holding UTC, so it is cast with
- * an explicit `Z` rather than handed over naive — a bare value is parsed as
- * LOCAL time on a non-UTC host.
+ * `proposed_time` is a `timestamptz` (TDB:1489). A raw `execute` hands it back
+ * as text in the DB SESSION's zone, so it is converted to UTC wall-clock with
+ * `AT TIME ZONE 'UTC'` and spelled with an explicit `Z` — correct whatever the
+ * session TimeZone or the host's `TZ`.
  *
  * @param matchId - Scope to one poll (the inline hook), or `null` to scan
  *   every poll (the cron safety net).
@@ -74,7 +75,8 @@ export function UNANIMOUS_SLOTS_QUERY(matchId: number | null): SQL {
   return sql`
     SELECT m.id AS "matchId", s.id AS "slotId", m.lineup_id AS "lineupId",
            l.created_by AS "creatorId", g.name AS "gameName",
-           to_char(s.proposed_time, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS "proposedTime",
+           to_char(s.proposed_time AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+             AS "proposedTime",
            mem.n::int AS "memberCount"
     FROM community_lineup_schedule_slots s
     JOIN community_lineup_matches m ON m.id = s.match_id

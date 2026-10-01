@@ -22,7 +22,7 @@ import {
   reEnrichSingleGameById,
 } from './igdb-enqueue.helpers';
 import { CronJobService } from '../cron-jobs/cron-job.service';
-import { ItadService } from '../itad/itad.service';
+import { ItadService, type ItadFetchOptions } from '../itad/itad.service';
 import { GameTasteService } from '../game-taste/game-taste.service';
 import {
   IGDB_CONFIG,
@@ -130,10 +130,12 @@ export class IgdbService {
     );
   }
 
-  async syncAllGames() {
+  /** @param itadOpts - ITAD fetch options; the default fails fast. */
+  async syncAllGames(itadOpts: ItadFetchOptions = {}) {
     this._syncInProgress = true;
     try {
       return await runSyncAllGames({
+        itadOpts,
         db: this.db,
         redis: this.redis,
         itadService: this.itadService,

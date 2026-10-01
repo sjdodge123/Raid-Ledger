@@ -5,6 +5,7 @@ import { Job, Queue } from 'bullmq';
 import { IgdbService } from './igdb.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.constants';
+import { ITAD_BACKGROUND_FETCH } from '../itad/itad.constants';
 
 @Processor(IGDB_SYNC_QUEUE)
 export class IgdbSyncProcessor extends WorkerHost implements OnModuleInit {
@@ -40,7 +41,8 @@ export class IgdbSyncProcessor extends WorkerHost implements OnModuleInit {
   private async handleFullSync(job: Job<IgdbSyncJobData>) {
     this.logger.log(`Starting IGDB sync (trigger: ${job.data.trigger})`);
     await job.updateProgress(0);
-    const result = await this.igdbService.syncAllGames();
+    // Background (BullMQ job): ITAD enrichment waits out a 429 pause.
+    const result = await this.igdbService.syncAllGames(ITAD_BACKGROUND_FETCH);
     await job.updateProgress(100);
     this.logger.log(
       `IGDB sync complete: refreshed ${result.refreshed}, discovered ${result.discovered}, backfilled ${result.backfilled}`,

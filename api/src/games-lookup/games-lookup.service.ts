@@ -10,7 +10,7 @@ import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 import { mapDbRowToDetail } from '../igdb/igdb.mappers';
 import { steamSourceOnChange } from '../igdb/igdb-upsert-sets.helpers';
-import type { ItadGame } from '../itad/itad.constants';
+import { ITAD_INTERACTIVE_FETCH, type ItadGame } from '../itad/itad.constants';
 import { keepSeedOwned } from './seed-owned-games.helpers';
 
 /**
@@ -78,16 +78,22 @@ export class GamesLookupService {
   }
 
   private async tryItadLookup(q: string): Promise<GameDetailDto | null> {
-    const hits = await this.itadService.searchGames(q, 5);
+    const hits = await this.itadService.searchGames(
+      q,
+      5,
+      ITAD_INTERACTIVE_FETCH,
+    );
     const first = hits.find((g) => g.type === 'game') ?? hits[0];
     if (!first) return null;
     return this.upsertFromItad(first);
   }
 
   private async upsertFromItad(itadGame: ItadGame): Promise<GameDetailDto> {
-    const steamMap = await this.itadService.lookupSteamAppIds([
-      { id: itadGame.id, slug: itadGame.slug },
-    ]);
+    // Interactive: same user request as the search; a long 429 pause saves the row without a Steam app id.
+    const steamMap = await this.itadService.lookupSteamAppIds(
+      [{ id: itadGame.id, slug: itadGame.slug }],
+      ITAD_INTERACTIVE_FETCH,
+    );
     const steamAppId = steamMap.get(itadGame.id) ?? null;
     const existingId = await this.findOrInsertItadRow(itadGame, steamAppId);
     return this.fetchDetailById(existingId);

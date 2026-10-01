@@ -195,6 +195,14 @@ function wireStore(): void {
     rows = rows.filter((r) => r.id !== id);
     return Promise.resolve();
   });
+  // `onConflictDoNothing`: a row with the same id, or a replacement open row
+  // for the game, wins — the restore is then a no-op (TDB:954).
+  s.restoreLfmMessage.mockImplementation((_db, row) => {
+    if (!openRow(row.gameId) && !rows.some((r) => r.id === row.id)) {
+      rows.push(row);
+    }
+    return Promise.resolve();
+  });
   s.loadLfmGame.mockResolvedValue(gameRow());
   s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl']));
   s.readConvertedGroup.mockResolvedValue([]);
@@ -346,5 +354,31 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
 
     expect(client.editEmbed).toHaveBeenCalledTimes(1);
     expect(board.editThread).not.toHaveBeenCalled();
+  });
+});
+
+describe('TDB:954 — the E3 heal never drops a forum row it cannot replace', () => {
+  it('keeps a forum row open when its one-hand replacement cannot be posted (TDB:954)', async () => {
+    seedOpenRow({
+      postKind: 'forum',
+      channelId: BOARD_THREAD,
+      threadId: BOARD_THREAD,
+    });
+    settings.get.mockResolvedValue('true'); // the board master toggle
+    // 2 -> 1 on a forum row stays open (ROK-1505 D4) — an LFG render.
+    jest.mocked(store).readLiveGroup.mockResolvedValue(live(['Bosco']));
+    board.editThread.mockRejectedValue(
+      new Error(`Unknown Message: LFG board thread ${BOARD_THREAD} is gone`),
+    );
+    board.postThread.mockResolvedValue(null);
+
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'withdrawn' });
+
+    expect(board.postThread).toHaveBeenCalledTimes(1);
+    expect(client.sendEmbed).not.toHaveBeenCalled();
+    // Without the restore this is [] and every later change returns early (E4).
+    expect(rows.map((r) => [r.id, r.state, r.postKind])).toEqual([
+      ['row-1', 'open', 'forum'],
+    ]);
   });
 });
