@@ -19,6 +19,7 @@ import { RateLimit } from '../throttler/rate-limit.decorator';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import { validateSteamReturnTo } from './steam-link-returnto.helpers';
+import { startSteamPostLinkSync } from './steam-link-autosync.helpers';
 import {
   LinkNonceService,
   LINK_REQUEST_EXPIRED_MESSAGE,
@@ -28,10 +29,7 @@ import {
   assertLinkStateBoundToBrowser,
   bindLinkStateToBrowser,
 } from '../auth/link-state-cookie.helpers';
-import {
-  ITAD_BACKGROUND_FETCH,
-  ITAD_INTERACTIVE_FETCH,
-} from '../itad/itad.constants';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
@@ -275,19 +273,12 @@ export class SteamAuthController {
     const profile = await getPlayerSummary(apiKey, steamId);
     const isPublic = profile?.communityvisibilitystate === 3;
     if (isPublic) {
-      this.steamService.syncLibrary(userId).catch((err: unknown) => {
-        this.logger.warn(
-          `Auto-sync library after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
-      // Background (fire-and-forget): ITAD discovery waits out a 429 pause.
-      this.steamWishlistService
-        .syncWishlist(userId, ITAD_BACKGROUND_FETCH)
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `Auto-sync wishlist after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        });
+      startSteamPostLinkSync(
+        this.steamService,
+        this.steamWishlistService,
+        this.logger,
+        userId,
+      );
     }
     return isPublic;
   }
