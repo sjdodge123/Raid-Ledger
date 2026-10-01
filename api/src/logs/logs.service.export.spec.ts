@@ -14,6 +14,13 @@ import { LogsService } from './logs.service';
 
 const SECRET_LINE = 'boot DATABASE_URL=postgresql://u:p@h/db\nhello\n';
 const SCRUBBED_LINE = 'boot DATABASE_URL=[REDACTED]\nhello\n';
+/**
+ * SECRET_LINE behind a distinct first line. Generations with identical
+ * content are an overlapping rotation and are left out as duplicates, so
+ * fixtures that model separate generations must differ from the start.
+ */
+const secretGen = (gen: string) => `gen-${gen}\n${SECRET_LINE}`;
+const scrubbedGen = (gen: string) => `gen-${gen}\n${SCRUBBED_LINE}`;
 
 /** `n` timestamped log lines (~80 bytes each), the same for every caller. */
 function logLines(n: number): string {
@@ -76,9 +83,9 @@ function describeGzExport() {
   it('decompresses, scrubs and stores a .gz generation as plain text', async () => {
     fs.writeFileSync(
       path.join(ctx.tmpDir, 'api.log.2.gz'),
-      gzipSync(SECRET_LINE),
+      gzipSync(secretGen('2')),
     );
-    fs.writeFileSync(path.join(ctx.tmpDir, 'api.log'), SECRET_LINE);
+    fs.writeFileSync(path.join(ctx.tmpDir, 'api.log'), secretGen('0'));
 
     const tar = gunzipSync(
       await collect(
@@ -89,8 +96,8 @@ function describeGzExport() {
     const entries = untar(tar);
     expect(entries.slice(0, 2)).toEqual([
       // live files first, then history newest-first
-      ['api.log', SCRUBBED_LINE],
-      ['api.log.2.decompressed', SCRUBBED_LINE],
+      ['api.log', scrubbedGen('0')],
+      ['api.log.2.decompressed', scrubbedGen('2')],
     ]);
     // the manifest documents the .decompressed naming
     expect(entries[2][0]).toBe('MANIFEST.txt');
@@ -141,53 +148,18 @@ function describeGzExport() {
 function describeHistoryCap() {
   const ctx = useExportService();
 
-  it('leaves out an older generation that repeats the start of a newer one (overlapping rotation)', async () => {
-    const write = (name: string, body: Buffer | string) =>
-      fs.writeFileSync(path.join(ctx.tmpDir, name), body);
-    const older = logLines(100); // a byte-prefix of the newer generation
-    write('api.log', 'gen-0 live line\n');
-    write('api.log.3.gz', gzipSync(logLines(200)));
-    write('api.log.4.gz', gzipSync(older));
-
-    const tar = gunzipSync(
-      await collect(
-        ctx.service.createExportStream([
-          'api.log',
-          'api.log.3.gz',
-          'api.log.4.gz',
-        ]),
-      ),
-    );
-
-    const entries = untar(tar);
-    expect(entries.map(([name]) => name)).toEqual([
-      'api.log',
-      'api.log.3.decompressed',
-      'MANIFEST.txt',
-    ]);
-    const lines = entries
-      .filter(([name]) => name !== 'MANIFEST.txt')
-      .flatMap(([, text]) => text.split('\n'))
-      .filter((line) => line !== '');
-    expect(lines.filter((line, i) => lines.indexOf(line) !== i)).toEqual([]);
-    expect(new Set(lines).size).toBe(lines.length);
-    expect(entries[2][1]).toContain(
-      `api.log.4.gz\t${Buffer.byteLength(older)} bytes\tskipped: duplicate of api.log.3.gz`,
-    );
-  });
-
   it('export-all keeps live + .1, adds older generations newest-first under the cap, and lists the rest in MANIFEST.txt', async () => {
     const write = (name: string, body: Buffer | string) =>
       fs.writeFileSync(path.join(ctx.tmpDir, name), body);
-    write('api.log', SECRET_LINE);
-    write('api.log.1', SECRET_LINE);
-    write('api.log.2.gz', gzipSync(SECRET_LINE));
-    const big = gzipSync(SECRET_LINE); // claims just under the cap on its own
+    write('api.log', secretGen('0'));
+    write('api.log.1', secretGen('1'));
+    write('api.log.2.gz', gzipSync(secretGen('2')));
+    const big = gzipSync(secretGen('3')); // claims just under the cap on its own
     big.writeUInt32LE(100 * 1024 * 1024 - 10, big.length - 4);
     write('api.log.3.gz', big);
-    write('api.log.4.gz', gzipSync(SECRET_LINE));
+    write('api.log.4.gz', gzipSync(secretGen('4')));
     const bigSize = 100 * 1024 * 1024 - 10;
-    const smallSize = Buffer.byteLength(SECRET_LINE);
+    const smallSize = Buffer.byteLength(secretGen('4'));
 
     const tar = gunzipSync(
       await collect(
@@ -223,6 +195,46 @@ function describeHistoryCap() {
       await collect(ctx.service.createExportStream(['api.log'])),
     );
     expect(untar(tar).map(([name]) => name)).toEqual(['api.log']);
+  });
+}
+
+/** An overlapping rotation (copytruncate plus a restart) is exported once. */
+function describeOverlap() {
+  const ctx = useExportService();
+
+  it('leaves out an older generation that repeats the start of a newer one (overlapping rotation)', async () => {
+    const write = (name: string, body: Buffer | string) =>
+      fs.writeFileSync(path.join(ctx.tmpDir, name), body);
+    const older = logLines(100); // a byte-prefix of the newer generation
+    write('api.log', 'gen-0 live line\n');
+    write('api.log.3.gz', gzipSync(logLines(200)));
+    write('api.log.4.gz', gzipSync(older));
+
+    const tar = gunzipSync(
+      await collect(
+        ctx.service.createExportStream([
+          'api.log',
+          'api.log.3.gz',
+          'api.log.4.gz',
+        ]),
+      ),
+    );
+
+    const entries = untar(tar);
+    expect(entries.map(([name]) => name)).toEqual([
+      'api.log',
+      'api.log.3.decompressed',
+      'MANIFEST.txt',
+    ]);
+    const lines = entries
+      .filter(([name]) => name !== 'MANIFEST.txt')
+      .flatMap(([, text]) => text.split('\n'))
+      .filter((line) => line !== '');
+    expect(lines.filter((line, i) => lines.indexOf(line) !== i)).toEqual([]);
+    expect(new Set(lines).size).toBe(lines.length);
+    expect(entries[2][1]).toContain(
+      `api.log.4.gz\t${Buffer.byteLength(older)} bytes\tskipped: duplicate of api.log.3.gz`,
+    );
   });
 }
 
@@ -287,7 +299,10 @@ function describeRealBytes() {
 
   it('never stores two entries under one name, nor a .gz under a live name', async () => {
     for (const name of ['api.log', 'api.log.1', 'api.log.1.gz', 'api.log.gz'])
-      write(name, name.endsWith('.gz') ? gzipSync(SECRET_LINE) : SECRET_LINE);
+      write(
+        name,
+        name.endsWith('.gz') ? gzipSync(secretGen(name)) : secretGen(name),
+      );
 
     const result = await exportEntries(ctx.service, [
       'api.log',
@@ -313,3 +328,5 @@ describe('LogsService export-all under the size cap (ROK-1164)', () =>
   describeHistoryCap());
 describe('LogsService export counts real bytes (ROK-1164)', () =>
   describeRealBytes());
+describe('LogsService export leaves out overlapping generations', () =>
+  describeOverlap());

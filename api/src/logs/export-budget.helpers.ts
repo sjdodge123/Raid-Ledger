@@ -80,6 +80,7 @@ const MANIFEST_HEADER = [
   '# <name minus .gz>.decompressed (api.log.2.gz -> api.log.2.decompressed),',
   '# so they never overwrite a live or plain file on extract.',
   '# The export is capped at 100 MB uncompressed; files left out are listed below.',
+  '# A generation that repeats the start of a newer one (an overlapping rotation) is left out as a duplicate.',
 ];
 
 /**

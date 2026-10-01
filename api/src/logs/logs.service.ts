@@ -8,12 +8,13 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createGzip } from 'node:zlib';
-import type { Readable } from 'node:stream';
+import type { Readable, Writable } from 'node:stream';
 import type { LogFileDto, LogService } from '@raid-ledger/contract';
 import { resolveLogDir } from '../common/log-dir';
 import { contentSize, detectService, isLogFileName } from './log-files.helpers';
 import { selectWithinCap, type ExportFile } from './export-budget.helpers';
 import { writeTarArchive } from './log-export.writer';
+import { dropOverlappingGenerations } from './log-overlap.helpers';
 import { createBoundedScrubbedStream } from './log-download.stream';
 
 /** Maximum total archive size in bytes (~100 MB). */
@@ -123,14 +124,38 @@ export class LogsService {
     );
   }
 
-  /** Validate filenames and fit them under the size cap (ROK-1164). */
-  private validateExportFiles(filenames: string[]) {
+  /**
+   * Validate filenames and measure them (ROK-1164). The cap selection runs
+   * here only for its side effect: a live file over the cap throws 413
+   * synchronously, before any byte is sent. The real selection happens in
+   * writeExport, once overlapping generations are left out.
+   */
+  private validateExportFiles(filenames: string[]): ExportFile[] {
     const files: ExportFile[] = filenames.map((filename) => {
       const filepath = this.getValidatedPath(filename);
       const size = contentSize(filepath, fs.statSync(filepath).size);
       return { filepath, filename, size };
     });
-    return selectWithinCap(files, MAX_ARCHIVE_BYTES);
+    selectWithinCap(files, MAX_ARCHIVE_BYTES);
+    return files;
+  }
+
+  /**
+   * Leave out generations that repeat the start of a newer one, fit the rest
+   * under the cap, and write the archive. Duplicates are dropped BEFORE the
+   * cap, so they never use up budget.
+   */
+  private async writeExport(out: Writable, files: ExportFile[]) {
+    const { kept, duplicates } = await dropOverlappingGenerations(files);
+    const { included, skipped } = selectWithinCap(kept, MAX_ARCHIVE_BYTES);
+    await writeTarArchive(out, included, {
+      budget: MAX_ARCHIVE_BYTES,
+      scrub: (text: string) => this.scrubContent(text),
+      skipped: [
+        ...duplicates,
+        ...skipped.map((f) => ({ ...f, reason: 'over cap' })),
+      ],
+    });
   }
 
   /**
@@ -139,14 +164,9 @@ export class LogsService {
    * handled inside the archive (MANIFEST.txt), never by cutting it short.
    */
   createExportStream(filenames: string[]): Readable {
-    const { included, skipped } = this.validateExportFiles(filenames);
+    const files = this.validateExportFiles(filenames);
     const gzip = createGzip();
-    const options = {
-      budget: MAX_ARCHIVE_BYTES,
-      scrub: (text: string) => this.scrubContent(text),
-      skipped: skipped.map((f) => ({ ...f, reason: 'over cap' })),
-    };
-    writeTarArchive(gzip, included, options).catch((err: Error) => {
+    this.writeExport(gzip, files).catch((err: Error) => {
       this.logger.warn(`Log export aborted: ${err.message}`);
       gzip.destroy(err);
     });
