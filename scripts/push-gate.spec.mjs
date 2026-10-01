@@ -81,23 +81,12 @@ test('allows when a fresh sentinel names this web surface', () => {
   });
 });
 
-// One-cycle fallback (paired with the writer's dual write): a PASS earned under
-// the old sha-keyed hook, or by /push's local `touch`, still counts.
-test('allows on a fresh LEGACY sha-named sentinel, reporting matched=sha', () => {
+// TDB:1416 retired the one-cycle sha-keyed fallback (and the MCP writer's dual
+// write): a FRESH sha-named sentinel must no longer satisfy the gate.
+test('denies on a fresh sha-named sentinel — the legacy sha key is retired', () => {
   withRepo(true, (dir, sentinels) => {
     writeFileSync(join(sentinels, `.playwright-verified-${shortSha(dir)}`), '');
-    const verdict = run(dir, sentinels);
-    assert.equal(verdict.continue, true);
-    assert.equal(verdict.matched, 'sha');
-  });
-});
-
-test('denies on a STALE legacy sha-named sentinel', () => {
-  withRepo(true, (dir, sentinels) => {
-    const path = join(sentinels, `.playwright-verified-${shortSha(dir)}`);
-    writeFileSync(path, '');
-    execFileSync('touch', ['-t', '202001010000', path]);
-    assert.ok(denied(run(dir, sentinels)));
+    assert.ok(denied(run(dir, sentinels)), 'a sha-named sentinel must not unlock the push');
   });
 });
 
