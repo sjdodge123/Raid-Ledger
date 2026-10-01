@@ -11,6 +11,7 @@ import type {
 import * as schema from '../../drizzle/schema';
 import { SETTING_KEYS } from '../../drizzle/schema';
 import type { SettingsService } from '../../settings/settings.service';
+import { DEFAULT_CHURN_THRESHOLD_PCT } from '../community-insights.constants';
 import type { ChurnDetectionService } from '../churn-detection.service';
 import type { CliqueDetectionService } from '../clique-detection.service';
 import type { KeyInsightsService } from '../key-insights.service';
@@ -37,7 +38,6 @@ export interface RefreshSnapshotResult {
   snapshotDate: string;
 }
 
-const DEFAULT_CHURN_THRESHOLD = 70;
 const DEFAULT_BASELINE_WEEKS = 12;
 const DEFAULT_RECENT_WEEKS = 4;
 const DEFAULT_RETENTION_DAYS = 90;
@@ -269,7 +269,7 @@ async function loadConfig(settings: SettingsService): Promise<{
   ]);
   return {
     churn: {
-      thresholdPct: parseNum(threshold, DEFAULT_CHURN_THRESHOLD),
+      thresholdPct: parseNum(threshold, DEFAULT_CHURN_THRESHOLD_PCT),
       baselineWeeks: parseNum(baseline, DEFAULT_BASELINE_WEEKS),
       recentWeeks: parseNum(recent, DEFAULT_RECENT_WEEKS),
     },
