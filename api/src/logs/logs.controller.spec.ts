@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   NotFoundException,
   BadRequestException,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { LogsController } from './logs.controller';
 import { LogsService } from './logs.service';
@@ -145,7 +146,7 @@ function describeLogsController() {
   describe('listLogs', () => describeListLogs());
 
   function describeExportLogs() {
-    it('streams gzip archive when files exist (no filter)', () => {
+    it('streams gzip archive when files exist (no filter)', async () => {
       const mockFiles = [
         {
           filename: 'api.log',
@@ -156,12 +157,12 @@ function describeLogsController() {
       ];
       mockLogsService.listLogFiles.mockReturnValue(mockFiles);
       const mockStream = createMockStream();
-      mockLogsService.createExportStream.mockReturnValue(mockStream);
+      mockLogsService.createExportStream.mockResolvedValue(mockStream);
 
       const res = createMockResponse();
       const req = { user: { id: 1, username: 'admin' } };
 
-      controller.exportLogs(res, undefined, undefined, req as any);
+      await controller.exportLogs(res, undefined, undefined, req as any);
 
       expect(res.set).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -171,7 +172,7 @@ function describeLogsController() {
       expect(mockStream.pipe).toHaveBeenCalledWith(res);
     });
 
-    it('sets Content-Disposition with timestamp filename', () => {
+    it('sets Content-Disposition with timestamp filename', async () => {
       mockLogsService.listLogFiles.mockReturnValue([
         {
           filename: 'api.log',
@@ -180,10 +181,10 @@ function describeLogsController() {
           lastModified: '2026-03-01T00:00:00Z',
         },
       ]);
-      mockLogsService.createExportStream.mockReturnValue(createMockStream());
+      mockLogsService.createExportStream.mockResolvedValue(createMockStream());
 
       const res = createMockResponse();
-      controller.exportLogs(res, undefined, undefined, undefined);
+      await controller.exportLogs(res, undefined, undefined, undefined);
 
       const setCall = (res.set as jest.Mock).mock.calls[0][0];
       expect(setCall['Content-Disposition']).toMatch(
@@ -191,22 +192,27 @@ function describeLogsController() {
       );
     });
 
-    it('returns empty JSON when no files match filter', () => {
+    it('returns empty JSON when no files match filter', async () => {
       mockLogsService.listLogFiles.mockReturnValue([]);
 
       const res = createMockResponse();
-      controller.exportLogs(res, 'api', undefined, undefined);
+      await controller.exportLogs(res, 'api', undefined, undefined);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ files: [], total: 0 });
       expect(mockLogsService.createExportStream).not.toHaveBeenCalled();
     });
 
-    it('uses specific file list when fileList query param is provided', () => {
-      mockLogsService.createExportStream.mockReturnValue(createMockStream());
+    it('uses specific file list when fileList query param is provided', async () => {
+      mockLogsService.createExportStream.mockResolvedValue(createMockStream());
 
       const res = createMockResponse();
-      controller.exportLogs(res, undefined, 'api.log,nginx.log', undefined);
+      await controller.exportLogs(
+        res,
+        undefined,
+        'api.log,nginx.log',
+        undefined,
+      );
 
       expect(mockLogsService.createExportStream).toHaveBeenCalledWith([
         'api.log',
@@ -215,11 +221,16 @@ function describeLogsController() {
       expect(mockLogsService.listLogFiles).not.toHaveBeenCalled();
     });
 
-    it('trims whitespace from comma-separated file list', () => {
-      mockLogsService.createExportStream.mockReturnValue(createMockStream());
+    it('trims whitespace from comma-separated file list', async () => {
+      mockLogsService.createExportStream.mockResolvedValue(createMockStream());
 
       const res = createMockResponse();
-      controller.exportLogs(res, undefined, ' api.log , nginx.log ', undefined);
+      await controller.exportLogs(
+        res,
+        undefined,
+        ' api.log , nginx.log ',
+        undefined,
+      );
 
       expect(mockLogsService.createExportStream).toHaveBeenCalledWith([
         'api.log',
@@ -227,11 +238,16 @@ function describeLogsController() {
       ]);
     });
 
-    it('filters empty entries from comma-separated file list', () => {
-      mockLogsService.createExportStream.mockReturnValue(createMockStream());
+    it('filters empty entries from comma-separated file list', async () => {
+      mockLogsService.createExportStream.mockResolvedValue(createMockStream());
 
       const res = createMockResponse();
-      controller.exportLogs(res, undefined, 'api.log,,nginx.log', undefined);
+      await controller.exportLogs(
+        res,
+        undefined,
+        'api.log,,nginx.log',
+        undefined,
+      );
 
       expect(mockLogsService.createExportStream).toHaveBeenCalledWith([
         'api.log',
@@ -239,15 +255,15 @@ function describeLogsController() {
       ]);
     });
 
-    it('returns empty JSON when fileList results in no filenames', () => {
+    it('returns empty JSON when fileList results in no filenames', async () => {
       const res = createMockResponse();
-      controller.exportLogs(res, undefined, '  , , ', undefined);
+      await controller.exportLogs(res, undefined, '  , , ', undefined);
 
       expect(res.status).toHaveBeenCalledWith(200);
       expect(res.json).toHaveBeenCalledWith({ files: [], total: 0 });
     });
 
-    it('filters by valid service when exporting all', () => {
+    it('filters by valid service when exporting all', async () => {
       const mockFiles = [
         {
           filename: 'nginx.log',
@@ -257,10 +273,10 @@ function describeLogsController() {
         },
       ];
       mockLogsService.listLogFiles.mockReturnValue(mockFiles);
-      mockLogsService.createExportStream.mockReturnValue(createMockStream());
+      mockLogsService.createExportStream.mockResolvedValue(createMockStream());
 
       const res = createMockResponse();
-      controller.exportLogs(res, 'nginx', undefined, undefined);
+      await controller.exportLogs(res, 'nginx', undefined, undefined);
 
       expect(mockLogsService.listLogFiles).toHaveBeenCalledWith('nginx');
       expect(mockLogsService.createExportStream).toHaveBeenCalledWith([
@@ -268,23 +284,35 @@ function describeLogsController() {
       ]);
     });
 
-    it('ignores invalid service filter when exporting all', () => {
+    it('ignores invalid service filter when exporting all', async () => {
       mockLogsService.listLogFiles.mockReturnValue([]);
 
       const res = createMockResponse();
-      controller.exportLogs(res, 'invalid-service', undefined, undefined);
+      await controller.exportLogs(res, 'invalid-service', undefined, undefined);
 
       expect(mockLogsService.listLogFiles).toHaveBeenCalledWith(undefined);
     });
 
-    it('handles missing user info gracefully in audit log', () => {
+    it('handles missing user info gracefully in audit log', async () => {
       mockLogsService.listLogFiles.mockReturnValue([]);
 
       const res = createMockResponse();
       // Should not throw when req is missing
-      expect(() =>
+      await expect(
         controller.exportLogs(res, undefined, undefined, undefined),
-      ).not.toThrow();
+      ).resolves.toBeUndefined();
+    });
+
+    it('rejects before any header is set when the export is over the cap (413)', async () => {
+      mockLogsService.createExportStream.mockRejectedValue(
+        new PayloadTooLargeException('exceeds maximum of 100 MB'),
+      );
+      const res = createMockResponse();
+
+      await expect(
+        controller.exportLogs(res, undefined, 'api.log', undefined),
+      ).rejects.toThrow(PayloadTooLargeException);
+      expect(res.set).not.toHaveBeenCalled();
     });
   }
   describe('exportLogs', () => describeExportLogs());
@@ -298,11 +326,11 @@ function describeLogsController() {
       (call?.[1] as (() => void) | undefined)?.();
     }
 
-    it('destroys the export stream when the response closes', () => {
+    it('destroys the export stream when the response closes', async () => {
       const stream = createMockStream();
-      mockLogsService.createExportStream.mockReturnValue(stream);
+      mockLogsService.createExportStream.mockResolvedValue(stream);
       const res = createMockResponse();
-      controller.exportLogs(res, undefined, 'api.log', undefined);
+      await controller.exportLogs(res, undefined, 'api.log', undefined);
       closeResponse(res);
       expect(stream.destroyed).toBe(true);
     });

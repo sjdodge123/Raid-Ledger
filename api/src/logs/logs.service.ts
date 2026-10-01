@@ -8,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createGzip } from 'node:zlib';
-import type { Readable, Writable } from 'node:stream';
+import type { Readable } from 'node:stream';
 import type { LogFileDto, LogService } from '@raid-ledger/contract';
 import { resolveLogDir } from '../common/log-dir';
 import { contentSize, detectService, isLogFileName } from './log-files.helpers';
@@ -124,49 +124,35 @@ export class LogsService {
     );
   }
 
-  /**
-   * Validate filenames and measure them (ROK-1164). The cap selection runs
-   * here only for its side effect: a live file over the cap throws 413
-   * synchronously, before any byte is sent. The real selection happens in
-   * writeExport, once overlapping generations are left out.
-   */
+  /** Validate filenames and measure them (ROK-1164). */
   private validateExportFiles(filenames: string[]): ExportFile[] {
-    const files: ExportFile[] = filenames.map((filename) => {
+    return filenames.map((filename) => {
       const filepath = this.getValidatedPath(filename);
       const size = contentSize(filepath, fs.statSync(filepath).size);
       return { filepath, filename, size };
     });
-    selectWithinCap(files, MAX_ARCHIVE_BYTES);
-    return files;
   }
 
   /**
-   * Leave out generations that repeat the start of a newer one, fit the rest
-   * under the cap, and write the archive. Duplicates are dropped BEFORE the
-   * cap, so they never use up budget.
+   * Create a gzipped tar stream of log files. Generations that repeat the
+   * start of a newer one are left out FIRST, so a duplicate never counts
+   * against the cap — not even a `.1` that repeats the live file. Live files
+   * still over the cap then reject (413) before any byte is sent; everything
+   * after that is handled inside the archive (MANIFEST.txt), never by
+   * cutting it short.
    */
-  private async writeExport(out: Writable, files: ExportFile[]) {
+  async createExportStream(filenames: string[]): Promise<Readable> {
+    const files = this.validateExportFiles(filenames);
     const { kept, duplicates } = await dropOverlappingGenerations(files);
     const { included, skipped } = selectWithinCap(kept, MAX_ARCHIVE_BYTES);
-    await writeTarArchive(out, included, {
+    const overCap = skipped.map((f) => ({ ...f, reason: 'over cap' }));
+    const gzip = createGzip();
+    const options = {
       budget: MAX_ARCHIVE_BYTES,
       scrub: (text: string) => this.scrubContent(text),
-      skipped: [
-        ...duplicates,
-        ...skipped.map((f) => ({ ...f, reason: 'over cap' })),
-      ],
-    });
-  }
-
-  /**
-   * Create a gzipped tar stream of log files. A live file over the cap
-   * throws (413) here, before any byte is sent; everything after that is
-   * handled inside the archive (MANIFEST.txt), never by cutting it short.
-   */
-  createExportStream(filenames: string[]): Readable {
-    const files = this.validateExportFiles(filenames);
-    const gzip = createGzip();
-    this.writeExport(gzip, files).catch((err: Error) => {
+      skipped: [...duplicates, ...overCap],
+    };
+    writeTarArchive(gzip, included, options).catch((err: Error) => {
       this.logger.warn(`Log export aborted: ${err.message}`);
       gzip.destroy(err);
     });

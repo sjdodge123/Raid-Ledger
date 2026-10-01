@@ -89,7 +89,7 @@ function describeGzExport() {
 
     const tar = gunzipSync(
       await collect(
-        ctx.service.createExportStream(['api.log.2.gz', 'api.log']),
+        await ctx.service.createExportStream(['api.log.2.gz', 'api.log']),
       ),
     );
 
@@ -113,7 +113,7 @@ function describeGzExport() {
 
     const entries = untar(
       gunzipSync(
-        await collect(ctx.service.createExportStream(['api.log.3.gz'])),
+        await collect(await ctx.service.createExportStream(['api.log.3.gz'])),
       ),
     );
 
@@ -123,14 +123,14 @@ function describeGzExport() {
     );
   });
 
-  it('still 413s when a live file declares a size over the cap', () => {
+  it('still 413s when a live file declares a size over the cap', async () => {
     const gz = gzipSync(SECRET_LINE);
     gz.writeUInt32LE(0xffffffff, gz.length - 4);
     fs.writeFileSync(path.join(ctx.tmpDir, 'api.log.1.gz'), gz);
 
-    expect(() => ctx.service.createExportStream(['api.log.1.gz'])).toThrow(
-      'exceeds maximum of 100 MB',
-    );
+    await expect(
+      ctx.service.createExportStream(['api.log.1.gz']),
+    ).rejects.toThrow('exceeds maximum of 100 MB');
   });
 
   it('streams a .gz generation as scrubbed text for single-file download', async () => {
@@ -163,7 +163,7 @@ function describeHistoryCap() {
 
     const tar = gunzipSync(
       await collect(
-        ctx.service.createExportStream([
+        await ctx.service.createExportStream([
           'api.log.4.gz',
           'api.log.3.gz',
           'api.log',
@@ -192,7 +192,7 @@ function describeHistoryCap() {
   it('adds no MANIFEST.txt when nothing is skipped', async () => {
     fs.writeFileSync(path.join(ctx.tmpDir, 'api.log'), SECRET_LINE);
     const tar = gunzipSync(
-      await collect(ctx.service.createExportStream(['api.log'])),
+      await collect(await ctx.service.createExportStream(['api.log'])),
     );
     expect(untar(tar).map(([name]) => name)).toEqual(['api.log']);
   });
@@ -212,7 +212,7 @@ function describeOverlap() {
 
     const tar = gunzipSync(
       await collect(
-        ctx.service.createExportStream([
+        await ctx.service.createExportStream([
           'api.log',
           'api.log.3.gz',
           'api.log.4.gz',
@@ -231,17 +231,55 @@ function describeOverlap() {
       .flatMap(([, text]) => text.split('\n'))
       .filter((line) => line !== '');
     expect(lines.filter((line, i) => lines.indexOf(line) !== i)).toEqual([]);
-    expect(new Set(lines).size).toBe(lines.length);
     expect(entries[2][1]).toContain(
       `api.log.4.gz\t${Buffer.byteLength(older)} bytes\tskipped: duplicate of api.log.3.gz`,
     );
   });
 }
 
+/** Overlap detection runs BEFORE the cap, the live tier's 413 included. */
+function describeOverlapVsCap() {
+  const ctx = useExportService();
+  const write = (name: string, body: Buffer | string) =>
+    fs.writeFileSync(path.join(ctx.tmpDir, name), body);
+  /** A gzip of SECRET_LINE whose ISIZE trailer claims `bytes`. */
+  const claimsSize = (bytes: number) => {
+    const gz = gzipSync(SECRET_LINE);
+    gz.writeUInt32LE(bytes, gz.length - 4);
+    return gz;
+  };
+
+  it('a .1 that repeats the live file never counts against the cap (no 413)', async () => {
+    // 101 MB together, over the cap; the live file alone fits.
+    write('api.log', Buffer.alloc(51 * MB, 'a'));
+    write('api.log.1', Buffer.alloc(50 * MB, 'a'));
+
+    const result = await exportEntries(ctx.service, ['api.log', 'api.log.1']);
+
+    expect(result.error).toBeUndefined();
+    expect(result.entries?.map(([name]) => name)).toEqual([
+      'api.log',
+      'MANIFEST.txt',
+    ]);
+    expect(result.entries?.[1][1]).toContain(
+      `api.log.1\t${50 * MB} bytes\tskipped: duplicate of api.log`,
+    );
+  }, 30_000);
+
+  it('live files that are not duplicates still 413 together, before any byte', async () => {
+    write('api.log.1.gz', claimsSize(60 * MB));
+    write('redis.log.1.gz', claimsSize(60 * MB));
+
+    await expect(
+      ctx.service.createExportStream(['api.log.1.gz', 'redis.log.1.gz']),
+    ).rejects.toThrow('exceeds maximum of 100 MB');
+  });
+}
+
 /** Resolve the export to its tar entries, or to the error that cut it short. */
 async function exportEntries(service: LogsService, names: string[]) {
   try {
-    const gz = await collect(service.createExportStream(names));
+    const gz = await collect(await service.createExportStream(names));
     return { entries: untar(gunzipSync(gz)) };
   } catch (err) {
     return { error: String(err) };
@@ -330,3 +368,5 @@ describe('LogsService export counts real bytes (ROK-1164)', () =>
   describeRealBytes());
 describe('LogsService export leaves out overlapping generations', () =>
   describeOverlap());
+describe('LogsService export drops duplicates before the size cap', () =>
+  describeOverlapVsCap());
