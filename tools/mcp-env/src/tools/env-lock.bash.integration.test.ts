@@ -18,6 +18,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = resolve(HERE, '..', '..', '..', '..', 'scripts', 'env-lock.sh');
 
+// TDB:1260 — each test spawns `bash scripts/env-lock.sh` several times
+// (execFileSync, jq, mkdir-lock). On a loaded fleet runner that routinely
+// exceeds vitest's 5s default and aborted a `--fleet` gate before integration
+// ever ran. Headroom is scoped to THESE bash-shelling suites, not the vitest
+// config, so a real hang anywhere else still fails at the default 5s.
+const BASH_SPAWN_SUITE = { timeout: 20_000 } as const;
+
 let stateDir: string;
 
 function runScript(args: string[]): { stdout: string; stderr: string; status: number } {
@@ -55,7 +62,7 @@ afterEach(() => {
 // own cwd, then MCP server later releases from a different cwd. Pre-fix, the
 // branch+worktree-only predicate misses; post-fix, agent_id matches.
 // ---------------------------------------------------------------------------
-describe('agent_id primary match (ROK-1318)', () => {
+describe('agent_id primary match (ROK-1318)', BASH_SPAWN_SUITE, () => {
   it('release succeeds via agent_id when worktree differs from holder.worktree', () => {
     const aid = 'abc123def4567890';
     // Acquire as if from the MCP server's cwd.
@@ -117,7 +124,7 @@ describe('agent_id primary match (ROK-1318)', () => {
 // still works (operator's manual `./scripts/env-lock.sh release ...` shouldn't
 // break).
 // ---------------------------------------------------------------------------
-describe('branch+worktree fallback (ROK-1318)', () => {
+describe('branch+worktree fallback (ROK-1318)', BASH_SPAWN_SUITE, () => {
   it('release without --agent-id matches by branch+worktree', () => {
     runScript([
       'acquire',
@@ -139,7 +146,7 @@ describe('branch+worktree fallback (ROK-1318)', () => {
 // ---------------------------------------------------------------------------
 // Scenario 3: wrong agent_id, wrong branch+worktree — release no-ops.
 // ---------------------------------------------------------------------------
-describe('no-match release is a no-op (ROK-1318)', () => {
+describe('no-match release is a no-op (ROK-1318)', BASH_SPAWN_SUITE, () => {
   it('was_holder=false + matched_by=null when neither predicate matches', () => {
     runScript([
       'acquire',
@@ -179,7 +186,7 @@ describe('no-match release is a no-op (ROK-1318)', () => {
 // the agent_id, the whole fix would be defeated (MCP release would fall back
 // to branch+worktree, which is exactly the failure mode we're avoiding).
 // ---------------------------------------------------------------------------
-describe('acquire_refresh_self preserves agent_id (ROK-1318)', () => {
+describe('acquire_refresh_self preserves agent_id (ROK-1318)', BASH_SPAWN_SUITE, () => {
   it('keeps original agent_id when re-acquire omits --agent-id', () => {
     runScript([
       'acquire',
@@ -238,7 +245,7 @@ describe('acquire_refresh_self preserves agent_id (ROK-1318)', () => {
 // Scenario 5: agent_id matches even when branch RENAMES on the holder.
 // (Edge case: git branch rename mid-lease — agent_id should still match.)
 // ---------------------------------------------------------------------------
-describe('agent_id matches across branch rename (ROK-1318)', () => {
+describe('agent_id matches across branch rename (ROK-1318)', BASH_SPAWN_SUITE, () => {
   it('release succeeds when branch arg differs but agent_id matches', () => {
     runScript([
       'acquire',
