@@ -135,9 +135,7 @@ describe('LlmService', () => {
 
   describe('getActiveDefaultModel', () => {
     it("returns the active provider's default model", async () => {
-      await expect(service.getActiveDefaultModel()).resolves.toBe(
-        'mock-model',
-      );
+      await expect(service.getActiveDefaultModel()).resolves.toBe('mock-model');
     });
 
     it('returns null when no provider is configured', async () => {
