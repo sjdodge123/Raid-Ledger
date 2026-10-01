@@ -126,6 +126,12 @@ export class LlmService {
     return resolution?.provider.key ?? null;
   }
 
+  /** Model `chat` uses when no `options.model` is passed; null without a provider. */
+  async getActiveDefaultModel(): Promise<string | null> {
+    const resolution = await this.registry.resolveActive();
+    return resolution?.provider.defaultModel ?? null;
+  }
+
   /** List models from the active provider. */
   async listModels(): Promise<LlmModelInfo[]> {
     const { provider } = await this.resolveOrThrow();
