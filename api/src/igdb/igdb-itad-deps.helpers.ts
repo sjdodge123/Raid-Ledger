@@ -3,14 +3,18 @@
  * Constructs the ItadSearchDeps interface used by executeItadSearch.
  */
 import { Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, or } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { ItadService } from '../itad/itad.service';
 import type { IgdbApiGame } from './igdb.constants';
 import type { ItadSearchDeps } from './igdb-itad-search.helpers';
 import type { ItadSearchGame } from './igdb-itad-merge.helpers';
-import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
+import {
+  ITAD_INTERACTIVE_FETCH,
+  type ItadGame,
+  type ItadGameInfo,
+} from '../itad/itad.constants';
 import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
@@ -42,10 +46,12 @@ export function buildItadSearchDeps(
 ): ItadSearchDeps {
   return {
     searchItad: (q) => searchAndMapItad(params.itadService, q),
-    lookupSteamAppIds: (games) => params.itadService.lookupSteamAppIds(games),
+    lookupSteamAppIds: (games) =>
+      params.itadService.lookupSteamAppIds(games, ITAD_INTERACTIVE_FETCH),
     enrichFromIgdb: (appId) => enrichViaExternalGames(params.queryIgdb, appId),
     getAdultFilter: params.getAdultFilter,
-    isBannedOrHidden: (slug) => checkBannedOrHidden(params.db, slug),
+    findBannedOrHiddenSlugs: (slugs) =>
+      findBannedOrHiddenSlugs(params.db, slugs),
     upsertGame: (game) => upsertItadGame(params.db, game),
     onUnenriched: params.onUnenriched,
     onGameUpserted: params.onGameUpserted,
@@ -57,7 +63,11 @@ async function searchAndMapItad(
   itadService: ItadService,
   query: string,
 ): Promise<ItadSearchGame[]> {
-  const results = await itadService.searchGames(query);
+  const results = await itadService.searchGames(
+    query,
+    undefined,
+    ITAD_INTERACTIVE_FETCH,
+  );
   return Promise.all(results.map((g) => mapItadGameToSearch(itadService, g)));
 }
 
@@ -66,7 +76,7 @@ async function mapItadGameToSearch(
   itadService: ItadService,
   game: ItadGame,
 ): Promise<ItadSearchGame> {
-  const info = await itadService.getGameInfo(game.id);
+  const info = await itadService.getGameInfo(game.id, ITAD_INTERACTIVE_FETCH);
   return mapToSearchGame(game, info);
 }
 
@@ -105,18 +115,24 @@ async function enrichViaExternalGames(
   }
 }
 
-/** Check if a game slug is banned or hidden in the database. */
-async function checkBannedOrHidden(
+/**
+ * Return the subset of `slugs` that are banned or hidden, in one query
+ * (READLOGS:D2 — was one SELECT per search result). `games.slug` is unique,
+ * so this matches the old per-slug `limit(1)` check exactly.
+ */
+async function findBannedOrHiddenSlugs(
   db: PostgresJsDatabase<typeof schema>,
-  slug: string,
-): Promise<boolean> {
+  slugs: string[],
+): Promise<Set<string>> {
+  if (slugs.length === 0) return new Set();
   const rows = await db
-    .select({
-      hidden: schema.games.hidden,
-      banned: schema.games.banned,
-    })
+    .select({ slug: schema.games.slug })
     .from(schema.games)
-    .where(eq(schema.games.slug, slug))
-    .limit(1);
-  return rows.length > 0 && (rows[0].hidden || rows[0].banned);
+    .where(
+      and(
+        inArray(schema.games.slug, slugs),
+        or(eq(schema.games.hidden, true), eq(schema.games.banned, true)),
+      ),
+    );
+  return new Set(rows.map((r) => r.slug));
 }

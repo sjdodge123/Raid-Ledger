@@ -15,6 +15,7 @@ import { setup } from "./setup.js";
 import type { SmokeTest, TestContext, TestResult } from "./types.js";
 import { channelEmbedTests } from "./tests/channel-embeds.test.js";
 import { dmNotificationTests } from "./tests/dm-notifications.test.js";
+import { dmEmbedRenderTests } from "./tests/dm-embed-render.test.js";
 import { voiceActivityTests } from "./tests/voice-activity.test.js";
 import { interactionFlowTests } from "./tests/interaction-flows.test.js";
 import { rosterCalculationTests } from "./tests/roster-calculation.test.js";
@@ -32,6 +33,7 @@ import { privateLineupTests } from "./tests/private-lineup.test.js";
 import { lineupTiebreakerOpenTests } from "./tests/lineup-tiebreaker-open.test.js";
 import { lineupAbortTests } from "./tests/lineup-abort.test.js";
 import { schedulingPollCardTests } from "./tests/lineup-scheduling-poll-card.test.js";
+import { lineupRedecideOrphanCardTests } from "./tests/lineup-redecide-orphan-card.test.js";
 import { standalonePollReminderTests } from "./tests/standalone-poll-reminders.test.js";
 import { reschedulePollLockInTests } from "./tests/reschedule-poll-lockin.test.js";
 import { schedulingPollEmbedLifecycleTests } from "./tests/scheduling-poll-embed-lifecycle.test.js";
@@ -159,6 +161,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...pushContentTests,
     ...rosterCalculationTests,
     ...dmNotificationTests,
+    ...dmEmbedRenderTests,
     ...voiceActivityTests,
     ...interactionFlowTests,
     ...slashCommandTests,
@@ -174,6 +177,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lineupTiebreakerOpenTests,
     ...lineupAbortTests,
     ...schedulingPollCardTests,
+    ...lineupRedecideOrphanCardTests,
     ...standalonePollReminderTests,
     ...reschedulePollLockInTests,
     ...schedulingPollEmbedLifecycleTests,

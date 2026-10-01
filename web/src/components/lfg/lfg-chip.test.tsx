@@ -6,8 +6,8 @@
  *
  * Contract these tests pin (spec §Files → `lfg-chip.tsx`, decisions D4/D5/D9):
  *   • props `{ activeCount, viabilityThreshold, state, gameSlug }`;
- *   • ONE element carries `data-testid="lfg-chip"`, `role="link"`,
- *     `data-lfg-state` and the `aria-label`;
+ *   • ONE element carries `data-testid="lfg-chip"`, the (implicit) link
+ *     role, `data-lfg-state` and the `aria-label`;
  *   • copy is the source of truth for the count (D9) — `🎯 N looking to play`
  *     for lfm, `🎯 1 looking · needs N more` for lfg;
  *   • `needs N more` = `max(1, (viabilityThreshold ?? 2) - activeCount)`;
@@ -19,7 +19,8 @@
  *     anchor, never a child (see its comment at `:94-97`). An `<a href>` there
  *     is valid HTML, and it is what makes "clicking the badge does not open the
  *     details page" provable by `href` rather than by a navigation side-effect.
- *     `role="link"` and `stopPropagation()` are both kept.
+ *     `stopPropagation()` is kept; the explicit `role="link"` was dropped
+ *     (TDB:1004) because the anchor's implicit role already is `link`.
  *
  * Colour assertions (D4) are a DELIBERATE exception to TESTING.md
  * anti-pattern #3: AC2 specifies the amber-300 tonal token *because*
@@ -204,7 +205,6 @@ describe('LfgChip — navigation and labelling (AC1)', () => {
         renderChip({ activeCount: 1, state: 'lfg' });
 
         const chip = screen.getByTestId('lfg-chip');
-        expect(chip).toHaveAttribute('role', 'link');
         expect(chip.getAttribute('aria-label')).toBe(chipText());
         // The accessible name is what a screen-reader user hears — it must be
         // the same sentence sighted users read.

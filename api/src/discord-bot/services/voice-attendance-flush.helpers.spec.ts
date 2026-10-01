@@ -200,9 +200,12 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       );
 
       const debugCalls = logger.debug.mock.calls;
-      // Second debug call reports event count
+      // Second debug call reports the event count inside the message itself
+      // (NestJS Logger does not substitute printf tokens).
       const secondCall = debugCalls[1];
-      expect(secondCall[1]).toBe(2); // 2 active events
+      expect(secondCall).toEqual([
+        '[voice-pipe] findActive: 2 active event(s) for channelId=voice-ch-3',
+      ]);
     });
 
     it('logs DEBUG when channel matches a general-lobby binding', async () => {
@@ -278,7 +281,9 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       );
 
       const firstDebugMsg = logger.debug.mock.calls[0][0];
-      expect(firstDebugMsg).toContain('[voice-pipe]');
+      expect(firstDebugMsg).toBe(
+        '[voice-pipe] findActive: default voice match channelId=my-default-ch',
+      );
     });
 
     it('returns all active events (no game filter) for default voice channel', async () => {
@@ -400,7 +405,9 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       ]);
       // Log should mention both bindings
       const firstDebug = logger.debug.mock.calls[0];
-      expect(firstDebug[1]).toBe(2); // 2 bindings
+      expect(firstDebug).toEqual([
+        '[voice-pipe] findActive: 2 binding(s) channelId=wow-ch gameIds=10,20',
+      ]);
     });
 
     it('general-lobby binding among game bindings queries ALL events', async () => {
@@ -434,7 +441,7 @@ describe('findActiveEventsForChannel — diagnostic logging (ROK-842)', () => {
       expect(result).toHaveLength(2);
       // gameIds arg should be 'all' (general-lobby → no filter)
       const firstDebug = logger.debug.mock.calls[0];
-      expect(firstDebug[3]).toBe('all');
+      expect(firstDebug[0]).toContain('gameIds=all');
     });
 
     it('unrecognized non-voice binding still logs WARN', async () => {

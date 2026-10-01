@@ -157,10 +157,7 @@ export class InviteCommand
       );
 
       this.logger.log(
-        'Generated invite link for event %d: %s (by %s)',
-        eventId,
-        link.inviteCode,
-        interaction.user.username,
+        `Generated invite link for event ${eventId}: ${link.inviteCode} (by ${interaction.user.username})`,
       );
     } catch (err) {
       const msg =
@@ -191,10 +188,7 @@ export class InviteCommand
       );
 
       this.logger.log(
-        'Created named PUG invite: event %d for user %s (by %s)',
-        eventId,
-        targetUser.username,
-        interaction.user.username,
+        `Created named PUG invite: event ${eventId} for user ${targetUser.username} (by ${interaction.user.username})`,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to send invite';

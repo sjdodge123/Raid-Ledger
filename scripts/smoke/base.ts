@@ -4,7 +4,8 @@
  * - `page`: wraps page.goto() to use 'domcontentloaded' instead of the
  *   default 'load'. The 'load' event never fires when pages render 1000+
  *   external game cover images (IGDB, ITAD CDNs). DOM is fully interactive
- *   at domcontentloaded.
+ *   at domcontentloaded. A `net::ERR_*` transport failure gets ONE retry
+ *   (./goto-retry.ts, TDB:1040); timeouts and HTTP statuses never do.
  *
  * - `world`: per-test `TestWorld` (see ./test-world.ts) that exposes a
  *   unique-prefixed id helper and an automatic cleanup hook. Tests that
@@ -15,6 +16,7 @@
 import { test as base, expect } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import { TestWorld } from './test-world';
+import { gotoWithRetry } from './goto-retry';
 
 export { expect };
 export { TestWorld };
@@ -28,7 +30,7 @@ export const test = base.extend<Fixtures>({
     page: async ({ page }, use) => {
         const originalGoto = page.goto.bind(page);
         page.goto = ((url: string, options?: Parameters<Page['goto']>[1]) =>
-            originalGoto(url, {
+            gotoWithRetry(originalGoto, url, {
                 waitUntil: 'domcontentloaded',
                 ...options,
             })) as Page['goto'];

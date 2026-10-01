@@ -25,6 +25,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { escapeLikePattern } from '../../common/search.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { listGroupMembers } from '../../lfg/lfg-query.helpers';
 import { LfgService } from '../../lfg/lfg.service';
 import { SettingsService } from '../../settings/settings.service';
 import { autocompleteGameIds } from './bind.autocomplete';
@@ -218,25 +219,19 @@ export class LfgCommand
     );
     const horizonLine =
       urgency === null ? horizonReplyLine(opts.urgency) : null;
-    const input = await this.joinReplyInput(
-      userId,
-      gameId,
-      result,
-      horizonLine,
-    );
+    const input = await this.joinReplyInput(gameId, result, horizonLine);
     await interaction.editReply({ embeds: [buildJoinReply(input, ctx)] });
   }
 
   /** Everything the join reply renders beyond the write result itself. */
   private async joinReplyInput(
-    userId: number,
     gameId: number,
     result: Awaited<ReturnType<LfgService['createIntent']>>,
     horizonLine: string | null,
   ): Promise<LfgJoinReplyInput> {
     const group = result.body.group;
     const memberNames =
-      group.activeCount >= 2 ? await this.rosterNames(userId, gameId) : [];
+      group.activeCount >= 2 ? await this.rosterNames(gameId) : [];
     const postLink = await this.postLink(gameId);
     return {
       group,
@@ -279,10 +274,14 @@ export class LfgCommand
     );
   }
 
-  /** Display names for the roster line, in the group's own order. */
-  private async rosterNames(userId: number, gameId: number): Promise<string[]> {
-    const detail = await this.lfgService.getGroupDetail(userId, gameId);
-    return detail.members.map((m) => m.displayName ?? m.username);
+  /**
+   * Display names for the roster line, in the group's own order. Reads the
+   * roster alone — the same members, same order as `getGroupDetail` — rather
+   * than the whole group detail the reply does not otherwise use.
+   */
+  private async rosterNames(gameId: number): Promise<string[]> {
+    const members = await listGroupMembers(this.db, gameId);
+    return members.map((m) => m.displayName ?? m.username);
   }
 
   /**

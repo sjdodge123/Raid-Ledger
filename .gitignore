@@ -36,8 +36,11 @@ scripts/*
 !scripts/reconcile-migrations.mjs
 !scripts/check-migration-merge-order.mjs
 !scripts/check-migration-merge-order.spec.mjs
+!scripts/check-migration-snapshot-chain.mjs
+!scripts/check-migration-snapshot-chain.spec.mjs
 !scripts/validate-ci.sh
 !scripts/validate-migrations.sh
+!scripts/validate-migrations-drift.spec.mjs
 !scripts/setup-branch-protection.sh
 !scripts/smoke/
 !scripts/ci/
@@ -78,6 +81,8 @@ scripts/*
 !scripts/check-bundle-size.mjs
 !scripts/check-bundle-size.spec.mjs
 !scripts/bundle-budget.config.mjs
+# node:test spec for the api ESLint guard against printf-style logger messages.
+!scripts/api-eslint-no-printf-logger.spec.mjs
 !scripts/test/
 # ROK-1286: keep the Playwright auth-cache DIRECTORY in the synced tree (so the
 # fleet Mutagen replica never deletes it mid-run) while still ignoring the JWT

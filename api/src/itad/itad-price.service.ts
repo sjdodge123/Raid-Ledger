@@ -5,7 +5,7 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
-import { itadPost } from './itad-http.util';
+import { itadPost, type ItadFetchOptions } from './itad-http.util';
 import type {
   ItadOverviewResponse,
   ItadOverviewGameEntry,
@@ -42,7 +42,10 @@ export class ItadPriceService {
    * Returns null if API key is not configured or if the request fails.
    * Results are cached in Redis with a 3-hour TTL.
    */
-  async getOverview(itadGameId: string): Promise<ItadOverviewGameEntry | null> {
+  async getOverview(
+    itadGameId: string,
+    opts: ItadFetchOptions = {},
+  ): Promise<ItadOverviewGameEntry | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
 
@@ -56,6 +59,7 @@ export class ItadPriceService {
       '/games/overview/v2',
       { key: apiKey },
       [itadGameId],
+      opts,
     );
 
     if (!response?.prices?.length) return null;
@@ -74,6 +78,7 @@ export class ItadPriceService {
    */
   async getOverviewBatch(
     itadGameIds: string[],
+    opts: ItadFetchOptions = {},
   ): Promise<ItadOverviewGameEntry[]> {
     if (itadGameIds.length === 0) return [];
     const apiKey = await this.getApiKey();
@@ -82,7 +87,7 @@ export class ItadPriceService {
     const { cached, missingIds } = await this.checkBatchCache(itadGameIds);
     if (missingIds.length === 0) return cached;
 
-    const fetched = await this.fetchBatchFromItad(apiKey, missingIds);
+    const fetched = await this.fetchBatchFromItad(apiKey, missingIds, opts);
     return [...cached, ...fetched];
   }
 
@@ -112,11 +117,13 @@ export class ItadPriceService {
   private async fetchBatchFromItad(
     apiKey: string,
     ids: string[],
+    opts: ItadFetchOptions,
   ): Promise<ItadOverviewGameEntry[]> {
     const response = await itadPost<ItadOverviewResponse>(
       '/games/overview/v2',
       { key: apiKey },
       ids,
+      opts,
     );
     if (response === null) throw new ItadOverviewFetchError(ids.length);
     if (!response.prices?.length) return [];

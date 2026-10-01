@@ -523,3 +523,103 @@ describe('Regression: rollup collision during merge', () => {
     expect(rollups[0].totalSeconds).toBe(77);
   });
 });
+
+/**
+ * Regression (TDB:229 / TDB:254): partial-unique collision on channel_bindings.
+ *
+ * `channel_bindings_nonseries_game_unique` is on
+ * (guild_id, channel_id, binding_purpose, game_id) WHERE recurrence_group_id IS
+ * NULL AND game_id IS NOT NULL. With a voice monitor for BOTH the winner and the
+ * loser on one channel, repointing the loser's row duplicates the winner's.
+ * `safeReassign`'s savepoint catch cannot contain that under postgres.js, so the
+ * merge aborted. The loser's duplicate is now dropped first; the winner's kept.
+ */
+const BINDING_GUILD = 'guild-dedup-1';
+
+function binding(
+  gameId: number,
+  channelId: string,
+  recurrenceGroupId?: string,
+) {
+  return {
+    guildId: BINDING_GUILD,
+    channelId,
+    channelType: 'voice',
+    bindingPurpose: 'game-voice-monitor',
+    gameId,
+    recurrenceGroupId: recurrenceGroupId ?? null,
+  };
+}
+
+async function bindingsFor(gameId: number) {
+  return testApp.db
+    .select()
+    .from(schema.channelBindings)
+    .where(eq(schema.channelBindings.gameId, gameId));
+}
+
+async function mergeByName() {
+  return testApp.request
+    .post('/admin/games/dedup-cleanup-by-name?dryRun=false')
+    .set('Authorization', `Bearer ${adminToken}`);
+}
+
+describe('Regression: channel_bindings collision during merge', () => {
+  it('keeps the winner binding and drops the colliding loser binding', async () => {
+    const winner = await insertGame({
+      name: 'Valheim',
+      slug: 'valheim-igdb',
+      igdbId: 119176,
+    });
+    const loser = await insertGame({
+      name: 'Valheim',
+      slug: 'valheim-steam',
+      steamAppId: 892970,
+    });
+    const [winnerBinding] = await testApp.db
+      .insert(schema.channelBindings)
+      .values(binding(winner.id, 'vc-shared'))
+      .returning();
+    await testApp.db
+      .insert(schema.channelBindings)
+      .values(binding(loser.id, 'vc-shared'));
+
+    const res = await mergeByName();
+
+    expect(res.status).toBe(200);
+    expect(res.body.errors).toEqual([]);
+    expect(res.body.merged).toBe(1);
+    const survivors = await bindingsFor(winner.id);
+    expect(survivors.map((b) => b.id)).toEqual([winnerBinding.id]);
+    expect(await countGamesByName('Valheim')).toBe(1);
+  });
+
+  it('repoints non-colliding loser bindings (other channel, series row)', async () => {
+    const winner = await insertGame({
+      name: 'Terraria',
+      slug: 'terraria-igdb',
+      igdbId: 119177,
+    });
+    const loser = await insertGame({
+      name: 'Terraria',
+      slug: 'terraria-steam',
+      steamAppId: 105600,
+    });
+    const seriesId = '6f1c1e2a-4b1d-4c3e-9a55-0d2b8f6a7e11';
+    await testApp.db
+      .insert(schema.channelBindings)
+      .values([
+        binding(winner.id, 'vc-a'),
+        binding(loser.id, 'vc-b'),
+        binding(loser.id, 'vc-a', seriesId),
+      ]);
+
+    const res = await mergeByName();
+
+    expect(res.body.errors).toEqual([]);
+    const moved = (await bindingsFor(winner.id))
+      .map((b) => `${b.channelId}:${b.recurrenceGroupId ?? '-'}`)
+      .sort();
+    expect(moved).toEqual(['vc-a:-', `vc-a:${seriesId}`, 'vc-b:-']);
+  });
+});

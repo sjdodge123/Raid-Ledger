@@ -257,7 +257,7 @@ describe('buildMemberInviteEmbed (AC2)', () => {
     const { embed } = buildMemberInviteEmbed(memberInput());
     const names = (embed.toJSON().fields ?? []).map((f) => f.name);
 
-    expect(names).not.toContain('\u{1F3AE} In your library');
+    expect(names).not.toContain(OWNED_FIELD);
     expect(names).not.toContain('⭐ On your wishlist');
     expect(names).not.toContain('\u{1F49B} You hearted this');
   });

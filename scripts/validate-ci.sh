@@ -755,6 +755,11 @@ run_tools_tests() {
   npm test --prefix "$REPO_ROOT/tools/test-bot" || return $?
 }
 
+# TDB:1246: the packages/contract schema specs (src/__tests__/*.spec.ts) ran in
+# no gate at all. The workspace carries its own node-environment vitest config;
+# the root one forces jsdom + the web setup file and is not the right runner.
+run_contract_specs() { (cd "$REPO_ROOT" && npm test -w @raid-ledger/contract); }
+
 # ROK-1451 L4: derive the V8 heap ceiling from a cgroup memory limit, clamped.
 #
 # 75% of the container limit leaves headroom for the node process itself and
@@ -1222,6 +1227,9 @@ run_migration_validation() {
   # silently SKIPPED by Drizzle on every DB past that entry (0176 never reached
   # prod). `|| return 1` so the guard's exit 3 is never read as a run_step code.
   node "$REPO_ROOT/scripts/check-migration-merge-order.mjs" || return 1
+  # TDB:1150: each snapshot's prevId must be the previous snapshot's id —
+  # drizzle-kit never checks the link, only prevId collisions.
+  node "$REPO_ROOT/scripts/check-migration-snapshot-chain.mjs" || return 1
   # ROK-1343: Mutagen sync on the rl-infra fleet runner strips POSIX exec
   # bits even though git stores `scripts/validate-migrations.sh` as 100755.
   # GitHub CI honors the git mode; the fleet does not. Re-assert +x defensively
@@ -1950,6 +1958,7 @@ run_default_gate() {
     if ! $static_mode; then
       run_step "$unit_step_label" run_unit_tests
       run_step "Tools unit tests (mcp servers)" run_tools_tests
+      run_step "Contract schema specs (packages/contract)" run_contract_specs
       run_step "Integration tests (api)" run_integration_tests
     fi
 

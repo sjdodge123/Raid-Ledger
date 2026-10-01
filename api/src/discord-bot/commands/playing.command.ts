@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { escapeLikePattern } from '../../common/search.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { autocompleteGames } from './bind.autocomplete';
@@ -84,7 +85,8 @@ export class PlayingCommand
     const [match] = await this.db
       .select({ id: schema.games.id, name: schema.games.name })
       .from(schema.games)
-      .where(ilike(schema.games.name, gameName))
+      // TDB:960 — escape LIKE wildcards so '%' or '_' can't match an arbitrary game.
+      .where(ilike(schema.games.name, escapeLikePattern(gameName)))
       .limit(1);
     const resolved = match?.name ?? gameName;
     this.presenceDetector.setManualOverride(interaction.user.id, resolved);

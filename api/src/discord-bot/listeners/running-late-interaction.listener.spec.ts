@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Logger } from '@nestjs/common';
 import { MessageFlags } from 'discord.js';
 import { RunningLateInteractionListener } from './running-late-interaction.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -259,6 +260,29 @@ describe('RunningLateInteractionListener', () => {
         content: expect.stringContaining('running late'),
       });
     });
+    it('logs the notify fan-out failure with the event id and reason interpolated', async () => {
+      const warn = jest
+        .spyOn((listener as unknown as { logger: Logger }).logger, 'warn')
+        .mockImplementation(() => undefined);
+      mockRunningLateService.notifyRunningLate.mockRejectedValue(
+        new Error('notification service down'),
+      );
+      mockFindLinkedUser.mockResolvedValue({
+        id: ATTENDEE_ID,
+        username: 'LateGuy',
+      });
+      mockDb.limit
+        .mockResolvedValueOnce([futureEvent()]) // lookupEvent
+        .mockResolvedValueOnce([{ id: 1 }]); // userHasSignup
+      await listener.handleLateClick(
+        makeButtonInteraction(`${RUNNING_LATE_BUTTON_IDS.LATE}:${EVENT_ID}`),
+        EVENT_ID,
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(warn).toHaveBeenCalledWith(
+        `Failed to notify attendees of running-late for event ${EVENT_ID}: notification service down`,
+      );
+    });
   });
 
   describe('host marks running late → delay prompt', () => {
@@ -409,6 +433,22 @@ describe('RunningLateInteractionListener', () => {
       expect(interaction.editReply).toHaveBeenCalledWith({
         content: 'Something went wrong. Please try again.',
       });
+    });
+
+    it('logs the action failure with the event id and passes the stack, not the error as context', async () => {
+      const error = jest
+        .spyOn((listener as unknown as { logger: Logger }).logger, 'error')
+        .mockImplementation(() => undefined);
+      mockFindLinkedUser.mockResolvedValue({ id: ATTENDEE_ID });
+      const boom = new Error('DB Error');
+      mockDb.limit.mockRejectedValueOnce(boom);
+      await listener.handleButtonInteraction(
+        makeButtonInteraction(`${RUNNING_LATE_BUTTON_IDS.LATE}:${EVENT_ID}`),
+      );
+      expect(error).toHaveBeenCalledWith(
+        `Error handling running late for event ${EVENT_ID}`,
+        boom.stack,
+      );
     });
   });
 

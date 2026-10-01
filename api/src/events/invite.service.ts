@@ -155,10 +155,7 @@ export class InviteService {
       await materialiseClaimedPugSlot(this.db, event, userId, role);
     }
     this.logger.log(
-      'Share invite %s claimed by user %d for event %d',
-      code,
-      userId,
-      event.id,
+      `Share invite ${code} claimed by user ${userId} for event ${event.id}`,
     );
     this.sendPostClaimDM(userId, event.title, event.id).catch(() => {});
     const discordServerInviteUrl = await this.tryGenerateServerInvite(
@@ -185,10 +182,7 @@ export class InviteService {
       .delete(schema.pugSlots)
       .where(eq(schema.pugSlots.id, slot.id));
     this.logger.log(
-      'Invite %s claimed by member (user %d) — created normal signup for event %d',
-      code,
-      userId,
-      slot.eventId,
+      `Invite ${code} claimed by member (user ${userId}) — created normal signup for event ${slot.eventId}`,
     );
     const discordServerInviteUrl = await this.tryGenerateServerInvite(
       userId,
@@ -213,10 +207,7 @@ export class InviteService {
     await this.createSignupForClaim(slot.eventId, userId, role, characterId);
     await this.markSlotClaimed(slot.id, userId);
     this.logger.log(
-      'Invite %s claimed by user %d (PUG slot + signup) for event %d',
-      code,
-      userId,
-      slot.eventId,
+      `Invite ${code} claimed by user ${userId} (PUG slot + signup) for event ${slot.eventId}`,
     );
     this.sendPostClaimDM(userId, event.title, slot.eventId).catch(() => {});
     // ROK-1631: the resolve response no longer carries a server invite, so
@@ -257,8 +248,7 @@ export class InviteService {
       });
     } catch (err) {
       this.logger.warn(
-        'Failed to create signup for invite claim: %s',
-        err instanceof Error ? err.message : 'Unknown error',
+        `Failed to create signup for invite claim: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
       throw err;
     }
@@ -294,9 +284,7 @@ export class InviteService {
     const message = buildPostClaimDm(eventTitle, eventId, clientUrl);
     await this.discordClient.sendDirectMessage(user.discordId, message);
     this.logger.log(
-      'Sent post-claim DM to user %d for event %d',
-      userId,
-      eventId,
+      `Sent post-claim DM to user ${userId} for event ${eventId}`,
     );
   }
 
@@ -309,8 +297,7 @@ export class InviteService {
       return await this.pugInviteService.serverInviteFor(userId, eventId);
     } catch (err) {
       this.logger.warn(
-        'Failed to generate server invite for claim response: %s',
-        err instanceof Error ? err.message : 'Unknown error',
+        `Failed to generate server invite for claim response: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
       return null;
     }

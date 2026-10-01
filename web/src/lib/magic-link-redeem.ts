@@ -1,7 +1,8 @@
 import { TokenResponseSchema, type RedeemMagicLinkDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from './config';
 import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './api/auth-storage-keys';
-import { clearSilentGuard, setAuthMethod } from './api/silent-reauth';
+import { refreshWithOutcome } from './api/refresh-client';
+import { clearSilentGuard, getAuthMethod, setAuthMethod } from './api/silent-reauth';
 
 /**
  * ROK-1366: exchange a single-use magic-link token for a real session.
@@ -15,16 +16,14 @@ import { clearSilentGuard, setAuthMethod } from './api/silent-reauth';
 
 let pending: Promise<void> | null = null;
 
-/** What /auth/me says about the stored access token (OQ6). */
+/** Whether a session the link would replace still exists (OQ6, #1384). */
 type StoredSession = 'none' | 'valid' | 'unknown';
 
 /**
- * OQ6: only a 401/403 from /auth/me proves the stored session is gone. A 429,
- * 5xx or network error proves nothing, so the session is 'unknown' and kept.
+ * OQ6: only a 401/403 from /auth/me proves the stored access token is dead. A
+ * 429, 5xx or network error proves nothing, so the session is 'unknown'.
  */
-async function checkStoredSession(): Promise<StoredSession> {
-  const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!stored) return 'none';
+async function probeStoredToken(stored: string): Promise<StoredSession> {
   try {
     const res = await fetch(`${API_BASE_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${stored}` },
@@ -34,6 +33,26 @@ async function checkStoredSession(): Promise<StoredSession> {
   } catch {
     return 'unknown';
   }
+}
+
+/**
+ * #1384 (operator ruling 2026-09-28): a session the refresh cookie can still
+ * renew is VALID — the 1h access token expiring must not let a planted link
+ * swap it (login CSRF). Only a refresh the server rejects (401/403) leaves
+ * 'none'. A 429, 5xx, network error or bad body is 'unknown': the refresh
+ * bucket is shared per IP, so anyone on the victim's NAT can force a 429.
+ */
+async function probeRefreshSession(): Promise<StoredSession> {
+  const outcome = await refreshWithOutcome();
+  if (outcome.kind === 'ok') return 'valid';
+  return outcome.kind === 'rejected' ? 'none' : 'unknown';
+}
+
+async function checkStoredSession(): Promise<StoredSession> {
+  const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
+  if (!stored && !getAuthMethod()) return 'none';
+  const probed = stored ? await probeStoredToken(stored) : 'none';
+  return probed === 'none' ? probeRefreshSession() : probed;
 }
 
 async function postRedeem(token: string): Promise<string | null> {
@@ -62,10 +81,12 @@ function adoptSession(accessToken: string): void {
 }
 
 /**
- * OQ6 (operator ruling 2026-09-27): redeem only when there is no stored
- * session or /auth/me rejects it (401/403), whoever the link is for. A
- * still-valid session is kept, and so is one a transient /auth/me failure
- * could not judge — the link is left unspent (its fragment is already gone).
+ * OQ6 (operator ruling 2026-09-27) + #1384 (2026-09-28): redeem only when no
+ * session exists — no stored token, or /auth/me rejects it (401/403) AND the
+ * refresh cookie cannot renew it — whoever the link is for. A valid or
+ * refreshable session is kept, and so is one a transient /auth/me or refresh
+ * failure could not judge — the link is left unspent (its
+ * fragment is already gone).
  */
 async function runRedeem(token: string): Promise<void> {
   if ((await checkStoredSession()) !== 'none') return;

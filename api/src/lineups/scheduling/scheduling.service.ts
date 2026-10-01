@@ -66,6 +66,7 @@ import {
 } from './scheduling-cancel.helpers';
 import { NotificationService } from '../../notifications/notification.service';
 import { isAnswering } from './scheduling-stance.helpers';
+import { errorStack } from '../../common/error-format.helpers';
 
 @Injectable()
 export class SchedulingService {
@@ -175,10 +176,8 @@ export class SchedulingService {
       });
     } catch (err) {
       this.logger.warn(
-        'Auto-vote failed for slot %d user %d: %s',
-        slotId,
-        userId,
-        err,
+        `Auto-vote failed for slot ${slotId} user ${userId}`,
+        errorStack(err),
       );
     }
   }
@@ -260,11 +259,24 @@ export class SchedulingService {
       );
   }
 
-  /** Retract all votes by a user for slots belonging to a match. */
-  async retractAllVotes(matchId: number, userId: number): Promise<void> {
+  /**
+   * Retract all votes by a user for slots belonging to a match.
+   *
+   * TDB:189: same participation gate as vote/suggest, but WITHOUT the match
+   * argument — so retract stays allowed on an expired poll (no assertPollOpen).
+   */
+  async retractAllVotes(
+    matchId: number,
+    userId: number,
+    callerRole?: string,
+  ): Promise<void> {
     const match = await this.findMatchOrThrow(matchId);
     assertSchedulingEnabled(match);
     assertSchedulable(match);
+    await assertCallerMayVote(this.db, match.lineupId, {
+      id: userId,
+      role: callerRole,
+    });
     // ROK-1544: no votes left → the member has no answer on record again.
     // Delete + stamp share one tx so the two can never diverge.
     await this.db.transaction(async (tx) => {

@@ -7,6 +7,7 @@ import {
   type StringSelectMenuInteraction,
 } from 'discord.js';
 import { Logger } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { SignupsService } from '../../events/signups.service';
@@ -131,8 +132,7 @@ export async function editDmEmbed(
     await msg.edit({ embeds: [embed], components });
   } catch (error) {
     logger.warn(
-      'Failed to edit reschedule DM embed: %s',
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to edit reschedule DM embed: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }
@@ -151,8 +151,7 @@ export async function editDmEmbedFromSelect(
     await botMessage.edit({ embeds: [embed], components });
   } catch (error) {
     logger.warn(
-      'Failed to edit reschedule DM embed from select: %s',
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to edit reschedule DM embed from select: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }
@@ -253,4 +252,49 @@ export async function logDiscordAck(
     isLinked ? actor.userId : null,
     metadata,
   );
+}
+
+type DmState = 'confirmed' | 'tentative' | 'declined';
+
+/** Look up the event fields the reschedule listener needs. */
+export async function lookupRescheduleEvent(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<EventRow | null> {
+  const [event] = await db
+    .select({
+      id: schema.events.id,
+      title: schema.events.title,
+      cancelledAt: schema.events.cancelledAt,
+      gameId: schema.events.gameId,
+      slotConfig: schema.events.slotConfig,
+    })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return event ?? null;
+}
+
+/** Resolve the user linked to a Discord account, if any. */
+export async function findLinkedUserByDiscordId(
+  db: PostgresJsDatabase<typeof schema>,
+  discordId: string,
+): Promise<{ id: number } | null> {
+  const [user] = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.discordId, discordId))
+    .limit(1);
+  return user ?? null;
+}
+
+/** Bind `editDmEmbed` to a logger for the button-handler contexts. */
+export function dmEditFor(logger: Logger) {
+  return (i: ButtonInteraction, s: DmState) => editDmEmbed(i, s, logger);
+}
+
+/** Bind `editDmEmbedFromSelect` to a logger for the select-menu contexts. */
+export function selectDmEditFor(logger: Logger) {
+  return (i: StringSelectMenuInteraction, s: DmState) =>
+    editDmEmbedFromSelect(i, s, logger);
 }

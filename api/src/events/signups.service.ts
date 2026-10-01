@@ -86,8 +86,7 @@ export class SignupsService {
     );
     cancelH.cleanupMatchingPugSlots(this.db, eventId, userId).catch((err) => {
       this.logger.warn(
-        'Failed to cleanup PUG slots: %s',
-        err instanceof Error ? err.message : 'Unknown error',
+        `Failed to cleanup PUG slots: ${err instanceof Error ? err.message : 'Unknown error'}`,
       );
     });
     // ROK-1269 invariant: the reconfirm self-heal is audited post-commit.

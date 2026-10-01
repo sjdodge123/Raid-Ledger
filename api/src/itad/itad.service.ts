@@ -6,7 +6,9 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import Redis from 'ioredis';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
-import { itadFetch, itadPost } from './itad-http.util';
+import { itadFetch, itadPost, type ItadFetchOptions } from './itad-http.util';
+
+export type { ItadFetchOptions } from './itad-http.util';
 import type {
   ItadGame,
   ItadLookupResponse,
@@ -51,17 +53,21 @@ export class ItadService {
   ) {}
 
   /** Look up an ITAD game by Steam App ID. Returns null if not found or unconfigured. */
-  async lookupBySteamAppId(appId: number): Promise<ItadGame | null> {
+  async lookupBySteamAppId(
+    appId: number,
+    opts: ItadFetchOptions = {},
+  ): Promise<ItadGame | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
 
     const cached = await getCachedLookup<ItadGame>(this.redis, appId);
     if (cached) return cached;
 
-    const result = await itadFetch<ItadLookupResponse>('/games/lookup/v1', {
-      key: apiKey,
-      appid: String(appId),
-    });
+    const result = await itadFetch<ItadLookupResponse>(
+      '/games/lookup/v1',
+      { key: apiKey, appid: String(appId) },
+      opts,
+    );
 
     if (!result?.found || !result.game) return null;
 
@@ -73,6 +79,7 @@ export class ItadService {
   async searchGames(
     title: string,
     limit = DEFAULT_SEARCH_LIMIT,
+    opts: ItadFetchOptions = {},
   ): Promise<ItadGame[]> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return [];
@@ -80,11 +87,11 @@ export class ItadService {
     const cached = await getCachedSearch<ItadGame[]>(this.redis, title, limit);
     if (cached) return cached;
 
-    const result = await itadFetch<ItadGame[]>('/games/search/v1', {
-      key: apiKey,
-      title,
-      results: String(limit),
-    });
+    const result = await itadFetch<ItadGame[]>(
+      '/games/search/v1',
+      { key: apiKey, title, results: String(limit) },
+      opts,
+    );
 
     const games = result ?? [];
     if (games.length > 0) {
@@ -94,17 +101,21 @@ export class ItadService {
   }
 
   /** Get full ITAD game info by ITAD UUID. Returns null if not found or unconfigured. */
-  async getGameInfo(itadId: string): Promise<ItadGameInfo | null> {
+  async getGameInfo(
+    itadId: string,
+    opts: ItadFetchOptions = {},
+  ): Promise<ItadGameInfo | null> {
     const apiKey = await this.getApiKey();
     if (!apiKey) return null;
 
     const cached = await getCachedInfo<ItadGameInfo>(this.redis, itadId);
     if (cached) return cached;
 
-    const result = await itadFetch<ItadGameInfo>('/games/info/v2', {
-      key: apiKey,
-      id: itadId,
-    });
+    const result = await itadFetch<ItadGameInfo>(
+      '/games/info/v2',
+      { key: apiKey, id: itadId },
+      opts,
+    );
 
     if (!result) return null;
 
@@ -115,10 +126,12 @@ export class ItadService {
   /**
    * Batch-resolve ITAD game UUIDs to Steam App IDs via shop lookup.
    * @param games - Array of { id, slug } from ITAD search results
+   * @param opts - Fetch options; the default fails fast on a long 429 pause
    * @returns Map of ITAD UUID to Steam App ID (number)
    */
   async lookupSteamAppIds(
     games: { id: string; slug: string }[],
+    opts: ItadFetchOptions = {},
   ): Promise<Map<string, number>> {
     const result = new Map<string, number>();
     if (games.length === 0) return result;
@@ -132,6 +145,7 @@ export class ItadService {
       `/lookup/shop/${shopId}/id/v1`,
       { key: apiKey, shops: shopId },
       itadIds,
+      opts,
     );
 
     if (!response) return result;

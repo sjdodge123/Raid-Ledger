@@ -13,6 +13,7 @@ import type { ItadPriceService } from '../itad/itad-price.service';
 import type { ItadGamePricingDto, DealQuality } from '@raid-ledger/contract';
 import type { ItadOverviewGameEntry } from '../itad/itad-price.types';
 import { PRICING_STALE_MS } from '../itad/itad-price-sync.constants';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 
 /** Thresholds for deal quality classification */
 const GREAT_DEAL_THRESHOLD = 0.1;
@@ -30,7 +31,10 @@ export async function fetchGamePricing(
   const itadGameId = await lookupItadGameId(db, gameId);
   if (!itadGameId) return null;
 
-  const overview = await itadPriceService.getOverview(itadGameId);
+  const overview = await itadPriceService.getOverview(
+    itadGameId,
+    ITAD_INTERACTIVE_FETCH,
+  );
   if (!overview) return null;
 
   return mapOverviewToPricing(overview);

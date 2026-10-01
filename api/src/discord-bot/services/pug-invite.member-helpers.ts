@@ -121,9 +121,7 @@ async function notifyCreatorWithInvite(
     await clientService.sendEmbedDM(creator.discordId, embed, row);
   } catch (error) {
     logger.warn(
-      'Failed to send invite relay DM to creator %d: %s',
-      creatorUserId,
-      error instanceof Error ? error.message : 'Unknown error',
+      `Failed to send invite relay DM to creator ${creatorUserId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
   }
 }

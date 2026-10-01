@@ -14,6 +14,7 @@
 import { EventEmitter } from 'events';
 import { SteamLinkListener } from './steam-link.listener';
 import { ChannelType, Events } from 'discord.js';
+import { ITAD_INTERACTIVE_FETCH } from '../../itad/itad.constants';
 
 let listener: SteamLinkListener;
 let mockClientService: Record<string, jest.Mock>;
@@ -546,3 +547,34 @@ function rateLimitTests() {
     expect(mockDmSend).toHaveBeenCalledTimes(1);
   });
 }
+
+describe('SteamLinkListener — ITAD discovery fail-fast', () => {
+  it('passes the interactive limit to the ITAD Steam app id lookup', async () => {
+    const itadService = {
+      lookupBySteamAppId: jest.fn().mockResolvedValue(null),
+    };
+    const settingsService = { get: jest.fn().mockResolvedValue('false') };
+    const subject = new SteamLinkListener(
+      {} as never,
+      { getClient: jest.fn() } as never,
+      itadService as never,
+      undefined as never,
+      settingsService as never,
+    );
+    try {
+      const discover = (
+        subject as unknown as {
+          discoverGame: (appId: number) => Promise<unknown>;
+        }
+      ).discoverGame.bind(subject);
+
+      expect(await discover(1245620)).toBeNull();
+      expect(itadService.lookupBySteamAppId).toHaveBeenCalledWith(
+        1245620,
+        ITAD_INTERACTIVE_FETCH,
+      );
+    } finally {
+      subject.onModuleDestroy();
+    }
+  });
+});
