@@ -5,6 +5,7 @@
  * are the whole bug — they get deterministic coverage here with an injected
  * clock, while the DB-backed filtering is covered in game-time.integration.spec.
  */
+import { DrizzleQueryError } from 'drizzle-orm/errors';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
@@ -12,6 +13,16 @@ import {
   fetchAbsencesEndingOnOrAfter,
   resolveLocalToday,
 } from './game-time-absence.helpers';
+
+/** A PG error as Drizzle throws it: wrapped, with the SQLSTATE on `cause`. */
+function drizzleError(code: string, message: string): DrizzleQueryError {
+  const pgErr = Object.assign(new Error(message), { code });
+  return new DrizzleQueryError(
+    'select ... from "game_time_absences"',
+    [],
+    pgErr,
+  );
+}
 
 /** A db whose absence-list query (terminating at `.where()`) rejects. */
 function dbRejectingWith(err: unknown): PostgresJsDatabase<typeof schema> {
@@ -69,9 +80,9 @@ describe('game-time-absence.helpers', () => {
     // The week-bounded fetchAbsences already swallowed 42P01; the absence-list
     // query did not, so a missing game_time_absences table 500'd the endpoint.
     it('returns [] when game_time_absences does not exist (42P01)', async () => {
-      const err = Object.assign(
-        new Error('relation "game_time_absences" does not exist'),
-        { code: '42P01' },
+      const err = drizzleError(
+        '42P01',
+        'relation "game_time_absences" does not exist',
       );
 
       await expect(
@@ -80,9 +91,9 @@ describe('game-time-absence.helpers', () => {
     });
 
     it('rethrows any other database error', async () => {
-      const err = Object.assign(
-        new Error('duplicate key value violates unique constraint'),
-        { code: '23505' },
+      const err = drizzleError(
+        '23505',
+        'duplicate key value violates unique constraint',
       );
 
       await expect(
