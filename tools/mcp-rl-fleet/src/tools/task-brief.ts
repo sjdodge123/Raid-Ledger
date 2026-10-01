@@ -115,11 +115,41 @@ export const BRIEF_FIELDS = [
   'slot_url',
   'internal_url',
   'admin_email',
+  // TDB:1452: one human line naming the watchdog when it killed the run.
+  'exit_reason',
   // Error envelopes are already tiny; keep their payload legible in brief mode.
   'error',
   'message',
   'hint',
 ] as const;
+
+/** TDB:1452 — the exit code task-start's timeout watchdog leaves behind:
+ *  128 + SIGTERM(15). The orchestrator records it as a plain `failed`, so
+ *  without a gloss the poller sees "failed, exit 143" and reads it as a red
+ *  gate rather than a run that simply outlived its `timeout_seconds`. */
+export const WATCHDOG_EXIT_CODE = 143;
+
+/** The `exit_reason` a watchdog-killed task carries. */
+export const WATCHDOG_EXIT_REASON =
+  'killed by the gate watchdog (SIGTERM, exit 143) — raise timeout_seconds';
+
+/**
+ * Name the cause of a terminal exit code when it is one we can identify.
+ *
+ * Only exit 143 is glossed. A `cancelled` task is excluded: task-cancel also
+ * SIGTERMs the process group, so its 143 is the caller's own cancel, not the
+ * watchdog. 137 (SIGKILL) is deliberately NOT claimed — the watchdog's 10s
+ * grace SIGKILL and a kernel OOM kill both produce it.
+ *
+ * @param result A status payload.
+ * @returns A short human string, or undefined when there is nothing to say.
+ */
+export function describeExitReason(result: Record<string, unknown>): string | undefined {
+  if (result.script_exit_code !== WATCHDOG_EXIT_CODE) return undefined;
+  const s = result.mcp_runtime_status ?? result.status;
+  if (s === 'cancelled') return undefined;
+  return WATCHDOG_EXIT_REASON;
+}
 
 /** Status values that mean "the task has not finished yet". */
 const NON_TERMINAL_STATUSES = new Set(['running', 'queued', 'waiting']);
@@ -140,7 +170,8 @@ export function shouldDefaultBrief(result: Record<string, unknown>): boolean {
 
 /**
  * Apply ROK-1567's return-boundary rules to a status payload: always redact the
- * credential out of `cmd` / `args_summary` / `env`, then project to the brief
+ * credential out of `cmd` / `args_summary` / `env`, gloss a watchdog exit as
+ * `exit_reason` (TDB:1452), then project to the brief
  * field set when `brief` (explicit, else {@link shouldDefaultBrief}) is true.
  *
  * @param result The full status payload.
@@ -156,6 +187,8 @@ export function applyStatusProjection<T extends object>(
   includeCredentials?: boolean,
 ): T {
   const out = redactTaskSecrets(result) as unknown as Record<string, unknown>;
+  const exitReason = describeExitReason(out);
+  if (exitReason) out.exit_reason = exitReason;
   if (!(brief ?? (shouldDefaultBrief(out) && !includeCredentials))) return out as T;
   const briefed: Record<string, unknown> = {};
   for (const key of BRIEF_FIELDS) {

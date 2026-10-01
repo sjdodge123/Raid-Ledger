@@ -310,3 +310,38 @@ describe('rl_release returns cancelled_tasks: string[]', () => {
     expect(result.cancelled_tasks).toEqual([]);
   });
 });
+
+describe('TDB:1452 — the dispatched watchdog budget defaults by run shape', () => {
+  function dispatchedTimeoutFlag(): string | undefined {
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) => {
+      const a = call[1] as string[];
+      return Array.isArray(a) && a.some((s) => typeof s === 'string' && s.includes('task-start'));
+    });
+    const argvStr = JSON.stringify(sshCall?.[1] ?? []);
+    return argvStr.match(/--timeout-seconds \d+/)?.[0];
+  }
+
+  beforeEach(() => {
+    execFileAlwaysOk((_cmd: string, args: string[]) => {
+      if (args.join(' ').includes('rl status')) {
+        return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
+      }
+      return { ok: true, task_id: 'tdb14520', started_at: '2026-10-01T12:00:00.000Z' };
+    });
+  });
+
+  it('passes --timeout-seconds 5400 to task-start for an --only-e2e run', async () => {
+    await validateCi.execute({ args: ['--only-e2e'], wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 5400');
+  });
+
+  it('keeps --timeout-seconds 1800 for a plain run', async () => {
+    await validateCi.execute({ args: ['--static'], wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 1800');
+  });
+
+  it('honours an explicit timeout_seconds over the e2e default', async () => {
+    await validateCi.execute({ args: ['--with-e2e'], timeout_seconds: 900, wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 900');
+  });
+});

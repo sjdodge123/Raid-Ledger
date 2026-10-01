@@ -19,6 +19,7 @@ vi.mock('node:child_process', () => ({
 }));
 
 import { applyStatusProjection, executeStatus, executeWait, redactCmd } from '../task.js';
+import { WATCHDOG_EXIT_REASON } from '../task-brief.js';
 
 function execFileOk(stdoutJson: unknown): void {
   mockExecFile.mockImplementationOnce(
@@ -256,5 +257,38 @@ describe('brief mode vs include_credentials (review MAJOR 2)', () => {
     expect(r.slot_url).toBe('https://slot-2.gamernight.net');
     expect(r.admin_email).toBe('admin@local');
     expect('log_tail' in r, 'it is still a brief read').toBe(false);
+  });
+});
+
+describe('exit_reason names the watchdog on exit 143 (TDB:1452)', () => {
+  function terminal(status: string, code: number): Record<string, unknown> {
+    return { ...taskJson(status), script_exit_code: code };
+  }
+
+  it('a failed run with exit 143 carries the watchdog exit_reason, full and brief', () => {
+    const full = applyStatusProjection(terminal('failed', 143)) as Record<string, unknown>;
+    expect(full.exit_reason, 'a watchdog kill must be named, not left as a bare 143').toBe(
+      WATCHDOG_EXIT_REASON,
+    );
+    expect(full.exit_reason).toMatch(/watchdog.*143.*raise timeout_seconds/);
+    const brief = applyStatusProjection(terminal('failed', 143), true) as Record<string, unknown>;
+    expect(brief.exit_reason, 'brief mode must keep exit_reason').toBe(WATCHDOG_EXIT_REASON);
+  });
+
+  it('a cancelled run with exit 143 is NOT blamed on the watchdog (task-cancel also SIGTERMs)', () => {
+    const r = applyStatusProjection(terminal('cancelled', 143)) as Record<string, unknown>;
+    expect('exit_reason' in r).toBe(false);
+  });
+
+  it.each([[0], [1], [137]])('exit %i carries no exit_reason', (code) => {
+    const r = applyStatusProjection(terminal('failed', code)) as Record<string, unknown>;
+    expect('exit_reason' in r).toBe(false);
+  });
+
+  it('executeStatus surfaces exit_reason on a terminal watchdog-killed task', async () => {
+    execFileOk(terminal('failed', 143));
+    const r = (await executeStatus({ task_id: 'abc12345' })) as Record<string, unknown>;
+    expect(r.exit_reason).toBe(WATCHDOG_EXIT_REASON);
+    expect(r.script_exit_code).toBe(143);
   });
 });
