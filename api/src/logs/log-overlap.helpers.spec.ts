@@ -9,6 +9,7 @@ import { gzipSync } from 'node:zlib';
 import type { ExportFile } from './export-budget.helpers';
 import {
   HEAD_BYTES,
+  HEAD_READ_CONCURRENCY,
   dropOverlappingGenerations,
   readHead,
 } from './log-overlap.helpers';
@@ -66,16 +67,32 @@ describe('dropOverlappingGenerations drops', () => {
     ]);
   });
 
-  it('names the NEAREST newer generation when several match', async () => {
+  it('names a generation that STAYS in the export when several match (a chain)', async () => {
+    // .4 is a prefix of .3, and .3 of .2: .3 is dropped too, so .4 must not
+    // name it — the manifest would point at a file that is not in the archive.
     const files = [
       fixture('api.log.2.gz', logLines(1, 300)),
       fixture('api.log.3.gz', logLines(1, 200)),
       fixture('api.log.4.gz', logLines(1, 100)),
     ];
-    const { duplicates } = await dropOverlappingGenerations(files);
+    const { kept, duplicates } = await dropOverlappingGenerations(files);
+    expect(kept.map((f) => f.filename)).toEqual(['api.log.2.gz']);
     expect(duplicates.map((d) => [d.filename, d.reason])).toEqual([
       ['api.log.3.gz', reason('api.log.2.gz')],
-      ['api.log.4.gz', reason('api.log.3.gz')],
+      ['api.log.4.gz', reason('api.log.2.gz')],
+    ]);
+  });
+
+  it('a .1 that repeats the start of the live file', async () => {
+    // The live file can be the newer match (copytruncate plus a restart).
+    const files = [
+      fixture('api.log', logLines(1, 200)),
+      fixture('api.log.1', logLines(1, 100)),
+    ];
+    const { kept, duplicates } = await dropOverlappingGenerations(files);
+    expect(kept.map((f) => f.filename)).toEqual(['api.log']);
+    expect(duplicates.map((d) => [d.filename, d.reason])).toEqual([
+      ['api.log.1', reason('api.log')],
     ]);
   });
 });
@@ -148,5 +165,34 @@ describe('readHead', () => {
     fs.writeFileSync(corrupt, 'not a gzip stream at all');
     expect(await readHead(corrupt)).toBeNull();
     expect(await readHead(path.join(tmpDir, 'api.log.9.gz'))).toBeNull();
+  });
+});
+
+describe('dropOverlappingGenerations reading heads', () => {
+  const realFs = jest.requireActual<typeof fs>('node:fs');
+  afterEach(() => jest.restoreAllMocks());
+
+  it('keeps at most HEAD_READ_CONCURRENCY files open at once', async () => {
+    const files = Array.from({ length: 3 * HEAD_READ_CONCURRENCY }, (_, i) =>
+      fixture(`api.log.${i + 2}.gz`, logLines(i * 10 + 1, i * 10 + 10)),
+    );
+    let open = 0;
+    let maxOpen = 0;
+    const create = realFs.createReadStream.bind(realFs);
+    jest.spyOn(realFs, 'createReadStream').mockImplementation((...args) => {
+      const stream = create(...args);
+      maxOpen = Math.max(maxOpen, ++open);
+      const destroy = stream.destroy.bind(stream);
+      stream.destroy = (err?: Error) => {
+        if (!stream.destroyed) open--;
+        return destroy(err);
+      };
+      return stream;
+    });
+
+    await dropOverlappingGenerations(files);
+
+    expect(realFs.createReadStream).toHaveBeenCalledTimes(files.length);
+    expect(maxOpen).toBeLessThanOrEqual(HEAD_READ_CONCURRENCY);
   });
 });

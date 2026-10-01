@@ -67,7 +67,32 @@ function sameHead(older: Buffer | null, newer: Buffer | null): boolean {
   return newer.subarray(0, older.length).equals(older);
 }
 
-/** Numbered generations that share their base with at least one other. */
+/** Head reads in flight at once: an export-all can name hundreds of files. */
+export const HEAD_READ_CONCURRENCY = 8;
+
+/** The heads of `files`, read at most {@link HEAD_READ_CONCURRENCY} at a time. */
+async function readHeads(
+  files: ExportFile[],
+): Promise<Map<ExportFile, Buffer | null>> {
+  const heads = new Map<ExportFile, Buffer | null>();
+  let next = 0;
+  const worker = async () => {
+    while (next < files.length) {
+      const file = files[next++];
+      heads.set(file, await readHead(file.filepath));
+    }
+  };
+  const workers = Math.min(HEAD_READ_CONCURRENCY, files.length);
+  await Promise.all(Array.from({ length: workers }, worker));
+  return heads;
+}
+
+/**
+ * Generations that share their base with at least one other, newest first.
+ * The live file is one of them (generation 0), so a `.1` that repeats the
+ * start of the live file is dropped as its duplicate: the one comparison
+ * made against a file logrotate's copytruncate may still be writing to.
+ */
 function siblingGenerations(files: ExportFile[]): ExportFile[] {
   const numbered = files.filter((f) =>
     Number.isFinite(generationOf(f.filename)),
@@ -77,21 +102,23 @@ function siblingGenerations(files: ExportFile[]): ExportFile[] {
     const base = baseOf(f.filename);
     counts.set(base, (counts.get(base) ?? 0) + 1);
   }
-  return numbered.filter((f) => (counts.get(baseOf(f.filename)) ?? 0) >= 2);
+  return numbered
+    .filter((f) => (counts.get(baseOf(f.filename)) ?? 0) >= 2)
+    .sort((a, b) => generationOf(a.filename) - generationOf(b.filename));
 }
 
 /**
- * The nearest STRICTLY newer generation of `older`'s base that is at least
- * as big and starts with the same bytes. Equal generations (`api.log.1` and
- * `api.log.1.gz`) never match each other.
+ * The nearest STRICTLY newer generation of `older`'s base in `pool` that is
+ * at least as big and starts with the same bytes. Equal generations
+ * (`api.log.1` and `api.log.1.gz`) never match each other.
  */
 function newerOverlap(
   older: ExportFile,
-  candidates: ExportFile[],
+  pool: ExportFile[],
   heads: Map<ExportFile, Buffer | null>,
 ): ExportFile | undefined {
   const gen = generationOf(older.filename);
-  const matches = candidates.filter(
+  const matches = pool.filter(
     (n) =>
       baseOf(n.filename) === baseOf(older.filename) &&
       generationOf(n.filename) < gen &&
@@ -109,18 +136,26 @@ function newerOverlap(
  * so its lines are not exported twice. Only the first {@link HEAD_BYTES} of
  * files that have a sibling generation are read. The live file is never a
  * duplicate: nothing is newer than it.
+ *
+ * Generations are walked newest first and compared only with the ones kept
+ * so far, so every reason names a file that IS in the export. A match is
+ * transitive (a byte-prefix of a byte-prefix, never smaller), so this drops
+ * exactly the files that match any newer generation.
  */
 export async function dropOverlappingGenerations(
   files: ExportFile[],
 ): Promise<{ kept: ExportFile[]; duplicates: SkippedFile[] }> {
   const candidates = siblingGenerations(files);
-  const read = await Promise.all(candidates.map((f) => readHead(f.filepath)));
-  const heads = new Map(candidates.map((f, i) => [f, read[i]] as const));
+  const heads = await readHeads(candidates);
+  const keptSoFar: ExportFile[] = [];
   const dropped = new Set<ExportFile>();
   const duplicates: SkippedFile[] = [];
   for (const older of candidates) {
-    const newer = newerOverlap(older, candidates, heads);
-    if (!newer) continue;
+    const newer = newerOverlap(older, keptSoFar, heads);
+    if (!newer) {
+      keptSoFar.push(older);
+      continue;
+    }
     dropped.add(older);
     duplicates.push({
       filename: older.filename,
