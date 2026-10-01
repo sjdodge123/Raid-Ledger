@@ -845,19 +845,22 @@ export function validateWorktreePath(candidate: string): string | null {
  *
  * Zod's `.refine` error path: we attach the error to the field itself so the
  * MCP error response says exactly which input was rejected.
+ *
+ * TDB:698: this uses zod 4's `{ error: (iss) => ... }` form, reading the
+ * rejected value from `iss.input`. The zod-3 form — a FUNCTION as refine's
+ * second argument — is silently ignored by zod 4 (normalizeParams spreads it
+ * to `{}`), which then reports a bare "Invalid input" and drops the per-value
+ * reason validateWorktreePath computed.
  */
 export const worktreePathSchema = z
   .string()
   .optional()
-  .refine(
-    (val) => val === undefined || validateWorktreePath(val) === null,
-    (val) => ({
-      message:
-        val === undefined
-          ? 'worktree_path is invalid'
-          : (validateWorktreePath(val) ?? 'worktree_path is invalid'),
-    }),
-  );
+  .refine((val) => val === undefined || validateWorktreePath(val) === null, {
+    error: (iss) =>
+      typeof iss.input === 'string'
+        ? (validateWorktreePath(iss.input) ?? 'worktree_path is invalid')
+        : 'worktree_path is invalid',
+  });
 
 function extractBalanced(s: string, openIdx: number): string | null {
   const opener = s[openIdx];

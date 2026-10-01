@@ -100,6 +100,14 @@ function stepSummary(steps: unknown): string {
     .join(',');
 }
 
+/** The terminal verdict line; names the exit_reason (TDB:1452) when the status carries one. */
+function terminalLine(runtime: string, taskId: string, latest: Record<string, unknown>): string {
+  const sentinel = (latest.playwright_sentinel as string | null) || 'none';
+  const reason = typeof latest.exit_reason === 'string' ? ` — ${latest.exit_reason}` : '';
+  const table = stepSummary(latest.steps);
+  return `${verdict(runtime)} ${taskId} — ${table} — sentinel=${sentinel}${reason}`;
+}
+
 /** succeeded -> PASS, cancelled -> CANCELLED, anything else terminal -> FAIL. */
 function verdict(status: string): 'PASS' | 'FAIL' | 'CANCELLED' {
   if (status === 'succeeded') return 'PASS';
@@ -188,10 +196,7 @@ export async function runTaskWait(argv: string[], deps: TaskWaitDeps = {}): Prom
       log(`${stamp(now())} ${args.taskId} ${runtime} ${step}`);
     }
     if (!NON_TERMINAL.has(runtime)) {
-      const sentinel = (latest.playwright_sentinel as string | null) || 'none';
-      log(
-        `${verdict(runtime)} ${args.taskId} — ${stepSummary(latest.steps)} — sentinel=${sentinel}`,
-      );
+      log(terminalLine(runtime, args.taskId, latest));
       return verdict(runtime) === 'PASS' ? 0 : 1;
     }
     if (waitedS >= args.timeoutS) break;
