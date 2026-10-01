@@ -6,9 +6,10 @@
  * the normal LineupsService API would reject (e.g. forcing a building
  * lineup with zero nominations into voting).
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { carryOverFromLastDecided } from '../lineups/lineups-carryover.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -73,4 +74,31 @@ export async function setLineupChannelOverrideForTest(
     .update(schema.communityLineups)
     .set({ channelOverrideId, updatedAt: new Date() })
     .where(eq(schema.communityLineups.id, lineupId));
+}
+
+/**
+ * Re-run carryover for `lineupId` from an explicit source lineup.
+ *
+ * `POST /lineups` auto-carries from the newest PUBLIC decided/archived
+ * lineup on the whole instance, so under parallel smoke runs the source can
+ * be another spec's lineup rather than this spec's own. This drops the rows
+ * the auto-carry copied (carried rows only; real nominations stay) and
+ * re-carries from `previousLineupId`. The delete is required: the
+ * `uq_lineup_entry_game` unique key rejects re-inserting a game the
+ * auto-carry already copied.
+ */
+export async function recarryLineupFromForTest(
+  db: Db,
+  lineupId: number,
+  previousLineupId: number,
+): Promise<void> {
+  await db
+    .delete(schema.communityLineupEntries)
+    .where(
+      and(
+        eq(schema.communityLineupEntries.lineupId, lineupId),
+        isNotNull(schema.communityLineupEntries.carriedOverFrom),
+      ),
+    );
+  await carryOverFromLastDecided(db, lineupId, { previousLineupId });
 }

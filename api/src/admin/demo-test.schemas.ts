@@ -218,6 +218,15 @@ export const SeedSingleVoterSchema = z.object({
   userId: z.number().int().positive(),
 });
 
+/**
+ * Body for `/admin/test/lineup/carryover-from`: re-carry `lineupId` from an
+ * explicit source lineup instead of the newest one on the instance.
+ */
+export const RecarryLineupFromSchema = z.object({
+  lineupId: z.number().int().positive(),
+  previousLineupId: z.number().int().positive(),
+});
+
 /** Body for `/admin/test/lineup/set-private` (ROK-1069). */
 export const SetLineupPrivateSchema = z.object({
   lineupId: z.number().int().positive(),
