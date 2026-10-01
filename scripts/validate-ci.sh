@@ -1232,13 +1232,11 @@ run_migration_validation() {
   # TDB:1150: each snapshot's prevId must be the previous snapshot's id —
   # drizzle-kit never checks the link, only prevId collisions.
   node "$REPO_ROOT/scripts/check-migration-snapshot-chain.mjs" || return 1
-  # ROK-1343: Mutagen sync on the rl-infra fleet runner strips POSIX exec
-  # bits even though git stores `scripts/validate-migrations.sh` as 100755.
-  # GitHub CI honors the git mode; the fleet does not. Re-assert +x defensively
-  # so the step survives both environments. See TECH-DEBT-BACKLOG.md 2026-05-22
-  # for the upstream Mutagen-side fix tracking.
-  chmod +x "$REPO_ROOT/scripts/validate-migrations.sh"
-  "$REPO_ROOT/scripts/validate-migrations.sh"
+  # ROK-1343 / TDB:654: Mutagen strips POSIX exec bits on the fleet runner even
+  # though git stores this file 100755, so run it through bash instead of by
+  # mode. That works in every environment and never chmods the working tree
+  # (same convention as scripts/test/run-all.sh).
+  bash "$REPO_ROOT/scripts/validate-migrations.sh"
 }
 
 run_container_validation() {
