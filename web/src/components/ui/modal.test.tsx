@@ -113,17 +113,19 @@ describe('ARIA semantics (ROK-342) — part 1', () => {
             expect(closeBtn).toBeInTheDocument();
         });
 
-        it('close button shows the shared focus ring on keyboard focus', () => {
-            render(
-                <Modal isOpen={true} onClose={vi.fn()} title="Test">
-                    <p>Content</p>
-                </Modal>,
-            );
-            expect(screen.getByRole('button', { name: 'Close modal' })).toHaveClass(
-                'focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-success/80',
-            );
-        });
+});
 
+describe('Modal close button focus ring', () => {
+    it('shows the shared FOCUS_RING (success/80) on keyboard focus', () => {
+        render(
+            <Modal isOpen={true} onClose={vi.fn()} title="Test">
+                <p>Content</p>
+            </Modal>,
+        );
+        expect(screen.getByRole('button', { name: 'Close modal' })).toHaveClass(
+            'focus-visible:outline-none', 'focus-visible:ring-2', 'focus-visible:ring-success/80',
+        );
+    });
 });
 
 describe('Modal — part 3', () => {
