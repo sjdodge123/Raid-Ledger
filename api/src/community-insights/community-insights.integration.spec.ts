@@ -147,6 +147,11 @@ describe('Community Insights (ROK-1099)', () => {
       expect(res.status).toBe(200);
       expect(res.body.nodes).toHaveLength(2);
       expect(res.body.edges).toHaveLength(1);
+      // Stored degrees are 3 and 2; each node has one edge in the response.
+      const degrees = (
+        res.body.nodes as Array<{ userId: number; degree: number }>
+      ).map((n) => [n.userId, n.degree]);
+      expect(Object.fromEntries(degrees)).toEqual({ 1: 1, 2: 1 });
     });
 
     it('GET /insights/community/temporal returns the heatmap payload', async () => {
