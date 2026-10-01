@@ -15,6 +15,16 @@ import { LogsService } from './logs.service';
 const SECRET_LINE = 'boot DATABASE_URL=postgresql://u:p@h/db\nhello\n';
 const SCRUBBED_LINE = 'boot DATABASE_URL=[REDACTED]\nhello\n';
 
+/** `n` timestamped log lines (~80 bytes each), the same for every caller. */
+function logLines(n: number): string {
+  let out = '';
+  for (let i = 1; i <= n; i++) {
+    const ts = new Date(Date.UTC(2026, 8, 23, 9, 2, i)).toISOString();
+    out += `${ts} INFO [Http] GET /api/events/${i} 200 - request handled\n`;
+  }
+  return out;
+}
+
 async function collect(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
   for await (const chunk of stream) chunks.push(chunk as Buffer);
@@ -130,6 +140,41 @@ function describeGzExport() {
 
 function describeHistoryCap() {
   const ctx = useExportService();
+
+  it('leaves out an older generation that repeats the start of a newer one (overlapping rotation)', async () => {
+    const write = (name: string, body: Buffer | string) =>
+      fs.writeFileSync(path.join(ctx.tmpDir, name), body);
+    const older = logLines(100); // a byte-prefix of the newer generation
+    write('api.log', 'gen-0 live line\n');
+    write('api.log.3.gz', gzipSync(logLines(200)));
+    write('api.log.4.gz', gzipSync(older));
+
+    const tar = gunzipSync(
+      await collect(
+        ctx.service.createExportStream([
+          'api.log',
+          'api.log.3.gz',
+          'api.log.4.gz',
+        ]),
+      ),
+    );
+
+    const entries = untar(tar);
+    expect(entries.map(([name]) => name)).toEqual([
+      'api.log',
+      'api.log.3.decompressed',
+      'MANIFEST.txt',
+    ]);
+    const lines = entries
+      .filter(([name]) => name !== 'MANIFEST.txt')
+      .flatMap(([, text]) => text.split('\n'))
+      .filter((line) => line !== '');
+    expect(lines.filter((line, i) => lines.indexOf(line) !== i)).toEqual([]);
+    expect(new Set(lines).size).toBe(lines.length);
+    expect(entries[2][1]).toContain(
+      `api.log.4.gz\t${Buffer.byteLength(older)} bytes\tskipped: duplicate of api.log.3.gz`,
+    );
+  });
 
   it('export-all keeps live + .1, adds older generations newest-first under the cap, and lists the rest in MANIFEST.txt', async () => {
     const write = (name: string, body: Buffer | string) =>
