@@ -2,6 +2,7 @@
  * High-level instance API orchestration helpers for BlizzardService.
  * Composes the lower-level helpers in blizzard-instance.helpers.ts.
  */
+import { NotFoundException } from '@nestjs/common';
 import type { WowGameVariant } from '@raid-ledger/contract';
 import type {
   InstanceListCacheData,
@@ -50,6 +51,8 @@ export async function fetchInstanceDetailFromApi(
   const res = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (res.status === 404)
+    throw new NotFoundException(`Instance ${instanceId} not found`);
   if (!res.ok)
     throw blizzardUpstreamError(
       res.status,

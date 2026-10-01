@@ -5,6 +5,7 @@ import {
   Query,
   UseGuards,
   BadRequestException,
+  HttpException,
   InternalServerErrorException,
   Logger,
   ParseIntPipe,
@@ -122,6 +123,8 @@ export class BlizzardController {
       return { data: type === 'dungeon' ? dungeons : raids };
     } catch (err) {
       this.logger.error(`Failed to fetch instances: ${err}`);
+      // An upstream 403/5xx is already a mapped 502 — keep its status.
+      if (err instanceof HttpException) throw err;
       throw new InternalServerErrorException(
         `Failed to fetch instances: ${err instanceof Error ? err.message : String(err)}`,
       );
