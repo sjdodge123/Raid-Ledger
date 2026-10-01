@@ -922,9 +922,9 @@ three places, all fixed together in ROK-1565: the sentinel's summary parser
 
 | Field | Meaning |
 |-------|---------|
-| `gate_verified` | The pre-push gate was satisfied for the synced worktree, and the sentinel was written. |
-| `gate_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
-| `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed), or `null` when nothing was written. |
+| `gate_verified` | The pre-push gate was satisfied for the synced worktree: the surface-keyed sentinel was written, or the run is `nosurface` (no file needed — the hook allows it outright). |
+| `gate_sentinel` | Path of the surface-keyed sentinel; `null` for a `nosurface` run (nothing is written) and whenever `gate_verified` is false. |
+| `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed) — set for a `nosurface` pass too — or `null` whenever `gate_verified` is false. |
 | `playwright_verified` | Legacy alias of `gate_verified`, kept for older callers. |
 | `playwright_sentinel` | Legacy alias of `gate_sentinel`. |
 | `surface_hash` | The surface the run verified. `nosurface` = the branch changes nothing Playwright exercises, so the push hook allows it outright. |
@@ -932,10 +932,9 @@ three places, all fixed together in ROK-1565: the sentinel's summary parser
 
 Why the surface and not HEAD: a docs-only or test-only follow-up commit, and
 GitHub's identical-tree "merge main" rewrite of a remote branch, both used to
-invalidate a green gate without changing a byte Playwright runs. The sha-named
-file is ALSO written for one cycle so in-flight branches gated under the old
-hook are not stranded — drop that dual write once no open branch predates
-ROK-1566.
+invalidate a green gate without changing a byte Playwright runs. The surface
+hash is the ONLY key: TDB:1416 retired the one-cycle sha-named dual write and
+the hook's sha fallback, so a sha-named file no longer satisfies the gate.
 
 #### One claim per worktree — `rl_claim` is idempotent on agent identity
 

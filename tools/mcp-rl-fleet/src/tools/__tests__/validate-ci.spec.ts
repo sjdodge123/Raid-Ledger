@@ -310,3 +310,62 @@ describe('rl_release returns cancelled_tasks: string[]', () => {
     expect(result.cancelled_tasks).toEqual([]);
   });
 });
+
+describe('TDB:1452 — the dispatched watchdog budget defaults by run shape', () => {
+  function dispatchedTimeoutFlag(): string | undefined {
+    const sshCall = mockExecFile.mock.calls.find((call: unknown[]) => {
+      const a = call[1] as string[];
+      return Array.isArray(a) && a.some((s) => typeof s === 'string' && s.includes('task-start'));
+    });
+    const argvStr = JSON.stringify(sshCall?.[1] ?? []);
+    return argvStr.match(/--timeout-seconds \d+/)?.[0];
+  }
+
+  beforeEach(() => {
+    execFileAlwaysOk((_cmd: string, args: string[]) => {
+      if (args.join(' ').includes('rl status')) {
+        return { slots: [{ slot: 1, claimed_by: 'this-agent' }] };
+      }
+      return { ok: true, task_id: 'tdb14520', started_at: '2026-10-01T12:00:00.000Z' };
+    });
+  });
+
+  it('passes --timeout-seconds 5400 to task-start for an --only-e2e run', async () => {
+    await validateCi.execute({ args: ['--only-e2e'], wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 5400');
+  });
+
+  it('keeps --timeout-seconds 1800 for a --static run', async () => {
+    await validateCi.execute({ args: ['--static'], wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 1800');
+  });
+
+  // The headline TDB:1452 path: the BOOLEAN fleet param only becomes --fleet
+  // inside resolveArgs, so this goes red if the helper is fed params.args.
+  it('passes --timeout-seconds 5400 for a fleet:true dispatch (no raw args)', async () => {
+    await validateCi.execute({
+      fleet: true,
+      base_url: 'https://slot-1.gamernight.net',
+      admin_password: 'tdb1452-test-pw',
+      wait: false,
+    });
+    expect(dispatchedTimeoutFlag(), 'fleet:true must reach task-start as a long gate').toBe(
+      '--timeout-seconds 5400',
+    );
+  });
+
+  it('passes --timeout-seconds 5400 for a bare run (the script default is the full pipeline)', async () => {
+    await validateCi.execute({ wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 5400');
+  });
+
+  it('keeps --timeout-seconds 1800 when only_unit narrows the run', async () => {
+    await validateCi.execute({ only_unit: true, wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 1800');
+  });
+
+  it('honours an explicit timeout_seconds over the e2e default', async () => {
+    await validateCi.execute({ args: ['--with-e2e'], timeout_seconds: 900, wait: false });
+    expect(dispatchedTimeoutFlag()).toBe('--timeout-seconds 900');
+  });
+});

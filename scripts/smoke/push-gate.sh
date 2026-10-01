@@ -10,8 +10,8 @@
 set -uo pipefail
 
 esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
-# `matched` names WHICH key satisfied the gate: surface (the ROK-1566 key),
-# sha (the legacy one-cycle fallback), or nosurface (nothing to verify).
+# `matched` names WHICH key satisfied the gate: surface (the ROK-1566 key) or
+# nosurface (nothing to verify). TDB:1416 retired the legacy `sha` fallback.
 allow() {
   printf '{"continue":true,"matched":"%s"}\n' "$1"
   exit 0
@@ -35,11 +35,5 @@ DIR="${RL_PLAYWRIGHT_SENTINEL_DIR:-/tmp}"
 fresh() { [ -f "$1" ] && [ -n "$(find "$1" -mmin -1440 2>/dev/null)" ]; }
 
 fresh "$DIR/.playwright-verified-$H" && allow surface
-# One-cycle legacy fallback, paired with the writer's dual write: a PASS earned
-# under the sha-keyed hook (or by the old local `touch`) still counts, so
-# in-flight branches are not blocked. Remove both together — see
-# TECH-DEBT-BACKLOG.md (ROK-1566).
-SHA=$(git rev-parse --short HEAD 2>/dev/null || true)
-[ -n "$SHA" ] && fresh "$DIR/.playwright-verified-$SHA" && allow sha
 
 deny "Smoke tests not verified for web surface $H (checked in $(pwd)). Run Playwright on the fleet (rl_validate_ci --only-e2e / --full - the MCP server writes the sentinel on a PASS), or locally via /push, which after a local PASS touches "'/tmp/.playwright-verified-$(bash scripts/smoke/surface-hash.sh)'" (the body may be empty)."

@@ -25,6 +25,7 @@ import {
   pollForEmbed,
   waitForEmbedUpdate,
   pollForCondition,
+  snapshotMessageIds,
 } from "../../helpers/polling.js";
 import {
   createEvent,
@@ -34,15 +35,15 @@ import {
   flushEmbedQueue,
   channelForTest,
   channelForGame,
-  enableScheduledEvents,
-  disableScheduledEvents,
 } from "../fixtures.js";
+import {
+  acquireScheduledEvents,
+  releaseScheduledEvents,
+  releaseScheduledEventsAndRethrow,
+} from "../scheduled-events-toggle.js";
 import type { SmokeTest, TestContext } from "../types.js";
 import type { ApiClient } from "../api.js";
-import {
-  readLastMessages,
-  type SimpleMessage,
-} from "../../helpers/messages.js";
+import type { SimpleMessage } from "../../helpers/messages.js";
 
 /** ROK-1459 palette: `announcing` — the colour an OPEN poll must render. */
 const ANNOUNCEMENT_CYAN = 0x38bdf8;
@@ -166,21 +167,16 @@ function waitForLockedInPollCard(
   );
 }
 
-/** Message ids already in a channel, snapshotted before a poll is opened. */
-async function snapshotMessageIds(channelId: string): Promise<Set<string>> {
-  return new Set(
-    (await readLastMessages(channelId, GHOST_SNAPSHOT_COUNT)).map((m) => m.id),
-  );
-}
-
 const pollStartSuppressesEvent: SmokeTest = {
   name: "ROK-1370: poll start flips embed to RESCHEDULING and tears down the Scheduled Event",
   category: "flow",
   async run(ctx) {
-    await enableScheduledEvents(ctx.api);
     const ch = channelForTest(ctx, 0);
     const gameId = ch.gameId ?? (await resolveGameId(ctx));
-    const ev = await createEvent(ctx.api, "resched-start", { gameId });
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, "resched-start", { gameId }).catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await pollForEmbed(
         ch.channelId,
@@ -210,7 +206,7 @@ const pollStartSuppressesEvent: SmokeTest = {
         { intervalMs: 2000 },
       );
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -220,10 +216,12 @@ const lockInRestoresEventRepeatably: SmokeTest = {
   name: "ROK-1370: lock-in restores the live embed + Scheduled Event, repeatably",
   category: "flow",
   async run(ctx) {
-    await enableScheduledEvents(ctx.api);
     const ch = channelForTest(ctx, 1);
     const gameId = ch.gameId ?? (await resolveGameId(ctx));
-    const ev = await createEvent(ctx.api, "resched-cycle", { gameId });
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, "resched-cycle", { gameId }).catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await pollForEmbed(
         ch.channelId,
@@ -273,7 +271,7 @@ const lockInRestoresEventRepeatably: SmokeTest = {
         );
       }
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -284,13 +282,6 @@ const lockInRestoresEventRepeatably: SmokeTest = {
  * author line, is coloured `announcing` while open, and offers a masked
  * `Vote now ↗` link instead of the old "Vote Now" BUTTON.
  */
-/**
- * How far back to snapshot the channel when fencing off prior-run ghost
- * cards. Discord caps a fetch at 100; the shared channel accrues a handful
- * of cards per run, so this covers many runs.
- */
-const GHOST_SNAPSHOT_COUNT = 100;
-
 const pollEmbedUsesLinkNotButton: SmokeTest = {
   name: "ROK-1461: scheduling poll embed has no components and a Vote now link",
   category: "embed",
@@ -305,9 +296,7 @@ const pollEmbedUsesLinkNotButton: SmokeTest = {
     // went red on main three runs straight. Snapshot every message id already
     // in the channel BEFORE creating the poll and accept only a card that is
     // not in that set — no clock, no skew window (Codex P2 on the first cut).
-    const ghostIds = new Set(
-      (await readLastMessages(channelId, GHOST_SNAPSHOT_COUNT)).map((m) => m.id),
-    );
+    const ghostIds = await snapshotMessageIds(channelId);
     const poll = await ctx.api.post<CreatePollResponse>("/scheduling-polls", {
       gameId,
       durationHours: 24,

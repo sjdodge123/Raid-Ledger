@@ -54,16 +54,22 @@ function botConnectedTests() {
 }
 
 function botDisconnectedTests() {
-  it('should clear boundHandler to null', () => {
+  it('detaches the interactionCreate handler from the client on disconnect', () => {
     const mockOn = jest.fn();
-    const fakeClient = { on: mockOn, removeListener: jest.fn() };
+    const mockRemoveListener = jest.fn();
+    const fakeClient = { on: mockOn, removeListener: mockRemoveListener };
     mocks.mockClientService.getClient.mockReturnValue(fakeClient);
 
     mocks.listener.onBotConnected();
-    expect(mocks.listener.boundHandler).not.toBeNull();
+    expect(mocks.listener.binding.attachedCount).toBe(1);
+    expect(mockRemoveListener).not.toHaveBeenCalled();
 
     mocks.listener.onBotDisconnected();
-    expect(mocks.listener.boundHandler).toBeNull();
+    expect(mocks.listener.binding.attachedCount).toBe(0);
+    expect(mockRemoveListener).toHaveBeenCalledWith(
+      'interactionCreate',
+      mockOn.mock.calls[0][1],
+    );
   });
 
   it('should not call removeListener on reconnect after disconnect (no stale reference)', () => {
@@ -81,6 +87,10 @@ function botDisconnectedTests() {
     mocks.mockClientService.getClient.mockReturnValue(fakeClient2);
     mocks.listener.onBotConnected();
     expect(mockRemove2).not.toHaveBeenCalled();
+    expect(mockRemove1).toHaveBeenCalledWith(
+      'interactionCreate',
+      mockOn1.mock.calls[0][1],
+    );
   });
 
   it('should properly re-register handler on new client after disconnect', () => {
@@ -104,7 +114,7 @@ function botDisconnectedTests() {
       'interactionCreate',
       expect.any(Function),
     );
-    expect(mocks.listener.boundHandler).not.toBeNull();
+    expect(mocks.listener.binding.attachedCount).toBe(1);
   });
 }
 

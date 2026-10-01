@@ -21,11 +21,14 @@ import {
   createEvent,
   deleteEvent,
   awaitProcessing,
-  enableScheduledEvents,
-  disableScheduledEvents,
   triggerReconciliation,
   recoverOrphanScheduledEvents,
 } from "../fixtures.js";
+import {
+  acquireScheduledEvents,
+  releaseScheduledEvents,
+  releaseScheduledEventsAndRethrow,
+} from "../scheduled-events-toggle.js";
 import type { SmokeTest, TestContext } from "../types.js";
 
 /** Count guild SEs whose name matches `title` exactly (HTTP fetch, not cache). */
@@ -74,8 +77,10 @@ const reconciliationIsIdempotent: SmokeTest = {
   name: "ROK-1347: reconciliation creates exactly one SE even when run twice",
   category: "flow",
   async run(ctx: TestContext) {
-    await enableScheduledEvents(ctx.api);
-    const ev = await createEvent(ctx.api, "se-idem");
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, "se-idem").catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     try {
       await awaitProcessing(ctx.api);
       // Wait for the initial SE to appear. 2× the default timeout: SE creation
@@ -103,7 +108,7 @@ const reconciliationIsIdempotent: SmokeTest = {
         );
       }
     } finally {
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },
@@ -113,8 +118,10 @@ const recoveryDeletesDuplicateKeepsBound: SmokeTest = {
   name: "ROK-1347: recovery deletes a duplicate SE, leaves the bound copy",
   category: "flow",
   async run(ctx: TestContext) {
-    await enableScheduledEvents(ctx.api);
-    const ev = await createEvent(ctx.api, "se-recover");
+    await acquireScheduledEvents(ctx.api);
+    const ev = await createEvent(ctx.api, "se-recover").catch(
+      releaseScheduledEventsAndRethrow(ctx.api),
+    );
     let dupId: string | null = null;
     try {
       await awaitProcessing(ctx.api);
@@ -181,7 +188,7 @@ const recoveryDeletesDuplicateKeepsBound: SmokeTest = {
           .scheduledEvents.delete(dupId)
           .catch(() => null);
       }
-      await disableScheduledEvents(ctx.api);
+      await releaseScheduledEvents(ctx.api);
       await deleteEvent(ctx.api, ev.id);
     }
   },

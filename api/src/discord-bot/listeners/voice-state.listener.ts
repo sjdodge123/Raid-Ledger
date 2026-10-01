@@ -6,7 +6,6 @@ import {
   Optional,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import * as Sentry from '@sentry/nestjs';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   Events,
@@ -16,7 +15,6 @@ import {
 } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { reportBindingHealthWarnings } from '../services/channel-bindings-heal.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
@@ -46,7 +44,14 @@ import {
   handleChannelJoin,
   type JoinHandlerCtx,
 } from './voice-state-join-dispatch.handlers';
-import { recoverFromVoiceChannels } from './voice-state-recovery.handlers';
+import {
+  connectRecoverySteps,
+  onceOnSuccess,
+  reportBindingHealth,
+  runConnectRecoverySteps,
+  startBindingCacheSweep,
+  stopBindingCacheSweep,
+} from './voice-state-connect.helpers';
 import {
   handleChannelLeave,
   type TimerMaps,
@@ -73,6 +78,15 @@ export class VoiceStateListener implements OnApplicationShutdown {
   >();
   private pendingRechecks = new Map<string, NodeJS.Timeout>();
   private pendingSpawnTimers = new Map<string, NodeJS.Timeout>();
+  // TDB:175: once per process — retried on each READY until a report succeeds.
+  private readonly reportBindingHealthOnce = onceOnSuccess(() =>
+    reportBindingHealth({
+      db: this.db,
+      clientService: this.clientService,
+      channelBindingsService: this.channelBindingsService,
+      logger: this.logger,
+    }),
+  );
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -139,45 +153,18 @@ export class VoiceStateListener implements OnApplicationShutdown {
     if (!client) return;
     this.removeListeners(client);
     this.registerListeners(client);
-    await this.voiceAttendanceService.recoverActiveSessions();
-    await this.reportBindingHealth();
-    // ROK-1446 D7/AC8: adopt every open presence row BEFORE recovery re-seats
-    // the room. A join dispatched first would post a second message for a room
-    // whose live message has not been re-adopted yet.
-    // Guarded because THIS story inserted it into an unguarded async chain: a
-    // rejection here would skip `recoverFromVoiceChannels` and `startCacheSweep`
-    // below, turning a presence-layer fault into an ad-hoc-voice outage. The
-    // service's own `finally` already sets `ready`, so a failure here degrades
-    // to "adopted nothing" rather than "never flushes again"; this is the
-    // second layer, not the first (review S-3).
-    try {
-      await this.channelPresence.recover();
-    } catch (error) {
-      this.logger.error(`Presence recovery failed: ${String(error)}`);
-    }
-    await recoverFromVoiceChannels(
-      this.deps,
-      (ch) => this.resolveBinding(ch),
-      (ch, dm, gm) => handleChannelJoin(this.joinCtx, ch, dm, gm),
+    // Each step is guarded on its own (TDB:836); ROK-1446 D7/AC8 ordering —
+    // presence adoption before recoverFromVoiceChannels — lives in the helper.
+    await runConnectRecoverySteps(
+      connectRecoverySteps({
+        deps: this.deps,
+        reportBindingHealth: this.reportBindingHealthOnce,
+        resolveBinding: (ch) => this.resolveBinding(ch),
+        handleJoin: (ch, dm, gm) => handleChannelJoin(this.joinCtx, ch, dm, gm),
+        startCacheSweep: () => this.startCacheSweep(),
+      }),
+      this.logger,
     );
-    this.startCacheSweep();
-  }
-
-  /** ROK-1389: WARN about series voice bindings that resolve to the wrong
-   *  channel (pre-1372 residue shape / rotted recurrence group). Never mutates. */
-  private async reportBindingHealth(): Promise<void> {
-    try {
-      const guildId = this.clientService.getGuildId();
-      if (!this.db || !guildId) return;
-      const bindings = await this.channelBindingsService.getBindings(guildId);
-      await reportBindingHealthWarnings(this.db, bindings, this.logger);
-    } catch (err) {
-      // ROK-1415: inert-binding detection lives in this path now — a swallowed
-      // failure is a detection outage, so it must reach Sentry, not just a
-      // routine-looking warn.
-      Sentry.captureException(err, { tags: { context: 'binding-health' } });
-      this.logger.warn(`[binding-heal] health report failed: ${err}`);
-    }
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
@@ -222,23 +209,11 @@ export class VoiceStateListener implements OnApplicationShutdown {
     clearTimerMap(this.debounceTimers);
     clearTimerMap(this.pendingRechecks);
     clearTimerMap(this.pendingSpawnTimers);
-    if (this.cacheSweepTimer) {
-      clearInterval(this.cacheSweepTimer);
-      this.cacheSweepTimer = null;
-    }
+    this.cacheSweepTimer = stopBindingCacheSweep(this.cacheSweepTimer);
   }
 
   private startCacheSweep(): void {
-    this.cacheSweepTimer = setInterval(
-      () => {
-        const now = Date.now();
-        for (const [key, entry] of this.channelBindingCache) {
-          if (now - entry.cachedAt > 10 * 60 * 1000)
-            this.channelBindingCache.delete(key);
-        }
-      },
-      10 * 60 * 1000,
-    );
+    this.cacheSweepTimer = startBindingCacheSweep(this.channelBindingCache);
   }
 
   private handleVoiceStateUpdate(
