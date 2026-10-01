@@ -55,9 +55,15 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:702-703` |
 | `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:704-705` |
 | `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:713-735` |
+| `bg-amber-500/15` / `bg-amber-500/20` fill (role badge, DemoDataCard badge, LFG "now" chip) | the raw 15% / 20% hue | `amber-100` at 0.6 / 0.7 alpha | `:745-746` |
+| `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:770-771` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:747-759` |
 | `bg-emerald-600` (button fill) | `#059669` | `#059669` — same fill both families | design-system.md §6.10 |
+
+`web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
+`bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`
+and `hover:bg-amber-500/10` are its two listed known gaps.
 
 Only the hues listed at `:713-735` get the tint treatment — `red`, `amber`, `emerald`,
 `green`, `yellow`, `indigo`, `cyan`. A `bg-blue-500/10` or `bg-purple-500/10` surface has
