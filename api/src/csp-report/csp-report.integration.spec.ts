@@ -18,6 +18,30 @@ import type TestAgent from 'supertest/lib/agent';
 import { CspReportController } from './csp-report.controller';
 import { installCspReportBodyParser } from '../main.helpers';
 
+/** ROK-1501: Cloudflare RUM beacon reports, one per supported content type. */
+const CLOUDFLARE_BEACON_BODIES: [string, unknown][] = [
+  [
+    'application/csp-report',
+    {
+      'csp-report': {
+        'document-uri': 'https://raid.gamernight.net/',
+        'blocked-uri':
+          'https://static.cloudflareinsights.com/beacon.min.js/v31edd',
+        'violated-directive': 'script-src-elem',
+      },
+    },
+  ],
+  [
+    'application/reports+json',
+    [
+      {
+        type: 'csp-violation',
+        body: { blockedURL: 'https://cloudflareinsights.com/cdn-cgi/rum' },
+      },
+    ],
+  ],
+];
+
 let app: NestExpressApplication;
 let request: TestAgent<supertest.Test>;
 
@@ -72,4 +96,16 @@ describe('POST /csp-report (ROK-1365)', () => {
 
     expect(res.status).toBe(204);
   });
+
+  it.each(CLOUDFLARE_BEACON_BODIES)(
+    'returns 204 for a Cloudflare RUM beacon report sent as %s (ROK-1501)',
+    async (contentType, body) => {
+      const res = await request
+        .post('/csp-report')
+        .set('Content-Type', contentType)
+        .send(JSON.stringify(body));
+
+      expect(res.status).toBe(204);
+    },
+  );
 });
