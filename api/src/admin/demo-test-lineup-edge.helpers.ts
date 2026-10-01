@@ -86,6 +86,16 @@ export async function setLineupChannelOverrideForTest(
  * re-carries from `previousLineupId`. The delete is required: the
  * `uq_lineup_entry_game` unique key rejects re-inserting a game the
  * auto-carry already copied.
+ *
+ * Only the carried ENTRIES are replaced. Lineup-level state the auto-carry
+ * derived from the first source's roster is not recomputed:
+ * `nomination_cap_peak` keeps whatever the auto-carry ratcheted it to (the
+ * ratchet only rises, so it can sit above what a direct carry from
+ * `previousLineupId` would set), and the early-advance nomination target that
+ * `armNominationTargetOnCreate` armed at create time stays as it was. The pinned
+ * source is also not checked against the auto-carry's PUBLIC + decided/archived
+ * filter (ROK-1065) — the caller picks it. Acceptable for this DEMO_MODE-only
+ * seam: no smoke assertion depends on the cap or the arm.
  */
 export async function recarryLineupFromForTest(
   db: Db,

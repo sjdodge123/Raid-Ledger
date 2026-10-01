@@ -128,8 +128,8 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
 }
 
 /**
- * Create a NEW building lineup of this worker's own and return its id — the
- * `create` callback for `claimBannerOwnership`. Same body as `beforeAll`.
+ * Create a NEW building lineup of this worker's own and return its id. Used by
+ * `beforeAll` and as the `create` callback for `claimBannerOwnership`.
  * Unlike `ensureActiveLineupInBuildingPhase`, it never adopts whatever building
  * lineup the banner shows (possibly a sibling's), so the claim can be won.
  */
@@ -148,6 +148,20 @@ async function createOwnBuildingLineup(): Promise<number> {
     return id;
 }
 
+/**
+ * Return `lineupId` when that lineup is still in the building phase, else
+ * `undefined` — so `claimBannerOwnership` builds a fresh lineup instead of
+ * re-claiming one that has moved on to voting/decided.
+ */
+async function keepIfStillBuilding(
+    token: string,
+    lineupId: number | undefined,
+): Promise<number | undefined> {
+    if (lineupId === undefined) return undefined;
+    const detail = (await apiGet(token, `/lineups/${lineupId}`)) as { status?: string } | null;
+    return detail?.status === 'building' ? lineupId : undefined;
+}
+
 test.beforeAll(async ({}, testInfo) => {
     workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
     lineupTitle = `${workerPrefix}Smoke Lineup`;
@@ -159,18 +173,7 @@ test.beforeAll(async ({}, testInfo) => {
     // ROK-1070: switched bare POST /lineups to createLineupOrRetry so a
     // sibling-worker 409 collision triggers a prefix-scoped reset + retry
     // rather than silently leaking another worker's lineup into our state.
-    const { id } = await createLineupOrRetry(
-        adminToken,
-        {
-            title: lineupTitle,
-            targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-            buildingDurationHours: 720,
-            votingDurationHours: 720,
-            decidedDurationHours: 720,
-        },
-        workerPrefix,
-    );
-    lineupId = id;
+    lineupId = await createOwnBuildingLineup();
     createdLineup = true;
 });
 
@@ -519,8 +522,12 @@ test.describe('Community Lineup responsive layout', () => {
         test.setTimeout(150_000);
         let ownLineupId: number | undefined;
         await expect(async () => {
+            // A sibling can advance our lineup past building between attempts.
+            // Voting/decided lineups still own the banner but render no
+            // Nominate button, so re-claiming the same id would fail every
+            // retry — drop it and claim with a fresh building lineup instead.
             ownLineupId = await claimBannerOwnership(adminToken, createOwnBuildingLineup, {
-                existing: ownLineupId,
+                existing: await keepIfStillBuilding(adminToken, ownLineupId),
                 attempts: 2,
             });
             await gotoGames(page);
@@ -689,12 +696,13 @@ test.describe('Voting phase', () => {
         // retries the whole open; its doc comment explains why.
         test.setTimeout(60_000);
 
-        // Match threshold slider should be present with correct labels
-        const { modal } = await revealStartLineupModalField(page, 'match-threshold');
-
-        // Verify the slider has min/max labels
-        await expect(modal.getByText('More matches')).toBeVisible({ timeout: 3_000 });
-        await expect(modal.getByText('Fewer, larger matches')).toBeVisible({ timeout: 3_000 });
+        // Match threshold slider should be present with correct labels. The
+        // min/max label checks run inside the helper's retried window: they
+        // need "More options" expanded, and a remount collapses it.
+        await revealStartLineupModalField(page, 'match-threshold', async (modal) => {
+            await expect(modal.getByText('More matches')).toBeVisible({ timeout: 3_000 });
+            await expect(modal.getByText('Fewer, larger matches')).toBeVisible({ timeout: 3_000 });
+        });
 
         // Recreate a lineup to restore state for other tests
         const modal2 = page.locator('[role="dialog"]');
