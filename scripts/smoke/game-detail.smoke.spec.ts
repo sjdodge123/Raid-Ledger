@@ -10,19 +10,36 @@ import type { Page } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
 import { isMobile, isPhoneLayout } from './helpers';
 
+const NO_GAMES_REASON = 'GET /games/search returned no games';
+
+/**
+ * Ask the API whether any games exist. A non-2xx answer is a failure, not
+ * a reason to skip: it would otherwise hide a broken search endpoint.
+ */
+async function apiHasGames(): Promise<boolean> {
+    const token = await getAdminToken();
+    const res = (await apiGet(token, '/games/search?q=a')) as { data?: unknown[] } | null;
+    expect(res, 'GET /games/search?q=a must answer 2xx with a body').not.toBeNull();
+    return (res?.data?.length ?? 0) > 0;
+}
+
 /**
  * Navigate to the first game detail page by clicking the first
- * game card link on /games.  Returns false if no game links are
- * visible (e.g. CI with sparse seed data).
+ * game card link on /games.  Returns false ONLY when the API reports no
+ * games (the skip precondition). When games exist, a missing card link
+ * on /games is a hard failure — never a silent skip.
  */
 async function navigateToFirstGame(page: Page, isMobileViewport: boolean): Promise<boolean> {
+    if (!(await apiHasGames())) return false;
+
     await page.goto('/games');
 
-    // Wait for the page to settle — if no game links exist after timeout, bail.
-    const anyGameLink = page.locator('a[href*="/games/"]').first();
-    if (!(await anyGameLink.isVisible({ timeout: 10_000 }).catch(() => false))) {
-        return false;
-    }
+    // Games exist, so /games must render at least one visible card link.
+    const anyGameLink = page.locator('a[href*="/games/"]:visible').first();
+    await expect(
+        anyGameLink,
+        'games exist (API) but no /games/:id card link became visible on /games',
+    ).toBeVisible({ timeout: 15_000 });
 
     if (isMobileViewport) {
         // On mobile the lineup banner covers game cards — scroll past it
@@ -36,13 +53,11 @@ async function navigateToFirstGame(page: Page, isMobileViewport: boolean): Promi
                 return true;
             }
         }
-        return false;
+        throw new Error('games exist (API) but no /games/:id card link became visible on /games');
     }
 
     // Desktop: first visible game link
-    const gameLink = page.locator('a[href*="/games/"]').first();
-    await expect(gameLink).toBeVisible({ timeout: 15_000 });
-    await gameLink.click();
+    await anyGameLink.click();
     await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
     return true;
 }
@@ -57,7 +72,7 @@ test.describe('Game detail — desktop', () => {
     test.beforeEach(async ({ page }, testInfo) => {
         test.skip(isPhoneLayout(testInfo), 'Desktop-only tests');
         hasGames = await navigateToFirstGame(page, false);
-        if (!hasGames) test.skip(true, 'No games seeded — skipping game detail tests');
+        if (!hasGames) test.skip(true, NO_GAMES_REASON);
     });
 
     test('page renders without crashing', async ({ page }) => {
@@ -142,7 +157,7 @@ test.describe('Game detail — mobile', () => {
     test.beforeEach(async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'Mobile-only tests');
         hasGames = await navigateToFirstGame(page, true);
-        if (!hasGames) test.skip(true, 'No games seeded — skipping game detail tests');
+        if (!hasGames) test.skip(true, NO_GAMES_REASON);
     });
 
     test('page renders without crashing', async ({ page }) => {
