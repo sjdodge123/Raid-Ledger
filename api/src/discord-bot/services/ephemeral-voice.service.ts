@@ -140,20 +140,8 @@ export class EphemeralVoiceService {
     if (!guild) return false;
     let deleted = false;
     try {
-      if (
-        !opts?.force &&
-        (await getChannelMemberCountFresh(guild, channelId)) > 0
-      ) {
-        this.logger.debug(
-          `Skip reap: ephemeral channel ${channelId} (event ${ev.id}) occupied`,
-        );
+      if (!(await this.readyToDestroy(guild, ev.id, channelId, opts?.force)))
         return false;
-      }
-      await this.voiceAttendance
-        ?.flushToDb()
-        .catch((e) =>
-          this.logger.warn(`Voice flush before reap failed: ${String(e)}`),
-        );
       deleted = await deleteVoiceChannel(guild, channelId);
       await clearEphemeralChannelId(this.db, ev.id);
       await this.repointAndResync(ev, await buildRepointData(this.db, ev));
@@ -164,6 +152,31 @@ export class EphemeralVoiceService {
       this.captureError('destroy', ev.id, err);
     }
     return deleted;
+  }
+
+  /**
+   * False when the channel is occupied and `force` is off — the reaper/idle
+   * path never deletes an occupied channel. Otherwise flushes attendance so
+   * the delete doesn't drop open voice sessions, and returns true.
+   */
+  private async readyToDestroy(
+    guild: Guild,
+    eventId: number,
+    channelId: string,
+    force?: boolean,
+  ): Promise<boolean> {
+    if (!force && (await getChannelMemberCountFresh(guild, channelId)) > 0) {
+      this.logger.debug(
+        `Skip reap: ephemeral channel ${channelId} (event ${eventId}) occupied`,
+      );
+      return false;
+    }
+    await this.voiceAttendance
+      ?.flushToDb()
+      .catch((e) =>
+        this.logger.warn(`Voice flush before reap failed: ${String(e)}`),
+      );
+    return true;
   }
 
   /**
