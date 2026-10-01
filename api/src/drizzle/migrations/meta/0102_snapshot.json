@@ -1,6 +1,6 @@
 {
   "id": "0102_lineup_phase_scheduling",
-  "prevId": "0101_regular_adam_destine",
+  "prevId": "b207bece-9db8-4150-8e69-28a2483bdb0b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {

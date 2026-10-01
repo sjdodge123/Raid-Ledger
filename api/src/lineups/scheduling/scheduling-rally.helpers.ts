@@ -202,13 +202,14 @@ export async function findSlotInMatch(
   matchId: number,
   slotId: number,
 ): Promise<LeadingSlot | null> {
-  // `proposed_time` is a zone-less timestamp holding UTC. A raw `execute`
-  // hands it back as a bare string, which `new Date()` reads as LOCAL time —
-  // off by the host's offset, so a passed time looked like a future one.
-  // `to_char` spells the zone out.
+  // `proposed_time` is a `timestamptz` (TDB:1489). A raw `execute` hands it
+  // back as text in the DB SESSION's zone, and a bare zone-less string is read
+  // by `new Date()` as LOCAL time — either way off by an offset, so a passed
+  // time looked like a future one. Converting to UTC wall-clock and spelling
+  // the `Z` out is correct whatever the session TimeZone or the host's `TZ`.
   const rows = (await db.execute(sql`
     SELECT s.id AS "slotId",
-           to_char(s.proposed_time, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+           to_char(s.proposed_time AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
              AS "proposedTime",
            (
              SELECT count(*)::int

@@ -16,6 +16,33 @@ export const ITAD_INFO_CACHE_TTL = 86_400;
 export const ITAD_MAX_RETRIES = 3;
 /** Initial backoff delay on 429 (ms) — doubles each retry */
 export const ITAD_BACKOFF_INITIAL_MS = 500;
+/**
+ * Ceiling on a server-supplied `Retry-After` wait (ms). A 429 pauses every
+ * ITAD caller for this long at most, so a hostile or buggy header cannot
+ * stall the syncs indefinitely.
+ */
+export const ITAD_RETRY_AFTER_MAX_MS = 60_000;
+/**
+ * Default limit on how long an ITAD call waits out a 429 pause (ms). A call
+ * made without `maxPauseWaitMs` gives up (resolves null) rather than wait
+ * longer, so no HTTP request is held open for up to `ITAD_RETRY_AFTER_MAX_MS`
+ * per attempt behind nginx's 120s proxy timeout. A short `Retry-After` still
+ * retries.
+ */
+export const ITAD_DEFAULT_MAX_PAUSE_WAIT_MS = 5_000;
+/**
+ * Fetch options for user-facing ITAD calls (search, detail pricing, Steam-id
+ * lookup): the fail-fast default, spelled out where a user waits on the call.
+ */
+export const ITAD_INTERACTIVE_FETCH = {
+  maxPauseWaitMs: ITAD_DEFAULT_MAX_PAUSE_WAIT_MS,
+} as const;
+/**
+ * Fetch options for background ITAD work that never holds an HTTP request
+ * (crons, BullMQ jobs, fire-and-forget syncs): wait out every 429 pause, each
+ * capped at `ITAD_RETRY_AFTER_MAX_MS`, instead of skipping the game.
+ */
+export const ITAD_BACKGROUND_FETCH = { maxPauseWaitMs: Infinity } as const;
 
 /** Redis cache TTL for price/overview results (3h) */
 export const ITAD_PRICE_CACHE_TTL = 10_800;

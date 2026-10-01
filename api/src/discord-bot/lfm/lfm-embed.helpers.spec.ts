@@ -227,13 +227,23 @@ describe('buildLfmEmbed — description', () => {
   });
 
   it('drops the link entirely when no client URL is configured', () => {
-    const description = buildLfmEmbed(
-      group(),
-      { communityName: 'Deep Rock', clientUrl: null, timezone: 'UTC' },
-      NOW,
-    ).embed.data.description;
+    // The context is the ONLY source: `SettingsService.getClientUrl()` already
+    // folded in the env fallback before the context was built, so a pure
+    // builder that re-read the env would second-guess the settings layer.
+    const previous = process.env.CLIENT_URL;
+    process.env.CLIENT_URL = 'https://env-fallback.example';
+    try {
+      const description = buildLfmEmbed(
+        group(),
+        { communityName: 'Deep Rock', clientUrl: null, timezone: 'UTC' },
+        NOW,
+      ).embed.data.description;
 
-    expect(description).toBe('**Bosco** · **Karl**');
+      expect(description).toBe('**Bosco** · **Karl**');
+    } finally {
+      if (previous === undefined) delete process.env.CLIENT_URL;
+      else process.env.CLIENT_URL = previous;
+    }
   });
 });
 

@@ -5,6 +5,7 @@ import { IGDB_SYNC_QUEUE } from './igdb-sync.constants';
 import { IgdbService } from './igdb.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { Job } from 'bullmq';
+import { ITAD_BACKGROUND_FETCH } from '../itad/itad.constants';
 
 function describeIgdbSyncProcessor() {
   let processor: IgdbSyncProcessor;
@@ -62,7 +63,10 @@ function describeIgdbSyncProcessor() {
     const result = await processor.process(mockJob);
 
     expect(mockUpdateProgress).toHaveBeenCalledWith(0);
-    expect(mockIgdbService.syncAllGames).toHaveBeenCalled();
+    // Background job: ITAD enrichment waits out a 429 pause.
+    expect(mockIgdbService.syncAllGames).toHaveBeenCalledWith(
+      ITAD_BACKGROUND_FETCH,
+    );
     expect(mockUpdateProgress).toHaveBeenCalledWith(100);
     expect(result).toEqual({ refreshed: 10, discovered: 50, backfilled: 0 });
   });
