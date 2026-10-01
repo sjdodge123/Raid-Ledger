@@ -2002,3 +2002,7 @@ same day (#1278, #1279, #1280).
 ### 2026-09-30 — fix/discord-hygiene-0930 (GitHub discord-smoke flake while shipping #1408)
 - **[med]** `tools/test-bot/src/smoke/tests/ephemeral-voice.test.ts:139` (via `tools/test-bot/src/helpers/voice.ts:26` `entersState(connection, Ready, 30_000)`): "Ephemeral voice channel create → occupied-survives → idle destroy (ROK-1352)" failed with `The operation was aborted` (voice join timeout) on runs 36672113120 (feat/rok-1366) and 36673116814 (#1408) within 2.5 min on both runner pools and the same companion bot; the 8 runs before passed, and neither diff touches voice. Environmental Discord voice-connect flake. The `finally` block deletes the event but leaves the Discord channel orphaned (`⏰ smoke-rok1352-ephemeral-…-4`).
   Suggested: delete the created channel in `finally`, and retry the voice join once before failing.
+
+### 2026-10-01 — fix/log-export-1001 (surfaced during review of the overlapping-generation export fix)
+- **[nit]** `api/src/logs/logs.service.export.spec.ts:25` and `api/src/logs/log-overlap.helpers.spec.ts:17`: the `logLines` fixture (timestamped log lines) is copied into both specs with different signatures (`logLines(n)` vs `logLines(from, to)`).
+  Suggested: keep one `logLines(from, to)` in a small shared test helper under `api/src/logs/` and import it from both specs.
