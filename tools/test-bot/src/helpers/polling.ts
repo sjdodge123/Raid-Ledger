@@ -23,6 +23,13 @@ export interface PollOptions extends RenderRuleOptions {
   backoff?: boolean;
   /** Max messages to fetch per poll (default 100). */
   fetchCount?: number;
+  /**
+   * Message ids that must never match — a `snapshotMessageIds` taken BEFORE
+   * the mutation under test. Reads are oldest-first and the first match wins,
+   * so an id/path-only predicate otherwise settles on a prior run's card
+   * carrying the same seeded href (TDB:571 / TDB:1459).
+   */
+  excludeIds?: ReadonlySet<string>;
 }
 
 const DEFAULT_INTERVAL = 2000;
@@ -58,6 +65,46 @@ export async function readOrMiss(
   }
 }
 
+/** The first message that is not excluded and satisfies `predicate`. */
+export function firstFreshMatch(
+  msgs: readonly SimpleMessage[],
+  predicate: (msg: SimpleMessage) => boolean,
+  excludeIds?: ReadonlySet<string>,
+): SimpleMessage | undefined {
+  return msgs.find((m) => !excludeIds?.has(m.id) && predicate(m));
+}
+
+/** Reads a snapshot makes before giving up on truncated Discord responses. */
+const SNAPSHOT_ATTEMPTS = 3;
+
+/**
+ * Ids of a channel's recent messages, for `PollOptions.excludeIds`. Take it
+ * BEFORE the mutation that posts the card under test (Discord caps a fetch
+ * at 100, which covers many runs' leftover cards).
+ *
+ * Unlike a poll tick, a truncated read is NOT counted as an empty result: an
+ * empty fence lets a prior run's card match, which false-passes any probe
+ * that card also satisfies. It is re-read, and after SNAPSHOT_ATTEMPTS
+ * truncated reads the SyntaxError propagates. Any other error propagates at
+ * once.
+ */
+export async function snapshotMessageIds(
+  channelId: string,
+  count = DEFAULT_FETCH_COUNT,
+  read: ChannelReader = readLastMessages,
+): Promise<Set<string>> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return new Set((await read(channelId, count)).map((m) => m.id));
+    } catch (err) {
+      if (!(err instanceof SyntaxError) || attempt >= SNAPSHOT_ATTEMPTS) throw err;
+      console.warn(
+        `  [snapshotMessageIds] channel ${channelId}: unparseable Discord response (${err.message}) — re-reading (attempt ${attempt}/${SNAPSHOT_ATTEMPTS})`,
+      );
+    }
+  }
+}
+
 /**
  * Poll a channel for a message matching a predicate.
  * Uses exponential backoff (2s -> 4s -> 8s cap) by default.
@@ -77,7 +124,7 @@ export async function pollForEmbed(
 
   while (Date.now() < deadline) {
     const msgs = await readOrMiss(channelId, fetchCount, 'pollForEmbed');
-    const match = msgs.find(predicate);
+    const match = firstFreshMatch(msgs, predicate, opts?.excludeIds);
     if (match) return sweepRenderRules(match, opts);
 
     const remaining = deadline - Date.now();
