@@ -3,7 +3,8 @@
 // `.claude/settings.json` has a PreToolUse hook (scripts/smoke/push-gate.sh)
 // that DENIES `git push` when the branch changes the web surface unless
 // `/tmp/.playwright-verified-<surface hash>` exists (ROK-1566; the older
-// `<short sha>` key and its fallback were retired by TDB:1416). Until now only `/push`'s LOCAL Playwright run wrote that file — and
+// `<short sha>` key and its fallback were retired by TDB:1416). Until now only
+// `/push`'s LOCAL Playwright run wrote that file — and
 // the auto-mode classifier refuses to let an agent `touch` it — so agents could
 // not push web branches at all and the operator pushed by hand, skipping the
 // gate entirely.
@@ -24,7 +25,7 @@
 // after its fix and got `playwright_verified: false` every time — including
 // task ee580cf38f66, where Playwright reported 795 passed / 0 failed. Exit code
 // answers "did the whole pipeline succeed"; the gate asks "did Playwright pass
-// for this sha", and only the step answers that.
+// for this web surface", and only the step answers that.
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';

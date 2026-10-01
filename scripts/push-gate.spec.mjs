@@ -86,7 +86,14 @@ test('allows when a fresh sentinel names this web surface', () => {
 test('denies on a fresh sha-named sentinel — the legacy sha key is retired', () => {
   withRepo(true, (dir, sentinels) => {
     writeFileSync(join(sentinels, `.playwright-verified-${shortSha(dir)}`), '');
-    assert.ok(denied(run(dir, sentinels)), 'a sha-named sentinel must not unlock the push');
+    const verdict = run(dir, sentinels);
+    assert.ok(denied(verdict), 'a sha-named sentinel must not unlock the push');
+    // Denied for the RIGHT reason: the surface lookup ran and found no file —
+    // not the unresolvable-surface deny, which would also pass the line above.
+    assert.match(
+      verdict.hookSpecificOutput.permissionDecisionReason,
+      /not verified for web surface/,
+    );
   });
 });
 
