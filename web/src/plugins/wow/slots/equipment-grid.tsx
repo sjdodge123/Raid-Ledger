@@ -30,7 +30,8 @@ function SlotIcon({ item, iconBorderClass }: { item: EquipmentItemDto; iconBorde
     return (
         <>
             {item.iconUrl ? (
-                <img src={item.iconUrl} alt={item.name} className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
+                <img src={item.iconUrl} alt={item.name} width={32} height={32} loading="lazy" decoding="async"
+                    className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
                     onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
             ) : null}
             <div className={`w-8 h-8 rounded bg-faint flex items-center justify-center text-xs text-muted font-mono flex-shrink-0${item.iconUrl ? ' hidden' : ''}`}>
@@ -137,6 +138,15 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }
     );
 }
 
+/**
+ * Box the character render paints at, per layout (ROK-1159). Blizzard's
+ * `main-raw` render is assumed 4:3 (1600x1200), scaled to each layout's
+ * max height, so the box is reserved before the bytes land. The render is the
+ * character page's likely LCP image, so it is never lazy-loaded.
+ */
+const RENDER_BOX_DESKTOP = { width: 800, height: 600 } as const;
+const RENDER_BOX_MOBILE = { width: 400, height: 300 } as const;
+
 /** Desktop and mobile layouts with character render image */
 function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
     renderUrl: string; renderSlotColumn: (slots: string[]) => JSX.Element;
@@ -146,7 +156,7 @@ function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
             <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] gap-4 items-start">
                 {renderSlotColumn(LEFT_SLOTS)}
                 <div className="flex items-center justify-center px-2">
-                    <img src={renderUrl} alt="Character render"
+                    <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
                         className="max-h-[600px] object-contain drop-shadow-lg"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
@@ -155,7 +165,7 @@ function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
             </div>
             <div className="lg:hidden space-y-4">
                 <div className="flex justify-center">
-                    <img src={renderUrl} alt="Character render"
+                    <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
                         className="max-h-[300px] object-contain drop-shadow-lg"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
