@@ -8,6 +8,7 @@ import type {
   WowInstanceDetail,
 } from './blizzard.constants';
 import * as instH from './blizzard-instance.helpers';
+import { blizzardUpstreamError } from './blizzard-upstream-error';
 
 export async function fetchAllInstancesFromApi(
   region: string,
@@ -50,7 +51,11 @@ export async function fetchInstanceDetailFromApi(
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok)
-    throw new Error(`Failed to fetch instance detail (${res.status})`);
+    throw blizzardUpstreamError(
+      res.status,
+      'instances',
+      `Failed to fetch instance detail from Blizzard (${res.status}). Please try again later.`,
+    );
   const data = (await res.json()) as {
     id: number;
     name: string;
