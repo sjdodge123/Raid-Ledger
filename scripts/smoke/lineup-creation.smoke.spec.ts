@@ -427,7 +427,8 @@ test.describe('Operator ⋮ menu — phase transitions', () => {
 
         // The tiling is read from the computed grid, never from pixels: the
         // old bounding-box checks (Custom flush within 2px of the row's right
-        // edge) drifted ~8px on the fleet from font/scrollbar metrics alone.
+        // edge) drifted ~8px on the fleet (font metrics or the modal open
+        // animation; not pinned).
         const row = modal.getByRole('radiogroup', { name: 'Lineup preset' });
         const grid = await row.evaluate((el) => ({
             tracks: getComputedStyle(el).gridTemplateColumns,
@@ -460,14 +461,19 @@ test.describe('Operator ⋮ menu — phase transitions', () => {
         // The preset grid keeps its own (sm/md) breakpoint — ROK-1584 moved only
         // the hero / poll / profile surfaces to 1024px — so the tablet project
         // (810px) sees the desktop 3-2 tiling here, not the phone 2-2-1.
+        // Spans are pinned exactly (start-lineup-presets.tsx PRESET_OPTIONS):
+        // a looser "fills the grid" check also passes when Custom shrinks to
+        // a 1/3- or 1/6-width cell.
         if (isMobile(testInfo)) {
             // 2-col grid: Custom spans both columns on a line of its own.
             expect(cols).toBe(2);
-            expect(spans[4]).toBe(2);
+            expect(spans).toEqual([1, 1, 1, 1, 2]);
             expect(customRow).toBe(seriesRow + 1);
         } else {
-            // 6-col grid: Series and Custom share the final row.
+            // 6-col grid: three 1/3 cells, then Series and Custom share the
+            // final row half-and-half.
             expect(cols).toBe(6);
+            expect(spans).toEqual([2, 2, 2, 3, 3]);
             expect(customRow).toBe(seriesRow);
         }
     });

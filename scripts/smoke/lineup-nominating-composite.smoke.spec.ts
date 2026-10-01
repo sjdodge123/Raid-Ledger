@@ -227,9 +227,18 @@ test.describe('Nominating composite — drawer interactions (ROK-1297)', () => {
             (r) =>
                 r.request().method() === 'POST' &&
                 r.url().includes(`/lineups/${lineupId}/nominate`),
+            { timeout: 10_000 },
         );
         await nominateBtn.click();
-        await nominateResponse;
+        // If the regression returns, the click navigates and the POST never
+        // fires: report the navigation, not a bare response timeout.
+        await nominateResponse.catch((err: unknown) => {
+            expect(
+                page.url(),
+                'Nominate click navigated away instead of POSTing the nomination',
+            ).toBe(beforeUrl);
+            throw err;
+        });
         // onSettled clears the in-flight "Adding…" label on every tile.
         await expect(
             page
