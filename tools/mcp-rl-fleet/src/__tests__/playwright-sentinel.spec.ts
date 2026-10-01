@@ -14,7 +14,14 @@
 // Both the sentinel dir and the task->sha map are injected, so nothing here
 // touches the real /tmp or ~/.raid-ledger.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -30,6 +37,9 @@ import type { ExecuteStatusReturn } from '../tools/task-schemas.js';
 const SYNCED_SHA = '8fd1f515';
 const OTHER_SHA = 'deadbee1';
 const TASK_ID = 'a1b2c3d4e5f6';
+/** A web-surface hash as scripts/smoke/surface-hash.sh prints it. */
+const SURFACE = 'a1b2c3d4e5f6';
+const OTHER_SURFACE = '0f0f0f0f0f0f';
 
 let dir = '';
 let mapPath = '';
@@ -68,7 +78,7 @@ const NOT_VERIFIED = {
 };
 
 /** The annotation a Playwright-tier PASS produces for `file`. */
-function verified(file: string, surfaceHash: string | null) {
+function verified(file: string | null, surfaceHash: string | null) {
   return {
     playwright_verified: true,
     playwright_sentinel: file,
@@ -88,14 +98,19 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+/** Every `.playwright-verified-*` file in the sentinel dir, whatever its key. */
+function sentinelFiles(): string[] {
+  return readdirSync(dir).filter((f) => f.startsWith(SENTINEL_PREFIX));
+}
+
 describe('evaluateSentinel', () => {
   it('writes the sentinel on a succeeded run whose Playwright row PASSed', () => {
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
-    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`), 'nosurface'));
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
+    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SURFACE}`), SURFACE));
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SURFACE}`))).toBe(true);
   });
 
   it('does NOT write it when the Playwright row is SKIPPED', () => {
@@ -109,7 +124,7 @@ describe('evaluateSentinel', () => {
     );
 
     expect(result).toEqual(NOT_VERIFIED);
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+    expect(sentinelFiles()).toEqual([]);
   });
 
   it('does NOT write it when the task failed AND Playwright itself FAILed', () => {
@@ -125,7 +140,7 @@ describe('evaluateSentinel', () => {
     );
 
     expect(result).toEqual(NOT_VERIFIED);
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+    expect(sentinelFiles()).toEqual([]);
   });
 
   it('does NOT write it when the task failed with no Playwright row at all', () => {
@@ -143,7 +158,7 @@ describe('evaluateSentinel', () => {
     );
 
     expect(result).toEqual(NOT_VERIFIED);
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+    expect(sentinelFiles()).toEqual([]);
   });
 
   it('DOES write it when Playwright PASSed and a LATER step failed the task', () => {
@@ -151,7 +166,7 @@ describe('evaluateSentinel', () => {
     // Discord smoke tier (no tools/test-bot/.env on a fresh worktree) drives the
     // whole task to `failed` — after Playwright already passed 795/0 for this
     // sha. The gate asks about Playwright, so this must verify.
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
 
     const result = evaluateSentinel(
       status({
@@ -167,8 +182,8 @@ describe('evaluateSentinel', () => {
       { dir, mapPath },
     );
 
-    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`), 'nosurface'));
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
+    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SURFACE}`), SURFACE));
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SURFACE}`))).toBe(true);
   });
 
   it('does NOT write it for a cancelled or killed run, even on a PASS row', () => {
@@ -183,34 +198,34 @@ describe('evaluateSentinel', () => {
       });
       expect(result).toEqual(NOT_VERIFIED);
     }
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+    expect(sentinelFiles()).toEqual([]);
   });
 
-  it('names the sentinel after the RECORDED synced sha, not a later HEAD', () => {
-    // Dispatch recorded SYNCED_SHA; by observation time another task (and the
-    // worktree) has moved to OTHER_SHA. The sentinel must still be the one the
-    // run actually covered.
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
-    recordTaskSha('ffffffffffff', OTHER_SHA, mapPath, 'nosurface');
+  it('names the sentinel after the surface RECORDED for this task, not a later one', () => {
+    // Dispatch recorded SYNCED_SHA/SURFACE; by observation time another task
+    // (and the worktree) has moved to OTHER_SHA/OTHER_SURFACE. The sentinel
+    // must still be the one the run actually covered.
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
+    recordTaskSha('ffffffffffff', OTHER_SHA, mapPath, OTHER_SURFACE);
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
     expect(lookupTaskSha(TASK_ID, mapPath)).toBe(SYNCED_SHA);
-    expect(result?.playwright_sentinel).toBe(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`));
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${OTHER_SHA}`))).toBe(false);
+    expect(result?.playwright_sentinel).toBe(join(dir, `${SENTINEL_PREFIX}${SURFACE}`));
+    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${OTHER_SURFACE}`))).toBe(false);
   });
 
   it('reports NOT verified when the sentinel write fails (Codex P3)', () => {
     // The hook checks for the file, so a failed write means the push is still
     // denied — claiming verified:true there would mislead the agent. A regular
     // file standing where the directory should be makes mkdir/write throw.
-    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
+    recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
     const blocked = join(dir, 'not-a-dir');
     writeFileSync(blocked, 'i am a file');
 
     const result = evaluateSentinel(status(), { dir: blocked, mapPath });
 
-    expect(result).toEqual({ ...NOT_VERIFIED, surface_hash: 'nosurface' });
+    expect(result).toEqual({ ...NOT_VERIFIED, surface_hash: SURFACE });
   });
 
   it('annotates nothing for a task with no recorded sha, or one still running', () => {
@@ -220,7 +235,7 @@ describe('evaluateSentinel', () => {
     expect(
       evaluateSentinel(status({ mcp_runtime_status: 'running' }), { dir, mapPath }),
     ).toBeNull();
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+    expect(sentinelFiles()).toEqual([]);
   });
 });
 
@@ -255,19 +270,19 @@ describe('playwrightPassed', () => {
 // each invalidated a sha-keyed sentinel: 55 wasted minutes and a forced push.
 // Neither changed a single byte Playwright exercises. The surface hash (see
 // scripts/smoke/surface-hash.sh) is what the run actually verified, so that is
-// what the file is named after. The sha-named file is ALSO still written for
-// one cycle so branches whose gate ran under the old hook are not stranded.
-const SURFACE = 'a1b2c3d4e5f6';
+// what the file is named after. TDB:1416 retired the one-cycle sha-named dual
+// write (and push-gate.sh's matching fallback): the surface name is the only key.
 
 describe('evaluateSentinel — surface-keyed (ROK-1566)', () => {
-  it('writes BOTH the surface-named and the sha-named sentinel', () => {
+  it('writes ONLY the surface-named sentinel — no sha-named fallback (TDB:1416)', () => {
     recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, SURFACE);
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
     expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SURFACE}`), SURFACE));
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SURFACE}`))).toBe(true);
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(true);
+    expect(sentinelFiles(), 'the retired sha-named dual write must not come back').toEqual([
+      `${SENTINEL_PREFIX}${SURFACE}`,
+    ]);
   });
 
   it('writes a one-line JSON body naming the sha, surface and task', () => {
@@ -289,15 +304,16 @@ describe('evaluateSentinel — surface-keyed (ROK-1566)', () => {
     expect(lookupTaskSurfaceHash('nope', mapPath)).toBeNull();
   });
 
-  it('falls back to the sha-named file when the run touched no web surface', () => {
+  it('writes NO file when the run touched no web surface, yet reports the gate satisfied', () => {
     // `nosurface` means the branch cannot break Playwright, so there is nothing
-    // to key on — the hook allows those pushes outright.
+    // to key on — the hook allows those pushes outright (TDB:1416: the old
+    // sha-named fallback file is no longer written).
     recordTaskSha(TASK_ID, SYNCED_SHA, mapPath, 'nosurface');
 
     const result = evaluateSentinel(status(), { dir, mapPath });
 
-    expect(result).toEqual(verified(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`), 'nosurface'));
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}nosurface`))).toBe(false);
+    expect(result).toEqual(verified(null, 'nosurface'));
+    expect(sentinelFiles()).toEqual([]);
   });
 
   it('reports NOT verified when the surface-named write fails', () => {
@@ -325,6 +341,6 @@ describe('evaluateSentinel — unresolved surface (ROK-1566)', () => {
     expect(result?.playwright_sentinel).toBeNull();
     expect(result?.surface_hash).toBeNull();
     expect(result?.surface_error).toMatch(/surface-hash\.sh/);
-    expect(existsSync(join(dir, `${SENTINEL_PREFIX}${SYNCED_SHA}`))).toBe(false);
+    expect(sentinelFiles()).toEqual([]);
   });
 });
