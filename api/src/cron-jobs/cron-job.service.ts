@@ -21,7 +21,6 @@ import * as schema from '../drizzle/schema';
 import {
   CORE_JOB_METADATA,
   FLUSH_INTERVAL_MS,
-  NOOP_LIVENESS_INTERVAL_MS,
   PRUNE_EVERY_N_EXECUTIONS,
 } from './cron-job.constants';
 import {
@@ -29,12 +28,11 @@ import {
   upsertJob,
   pruneExecutions,
   recordSkipped,
-  shouldUpdateLiveness,
   extractRegistryJobMeta,
-  flushPendingUpdates,
   recordSkippedTrigger,
 } from './cron-job.helpers';
 import { selectJobByName } from './cron-job.fk-recovery.helpers';
+import { LastRunBuffer } from './cron-job.last-run-buffer';
 import {
   runHandlerTracked,
   type RecordDeps,
@@ -58,10 +56,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(CronJobService.name);
   private readonly executionCounts = new Map<number, number>();
   private readonly jobCache = new Map<string, CronJobRow>();
-  private readonly pendingLastRunUpdates = new Map<
-    number,
-    { lastRunAt: Date; cronExpression: string }
-  >();
+  private readonly lastRun = new LastRunBuffer();
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   // ROK-1058: deferred sync timers, cancelled in onModuleDestroy.
   private bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
@@ -91,7 +86,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     }, 2_000);
     this.flushInterval = setInterval(() => {
       // Flush-then-refresh in the same tick (ROK-1328): flush first so we
-      // don't race pendingLastRunUpdates, then re-pull the cache so a deleted
+      // don't race the last-run buffer, then re-pull the cache so a deleted
       // or newly-added cron_jobs row can't leave a stale `job.id` wedged in
       // the cache forever (the dead FK → 23503 → Sentry-spam loop).
       this.flushLastRunUpdates()
@@ -240,7 +235,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       db: this.db,
       logger: this.logger,
       reresolve: this.reresolveJob,
-      onNoOp: (job) => this.queueLivenessIfStale(job),
+      onNoOp: (job) => this.lastRun.queueLiveness(job),
     };
   }
 
@@ -257,17 +252,6 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       fn,
     );
     if (didInsertRow) await this.maybePrune(job, jobName);
-  }
-
-  /** Queue a liveness heartbeat if enough time has elapsed since last update. */
-  private queueLivenessIfStale(job: CronJobRow): void {
-    if (!shouldUpdateLiveness(job.lastRunAt, NOOP_LIVENESS_INTERVAL_MS)) return;
-    const now = new Date();
-    this.pendingLastRunUpdates.set(job.id, {
-      lastRunAt: now,
-      cronExpression: job.cronExpression,
-    });
-    job.lastRunAt = now;
   }
 
   /** Prune old executions periodically. */
@@ -367,10 +351,6 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   /** Flush pending last_run_at updates to DB. */
   async flushLastRunUpdates(): Promise<void> {
-    return flushPendingUpdates(
-      this.db,
-      this.pendingLastRunUpdates,
-      this.logger,
-    );
+    return this.lastRun.flush(this.db, this.logger);
   }
 }
