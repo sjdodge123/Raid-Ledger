@@ -212,6 +212,7 @@ invoke() {
             STUB_CURL_ARGV_FILE="$curl_argv_file" \
             STUB_NODE_ARGV_FILE="$node_argv_file" \
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
+            RL_DEPS_RUNNER_ROOT="/nonexistent-runner-root" \
             RL_WORKSPACE_ROOT="$INVOKE_WORKSPACE_ROOT" \
             PLAYWRIGHT_AUTH_DIR="$INVOKE_AUTH_DIR" \
             NODE_OPTIONS="$INVOKE_NODE_OPTIONS" \
@@ -229,6 +230,7 @@ invoke() {
             STUB_CURL_ARGV_FILE="$curl_argv_file" \
             STUB_NODE_ARGV_FILE="$node_argv_file" \
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
+            RL_DEPS_RUNNER_ROOT="/nonexistent-runner-root" \
             bash "$VALIDATE_CI_PATH" "$@" 2>"$err_file"
         ) || INVOKE_RC=$?
     fi

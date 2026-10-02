@@ -8,15 +8,16 @@
 # (Rolldown could not resolve @m-lab/ndt7; TS2307 rollup-plugin-visualizer).
 #
 # Contract asserted here:
-#   runner mode (ROOT == RL_WORKSPACE_ROOT): install when tsc is missing, the
-#     marker is absent, or the marker differs from sha256(package-lock.json);
+#   runner mode (ROOT == RL_DEPS_RUNNER_ROOT): install when tsc is missing,
+#     the marker is absent, or the marker differs from sha256(package-lock.json);
 #     write the marker only after npm really refreshed
-#     node_modules/.package-lock.json; a failed npm ci exits 1 with its log
-#     tail and leaves the marker alone.
+#     node_modules/.package-lock.json, with the sha hashed BEFORE npm ran; a
+#     failed npm ci exits 1 with its log tail and leaves the marker alone.
 #   laptop mode: install only when tsc is missing; never write a marker.
+#     RL_WORKSPACE_ROOT (validate-ci.sh's auth-dir seam) never switches mode.
 #
 # Harness: a stub `npm` first on PATH records argv and behaves per
-# STUB_NPM_MODE (ok | fail | noop). No real install runs, no sleep().
+# STUB_NPM_MODE (ok | fail | noop | rewrite). No real install runs, no sleep().
 
 set -uo pipefail
 
@@ -69,7 +70,7 @@ cat >"$STUB_BIN/npm" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$NPM_CALLS"
 case "${STUB_NPM_MODE:-ok}" in
-  ok)
+  ok|rewrite)
     # Like real `npm ci`: wipe node_modules, then lay down a fresh tree. A
     # real install takes many seconds; a fixed future mtime on the hidden
     # lockfile keeps the helper's `find -newer` check deterministic.
@@ -79,7 +80,11 @@ case "${STUB_NPM_MODE:-ok}" in
     chmod +x node_modules/.bin/tsc
     : >node_modules/.package-lock.json
     touch -t 203001010000 node_modules/.package-lock.json
-    echo "stub-npm-ok" ;;
+    echo "stub-npm-ok"
+    # rewrite: a new package-lock.json lands (Mutagen sync) mid-install.
+    if [ "${STUB_NPM_MODE:-ok}" = rewrite ]; then
+      printf '{"name":"fixture","lockfileVersion":3,"rev":99}\n' >package-lock.json
+    fi ;;
   fail) echo "stub-npm-boom"; exit 1 ;;
   noop) exit 0 ;;
 esac
@@ -108,12 +113,18 @@ seed_install() {
     if [ $# -gt 0 ]; then printf '%s\n' "$1" >"$MARKER"; fi
 }
 
-# run_helper <runner|laptop> <ok|fail|noop>
+# run_helper <runner|laptop|auth-seam> <ok|fail|noop|rewrite>
+#   auth-seam: a laptop run whose RL_WORKSPACE_ROOT (validate-ci.sh's auth-dir
+#   seam) happens to equal ROOT, as validate-ci-fleet-flag.test.sh's AC7 does.
 run_helper() {
-    local ws="$ROOT"
-    [ "$1" = runner ] || ws="$CASE_DIR/not-root"
-    OUT=$(PATH="$STUB_BIN:$PATH" RL_WORKSPACE_ROOT="$ws" RL_NPM_CI_LOCK="$CASE_DIR/lock" \
-        STUB_NPM_MODE="$2" NPM_CALLS="$CASE_DIR/npm.calls" bash "$HELPER" "$ROOT" 2>&1)
+    local runner_root="$CASE_DIR/not-root" ws="$CASE_DIR/not-root"
+    case "$1" in
+        runner) runner_root="$ROOT" ;;
+        auth-seam) ws="$ROOT" ;;
+    esac
+    OUT=$(PATH="$STUB_BIN:$PATH" RL_DEPS_RUNNER_ROOT="$runner_root" RL_WORKSPACE_ROOT="$ws" \
+        RL_NPM_CI_LOCK="$CASE_DIR/lock" STUB_NPM_MODE="$2" NPM_CALLS="$CASE_DIR/npm.calls" \
+        bash "$HELPER" "$ROOT" 2>&1)
     RC=$?
 }
 
@@ -179,6 +190,25 @@ assert_eq 0 "$RC" "exit code"
 assert_eq 1 "$(ci_calls)" "npm ci calls"
 assert_out_matches 'missing tsc' "reason printed"
 assert_absent_file "$MARKER" "laptop marker"
+
+new_case "(h) runner, package-lock.json changes mid-install: marker keeps the pre-install sha"
+seed_install "0000stale"
+pre_sha="$(sha_of "$ROOT/package-lock.json")"
+run_helper runner rewrite
+assert_eq 0 "$RC" "exit code"
+assert_eq 1 "$(ci_calls)" "npm ci calls"
+assert_eq "$pre_sha" "$(marker)" "marker must hold the sha npm installed from, not the one synced in mid-install"
+run_helper runner ok
+assert_eq 2 "$(ci_calls)" "npm ci calls after the next run (the new lockfile must be installed)"
+assert_eq "$(sha_of "$ROOT/package-lock.json")" "$(marker)" "marker after the follow-up install"
+
+new_case "(i) RL_WORKSPACE_ROOT == ROOT alone stays in laptop mode: no install, no marker, no lock"
+seed_install
+run_helper auth-seam ok
+assert_eq 0 "$RC" "exit code"
+assert_eq 0 "$(ci_calls)" "npm ci calls"
+assert_absent_file "$MARKER" "auth-seam marker"
+assert_absent_file "$CASE_DIR/lock" "auth-seam lock"
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"
