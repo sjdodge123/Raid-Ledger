@@ -64,15 +64,18 @@ export async function seedBaseline(
   });
 
   // Create a sample game
-  const [game] = await db
-    .insert(schema.games)
-    .values({
-      name: 'Test Game',
-      slug: 'test-game',
-      coverUrl: null,
-      igdbId: null,
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await db
+      .insert(schema.games)
+      .values({
+        name: 'Test Game',
+        slug: 'test-game',
+        coverUrl: null,
+        igdbId: null,
+      })
+      .returning(),
+    'seeded game',
+  );
 
   return { adminUser, adminPassword, adminEmail, game };
 }

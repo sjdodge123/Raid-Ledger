@@ -11,6 +11,7 @@
  */
 import { readdirSync, readFileSync } from 'fs';
 import * as path from 'path';
+import { defined } from '../common/testing/narrow';
 import {
   CrosswalkContributionBatchSchema,
   CrosswalkContributionResponseSchema,
@@ -103,14 +104,16 @@ describe('relay hub v1 golden fixtures (AC5)', () => {
   });
 
   it.each(Object.keys(FIXTURE_SCHEMAS))('%s parses with its schema', (f) => {
-    expect(parseIssues(FIXTURE_SCHEMAS[f], readFixture(f))).toEqual([]);
+    const schema = defined(FIXTURE_SCHEMAS[f], `schema for ${f}`);
+    expect(parseIssues(schema, readFixture(f))).toEqual([]);
   });
 
   it.each(RESPONSE_FIXTURES)(
     '%s still parses with an unknown key on every object (§3.1)',
     (file) => {
       const fromLaterHub = withExtraKeys(readFixture(file));
-      expect(parseIssues(FIXTURE_SCHEMAS[file], fromLaterHub)).toEqual([]);
+      const schema = defined(FIXTURE_SCHEMAS[file], `schema for ${file}`);
+      expect(parseIssues(schema, fromLaterHub)).toEqual([]);
     },
   );
 });

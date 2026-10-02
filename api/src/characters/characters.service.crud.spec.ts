@@ -5,6 +5,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { CharactersService } from './characters.service';
+import { at } from '../common/testing/narrow';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
@@ -348,7 +349,7 @@ describe('CharactersService — crud', () => {
       const result = await service.create(1, dto);
       expect(result.isMain).toBe(true);
 
-      const insertCall = txInsertMock.mock.results[0].value.values;
+      const insertCall = at(txInsertMock.mock.results, 0).value.values;
       expect(insertCall).toHaveBeenCalledWith(
         expect.objectContaining({ isMain: true }),
       );
@@ -392,7 +393,7 @@ describe('CharactersService — crud', () => {
       const result = await service.create(1, dto);
       expect(result.isMain).toBe(false);
 
-      const insertCall = txInsertMock.mock.results[0].value.values;
+      const insertCall = at(txInsertMock.mock.results, 0).value.values;
       expect(insertCall).toHaveBeenCalledWith(
         expect.objectContaining({ isMain: false }),
       );
@@ -498,7 +499,7 @@ describe('CharactersService — crud', () => {
       expect(txUpdateMock).toHaveBeenCalled();
 
       // Insert was called with isMain: true
-      const insertCall = txInsertMock.mock.results[0].value.values;
+      const insertCall = at(txInsertMock.mock.results, 0).value.values;
       expect(insertCall).toHaveBeenCalledWith(
         expect.objectContaining({ isMain: true }),
       );

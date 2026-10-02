@@ -16,7 +16,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { refreshDedupAudit } from '../../scripts/run-migrations-with-sentry';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 describe('ROK-1281 boot-time refreshDedupAudit', () => {
   let testApp: TestApp;
@@ -57,7 +57,7 @@ describe('ROK-1281 boot-time refreshDedupAudit', () => {
         match_type, match_key, canonical_game_id, dup_game_ids,
         group_size, downstream_counts, unique_conflicts, snapshot_at
       ) VALUES (
-        'name', 'stale', ${games[0].id}, ARRAY[${games[1].id}]::int[],
+        'name', 'stale', ${at(games, 0).id}, ARRAY[${at(games, 1).id}]::int[],
         2, '{}'::jsonb, '{}'::jsonb, NOW()
       )
     `);

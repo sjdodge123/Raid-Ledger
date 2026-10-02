@@ -732,22 +732,25 @@ async function insertSyncableCharacter(
   gameId: number,
   overrides: Partial<typeof schema.characters.$inferInsert> = {},
 ): Promise<typeof schema.characters.$inferSelect> {
-  const [char] = await testApp.db
-    .insert(schema.characters)
-    .values({
-      userId,
-      gameId,
-      name: 'Profsync',
-      realm: 'area-52',
-      class: 'Mage',
-      spec: 'Frost',
-      role: 'dps',
-      isMain: true,
-      region: 'us',
-      gameVariant: 'retail',
-      ...overrides,
-    })
-    .returning();
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId,
+        gameId,
+        name: 'Profsync',
+        realm: 'area-52',
+        class: 'Mage',
+        spec: 'Frost',
+        role: 'dps',
+        isMain: true,
+        region: 'us',
+        gameVariant: 'retail',
+        ...overrides,
+      })
+      .returning(),
+    'inserted syncable character',
+  );
   return char;
 }
 

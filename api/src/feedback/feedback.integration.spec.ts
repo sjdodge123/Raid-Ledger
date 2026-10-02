@@ -56,8 +56,8 @@ function describeFeedback() {
       const [row] = await testApp.db.select().from(schema.feedback).limit(1);
 
       expect(row).toBeDefined();
-      expect(row.category).toBe('bug');
-      expect(row.userId).toBe(testApp.seed.adminUser.id);
+      expect(row?.category).toBe('bug');
+      expect(row?.userId).toBe(testApp.seed.adminUser.id);
     });
 
     it('should accept all valid feedback categories', async () => {
@@ -135,7 +135,7 @@ function describeFeedback() {
       const [row] = await testApp.db.select().from(schema.feedback).limit(1);
 
       expect(row).toBeDefined();
-      expect(row.clientLogs).toBe(sampleLogs);
+      expect(row?.clientLogs).toBe(sampleLogs);
     });
 
     it('rejects clientLogs >50000 chars with 400', async () => {

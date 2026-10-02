@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Readable } from 'node:stream';
 import { LogsService } from './logs.service';
+import { at } from '../common/testing/narrow';
 
 const SECRET_LINE = 'boot DATABASE_URL=postgresql://u:p@h/db\nhello\n';
 const SCRUBBED_LINE = 'boot DATABASE_URL=[REDACTED]\nhello\n';
@@ -180,7 +181,7 @@ function describeHistoryCap() {
       'api.log.2.decompressed',
       'MANIFEST.txt',
     ]);
-    const manifest = entries[3][1];
+    const manifest = at(entries, 3)[1];
     expect(manifest).toContain(
       `api.log.3.gz\t${bigSize} bytes\tskipped: over cap`,
     );
