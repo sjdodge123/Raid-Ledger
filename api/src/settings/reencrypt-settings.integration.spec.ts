@@ -10,6 +10,7 @@ import { appSettings } from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { reencryptAllSettings } from '../../scripts/reencrypt-settings';
 import { deriveKey, encryptWithKey, decryptWithKey } from './encryption.util';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeReencryptSettings() {
   let testApp: TestApp;
@@ -50,10 +51,13 @@ function describeReencryptSettings() {
 
     // Verify each row is now encrypted with the new key
     for (const row of rows) {
-      const [dbRow] = await testApp.db
-        .select()
-        .from(appSettings)
-        .where(eq(appSettings.key, row.key));
+      const [dbRow] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(appSettings)
+          .where(eq(appSettings.key, row.key)),
+        'dbRow',
+      );
 
       // Decrypting with the new key should yield the original value
       const decrypted = decryptWithKey(dbRow.encryptedValue, newKey);

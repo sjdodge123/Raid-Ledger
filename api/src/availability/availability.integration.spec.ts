@@ -10,6 +10,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { AvailabilityService } from './availability.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Helper to create a member user with local credentials and return their token. */
 async function createMemberAndLogin(
@@ -19,14 +20,17 @@ async function createMemberAndLogin(
 ): Promise<{ userId: number; token: string }> {
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
 
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${email}`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${email}`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
 
   await testApp.db.insert(schema.localCredentials).values({
     email,
@@ -468,8 +472,8 @@ function describeAvailability() {
 
       expect(result.get(u1)?.length).toBe(1); // Only the in-range window
       expect(result.get(u2)?.length).toBe(1);
-      expect(result.get(u1)?.[0].status).toBe('available');
-      expect(result.get(u2)?.[0].status).toBe('committed');
+      expect(result.get(u1)?.[0]?.status).toBe('available');
+      expect(result.get(u2)?.[0]?.status).toBe('committed');
     }
     it('should return availability for multiple users in a time range', () =>
       testReturnAvailabilityForMultipleUsersInATimeRange());

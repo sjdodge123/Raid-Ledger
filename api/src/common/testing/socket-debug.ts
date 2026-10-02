@@ -16,6 +16,7 @@ import type { Socket } from 'net';
 import type * as supertest from 'supertest';
 import type TestAgent from 'supertest/lib/agent';
 import { dumpFailureSnapshot } from './dump-failure-snapshot';
+import { defined } from './narrow';
 
 interface RequestMeta {
   method: string;
@@ -108,9 +109,11 @@ function wrapMethod(
   agent: TestAgent<supertest.Test>,
   method: HttpMethod,
 ): (...args: unknown[]) => supertest.Test {
-  const original = (
-    agent as unknown as Record<string, (...args: unknown[]) => supertest.Test>
-  )[method].bind(agent);
+  const methods = agent as unknown as Record<
+    string,
+    (...args: unknown[]) => supertest.Test
+  >;
+  const original = defined(methods[method], `agent.${method}`).bind(agent);
   return (...args: unknown[]) => {
     const test = original(...args);
     const firstArg = args[0];

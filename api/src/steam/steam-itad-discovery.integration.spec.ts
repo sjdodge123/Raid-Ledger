@@ -16,6 +16,7 @@ import {
   type DiscoveryDeps,
 } from './steam-itad-discovery.helpers';
 import type { ItadGame } from '../itad/itad.constants';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 jest.mock('./steam-igdb-enrichment.helpers', () => ({
   enrichFromIgdb: jest.fn().mockResolvedValue(null),
@@ -68,15 +69,18 @@ function describeItadDiscoveryIntegration() {
 
   it('merges when itadGameId matches but slug differs (ROK-855 bug)', async () => {
     // Pre-insert a game with the same itadGameId but a DIFFERENT slug
-    const [existing] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Alpha Game (IGDB)',
-        slug: 'alpha-game-igdb', // different slug
-        itadGameId: 'itad-uuid-aaa', // same itadGameId
-        steamAppId: null,
-      })
-      .returning({ id: schema.games.id });
+    const [existing] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Alpha Game (IGDB)',
+          slug: 'alpha-game-igdb', // different slug
+          itadGameId: 'itad-uuid-aaa', // same itadGameId
+          steamAppId: null,
+        })
+        .returning({ id: schema.games.id }),
+      'existing',
+    );
 
     const deps = buildDeps(testApp, ITAD_GAME_A);
     const result = await discoverGameViaItad(22222, deps, 'steam');
@@ -175,9 +179,10 @@ function describeItadDiscoveryIntegration() {
     const suffixed = sharedRows.filter((r) => r.slug !== 'shared-slug');
     expect(bare).toHaveLength(1);
     expect(suffixed).toHaveLength(1);
-    expect(suffixed[0].slug).toBe(`shared-slug-${suffixed[0].steamAppId}`);
-    expect(suffixed[0].itadGameId).toBeNull();
-    expect(bare[0].itadGameId).not.toBeNull();
+    const loser = at(suffixed, 0);
+    expect(loser.slug).toBe(`shared-slug-${loser.steamAppId}`);
+    expect(loser.itadGameId).toBeNull();
+    expect(at(bare, 0).itadGameId).not.toBeNull();
   });
 
   it('handles slug + itadGameId both colliding with different games', async () => {
@@ -252,10 +257,13 @@ function describeSteamAppIdSourceTagging() {
   ])(
     "tags 'steam' when merging into an existing %s row with a NULL steam id",
     async (_via, slug) => {
-      const [existing] = await testApp.db
-        .insert(schema.games)
-        .values({ name: 'Alpha Game', slug, steamAppId: null })
-        .returning({ id: schema.games.id });
+      const [existing] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({ name: 'Alpha Game', slug, steamAppId: null })
+          .returning({ id: schema.games.id }),
+        'existing',
+      );
 
       const result = await discoverGameViaItad(
         13131,
