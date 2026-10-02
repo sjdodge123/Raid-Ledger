@@ -30,6 +30,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import { runMigrations } from './backup.helpers';
+import { at } from '../common/testing/narrow';
 
 const SKIP_BACKUP_INTEGRATION = process.env.SKIP_BACKUP_INTEGRATION === '1';
 const describeRestore = SKIP_BACKUP_INTEGRATION ? describe.skip : describe;
@@ -89,8 +90,8 @@ async function seedUncataloguedDup(
       ('Dup Restore A', 'dup-restore-a-dup')
     RETURNING id
   `) as unknown as Array<{ id: number }>;
-  const canon = rows[0].id;
-  const dup = rows[1].id;
+  const canon = at(rows, 0).id;
+  const dup = at(rows, 1).id;
   await client`
     INSERT INTO games_dedup_audit (
       match_type, match_key, canonical_game_id, dup_game_ids,
@@ -198,14 +199,14 @@ describeRestore(
       }>;
       expect(audit).toHaveLength(1);
       expect(audit[0]?.match_type).toBe('name');
-      expect(audit[0].match_key).not.toBe('stale');
+      expect(at(audit, 0).match_key).not.toBe('stale');
       expect(audit[0]?.dup_game_ids).toHaveLength(1);
 
       // The migrate step actually ran (proves refresh preceded a real migrate).
       const ok = (await client`
         SELECT to_regclass('public.rok1322_restore_ok') AS oid
       `) as unknown as Array<{ oid: string | null }>;
-      expect(ok[0].oid).not.toBeNull();
+      expect(at(ok, 0).oid).not.toBeNull();
     }, 60_000);
 
     it('propagates a broken migration loudly on the restore path (AC#4)', async () => {

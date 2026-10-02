@@ -19,7 +19,7 @@ import { eq, desc } from 'drizzle-orm';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { CronJobService } from './cron-job.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 /** Insert a test cron job directly into DB and return its ID. */
 async function insertTestJob(
@@ -48,11 +48,14 @@ const FIVE_MINUTE = { cronExpression: '*/5 * * * *' };
 
 /** Read one cron job row by id. */
 async function readJob(testApp: TestApp, jobId: number) {
-  const [job] = await testApp.db
-    .select()
-    .from(schema.cronJobs)
-    .where(eq(schema.cronJobs.id, jobId))
-    .limit(1);
+  const [job] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.cronJobs)
+      .where(eq(schema.cronJobs.id, jobId))
+      .limit(1),
+    'cron job row',
+  );
   return job;
 }
 
@@ -112,8 +115,8 @@ function describeCronJob() {
       expect(executions.length).toBe(1);
       expect(executions[0]?.status).toBe('completed');
       expect(executions[0]?.durationMs).toBeGreaterThanOrEqual(0);
-      expect(executions[0].finishedAt).toBeDefined();
-      expect(executions[0].error).toBeNull();
+      expect(at(executions, 0).finishedAt).toBeDefined();
+      expect(at(executions, 0).error).toBeNull();
 
       // ROK-1380: a completed run hands last_run_at to the batched flusher,
       // so nothing is written to the job row until a flush cycle runs.
@@ -125,7 +128,7 @@ function describeCronJob() {
       const afterFlush = await readJob(testApp, jobId);
       expect(afterFlush.lastRunAt).not.toBeNull();
       expect(afterFlush.lastRunAt!.getTime()).toBe(
-        executions[0].finishedAt!.getTime(),
+        at(executions, 0).finishedAt!.getTime(),
       );
       expect(afterFlush.nextRunAt).not.toBeNull();
     });
@@ -224,11 +227,14 @@ function describeCronJob() {
         Promise.resolve(false),
       );
 
-      const [job] = await testApp.db
-        .select()
-        .from(schema.cronJobs)
-        .where(eq(schema.cronJobs.id, jobId))
-        .limit(1);
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'cron job row',
+      );
 
       // last_run_at should not have been written directly to DB
       // (it may be queued by LastRunBuffer.queueLiveness for liveness)
@@ -249,11 +255,14 @@ function describeCronJob() {
       // Flush pending updates to write to DB
       await cronJobService.flushLastRunUpdates();
 
-      const [job] = await testApp.db
-        .select()
-        .from(schema.cronJobs)
-        .where(eq(schema.cronJobs.id, jobId))
-        .limit(1);
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'cron job row',
+      );
 
       // last_run_at should have been updated via liveness flush
       expect(job.lastRunAt).not.toBeNull();
@@ -370,7 +379,7 @@ function describeCronJob() {
       const flushed = await readJob(testApp, jobId);
       expect(flushed.lastRunAt).not.toBeNull();
       expect(flushed.lastRunAt!.getTime()).toBe(
-        executions[0].finishedAt!.getTime(),
+        at(executions, 0).finishedAt!.getTime(),
       );
     });
 
@@ -388,7 +397,7 @@ function describeCronJob() {
       const job = await readJob(testApp, jobId);
       expect(job.lastRunAt).not.toBeNull();
       expect(job.lastRunAt!.getTime()).toBe(
-        executions[0].finishedAt!.getTime(),
+        at(executions, 0).finishedAt!.getTime(),
       );
     });
   }
