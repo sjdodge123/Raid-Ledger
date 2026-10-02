@@ -82,14 +82,10 @@ export async function runCreateLineup(
   const overrides = hasDurationParams(dto) ? buildOverrides(dto) : null;
   const phaseDeadline = computeInitialDeadline(dto);
 
-  const [inserted] = await insertLineup(
-    deps.db,
-    dto,
-    userId,
-    phaseDeadline,
-    overrides,
+  const row = defined(
+    (await insertLineup(deps.db, dto, userId, phaseDeadline, overrides))[0],
+    'inserted lineup row',
   );
-  const row = defined(inserted, 'inserted lineup row');
   await deps.activityLog.log('lineup', row.id, 'lineup_created', userId);
   if (row.visibility === 'public') {
     void deps.steamNudge.nudgeUnlinkedMembers(row.id);

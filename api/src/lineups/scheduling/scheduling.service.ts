@@ -21,7 +21,6 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { defined } from '../../common/defined.helpers';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
 import { applyStance } from './scheduling-vote-write.helpers';
@@ -148,13 +147,8 @@ export class SchedulingService {
       throw new BadRequestException('Cannot suggest a time in the past');
     }
     await assertNoDuplicateSlot(this.db, matchId, proposed);
-    const [inserted] = await insertScheduleSlot(
-      this.db,
-      matchId,
-      proposed,
-      'user',
-    );
-    const slot = defined(inserted, 'inserted schedule slot');
+    const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
+    if (!slot) throw new Error('Expected inserted schedule slot to be defined');
     if (userId) await this.autoVoteForSlot(slot.id, matchId, userId, source);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
