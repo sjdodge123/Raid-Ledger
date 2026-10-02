@@ -179,7 +179,19 @@ export function PurposeSelect(p: {
   );
 }
 
-export function InertHealBanner({ onConvert }: { onConvert: () => void }) {
+interface InertHealBannerProps {
+  onConvert: () => void;
+  /** Another row's save is in flight — native disabled. */
+  locked?: boolean | undefined;
+  /** This row's save is pending — Button `loading` (swallows the click). */
+  isSaving?: boolean | undefined;
+}
+
+export function InertHealBanner({
+  onConvert,
+  locked = false,
+  isSaving = false,
+}: InertHealBannerProps) {
   return (
     <div className="border border-danger/40 bg-danger/10 rounded-lg p-2 text-xs">
       <div className="text-danger font-medium">
@@ -190,7 +202,13 @@ export function InertHealBanner({ onConvert }: { onConvert: () => void }) {
           Pick a game below, or convert to a General Lobby (any game,
           auto-detected).
         </span>
-        <Button size="sm" onClick={onConvert} className="whitespace-nowrap">
+        <Button
+          size="sm"
+          onClick={onConvert}
+          disabled={locked}
+          loading={isSaving}
+          className="whitespace-nowrap"
+        >
           Convert to General Lobby
         </Button>
       </div>
@@ -225,9 +243,10 @@ export function GameField({
 }
 
 /**
- * Save + Cancel. `saveDisabled` is VALIDATION only (native disabled — the
- * inert triple cannot be saved); a pending save is Button `loading`, which
- * keeps focus and swallows the submit (ROK-1652 ruling 7).
+ * Save + Cancel. `saveDisabled` is native disabled, for VALIDATION (the inert
+ * triple cannot be saved) OR another row's save in flight (one PATCH at a
+ * time). A pending save of THIS row is Button `loading`, which keeps focus and
+ * swallows the submit (ROK-1652 ruling 7) — the two are never combined.
  */
 export function FormActions(p: {
   saveDisabled: boolean;

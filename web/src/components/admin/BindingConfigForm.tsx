@@ -19,6 +19,8 @@ interface BindingConfigFormProps {
   isSaving: boolean;
   /** ROK-1416: a rejected PATCH (400/409) surfaced above the actions; the form stays open. */
   saveError?: string | null | undefined;
+  /** Another row's PATCH is in flight: Save (and Convert) are native-disabled, not loading. */
+  saveLocked?: boolean | undefined;
 }
 
 /**
@@ -34,6 +36,7 @@ export function BindingConfigForm({
   onCancel,
   isSaving,
   saveError,
+  saveLocked = false,
 }: BindingConfigFormProps) {
   const f = useBindingConfigForm(binding);
   // The game maps to a purpose for a monitor / announcement channel; a General
@@ -61,7 +64,13 @@ export function BindingConfigForm({
       <h4 className="text-sm font-medium text-foreground">
         Edit Config: #{binding.channelName ?? binding.channelId}
       </h4>
-      {f.gameRequired && <InertHealBanner onConvert={handleConvert} />}
+      {f.gameRequired && (
+        <InertHealBanner
+          onConvert={handleConvert}
+          locked={saveLocked}
+          isSaving={isSaving}
+        />
+      )}
       <PurposeSelect
         id={purposeId}
         channelType={f.channelType}
@@ -105,7 +114,7 @@ export function BindingConfigForm({
         </p>
       )}
       <FormActions
-        saveDisabled={f.gameRequired}
+        saveDisabled={f.gameRequired || saveLocked}
         isSaving={isSaving}
         onCancel={onCancel}
       />
