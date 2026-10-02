@@ -7,9 +7,14 @@
 -- `USING "<col>" AT TIME ZONE 'UTC'` (hand-added; drizzle-kit omits USING).
 --
 -- Why 'UTC' is the zone the values were written in:
---   * The 11 community_lineups columns are written only from JS Dates. Drizzle
---     serialises a Date as `toISOString()` (a UTC wall clock) and Postgres
---     dropped the `Z`, so `AT TIME ZONE 'UTC'` is exact for them.
+--   * The 11 community_lineups columns are written by the app only from JS
+--     Dates. Drizzle serialises a Date as `toISOString()` (a UTC wall clock)
+--     and Postgres dropped the `Z`, so `AT TIME ZONE 'UTC'` is exact for those
+--     writes. The one SQL writer is the 0133 backfill, which set
+--     `phase_deadline = created_at + interval '36 hours'` from the zone-less
+--     `created_at` (defaultNow, so the SESSION TimeZone wall clock); prod and
+--     fleet Postgres run in UTC, so 'UTC' is the correct zone for those rows
+--     too.
 --   * community_lineup_matches.threshold_notified_at is stamped by SQL `NOW()`
 --     (SchedulingThresholdService.stampNotified) and
 --     community_lineup_match_members.scheduling_submitted_at by

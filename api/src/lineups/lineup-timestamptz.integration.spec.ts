@@ -75,12 +75,12 @@ async function readColumnTypes(): Promise<Record<string, string>> {
     TZ_TABLES.map((t) => sql`${t}`),
     sql`, `,
   );
-  const rows = (await testApp.db.execute(sql`
+  const rows = await testApp.db.execute<ColumnRow>(sql`
     SELECT table_name AS "tableName", column_name AS "columnName",
            data_type AS "dataType"
     FROM information_schema.columns
     WHERE table_schema = current_schema()
-      AND table_name IN (${tables})`)) as unknown as ColumnRow[];
+      AND table_name IN (${tables})`);
   const byKey = new Map(
     rows.map((r) => [`${r.tableName}.${r.columnName}`, r.dataType]),
   );
@@ -117,13 +117,13 @@ async function readUnderNewYork(
 ): Promise<NewYorkRead> {
   return testApp.db.transaction(async (tx) => {
     await tx.execute(sql`SET LOCAL TIME ZONE 'America/New_York'`);
-    const rows = (await tx.execute(sql`
+    const rows = await tx.execute<NewYorkRead>(sql`
       SELECT phase_deadline = ${deadline.toISOString()}::timestamptz
                AS "sameInstant",
              tie_expires_at <= NOW() AS "tieExpired",
              phase_deadline AS "rawDeadline"
       FROM community_lineups
-      WHERE id = ${lineupId}`)) as unknown as NewYorkRead[];
+      WHERE id = ${lineupId}`);
     const [row] = nonEmpty(rows, 'New York read of the seeded lineup');
     return row;
   });
