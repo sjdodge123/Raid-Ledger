@@ -17,6 +17,7 @@
  */
 import { readFileSync, readdirSync, statSync } from 'fs';
 import * as path from 'path';
+import { defined } from './testing/narrow';
 
 const CONTRACT_SRC = path.resolve(__dirname, '../../../packages/contract/src');
 const CONTRACT_PACKAGE_JSON = path.resolve(CONTRACT_SRC, '../package.json');
@@ -47,7 +48,9 @@ function stripComments(source: string): string {
 function extractSpecifiers(source: string): string[] {
   const code = stripComments(source);
   return SPECIFIER_PATTERNS.flatMap((pattern) =>
-    [...code.matchAll(pattern)].map((match) => match[1]),
+    [...code.matchAll(pattern)].map((match) =>
+      defined(match[1], 'module specifier capture'),
+    ),
   );
 }
 

@@ -12,6 +12,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 interface ActivityEntry {
   id: number;
@@ -140,8 +141,8 @@ function describeActivityLog() {
       const timestamps = timeline(res).data.map((e) =>
         new Date(e.createdAt).getTime(),
       );
-      for (let i = 1; i < timestamps.length; i++) {
-        expect(timestamps[i]).toBeGreaterThanOrEqual(timestamps[i - 1]);
+      for (const [prevIndex, ts] of timestamps.slice(1).entries()) {
+        expect(ts).toBeGreaterThanOrEqual(at(timestamps, prevIndex));
       }
     });
 
@@ -230,7 +231,7 @@ function describeActivityLog() {
         action: 'event_created',
         actorId: testApp.seed.adminUser.id,
       });
-      expect(rows[0].metadata).toMatchObject({
+      expect(rows[0]?.metadata).toMatchObject({
         title: 'Direct insert test',
       });
     });
@@ -243,14 +244,17 @@ function describeActivityLog() {
     const ENTITY_TYPE = 'event' as const;
 
     it('returns username when actor displayName is null', async () => {
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'rok-1116:null-display',
-          username: 'alice',
-          displayName: null,
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'rok-1116:null-display',
+            username: 'alice',
+            displayName: null,
+          })
+          .returning(),
+        'user',
+      );
 
       const entityId = 90001;
       await testApp.db.insert(schema.activityLog).values({
@@ -268,20 +272,24 @@ function describeActivityLog() {
       expect(res.status).toBe(200);
       const body = timeline(res);
       expect(body.data).toHaveLength(1);
-      expect(body.data[0].actor).not.toBeNull();
-      expect(body.data[0].actor!.displayName).toBe('alice');
-      expect(body.data[0].actor!.displayName).not.toBe('Unknown');
+      const entry = at(body.data, 0);
+      expect(entry.actor).not.toBeNull();
+      expect(entry.actor!.displayName).toBe('alice');
+      expect(entry.actor!.displayName).not.toBe('Unknown');
     });
 
     it('returns displayName when set', async () => {
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'rok-1116:has-display',
-          username: 'alice',
-          displayName: 'AliceCustom',
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'rok-1116:has-display',
+            username: 'alice',
+            displayName: 'AliceCustom',
+          })
+          .returning(),
+        'user',
+      );
 
       const entityId = 90002;
       await testApp.db.insert(schema.activityLog).values({
@@ -299,7 +307,7 @@ function describeActivityLog() {
       expect(res.status).toBe(200);
       const body = timeline(res);
       expect(body.data).toHaveLength(1);
-      expect(body.data[0].actor!.displayName).toBe('AliceCustom');
+      expect(at(body.data, 0).actor!.displayName).toBe('AliceCustom');
     });
 
     it('returns "Unknown" only when actor row is missing entirely', async () => {
@@ -329,8 +337,9 @@ function describeActivityLog() {
       expect(res.status).toBe(200);
       const body = timeline(res);
       expect(body.data).toHaveLength(1);
-      expect(body.data[0].actor).not.toBeNull();
-      expect(body.data[0].actor!.displayName).toBe('Unknown');
+      const entry = at(body.data, 0);
+      expect(entry.actor).not.toBeNull();
+      expect(entry.actor!.displayName).toBe('Unknown');
     });
   }
   describe('displayName fallback (ROK-1116)', describeUsernameFallback);
