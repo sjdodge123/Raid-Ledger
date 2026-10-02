@@ -6,7 +6,7 @@ import { useRoster } from '../../hooks/use-roster';
 import { isMMOSlotConfig } from '../../utils/game-utils';
 import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
-import { toAttendeePreviews } from './WeekEventCard';
+import { toAttendeePreviews } from './attendee-previews';
 import { SignupConfirmationModal } from '../events/signup-confirmation-modal';
 import { useDayEventSignup } from './use-day-event-signup';
 import { SeriesBadge } from '../events/SeriesBadge';

@@ -13,7 +13,7 @@ import { getGameColors } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { AttendeeAvatars } from './AttendeeAvatars';
-import { toAttendeePreviews } from './WeekEventCard';
+import { toAttendeePreviews } from './attendee-previews';
 import type { CalendarEvent } from './CalendarView';
 import { coverSrcSetProps } from '../../lib/igdb-image';
 

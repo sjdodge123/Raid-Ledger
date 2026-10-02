@@ -3,17 +3,7 @@ import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { SeriesBadge } from '../events/SeriesBadge';
 import type { CalendarEvent } from './CalendarView';
-
-type SignupUser = NonNullable<NonNullable<CalendarEvent['resource']>['signupsPreview']>[number];
-
-/** AttendeeAvatars' input: avatar fields the API left out stay absent instead of explicitly undefined. */
-export function toAttendeePreviews(signups: SignupUser[] | undefined) {
-    return signups?.map(({ customAvatarUrl, characters, ...rest }) => ({
-        ...rest,
-        ...(customAvatarUrl === undefined ? {} : { customAvatarUrl }),
-        ...(characters === undefined ? {} : { characters }),
-    }));
-}
+import { toAttendeePreviews } from './attendee-previews';
 
 interface WeekEventCardProps {
     event: CalendarEvent;
