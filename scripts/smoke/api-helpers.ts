@@ -229,7 +229,7 @@ export async function apiPost(
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
         },
-        body: body ? JSON.stringify(body) : undefined,
+        ...(body ? { body: JSON.stringify(body) } : {}),
     });
     return res.json();
 }
@@ -566,7 +566,7 @@ export async function waitForBannerOwnership(
 export async function claimBannerOwnership(
     token: string,
     create: () => Promise<number>,
-    opts: { attempts?: number; timeoutMs?: number; existing?: number } = {},
+    opts: { attempts?: number; timeoutMs?: number; existing?: number | undefined } = {},
 ): Promise<number> {
     const attempts = opts.attempts ?? 2;
     let lineupId = opts.existing;
