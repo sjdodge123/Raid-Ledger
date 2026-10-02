@@ -16,7 +16,7 @@ import type { ChurnDetectionService } from '../churn-detection.service';
 import type { CliqueDetectionService } from '../clique-detection.service';
 import type { KeyInsightsService } from '../key-insights.service';
 import { buildChurnSection } from './churn-section';
-import { readPriorRadarRows, stitchDriftForInsights } from './drift-history';
+import { radarForInsights } from './drift-history';
 import { buildEngagementSection } from './engagement-section';
 import { buildKeyInsightsSection } from './key-insights-section';
 import { buildRadarSection } from './radar-section';
@@ -55,21 +55,24 @@ export async function runRefreshSnapshot(
   db: Db,
   deps: RefreshSnapshotDeps,
 ): Promise<RefreshSnapshotResult> {
-  const logger = deps.logger ?? new Logger('runRefreshSnapshot');
+  const log: SectionLog = {
+    logger: deps.logger ?? new Logger('runRefreshSnapshot'),
+    jobId: deps.jobId,
+  };
   const cfg = await loadConfig(deps.settings);
   const snapshotDate = todayUtcIso();
   const results = await runAllSections(db, deps, snapshotDate, cfg.churn);
   throwIfAllRejected(results);
-  const sections = materializeSections(results, snapshotDate, cfg.churn, {
-    logger,
-    jobId: deps.jobId,
-  });
+  const sections = materializeSections(results, snapshotDate, cfg.churn, log);
   // Key insights compare week-over-week, so they see the radar with prior
-  // weeks' drift stitched in; the stored radar keeps its single week.
-  const priorRows = await readPriorRadarRows(db, snapshotDate);
+  // weeks' drift stitched in; the stored radar keeps its single week. A
+  // failed history read falls back to that single week (no genre-shift).
+  const radar = await radarForInsights(db, sections.radar, snapshotDate, (e) =>
+    logFailure(log, 'key-insights drift-history', e),
+  );
   const keyInsights = buildKeyInsightsSection(deps.keyInsights, snapshotDate, {
     ...sections,
-    radar: stitchDriftForInsights(priorRows, sections.radar, snapshotDate),
+    radar,
   });
   await upsertSnapshot(db, snapshotDate, { ...sections, keyInsights });
   await pruneOlderThan(db, cfg.retentionDays);
@@ -128,9 +131,13 @@ function logSectionFailure(
   section: SectionId,
   reason: unknown,
 ): void {
+  logFailure(log, `${section} section`, reason);
+}
+
+function logFailure(log: SectionLog, what: string, reason: unknown): void {
   const job = log.jobId ? ` [job ${log.jobId}]` : '';
   log.logger.error(
-    `community-insights ${section} section failed${job}`,
+    `community-insights ${what} failed${job}`,
     reason instanceof Error ? reason.stack : String(reason),
   );
 }

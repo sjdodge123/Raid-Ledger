@@ -76,6 +76,26 @@ export async function readPriorRadarRows(
     .limit(DRIFT_SNAPSHOT_LIMIT);
 }
 
+/**
+ * `current` with prior weeks' drift stitched in for key insights. If the
+ * history read fails, `onError` is told and the single-week `current` is
+ * returned: genre-shift is skipped this run, but the snapshot still saves.
+ */
+export async function radarForInsights(
+  db: Db,
+  current: CommunityRadarResponseDto,
+  snapshotDate: string,
+  onError: (err: unknown) => void,
+): Promise<CommunityRadarResponseDto> {
+  try {
+    const priorRows = await readPriorRadarRows(db, snapshotDate);
+    return stitchDriftForInsights(priorRows, current, snapshotDate);
+  } catch (err) {
+    onError(err);
+    return current;
+  }
+}
+
 /** Drizzle's `date` column may surface as string or Date; normalize. */
 function toDateString(value: string | Date): string {
   return typeof value === 'string' ? value : value.toISOString().slice(0, 10);
