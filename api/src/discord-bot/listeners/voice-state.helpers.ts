@@ -2,7 +2,6 @@ import type { GuildMember } from 'discord.js';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ChannelBindingsService } from '../services/channel-bindings.service';
 import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
-import { traceResolve } from './voice-bind-trace';
 
 /** TTL for channel binding cache entries (ms). */
 export const CACHE_TTL_MS = 60 * 1000;
@@ -86,28 +85,9 @@ export function resolveVoiceChannel(
 /** Cache shape for resolved bindings. */
 type BindingCacheEntry = { cachedAt: number; value: ResolvedBinding[] };
 
-/** A guild's game-voice-monitor / general-lobby bindings on one channel. */
-async function loadChannelBindings(
-  deps: VoiceStateDeps,
-  guildId: string,
-  channelId: string,
-): Promise<ResolvedBinding[]> {
-  const bindings =
-    await deps.channelBindingsService.getBindingsWithGameNames(guildId);
-  return bindings
-    .filter(
-      (b) =>
-        b.channelId === channelId &&
-        (b.bindingPurpose === 'game-voice-monitor' ||
-          b.bindingPurpose === 'general-lobby'),
-    )
-    .map(mapToResolvedBinding);
-}
-
 /**
  * Resolve a channel ID to ALL matching bindings (with caching).
  * Matches 'game-voice-monitor' and 'general-lobby' binding purposes.
- * Each lookup logs one `[voice-bind] resolve` line (ROK-1390 diagnostics).
  */
 export async function resolveAllBindings(
   deps: VoiceStateDeps,
@@ -115,18 +95,28 @@ export async function resolveAllBindings(
   cache: Map<string, BindingCacheEntry>,
 ): Promise<ResolvedBinding[]> {
   const cached = cache.get(channelId);
-  const ageMs = cached ? Date.now() - cached.cachedAt : Infinity;
-  if (cached && ageMs < CACHE_TTL_MS) {
-    traceResolve({ channelId, cache: 'hit', ageMs, bindings: cached.value });
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
     return cached.value;
   }
 
   const guildId = deps.clientService.getGuildId();
-  const matched = guildId
-    ? await loadChannelBindings(deps, guildId, channelId)
-    : [];
+  if (!guildId) {
+    cache.set(channelId, { cachedAt: Date.now(), value: [] });
+    return [];
+  }
+
+  const bindings =
+    await deps.channelBindingsService.getBindingsWithGameNames(guildId);
+  const matched = bindings
+    .filter(
+      (b) =>
+        b.channelId === channelId &&
+        (b.bindingPurpose === 'game-voice-monitor' ||
+          b.bindingPurpose === 'general-lobby'),
+    )
+    .map(mapToResolvedBinding);
+
   cache.set(channelId, { cachedAt: Date.now(), value: matched });
-  traceResolve({ channelId, cache: 'miss', guildId, bindings: matched });
   return matched;
 }
 
