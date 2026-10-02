@@ -184,7 +184,7 @@ function GamesStepGrid({
     isSearching: boolean;
     displayGames: GameDetailDto[];
     displayGameIds: number[];
-    searchSource?: string;
+    searchSource?: string | undefined;
 }) {
     if ((discoverLoading || searchLoading) && displayGames.length === 0) return <GamesStepLoading />;
     if (displayGames.length === 0) return (

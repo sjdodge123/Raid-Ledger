@@ -26,7 +26,7 @@ export interface LfgOverlapPanelProps {
     isLoading?: boolean;
     isBusy?: boolean;
     /** Set → every row's Lock in is disabled and this is its tooltip. */
-    disabledHint?: string;
+    disabledHint?: string | undefined;
 }
 
 type RowActionProps = Pick<LfgOverlapPanelProps, 'onLockIn' | 'isBusy' | 'disabledHint'>;

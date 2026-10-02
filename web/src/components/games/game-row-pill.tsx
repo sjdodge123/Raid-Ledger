@@ -14,8 +14,8 @@ interface GameRowPillProps {
     name: string;
     coverUrl: string | null;
     href?: string;
-    subtitle?: string;
-    pricing?: ItadGamePricingDto | null;
+    subtitle?: string | undefined;
+    pricing?: ItadGamePricingDto | null | undefined;
     /** Optional custom badge rendered next to the name (before PriceBadge). */
     badge?: React.ReactNode;
     /**
@@ -59,8 +59,8 @@ function PillCover({
 
 /** The viewer's own two pills, rendered only when the caller opts in. */
 function PersonalPills({ owns, wishlisted }: {
-    owns?: boolean;
-    wishlisted?: boolean;
+    owns?: boolean | undefined;
+    wishlisted?: boolean | undefined;
 }): JSX.Element {
     return (
         <>
@@ -80,11 +80,11 @@ function PillContent({
     currentUserWishlisted,
 }: {
     name: string;
-    subtitle?: string;
-    pricing?: ItadGamePricingDto | null;
+    subtitle?: string | undefined;
+    pricing?: ItadGamePricingDto | null | undefined;
     badge?: React.ReactNode;
-    currentUserOwns?: boolean;
-    currentUserWishlisted?: boolean;
+    currentUserOwns?: boolean | undefined;
+    currentUserWishlisted?: boolean | undefined;
 }): JSX.Element {
     return (
         <div className="flex-1 min-w-0">

@@ -222,7 +222,9 @@ export function UserRow({ user, currentUserId, onRoleChange, handlers, isUpdatin
     const isCurrentUser = user.id === currentUserId;
     const isAdmin = user.role === 'admin';
     const state: RowState = { isKicked: user.kickedAt != null, isBanned: user.bannedAt != null, isDeactivated: user.deactivatedAt != null };
-    const target: ModerationTarget = { id: user.id, username: user.username, discordId: user.discordId };
+    const target: ModerationTarget = {
+        id: user.id, username: user.username, ...(user.discordId === undefined ? {} : { discordId: user.discordId }),
+    };
     const av = resolveAvatar(toAvatarUser(user));
 
     return (

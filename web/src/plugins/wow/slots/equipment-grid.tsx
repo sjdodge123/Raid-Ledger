@@ -44,7 +44,7 @@ function SlotIcon({ item, iconBorderClass }: { item: EquipmentItemDto; iconBorde
 /** Single equipment slot with item display or empty placeholder */
 export function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: {
     item: EquipmentItemDto | undefined; slotName: string;
-    gameVariant: string | null; onItemClick?: () => void;
+    gameVariant: string | null; onItemClick?: (() => void) | undefined;
 }) {
     const [showFallback, setShowFallback] = useState(false);
     const isMobile = useMediaQuery('(max-width: 768px)');

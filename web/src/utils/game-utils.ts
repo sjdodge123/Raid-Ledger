@@ -6,12 +6,12 @@
 
 /** Slot configuration type for roster */
 interface SlotConfig {
-    tank?: number;
-    healer?: number;
-    dps?: number;
-    flex?: number;
-    player?: number;
-    bench?: number;
+    tank?: number | undefined;
+    healer?: number | undefined;
+    dps?: number | undefined;
+    flex?: number | undefined;
+    player?: number | undefined;
+    bench?: number | undefined;
 }
 
 /**

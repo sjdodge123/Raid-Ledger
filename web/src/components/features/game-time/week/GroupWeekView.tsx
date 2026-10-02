@@ -27,15 +27,15 @@ export interface GroupWeekViewProps {
     /** The viewer's own events in this week (`useViewerWeekEvents`) → titled blocks. */
     events?: GameTimeEventBlock[];
     /** Poll slots starting in this week (`slotMarksForWeek`); poll only. */
-    slotMarks?: Map<string, SlotMark>;
-    picked?: WeekCellRef | null;
+    slotMarks?: Map<string, SlotMark> | undefined;
+    picked?: WeekCellRef | null | undefined;
     /** Reschedule: the event's current start. */
     current?: WeekCellRef | null;
     isCellDisabled?: (dayOfWeek: number, hour: number) => boolean;
     /** Absent = read-only: cells are `role="img"` tiles. */
-    onPick?: (dayOfWeek: number, hour: number) => void;
+    onPick?: ((dayOfWeek: number, hour: number) => void) | undefined;
     onWeekChange: (delta: -1 | 1) => void;
-    legend: { memberCounts?: MemberCounts };
+    legend: { memberCounts?: MemberCounts | undefined };
     /** Default `group-week-view`. */
     testId?: string;
 }

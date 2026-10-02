@@ -60,7 +60,7 @@ export function useLockInEvent(gameId: number, gameName: string) {
     const { mutate } = mutation;
     const lockIn = useCallback(
         (window: LockInWindow, options?: LockInOptions): void =>
-            mutate(window, { onSuccess: options?.onSuccess }),
+            mutate(window, options),
         [mutate],
     );
     return { lockIn, isPending: mutation.isPending };

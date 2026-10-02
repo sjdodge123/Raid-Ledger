@@ -8,6 +8,7 @@
  * payloads and assert the token never survives.
  */
 import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { at } from './test/defined';
 
 vi.mock('@sentry/react', () => ({
     init: vi.fn(),
@@ -35,7 +36,7 @@ let recordingHook: Hook;
 beforeAll(async () => {
     const Sentry = await import('@sentry/react');
     await import('./sentry');
-    config = vi.mocked(Sentry.init).mock.calls[0][0] as unknown as InitConfig;
+    config = at(vi.mocked(Sentry.init).mock.calls, 0)[0] as unknown as InitConfig;
     const replayOpts = vi.mocked(Sentry.replayIntegration).mock.calls[0]?.[0];
     recordingHook =
         (replayOpts as { beforeAddRecordingEvent?: Hook } | undefined)
@@ -70,8 +71,8 @@ describe('ROK-1366: beforeSendTransaction scrubs the pageload transaction', () =
             ],
         }) as { spans: { description: string; data: Record<string, unknown> }[] };
         expectNoSecret(out);
-        expect(out.spans[0].description).toBe(PAGE_SCRUBBED);
-        expect(out.spans[2].data['http.method']).toBe('GET');
+        expect(out.spans[0]?.description).toBe(PAGE_SCRUBBED);
+        expect(out.spans[2]?.data['http.method']).toBe('GET');
     });
 });
 

@@ -25,11 +25,11 @@ export interface PlayerCardProps {
     /** Whether to display the role badge */
     showRole?: boolean;
     /** Admin remove handler */
-    onRemove?: () => void;
+    onRemove?: (() => void) | undefined;
     /** Accent left-border color string (e.g. for matching-role highlight) */
-    matchAccent?: string;
+    matchAccent?: string | undefined;
     /** An ANCESTOR owns a stretched action button over this card (RosterSlot): raise the link, Remove and titled badges above it */
-    raiseControls?: boolean;
+    raiseControls?: boolean | undefined;
 }
 
 /** Build an AvatarUser that includes character portrait when available */

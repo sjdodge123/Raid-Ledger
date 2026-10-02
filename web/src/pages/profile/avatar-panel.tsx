@@ -35,8 +35,8 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 /** Eagerly push avatar preference into React Query cache + module-level overlay. */
 function applyAvatarOptimistic(
     queryClient: ReturnType<typeof useQueryClient>,
-    pref: { type: SelectableAvatarType; characterName?: string },
-    opts?: { resolvedAvatarUrl?: string; customAvatarUrl?: string },
+    pref: { type: SelectableAvatarType; characterName?: string | undefined },
+    opts?: { resolvedAvatarUrl?: string | undefined; customAvatarUrl?: string | undefined },
 ) {
     queryClient.setQueryData<User | null>(['auth', 'me'], (old) => {
         if (!old) return old;

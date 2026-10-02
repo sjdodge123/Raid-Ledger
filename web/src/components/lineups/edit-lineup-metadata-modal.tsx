@@ -32,7 +32,7 @@ const FORM_ID = 'edit-lineup-metadata-form';
 function TitleField({ value, onChange, error, onBlur }: {
     value: string;
     onChange: (v: string) => void;
-    error?: string;
+    error?: string | undefined;
     onBlur: () => void;
 }): JSX.Element {
     return (

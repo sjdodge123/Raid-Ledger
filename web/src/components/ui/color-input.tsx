@@ -28,7 +28,7 @@ export interface ColorInputProps {
     onChange: (hex: string) => void;
     /** Names the well ("<label> colour picker") and, outside a Field, the hex field. */
     label: string;
-    disabled?: boolean;
+    disabled?: boolean | undefined;
     invalid?: boolean;
 }
 

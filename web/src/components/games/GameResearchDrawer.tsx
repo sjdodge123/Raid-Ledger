@@ -17,7 +17,7 @@ interface GameResearchDrawerProps {
     isOpen: boolean;
     onClose: () => void;
     /** Resolve by gameId (preferred when known). */
-    gameId?: number;
+    gameId?: number | undefined;
     /** Resolve by free-text name (triggers POST /games/lookup-by-name). */
     name?: string;
 }

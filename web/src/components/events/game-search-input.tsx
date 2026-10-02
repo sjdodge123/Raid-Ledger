@@ -26,7 +26,7 @@ export interface GameSearchTestIds {
 interface GameSearchInputProps {
     value: IgdbGameDto | null;
     onChange: (game: IgdbGameDto | null) => void;
-    error?: string;
+    error?: string | undefined;
     /** Games to show immediately when input is focused with no query (e.g. registry games) */
     initialSuggestions?: IgdbGameDto[];
     /**

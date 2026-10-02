@@ -99,7 +99,7 @@ describe('web Sentry magic-link token scrubbing (ROK-1366)', () => {
         const initMock = Sentry.init as unknown as ReturnType<typeof vi.fn>;
         initMock.mockClear();
         await import('./sentry');
-        config = initMock.mock.calls[0][0] as ScrubConfig;
+        config = at(initMock.mock.calls, 0)[0] as ScrubConfig;
     });
 
     it('scrubs a fragment token from navigation breadcrumbs', () => {

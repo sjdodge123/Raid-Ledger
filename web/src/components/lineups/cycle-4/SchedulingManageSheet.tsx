@@ -29,7 +29,7 @@ export interface SchedulingManageProps {
   match: MatchDetailResponseDto;
   readOnly: boolean;
   /** Distinct voters so far (poll.uniqueVoterCount) — drives "N haven't voted". */
-  uniqueVoterCount?: number;
+  uniqueVoterCount?: number | undefined;
 }
 
 /** The sheet itself — mounted only while open (a closed `BottomSheet` still

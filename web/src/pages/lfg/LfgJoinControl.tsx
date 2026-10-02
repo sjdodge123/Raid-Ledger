@@ -29,7 +29,7 @@ export interface LfgJoinControlProps {
     /** The caller's button styling, so the bar keeps one button vocabulary. */
     className: string;
     /** Disables the button and the three choices while a write is in flight. */
-    isBusy?: boolean;
+    isBusy?: boolean | undefined;
     /**
      * ROK-1619 AC7: `pressWouldSpawnNow` from the group read — would THIS
      * viewer's `Right now` pick form the group? Marks the `+1` opener with the
@@ -42,7 +42,7 @@ export interface LfgJoinControlProps {
      * The server-resolved indicator glyph (`spawnIndicatorEmoji`). The server
      * always sends it with the flag (🎉 by default), so the web has no default.
      */
-    spawnEmoji?: string;
+    spawnEmoji?: string | undefined;
 }
 
 /**
@@ -53,10 +53,10 @@ export interface LfgJoinControlProps {
  */
 function JoinOpener({ className, isBusy, open, onToggle, spawnGlyph }: {
     className: string;
-    isBusy?: boolean;
+    isBusy?: boolean | undefined;
     open: boolean;
     onToggle: () => void;
-    spawnGlyph?: string;
+    spawnGlyph?: string | undefined;
 }): JSX.Element {
     return (
         <button type="button" data-testid="lfg-join-button" className={className}

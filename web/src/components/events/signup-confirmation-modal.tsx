@@ -12,14 +12,14 @@ import { PHONE_MQ } from '../../lib/breakpoints';
 interface SignupConfirmationModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onConfirm: (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => void;
+    onConfirm: (selection: { characterId: string; role?: CharacterRole | undefined; preferredRoles?: CharacterRole[] | undefined }) => void;
     onSkip: (options?: { preferredRoles?: CharacterRole[] }) => void;
     isConfirming?: boolean;
-    gameId?: number;
-    gameName?: string;
+    gameId?: number | undefined;
+    gameName?: string | undefined;
     hasRoles?: boolean;
-    gameSlug?: string;
-    preSelectedRole?: CharacterRole;
+    gameSlug?: string | undefined;
+    preSelectedRole?: CharacterRole | undefined;
     eventId?: number;
 }
 
@@ -190,7 +190,7 @@ export function SignupConfirmationModal({
 }
 
 function InlineCreateSection({ gameId, characters, hasRoles, gameSlug, eventId, sel, handleCharacterCreated }: {
-    gameId?: number; characters: CharacterDto[]; hasRoles: boolean; gameSlug?: string; eventId?: number;
+    gameId?: number | undefined; characters: CharacterDto[]; hasRoles: boolean; gameSlug?: string | undefined; eventId?: number | undefined;
     sel: ReturnType<typeof useSignupSelection>; handleCharacterCreated: (c?: CharacterDto) => void;
 }) {
     if (!sel.showCreateForm || !gameId) return null;
@@ -218,7 +218,7 @@ function SignupRolePickerSection({ characters, sel, hasRoles, handleToggleRole }
 
 function EmptyCharactersPrompt({ characters, isLoadingCharacters, isError, sel, gameName, hasRoles, isConfirming, handleToggleRole, onSkip }: {
     characters: CharacterDto[]; isLoadingCharacters: boolean; isError: boolean;
-    sel: ReturnType<typeof useSignupSelection>; gameName?: string; hasRoles: boolean; isConfirming: boolean;
+    sel: ReturnType<typeof useSignupSelection>; gameName?: string | undefined; hasRoles: boolean; isConfirming: boolean;
     handleToggleRole: (r: CharacterRole) => void; onSkip: (o?: { preferredRoles?: CharacterRole[] }) => void;
 }) {
     if (isLoadingCharacters || isError || characters.length > 0 || sel.showCreateForm) return null;
@@ -232,8 +232,8 @@ function EmptyCharactersPrompt({ characters, isLoadingCharacters, isError, sel, 
 
 function SignupModalContent({ isLoadingCharacters, isError, error, characters, sel, gameId, gameName, hasRoles, gameSlug, preSelectedRole, eventId, isConfirming, onClose, onSkip, handleToggleRole, handleCharacterCreated, handleConfirm }: {
     isLoadingCharacters: boolean; isError: boolean; error: unknown; characters: CharacterDto[];
-    sel: ReturnType<typeof useSignupSelection>; gameId?: number; gameName?: string; hasRoles: boolean;
-    gameSlug?: string; preSelectedRole?: CharacterRole; eventId?: number; isConfirming: boolean;
+    sel: ReturnType<typeof useSignupSelection>; gameId?: number | undefined; gameName?: string | undefined; hasRoles: boolean;
+    gameSlug?: string | undefined; preSelectedRole?: CharacterRole | undefined; eventId?: number | undefined; isConfirming: boolean;
     onClose: () => void; onSkip: (o?: { preferredRoles?: CharacterRole[] }) => void;
     handleToggleRole: (r: CharacterRole) => void; handleCharacterCreated: (c?: CharacterDto) => void; handleConfirm: () => void;
 }) {
@@ -278,7 +278,7 @@ function ErrorState({ error }: { error: unknown }) {
 }
 
 function NoCharactersState({ gameName, hasRoles, selectedRoles, onToggleRole, isConfirming, onSkip, onCreateClick }: {
-    gameName?: string; hasRoles: boolean; selectedRoles: CharacterRole[];
+    gameName?: string | undefined; hasRoles: boolean; selectedRoles: CharacterRole[];
     onToggleRole: (role: CharacterRole) => void; isConfirming: boolean;
     onSkip: () => void; onCreateClick: () => void;
 }) {

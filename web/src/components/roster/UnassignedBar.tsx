@@ -7,7 +7,7 @@ import './UnassignedBar.css';
 interface UnassignedBarProps {
     pool: RosterAssignmentResponse[];
     /** ROK-466: Optional — only admins should open the assignment popup */
-    onBarClick?: () => void;
+    onBarClick?: (() => void) | undefined;
     /** When true, disables own sticky positioning (parent handles it) */
     inline?: boolean;
 }

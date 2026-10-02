@@ -123,7 +123,7 @@ function themeLabel(mode: string) {
     return 'Dark mode';
 }
 
-function ControlsSection({ onFeedbackClick, onClose }: { onFeedbackClick?: () => void; onClose: () => void }) {
+function ControlsSection({ onFeedbackClick, onClose }: { onFeedbackClick?: (() => void) | undefined; onClose: () => void }) {
     const themeMode = useThemeStore((s) => s.themeMode);
     const cycleTheme = useThemeStore((s) => s.cycleTheme);
     return (
@@ -238,7 +238,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
 
 function MoreDrawerBody({ s, onClose, onFeedbackClick, onOpenGameTime }: {
     s: Omit<ReturnType<typeof useMoreDrawerState>, 'trapRef'>; onClose: () => void;
-    onFeedbackClick?: () => void; onOpenGameTime: () => void;
+    onFeedbackClick?: (() => void) | undefined; onOpenGameTime: () => void;
 }) {
     return (
         <div className="flex-1 overflow-y-auto">

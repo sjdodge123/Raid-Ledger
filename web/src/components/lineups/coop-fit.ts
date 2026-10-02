@@ -10,11 +10,11 @@
 
 /** Minimal co-op shape shared by search results and suggestion rows. */
 export interface CoopCapacityFields {
-    cooptimusOnlineMax?: number | null;
+    cooptimusOnlineMax?: number | null | undefined;
     /** ROK-1401: feeds the shared `coopLabel` (`>= 2` means local co-op). */
-    cooptimusCouchMax?: number | null;
+    cooptimusCouchMax?: number | null | undefined;
     /** ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. */
-    cooptimusComboCoop?: boolean | null;
+    cooptimusComboCoop?: boolean | null | undefined;
 }
 
 /**

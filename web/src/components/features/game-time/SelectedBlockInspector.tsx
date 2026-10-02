@@ -13,7 +13,7 @@ interface SelectedBlockInspectorProps {
     onRemove: () => void;
     onDone: () => void;
     /** Coarse ranges (ROK-1579); the profile passes Evening / Whole day. */
-    presets?: BlockPreset[];
+    presets?: BlockPreset[] | undefined;
     /** Apply one — the caller decides whether the window has to grow first. */
     onPreset?: (preset: BlockPreset) => void;
 }

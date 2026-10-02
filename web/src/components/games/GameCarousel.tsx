@@ -9,7 +9,7 @@ interface GameCarouselProps {
     /** Batch pricing map from parent. */
     pricingMap?: Map<number, ItadGamePricingDto | null>;
     /** ROK-565: Optional per-game stats keyed by stringified game id. Renders a "N played" overlay badge. */
-    metadata?: Record<string, { playerCount: number; totalSeconds: number }>;
+    metadata?: Record<string, { playerCount: number; totalSeconds: number }> | undefined;
     /**
      * ROK-1295 / ROK-1342: when 'drawer', wraps each card in <GameDiscoverCard />.
      * The card body navigates to /games/:id (heart + detail UX). The inline

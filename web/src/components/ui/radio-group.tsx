@@ -46,10 +46,10 @@ export interface RadioGroupProps<V extends string> {
     /** Shared `name`; generated when omitted. */
     name?: string;
     disabled?: boolean;
-    className?: string;
+    className?: string | undefined;
     invalid?: boolean;
     /** Inline error under the group; also marks it invalid. */
-    error?: string;
+    error?: string | undefined;
     'aria-describedby'?: string;
 }
 

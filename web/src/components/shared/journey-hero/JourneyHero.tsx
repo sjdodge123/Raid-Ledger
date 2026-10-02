@@ -43,7 +43,7 @@ function PhaseProgress({
 }: {
   active: HeroActive;
   tone: HeroTone;
-  hideSchedulePhase?: boolean;
+  hideSchedulePhase?: boolean | undefined;
 }): JSX.Element {
   // ROK-1302: drop the trailing "Schedule" step for terminal (opted-out) lineups.
   const labels = hideSchedulePhase ? PHASE_LABELS.slice(0, 3) : PHASE_LABELS;
@@ -169,7 +169,7 @@ function DoneCheck({ label }: { label: string }): JSX.Element {
   );
 }
 
-function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: () => void; tone: HeroTone }): JSX.Element {
+function HeroCta({ cta, onCtaClick, tone }: { cta: string; onCtaClick?: (() => void) | undefined; tone: HeroTone }): JSX.Element {
   // ROK-1586: `bg-emerald-600` is a DELIBERATE KEEP, not a missed migration —
   // `index.css` forces the white label off `.bg-emerald-600`, so tokenising it to
   // `bg-success` would drop out of that rule and ship a dark label on light schemes.

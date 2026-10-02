@@ -68,7 +68,7 @@ function useRoleManagement() {
     const [removeTarget, setRemoveTarget] = useState<ModerationTarget | null>(null);
     const [kickTarget, setKickTarget] = useState<ModerationTarget | null>(null);
     const [banTarget, setBanTarget] = useState<ModerationTarget | null>(null);
-    const m = useUserManagement({ search: debouncedSearch || undefined });
+    const m = useUserManagement(debouncedSearch ? { search: debouncedSearch } : {});
 
     const handlers = {
         onRoleChange: (userId: number, username: string, role: Exclude<UserRole, 'admin'>) =>

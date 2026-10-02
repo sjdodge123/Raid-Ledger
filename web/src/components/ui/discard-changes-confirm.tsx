@@ -22,7 +22,7 @@ export interface DiscardChangesConfirmProps {
     /** "Discard" — close the overlay and drop the draft. */
     onDiscard: () => void;
     /** What is unsaved, in the caller's words. Defaults to `DEFAULT_DISCARD_MESSAGE`. */
-    message?: string;
+    message?: string | undefined;
 }
 
 /** See file docstring. */

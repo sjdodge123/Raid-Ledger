@@ -16,15 +16,15 @@ import { CharacterPreviewCard } from './character-preview-card';
 
 interface WowArmoryImportFormProps {
     onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
-    isMain?: boolean;
+    isMain?: boolean | undefined;
     /** Game variant for Blizzard API namespace (retail, classic_era, classic) */
-    gameVariant?: string;
+    gameVariant?: string | undefined;
     /** Pre-fill the realm field (e.g., from inviter's character) */
-    defaultRealm?: string;
+    defaultRealm?: string | undefined;
     /** ROK-587: Pre-fill the region (e.g., from event context) */
-    defaultRegion?: import('@raid-ledger/contract').WowRegion;
+    defaultRegion?: import('@raid-ledger/contract').WowRegion | undefined;
     /** Register a validator fn with the wizard. Return false = block Next. */
-    onRegisterValidator?: (fn: () => boolean) => void;
+    onRegisterValidator?: ((fn: () => boolean) => void) | undefined;
 }
 
 const REGIONS: { value: WowRegion; label: string }[] = [
@@ -152,7 +152,7 @@ function RegionSelector({ region, onRegionChange }: { region: WowRegion; onRegio
 }
 
 function CharacterNameInput({ name, error, onNameChange, onSearch }: {
-    name: string; error?: string; onNameChange: (v: string) => void; onSearch: () => void;
+    name: string; error?: string | undefined; onNameChange: (v: string) => void; onSearch: () => void;
 }) {
     return (
         <Field label="Character Name" required error={error}>
@@ -180,7 +180,7 @@ function splitSearchError(error: string) {
 
 /** Search form fields: region, realm, character name */
 function SearchFields({ region, realm, name, formState, error, gameVariant, onRegionChange, onRealmChange, onNameChange, onSearch }: {
-    region: WowRegion; realm: string; name: string; formState: FormState; error: string; gameVariant?: string;
+    region: WowRegion; realm: string; name: string; formState: FormState; error: string; gameVariant?: string | undefined;
     onRegionChange: (v: WowRegion) => void; onRealmChange: (v: string) => void; onNameChange: (v: string) => void; onSearch: () => void;
 }) {
     const { nameErr, realmErr, bannerErr } = splitSearchError(error);

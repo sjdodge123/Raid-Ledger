@@ -28,7 +28,7 @@ export interface SchedulingRemindActionProps {
    * ROK-1584: poll members who have not voted yet — the sheet row's subline
    * ("N haven't voted"). Omitted when the caller cannot compute it cheaply.
    */
-  pendingVoterCount?: number;
+  pendingVoterCount?: number | undefined;
 }
 
 /** Creator/operator-only Remind Voters button — see file-level docstring. */

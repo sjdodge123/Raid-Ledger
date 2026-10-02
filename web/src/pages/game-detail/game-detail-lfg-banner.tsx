@@ -43,11 +43,11 @@ const STATE_CLS: Record<'lfg' | 'lfm', string> = {
 
 export interface GameDetailLfgBannerProps {
     /** Eligible active intents. Nothing renders at 0 or `undefined`. */
-    activeCount?: number | null;
+    activeCount?: number | null | undefined;
     /** `games.cooptimusOnlineMax`, when Co-Optimus knows the group size. */
-    viabilityThreshold?: number | null;
+    viabilityThreshold?: number | null | undefined;
     /** Server-derived state; falls back to the count when absent. */
-    state?: LfgState;
+    state?: LfgState | undefined;
     /** `games.slug` — the banner navigates to `/lfg/{gameSlug}`. */
     gameSlug: string;
 }

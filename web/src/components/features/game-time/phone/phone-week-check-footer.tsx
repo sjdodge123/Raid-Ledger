@@ -36,7 +36,7 @@ export interface StepFooterProps {
     slots: GameTimeSlot[];
     dirty: boolean;
     /** Omitted on the profile variant — there is nothing to skip there. */
-    onSkip?: () => void;
+    onSkip?: (() => void) | undefined;
 }
 
 /**

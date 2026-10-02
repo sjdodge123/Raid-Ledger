@@ -12,9 +12,9 @@ interface InlineCharacterFormProps {
     hasRoles?: boolean;
     hasSpecs?: boolean;
     /** Game slug for plugin slot context (enables WoW import when plugin active) */
-    gameSlug?: string;
+    gameSlug?: string | undefined;
     /** ROK-587: Event ID for variant context auto-population */
-    eventId?: number;
+    eventId?: number | undefined;
     onCharacterCreated?: (character: CharacterDto) => void;
     onCancel?: () => void;
 }
@@ -38,7 +38,7 @@ function buildInlinePayload(name: string, charClass: string, spec: string, role:
 }
 
 function InlineTextField({ label, value, onChange, maxLength, error }: {
-    label: string; value: string; onChange: (v: string) => void; maxLength: number; error?: string;
+    label: string; value: string; onChange: (v: string) => void; maxLength: number; error?: string | undefined;
 }) {
     return (
         <Field label={label} hideLabel error={error || undefined}>
@@ -70,7 +70,7 @@ function InlineRoleFields({ charClass, spec, role, realm, onClassChange, onSpecC
     );
 }
 
-function InlineFormFooter({ onCancel, isPending }: { onCancel?: () => void; isPending: boolean }) {
+function InlineFormFooter({ onCancel, isPending }: { onCancel?: (() => void) | undefined; isPending: boolean }) {
     return (
         <div className="flex gap-2">
             {onCancel && <Button variant="secondary" size="sm" className="flex-1" onClick={onCancel}>Cancel</Button>}

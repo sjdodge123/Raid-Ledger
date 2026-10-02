@@ -60,7 +60,7 @@ function handleClaimError(err: unknown, resolveData: InviteCodeResolveResponseDt
     }
 }
 
-function useImportHandler(refetchCharacters: () => Promise<{ data?: { data?: { id: string; name: string; roleOverride: string | null; role: string | null; createdAt: string }[] } }>, handleClaim: (role?: PugRole, charId?: string) => Promise<void>) {
+function useImportHandler(refetchCharacters: () => Promise<{ data?: { data?: { id: string; name: string; roleOverride: string | null; role: string | null; createdAt: string }[] | undefined } | undefined }>, handleClaim: (role?: PugRole, charId?: string) => Promise<void>) {
     const [showManualRoleSelector, setShowManualRoleSelector] = useState(false);
     const [showImportForm, setShowImportForm] = useState(false);
 

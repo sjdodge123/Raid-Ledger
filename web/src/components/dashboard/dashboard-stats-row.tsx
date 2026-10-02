@@ -21,7 +21,7 @@ function StatCard({
     label: string;
     value: string | number;
     accent?: boolean;
-    onClick?: () => void;
+    onClick?: (() => void) | undefined;
 }) {
     const interactive = !!onClick && value !== 0;
     return (

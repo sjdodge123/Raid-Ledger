@@ -30,16 +30,16 @@ interface CharacterCardCompactProps {
     id?: string;
     name?: string;
     avatarUrl?: string | null;
-    faction?: string | null;
-    level?: number | null;
-    race?: string | null;
+    faction?: string | null | undefined;
+    level?: number | null | undefined;
+    race?: string | null | undefined;
     className?: string | null;
     spec?: string | null;
     role?: string | null;
     itemLevel?: number | null;
     isMain?: boolean;
     /** ROK-1130: profession data threaded into the meta row. */
-    professions?: CharacterProfessionsDto | null;
+    professions?: CharacterProfessionsDto | null | undefined;
     /** Visual size variant: 'default' for standard, 'sm' for compact/onboarding. */
     size?: 'default' | 'sm';
 }
@@ -53,11 +53,11 @@ interface CharacterCardCompactProps {
  * MiniCharacterCard to prevent visual drift.
  */
 interface ResolvedChar {
-    charId: string; charName: string; avatarUrl?: string | null; faction?: string | null;
-    level?: number | null; race?: string | null; charClass?: string | null;
-    spec?: string | null; role?: string | null; itemLevel?: number | null;
-    isMain?: boolean; variantLabel: string | null;
-    professions?: CharacterProfessionsDto | null;
+    charId: string; charName: string; avatarUrl?: string | null | undefined; faction?: string | null | undefined;
+    level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
+    spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
+    isMain?: boolean | undefined; variantLabel: string | null;
+    professions?: CharacterProfessionsDto | null | undefined;
 }
 
 function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
@@ -74,7 +74,7 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
     };
 }
 
-function CharacterAvatar({ avatarUrl, charName, size }: { avatarUrl?: string | null; charName: string; size: string }) {
+function CharacterAvatar({ avatarUrl, charName, size }: { avatarUrl?: string | null | undefined; charName: string; size: string }) {
     if (avatarUrl) {
         return <img src={avatarUrl} alt={charName} className={`${size} rounded-full bg-overlay flex-shrink-0`} onError={(e) => { e.currentTarget.style.display = 'none'; }} />;
     }
@@ -82,7 +82,7 @@ function CharacterAvatar({ avatarUrl, charName, size }: { avatarUrl?: string | n
 }
 
 function NameRow({ charName, isMain, faction, variantLabel, textSize }: {
-    charName: string; isMain?: boolean; faction?: string | null; variantLabel: string | null; textSize: string;
+    charName: string; isMain?: boolean | undefined; faction?: string | null | undefined; variantLabel: string | null; textSize: string;
 }) {
     return (
         <div className="flex items-center gap-2 flex-wrap">
@@ -95,9 +95,9 @@ function NameRow({ charName, isMain, faction, variantLabel, textSize }: {
 }
 
 function MetadataRow({ level, race, charClass, spec, role, itemLevel, professions, textSize }: {
-    level?: number | null; race?: string | null; charClass?: string | null;
-    spec?: string | null; role?: string | null; itemLevel?: number | null;
-    professions?: CharacterProfessionsDto | null; textSize: string;
+    level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
+    spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
+    professions?: CharacterProfessionsDto | null | undefined; textSize: string;
 }) {
     return (
         <div className={`flex items-center gap-1.5 ${textSize} text-muted flex-wrap`}>

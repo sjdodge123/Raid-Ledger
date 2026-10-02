@@ -10,7 +10,7 @@ interface MobileEventCardProps {
     event: EventResponseDto;
     signupCount?: number;
     onClick?: () => void;
-    matchesGameTime?: boolean;
+    matchesGameTime?: boolean | undefined;
 }
 
 function GameCoverThumb({ event, showPlaceholder, gameCoverUrl, onError }: {
@@ -79,7 +79,7 @@ function MobileCardHeader({ title, status, isSeries }: { title: string; status: 
 }
 
 function MobileCardFooter({ relativeTime, matchesGameTime, signupAvatars, signupCount }: {
-    relativeTime: string; matchesGameTime?: boolean;
+    relativeTime: string; matchesGameTime?: boolean | undefined;
     signupAvatars: Array<{ url: string | null }>; signupCount: number;
 }) {
     return (

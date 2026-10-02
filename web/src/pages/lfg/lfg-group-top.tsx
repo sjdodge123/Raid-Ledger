@@ -33,7 +33,7 @@ export interface LfgGroupTopProps {
     /** ROK-1613 — open the start-now confirm. Always offered while looking. */
     onStartNow: () => void;
     onParticipants: () => void;
-    isBusy?: boolean;
+    isBusy?: boolean | undefined;
 }
 
 /** A group mid-session: the card and the now strip, nothing to press. */

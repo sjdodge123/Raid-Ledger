@@ -16,7 +16,7 @@ export interface CharacterStepProps {
     selectedRole: PugRole | null;
     characterRole: PugRole | null;
     isClaiming: boolean;
-    gameInfo: { gameVariant?: string; inviterRealm?: string } | undefined;
+    gameInfo: { gameVariant?: string | undefined; inviterRealm?: string | undefined } | undefined;
     onSelectCharacter: (charId: string, role: PugRole | null) => void;
     onSelectRole: (role: PugRole) => void;
     onClaim: (role?: PugRole, charId?: string) => void;

@@ -57,7 +57,7 @@ interface ItemComparisonProps {
     /** WoW game variant for Wowhead URLs */
     gameVariant: string | null;
     /** Character's WoW class (e.g. "Druid", "Warrior") for armor proficiency checks */
-    characterClass?: string | null;
+    characterClass?: string | null | undefined;
     /** Armor subclass of the loot/reward item (e.g. "Plate", "Mail", "Leather", "Cloth", "Shield") */
     lootItemSubclass?: string | null;
     /** Item slot name — used to infer Shield when itemSubclass is missing */

@@ -15,25 +15,25 @@ interface SignupItem {
     id: number;
     status: string;
     confirmationStatus: string;
-    isAnonymous?: boolean;
+    isAnonymous?: boolean | undefined;
     /** Anonymous Discord signups (ROK-137): the API fills these, and sends user.avatar as null */
-    discordUserId?: string | null;
-    discordUsername?: string | null;
-    discordAvatarHash?: string | null;
+    discordUserId?: string | null | undefined;
+    discordUsername?: string | null | undefined;
+    discordAvatarHash?: string | null | undefined;
     /** ROK-847: Preferred roles the player is willing to play */
-    preferredRoles?: string[] | null;
+    preferredRoles?: string[] | null | undefined;
     user: {
         id: number;
         username: string;
         avatar: string | null;
-        discordId?: string | null;
-        customAvatarUrl?: string | null;
-        characters?: Array<{ gameId: string | number; name?: string; avatarUrl: string | null }>;
+        discordId?: string | null | undefined;
+        customAvatarUrl?: string | null | undefined;
+        characters?: Array<{ gameId: string | number; name?: string | undefined; avatarUrl: string | null }> | undefined;
     };
-    character?: SignupCharacterDto | null;
+    character?: SignupCharacterDto | null | undefined;
     /** ROK-1379 follow-up: running-late marker (⏰ badge parity with the Discord embed) */
-    runningLate?: boolean;
-    lateMinutes?: number | null;
+    runningLate?: boolean | undefined;
+    lateMinutes?: number | null | undefined;
 }
 
 interface EventDetailRosterProps {
@@ -42,7 +42,7 @@ interface EventDetailRosterProps {
 }
 
 /** Inline role preference icons for a signup (ROK-847). */
-function RolePreferenceBadges({ roles }: { roles?: string[] | null }) {
+function RolePreferenceBadges({ roles }: { roles?: string[] | null | undefined }) {
     if (!roles || roles.length === 0) return null;
     return (
         <span className="flex shrink-0 items-center gap-0.5">
@@ -75,7 +75,7 @@ function AnonymousUserLabel({ signup }: { signup: SignupItem }) {
     const name = signup.discordUsername ?? signup.user.username;
     const { to, state } = guestProfileLink({
         username: name,
-        discordId: signup.discordUserId ?? signup.user.discordId,
+        discordId: signup.discordUserId ?? signup.user.discordId ?? null,
         avatarHash: signup.discordAvatarHash ?? signup.user.avatar,
     });
     return (

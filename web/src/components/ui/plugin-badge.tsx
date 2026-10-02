@@ -3,7 +3,7 @@ import { isImageIcon } from '../../plugins/plugin-registry';
 interface PluginBadgeProps {
     icon: string;
     /** Optional smaller icon URL for compact variant */
-    iconSmall?: string;
+    iconSmall?: string | undefined;
     label: string;
     /** 'sm' for plugin slot badges (24x24), 'md' for admin UI (32x32) */
     size?: 'sm' | 'md';

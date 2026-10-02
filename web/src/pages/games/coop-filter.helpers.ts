@@ -19,12 +19,12 @@
  * it, and every field may be null OR entirely absent.
  */
 export interface CoopFilterableGame {
-    cooptimusOnlineMax?: number | null;
-    cooptimusCouchMax?: number | null;
-    cooptimusLanMax?: number | null;
-    cooptimusSplitscreen?: boolean | null;
-    cooptimusCampaignCoop?: boolean | null;
-    cooptimusSyncedAt?: string | null;
+    cooptimusOnlineMax?: number | null | undefined;
+    cooptimusCouchMax?: number | null | undefined;
+    cooptimusLanMax?: number | null | undefined;
+    cooptimusSplitscreen?: boolean | null | undefined;
+    cooptimusCampaignCoop?: boolean | null | undefined;
+    cooptimusSyncedAt?: string | null | undefined;
 }
 
 /**

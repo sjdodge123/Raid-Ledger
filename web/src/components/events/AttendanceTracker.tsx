@@ -87,7 +87,7 @@ function StatusBadge({ status }: { status: AttendanceStatus }) {
 }
 
 function SignupRow({ signup, editMode, isPending, onRecord }: {
-    signup: { id: number; user: { username: string }; attendanceStatus?: AttendanceStatus | null };
+    signup: { id: number; user: { username: string }; attendanceStatus?: AttendanceStatus | null | undefined };
     editMode: boolean; isPending: boolean; onRecord: (signupId: number, status: AttendanceStatus) => void;
 }) {
     const currentStatus = signup.attendanceStatus ?? 'unmarked';

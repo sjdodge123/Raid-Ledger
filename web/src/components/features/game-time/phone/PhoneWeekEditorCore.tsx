@@ -45,7 +45,7 @@ export interface PhoneWeekEditorCoreProps {
     /** Told which day is on screen, for a caller that mirrors it elsewhere. */
     onDayChange?: (day: number) => void;
     /** Pre-measured dims — see `DayBlockEditor`. */
-    dims?: GridDims;
+    dims?: GridDims | undefined;
     /** Where the block inspector goes — see `DayBlockEditor`. */
     inspectorPlacement?: 'flow' | 'fixed';
     /**
@@ -61,7 +61,7 @@ export interface PhoneWeekEditorCoreProps {
     /** Attached to the day slot, for a caller that sizes its window to it. */
     daySlotRef?: React.Ref<HTMLDivElement>;
     /** Coarse block presets for the inspector (ROK-1579). */
-    presets?: BlockPresetControl;
+    presets?: BlockPresetControl | undefined;
     /**
      * GROUP mode (ROK-1580). When set, the day slot shows the poll's aggregate
      * read-only instead of the block editor; `slots`/`onChange` are ignored.

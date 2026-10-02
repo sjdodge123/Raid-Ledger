@@ -111,7 +111,7 @@ function BindingActions({ binding, isEditing, isInert, onToggleEdit, onFix, onDe
 function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpdating, isDeleting, deletingId, hasMultiMonitor, updateError }: {
     binding: ChannelBindingDto; editingId: string | null; setEditingId: (id: string | null) => void;
     onSave: (id: string, dto: UpdateChannelBindingDto) => void; onDelete: (id: string) => void;
-    isUpdating: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean; updateError?: string | null;
+    isUpdating: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean; updateError?: string | null | undefined;
 }) {
     const isEditing = editingId === binding.id;
     const isInert = isBindingInert(binding);

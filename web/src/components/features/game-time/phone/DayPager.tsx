@@ -11,7 +11,7 @@ interface DayPagerProps {
      * puts the date and the poll size there — "Sep 16 · 4 in poll" — because
      * the viewer's own free hours are not what that screen is about.
      */
-    subtitle?: string;
+    subtitle?: string | undefined;
     /**
      * Paging past an end is a week step rather than a dead end (ROK-1580): the
      * caller re-fetches the neighbouring week, so both arrows stay live.

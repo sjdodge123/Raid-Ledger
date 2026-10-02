@@ -71,8 +71,8 @@ export function findPlayerPreset(key: string | null | undefined): PlayerCountPre
  * it, and every field may be null OR entirely absent.
  */
 export interface LibraryFilterableGame {
-    playerCount?: { min: number; max: number } | null;
-    ownerCount?: number | null;
+    playerCount?: { min: number; max: number } | null | undefined;
+    ownerCount?: number | null | undefined;
 }
 
 /** Active library predicates. An absent key is an inactive predicate. */

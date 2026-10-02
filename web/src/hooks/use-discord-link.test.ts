@@ -12,6 +12,7 @@ vi.mock('../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 import { API_BASE_URL } from '../lib/config';
 import { toast } from '../lib/toast';
 import { useDiscordLink, useDiscordLinkAction } from './use-discord-link';
+import { at } from '../test/defined';
 
 const realLocation = window.location;
 let navigations: string[] = [];
@@ -79,7 +80,7 @@ describe('useDiscordLink (ROK-1630 AC16)', () => {
         const fakeEvent = { type: 'click', target: {} };
         await act(async () => { await (result.current as (e: unknown) => Promise<void>)(fakeEvent); });
 
-        const init = fetchFn.mock.calls[0][1] as RequestInit;
+        const init = at(fetchFn.mock.calls, 0)[1] as RequestInit;
         expect(JSON.parse(String(init.body))).toEqual({});
     });
 

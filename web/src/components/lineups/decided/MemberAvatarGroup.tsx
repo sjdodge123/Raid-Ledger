@@ -19,7 +19,7 @@ interface Member {
 interface MemberAvatarGroupProps {
   members: Member[];
   max?: number;
-  gameId?: number | string;
+  gameId?: number | string | undefined;
 }
 
 /** Convert a match member to an AvatarUser for the shared component. */

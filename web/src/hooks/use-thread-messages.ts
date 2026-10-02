@@ -49,7 +49,7 @@ export function useThreadMessages(
             getThreadMessages(threadId as string, {
                 surfaceKind: surface.kind,
                 surfaceId: surface.id,
-                before,
+                ...(before === undefined ? {} : { before }),
             }),
         refetchInterval: THREAD_POLL_MS,
         refetchIntervalInBackground: false,

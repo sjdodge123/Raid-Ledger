@@ -25,7 +25,7 @@ function CharacterAvatar({ character }: { character: CharacterDto }) {
     );
 }
 
-function CharacterDetails({ character, isMain }: { character: CharacterDto; isMain?: boolean }) {
+function CharacterDetails({ character, isMain }: { character: CharacterDto; isMain?: boolean | undefined }) {
     return (
         <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">

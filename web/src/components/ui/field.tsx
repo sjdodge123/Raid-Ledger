@@ -16,12 +16,12 @@ export interface FieldProps {
     label: string;
     hint?: ReactNode;
     /** Inline validation message. Setting it marks the control invalid. */
-    error?: string;
-    required?: boolean;
+    error?: string | undefined;
+    required?: boolean | undefined;
     /** Visually hide the label (search boxes, inline row editors); it still names the control. */
     hideLabel?: boolean;
     id?: string;
-    className?: string;
+    className?: string | undefined;
     children: ReactNode;
 }
 
@@ -32,14 +32,14 @@ function useFieldValue(p: FieldProps, base: string): FieldContextValue {
     const invalid = !!p.error;
     const required = !!p.required;
     const value = useMemo(
-        () => ({ id: base, labelId: `${base}-label`, describedBy, invalid, required }),
+        () => ({ id: base, labelId: `${base}-label`, ...(describedBy === undefined ? {} : { describedBy }), invalid, required }),
         [base, describedBy, invalid, required],
     );
     return value;
 }
 
 function FieldLabel({ htmlFor, label, required, hidden }: {
-    htmlFor: string; label: string; required?: boolean; hidden?: boolean;
+    htmlFor: string; label: string; required?: boolean | undefined; hidden?: boolean | undefined;
 }): JSX.Element {
     const id = `${htmlFor}-label`;
     const cls = hidden ? 'sr-only' : 'block mb-1.5 text-sm font-medium text-secondary';

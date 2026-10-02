@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { at, defined } from '../test/defined';
 
 /**
  * ROK-1366 review fix: the fragment token must be gone from the address bar
@@ -15,7 +16,7 @@ function importsOf(file: string): string[] {
     const src = readFileSync(join(here, file), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/^\s*\/\/.*$/gm, '');
-    return [...src.matchAll(IMPORT_RE)].map((m) => m[1]);
+    return [...src.matchAll(IMPORT_RE)].map((m) => defined(m[1], 'import specifier'));
 }
 
 describe('ROK-1366: magic-link fragment is captured before Sentry initialises', () => {
@@ -73,7 +74,7 @@ interface ScriptTag {
 
 function indexHtmlScripts(): ScriptTag[] {
     const html = readFileSync(join(here, '../../index.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
-    return [...html.matchAll(SCRIPT_RE)].map((m) => ({ attrs: m[1], body: m[2] }));
+    return [...html.matchAll(SCRIPT_RE)].map((m) => ({ attrs: defined(m[1], 'script attrs'), body: defined(m[2], 'script body') }));
 }
 
 const srcOf = (tag: ScriptTag): string | null => /\bsrc\s*=\s*["']([^"']+)["']/i.exec(tag.attrs)?.[1] ?? null;
@@ -95,7 +96,7 @@ describe('ROK-1366: index.html runs nothing that can read the fragment before th
 
     it('loads no external script ahead of the module entry, and no inline one that reads the URL', () => {
         expect(entry, 'index.html must load /src/main.tsx').toBeGreaterThanOrEqual(0);
-        expect(hasAttr(scripts[entry], 'async'), 'an async entry could run after a deferred script').toBe(false);
+        expect(hasAttr(at(scripts, entry), 'async'), 'an async entry could run after a deferred script').toBe(false);
         const early = scripts.slice(0, entry);
         expect(early.map(srcOf).filter(Boolean), 'these execute before the fragment strip').toEqual([]);
         for (const tag of early) {

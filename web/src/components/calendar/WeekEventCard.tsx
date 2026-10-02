@@ -3,6 +3,7 @@ import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
 import { SeriesBadge } from '../events/SeriesBadge';
 import type { CalendarEvent } from './CalendarView';
+import { toAttendeePreviews } from './attendee-previews';
 
 interface WeekEventCardProps {
     event: CalendarEvent;
@@ -64,7 +65,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
     const tier = getTier(durationMins);
     const avatarConfig = getAvatarConfig(tier);
     const signupCount = event.resource?.signupCount ?? 0;
-    const signupsPreview = event.resource?.signupsPreview;
+    const signupsPreview = toAttendeePreviews(event.resource?.signupsPreview);
 
     return (
         <div className={`week-event-block week-event-block--${tier}`} data-tier={tier} style={{

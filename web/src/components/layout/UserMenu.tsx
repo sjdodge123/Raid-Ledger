@@ -71,7 +71,7 @@ function AvatarButton({ avatarUrl, username, isOpen, onClick }: {
 }
 
 function ProfileLink({ username, role, isImpersonating, onClose, userId }: {
-    username: string; role?: UserRole; isImpersonating: boolean; onClose: () => void; userId: number;
+    username: string; role?: UserRole | undefined; isImpersonating: boolean; onClose: () => void; userId: number;
 }) {
     return (
         <Link to={`/users/${userId}`} className="block p-3 border-b border-edge hover:bg-panel/50 transition-colors" onClick={onClose}>

@@ -155,7 +155,7 @@ export function useSchedulingLadder(args: UseSchedulingLadderArgs): SchedulingLa
         if (!canVote || slotPending.pending.has(slotId)) return;
         slotPending.add(slotId);
         void toggleVote
-            .mutateAsync({ lineupId, matchId, slotId, viewer, stance, source })
+            .mutateAsync({ lineupId, matchId, slotId, stance, source, ...(viewer ? { viewer } : {}) })
             .then((data) => announceVoteFor(slotId, data.stance ?? null))
             .catch(() => undefined)
             .finally(() => slotPending.clear(slotId));

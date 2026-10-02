@@ -6,7 +6,7 @@ interface TodayHighlightProps {
     gridDims: GridDims;
     hoursCount: number;
     hasRolling: boolean;
-    currentHour?: number;
+    currentHour?: number | undefined;
     rangeStart: number;
 }
 

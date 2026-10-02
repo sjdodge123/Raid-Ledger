@@ -72,7 +72,7 @@ function RecurrenceFields({ form, errors, recurrenceCount, updateField, setError
 }) {
     const onUntilChange = (value: string) => {
         updateField('recurrenceUntil', value);
-        setErrors((prev) => ({ ...prev, recurrenceUntil: undefined }));
+        setErrors((prev) => { const next = { ...prev }; delete next.recurrenceUntil; return next; });
     };
     return (
         <>
@@ -100,7 +100,7 @@ export function WhenSection({ form, errors, isEditMode, tzAbbr, endTimePreview, 
         <FormSection title="When">
             <p className="text-xs text-muted -mt-2">Times in {tzAbbr}</p>
             <DateTimeInputs form={form} errors={errors} updateField={updateField} />
-            <DurationSection durationMinutes={form.durationMinutes} customDuration={form.customDuration} durationError={errors.duration} onDurationMinutesChange={(v) => updateField('durationMinutes', v)} onCustomDurationChange={(v) => updateField('customDuration', v)} onDurationErrorClear={() => setErrors((prev) => ({ ...prev, duration: undefined }))} />
+            <DurationSection durationMinutes={form.durationMinutes} customDuration={form.customDuration} durationError={errors.duration} onDurationMinutesChange={(v) => updateField('durationMinutes', v)} onCustomDurationChange={(v) => updateField('customDuration', v)} onDurationErrorClear={() => setErrors((prev) => { const next = { ...prev }; delete next.duration; return next; })} />
             {endTimePreview && <EndTimePreview endTimePreview={endTimePreview} tzAbbr={tzAbbr} durationMinutes={form.durationMinutes} />}
             {!isEditMode && <RecurrenceFields form={form} errors={errors} recurrenceCount={recurrenceCount} updateField={updateField} setErrors={setErrors} />}
             <EphemeralVoiceToggle value={form.ephemeralVoiceEnabled} onChange={(v) => updateField('ephemeralVoiceEnabled', v)} privateValue={form.privateVoice} onPrivateChange={(v) => updateField('privateVoice', v)} />

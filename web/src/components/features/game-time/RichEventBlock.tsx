@@ -13,21 +13,21 @@ function DurationBadge({ hours }: { hours: number }) {
 interface RichEventBlockProps {
     event: {
         title: string;
-        gameName?: string | null;
-        gameSlug?: string | null;
-        coverUrl?: string | null;
+        gameName?: string | null | undefined;
+        gameSlug?: string | null | undefined;
+        coverUrl?: string | null | undefined;
         startHour: number;
         endHour: number;
-        description?: string | null;
-        creatorUsername?: string | null;
-        gameId?: number | null;
+        description?: string | null | undefined;
+        creatorUsername?: string | null | undefined;
+        gameId?: number | null | undefined;
         signupsPreview?: Array<{
             id: number;
             username: string;
             avatar: string | null;
-            characters?: Array<{ gameId: number | string; avatarUrl: string | null }>;
-        }>;
-        signupCount?: number;
+            characters?: Array<{ gameId: number | string; avatarUrl: string | null }> | undefined;
+        }> | undefined;
+        signupCount?: number | undefined;
     };
     spanHours: number;
 }

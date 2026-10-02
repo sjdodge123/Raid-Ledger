@@ -15,7 +15,7 @@ function SteamLibraryModalItem({
   pricing,
 }: {
   entry: SteamLibraryEntryDto;
-  pricing?: ItadGamePricingDto | null;
+  pricing?: ItadGamePricingDto | null | undefined;
 }): JSX.Element {
   return (
     <GameRowPill

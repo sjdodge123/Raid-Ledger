@@ -14,7 +14,7 @@ export interface Particle {
     idleTimer?: number;
     lifeTimer?: number;
     maxLife?: number;
-    targetEl?: Element;
+    targetEl?: Element | undefined;
     edgeType?: 'top' | 'bottom' | 'left' | 'right';
     edgeT?: number;
     perpOffset?: number;
