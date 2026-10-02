@@ -296,7 +296,7 @@ function describeGamesIGDB() {
         .where(eq(schema.gameInterests.gameId, game.id));
 
       expect(interests.length).toBe(1);
-      expect(interests[0].source).toBe('manual');
+      expect(interests[0]?.source).toBe('manual');
     });
 
     it('should be idempotent when adding interest twice', async () => {

@@ -183,7 +183,7 @@ describe('earlyAccess persistence (integration)', () => {
       .where(eq(schema.games.igdbId, igdbId))
       .limit(1);
 
-    expect(rows[0].earlyAccess).toBe(true);
+    expect(rows[0]?.earlyAccess).toBe(true);
   });
 
   it('upsertSingleGameRow does not overwrite earlyAccess=false', async () => {
@@ -204,7 +204,7 @@ describe('earlyAccess persistence (integration)', () => {
       .where(eq(schema.games.igdbId, igdbId))
       .limit(1);
 
-    expect(rows[0].earlyAccess).toBe(false);
+    expect(rows[0]?.earlyAccess).toBe(false);
   });
 
   // ── 3. ITAD upsert preserves earlyAccess when undefined ──────
@@ -222,7 +222,7 @@ describe('earlyAccess persistence (integration)', () => {
       .where(eq(schema.games.slug, slug))
       .limit(1);
 
-    expect(rows[0].earlyAccess).toBe(true);
+    expect(rows[0]?.earlyAccess).toBe(true);
   });
 
   it('upsertItadGame updates earlyAccess when explicitly set to true', async () => {
@@ -238,7 +238,7 @@ describe('earlyAccess persistence (integration)', () => {
       .where(eq(schema.games.slug, slug))
       .limit(1);
 
-    expect(rows[0].earlyAccess).toBe(true);
+    expect(rows[0]?.earlyAccess).toBe(true);
   });
 
   it('upsertItadGame updates earlyAccess when explicitly set to false', async () => {
@@ -254,7 +254,7 @@ describe('earlyAccess persistence (integration)', () => {
       .where(eq(schema.games.slug, slug))
       .limit(1);
 
-    expect(rows[0].earlyAccess).toBe(false);
+    expect(rows[0]?.earlyAccess).toBe(false);
   });
 
   // ── 4. enrichSyncedGamesWithItad sets earlyAccess from ITAD ──
@@ -370,7 +370,7 @@ describe('earlyAccess persistence (integration)', () => {
       .where(eq(schema.games.igdbId, igdbId))
       .limit(1);
 
-    expect(rows[0].earlyAccess).toBe(true);
+    expect(rows[0]?.earlyAccess).toBe(true);
   });
 
   it('earlyAccess set via ITAD upsert survives subsequent IGDB upsert', async () => {
@@ -390,7 +390,7 @@ describe('earlyAccess persistence (integration)', () => {
       .from(schema.games)
       .where(eq(schema.games.slug, slug))
       .limit(1);
-    expect(rows1[0].earlyAccess).toBe(true);
+    expect(rows1[0]?.earlyAccess).toBe(true);
 
     // Step 2: IGDB sync upserts the same game (by igdbId conflict)
     const apiGame = buildIgdbApiGame(igdbId, slug);
@@ -403,6 +403,6 @@ describe('earlyAccess persistence (integration)', () => {
       .where(eq(schema.games.igdbId, igdbId))
       .limit(1);
 
-    expect(rows2[0].earlyAccess).toBe(true);
+    expect(rows2[0]?.earlyAccess).toBe(true);
   });
 });

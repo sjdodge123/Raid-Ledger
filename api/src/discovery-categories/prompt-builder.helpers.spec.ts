@@ -22,8 +22,8 @@ describe('buildGenerationPrompt', () => {
     const out = buildGenerationPrompt(baseInput);
     expect(out.responseFormat).toBe('json');
     expect(out.messages.length).toBe(2);
-    expect(out.messages[0].role).toBe('system');
-    expect(out.messages[1].role).toBe('user');
+    expect(out.messages[0]?.role).toBe('system');
+    expect(out.messages[1]?.role).toBe('user');
   });
 
   // ROK-1127 item A2 — rule 5a and the player-count suffix are the two levers
@@ -50,7 +50,7 @@ describe('buildGenerationPrompt', () => {
       ],
     });
 
-    expect(out.messages[1].content).toContain('"Helldivers 2" (47h, 1-4p)');
+    expect(out.messages[1]?.content).toContain('"Helldivers 2" (47h, 1-4p)');
   });
 
   it('marks a single-player title rather than printing "1-1p"', () => {
@@ -65,7 +65,7 @@ describe('buildGenerationPrompt', () => {
       ],
     });
 
-    expect(out.messages[1].content).toContain(
+    expect(out.messages[1]?.content).toContain(
       '"Hades" (10h, 1p (single-player))',
     );
   });
@@ -76,7 +76,7 @@ describe('buildGenerationPrompt', () => {
       topPlayed: [{ name: 'Unknown Game', totalSeconds: 3_600 }],
     });
 
-    expect(out.messages[1].content).toContain('"Unknown Game" (1h)');
+    expect(out.messages[1]?.content).toContain('"Unknown Game" (1h)');
   });
 
   it('locks the 7-axis key order in the system prompt', () => {

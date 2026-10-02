@@ -81,20 +81,20 @@ describe('fetchCharacterProfessions — happy path', () => {
 
     expect(result).not.toBeNull();
     expect(result!.primary).toHaveLength(1);
-    expect(result!.primary[0].name).toBe('Tailoring');
-    expect(result!.primary[0].id).toBe(197);
-    expect(result!.primary[0].slug).toBe('tailoring');
-    expect(result!.primary[0].skillLevel).toBe(450);
-    expect(result!.primary[0].maxSkillLevel).toBe(450);
-    expect(result!.primary[0].tiers).toHaveLength(1);
-    expect(result!.primary[0].tiers[0].name).toBe('Dragon Isles Tailoring');
-    expect(result!.primary[0].tiers[0].id).toBe(2823);
-    expect(result!.primary[0].tiers[0].skillLevel).toBe(100);
-    expect(result!.primary[0].tiers[0].maxSkillLevel).toBe(100);
+    expect(result!.primary[0]?.name).toBe('Tailoring');
+    expect(result!.primary[0]?.id).toBe(197);
+    expect(result!.primary[0]?.slug).toBe('tailoring');
+    expect(result!.primary[0]?.skillLevel).toBe(450);
+    expect(result!.primary[0]?.maxSkillLevel).toBe(450);
+    expect(result!.primary[0]?.tiers).toHaveLength(1);
+    expect(result!.primary[0]?.tiers[0]?.name).toBe('Dragon Isles Tailoring');
+    expect(result!.primary[0]?.tiers[0]?.id).toBe(2823);
+    expect(result!.primary[0]?.tiers[0]?.skillLevel).toBe(100);
+    expect(result!.primary[0]?.tiers[0]?.maxSkillLevel).toBe(100);
     expect(result!.secondary).toHaveLength(1);
-    expect(result!.secondary[0].name).toBe('Cooking');
-    expect(result!.secondary[0].slug).toBe('cooking');
-    expect(result!.secondary[0].tiers).toEqual([]);
+    expect(result!.secondary[0]?.name).toBe('Cooking');
+    expect(result!.secondary[0]?.slug).toBe('cooking');
+    expect(result!.secondary[0]?.tiers).toEqual([]);
     expect(typeof result!.syncedAt).toBe('string');
     expect(result!.syncedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
@@ -119,7 +119,7 @@ describe('fetchCharacterProfessions — happy path', () => {
       't',
       fakeLogger,
     );
-    expect(result!.primary[0].slug).toBe('dragon-isles-mining');
+    expect(result!.primary[0]?.slug).toBe('dragon-isles-mining');
   });
 });
 

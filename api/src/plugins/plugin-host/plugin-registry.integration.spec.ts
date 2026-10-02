@@ -12,6 +12,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { PluginRegistryService } from './plugin-registry.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('Plugin Registry (integration)', () => {
   let testApp: TestApp;
@@ -106,11 +107,14 @@ describe('Plugin Registry (integration)', () => {
       expect(deactivateRes.body.success).toBe(true);
 
       // Verify persisted to DB
-      const [record] = await testApp.db
-        .select()
-        .from(schema.plugins)
-        .where(eq(schema.plugins.slug, testPluginSlug))
-        .limit(1);
+      const [record] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.plugins)
+          .where(eq(schema.plugins.slug, testPluginSlug))
+          .limit(1),
+        'record',
+      );
 
       expect(record.active).toBe(false);
 
@@ -148,11 +152,14 @@ describe('Plugin Registry (integration)', () => {
       expect(activateRes.body.success).toBe(true);
 
       // Verify persisted to DB
-      const [record] = await testApp.db
-        .select()
-        .from(schema.plugins)
-        .where(eq(schema.plugins.slug, testPluginSlug))
-        .limit(1);
+      const [record] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.plugins)
+          .where(eq(schema.plugins.slug, testPluginSlug))
+          .limit(1),
+        'record',
+      );
 
       expect(record.active).toBe(true);
     });
@@ -297,14 +304,17 @@ describe('Plugin Registry (integration)', () => {
       const bcrypt = await import('bcrypt');
       const passwordHash = await bcrypt.hash('TestPassword123!', 4);
 
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'local:member-plugin@test.local',
-          username: 'member-plugin',
-          role: 'member',
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'local:member-plugin@test.local',
+            username: 'member-plugin',
+            role: 'member',
+          })
+          .returning(),
+        'user',
+      );
 
       await testApp.db.insert(schema.localCredentials).values({
         email: 'member-plugin@test.local',

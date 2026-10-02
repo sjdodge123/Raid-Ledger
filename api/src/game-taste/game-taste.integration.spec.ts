@@ -44,6 +44,7 @@ import {
   SIGNAL_HASH_VERSION,
   type GameSignalSummary,
 } from './signal-hash.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 /**
  * Replica of `computeGameSignalHash`'s digest at an ARBITRARY version salt
@@ -123,14 +124,17 @@ describe('Game Taste Vectors (ROK-1082)', () => {
 
   async function createMemberAndLogin(): Promise<string> {
     const passwordHash = await bcrypt.hash('TestPassword123!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:gt-member@test.local',
-        username: 'gt-member',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:gt-member@test.local',
+          username: 'gt-member',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'gt-member@test.local',
       passwordHash,
@@ -146,10 +150,13 @@ describe('Game Taste Vectors (ROK-1082)', () => {
     discordId: string,
     username: string,
   ): Promise<number> {
-    const [u] = await testApp.db
-      .insert(schema.users)
-      .values({ discordId, username, role: 'member' })
-      .returning();
+    const [u] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({ discordId, username, role: 'member' })
+        .returning(),
+      'u',
+    );
     return u.id;
   }
 
@@ -164,19 +171,22 @@ describe('Game Taste Vectors (ROK-1082)', () => {
       hidden?: boolean;
     } = {},
   ): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        genres: opts.genres ?? [],
-        gameModes: opts.gameModes ?? [],
-        themes: opts.themes ?? [],
-        itadTags: opts.tags ?? [],
-        banned: opts.banned ?? false,
-        hidden: opts.hidden ?? false,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          genres: opts.genres ?? [],
+          gameModes: opts.gameModes ?? [],
+          themes: opts.themes ?? [],
+          itadTags: opts.tags ?? [],
+          banned: opts.banned ?? false,
+          hidden: opts.hidden ?? false,
+        })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 

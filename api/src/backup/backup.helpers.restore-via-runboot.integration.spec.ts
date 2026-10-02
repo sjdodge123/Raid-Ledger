@@ -197,9 +197,9 @@ describeRestore(
         dup_game_ids: number[];
       }>;
       expect(audit).toHaveLength(1);
-      expect(audit[0].match_type).toBe('name');
+      expect(audit[0]?.match_type).toBe('name');
       expect(audit[0].match_key).not.toBe('stale');
-      expect(audit[0].dup_game_ids).toHaveLength(1);
+      expect(audit[0]?.dup_game_ids).toHaveLength(1);
 
       // The migrate step actually ran (proves refresh preceded a real migrate).
       const ok = (await client`

@@ -77,8 +77,8 @@ function describeUsersServiceGetUserActivity() {
 
       // Should skip privacy check and query DB
       expect(result).toHaveLength(2);
-      expect(result[0].isMostPlayed).toBe(true);
-      expect(result[1].isMostPlayed).toBe(false);
+      expect(result[0]?.isMostPlayed).toBe(true);
+      expect(result[1]?.isMostPlayed).toBe(false);
     });
 
     it('should return activity when show_activity preference does not exist', async () => {
@@ -193,8 +193,8 @@ function describeUsersServiceGetUserActivity() {
 
       const result = await service.getUserActivity(1, 'week', 1);
 
-      expect(result[0].isMostPlayed).toBe(true);
-      expect(result[1].isMostPlayed).toBe(false);
+      expect(result[0]?.isMostPlayed).toBe(true);
+      expect(result[1]?.isMostPlayed).toBe(false);
     });
 
     it('should mark isMostPlayed=false for all entries when array is empty', async () => {
@@ -247,7 +247,7 @@ function describeUsersServiceGetUserActivity() {
       const result = await service.getUserActivity(1, 'all', 1);
 
       expect(result.filter((r) => r.isMostPlayed)).toHaveLength(1);
-      expect(result[0].isMostPlayed).toBe(true);
+      expect(result[0]?.isMostPlayed).toBe(true);
       expect(result.slice(1).every((r) => !r.isMostPlayed)).toBe(true);
     });
   }

@@ -71,8 +71,11 @@ const fullGameRow = {
 describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query', () => {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
-  let mockRedis: Record<string, jest.Mock>;
-  let mockSettingsService: Record<string, jest.Mock>;
+  let mockRedis: Record<'del' | 'get' | 'keys' | 'setex', jest.Mock>;
+  let mockSettingsService: Record<
+    'get' | 'getIgdbConfig' | 'isIgdbConfigured',
+    jest.Mock
+  >;
 
   function createMockDb() {
     // ROK-1438: find-then-insert paths run inside withGameNameLock, which

@@ -17,6 +17,7 @@ import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { UsersService } from './users.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -82,14 +83,17 @@ async function seedCascadeData(userId: number): Promise<void> {
     config: { title: 'T', durationMinutes: 60 },
   });
   // Event signup (event owned by admin so it survives user deletion)
-  const [evt] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Cascade Signup Test',
-      creatorId: testApp.seed.adminUser.id,
-      duration: [start, end] as [Date, Date],
-    })
-    .returning();
+  const [evt] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Cascade Signup Test',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [start, end] as [Date, Date],
+      })
+      .returning(),
+    'evt',
+  );
   await testApp.db
     .insert(schema.eventSignups)
     .values({ eventId: evt.id, userId });
@@ -171,11 +175,14 @@ async function testReassignsEventsToAdmin() {
     .set('Authorization', `Bearer ${adminToken}`)
     .expect(204);
 
-  const [event] = await testApp.db
-    .select({ creatorId: schema.events.creatorId })
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
+  const [event] = nonEmpty(
+    await testApp.db
+      .select({ creatorId: schema.events.creatorId })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1),
+    'event',
+  );
   expect(event.creatorId).toBe(testApp.seed.adminUser.id);
 }
 
@@ -289,14 +296,17 @@ async function testCannotDeleteSelfViaAdminEndpoint() {
 
 async function testCannotDeleteAnotherAdmin() {
   // Create a second admin
-  const [admin2] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: 'local:admin2@test.local',
-      username: 'admin2',
-      role: 'admin',
-    })
-    .returning();
+  const [admin2] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:admin2@test.local',
+        username: 'admin2',
+        role: 'admin',
+      })
+      .returning(),
+    'admin2',
+  );
 
   const res = await testApp.request
     .delete(`/users/${admin2.id}`)
@@ -335,11 +345,14 @@ async function testLinkDiscordUpdatesDiscordId() {
   expect(updated.username).toBe('linker_discord');
 
   // Verify persistence
-  const [row] = await testApp.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .limit(1);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1),
+    'row',
+  );
   expect(row.discordId).toBe('999888777');
 }
 
@@ -386,20 +399,26 @@ async function testRelinkRestoresDiscordId() {
   const usersService = testApp.app.get(UsersService);
 
   await usersService.unlinkDiscord(user.id);
-  const [unlinked] = await testApp.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, user.id))
-    .limit(1);
+  const [unlinked] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+      .limit(1),
+    'unlinked',
+  );
   expect(unlinked.discordId).toBe('unlinked:777888999');
 
   await usersService.relinkDiscord(user.id, 'relinked_name', 'new_avatar');
 
-  const [relinked] = await testApp.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, user.id))
-    .limit(1);
+  const [relinked] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+      .limit(1),
+    'relinked',
+  );
   expect(relinked.discordId).toBe('777888999');
   expect(relinked.username).toBe('relinked_name');
 }

@@ -187,10 +187,10 @@ describe('TasteProfileContextBuilder', () => {
       const topAxes = result.contexts[0].topAxes;
       expect(topAxes.length).toBeLessThanOrEqual(5);
       for (let i = 1; i < topAxes.length; i++) {
-        expect(topAxes[i - 1].score).toBeGreaterThanOrEqual(topAxes[i].score);
+        expect(topAxes[i - 1]?.score).toBeGreaterThanOrEqual(topAxes[i].score);
       }
       // With our seeded dimensions the top axis should be rpg (90)
-      expect(topAxes[0].axis).toBe('rpg');
+      expect(topAxes[0]?.axis).toBe('rpg');
     });
 
     it('returns lowAxes (≤3) sorted by score ASC', async () => {
@@ -213,11 +213,11 @@ describe('TasteProfileContextBuilder', () => {
       const lowAxes = result.contexts[0].lowAxes;
       expect(lowAxes.length).toBeLessThanOrEqual(3);
       for (let i = 1; i < lowAxes.length; i++) {
-        expect(lowAxes[i - 1].score).toBeLessThanOrEqual(lowAxes[i].score);
+        expect(lowAxes[i - 1]?.score).toBeLessThanOrEqual(lowAxes[i].score);
       }
       // Lowest axis first — horror (1)
       if (lowAxes.length > 0) {
-        expect(lowAxes[0].score).toBeLessThanOrEqual(10);
+        expect(lowAxes[0]?.score).toBeLessThanOrEqual(10);
       }
     });
 
@@ -281,7 +281,7 @@ describe('TasteProfileContextBuilder', () => {
       const result = await builder.build([1, 2, 3]);
 
       expect(result.contexts).toHaveLength(1);
-      expect(result.contexts[0].userId).toBe(1);
+      expect(result.contexts[0]?.userId).toBe(1);
       expect(result.missingUserIds).toEqual(expect.arrayContaining([2, 3]));
       expect(result.missingUserIds).toHaveLength(2);
     });
@@ -300,7 +300,7 @@ describe('TasteProfileContextBuilder', () => {
 
       const result = await builder.build([1]);
 
-      expect(result.contexts[0].username).toBe('Aragorn');
+      expect(result.contexts[0]?.username).toBe('Aragorn');
     });
 
     it('falls back to "Unknown player" when a user is hard-deleted (not returned by findByIds)', async () => {
@@ -311,7 +311,7 @@ describe('TasteProfileContextBuilder', () => {
 
       const result = await builder.build([42]);
 
-      expect(result.contexts[0].username).toBe('Unknown player');
+      expect(result.contexts[0]?.username).toBe('Unknown player');
     });
 
     it('calls UsersService.findByIds once with the resolved (non-missing) userIds', async () => {
@@ -402,7 +402,7 @@ describe('TasteProfileContextBuilder', () => {
       expect(partnerCtx.topAxes.length).toBeLessThanOrEqual(3);
       expect(partnerCtx.topAxes.length).toBeGreaterThan(0);
       // First axis should be the partner's strongest (co_op)
-      expect(partnerCtx.topAxes[0].axis).toBe('co_op');
+      expect(partnerCtx.topAxes[0]?.axis).toBe('co_op');
     });
 
     it('partner without own vector still appears with empty topAxes (graceful)', async () => {

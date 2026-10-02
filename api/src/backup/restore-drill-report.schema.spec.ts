@@ -212,7 +212,7 @@ describe('RestoreDrillReportSchema — nullability, strictness, timestamps', () 
     const result = RestoreDrillReportSchema.safeParse(bad);
 
     expect(result.success).toBe(false);
-    expect(result.error!.issues[0].code).toBe('unrecognized_keys');
+    expect(result.error!.issues[0]?.code).toBe('unrecognized_keys');
   });
 
   // Case 6 — the two real timestamp shapes. `startedAt` has no milliseconds,
@@ -240,6 +240,6 @@ describe('RestoreDrillReportSchema — nullability, strictness, timestamps', () 
     const result = RestoreDrillReportSchema.safeParse(partial);
 
     expect(result.success).toBe(false);
-    expect(result.error!.issues[0].path).toEqual(['totalDurationMs']);
+    expect(result.error!.issues[0]?.path).toEqual(['totalDurationMs']);
   });
 });

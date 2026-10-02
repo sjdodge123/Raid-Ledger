@@ -21,7 +21,7 @@ describe('pgvector extension (ROK-948)', () => {
       sql`SELECT extname FROM pg_extension WHERE extname = 'vector'`,
     );
     expect(rows.length).toBe(1);
-    expect(rows[0].extname).toBe('vector');
+    expect(rows[0]?.extname).toBe('vector');
   });
 
   it('supports vector(7) casts and cosine distance operator', async () => {

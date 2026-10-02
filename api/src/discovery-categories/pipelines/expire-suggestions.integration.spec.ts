@@ -8,6 +8,7 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { runExpireSuggestions } from './expire-suggestions';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('runExpireSuggestions (ROK-567)', () => {
   let testApp: TestApp;
@@ -25,18 +26,21 @@ describe('runExpireSuggestions (ROK-567)', () => {
     status: 'pending' | 'approved' | 'rejected' | 'expired',
     expiresAt: Date | null,
   ): Promise<string> {
-    const [row] = await testApp.db
-      .insert(schema.discoveryCategorySuggestions)
-      .values({
-        name,
-        description: 'd',
-        categoryType: 'trend',
-        themeVector: [0, 0, 0, 0, 0, 0, 0],
-        status,
-        populationStrategy: 'vector',
-        expiresAt,
-      })
-      .returning({ id: schema.discoveryCategorySuggestions.id });
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.discoveryCategorySuggestions)
+        .values({
+          name,
+          description: 'd',
+          categoryType: 'trend',
+          themeVector: [0, 0, 0, 0, 0, 0, 0],
+          status,
+          populationStrategy: 'vector',
+          expiresAt,
+        })
+        .returning({ id: schema.discoveryCategorySuggestions.id }),
+      'row',
+    );
     return row.id;
   }
 

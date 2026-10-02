@@ -28,8 +28,8 @@ describe('ChurnDetectionService', () => {
     );
     const res = service.findAtRiskPlayers([steady, dropping], settings);
     expect(res.atRisk).toHaveLength(1);
-    expect(res.atRisk[0].userId).toBe(2);
-    expect(res.atRisk[0].dropPct).toBeGreaterThanOrEqual(70);
+    expect(res.atRisk[0]?.userId).toBe(2);
+    expect(res.atRisk[0]?.dropPct).toBeGreaterThanOrEqual(70);
     expect(res.candidates).toHaveLength(2);
   });
 
@@ -59,7 +59,7 @@ describe('ChurnDetectionService', () => {
       [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0],
     );
     const res = service.findAtRiskPlayers([mid, big], settings);
-    expect(res.candidates[0].userId).toBe(6);
-    expect(res.candidates[1].userId).toBe(5);
+    expect(res.candidates[0]?.userId).toBe(6);
+    expect(res.candidates[1]?.userId).toBe(5);
   });
 });

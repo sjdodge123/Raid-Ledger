@@ -504,13 +504,13 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
     // DISTINCT_USER_COUNT already collapses at DB — DB returns count=1
     const db = buildBatchDb([{ gameId: 10, count: 1 }], [{ gameId: 10 }]);
     const result = await batchCheckInterests(db as never, [10], 7);
-    expect(result['10'].count).toBe(1);
+    expect(result['10']?.count).toBe(1);
   });
 
   it('returns wantToPlay: true when user has an interest row for the game', async () => {
     const db = buildBatchDb([{ gameId: 5, count: 3 }], [{ gameId: 5 }]);
     const result = await batchCheckInterests(db as never, [5], 42);
-    expect(result['5'].wantToPlay).toBe(true);
+    expect(result['5']?.wantToPlay).toBe(true);
   });
 
   it('returns wantToPlay: false when user has no interest row for the game', async () => {
@@ -519,14 +519,14 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
       [], // user not interested
     );
     const result = await batchCheckInterests(db as never, [5], 42);
-    expect(result['5'].wantToPlay).toBe(false);
+    expect(result['5']?.wantToPlay).toBe(false);
   });
 
   it('returns count: 0 and wantToPlay: false for a game with no interests', async () => {
     const db = buildBatchDb([], []);
     const result = await batchCheckInterests(db as never, [999], 1);
-    expect(result['999'].count).toBe(0);
-    expect(result['999'].wantToPlay).toBe(false);
+    expect(result['999']?.count).toBe(0);
+    expect(result['999']?.wantToPlay).toBe(false);
   });
 
   it('returns entries for every requested gameId, even if no counts exist', async () => {
@@ -534,8 +534,8 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
     const result = await batchCheckInterests(db as never, [1, 2, 3], 99);
     expect(Object.keys(result).sort()).toEqual(['1', '2', '3']);
     for (const key of ['1', '2', '3']) {
-      expect(result[key].count).toBe(0);
-      expect(result[key].wantToPlay).toBe(false);
+      expect(result[key]?.count).toBe(0);
+      expect(result[key]?.wantToPlay).toBe(false);
     }
   });
 
@@ -548,9 +548,9 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
       [{ gameId: 10 }],
     );
     const result = await batchCheckInterests(db as never, [10, 20], 5);
-    expect(result['10'].wantToPlay).toBe(true);
-    expect(result['10'].count).toBe(2);
-    expect(result['20'].wantToPlay).toBe(false);
-    expect(result['20'].count).toBe(0);
+    expect(result['10']?.wantToPlay).toBe(true);
+    expect(result['10']?.count).toBe(2);
+    expect(result['20']?.wantToPlay).toBe(false);
+    expect(result['20']?.count).toBe(0);
   });
 });

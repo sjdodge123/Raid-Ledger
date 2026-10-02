@@ -19,6 +19,7 @@ import { eq, desc } from 'drizzle-orm';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { CronJobService } from './cron-job.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Insert a test cron job directly into DB and return its ID. */
 async function insertTestJob(
@@ -26,16 +27,19 @@ async function insertTestJob(
   name: string,
   overrides: Partial<typeof schema.cronJobs.$inferInsert> = {},
 ): Promise<number> {
-  const [job] = await testApp.db
-    .insert(schema.cronJobs)
-    .values({
-      name,
-      source: 'core',
-      cronExpression: '0 * * * *', // every hour
-      paused: false,
-      ...overrides,
-    })
-    .returning();
+  const [job] = nonEmpty(
+    await testApp.db
+      .insert(schema.cronJobs)
+      .values({
+        name,
+        source: 'core',
+        cronExpression: '0 * * * *', // every hour
+        paused: false,
+        ...overrides,
+      })
+      .returning(),
+    'job',
+  );
   return job.id;
 }
 
@@ -106,8 +110,8 @@ function describeCronJob() {
         .orderBy(desc(schema.cronJobExecutions.startedAt));
 
       expect(executions.length).toBe(1);
-      expect(executions[0].status).toBe('completed');
-      expect(executions[0].durationMs).toBeGreaterThanOrEqual(0);
+      expect(executions[0]?.status).toBe('completed');
+      expect(executions[0]?.durationMs).toBeGreaterThanOrEqual(0);
       expect(executions[0].finishedAt).toBeDefined();
       expect(executions[0].error).toBeNull();
 
@@ -143,9 +147,9 @@ function describeCronJob() {
         .where(eq(schema.cronJobExecutions.cronJobId, jobId));
 
       expect(executions.length).toBe(1);
-      expect(executions[0].status).toBe('failed');
-      expect(executions[0].error).toBe('Simulated cron failure');
-      expect(executions[0].durationMs).toBeGreaterThanOrEqual(0);
+      expect(executions[0]?.status).toBe('failed');
+      expect(executions[0]?.error).toBe('Simulated cron failure');
+      expect(executions[0]?.durationMs).toBeGreaterThanOrEqual(0);
     });
 
     it('should log skipped execution when job is paused', async () => {
@@ -171,8 +175,8 @@ function describeCronJob() {
         .where(eq(schema.cronJobExecutions.cronJobId, jobId));
 
       expect(executions.length).toBe(1);
-      expect(executions[0].status).toBe('skipped');
-      expect(executions[0].durationMs).toBe(0);
+      expect(executions[0]?.status).toBe('skipped');
+      expect(executions[0]?.durationMs).toBe(0);
     });
 
     it('should run handler directly when job is not yet synced to DB', async () => {
@@ -317,7 +321,7 @@ function describeCronJob() {
         .where(eq(schema.cronJobExecutions.cronJobId, jobId));
 
       expect(executions.length).toBe(1);
-      expect(executions[0].status).toBe('completed');
+      expect(executions[0]?.status).toBe('completed');
     });
 
     it('should still fully track failed runs', async () => {
@@ -334,8 +338,8 @@ function describeCronJob() {
         .where(eq(schema.cronJobExecutions.cronJobId, jobId));
 
       expect(executions.length).toBe(1);
-      expect(executions[0].status).toBe('failed');
-      expect(executions[0].error).toBe('Intentional failure');
+      expect(executions[0]?.status).toBe('failed');
+      expect(executions[0]?.error).toBe('Intentional failure');
     });
   }
   describe('no-op tracking (ROK-1042)', () => describeNoOpTracking());
@@ -399,7 +403,10 @@ function describeCronJob() {
         Promise.resolve(),
       );
 
-      const [execution] = await readExecutions(testApp, jobId);
+      const [execution] = nonEmpty(
+        await readExecutions(testApp, jobId),
+        'execution',
+      );
       expect(execution.status).toBe('completed');
       // No flush: only schedules of 15 minutes or less defer.
       const job = await readJob(testApp, jobId);
@@ -574,11 +581,14 @@ function describeCronJob() {
       expect(pauseRes.body.paused).toBe(true);
 
       // Verify in DB
-      const [job] = await testApp.db
-        .select()
-        .from(schema.cronJobs)
-        .where(eq(schema.cronJobs.id, jobId))
-        .limit(1);
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'job',
+      );
 
       expect(job.paused).toBe(true);
     });
@@ -614,11 +624,14 @@ function describeCronJob() {
       expect(updateRes.body.cronExpression).toBe('*/5 * * * *');
 
       // Verify in DB
-      const [job] = await testApp.db
-        .select()
-        .from(schema.cronJobs)
-        .where(eq(schema.cronJobs.id, jobId))
-        .limit(1);
+      const [job] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.cronJobs)
+          .where(eq(schema.cronJobs.id, jobId))
+          .limit(1),
+        'job',
+      );
 
       expect(job.cronExpression).toBe('*/5 * * * *');
     });
@@ -708,14 +721,17 @@ function describeCronJob() {
       const bcrypt = await import('bcrypt');
       const passwordHash = await bcrypt.hash('TestPassword123!', 4);
 
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'local:member@test.local',
-          username: 'member',
-          role: 'member',
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'local:member@test.local',
+            username: 'member',
+            role: 'member',
+          })
+          .returning(),
+        'user',
+      );
 
       await testApp.db.insert(schema.localCredentials).values({
         email: 'member@test.local',

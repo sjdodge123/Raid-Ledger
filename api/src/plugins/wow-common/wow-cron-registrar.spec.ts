@@ -53,11 +53,11 @@ describe('WowCronRegistrar — getCronJobs', () => {
   it('should return cron jobs for character sync and boss data refresh', () => {
     const jobs = registrar.getCronJobs();
     expect(jobs).toHaveLength(2);
-    expect(jobs[0].name).toBe('character-auto-sync');
-    expect(jobs[0].cronExpression).toBe('0 0 3,15 * * *');
+    expect(jobs[0]?.name).toBe('character-auto-sync');
+    expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
     expect(typeof jobs[0].handler).toBe('function');
-    expect(jobs[1].name).toBe('boss-data-refresh');
-    expect(jobs[1].cronExpression).toBe('0 0 4 * * 0');
+    expect(jobs[1]?.name).toBe('boss-data-refresh');
+    expect(jobs[1]?.cronExpression).toBe('0 0 4 * * 0');
     expect(typeof jobs[1].handler).toBe('function');
   });
 });

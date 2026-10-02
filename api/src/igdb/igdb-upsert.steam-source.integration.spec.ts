@@ -20,6 +20,7 @@ import * as schema from '../drizzle/schema';
 import { upsertGamesFromApi, upsertSingleGameRow } from './igdb-upsert.helpers';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
+import { nonEmpty } from '../common/testing/narrow';
 
 const IGDB_ID = 9_680_101;
 const STEAM_X = 9_680_001;
@@ -63,14 +64,17 @@ function igdbGame(steamAppId: number | null): IgdbApiGame {
 async function seedGame(
   values: Partial<typeof schema.games.$inferInsert>,
 ): Promise<number> {
-  const [row] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name: 'ROK-1680 Stored Title',
-      slug: 'rok-1680-stored-title',
-      ...values,
-    })
-    .returning({ id: schema.games.id });
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'ROK-1680 Stored Title',
+        slug: 'rok-1680-stored-title',
+        ...values,
+      })
+      .returning({ id: schema.games.id }),
+    'row',
+  );
   return row.id;
 }
 

@@ -254,7 +254,7 @@ describe('AiAdminController (adversarial)', () => {
         },
       ]);
       const result = await controller.getModels();
-      expect(result[0].family).toBe('llama');
+      expect(result[0]?.family).toBe('llama');
     });
 
     it('family is undefined when capabilities is absent', async () => {

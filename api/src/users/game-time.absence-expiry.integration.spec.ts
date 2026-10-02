@@ -17,6 +17,7 @@ import {
   utcDateOffset,
   localDateOffset,
 } from './game-time.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -28,10 +29,13 @@ function describeRok1427() {
     endDate: string,
     reason: string,
   ): Promise<number> {
-    const [row] = await testApp.db
-      .insert(schema.gameTimeAbsences)
-      .values({ userId, startDate, endDate, reason })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.gameTimeAbsences)
+        .values({ userId, startDate, endDate, reason })
+        .returning(),
+      'row',
+    );
     return row.id;
   }
 
@@ -95,7 +99,7 @@ function describeRok1427() {
       .from(schema.gameTimeAbsences)
       .where(eq(schema.gameTimeAbsences.userId, userId));
     expect(rows).toHaveLength(1);
-    expect(rows[0].reason).toBe('Tennis Travel');
+    expect(rows[0]?.reason).toBe('Tennis Travel');
   }
   it('keeps expired absences in the database as history', () =>
     testPastAbsencesStayInTheDatabase());

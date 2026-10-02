@@ -5,6 +5,7 @@
 import type { TestApp } from '../common/testing/test-app';
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Helper to create a member user with local credentials and return their token. */
 export async function createMemberAndLogin(
@@ -14,14 +15,17 @@ export async function createMemberAndLogin(
 ): Promise<{ userId: number; token: string }> {
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
 
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${email}`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${email}`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
 
   await testApp.db.insert(schema.localCredentials).values({
     email,

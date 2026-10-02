@@ -19,6 +19,7 @@ import { upsertItadGame } from './igdb-itad-upsert.helpers';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
 import type { GameDetailDto } from '@raid-ledger/contract';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -121,7 +122,7 @@ describe('Regression: ROK-1113 — ingest dedup by normalized name', () => {
       .from(schema.games)
       .where(eq(schema.games.itadGameId, 'itad-slay-the-spire-ii'));
     expect(all).toHaveLength(1);
-    expect(all[0].igdbId).toBe(900111);
+    expect(all[0]?.igdbId).toBe(900111);
     // Same row enriched (not duplicated): the original ITAD-derived itadGameId
     // is still attached to a single row that now also carries the IGDB id.
     const allRows = await testApp.db
@@ -179,7 +180,7 @@ describe('Regression: ROK-1113 — ingest dedup by normalized name', () => {
       .select()
       .from(schema.games)
       .where(eq(schema.games.id, existing.id));
-    expect(rows[0].igdbId).toBe(900333);
+    expect(rows[0]?.igdbId).toBe(900333);
     // Total rows for this canonical game stayed at 1
     const allRows = await testApp.db.select().from(schema.games);
     const slaySpireRows = allRows.filter((r) => /slay the spire/i.test(r.name));
@@ -222,14 +223,17 @@ describe('POST /admin/games/dedup-cleanup-by-name (integration)', () => {
     });
 
     // Build a lineup + entry pointing at the loser to verify FK reassignment
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Test Lineup',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: 'rok1113-test',
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Test Lineup',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: 'rok1113-test',
+        })
+        .returning(),
+      'lineup',
+    );
     await testApp.db.insert(schema.communityLineupEntries).values({
       lineupId: lineup.id,
       gameId: loser.id,
@@ -399,10 +403,13 @@ describe('Regression: dedup merge vs games_dedup_audit FK', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(res.body.errors).toEqual([]);
 
-    const [survivor] = await testApp.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, winner.id));
+    const [survivor] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.games)
+        .where(eq(schema.games.id, winner.id)),
+      'survivor',
+    );
     expect(survivor.steamAppId).toBe(412020);
     expect(survivor.itadGameId).toBe('itad-metro');
     expect(survivor.coverUrl).toBe('https://example.test/metro.jpg');
@@ -428,10 +435,13 @@ describe('Regression: dedup merge vs games_dedup_audit FK', () => {
       .post('/admin/games/dedup-cleanup-by-name?dryRun=false')
       .set('Authorization', `Bearer ${adminToken}`);
 
-    const [survivor] = await testApp.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, winner.id));
+    const [survivor] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.games)
+        .where(eq(schema.games.id, winner.id)),
+      'survivor',
+    );
     expect(survivor.steamAppId).toBe(240760);
     expect(survivor.coverUrl).toBe('https://example.test/keep-me.jpg');
   });
@@ -487,7 +497,7 @@ describe('Regression: rollup collision during merge', () => {
       .where(eq(schema.gameActivityRollups.gameId, winner.id));
     expect(rollups).toHaveLength(1);
     // Additive, matching migration 0140's semantics — playtime is not lost.
-    expect(rollups[0].totalSeconds).toBe(150);
+    expect(rollups[0]?.totalSeconds).toBe(150);
   });
 
   it('moves a non-colliding rollup across untouched', async () => {
@@ -520,7 +530,7 @@ describe('Regression: rollup collision during merge', () => {
       .from(schema.gameActivityRollups)
       .where(eq(schema.gameActivityRollups.gameId, winner.id));
     expect(rollups).toHaveLength(1);
-    expect(rollups[0].totalSeconds).toBe(77);
+    expect(rollups[0]?.totalSeconds).toBe(77);
   });
 });
 
@@ -576,10 +586,13 @@ describe('Regression: channel_bindings collision during merge', () => {
       slug: 'valheim-steam',
       steamAppId: 892970,
     });
-    const [winnerBinding] = await testApp.db
-      .insert(schema.channelBindings)
-      .values(binding(winner.id, 'vc-shared'))
-      .returning();
+    const [winnerBinding] = nonEmpty(
+      await testApp.db
+        .insert(schema.channelBindings)
+        .values(binding(winner.id, 'vc-shared'))
+        .returning(),
+      'winnerBinding',
+    );
     await testApp.db
       .insert(schema.channelBindings)
       .values(binding(loser.id, 'vc-shared'));

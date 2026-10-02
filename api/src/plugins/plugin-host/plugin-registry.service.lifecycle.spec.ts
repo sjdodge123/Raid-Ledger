@@ -144,8 +144,8 @@ async function testListPluginsMerge() {
 
   const result = await service.listPlugins();
   expect(result).toHaveLength(1);
-  expect(result[0].slug).toBe('test-plugin');
-  expect(result[0].status).toBe('active');
+  expect(result[0]?.slug).toBe('test-plugin');
+  expect(result[0]?.status).toBe('active');
   expect(result[0].installedAt).toBe(installedAt.toISOString());
 }
 
@@ -155,7 +155,7 @@ async function testConfiguredFlag() {
   mockSelectWithCredentials([], bothKeys);
 
   const result = await service.listPlugins();
-  expect(result[0].integrations[0].configured).toBe(true);
+  expect(result[0]?.integrations[0]?.configured).toBe(true);
 }
 
 async function testConfiguredFalseWhenKeyMissing() {
@@ -163,7 +163,7 @@ async function testConfiguredFalseWhenKeyMissing() {
   mockSelectWithCredentials([], [{ key: 'test_client_id' }]);
 
   const result = await service.listPlugins();
-  expect(result[0].integrations[0].configured).toBe(false);
+  expect(result[0]?.integrations[0]?.configured).toBe(false);
 }
 
 async function testInstallEmitsEvent() {
@@ -262,14 +262,14 @@ describe('PluginRegistryService — manifest registration', () => {
       service.registerManifest(testManifest);
       mockSelectWithCredentials([], []);
       const result = await service.listPlugins();
-      expect(result[0].author).toEqual({ name: 'Test Author' });
+      expect(result[0]?.author).toEqual({ name: 'Test Author' });
     });
 
     it('should return not_installed for manifests without DB records', async () => {
       service.registerManifest(testManifest);
       mockSelectWithCredentials([], []);
       const result = await service.listPlugins();
-      expect(result[0].status).toBe('not_installed');
+      expect(result[0]?.status).toBe('not_installed');
       expect(result[0].installedAt).toBeNull();
     });
 

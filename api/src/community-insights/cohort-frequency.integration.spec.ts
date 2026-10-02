@@ -94,7 +94,7 @@ describe('Cohort game frequency (ROK-1310)', () => {
       gameId: gameIds[0],
       count: 2,
     });
-    expect(bucket(body, '3')!.entries[0].count).toBe(1);
+    expect(bucket(body, '3')!.entries[0]?.count).toBe(1);
     expect(bucket(body, '6+')!.entries[0]).toMatchObject({
       gameId: gameIds[2],
       count: 1,
@@ -173,7 +173,7 @@ describe('Cohort game frequency (ROK-1310)', () => {
     const entries = bucket(body, '3')!.entries;
     expect(entries.map((e) => e.gameId)).toEqual([gameIds[2], gameIds[1]]);
     expect(entries[0]).toMatchObject({ rank: 1, count: 2 });
-    expect(entries[0].breakdown).toEqual({
+    expect(entries[0]?.breakdown).toEqual({
       decided: 0,
       match: 0,
       vetoWon: 0,

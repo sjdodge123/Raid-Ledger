@@ -74,8 +74,8 @@ function describeUsersService() {
 
       const result = await service.findRecent();
 
-      expect(result[0].username).toBe('NewestPlayer');
-      expect(result[1].username).toBe('OlderNewbie');
+      expect(result[0]?.username).toBe('NewestPlayer');
+      expect(result[1]?.username).toBe('OlderNewbie');
     });
 
     it('should respect the recent member limit', async () => {
@@ -112,7 +112,7 @@ function describeUsersService() {
       expect(result[0]).toHaveProperty('username', 'TestUser');
       expect(result[0]).toHaveProperty('avatar', 'hash123');
       expect(result[0]).toHaveProperty('createdAt');
-      expect(result[0].createdAt).toBeInstanceOf(Date);
+      expect(result[0]?.createdAt).toBeInstanceOf(Date);
     });
   }
   describe('findRecent', () => describeFindRecent());

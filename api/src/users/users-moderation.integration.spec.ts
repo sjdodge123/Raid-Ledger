@@ -26,6 +26,7 @@ import {
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
 import { deleteUserTransaction, WIPE_BY_COLUMN } from './users-delete.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -64,14 +65,17 @@ async function seedMemberWithSignup(
   );
   const start = new Date(Date.now() + 86_400_000);
   const end = new Date(start.getTime() + 3_600_000);
-  const [evt] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Moderation Test Event',
-      creatorId: testApp.seed.adminUser.id,
-      duration: [start, end] as [Date, Date],
-    })
-    .returning();
+  const [evt] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Moderation Test Event',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [start, end] as [Date, Date],
+      })
+      .returning(),
+    'evt',
+  );
   await testApp.db
     .insert(schema.eventSignups)
     .values({ eventId: evt.id, userId });
@@ -185,28 +189,34 @@ describe('POST /users/:id/ban', () => {
 // ─── ban + wipe completeness ───────────────────────────────────────────────────
 
 async function seedGame(tag: string): Promise<number> {
-  const [g] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name: `Wipe ${tag}`,
-      slug: `wipe-${tag}-${randomUUID().slice(0, 8)}`,
-    })
-    .returning();
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: `Wipe ${tag}`,
+        slug: `wipe-${tag}-${randomUUID().slice(0, 8)}`,
+      })
+      .returning(),
+    'g',
+  );
   return g.id;
 }
 
 /** A community lineup created by `createdBy`, with one own entry. Returns its id. */
 async function seedLineup(createdBy: number, gameId: number): Promise<number> {
-  const [l] = await testApp.db
-    .insert(schema.communityLineups)
-    .values({
-      title: 'L',
-      status: 'building',
-      visibility: 'private',
-      createdBy,
-      publicSlug: randomUUID().replace(/-/g, '').slice(0, 16),
-    })
-    .returning();
+  const [l] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'L',
+        status: 'building',
+        visibility: 'private',
+        createdBy,
+        publicSlug: randomUUID().replace(/-/g, '').slice(0, 16),
+      })
+      .returning(),
+    'l',
+  );
   await testApp.db
     .insert(schema.communityLineupEntries)
     .values({ lineupId: l.id, gameId, nominatedBy: createdBy });
@@ -230,10 +240,16 @@ async function seedFullWipeManifest(
   eventId: number,
 ): Promise<{ otherId: number; l1Id: number; l2Id: number }> {
   const gameId = await seedGame(`${userId}`);
-  const [other] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId: `local:other-${userId}`, username: `other-${userId}` })
-    .returning();
+  const [other] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:other-${userId}`,
+        username: `other-${userId}`,
+      })
+      .returning(),
+    'other',
+  );
   const otherId = other.id;
   const now = new Date();
 
@@ -391,7 +407,7 @@ describe('ban with wipeData — true data wipe (§9.6, §9.10 #2)', () => {
     expect(l2Entries.length).toBeGreaterThan(0);
     expect(l2Entries.every((e) => e.carriedOverFrom === null)).toBe(true);
 
-    const [banRow] = await fetchActions(userId, 'ban');
+    const [banRow] = nonEmpty(await fetchActions(userId, 'ban'), 'banRow');
     expect(JSON.parse(banRow.metadata ?? '{}').dataWiped).toBe(true);
   });
 
@@ -401,20 +417,26 @@ describe('ban with wipeData — true data wipe (§9.6, §9.10 #2)', () => {
   it('wipe removes lfg_invites rows by either user column (ROK-1455)', async () => {
     const { userId } = await seedMemberWithSignup('lfgwipetarget');
     const gameId = await seedGame(`lfg-${userId}`);
-    const [peer] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:lfg-peer-${userId}`,
-        username: `lfg-peer-${userId}`,
-      })
-      .returning();
-    const [bystander] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:lfg-bystander-${userId}`,
-        username: `lfg-bystander-${userId}`,
-      })
-      .returning();
+    const [peer] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:lfg-peer-${userId}`,
+          username: `lfg-peer-${userId}`,
+        })
+        .returning(),
+      'peer',
+    );
+    const [bystander] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:lfg-bystander-${userId}`,
+          username: `lfg-bystander-${userId}`,
+        })
+        .returning(),
+      'bystander',
+    );
 
     // Target as RECIPIENT, target as INVITER, plus one row touching neither.
     const seeded = await testApp.db

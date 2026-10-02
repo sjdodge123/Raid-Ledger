@@ -9,6 +9,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { loadApprovedDynamicRows } from './discovery-categories.discover.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('loadApprovedDynamicRows (ROK-567)', () => {
   let testApp: TestApp;
@@ -26,14 +27,17 @@ describe('loadApprovedDynamicRows (ROK-567)', () => {
     vector: number[],
     opts: { confidence?: number; hidden?: boolean } = {},
   ): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        hidden: opts.hidden ?? false,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          hidden: opts.hidden ?? false,
+        })
+        .returning(),
+      'game',
+    );
     await testApp.db.execute(sql`
       INSERT INTO game_taste_vectors (game_id, vector, dimensions, confidence, signal_hash)
       VALUES (
@@ -56,20 +60,23 @@ describe('loadApprovedDynamicRows (ROK-567)', () => {
     themeVector?: number[];
     expiresAt?: Date | null;
   }): Promise<string> {
-    const [row] = await testApp.db
-      .insert(schema.discoveryCategorySuggestions)
-      .values({
-        name: opts.name,
-        description: 'test',
-        categoryType: 'trend',
-        themeVector: opts.themeVector ?? [1, 0, 0, 0, 0, 0, 0],
-        status: opts.status ?? 'approved',
-        populationStrategy: opts.strategy ?? 'vector',
-        sortOrder: opts.sortOrder ?? 1000,
-        candidateGameIds: opts.candidateGameIds ?? [],
-        expiresAt: opts.expiresAt ?? null,
-      })
-      .returning({ id: schema.discoveryCategorySuggestions.id });
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.discoveryCategorySuggestions)
+        .values({
+          name: opts.name,
+          description: 'test',
+          categoryType: 'trend',
+          themeVector: opts.themeVector ?? [1, 0, 0, 0, 0, 0, 0],
+          status: opts.status ?? 'approved',
+          populationStrategy: opts.strategy ?? 'vector',
+          sortOrder: opts.sortOrder ?? 1000,
+          candidateGameIds: opts.candidateGameIds ?? [],
+          expiresAt: opts.expiresAt ?? null,
+        })
+        .returning({ id: schema.discoveryCategorySuggestions.id }),
+      'row',
+    );
     return row.id;
   }
 
@@ -87,11 +94,11 @@ describe('loadApprovedDynamicRows (ROK-567)', () => {
     });
     const rows = await loadApprovedDynamicRows(testApp.db);
     expect(rows).toHaveLength(1);
-    expect(rows[0].category).toBe('Near Theme');
+    expect(rows[0]?.category).toBe('Near Theme');
     expect(rows[0].slug).toBe(`dynamic-${id}`);
     expect(rows[0].suggestionId).toBe(id);
-    expect(rows[0].isDynamic).toBe(true);
-    expect(rows[0].games.map((g) => g.id)).toEqual([near]);
+    expect(rows[0]?.isDynamic).toBe(true);
+    expect(rows[0]?.games.map((g) => g.id)).toEqual([near]);
   });
 
   it('fixed strategy returns games in the stored candidate order', async () => {
@@ -103,7 +110,7 @@ describe('loadApprovedDynamicRows (ROK-567)', () => {
       candidateGameIds: [b, a],
     });
     const rows = await loadApprovedDynamicRows(testApp.db);
-    expect(rows[0].games.map((g) => g.id)).toEqual([b, a]);
+    expect(rows[0]?.games.map((g) => g.id)).toEqual([b, a]);
   });
 
   it('filters hidden games out of fixed-strategy rows', async () => {
@@ -117,7 +124,7 @@ describe('loadApprovedDynamicRows (ROK-567)', () => {
       candidateGameIds: [hidden, visible],
     });
     const rows = await loadApprovedDynamicRows(testApp.db);
-    expect(rows[0].games.map((g) => g.id)).toEqual([visible]);
+    expect(rows[0]?.games.map((g) => g.id)).toEqual([visible]);
   });
 
   it('filters out rows whose expires_at has passed', async () => {

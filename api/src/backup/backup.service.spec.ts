@@ -361,10 +361,10 @@ function describeBackupService() {
 
       const result = service.listBackups();
       expect(result).toHaveLength(2);
-      expect(result[0].filename).toBe('new.dump');
-      expect(result[0].type).toBe('migration');
-      expect(result[1].filename).toBe('old.dump');
-      expect(result[1].type).toBe('daily');
+      expect(result[0]?.filename).toBe('new.dump');
+      expect(result[0]?.type).toBe('migration');
+      expect(result[1]?.filename).toBe('old.dump');
+      expect(result[1]?.type).toBe('daily');
     });
   });
 

@@ -61,7 +61,7 @@ describe('fetchHeartedGames — playtimeSeconds edge cases (ROK-805)', () => {
 
     const result = await fetchHeartedGames(db as never, 1, 1, 10);
 
-    expect(result.data[0].playtimeSeconds).toBe(0);
+    expect(result.data[0]?.playtimeSeconds).toBe(0);
   });
 
   it('passes through a large playtimeSeconds value without overflow', async () => {
@@ -82,7 +82,7 @@ describe('fetchHeartedGames — playtimeSeconds edge cases (ROK-805)', () => {
 
     const result = await fetchHeartedGames(db as never, 1, 1, 10);
 
-    expect(result.data[0].playtimeSeconds).toBe(600_000);
+    expect(result.data[0]?.playtimeSeconds).toBe(600_000);
   });
 
   it('passes through playtimeSeconds = null (no steam library entry)', async () => {

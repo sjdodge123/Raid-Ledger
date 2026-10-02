@@ -72,7 +72,7 @@ describe('filterDlc — edge cases', () => {
     ];
     const result = filterDlc(games);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('g3');
+    expect(result[0]?.id).toBe('g3');
   });
 });
 
@@ -231,7 +231,7 @@ describe('executeItadSearch — combined filters', () => {
     const result = await executeItadSearch(deps, 'test');
 
     expect(result.games).toHaveLength(1);
-    expect(result.games[0].name).toBe('Safe Game');
+    expect(result.games[0]?.name).toBe('Safe Game');
   });
 
   it('combines IGDB theme filter with ITAD mature filter', async () => {
@@ -279,7 +279,7 @@ describe('executeItadSearch — combined filters', () => {
 
     // itadMature filtered by pre-filter, igdbAdult by post-filter
     expect(result.games).toHaveLength(1);
-    expect(result.games[0].name).toBe('Safe');
+    expect(result.games[0]?.name).toBe('Safe');
   });
 
   it('IGDB theme 39 (Sexual Content) also triggers adult filter', async () => {
@@ -368,7 +368,7 @@ describe('executeItadSearch — enrichment paths', () => {
     const result = await executeItadSearch(deps, 'test');
 
     expect(result.games[0].igdbId).toBeNull();
-    expect(result.games[0].coverUrl).toBe('https://itad.example.com/box.jpg');
+    expect(result.games[0]?.coverUrl).toBe('https://itad.example.com/box.jpg');
   });
 
   it('enriches multiple games independently', async () => {
@@ -404,8 +404,8 @@ describe('executeItadSearch — enrichment paths', () => {
     const result = await executeItadSearch(deps, 'test');
 
     // Game A enriched, Game B ITAD-only
-    expect(result.games[0].igdbId).toBe(10);
-    expect(result.games[0].coverUrl).toBe('https://igdb.com/a.jpg');
+    expect(result.games[0]?.igdbId).toBe(10);
+    expect(result.games[0]?.coverUrl).toBe('https://igdb.com/a.jpg');
     expect(result.games[1].igdbId).toBeNull();
   });
 

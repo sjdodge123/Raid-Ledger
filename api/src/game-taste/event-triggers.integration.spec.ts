@@ -37,6 +37,7 @@ import type { ItadSearchDeps } from '../igdb/igdb-itad-search.helpers';
 import type { ItadSearchGame } from '../igdb/igdb-itad-merge.helpers';
 import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 import type { GameDetailDto } from '@raid-ledger/contract';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('Game Taste Event Triggers (ROK-1082)', () => {
   let testApp: TestApp;
@@ -64,27 +65,33 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
     name: string,
     opts: { igdbId?: number; banned?: boolean } = {},
   ): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        igdbId: opts.igdbId,
-        banned: opts.banned ?? false,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          igdbId: opts.igdbId,
+          banned: opts.banned ?? false,
+        })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
   async function seedUser(discordId: string): Promise<number> {
-    const [u] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId,
-        username: discordId.slice(0, 20),
-        role: 'member',
-      })
-      .returning();
+    const [u] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId,
+          username: discordId.slice(0, 20),
+          role: 'member',
+        })
+        .returning(),
+      'u',
+    );
     return u.id;
   }
 
@@ -184,7 +191,7 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
     const set = new Set(received[0]);
     expect(set.has(game1)).toBe(true);
     expect(set.has(game2)).toBe(true);
-    expect(received[0].length).toBe(2);
+    expect(received[0]?.length).toBe(2);
   });
 
   // ─── AC: upsertGamesFromApi helper-level contract ────────
@@ -203,11 +210,14 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
     );
 
     expect(received.length).toBe(1);
-    const [row] = await testApp.db
-      .select({ id: schema.games.id })
-      .from(schema.games)
-      .where(eq(schema.games.igdbId, 9100001))
-      .limit(1);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ id: schema.games.id })
+        .from(schema.games)
+        .where(eq(schema.games.igdbId, 9100001))
+        .limit(1),
+      'row',
+    );
     expect(received[0]).toBe(row.id);
   });
 
@@ -229,22 +239,28 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
 
   it('enrichSyncedGamesWithItad fires onGameChanged once per successfully enriched game', async () => {
     // Seed two games with steamAppId so the helper's query picks them up.
-    const [gameA] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'ITAD Enrich A',
-        slug: 'itad-enrich-a',
-        steamAppId: 501,
-      })
-      .returning();
-    const [gameB] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'ITAD Enrich B',
-        slug: 'itad-enrich-b',
-        steamAppId: 502,
-      })
-      .returning();
+    const [gameA] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'ITAD Enrich A',
+          slug: 'itad-enrich-a',
+          steamAppId: 501,
+        })
+        .returning(),
+      'gameA',
+    );
+    const [gameB] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'ITAD Enrich B',
+          slug: 'itad-enrich-b',
+          steamAppId: 502,
+        })
+        .returning(),
+      'gameB',
+    );
 
     const lookupBySteamAppId = jest
       .fn<Promise<ItadGame | null>, [number]>()
@@ -325,22 +341,28 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
 
   it('refreshExistingGames fires onGameChanged for each refreshed game', async () => {
     // Seed two existing games with igdbId so the helper's select picks them up.
-    const [gameA] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Refresh A',
-        slug: 'refresh-a',
-        igdbId: 8100001,
-      })
-      .returning();
-    const [gameB] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Refresh B',
-        slug: 'refresh-b',
-        igdbId: 8100002,
-      })
-      .returning();
+    const [gameA] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Refresh A',
+          slug: 'refresh-a',
+          igdbId: 8100001,
+        })
+        .returning(),
+      'gameA',
+    );
+    const [gameB] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Refresh B',
+          slug: 'refresh-b',
+          igdbId: 8100002,
+        })
+        .returning(),
+      'gameB',
+    );
 
     const queryIgdb = jest
       .fn<Promise<IgdbApiGame[]>, [string]>()
