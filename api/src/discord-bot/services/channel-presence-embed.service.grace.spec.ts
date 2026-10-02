@@ -165,7 +165,7 @@ const lobby = (bindingId: string, gracePeriod?: number) => ({
 });
 
 describe('onBindingChanged — a binding write evicts the cached binding', () => {
-  it('a binding-changed event evicts the cached binding the same way', async () => {
+  it('a binding-changed event evicts the cached binding', async () => {
     const current = { value: [lobby('b-old')] as unknown[] };
     cachingBindings(current);
     const service = await started();
@@ -177,6 +177,7 @@ describe('onBindingChanged — a binding write evicts the cached binding', () =>
     service.markDirty(VOICE);
     await service.flushNow();
 
+    expect(flushes).toHaveBeenCalledTimes(2);
     expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-new', 1));
   });
 

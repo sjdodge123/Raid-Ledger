@@ -226,7 +226,10 @@ export class LfgNowSpawnService {
    * ad-hoc auto-extend among them) would treat a lone session as absent.
    * CREATED is deliberately NOT emitted here: its listener posts
    * announcements. Runs post-COMMIT, so the refresh can see the row; a failure
-   * only delays that visibility, never the session.
+   * only delays that visibility, never the session. Awaited ahead of the temp
+   * voice channel and the GROUP_CHANGED emit on purpose: a member joining that
+   * channel (voice attendance reads this cache) or a listener of that emit
+   * already finds the session cached. The price is one active-window SELECT.
    */
   private async refreshEventCache(eventId: number): Promise<void> {
     if (!this.eventCache) return;

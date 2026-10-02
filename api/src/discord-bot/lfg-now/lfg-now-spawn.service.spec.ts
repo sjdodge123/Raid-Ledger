@@ -73,8 +73,7 @@ function build(over: { masterToggle?: boolean } = {}) {
     settings as any,
 
     null,
-
-    eventCache as any,
+    eventCache as never,
   );
   return { service, emitter, ephemeralVoice, settings, eventCache };
 }
@@ -269,7 +268,7 @@ describe('LfgNowSpawnService — the post-commit event-cache refresh', () => {
   ];
 
   it.each(PATHS)(
-    '%s refreshes once, after the spawn settled',
+    '%s refreshes once, after the spawn call',
     async (_path, run) => {
       const { service, eventCache } = build();
       await run(service);
