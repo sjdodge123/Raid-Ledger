@@ -2,9 +2,9 @@
  * ROK-1564 — "Looks right" must refresh BOTH the viewer's game time (so the
  * check closes) and the poll views (so the heatmap/row stop reading stale).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { createTestQueryClient } from '../../test/render-helpers';
 import { GAME_TIME_QUERY_KEY, useConfirmGameTime } from '../use-game-time';
@@ -21,7 +21,7 @@ vi.mock('../../lib/api-client', () => ({
     getGameTimeAbsences: vi.fn(),
 }));
 
-function keysInvalidated(spy: ReturnType<typeof vi.spyOn>): unknown[][] {
+function keysInvalidated(spy: MockInstance<QueryClient['invalidateQueries']>): unknown[][] {
     return spy.mock.calls
         .map((call) => (call[0] as { queryKey?: unknown[] } | undefined)?.queryKey)
         .filter((k): k is unknown[] => Array.isArray(k));

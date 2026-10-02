@@ -3,9 +3,9 @@
  * the server stamps a saved week as confirmed, so the group heatmap and the
  * viewer's freshness change with the same write (Codex finding).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { createTestQueryClient } from '../../test/render-helpers';
 import { GAME_TIME_QUERY_KEY, useSaveGameTime } from '../use-game-time';
@@ -22,7 +22,7 @@ vi.mock('../../lib/api-client', () => ({
     getGameTimeAbsences: vi.fn(),
 }));
 
-function keysInvalidated(spy: ReturnType<typeof vi.spyOn>): unknown[][] {
+function keysInvalidated(spy: MockInstance<QueryClient['invalidateQueries']>): unknown[][] {
     return spy.mock.calls
         .map((call) => (call[0] as { queryKey?: unknown[] } | undefined)?.queryKey)
         .filter((k): k is unknown[] => Array.isArray(k));

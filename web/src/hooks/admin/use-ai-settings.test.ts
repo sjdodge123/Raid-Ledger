@@ -8,7 +8,7 @@ import { server } from '../../test/mocks/server';
 const API_BASE = 'http://localhost:3000';
 
 const useAuthMock = vi.fn();
-const getAuthTokenMock = vi.fn<[], string | null>();
+const getAuthTokenMock = vi.fn<() => string | null>();
 
 vi.mock('../use-auth', async () => {
     const actual = await vi.importActual<typeof import('../use-auth')>('../use-auth');

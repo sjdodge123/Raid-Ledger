@@ -412,7 +412,15 @@ async function driveHeadCount(
  */
 async function endSpawnedSession(run: Run): Promise<void> {
   try {
-    await endLfgSession(run.ctx.api, run.game.id);
+    const res = await endLfgSession(run.ctx.api, run.game.id);
+    if (res.ended && !res.channelDestroyed) {
+      console.warn(
+        `[lfm-playing] session ended for game ${run.game.id} but its temp ` +
+          `voice channel was NOT deleted — never created, bot offline, ` +
+          `already gone, or the delete failed; if it exists it may be ` +
+          `orphaned in the guild`,
+      );
+    }
     await awaitProcessing(run.ctx.api);
   } catch (err) {
     console.warn(

@@ -2,7 +2,7 @@
  * Game detail page smoke tests — page renders, title/summary visible,
  * details grid, community activity section.
  *
- * Navigates from /games to the first game card link so we don't
+ * Navigates from /games to the first game card it shows so we don't
  * hard-code a DB row ID that may differ across seed runs.
  */
 import { test, expect } from './base';
@@ -10,41 +10,76 @@ import type { Page } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
 import { isMobile, isPhoneLayout } from './helpers';
 
+const NO_GAMES_REASON = 'GET /games/discover returned no games';
+
 /**
- * Navigate to the first game detail page by clicking the first
- * game card link on /games.  Returns false if no game links are
- * visible (e.g. CI with sparse seed data).
+ * Ask the API whether /games has anything to render. This reads
+ * `GET /games/discover` — the same endpoint that backs the /games rows — so
+ * "the API has games" and "the page renders game cards" share one source.
+ * A non-2xx answer is a failure, not a reason to skip: it would otherwise
+ * hide a broken discover endpoint.
  */
-async function navigateToFirstGame(page: Page, isMobileViewport: boolean): Promise<boolean> {
+async function apiHasGames(): Promise<boolean> {
+    const token = await getAdminToken();
+    const res = (await apiGet(token, '/games/discover')) as {
+        rows?: Array<{ games?: unknown[] }>;
+    } | null;
+    expect(res, 'GET /games/discover must answer 2xx with a body').not.toBeNull();
+    return (res?.rows ?? []).some((row) => (row.games?.length ?? 0) > 0);
+}
+
+/** The Discover grid container — `DISCOVER_GRID_TESTID` in games-page-discover.tsx. */
+const DISCOVER_GRID = 'discover-grid';
+
+/**
+ * Navigate to the first game detail page from /games. Returns false ONLY when
+ * the API reports no games (the skip precondition). When games exist, a /games
+ * page that shows no card is a hard failure — never a silent skip.
+ *
+ * Both card trees are always mounted; the one the viewport doesn't use is
+ * CSS-hidden, so each locator qualifies on `:visible`. At and above `md` a card
+ * is a `/games/:id` link, which the test clicks. Below `md` (the phone project)
+ * a card is the `DrawerCard` tile — a button that opens the research drawer and
+ * carries no link — so the test reads the tile's `data-game-id` and loads that
+ * game's page directly.
+ */
+async function navigateToFirstGame(page: Page, phone: boolean): Promise<boolean> {
+    if (!(await apiHasGames())) return false;
+
     await page.goto('/games');
-
-    // Wait for the page to settle — if no game links exist after timeout, bail.
-    const anyGameLink = page.locator('a[href*="/games/"]').first();
-    if (!(await anyGameLink.isVisible({ timeout: 10_000 }).catch(() => false))) {
-        return false;
-    }
-
-    if (isMobileViewport) {
-        // On mobile the lineup banner covers game cards — scroll past it
-        const gameLink = page.locator('a[href*="/games/"]');
-        const allLinks = await gameLink.all();
-        for (const link of allLinks) {
-            await link.scrollIntoViewIfNeeded();
-            if (await link.isVisible({ timeout: 1_000 }).catch(() => false)) {
-                await link.click();
-                await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
-                return true;
-            }
-        }
-        return false;
-    }
-
-    // Desktop: first visible game link
-    const gameLink = page.locator('a[href*="/games/"]').first();
-    await expect(gameLink).toBeVisible({ timeout: 15_000 });
-    await gameLink.click();
-    await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
+    if (phone) await openFirstPhoneTile(page);
+    else await clickFirstCardLink(page);
     return true;
+}
+
+async function clickFirstCardLink(page: Page): Promise<void> {
+    // Games exist, so /games must render at least one visible card link.
+    const anyGameLink = page.locator('a[href*="/games/"]:visible').first();
+    await expect(
+        anyGameLink,
+        'games exist (API) but no /games/:id card link became visible on /games',
+    ).toBeVisible({ timeout: 15_000 });
+
+    // A banner above the rows can push the first card below the fold.
+    await anyGameLink.scrollIntoViewIfNeeded();
+    await anyGameLink.click();
+    await page.waitForURL(/\/games\/\d+/, { timeout: 10_000 });
+}
+
+async function openFirstPhoneTile(page: Page): Promise<void> {
+    // Games exist, so the phone grid must render at least one visible tile.
+    const tile = page
+        .getByTestId(DISCOVER_GRID)
+        .locator('[data-testid="game-ref-row"]:visible')
+        .first();
+    await expect(
+        tile,
+        'games exist (API) but no game tile became visible in the /games discover grid',
+    ).toBeVisible({ timeout: 15_000 });
+
+    const id = (await tile.getAttribute('data-game-id')) ?? '';
+    expect(id, 'the first /games tile must carry a numeric data-game-id').toMatch(/^\d+$/);
+    await page.goto(`/games/${id}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -57,7 +92,7 @@ test.describe('Game detail — desktop', () => {
     test.beforeEach(async ({ page }, testInfo) => {
         test.skip(isPhoneLayout(testInfo), 'Desktop-only tests');
         hasGames = await navigateToFirstGame(page, false);
-        if (!hasGames) test.skip(true, 'No games seeded — skipping game detail tests');
+        if (!hasGames) test.skip(true, NO_GAMES_REASON);
     });
 
     test('page renders without crashing', async ({ page }) => {
@@ -142,7 +177,7 @@ test.describe('Game detail — mobile', () => {
     test.beforeEach(async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'Mobile-only tests');
         hasGames = await navigateToFirstGame(page, true);
-        if (!hasGames) test.skip(true, 'No games seeded — skipping game detail tests');
+        if (!hasGames) test.skip(true, NO_GAMES_REASON);
     });
 
     test('page renders without crashing', async ({ page }) => {

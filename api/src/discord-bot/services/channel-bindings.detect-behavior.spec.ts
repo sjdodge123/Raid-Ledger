@@ -9,6 +9,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 describe('ChannelBindingsService.detectBehavior (ROK-515)', () => {
   let service: ChannelBindingsService;
@@ -21,6 +22,7 @@ describe('ChannelBindingsService.detectBehavior (ROK-515)', () => {
           provide: DrizzleAsyncProvider,
           useValue: {}, // detectBehavior doesn't use the DB
         },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
     }).compile();
 

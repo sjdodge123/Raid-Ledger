@@ -125,9 +125,10 @@ export const GameTimeAbsenceInputSchema = z
     message: 'endDate must be on or after startDate',
     path: ['endDate'],
     when: ({ issues }) =>
-      !issues.some(
-        (i) => !i.path?.length || ABSENCE_DATE_KEYS.includes(i.path[0]),
-      ),
+      !issues.some((i) => {
+        const key = i.path?.[0];
+        return key === undefined || ABSENCE_DATE_KEYS.includes(key);
+      }),
   });
 export type GameTimeAbsenceInput = z.infer<typeof GameTimeAbsenceInputSchema>;
 

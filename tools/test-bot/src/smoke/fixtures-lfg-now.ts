@@ -71,6 +71,12 @@ export interface LfgEndSessionResult {
   /** False when the game had no open LFG-born session to end. */
   ended: boolean;
   eventId: number | null;
+  /**
+   * True only when the temp voice channel was actually deleted. False with
+   * `ended: true` means it may be leaked (bot offline, already gone, or the
+   * delete failed).
+   */
+  channelDestroyed: boolean;
 }
 
 /**
