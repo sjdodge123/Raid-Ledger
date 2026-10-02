@@ -18,6 +18,7 @@ import {
   bfsRearrangementChain,
 } from './signups-allocation.helpers';
 import * as tentH from './signups-tentative.helpers';
+import { defined } from '../common/defined.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 
@@ -78,7 +79,7 @@ export async function tryDirectAllocation(
   const signupById = new Map(ctx.allSignups.map((s) => [s.id, s]));
   for (const role of newPrefs) {
     if (!(role in ctx.roleCapacity)) continue;
-    if (ctx.filledPerRole[role] >= ctx.roleCapacity[role]) {
+    if (isRoleFull(ctx, role)) {
       if (shouldDeferToTentativeDisplacement(role, status, ctx, signupById))
         return false;
       continue;
@@ -92,6 +93,15 @@ export async function tryDirectAllocation(
     return true;
   }
   return false;
+}
+
+/** `filled >= capacity`; a role missing from either map is not full
+ *  (the comparison against `undefined` was always false). */
+function isRoleFull(ctx: AllocationContext, role: string): boolean {
+  const filled = ctx.filledPerRole[role];
+  const capacity = ctx.roleCapacity[role];
+  if (filled === undefined || capacity === undefined) return false;
+  return filled >= capacity;
 }
 
 /** Returns true when a confirmed player should skip direct allocation to
@@ -130,7 +140,7 @@ export async function tryChainRearrangement(
   if (!chain) return false;
   await executeChainMoves(tx, chain, ctx, logger);
   const { freedRole } = chain;
-  const pos = chain.moves[0].position;
+  const pos = defined(chain.moves[0], 'first chain move').position;
   await insertAndConfirmSlot(tx, eventId, newSignupId, freedRole, pos);
   logger.log(
     `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${pos} (${chain.moves.length}-step chain rearrangement)`,
@@ -146,7 +156,7 @@ async function executeChainMoves(
   logger: { log: (msg: string) => void },
 ) {
   for (let i = chain.moves.length - 1; i >= 0; i--) {
-    const move = chain.moves[i];
+    const move = defined(chain.moves[i], `chain move ${i}`);
     const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
     const newPos =
       nextMove && nextMove.fromRole === move.toRole
@@ -159,7 +169,8 @@ async function executeChainMoves(
     ctx.occupiedPositions[move.fromRole]?.delete(move.position);
     ctx.occupiedPositions[move.toRole]?.add(newPos);
     if (!nextMove || nextMove.fromRole !== move.toRole)
-      ctx.filledPerRole[move.toRole]++;
+      ctx.filledPerRole[move.toRole] =
+        defined(ctx.filledPerRole[move.toRole], `filled[${move.toRole}]`) + 1;
     logger.log(
       `Chain rearrange: signup ${move.signupId} moved from ${move.fromRole} to ${move.toRole} slot ${newPos}`,
     );
