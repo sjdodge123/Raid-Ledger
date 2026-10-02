@@ -18,11 +18,11 @@
  */
 import { pollForEmbed } from '../../helpers/polling.js';
 import { assertBindSucceeded, type BindReply } from '../bind-reply.js';
+import { deleteSeriesBindings } from '../series-binding-cleanup.js';
 import { joinVoice, leaveVoice } from '../../helpers/voice.js';
 import {
   createEvent,
   deleteEvent,
-  deleteBinding,
   awaitProcessing,
 } from '../fixtures.js';
 import type { ApiClient } from '../api.js';
@@ -48,7 +48,10 @@ const GUILD_VOICE = 2;
  * Invoke /bind via the test harness for a series + channel. The channel is
  * passed in object form with its Discord `type` so FakeInteraction surfaces
  * voice vs text to the handler (the string form carries no type and always
- * resolves as text). Throws the /bind refusal text when no binding was saved.
+ * resolves as text). Throws the /bind refusal text when no binding was saved,
+ * so callers sweep the series' bindings in `finally` (deleteSeriesBindings)
+ * rather than collecting ids after both binds: a refused second bind would
+ * skip that read and leak the first binding.
  */
 async function bindSeriesChannel(
   ctx: TestContext,
@@ -117,8 +120,6 @@ const dualBindingPersists: SmokeTest = {
     if (!voiceCh) throw new Error('No voice channel available');
 
     const series = await createSeries(ctx, 'dual-bind-persist');
-    let textBindingId: string | undefined;
-    let voiceBindingId: string | undefined;
     try {
       // 1. Bind the TEXT announce channel for the series.
       await bindSeriesChannel(
@@ -144,8 +145,6 @@ const dualBindingPersists: SmokeTest = {
       );
       const textRow = seriesRows.find((b) => b.channelId === textCh.id);
       const voiceRow = seriesRows.find((b) => b.channelId === voiceCh.id);
-      textBindingId = textRow?.id;
-      voiceBindingId = voiceRow?.id;
 
       if (!textRow) {
         throw new Error(
@@ -170,8 +169,7 @@ const dualBindingPersists: SmokeTest = {
         );
       }
     } finally {
-      if (textBindingId) await deleteBinding(ctx.api, textBindingId);
-      if (voiceBindingId) await deleteBinding(ctx.api, voiceBindingId);
+      await deleteSeriesBindings(ctx.api, series.recurrenceGroupId);
       await deleteEvent(ctx.api, series.id);
     }
   },
@@ -191,7 +189,6 @@ const announceRoutesToTextHostsInVoice: SmokeTest = {
     if (!voiceCh) throw new Error('No voice channel available');
 
     const series = await createSeries(ctx, 'dual-bind-route');
-    const bindingIds: string[] = [];
     try {
       // Bind both slots for the series.
       await bindSeriesChannel(
@@ -211,7 +208,6 @@ const announceRoutesToTextHostsInVoice: SmokeTest = {
       const seriesRows = (await listBindings(ctx.api)).filter(
         (b) => b.recurrenceGroupId === series.recurrenceGroupId,
       );
-      for (const r of seriesRows) bindingIds.push(r.id);
 
       // A new event in the series must announce to the TEXT channel.
       // resyncSeriesEvents re-emits UPDATED for all series events, so the
@@ -241,7 +237,7 @@ const announceRoutesToTextHostsInVoice: SmokeTest = {
         );
       }
     } finally {
-      for (const id of bindingIds) await deleteBinding(ctx.api, id);
+      await deleteSeriesBindings(ctx.api, series.recurrenceGroupId);
       await deleteEvent(ctx.api, series.id);
     }
   },
@@ -286,14 +282,17 @@ async function setPlayingOverride(
     });
 }
 
-/** Bind text + series-linked game-voice-monitor voice slots; return their ids. */
+/**
+ * Bind text + series-linked game-voice-monitor voice slots. The caller sweeps
+ * them with deleteSeriesBindings.
+ */
 async function bindSeriesRoutingSlots(
   ctx: TestContext,
   recurrenceGroupId: string,
   textChId: string,
   voiceChId: string,
   gameName: string,
-): Promise<{ ids: string[]; voiceBindingId: string }> {
+): Promise<void> {
   await bindSeriesChannel(ctx, recurrenceGroupId, textChId, GUILD_TEXT);
   await bindSeriesChannel(
     ctx,
@@ -317,7 +316,6 @@ async function bindSeriesRoutingSlots(
   await ctx.api.patch(`/admin/discord/bindings/${voiceRow.id}`, {
     config: { minPlayers: 1 },
   });
-  return { ids: rows.map((r) => r.id), voiceBindingId: voiceRow.id };
 }
 
 const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
@@ -331,15 +329,14 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
 
     const game = await firstGame(ctx);
     const series = await createSeries(ctx, 'rok1390-route');
-    let bindingIds: string[] = [];
     try {
-      ({ ids: bindingIds } = await bindSeriesRoutingSlots(
+      await bindSeriesRoutingSlots(
         ctx,
         series.recurrenceGroupId,
         textCh.id,
         voiceCh.id,
         game.name,
-      ));
+      );
 
       // Presence-less bot + /playing = one positive confirmation → the series
       // spawn guard allows the mint and the embed routes via getChannelForSeries.
@@ -367,7 +364,7 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
     } finally {
       leaveVoice();
       await setPlayingOverride(ctx); // clear override
-      for (const id of bindingIds) await deleteBinding(ctx.api, id);
+      await deleteSeriesBindings(ctx.api, series.recurrenceGroupId);
       await deleteEvent(ctx.api, series.id);
     }
   },
