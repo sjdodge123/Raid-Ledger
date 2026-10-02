@@ -17,6 +17,7 @@ import { channelEmbedTests } from "./tests/channel-embeds.test.js";
 import { dmNotificationTests } from "./tests/dm-notifications.test.js";
 import { dmEmbedRenderTests } from "./tests/dm-embed-render.test.js";
 import { voiceActivityTests } from "./tests/voice-activity.test.js";
+import { suppressionEndSyncTests } from "./tests/suppression-end-sync.test.js";
 import { interactionFlowTests } from "./tests/interaction-flows.test.js";
 import { rosterCalculationTests } from "./tests/roster-calculation.test.js";
 import { pushContentTests } from "./tests/push-content.test.js";
@@ -163,6 +164,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...dmNotificationTests,
     ...dmEmbedRenderTests,
     ...voiceActivityTests,
+    ...suppressionEndSyncTests,
     ...interactionFlowTests,
     ...slashCommandTests,
     ...cdpSlashCommandTests,

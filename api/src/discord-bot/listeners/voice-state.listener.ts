@@ -29,6 +29,7 @@ import { EphemeralVoiceIdleCoordinator } from '../services/ephemeral-voice-idle.
 import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
 import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { CHANNEL_BINDING_EVENTS } from '../services/channel-binding-events';
 import {
   DEBOUNCE_MS,
   buildDiscordMember,
@@ -175,6 +176,15 @@ export class VoiceStateListener implements OnApplicationShutdown {
     this.presenceHandler = null;
     this.channelPresence.clear();
     this.clearAllState();
+  }
+
+  /**
+   * A binding on this channel was written: drop its cache entry so the next
+   * join resolves the binding that exists now, not one up to 60 s stale.
+   */
+  @OnEvent(CHANNEL_BINDING_EVENTS.CHANGED)
+  onBindingChanged({ channelId }: { channelId: string }): void {
+    this.channelBindingCache.delete(channelId);
   }
 
   onApplicationShutdown(): void {
