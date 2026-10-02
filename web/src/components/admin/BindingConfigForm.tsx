@@ -23,6 +23,40 @@ interface BindingConfigFormProps {
   saveLocked?: boolean | undefined;
 }
 
+type BindingForm = ReturnType<typeof useBindingConfigForm>;
+
+/** The purpose-specific config: lobby toggle, voice timings, announcement note. */
+function PurposeConfigSections({ f }: { f: BindingForm }) {
+  const showVoiceFields =
+    f.purpose === "game-voice-monitor" || f.purpose === "general-lobby";
+  return (
+    <>
+      {f.purpose === "general-lobby" && (
+        <GeneralLobbySection
+          allowJustChatting={f.allowJustChatting}
+          onChange={f.setAllowJustChatting}
+        />
+      )}
+      {showVoiceFields && (
+        <VoiceMonitorFields
+          purpose={f.purpose}
+          minPlayers={f.minPlayers}
+          onMinPlayersChange={f.setMinPlayers}
+          autoClose={f.autoClose}
+          onAutoCloseChange={f.setAutoClose}
+          gracePeriod={f.gracePeriod}
+          onGracePeriodChange={f.setGracePeriod}
+        />
+      )}
+      {f.purpose === "game-announcements" && (
+        <p className="text-sm text-muted">
+          No additional configuration needed for announcement channels.
+        </p>
+      )}
+    </>
+  );
+}
+
 /**
  * Edit a channel binding's purpose, game, and config (ROK-1416). Purpose is
  * channelType-filtered; the game picker shows for a voice Activity Monitor and
@@ -42,8 +76,6 @@ export function BindingConfigForm({
   // The game maps to a purpose for a monitor / announcement channel; a General
   // Lobby auto-detects it, so the field is hidden there (wireframe B1).
   const showGameField = f.purpose !== "general-lobby";
-  const showVoiceFields =
-    f.purpose === "game-voice-monitor" || f.purpose === "general-lobby";
   const purposeId = `binding-purpose-${binding.id}`;
   const gameFieldId = `binding-game-${binding.id}`;
 
@@ -86,28 +118,7 @@ export function BindingConfigForm({
           violationMessage={f.gameRequired ? f.violation?.message : undefined}
         />
       )}
-      {f.purpose === "general-lobby" && (
-        <GeneralLobbySection
-          allowJustChatting={f.allowJustChatting}
-          onChange={f.setAllowJustChatting}
-        />
-      )}
-      {showVoiceFields && (
-        <VoiceMonitorFields
-          purpose={f.purpose}
-          minPlayers={f.minPlayers}
-          onMinPlayersChange={f.setMinPlayers}
-          autoClose={f.autoClose}
-          onAutoCloseChange={f.setAutoClose}
-          gracePeriod={f.gracePeriod}
-          onGracePeriodChange={f.setGracePeriod}
-        />
-      )}
-      {f.purpose === "game-announcements" && (
-        <p className="text-sm text-muted">
-          No additional configuration needed for announcement channels.
-        </p>
-      )}
+      <PurposeConfigSections f={f} />
       {saveError && (
         <p className="text-sm text-danger" role="alert">
           {saveError}

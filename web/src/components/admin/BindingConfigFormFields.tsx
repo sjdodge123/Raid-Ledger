@@ -246,7 +246,9 @@ export function GameField({
  * Save + Cancel. `saveDisabled` is native disabled, for VALIDATION (the inert
  * triple cannot be saved) OR another row's save in flight (one PATCH at a
  * time). A pending save of THIS row is Button `loading`, which keeps focus and
- * swallows the submit (ROK-1652 ruling 7) — the two are never combined.
+ * swallows the submit (ROK-1652 ruling 7). The cross-row lock and `loading`
+ * are never combined (the list computes them as mutually exclusive);
+ * validation-disabled can coincide with this row's own pending save.
  */
 export function FormActions(p: {
   saveDisabled: boolean;
