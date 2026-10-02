@@ -77,7 +77,7 @@ describe('sortGamesWithLikedFirst — edge cases', () => {
 
         // All liked games come before all non-liked games
         const firstUnlikedIdx = result.findIndex((g) => !g.liked);
-        const lastLikedIdx = result.findLastIndex((g) => g.liked);
+        const lastLikedIdx = result.map((g) => g.liked).lastIndexOf(true);
         if (firstUnlikedIdx !== -1 && lastLikedIdx !== -1) {
             expect(lastLikedIdx).toBeLessThan(firstUnlikedIdx);
         }

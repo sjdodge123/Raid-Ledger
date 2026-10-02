@@ -2,10 +2,11 @@
  * Tests for useRecordAttendance — verifies onSuccess cache invalidation
  * includes the metrics query key (ROK-852).
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
+import type { AttendanceStatus } from '@raid-ledger/contract';
 
 // --- API client mocks ---
 const mockRecordAttendance = vi.fn();
@@ -47,7 +48,7 @@ function createTestHarness() {
 }
 
 function getInvalidateCalls(
-    spy: ReturnType<typeof vi.spyOn>,
+    spy: MockInstance<QueryClient['invalidateQueries']>,
     key: readonly unknown[],
 ) {
     return spy.mock.calls.filter(
@@ -58,7 +59,7 @@ function getInvalidateCalls(
 async function mutateAndAssert(
     key: readonly unknown[],
     expectedCount: number,
-    opts?: { reject?: boolean; signupId?: number; status?: string },
+    opts?: { reject?: boolean; signupId?: number; status?: AttendanceStatus },
 ) {
     const { invalidateSpy, wrapper } = createTestHarness();
     const status = opts?.status ?? 'attended';

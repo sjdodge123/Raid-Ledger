@@ -444,7 +444,7 @@ describe('CreateEventForm copyFromEvent prefill', () => {
         signupCount: 4,
         slotConfig: { type: 'generic', player: 6 },
         maxAttendees: 6,
-    } as unknown as Parameters<typeof CreateEventForm>[0]['copyFromEvent'];
+    } as unknown as NonNullable<Parameters<typeof CreateEventForm>[0]>['copyFromEvent'];
 
     it('renders the source event title in the form', () => {
         renderForm({ copyFromEvent: endedEvent });

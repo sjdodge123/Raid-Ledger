@@ -68,14 +68,14 @@ const EMPTY_PROFESSIONS: CharacterProfessionsDto = {
 describe('CharacterProfessionsPanel — visibility short-circuit', () => {
     it('renders nothing when professions === null and viewer is NOT the owner', () => {
         const { container } = render(
-            <CharacterProfessionsPanel professions={null} isOwner={false} characterId="c1" />,
+            <CharacterProfessionsPanel professions={null} isOwner={false} characterId="c1" gameId={1} />,
         );
         expect(container).toBeEmptyDOMElement();
     });
 
     it('renders nothing when both arrays are empty and viewer is NOT the owner', () => {
         const { container } = render(
-            <CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner={false} characterId="c1" />,
+            <CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner={false} characterId="c1" gameId={1} />,
         );
         expect(container).toBeEmptyDOMElement();
     });
@@ -83,20 +83,20 @@ describe('CharacterProfessionsPanel — visibility short-circuit', () => {
 
 describe('CharacterProfessionsPanel — owner CTA when no data', () => {
     it('renders an "Add Professions" CTA when owner has no data', () => {
-        render(<CharacterProfessionsPanel professions={null} isOwner characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={null} isOwner characterId="c1" gameId={1} />);
         expect(screen.getByRole('heading', { name: /professions/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
     });
 
     it('renders the CTA when owner has empty arrays (sync-with-no-data path)', () => {
-        render(<CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner characterId="c1" gameId={1} />);
         expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
     });
 });
 
 describe('CharacterProfessionsPanel — populated state', () => {
     it('renders primary, secondary, tiers, and skill numbers (non-owner)', () => {
-        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false} characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false} characterId="c1" gameId={1} />);
         expect(screen.getByRole('heading', { name: /professions/i })).toBeInTheDocument();
         expect(screen.getByText('Tailoring')).toBeInTheDocument();
         expect(screen.getByText(/450\s*\/\s*450/)).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe('CharacterProfessionsPanel — populated state', () => {
     });
 
     it('renders an Edit affordance for owners with data', () => {
-        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} />);
         expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument();
     });
 
@@ -119,7 +119,7 @@ describe('CharacterProfessionsPanel — populated state', () => {
             secondary: [],
             syncedAt: '2026-04-28T00:00:00.000Z',
         };
-        render(<CharacterProfessionsPanel professions={unknown} isOwner={false} characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={unknown} isOwner={false} characterId="c1" gameId={1} />);
         expect(screen.getByText('Mystery Craft')).toBeInTheDocument();
         expect(screen.queryByRole('img', { name: /mystery craft/i })).toBeNull();
     });

@@ -85,11 +85,16 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+const TOOLBAR_HERO: JourneyHeroProps = {
+    badge: 'Step 4 of 4 · Scheduling',
+    task: 'Valheim',
+};
+
 function renderToolbar() {
     const poll = buildPoll();
     return renderWithProviders(
         <SchedulingToolbar
-            hero={{ title: 'Valheim' } as JourneyHeroProps}
+            hero={TOOLBAR_HERO}
             match={poll.match}
             mode="from-match"
             lineupId={7}

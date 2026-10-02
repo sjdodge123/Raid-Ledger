@@ -44,7 +44,7 @@ import { LfgChip } from './lfg-chip';
 import { nowLine } from './lfg-chip-copy';
 
 /** The one game the real-card cases use. */
-const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic' };
+const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic', coverUrl: null };
 
 /**
  * The REAL card composition: `UnifiedGameCard variant="link"` inside
