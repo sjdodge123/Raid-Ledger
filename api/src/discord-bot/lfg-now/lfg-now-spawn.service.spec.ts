@@ -10,6 +10,7 @@ import { Logger } from '@nestjs/common';
 import { LFG_EVENTS } from '../../lfg/lfg.constants';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
 import { spawnUnderGroupLock } from './lfg-now-spawn.helpers';
+import { mayStartGroup } from './lfg-now-manual-start.helpers';
 import {
   loadLfgNowEphemeralRow,
   lfgNowEventGameId,
@@ -17,6 +18,9 @@ import {
 
 jest.mock('./lfg-now-spawn.helpers', () => ({
   spawnUnderGroupLock: jest.fn(),
+}));
+jest.mock('./lfg-now-manual-start.helpers', () => ({
+  mayStartGroup: jest.fn(),
 }));
 jest.mock('./lfg-now.db-helpers', () => ({
   loadLfgNowEphemeralRow: jest.fn(),
@@ -32,6 +36,7 @@ const loadRow = loadLfgNowEphemeralRow as jest.MockedFunction<
 const eventGameId = lfgNowEventGameId as jest.MockedFunction<
   typeof lfgNowEventGameId
 >;
+const mayStart = mayStartGroup as jest.MockedFunction<typeof mayStartGroup>;
 
 const GAME_ID = 42;
 const EVENT_ROW = {
@@ -57,6 +62,7 @@ function build(over: { masterToggle?: boolean } = {}) {
       .fn()
       .mockResolvedValue(over.masterToggle ?? false),
   };
+  const eventCache = { refresh: jest.fn().mockResolvedValue(undefined) };
   const service = new LfgNowSpawnService(
     {} as any,
 
@@ -65,8 +71,12 @@ function build(over: { masterToggle?: boolean } = {}) {
     ephemeralVoice as any,
 
     settings as any,
+
+    null,
+
+    eventCache as any,
   );
-  return { service, emitter, ephemeralVoice, settings };
+  return { service, emitter, ephemeralVoice, settings, eventCache };
 }
 
 beforeEach(() => {
@@ -76,6 +86,7 @@ beforeEach(() => {
   spawn.mockResolvedValue({ eventId: 900, spawned: true, invitedUserIds: [] });
   loadRow.mockResolvedValue(EVENT_ROW);
   eventGameId.mockResolvedValue(GAME_ID);
+  mayStart.mockResolvedValue(true);
 });
 
 describe('LfgNowSpawnService — the subscription filter', () => {
@@ -239,5 +250,71 @@ describe('LfgNowSpawnService — never throws into the emitter', () => {
       discordUserId: 'd-5',
     });
     expect(emitter.emit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * An LFG-born event starts NOW and emits no CREATED, so the post-COMMIT
+ * refresh is the only thing that puts it in the active-event cache before the
+ * voice-attendance start-snapshot window closes.
+ */
+describe('LfgNowSpawnService — the post-commit event-cache refresh', () => {
+  type Run = (service: LfgNowSpawnService) => Promise<unknown>;
+  const PATHS: [string, Run][] = [
+    ['startNow', (s) => s.startNow(7, GAME_ID)],
+    [
+      'the threshold listener',
+      (s) => s.onGroupChanged({ gameId: GAME_ID, reason: 'joined' }),
+    ],
+  ];
+
+  it.each(PATHS)(
+    '%s refreshes once, after the spawn settled',
+    async (_path, run) => {
+      const { service, eventCache } = build();
+      await run(service);
+      expect(eventCache.refresh).toHaveBeenCalledTimes(1);
+      const [spawnedAt] = spawn.mock.invocationCallOrder;
+      const [refreshedAt] = eventCache.refresh.mock.invocationCallOrder;
+      expect(refreshedAt).toBeGreaterThan(spawnedAt ?? Infinity);
+    },
+  );
+
+  it.each(PATHS)('%s never refreshes on an ATTACH', async (_path, run) => {
+    spawn.mockResolvedValue({
+      eventId: 900,
+      spawned: false,
+      invitedUserIds: [],
+    });
+    const { service, eventCache } = build();
+    await run(service);
+    expect(eventCache.refresh).not.toHaveBeenCalled();
+  });
+
+  it('a rejected refresh still resolves the start and announces it', async () => {
+    const { service, eventCache, emitter, ephemeralVoice } = build();
+    eventCache.refresh.mockRejectedValue(new Error('pool exhausted'));
+    await expect(service.startNow(7, GAME_ID)).resolves.toEqual({
+      eventId: 900,
+      spawned: true,
+      invited: 0,
+    });
+    expect(ephemeralVoice.createForEvent).toHaveBeenCalledWith(EVENT_ROW);
+    expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.GROUP_CHANGED, {
+      gameId: GAME_ID,
+      reason: 'playing',
+      eventId: 900,
+    });
+  });
+
+  it('a rejected refresh on the listener path still announces the session', async () => {
+    const { service, eventCache, emitter } = build();
+    eventCache.refresh.mockRejectedValue(new Error('pool exhausted'));
+    await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
+    expect(emitter.emit).toHaveBeenCalledWith(LFG_EVENTS.GROUP_CHANGED, {
+      gameId: GAME_ID,
+      reason: 'playing',
+      eventId: 900,
+    });
   });
 });
