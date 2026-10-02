@@ -10,7 +10,11 @@
  * Before ROK-1473 nothing called `firePostInitialEmbed` for a lineup-phase
  * match, so this channel stayed silent and every later re-render was a no-op.
  */
-import { pollForEmbed, waitForEmbedUpdate } from '../../helpers/polling.js';
+import {
+  pollForEmbed,
+  snapshotMessageIds,
+  waitForEmbedUpdate,
+} from '../../helpers/polling.js';
 import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed } from '../../helpers/messages.js';
@@ -225,6 +229,14 @@ const schedulingPollCardPosted: SmokeTest = {
   category: 'embed',
   async run(ctx: TestContext) {
     await archiveAllLineups(ctx.api);
+    // Fence the channel BEFORE the lineup exists: CI reseeds the same
+    // lineup/match ids, so a prior run's card can carry this run's exact
+    // href, and the oldest match would win (TDB:1459).
+    const channelId = await resolveLineupChannelId(
+      ctx.api,
+      ctx.defaultChannelId,
+    );
+    const ghostIds = await snapshotMessageIds(channelId);
 
     const title = `Poll Card ${Date.now()}`;
     const lineup = await buildDecidedLineup(ctx.api, title);
@@ -233,15 +245,12 @@ const schedulingPollCardPosted: SmokeTest = {
       await awaitProcessing(ctx.api);
       const match = await loadSchedulingMatch(ctx.api, lineup.id);
       const path = `/community-lineup/${lineup.id}/schedule/${match.id}`;
-      const channelId = await resolveLineupChannelId(
-        ctx.api,
-        ctx.defaultChannelId,
-      );
 
       const msg = await pollForEmbed(
         channelId,
         (m) => m.embeds.some((e) => (e.description ?? '').includes(path)),
         ctx.config.timeoutMs,
+        { excludeIds: ghostIds },
       );
 
       const embed = msg.embeds.find((e) =>

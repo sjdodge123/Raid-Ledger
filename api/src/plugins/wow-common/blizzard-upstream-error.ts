@@ -2,8 +2,9 @@
  * Map a failed Blizzard API response to an HttpException (ROK-1636).
  *
  * A raw `Error` becomes a bare 500 "Internal server error" in Nest, so the
- * user never learns why an import or realm lookup failed. Every upstream
- * failure is a 502: the request was fine, Blizzard's answer was not.
+ * user never learns why an import, realm lookup or instance/journal lookup
+ * failed. Every upstream failure is a 502: the request was fine, Blizzard's
+ * answer was not.
  *
  * A 403 is Blizzard refusing the namespace — the game version isn't served by
  * its API (WoW: Forever before launch). It stays a 5xx on purpose so the
@@ -13,7 +14,7 @@
 import { BadGatewayException } from '@nestjs/common';
 
 /** What the failed call was fetching, used in the 403 message. */
-export type BlizzardResource = 'characters' | 'realms';
+export type BlizzardResource = 'characters' | 'realms' | 'instances';
 
 /** Build the 502 for a non-404 upstream status. */
 export function blizzardUpstreamError(

@@ -172,16 +172,16 @@ export class PugInviteService {
     if (!event || event.cancelledAt) return;
 
     const ctx = await loadInviteContext(this.settingsService);
-    const voiceChannelId =
-      await this.channelResolver.resolveVoiceChannelForEvent(
+    const [voiceChannelId, signupCount] = await Promise.all([
+      this.channelResolver.resolveVoiceChannelForEvent(
         gameId,
         event.recurrenceGroupId,
         event.ephemeralVoiceChannelId,
-      );
-
-    // The spots line must quote the REAL roster: hardcoding 0 told a capped
-    // event's invitee "N spots open · 0 of N signed up" regardless of signups.
-    const signupCount = await countSignedUp(this.db, eventId);
+      ),
+      // The spots line must quote the REAL roster: hardcoding 0 told a capped
+      // event's invitee "N spots open · 0 of N signed up" regardless of signups.
+      countSignedUp(this.db, eventId),
+    ]);
 
     const { embed, row } = buildMemberInviteEmbed({
       eventId,

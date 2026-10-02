@@ -32,7 +32,9 @@ const adHoc = { finalizeEvent: jest.fn() };
 const discordClient = { getGuild: jest.fn() };
 const ephemeralVoice = { destroyById: jest.fn() };
 
-function controller(): DemoTestLfgController {
+function controller(
+  { voice }: { voice?: typeof ephemeralVoice } = { voice: ephemeralVoice },
+): DemoTestLfgController {
   return new DemoTestLfgController(
     settings as unknown as SettingsService,
     emitter as unknown as EventEmitter2,
@@ -40,7 +42,7 @@ function controller(): DemoTestLfgController {
     adHoc as never,
     {} as never,
     discordClient as never,
-    ephemeralVoice as never,
+    voice as never,
   );
 }
 
@@ -53,7 +55,7 @@ beforeEach(() => {
   emitter.emitAsync.mockResolvedValue([]);
   invites.decline.mockResolvedValue(true);
   adHoc.finalizeEvent.mockResolvedValue(undefined);
-  ephemeralVoice.destroyById.mockResolvedValue(undefined);
+  ephemeralVoice.destroyById.mockResolvedValue(true);
   jest.mocked(findOpenLfgNowEventId).mockResolvedValue(77);
   jest.mocked(setGracePeriodStatus).mockResolvedValue(undefined);
   jest.mocked(readBoardThreadMembers).mockResolvedValue({
@@ -124,6 +126,7 @@ describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
     expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
       ended: true,
       eventId: 77,
+      channelDestroyed: true,
     });
     // grace_period FIRST: `claimAndEndEvent` claims nothing otherwise, so a
     // reversed order would silently no-op and leak the session it promised to
@@ -147,12 +150,34 @@ describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
     );
   });
 
+  // TDB:1917 — `ended: true` alone hid a leaked channel from the smoke.
+  it('reports channelDestroyed false when the channel was not deleted', async () => {
+    ephemeralVoice.destroyById.mockResolvedValue(false);
+
+    expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
+      ended: true,
+      eventId: 77,
+      channelDestroyed: false,
+    });
+  });
+
+  it('reports channelDestroyed false (not undefined) without the voice service', async () => {
+    const res = await controller({ voice: undefined }).endLfgSession({
+      gameId: 42,
+    });
+
+    expect(res.channelDestroyed).toBe(false);
+    expect(res).toEqual({ ended: true, eventId: 77, channelDestroyed: false });
+    expect(adHoc.finalizeEvent).toHaveBeenCalledWith(77);
+  });
+
   it('is a no-op when the game has no open session', async () => {
     jest.mocked(findOpenLfgNowEventId).mockResolvedValue(null);
 
     expect(await controller().endLfgSession({ gameId: 42 })).toEqual({
       ended: false,
       eventId: null,
+      channelDestroyed: false,
     });
     expect(adHoc.finalizeEvent).not.toHaveBeenCalled();
     expect(ephemeralVoice.destroyById).not.toHaveBeenCalled();

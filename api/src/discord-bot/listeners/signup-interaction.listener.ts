@@ -48,6 +48,10 @@ import {
   showOnboardingEphemeral,
 } from './signup-status.handlers';
 import { handleSelectMenuInteraction } from './signup-select.handlers';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
 
 /**
  * Handles Discord button interactions for event signup actions (ROK-137).
@@ -55,8 +59,10 @@ import { handleSelectMenuInteraction } from './signup-select.handlers';
 @Injectable()
 export class SignupInteractionListener {
   private readonly logger = new Logger(SignupInteractionListener.name);
-  private boundHandler:
-    ((interaction: import('discord.js').Interaction) => void) | null = null;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'Signup interactions',
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -75,34 +81,20 @@ export class SignupInteractionListener {
   /** Register the interaction handler when the bot connects. */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client) {
-      this.logger.warn(
-        'Discord client unavailable — signup buttons will not register',
-      );
-      return;
-    }
-
-    if (this.boundHandler) {
-      client.removeListener('interactionCreate', this.boundHandler);
-    }
-
-    this.boundHandler = (interaction: import('discord.js').Interaction) => {
-      if (interaction.isButton()) {
-        void this.handleButtonInteraction(interaction);
-      } else if (interaction.isStringSelectMenu()) {
-        void this.handleSelectMenuInteraction(interaction);
-      }
-    };
-
-    client.on('interactionCreate', this.boundHandler);
-    this.logger.log('Registered signup interaction handler');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton())
+          void this.handleButtonInteraction(interaction);
+        else if (interaction.isStringSelectMenu())
+          void this.handleSelectMenuInteraction(interaction);
+      }),
+    ]);
   }
 
-  /** Clear handler reference on disconnect. */
+  /** Detach the handler so a reconnect re-attaches to the live client. */
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   onBotDisconnected(): void {
-    this.boundHandler = null;
+    this.binding.detach();
   }
 
   /** Build the shared dependency bag for handlers. */

@@ -1,4 +1,4 @@
-import { type Message, type TextChannel } from 'discord.js';
+import { type Message } from 'discord.js';
 import { getClient, getTextChannel } from '../client.js';
 import { sweepRenderRules, type RenderRuleOptions } from '../smoke/assert.js';
 import { filterByApiBot, shouldAcceptMessage } from './bot-author.js';

@@ -1,8 +1,10 @@
 // Fleet Playwright PASS -> the pre-push sentinel (operator ruling 2026-09-12).
 //
-// `.claude/settings.json` has a PreToolUse hook that DENIES `git push` when the
-// branch diff touches `web/src/` unless `/tmp/.playwright-verified-<short sha>`
-// exists. Until now only `/push`'s LOCAL Playwright run wrote that file — and
+// `.claude/settings.json` has a PreToolUse hook (scripts/smoke/push-gate.sh)
+// that DENIES `git push` when the branch changes the web surface unless
+// `/tmp/.playwright-verified-<surface hash>` exists (ROK-1566; the older
+// `<short sha>` key and its fallback were retired by TDB:1416). Until now only
+// `/push`'s LOCAL Playwright run wrote that file — and
 // the auto-mode classifier refuses to let an agent `touch` it — so agents could
 // not push web branches at all and the operator pushed by hand, skipping the
 // gate entirely.
@@ -11,9 +13,9 @@
 // So: when a validate-ci task is observed TERMINAL AND its summary shows the
 // Playwright STEP passed, the MCP server (which runs on the laptop, alongside
 // the hook) writes the sentinel itself. A SKIPPED or FAILED Playwright tier
-// never writes it, and it is only ever written for the SHA that was synced for
-// THAT task — recorded at dispatch time, not re-read from a worktree that may
-// have moved on since.
+// never writes it, and it is only ever written for the web surface (and sha)
+// recorded for THAT task at dispatch time, not re-read from a worktree that
+// may have moved on since.
 //
 // The sentinel keys on the PLAYWRIGHT STEP, not on the script's exit code.
 // `validate-ci.sh` stops at the first failing step, so a LATER tier failing
@@ -23,7 +25,7 @@
 // after its fix and got `playwright_verified: false` every time — including
 // task ee580cf38f66, where Playwright reported 795 passed / 0 failed. Exit code
 // answers "did the whole pipeline succeed"; the gate asks "did Playwright pass
-// for this sha", and only the step answers that.
+// for this web surface", and only the step answers that.
 
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -224,10 +226,9 @@ export function evaluateSentinel(
   const dir = opts.dir ?? sentinelDir();
   // ROK-1566: name the sentinel after the SURFACE the run verified, so a
   // docs-only follow-up commit (or GitHub's identical-tree "merge main"
-  // rewrite) keeps a green gate. `nosurface` is never a filename — the hook
-  // allows those pushes outright. The sha-named file is still written for one
-  // cycle so branches gated under the old hook are not stranded.
-  // An unresolvable surface is NOT a pass: the hook reads
+  // rewrite) keeps a green gate. TDB:1416: the one-cycle sha-named dual write
+  // (and the hook's matching fallback) is gone — the surface name is the only
+  // key. An unresolvable surface is NOT a pass: the hook reads
   // .playwright-verified-<surfacehash>, so there is no name to write and
   // reporting verified:true would tell the agent a gate it is about to fail
   // was satisfied (review MAJOR 4).
@@ -237,11 +238,14 @@ export function evaluateSentinel(
       'The gate passed but the web-surface hash was unresolved at dispatch, so no sentinel could be named. Re-run the gate from a checkout where `bash scripts/smoke/surface-hash.sh` succeeds (needs git and a resolvable origin/main).',
     );
   }
-  const keyed = surface !== 'nosurface' ? surface : null;
-  const names = [keyed, sha].filter((n): n is string => !!n).map((n) => `${SENTINEL_PREFIX}${n}`);
+  // `nosurface` is never a filename: the branch touches nothing Playwright
+  // exercises and the hook allows the push outright, so the gate is satisfied
+  // with no file to write.
+  if (surface === 'nosurface') return verifiedAnnotation(null, tier, surface);
+  const names = [`${SENTINEL_PREFIX}${surface}`];
   const body = JSON.stringify({
     sha,
-    surface: keyed,
+    surface,
     tier,
     written_at: new Date().toISOString(),
     task_id: taskId,
@@ -252,7 +256,15 @@ export function evaluateSentinel(
     // gate was satisfied when it was not.
     return notVerified(surface);
   }
-  const written = join(dir, names[0]);
+  return verifiedAnnotation(join(dir, names[0]), tier, surface);
+}
+
+/** The "gate satisfied" annotation; `written` is null when no file was needed. */
+function verifiedAnnotation(
+  written: string | null,
+  tier: GateTier,
+  surface: string,
+): SentinelAnnotation {
   return {
     playwright_verified: true,
     playwright_sentinel: written,

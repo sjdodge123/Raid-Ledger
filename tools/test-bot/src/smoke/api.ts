@@ -30,10 +30,53 @@ async function parseJson<T>(method: string, path: string, res: Response): Promis
   }
 }
 
+type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+interface LoginResponse {
+  access_token: string;
+  user: { id: number };
+}
+
+/** POST /auth/local; throws `Login failed: <status>` on a non-2xx. */
+async function fetchLogin(
+  baseUrl: string,
+  email: string,
+  password: string,
+): Promise<LoginResponse> {
+  const res = await fetch(`${baseUrl}/auth/local`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) throw new Error(`Login failed: ${res.status}`);
+  return parseJson<LoginResponse>('POST', '/auth/local', res);
+}
+
+/**
+ * The error a non-2xx response raises. GET and DELETE name the status only;
+ * the mutating verbs append the response text.
+ */
+async function httpError(method: Method, path: string, res: Response): Promise<Error> {
+  if (method === 'GET' || method === 'DELETE') {
+    return new Error(`${method} ${path} → ${res.status}`);
+  }
+  const text = await res.text().catch(() => '');
+  return new Error(`${method} ${path} → ${res.status}: ${text}`);
+}
+
 /** Thin HTTP client wrapping fetch with JWT auth. */
 export class ApiClient {
   /** User ID from login response */
   userId = 0;
+
+  /**
+   * Mints a fresh token with the credentials `login()` was given. Unset on a
+   * client built from a bare JWT, which therefore never re-logs in.
+   */
+  private relogin?: () => Promise<string>;
+
+  /** The re-login in flight; every request that hit the same expiry awaits it. */
+  private reloginInFlight?: Promise<void>;
 
   constructor(
     private baseUrl: string,
@@ -45,80 +88,91 @@ export class ApiClient {
     email: string,
     password: string,
   ): Promise<ApiClient> {
-    const res = await fetch(`${baseUrl}/auth/local`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) throw new Error(`Login failed: ${res.status}`);
-    const data = await parseJson<{
-      access_token: string;
-      user: { id: number };
-    }>('POST', '/auth/local', res);
+    const data = await fetchLogin(baseUrl, email, password);
     const client = new ApiClient(baseUrl, data.access_token);
     client.userId = data.user.id;
+    client.relogin = async () =>
+      (await fetchLogin(baseUrl, email, password)).access_token;
     return client;
   }
 
-  private headers(): Record<string, string> {
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.token}`,
-    };
-  }
-
   async get<T = unknown>(path: string): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      headers: this.headers(),
-    });
-    if (!res.ok) throw new Error(`GET ${path} → ${res.status}`);
-    return parseJson<T>('GET', path, res);
+    return parseJson<T>('GET', path, await this.request('GET', path));
   }
 
   async post<T = unknown>(path: string, body?: unknown): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: this.headers(),
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`POST ${path} → ${res.status}: ${text}`);
-    }
-    return parseJson<T>('POST', path, res);
+    const json = body ? JSON.stringify(body) : undefined;
+    return parseJson<T>('POST', path, await this.request('POST', path, json));
   }
 
   async put<T = unknown>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'PUT',
-      headers: this.headers(),
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`PUT ${path} → ${res.status}: ${text}`);
-    }
-    return parseJson<T>('PUT', path, res);
+    const json = JSON.stringify(body);
+    return parseJson<T>('PUT', path, await this.request('PUT', path, json));
   }
 
   async patch<T = unknown>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'PATCH',
-      headers: this.headers(),
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`PATCH ${path} → ${res.status}: ${text}`);
-    }
-    return parseJson<T>('PATCH', path, res);
+    const json = JSON.stringify(body);
+    return parseJson<T>('PATCH', path, await this.request('PATCH', path, json));
   }
 
   async delete(path: string): Promise<void> {
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'DELETE',
-      headers: this.headers(),
+    await this.request('DELETE', path);
+  }
+
+  /**
+   * Send once and return the 2xx response, or throw the verb's error.
+   *
+   * A 401 on a login-made client means the JWT expired mid-suite (1h
+   * lifetime): refresh the token (see `refreshToken`) and re-send ONCE. The
+   * API rejects a 401 before any handler runs, so the re-send cannot apply a
+   * mutation twice. A second 401 throws the normal error; a failed re-login
+   * throws the original 401 error with the re-login failure as its cause.
+   * No other status is ever re-sent.
+   */
+  private async request(method: Method, path: string, body?: string): Promise<Response> {
+    const sentWith = this.token;
+    let res = await this.send(method, path, body);
+    if (res.status === 401 && this.relogin) {
+      const original = await httpError(method, path, res);
+      try {
+        await this.refreshToken(this.relogin, sentWith);
+      } catch (err) {
+        throw new Error(original.message, { cause: err });
+      }
+      res = await this.send(method, path, body);
+    }
+    if (!res.ok) throw await httpError(method, path, res);
+    return res;
+  }
+
+  /**
+   * Replace the `stale` token, single-flight. One client is shared by up to
+   * SMOKE_CONCURRENCY tests, so an expiry 401s every request in flight; each
+   * re-logging in on its own would burst POST /auth/local, which is
+   * rate-limited (10/min outside test envs) and would turn the expiry into a
+   * 429. All of them await ONE re-login instead, and a request whose token
+   * was already replaced after it was sent just re-sends.
+   */
+  private refreshToken(relogin: () => Promise<string>, stale: string): Promise<void> {
+    if (this.token !== stale) return Promise.resolve();
+    this.reloginInFlight ??= relogin()
+      .then((fresh) => {
+        this.token = fresh;
+      })
+      .finally(() => {
+        this.reloginInFlight = undefined;
+      });
+    return this.reloginInFlight;
+  }
+
+  private send(method: Method, path: string, body?: string): Promise<Response> {
+    return fetch(`${this.baseUrl}${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.token}`,
+      },
+      body,
     });
-    if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`);
   }
 }
