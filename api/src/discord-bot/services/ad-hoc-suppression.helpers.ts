@@ -35,12 +35,19 @@ export const SUPPRESSION_MAX_EXTENSION_MS = 6 * 60 * 60 * 1000;
 export type SuppressionPlan =
   | { action: 'extend'; newEnd: Date }
   | { action: 'skip-fresh' }
+  | { action: 'skip-within-schedule' }
   | { action: 'skip-capped'; ceiling: Date };
 
 /**
  * Pure planner for the suppression-window extension. Targets a 60m forward
  * window, never moves the window backward, never advances past scheduledEnd+6h,
  * and skips entirely while the current window is still fresh (>= now+15m).
+ *
+ * ROK-1696 floor: never writes a window that ends at or before scheduledEnd.
+ * Every consumer reads the effective end as COALESCE(extended_until,
+ * upper(duration)), so such a write would pull the event's end FORWARD.
+ * Suppression does not need it: buildTimeConditions matches on
+ * upper(duration) alone until the scheduled end has passed.
  */
 export function planSuppressionExtension(
   scheduledEnd: Date,
@@ -56,6 +63,9 @@ export function planSuppressionExtension(
   const freshFloor = now.getTime() + SUPPRESSION_REFRESH_THRESHOLD_MS;
   if (currentExtended && currentExtended.getTime() >= freshFloor) {
     return { action: 'skip-fresh' };
+  }
+  if (target.getTime() <= scheduledEnd.getTime()) {
+    return { action: 'skip-within-schedule' };
   }
   if (
     target.getTime() <= now.getTime() ||

@@ -56,9 +56,23 @@ describe('planSuppressionExtension (ROK-1418)', () => {
     expect(SUPPRESSION_MAX_EXTENSION_MS).toBe(6 * 60 * 60 * 1000);
   });
 
-  it('extends to now+1h when there is no current window (currentExtended null)', () => {
-    // scheduledEnd 2h out ⇒ ceiling now+8h ⇒ target = min(now+1h, ceiling) = now+1h.
+  it('does not write a window that ends before the scheduled end → skip-within-schedule (ROK-1696)', () => {
+    // scheduledEnd 2h out ⇒ target = now+1h, which is BEFORE the scheduled end.
+    // Writing it would pull COALESCE(extended_until, upper(duration)) forward
+    // by an hour, so the planner must skip instead of extending.
     const result = planSuppressionExtension(at(120), null, now);
+    expect(result).toEqual({ action: 'skip-within-schedule' });
+  });
+
+  it('skips a target exactly at the scheduled end → skip-within-schedule (ROK-1696)', () => {
+    // target now+1h == scheduledEnd ⇒ the write would not move the end forward.
+    const result = planSuppressionExtension(at(60), null, now);
+    expect(result).toEqual({ action: 'skip-within-schedule' });
+  });
+
+  it('extends to now+1h when the scheduled end is sooner (no current window)', () => {
+    // scheduledEnd 50m out ⇒ ceiling now+6h50m ⇒ target = now+1h, past the end.
+    const result = planSuppressionExtension(at(50), null, now);
     expect(result).toEqual({ action: 'extend', newEnd: at(60) });
   });
 
@@ -69,8 +83,9 @@ describe('planSuppressionExtension (ROK-1418)', () => {
 
   it('extends when the current window is stale-ish (currentExtended < now+15m)', () => {
     // currentExtended now+5m is inside the 15m threshold ⇒ not fresh; target
-    // now+1h is beyond it and below the ceiling ⇒ extend to now+1h.
-    const result = planSuppressionExtension(at(120), at(5), now);
+    // now+1h is beyond it, past the 30m scheduled end and below the ceiling ⇒
+    // extend to now+1h.
+    const result = planSuppressionExtension(at(30), at(5), now);
     expect(result).toEqual({ action: 'extend', newEnd: at(60) });
   });
 
