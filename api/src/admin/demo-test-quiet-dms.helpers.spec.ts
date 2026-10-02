@@ -78,6 +78,22 @@ describe('POST /admin/test/seed-non-guild-user — quietDms', () => {
     });
   });
 
+  it('quietDms:true writes the user AND its prefs row in ONE transaction (TDB:1960)', async () => {
+    const tx = createDrizzleMock();
+    tx.returning.mockResolvedValue([{ id: 42 }]);
+    mockDb.transaction.mockImplementationOnce(
+      async (cb: (t: MockDb) => Promise<unknown>) => cb(tx),
+    );
+
+    const res = await controller.seedNonGuildUser({ quietDms: true });
+
+    expect(res).toMatchObject({ userId: 42, quietDms: true });
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(tx.insert).toHaveBeenCalledWith(schema.users);
+    expect(tx.insert).toHaveBeenCalledWith(schema.userNotificationPreferences);
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+
   it('default (no body) writes NO prefs row — other callers keep DMs on', async () => {
     const res = await controller.seedNonGuildUser(undefined);
 
