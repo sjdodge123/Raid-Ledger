@@ -121,7 +121,7 @@ Every Lead turn re-reads the whole conversation on the Lead's (most expensive) m
 
 Three custom MCP servers cover environment management, story tracking and Discord testing. **Use them instead of manual shell commands.** Per-tool detail: `mcp-env` → `docs/runbooks/local-dev-env.md`; `mcp-discord` → `docs/runbooks/discord-testing.md`; `mcp-rl-fleet` → `rl-infra/README.md` → "Agent MCP tool reference" (canonical home of the "Use When" table, the stale-build sync guard, the push-notify pattern and the `RL_*` env vars).
 
-**STRICT — agent-side SSH to the rl-infra VM as `rl-agent` is closed (ROK-1338 PR-3).** Agents reach the fleet only through `mcp__mcp-rl-fleet__*`. The operator's `rl` CLI SSHes as the operator user and is NOT an agent fallback. If a debug path requires direct SSH, that's a capability gap — append it to the no-SSH umbrella list ([[project_rok_1338_no_ssh_umbrella]]) rather than asking the operator to re-open SSH.
+**STRICT — agents must not SSH to the rl-infra VM as `rl-agent` (ROK-1338).** Agents reach the fleet only through `mcp__mcp-rl-fleet__*`. The operator's `rl` CLI SSHes as the operator user and is NOT an agent fallback. If a debug path requires direct SSH, that's a capability gap — append it to the no-SSH umbrella list ([[project_rok_1338_no_ssh_umbrella]]) rather than asking the operator to re-open SSH.
 
 **STRICT — Codex reviews never run test suites on the laptop (ROK-1468).** `codex review` (the `/security-review` pass) runs read-only with no approvals — set in `.codex/config.toml` AND passed explicitly as `-c sandbox_mode="read-only" -c approval_policy="never"` by `.claude/skills/security-review/SKILL.md`. Reviews are staggered one at a time; jest/vitest/Playwright stay on the fleet.
 
@@ -170,7 +170,7 @@ This rule exists because parallel agents kept seeing these commits, assuming "no
 
 `./scripts/deploy_dev.sh --ci --rebuild` starts everything (Docker, migrations, seed, API `:3000` + web `:5173` in watch mode) and is worktree-safe. Flags, the Docker-volume gotcha, clone-prod-to-local and the full lease semantics: `docs/runbooks/local-dev-env.md`.
 
-- **DEMO_MODE=true** in root `.env` enables the `/admin/test/*` fixture endpoints (still behind the JWT + admin guards) and demo-only UI affordances. **It is NOT an auth bypass and does NOT prefill credentials** — the login page's `placeholder="admin"` reads like a prefill but is empty. Agents driving a fleet env in a browser must obtain a session another way (Playwright's global-setup JWT via `rl_validate_ci`, or the operator's Discord OAuth); **never type a password into a form**. (Corrected 2026-09-12 after two verification lanes lost a cycle to this line.)
+- **DEMO_MODE=true** in root `.env` enables the `/admin/test/*` fixture endpoints (still behind the JWT + admin guards) and demo-only UI affordances. **It is NOT an auth bypass and does NOT prefill credentials** — the login page's `placeholder="admin"` reads like a prefill but is empty. Agents driving a fleet env in a browser must obtain a session another way (Playwright's global-setup JWT via `rl_validate_ci`, or the operator's Discord OAuth); **never type a password into a form, and never copy a credential out of a tool result into a form or a file**. (Corrected 2026-09-12 after two verification lanes lost a cycle to this line.)
 
 ### Remote test fleet — `rl-infra` (STRICT — preferred path when reachable)
 
