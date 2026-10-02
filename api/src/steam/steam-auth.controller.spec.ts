@@ -30,6 +30,7 @@ import {
 import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
 import type { AuthenticatedExpressRequest } from '../auth/types';
+import { at } from '../common/testing/narrow';
 
 const LINK_EXPIRED_COPY = 'Link request expired. Please try again.';
 
@@ -351,8 +352,8 @@ describe('SteamAuthController', () => {
 
       expect(setUserMock).toHaveBeenCalledWith({ id: '42' });
       // Ordering: setUser must run BEFORE the sync service is invoked.
-      const setUserOrder = setUserMock.mock.invocationCallOrder[0];
-      const syncOrder = mocks.steam.syncLibrary.mock.invocationCallOrder[0];
+      const setUserOrder = at(setUserMock.mock.invocationCallOrder, 0);
+      const syncOrder = at(mocks.steam.syncLibrary.mock.invocationCallOrder, 0);
       expect(setUserOrder).toBeLessThan(syncOrder);
     });
 
@@ -367,8 +368,11 @@ describe('SteamAuthController', () => {
       await controller.syncWishlist(fakeRequest(99));
 
       expect(setUserMock).toHaveBeenCalledWith({ id: '99' });
-      const setUserOrder = setUserMock.mock.invocationCallOrder[0];
-      const syncOrder = mocks.wishlist.syncWishlist.mock.invocationCallOrder[0];
+      const setUserOrder = at(setUserMock.mock.invocationCallOrder, 0);
+      const syncOrder = at(
+        mocks.wishlist.syncWishlist.mock.invocationCallOrder,
+        0,
+      );
       expect(setUserOrder).toBeLessThan(syncOrder);
     });
 

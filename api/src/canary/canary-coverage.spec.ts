@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { defined } from '../common/testing/narrow';
 
 /**
  * Enforces that every plugin with `integrations[]` in its manifest
@@ -33,7 +34,10 @@ function describeCanaryCoverage() {
       // Extract integration keys using regex — avoids importing NestJS modules
       const keyMatches = content.matchAll(/key:\s*['"]([^'"]+)['"]/g);
       for (const match of keyMatches) {
-        results.push({ pluginId: dir.name, integrationKey: match[1] });
+        results.push({
+          pluginId: dir.name,
+          integrationKey: defined(match[1], 'manifest integration key'),
+        });
       }
     }
 
@@ -56,7 +60,7 @@ function describeCanaryCoverage() {
         /integrationKey:\s*['"]([^'"]+)['"]/g,
       );
       for (const match of keyMatches) {
-        keys.push(match[1]);
+        keys.push(defined(match[1], 'canary integrationKey'));
       }
     }
 

@@ -8,6 +8,7 @@ import {
   decryptWithKey,
   getEncryptionKey,
 } from './encryption.util';
+import { at } from '../common/testing/narrow';
 
 /* ------------------------------------------------------------------ */
 /*  Existing tests (unchanged)                                        */
@@ -44,11 +45,11 @@ function describeEncryptionUtil() {
 
       expect(parts.length).toBe(3);
       // IV should be 32 hex chars (16 bytes)
-      expect(parts[0].length).toBe(32);
+      expect(parts[0]?.length).toBe(32);
       // Auth tag should be 32 hex chars (16 bytes)
-      expect(parts[1].length).toBe(32);
+      expect(parts[1]?.length).toBe(32);
       // Encrypted data should exist
-      expect(parts[2].length).toBeGreaterThan(0);
+      expect(parts[2]?.length).toBeGreaterThan(0);
     });
   });
 
@@ -98,8 +99,9 @@ function describeEncryptionUtil() {
       const encrypted = encrypt('secret');
       const parts = encrypted.split(':');
       // Tamper with the encrypted data (ensure byte actually changes)
-      const firstByte = parts[2].slice(0, 2);
-      parts[2] = (firstByte === 'ff' ? '00' : 'ff') + parts[2].slice(2);
+      const ciphertext = at(parts, 2);
+      const firstByte = ciphertext.slice(0, 2);
+      parts[2] = (firstByte === 'ff' ? '00' : 'ff') + ciphertext.slice(2);
       const tampered = parts.join(':');
 
       expect(() => decrypt(tampered)).toThrow();

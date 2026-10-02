@@ -29,6 +29,7 @@ import { ItadService } from '../itad/itad.service';
 import { IgdbService } from '../igdb/igdb.service';
 import type { ItadGame } from '../itad/itad.constants';
 import type { IgdbApiGame } from '../igdb/igdb.constants';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -124,10 +125,13 @@ describe('POST /games/lookup-by-name — existing-row dedup', () => {
   it('returns the existing row via findGameByNormalizedName without inserting a new row', async () => {
     // Pre-seed a games row with a canonical name. The service MUST resolve
     // this via findGameByNormalizedName BEFORE calling out to ITAD/IGDB.
-    const [existing] = await testApp.db
-      .insert(schema.games)
-      .values({ name: 'Slay the Spire II', slug: 'slay-the-spire-ii' })
-      .returning();
+    const [existing] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Slay the Spire II', slug: 'slay-the-spire-ii' })
+        .returning(),
+      'existing',
+    );
 
     const itadSpy = jest
       .spyOn(testApp.app.get(ItadService), 'searchGames')
