@@ -17,7 +17,7 @@ export function SearchBar({ search, onSearch }: { search: string; onSearch: (v: 
 
 /** Self-assign button for the current user */
 export function SelfAssignSection({ onSelfAssign, slotRole, slotPosition }: {
-    onSelfAssign?: () => void; slotRole: RosterRole | null; slotPosition: number;
+    onSelfAssign?: (() => void) | undefined; slotRole: RosterRole | null; slotPosition: number;
 }): JSX.Element | null {
     if (!onSelfAssign || !slotRole || slotPosition <= 0) return null;
     return (
@@ -31,8 +31,8 @@ export function SelfAssignSection({ onSelfAssign, slotRole, slotPosition }: {
 
 /** Shows the current occupant with remove/reassign actions */
 export function OccupantSection({ currentOccupant, onRemove, onReassignToSlot, onRemoveFromEvent, onClose }: {
-    currentOccupant?: RosterAssignmentResponse; onRemove?: (id: number) => void;
-    onReassignToSlot?: () => void; onRemoveFromEvent?: (id: number, name: string) => void;
+    currentOccupant?: RosterAssignmentResponse | undefined; onRemove?: ((id: number) => void) | undefined;
+    onReassignToSlot?: (() => void) | undefined; onRemoveFromEvent?: ((id: number, name: string) => void) | undefined;
     onClose: () => void;
 }): JSX.Element | null {
     if (!currentOccupant || !onRemove) return null;
@@ -58,7 +58,7 @@ export function OccupantSection({ currentOccupant, onRemove, onReassignToSlot, o
 /** Players matching the target slot role */
 export function MatchingSection({ slotRole, matching, onAssign, onRemoveFromEvent, onClose }: {
     slotRole: RosterRole | null; matching: RosterAssignmentResponse[];
-    onAssign: (id: number) => void; onRemoveFromEvent?: (id: number, name: string) => void;
+    onAssign: (id: number) => void; onRemoveFromEvent?: ((id: number, name: string) => void) | undefined;
     onClose: () => void;
 }): JSX.Element | null {
     if (!slotRole || matching.length === 0) return null;
@@ -81,7 +81,7 @@ export function MatchingSection({ slotRole, matching, onAssign, onRemoveFromEven
 /** Other unassigned players not matching the role */
 export function OtherSection({ slotRole, matching, other, onAssign, onRemoveFromEvent, onClose }: {
     slotRole: RosterRole | null; matching: RosterAssignmentResponse[]; other: RosterAssignmentResponse[];
-    onAssign: (id: number) => void; onRemoveFromEvent?: (id: number, name: string) => void;
+    onAssign: (id: number) => void; onRemoveFromEvent?: ((id: number, name: string) => void) | undefined;
     onClose: () => void;
 }): JSX.Element | null {
     if (other.length === 0) return null;
@@ -101,7 +101,7 @@ export function OtherSection({ slotRole, matching, other, onAssign, onRemoveFrom
 export function RosterPlayersSection({ isBrowseAll, slotRole, slotPosition, assigned, search, onReassignToSlot, onClose }: {
     isBrowseAll: boolean; slotRole: RosterRole | null; slotPosition: number;
     assigned: RosterAssignmentResponse[]; search: string;
-    onReassignToSlot?: (id: number, role: RosterRole, pos: number) => void;
+    onReassignToSlot?: ((id: number, role: RosterRole, pos: number) => void) | undefined;
     onClose: () => void;
 }): JSX.Element | null {
     if (isBrowseAll || !slotRole || slotPosition <= 0 || !onReassignToSlot) return null;
@@ -128,7 +128,7 @@ export function RosterPlayersSection({ isBrowseAll, slotRole, slotPosition, assi
 
 /** Invite PUG button section */
 export function InvitePugSection({ canInvitePug, onGenerateInviteLink, onClose }: {
-    canInvitePug: boolean; onGenerateInviteLink?: () => void; onClose: () => void;
+    canInvitePug: boolean; onGenerateInviteLink?: (() => void) | undefined; onClose: () => void;
 }): JSX.Element | null {
     if (!canInvitePug) return null;
     return (

@@ -16,11 +16,11 @@ export interface ComboboxPopupProps<T> {
     popupRef: RefObject<HTMLDivElement | null>;
     pos: PopupPosition | null;
     listboxId: string;
-    label?: string;
+    label?: string | undefined;
     /** The surrounding Field's label id, used when there is no `label`. */
-    labelledBy?: string;
+    labelledBy?: string | undefined;
     items: T[];
-    status?: ComboboxStatus;
+    status?: ComboboxStatus | undefined;
     activeIndex: number;
     optionId: (index: number) => string;
     isSelected: (option: T) => boolean;
@@ -29,9 +29,9 @@ export interface ComboboxPopupProps<T> {
     onHover: (index: number) => void;
     onPick: (index: number) => void;
     /** `data-testid` for the popup container. */
-    testId?: string;
+    testId?: string | undefined;
     /** `data-testid` for every `role="option"` row. */
-    optionTestId?: string;
+    optionTestId?: string | undefined;
     /** Portal target (default `document.body`). */
     portalContainer?: HTMLElement | null;
 }

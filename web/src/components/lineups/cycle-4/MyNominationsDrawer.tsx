@@ -27,7 +27,7 @@ export interface MyNominationsDrawerProps {
    * `hidden md:block`), so without this the fit warning would never appear
    * on mobile at all.
    */
-  participantCount?: number;
+  participantCount?: number | undefined;
 }
 
 function useEscToClose(isOpen: boolean, onClose: () => void): void {
@@ -111,7 +111,7 @@ function DrawerBody({
 }: {
   entries: readonly LineupEntryResponseDto[];
   lineupId: number;
-  participantCount?: number;
+  participantCount?: number | undefined;
 }): JSX.Element {
   const removeMutation = useRemoveNomination();
   const handleRemove = (gameId: number): void => {

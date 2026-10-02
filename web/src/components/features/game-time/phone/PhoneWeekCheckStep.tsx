@@ -75,7 +75,7 @@ function useProfilePresets(isCheck: boolean, expand: () => void): BlockPresetCon
 
 export interface PhoneWeekCheckStepProps {
     /** Whole days since the last confirmation; `null` = never confirmed. */
-    ageDays?: number | null;
+    ageDays?: number | null | undefined;
     /** Whether the viewer has a saved week (drives the copy AND the one-tap answer). */
     hasSlots?: boolean;
     /** The caller's session-skip, rendered as "Skip" in the sticky footer (check only). */
@@ -139,7 +139,7 @@ function WeekAnswers({ showSame, nextLabel, onAway, entryRef }: {
 }
 
 /** The check's one question line (the profile has none). */
-function WeekPrompt({ ageDays, hasSlots }: { ageDays?: number | null; hasSlots: boolean }): JSX.Element {
+function WeekPrompt({ ageDays, hasSlots }: { ageDays?: number | null | undefined; hasSlots: boolean }): JSX.Element {
     return (
         <p data-testid="phone-week-prompt" className="text-sm text-foreground">
             {gameTimeCheckPrompt(ageDays, hasSlots)}

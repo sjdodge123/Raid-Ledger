@@ -9,7 +9,7 @@ interface IntegrationCardProps {
     isConfigured: boolean;
     isLoading?: boolean;
     badge?: ReactNode;
-    pluginBadge?: PluginBadgeMeta;
+    pluginBadge?: PluginBadgeMeta | undefined;
     onMouseEnter?: () => void;
     children: ReactNode;
 }
@@ -25,7 +25,7 @@ function statusBadgeLabel(isLoading: boolean, isConfigured: boolean) {
     return isConfigured ? 'Online' : 'Offline';
 }
 
-function CardIcon({ icon, pluginBadge }: { icon: ReactNode; pluginBadge?: PluginBadgeMeta }) {
+function CardIcon({ icon, pluginBadge }: { icon: ReactNode; pluginBadge?: PluginBadgeMeta | undefined }) {
     if (pluginBadge) return <PluginBadge icon={pluginBadge.icon} iconSmall={pluginBadge.iconSmall} label={pluginBadge.label} size="md" />;
     return <div className="w-10 h-10 rounded-lg flex items-center justify-center">{icon}</div>;
 }

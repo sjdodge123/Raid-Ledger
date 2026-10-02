@@ -50,7 +50,7 @@ function GameQueryInput({ value, onChange }: { value: string; onChange: (v: stri
 function SearchResultItem({ game, onSelect, participantCount }: {
     game: SearchResultGame;
     onSelect: (g: SelectedGame) => void;
-    participantCount?: number;
+    participantCount?: number | undefined;
 }): JSX.Element {
     return (
         <button
@@ -75,7 +75,7 @@ function SearchResultItem({ game, onSelect, participantCount }: {
 function SearchResults({ results, onSelect, participantCount }: {
     results: SearchResultGame[];
     onSelect: (g: SelectedGame) => void;
-    participantCount?: number;
+    participantCount?: number | undefined;
 }): JSX.Element {
     return (
         <div className="space-y-1 max-h-60 overflow-y-auto">
@@ -183,7 +183,7 @@ function SearchPane({ query, onQueryChange, isOpen, lineupId, participantCount, 
     onQueryChange: (v: string) => void;
     isOpen: boolean;
     lineupId: number;
-    participantCount?: number;
+    participantCount?: number | undefined;
     onSelect: (g: SelectedGame) => void;
 }): JSX.Element {
     // When a Steam URL is in the input we don't want to run the name
@@ -214,7 +214,7 @@ function SearchPane({ query, onQueryChange, isOpen, lineupId, participantCount, 
  * before discarding a selected game or a note (ROK-1655, `use-nominate-draft`).
  */
 export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, participantCount }: NominateModalProps): JSX.Element {
-    const draft = useNominateDraft({ isOpen, onClose, lineupId, preSelectedGame });
+    const draft = useNominateDraft({ isOpen, onClose, lineupId, preSelectedGame: preSelectedGame ?? null });
     const closeGuard = useDirtyCloseGuard(draft.isDirty, draft.handleClose);
     // Resolve any Steam store URL pasted into the search input. The
     // page-level paste detector skips the modal (its global listener

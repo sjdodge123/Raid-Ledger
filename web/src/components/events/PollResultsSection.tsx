@@ -1,7 +1,7 @@
 import { useEventPlanPollResults } from '../../hooks/use-event-plans';
 import type { EventPlanResponseDto, PollOptionResult } from '@raid-ledger/contract';
 
-function VoteBarLabel({ option, isWinner }: { option: PollOptionResult; isWinner?: boolean }) {
+function VoteBarLabel({ option, isWinner }: { option: PollOptionResult; isWinner?: boolean | undefined }) {
     return (
         <span className={`truncate mr-2 ${isWinner ? 'text-emerald-300 font-medium' : 'text-foreground'}`}>
             {isWinner && (

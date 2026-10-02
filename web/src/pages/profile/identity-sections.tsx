@@ -138,7 +138,7 @@ function SteamLinkedInfo({ personaName, isPublic }: {
 
 /** Steam account section — linked or link CTA */
 export function SteamSection({ steamStatus, linkSteam, unlinkSteam, syncLibrary, syncWishlist }: {
-    steamStatus: { data?: { linked: boolean; personaName?: string | null; isPublic?: boolean } | undefined };
+    steamStatus: { data?: { linked: boolean; personaName?: string | null | undefined; isPublic?: boolean | undefined } | undefined };
     linkSteam: () => void;
     unlinkSteam: { mutate: () => void; isPending: boolean };
     syncLibrary: { mutate: () => void; isPending: boolean };

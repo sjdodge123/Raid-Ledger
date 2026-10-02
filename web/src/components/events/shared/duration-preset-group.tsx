@@ -23,7 +23,7 @@ export interface DurationPresetGroupProps {
     presets: readonly DurationPreset[];
     value: DurationChoice;
     onChange: (value: DurationChoice) => void;
-    error?: string;
+    error?: string | undefined;
     label?: string;
     className?: string;
 }

@@ -37,7 +37,7 @@ const SERVICES: LogService[] = ['api', 'nginx', 'postgresql', 'redis', 'supervis
 
 async function handleLogExport(filter: FilterService, setExporting: (v: boolean) => void) {
   setExporting(true);
-  try { await exportLogs({ service: filter !== 'all' ? filter : undefined }); toast.success('Logs exported successfully'); }
+  try { await exportLogs(filter !== 'all' ? { service: filter } : {}); toast.success('Logs exported successfully'); }
   catch (err) { toast.error(err instanceof Error ? err.message : 'Failed to export logs'); }
   finally { setExporting(false); }
 }

@@ -9,9 +9,9 @@ interface PugAvatarProps {
     /** Discord username to derive initials and color from (null for anonymous invite slots) */
     username: string | null;
     /** Discord user ID for CDN avatar URL */
-    discordUserId?: string | null;
+    discordUserId?: string | null | undefined;
     /** Discord avatar hash for CDN avatar URL */
-    discordAvatarHash?: string | null;
+    discordAvatarHash?: string | null | undefined;
     /** Tailwind size class (default: 'h-10 w-10') */
     sizeClassName?: string;
 }

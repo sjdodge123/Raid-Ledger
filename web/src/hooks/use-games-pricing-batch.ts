@@ -33,7 +33,7 @@ export function useGamesPricingBatch(
             queryFn: () => getGamePricingBatch(chunk),
             enabled: chunk.length > 0,
             staleTime: 1000 * 60 * 30,
-            refetchInterval: (query: { state: { data?: ItadBatchPricingResponseDto } }) =>
+            refetchInterval: (query: { state: { data?: ItadBatchPricingResponseDto | undefined } }) =>
                 hasPendingPrices(query.state.data) ? POLL_INTERVAL_MS : false,
         })),
     });

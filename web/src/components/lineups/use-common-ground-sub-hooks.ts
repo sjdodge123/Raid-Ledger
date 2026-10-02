@@ -119,11 +119,15 @@ function toApiParams(
     search: string,
     resolvedId: number | undefined,
 ): CommonGroundParams {
-    return {
-        ...effectiveFilters,
-        search: search.trim() || undefined,
-        lineupId: resolvedId,
-    };
+    // The request's own search and lineup replace any carried on the filters;
+    // an absent value is an absent key.
+    const params: CommonGroundParams = { ...effectiveFilters };
+    delete params.search;
+    delete params.lineupId;
+    const trimmed = search.trim();
+    if (trimmed) params.search = trimmed;
+    if (resolvedId !== undefined) params.lineupId = resolvedId;
+    return params;
 }
 
 export function useCommonGroundQuery(

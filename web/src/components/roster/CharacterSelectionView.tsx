@@ -100,7 +100,7 @@ function CharacterPicker({
     mainCharacter, altCharacters, selectedCharacterId, slotRole,
     onSelectCharacter, onConfirm, onSkip,
 }: {
-    mainCharacter?: CharacterDto; altCharacters: CharacterDto[];
+    mainCharacter?: CharacterDto | undefined; altCharacters: CharacterDto[];
     selectedCharacterId: string | null; slotRole: RosterRole | null;
     onSelectCharacter: (charId: string, role?: RosterRole) => void;
     onConfirm: () => void; onSkip: () => void;

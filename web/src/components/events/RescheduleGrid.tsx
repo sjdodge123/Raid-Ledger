@@ -70,6 +70,12 @@ interface DesktopBodyProps {
     onWeekChange: (delta: number) => void;
 }
 
+/** `memberCountsFrom` takes `staleMembers` absent, never explicitly undefined. */
+function legendCounts(data: AggregateGameTimeResponse) {
+    const { staleMembers, ...rest } = data;
+    return memberCountsFrom(staleMembers === undefined ? rest : { ...rest, staleMembers });
+}
+
 /** Desktop: the "Currently …" note above the shared week-columns view. */
 function DesktopBody(p: DesktopBodyProps): JSX.Element {
     return (
@@ -80,7 +86,7 @@ function DesktopBody(p: DesktopBodyProps): JSX.Element {
                     picked={p.picked} current={cellInWeek(p.currentStart, p.weekStart)}
                     isCellDisabled={(day, hour) => isCellBlocked(p.weekStart, p.currentStart, day, hour)}
                     onPick={p.onPick} onWeekChange={p.onWeekChange}
-                    legend={{ memberCounts: memberCountsFrom(p.data) }} />
+                    legend={{ memberCounts: legendCounts(p.data) }} />
             </div>
         </div>
     );
@@ -96,7 +102,7 @@ export function RescheduleGrid(props: RescheduleGridProps): JSX.Element {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const [weekStart, stepWeek] = useRescheduleWeek(currentStart);
     // Phones fetch inside `PhoneGroupAvailability`; this read is the desktop's.
-    const events = useViewerWeekEvents(weekStart, { enabled: isDesktop, excludeEventId: eventId });
+    const events = useViewerWeekEvents(weekStart, { enabled: isDesktop, ...(eventId === undefined ? {} : { excludeEventId: eventId }) });
     const cells = useMemo(() => toGroupCellMap(data ? fillUnknownCells(data) : []), [data]);
 
     if (isLoading) return <GridMessage text={LOADING_COPY} />;

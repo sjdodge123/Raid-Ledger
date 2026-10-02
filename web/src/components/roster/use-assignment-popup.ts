@@ -103,6 +103,11 @@ function useHandleAssign(props: AssignmentPopupProps, state: ReturnType<typeof u
     }, [unassigned, isBrowseAll, onAssignToSlot, availableSlots, gameId, isMMO, enterSelectionStep, state]);
 }
 
+/** The character / role picked in the selection step, with no key for what was not picked. */
+function assignSelection(characterId: string | null, role: RosterRole | null): { characterId?: string; role?: RosterRole } {
+    return { ...(characterId === null ? {} : { characterId }), ...(role === null ? {} : { role }) };
+}
+
 /** Builds selection confirm/skip and slot-pick handlers */
 function useSelectionHandlers(props: AssignmentPopupProps, state: ReturnType<typeof useSelectionState>) {
     const { onAssign, onAssignToSlot, availableSlots, slotRole } = props;
@@ -112,7 +117,7 @@ function useSelectionHandlers(props: AssignmentPopupProps, state: ReturnType<typ
         if (isBrowseAll && onAssignToSlot && availableSlots) {
             state.setSelectedPlayerId(state.selectionTarget.signupId); state.setSelectionTarget(null);
         } else {
-            onAssign(state.selectionTarget.signupId, { characterId: state.selectedCharacterId ?? undefined, role: state.selectedRole ?? undefined });
+            onAssign(state.selectionTarget.signupId, assignSelection(state.selectedCharacterId, state.selectedRole));
             state.setSelectionTarget(null); state.setSelectedCharacterId(null); state.setSelectedRole(null); state.setSearch('');
         }
     }, [state, isBrowseAll, onAssignToSlot, availableSlots, onAssign]);
@@ -126,7 +131,7 @@ function useSelectionHandlers(props: AssignmentPopupProps, state: ReturnType<typ
         }
     }, [state, isBrowseAll, onAssignToSlot, availableSlots, onAssign]);
     const handleSlotPick = useCallback((role: RosterRole, position: number): void => {
-        if (state.selectedPlayerId != null && onAssignToSlot) { onAssignToSlot(state.selectedPlayerId, role, position, { characterId: state.selectedCharacterId ?? undefined }); state.resetAll(); }
+        if (state.selectedPlayerId != null && onAssignToSlot) { onAssignToSlot(state.selectedPlayerId, role, position, assignSelection(state.selectedCharacterId, null)); state.resetAll(); }
     }, [state, onAssignToSlot]);
     return { handleSelectionConfirm, handleSelectionSkip, handleSlotPick };
 }

@@ -36,7 +36,7 @@ function shouldHideBanner(
     return dismissed;
 }
 
-function BannerActions({ inviteUrl, onDismiss }: { inviteUrl?: string; onDismiss: () => void }) {
+function BannerActions({ inviteUrl, onDismiss }: { inviteUrl?: string | undefined; onDismiss: () => void }) {
     return (
         <div className="flex items-center gap-2 shrink-0">
             {inviteUrl && (

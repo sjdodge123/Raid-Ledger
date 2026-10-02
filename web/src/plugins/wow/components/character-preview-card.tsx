@@ -138,7 +138,7 @@ function MainToggleButton({ setAsMain, onSetAsMainChange }: { setAsMain: boolean
 /** Action buttons: Main toggle, Dismiss, Save */
 function ActionButtons({ setAsMain, onSetAsMainChange, onImport, onBack, isImporting, highlightActions }: {
     setAsMain: boolean; onSetAsMainChange: (v: boolean) => void;
-    onImport: () => void; onBack: () => void; isImporting: boolean; highlightActions?: boolean;
+    onImport: () => void; onBack: () => void; isImporting: boolean; highlightActions?: boolean | undefined;
 }) {
     const hl = highlightActions ?? false;
     return (

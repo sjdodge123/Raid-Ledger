@@ -28,22 +28,22 @@ export interface ResolvedAvatar {
  */
 export interface AvatarPreference {
     type: AvatarType;
-    characterName?: string;
+    characterName?: string | undefined;
 }
 
 export interface AvatarUser {
     /** Discord avatar URL (full URL, not hash) */
     avatar: string | null;
     /** Custom uploaded avatar (relative path like /avatars/...) */
-    customAvatarUrl?: string | null;
+    customAvatarUrl?: string | null | undefined;
     /** User's characters (optional). gameId is number (games.id) or '__resolved__' sentinel. */
     characters?: Array<{
         gameId: number | string;
-        name?: string;
+        name?: string | undefined;
         avatarUrl: string | null;
-    }>;
+    }> | undefined;
     /** Server-persisted avatar preference from user_preferences table */
-    avatarPreference?: AvatarPreference | null;
+    avatarPreference?: AvatarPreference | null | undefined;
 }
 
 // ============================================================
@@ -56,10 +56,10 @@ export interface AvatarUser {
 
 interface CurrentUserAvatarData {
     id: number;
-    avatarPreference?: AvatarPreference | null;
+    avatarPreference?: AvatarPreference | null | undefined;
     /** Server-resolved avatar URL for character preference (ROK-414) */
-    resolvedAvatarUrl?: string | null;
-    customAvatarUrl?: string | null;
+    resolvedAvatarUrl?: string | null | undefined;
+    customAvatarUrl?: string | null | undefined;
 }
 
 let _currentUserAvatarData: CurrentUserAvatarData | null = null;
@@ -118,12 +118,12 @@ export function buildDiscordAvatarUrl(
  * a full characters array, avoiding heavy JSONB payloads on /auth/me.
  */
 type AvatarUserInput = {
-    id?: number;
+    id?: number | undefined;
     avatar: string | null;
-    discordId?: string | null;
-    customAvatarUrl?: string | null;
-    characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
-    avatarPreference?: AvatarPreference | null;
+    discordId?: string | null | undefined;
+    customAvatarUrl?: string | null | undefined;
+    characters?: Array<{ gameId: number | string; name?: string | undefined; avatarUrl: string | null }> | undefined;
+    avatarPreference?: AvatarPreference | null | undefined;
 };
 
 function getOverlay(userId?: number): CurrentUserAvatarData | null {

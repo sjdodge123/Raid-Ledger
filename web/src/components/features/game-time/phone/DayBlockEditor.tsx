@@ -13,7 +13,7 @@ const GUTTER = 52;
 
 interface DayBlockEditorProps {
     slots: GameTimeSlot[];
-    onChange?: (slots: GameTimeSlot[]) => void;
+    onChange?: ((slots: GameTimeSlot[]) => void) | undefined;
     /** The one day rendered, grid convention (0 = Sunday). */
     dayOfWeek: number;
     hours: number[];
@@ -22,7 +22,7 @@ interface DayBlockEditorProps {
      * caller that already measures) pass them instead of waiting for the
      * layout pass.
      */
-    dims?: GridDims;
+    dims?: GridDims | undefined;
     /**
      * Where the selected block's inspector goes. `flow` (default) puts it
      * under the day inside a bounded box — the sheet. `fixed` pins it above
@@ -30,9 +30,9 @@ interface DayBlockEditorProps {
      * page, whose 17-hour day scrolls with the page, so an in-flow inspector
      * landed at y=890 in a 671px viewport (fleet gate, ROK-1569).
      */
-    inspectorPlacement?: 'flow' | 'fixed';
+    inspectorPlacement?: 'flow' | 'fixed' | undefined;
     /** Coarse block presets and the window negotiation behind them (ROK-1579). */
-    presets?: BlockPresetControl;
+    presets?: BlockPresetControl | undefined;
 }
 
 /**

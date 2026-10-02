@@ -20,7 +20,7 @@ export interface ComboboxProps<T> {
     value: T | null;
     onChange: (option: T | null) => void;
     /** Accessible name (`aria-label`). Omit inside a `Field`. */
-    label?: string;
+    label?: string | undefined;
     /** Controlled input text. Omit to let the combobox own it. */
     inputValue?: string;
     onInputChange?: (text: string) => void;
@@ -37,7 +37,7 @@ export interface ComboboxProps<T> {
     placeholder?: string;
     disabled?: boolean;
     invalid?: boolean;
-    autoFocus?: boolean;
+    autoFocus?: boolean | undefined;
     fieldSize?: FieldSize;
     /**
      * Where the listbox portals. Default: the surrounding `[role="dialog"]`
@@ -51,7 +51,7 @@ export interface ComboboxProps<T> {
     /** Open the listbox when the input gains focus (e.g. to offer suggestions before typing). */
     openOnFocus?: boolean;
     /** `data-testid` hooks for the input, the popup and every `role="option"` row (smoke specs). */
-    testIds?: { input?: string; popup?: string; option?: string };
+    testIds?: { input?: string | undefined; popup?: string | undefined; option?: string | undefined } | undefined;
 }
 
 export interface ComboboxStatus {

@@ -55,19 +55,19 @@ const BASE_CLS =
     `${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${DISABLED}`;
 
 interface ButtonBaseProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
-    variant?: ButtonVariant;
-    size?: ButtonSize;
-    loading?: boolean;
+    variant?: ButtonVariant | undefined;
+    size?: ButtonSize | undefined;
+    loading?: boolean | undefined;
     /** Accessible name while `loading` (e.g. "Saving…"). Defaults to the label. */
-    loadingLabel?: string;
-    fullWidth?: boolean;
+    loadingLabel?: string | undefined;
+    fullWidth?: boolean | undefined;
     /** Runtime/brand fill ONLY (a provider colour, Discord #5865F2) — never a theme colour. */
-    brandColor?: string;
+    brandColor?: string | undefined;
 }
 
 /** A labelled button, or an icon-only one that MUST be named by `aria-label`. */
 export type ButtonProps =
-    | (ButtonBaseProps & { iconOnly?: false; 'aria-label'?: string })
+    | (ButtonBaseProps & { iconOnly?: false | undefined; 'aria-label'?: string | undefined })
     | (ButtonBaseProps & { iconOnly: true; 'aria-label': string });
 
 /** Private inline spinner — inherits the label colour. */

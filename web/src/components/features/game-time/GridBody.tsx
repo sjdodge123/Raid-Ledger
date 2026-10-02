@@ -9,7 +9,7 @@ import { GridCell } from './GridCell';
 export interface CellRenderProps {
     rangeStart: number;
     rangeEnd: number;
-    compact?: boolean;
+    compact?: boolean | undefined;
     getSlotStatus: (d: number, h: number) => string | undefined;
     isCellLocked: (d: number, h: number) => boolean;
     isPastCell: (d: number, h: number) => boolean;
@@ -19,29 +19,29 @@ export interface CellRenderProps {
     hoverHour: number;
     isInteractive: boolean;
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
-    onCellClick?: (d: number, h: number) => void;
+    onCellClick?: ((d: number, h: number) => void) | undefined;
     onPointerEnter: (d: number, h: number) => void;
     /** Days the viewer is away this week (ROK-1585) — muted header + column. */
-    awayDays?: ReadonlySet<number>;
+    awayDays?: ReadonlySet<number> | undefined;
 }
 
 export interface GridBodyProps extends CellRenderProps {
     gridRef: React.RefObject<HTMLDivElement | null>;
     gridLineBackground: string | undefined;
     setHoveredCell: (v: string | null) => void;
-    tzLabel?: string;
-    noStickyOffset?: boolean;
+    tzLabel?: string | undefined;
+    noStickyOffset?: boolean | undefined;
     isHeaderHidden: boolean;
     dayDates: string[] | null;
     nextWeekDayDates: string[] | null;
-    fullDayNames?: boolean;
-    todayIndex?: number;
-    nextWeekSlots?: GameTimeSlot[];
+    fullDayNames?: boolean | undefined;
+    todayIndex?: number | undefined;
+    nextWeekSlots?: GameTimeSlot[] | undefined;
     HOURS: number[];
     /** Callback when a day header is clicked (for whole-day toggle) */
-    onDayClick?: (dayIndex: number) => void;
+    onDayClick?: ((dayIndex: number) => void) | undefined;
     /** Returns whether all 24 hours are active for a given day (drives aria-pressed on DayHeader) */
-    isDayAllActive?: (dayIndex: number) => boolean;
+    isDayAllActive?: ((dayIndex: number) => boolean) | undefined;
 }
 
 /** Inner grid with day headers and cell rows */
@@ -69,7 +69,7 @@ export function GridBody({
 }
 
 function TzCorner({ tzLabel, noStickyOffset, isHeaderHidden }: {
-    tzLabel?: string; noStickyOffset?: boolean; isHeaderHidden: boolean;
+    tzLabel?: string | undefined; noStickyOffset?: boolean | undefined; isHeaderHidden: boolean;
 }): JSX.Element {
     return (
         <div
@@ -83,9 +83,9 @@ function TzCorner({ tzLabel, noStickyOffset, isHeaderHidden }: {
 
 function DayHeaders({ dayDates, nextWeekDayDates, fullDayNames, todayIndex, nextWeekSlots, noStickyOffset, isHeaderHidden, onDayClick, isDayAllActive, awayDays }: {
     dayDates: string[] | null; nextWeekDayDates: string[] | null;
-    fullDayNames?: boolean; todayIndex?: number; nextWeekSlots?: GameTimeSlot[];
-    noStickyOffset?: boolean; isHeaderHidden: boolean; onDayClick?: (dayIndex: number) => void;
-    isDayAllActive?: (dayIndex: number) => boolean; awayDays?: ReadonlySet<number>;
+    fullDayNames?: boolean | undefined; todayIndex?: number | undefined; nextWeekSlots?: GameTimeSlot[] | undefined;
+    noStickyOffset?: boolean | undefined; isHeaderHidden: boolean; onDayClick?: ((dayIndex: number) => void) | undefined;
+    isDayAllActive?: ((dayIndex: number) => boolean) | undefined; awayDays?: ReadonlySet<number> | undefined;
 }): JSX.Element {
     return (
         <>

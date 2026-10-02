@@ -117,8 +117,9 @@ export function useCombobox<T>(p: ComboboxProps<T>): ComboboxController<T> {
     };
     const clear = (): void => { setText(''); if (p.value !== null) p.onChange(null); };
     const c: Internals = { open, n: items.length, activeIndex, text, hasValue: p.value !== null, setOpen, setActive, select, close, clear };
+    const status = statusOf(p, items.length);
     return {
-        open, text, items, activeIndex, listboxId, status: statusOf(p, items.length),
+        open, text, items, activeIndex, listboxId, ...(status === undefined ? {} : { status }),
         optionId: (i) => `${listboxId}-option-${i}`,
         setActive, select, close, show: () => setOpen(true),
         onInputChange: (s) => { setText(s); setOpen(true); setActive(-1); },

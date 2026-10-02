@@ -15,8 +15,8 @@ export type GameTimePreset = 'morning' | 'afternoon' | 'evening' | 'night';
 export interface UseGameTimeEditorReturn {
     slots: GameTimeSlot[];
     events: GameTimeEventBlock[];
-    nextWeekEvents?: GameTimeEventBlock[];
-    nextWeekSlots?: GameTimeSlot[];
+    nextWeekEvents?: GameTimeEventBlock[] | undefined;
+    nextWeekSlots?: GameTimeSlot[] | undefined;
     isLoading: boolean;
     weekStart: string;
     isDirty: boolean;

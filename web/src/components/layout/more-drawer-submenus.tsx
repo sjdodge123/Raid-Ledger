@@ -106,7 +106,7 @@ export function ProfileSubmenuContent({ pathname, onClose, onOpenGameTime }: {
     const { data: week } = useGameTime();
     const gameTime: GameTimeRowData = {
         subtitle: gameTimeSummary(week?.slots ?? [], week?.gameTimeAgeDays),
-        onOpen: onOpenGameTime,
+        ...(onOpenGameTime ? { onOpen: onOpenGameTime } : {}),
     };
 
     const handleRerunWizard = () => {

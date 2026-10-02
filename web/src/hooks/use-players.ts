@@ -13,8 +13,8 @@ export function usePlayers(page: number, search: string, gameId?: number) {
         queryFn: () =>
             getPlayers({
                 page,
-                search: search || undefined,
-                gameId,
+                ...(search ? { search } : {}),
+                ...(gameId === undefined ? {} : { gameId }),
             }),
     });
 }
@@ -38,7 +38,7 @@ export function useInfinitePlayers(search: string, params?: InfinitePlayersParam
         queryFn: (page) =>
             getPlayers({
                 page,
-                search: search || undefined,
+                ...(search ? { search } : {}),
                 ...params,
             }),
     });

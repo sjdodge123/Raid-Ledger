@@ -10,7 +10,7 @@ interface EventsMobileToolbarProps {
     searchQuery: string;
     onSearchChange: (query: string) => void;
     genreOptions?: GenreOption[];
-    selectedGenre?: string;
+    selectedGenre?: string | undefined;
     onGenreChange?: (genreKey: string) => void;
 }
 
@@ -38,7 +38,7 @@ function TabButtons({ activeTab, onTabChange }: { activeTab: EventsTab; onTabCha
 
 function SearchAndGenreFilter({ searchQuery, onSearchChange, genreOptions, selectedGenre, onGenreChange }: {
     searchQuery: string; onSearchChange: (q: string) => void;
-    genreOptions?: GenreOption[]; selectedGenre?: string; onGenreChange?: (key: string) => void;
+    genreOptions?: GenreOption[] | undefined; selectedGenre?: string | undefined; onGenreChange?: ((key: string) => void) | undefined;
 }) {
     return (
         <div className="flex gap-2">

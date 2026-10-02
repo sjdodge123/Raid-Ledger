@@ -35,7 +35,7 @@ interface Props {
   /** ROK-1207: aborted lineup is terminal — advance/revert disabled. */
   isAborted?: boolean;
   /** Reuse the page's tiebreaker prompt when advance hits TIEBREAKER_REQUIRED. */
-  onTiebreakerIntercept?: () => void;
+  onTiebreakerIntercept?: (() => void) | undefined;
 }
 
 /** Edit / Abort / phase-transition modal host, driven by the menu's state. */
@@ -48,7 +48,7 @@ function MenuModalsHost({
   lineup: LineupDetailResponseDto;
   modals: MenuModals;
   setModals: React.Dispatch<React.SetStateAction<MenuModals>>;
-  onTiebreakerIntercept?: () => void;
+  onTiebreakerIntercept?: (() => void) | undefined;
 }): JSX.Element {
   const transition = useTransitionLineupStatus();
   const clearTransition = (): void =>

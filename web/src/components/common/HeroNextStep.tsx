@@ -116,7 +116,7 @@ function HeroFull(props: HeroNextStepProps): JSX.Element {
 
 function HeroCompact({
     headline, cta, tone,
-}: { headline: string; cta?: HeroCta; tone: HeroTone }): JSX.Element {
+}: { headline: string; cta?: HeroCta | undefined; tone: HeroTone }): JSX.Element {
     return (
         <div className="flex items-center justify-between gap-3 min-h-[44px]">
             <p className={`text-sm font-semibold uppercase tracking-[0.15em] truncate ${TONE_LABEL_CLS[tone]}`}>

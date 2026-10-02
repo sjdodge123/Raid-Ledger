@@ -22,7 +22,7 @@ interface CharacterFormFieldsProps {
     editingIsMain: boolean;
     hasMainForGame: boolean;
     /** Inline error on the Name field (e.g. 'Character name is required'). */
-    nameError?: string;
+    nameError?: string | undefined;
     onUpdateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
 }
 
@@ -47,7 +47,7 @@ const ARMORY_LOCK_HINT = (
 
 function SyncableInput({ label, value, onChange, placeholder, maxLength, isArmorySynced, required, error }: {
     label: string; value: string; onChange: (v: string) => void; placeholder: string; maxLength: number;
-    isArmorySynced: boolean; required?: boolean; error?: string;
+    isArmorySynced: boolean; required?: boolean | undefined; error?: string | undefined;
 }) {
     return (
         <Field label={label} required={required} error={error} hint={isArmorySynced ? ARMORY_LOCK_HINT : undefined}>

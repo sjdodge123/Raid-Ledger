@@ -17,12 +17,12 @@ import { FIELD_FRAME_BASE, FIELD_PAD, type FieldSize } from './form-classes';
 import { useFieldControlProps } from './field-context';
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
-    invalid?: boolean;
-    fieldSize?: FieldSize;
+    invalid?: boolean | undefined;
+    fieldSize?: FieldSize | undefined;
     leading?: ReactNode;
     trailing?: ReactNode;
     /** Monospace text — ids, codes, URLs, numeric readouts. */
-    mono?: boolean;
+    mono?: boolean | undefined;
 }
 
 const DATE_TIME_TYPES = new Set(['date', 'time', 'datetime-local', 'month', 'week']);

@@ -10,7 +10,7 @@ interface SignupPreview {
     /** Discord user ID for avatar URL resolution (ROK-222) */
     discordId?: string | null;
     /** Optional characters for avatar resolution (ROK-194) */
-    characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
+    characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }> | undefined;
 }
 
 interface AttendeeAvatarsProps {
@@ -25,7 +25,7 @@ interface AttendeeAvatarsProps {
     /** Accent color for avatar borders (from game theme) */
     accentColor?: string;
     /** Optional game ID for context-aware avatar resolution (ROK-194) */
-    gameId?: number;
+    gameId?: number | undefined;
 }
 
 /**
@@ -50,7 +50,7 @@ function getInitialsBg(username: string): string {
 
 function AvatarItem({ signup, index, size, accentColor, totalVisible, gameId }: {
     signup: SignupPreview; index: number; size: 'xs' | 'sm' | 'md';
-    accentColor: string; totalVisible: number; gameId?: number;
+    accentColor: string; totalVisible: number; gameId?: number | undefined;
 }) {
     const resolved = resolveAvatar(toAvatarUser(signup), gameId);
     const avatarUrl = resolved.url;

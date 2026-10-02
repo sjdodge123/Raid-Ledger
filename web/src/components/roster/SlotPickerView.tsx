@@ -91,7 +91,7 @@ function SlotRoleGroup({
     role, label, slots, playerRole, onSlotPick,
 }: {
     role: string; label: string; slots: AvailableSlot[];
-    playerRole?: string | null; onSlotPick: (role: RosterRole, position: number) => void;
+    playerRole?: string | null | undefined; onSlotPick: (role: RosterRole, position: number) => void;
 }) {
     return (
         <div className="assignment-popup__section">
@@ -132,7 +132,7 @@ function reassignSlotClass(isCurrent: boolean, isOccupied: boolean, isMatch: boo
 
 function ReassignSlotButton({ slot, slotRole, slotPosition, occupantRole, onSlotPick }: {
     slot: AvailableSlot; slotRole: RosterRole | null; slotPosition: number;
-    occupantRole?: string | null; onSlotPick: (role: RosterRole, position: number) => void;
+    occupantRole?: string | null | undefined; onSlotPick: (role: RosterRole, position: number) => void;
 }) {
     const colors = ROLE_SLOT_COLORS[slot.role] ?? ROLE_SLOT_COLORS.player;
     const isCurrent = slot.role === slotRole && slot.position === slotPosition;

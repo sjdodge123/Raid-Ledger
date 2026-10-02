@@ -9,7 +9,7 @@ interface EventBlockOverlaysProps {
     gridDims: GridDims;
     rangeStart: number;
     rangeEnd: number;
-    onEventClick?: (event: GameTimeEventBlock, anchorRect: DOMRect) => void;
+    onEventClick?: ((event: GameTimeEventBlock, anchorRect: DOMRect) => void) | undefined;
 }
 
 /** Renders positioned event blocks overlaid on the grid */
@@ -61,7 +61,7 @@ function computeEventPosition(
 
 function EventBlock({ ev, pos, onEventClick }: {
     ev: GameTimeEventBlock; pos: EventPosition;
-    onEventClick?: (event: GameTimeEventBlock, anchorRect: DOMRect) => void;
+    onEventClick?: ((event: GameTimeEventBlock, anchorRect: DOMRect) => void) | undefined;
 }): JSX.Element {
     return (
         <div

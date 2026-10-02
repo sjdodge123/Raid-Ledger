@@ -60,7 +60,7 @@ export function CalendarGameFilterControls({
 
 /** "N of M selected" + "None" (hide every game). */
 function SelectionSummary({ count, total, onNone, className }: {
-    count: number; total: number; onNone: () => void; className?: string;
+    count: number; total: number; onNone: () => void; className?: string | undefined;
 }): JSX.Element {
     return (
         <div className={`flex items-center justify-between gap-3 ${className ?? ''}`}>

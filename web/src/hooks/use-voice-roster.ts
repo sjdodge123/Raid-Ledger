@@ -64,7 +64,7 @@ function createVoiceSocket(
   const { url, path } = resolveSocketTarget('/ad-hoc');
   const socket = io(url, {
     path,
-    auth: token ? { token } : undefined,
+    ...(token ? { auth: { token } } : {}),
     transports: ['websocket', 'polling'],
     // ROK-1533: socket.io-client 4.8 made `tryAllTransports` default to FALSE,
     // so a failed FIRST transport is fatal instead of falling through to the

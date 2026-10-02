@@ -138,9 +138,9 @@ function InstanceBossList({
     instanceId, instanceName, variant, wowheadVariant,
     equippedBySlot, characterClass, hasCharacter,
 }: {
-    instanceId: number; instanceName?: string; variant: string;
+    instanceId: number; instanceName?: string | undefined; variant: string;
     wowheadVariant: string; equippedBySlot: Map<string, EquipmentItemDto>;
-    characterClass?: string | null; hasCharacter: boolean;
+    characterClass?: string | null | undefined; hasCharacter: boolean;
 }) {
     const { data: bosses, isLoading } = useBossesForInstance(instanceId, variant);
     const { ids: expandedBossIds, toggle: toggleBoss } = useToggleSet();
@@ -175,7 +175,7 @@ function BossRow({
     boss: BossEncounterDto; isExpanded: boolean; onToggle: () => void;
     variant: string; wowheadVariant: string;
     equippedBySlot: Map<string, EquipmentItemDto>;
-    characterClass?: string | null; hasCharacter: boolean;
+    characterClass?: string | null | undefined; hasCharacter: boolean;
 }) {
     const { data: loot, isLoading: lootLoading } = useLootForBoss(
         isExpanded ? boss.id : undefined, variant,

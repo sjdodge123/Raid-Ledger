@@ -62,7 +62,7 @@ function useCloseOnScroll(onClose: () => void) {
     }, [onClose]);
 }
 
-async function handlePopoverConfirm(confirmSignup: ReturnType<typeof useConfirmSignup>, event: GameTimeEventBlock, selection: { characterId: string; role?: CharacterRole }, setShowModal: (v: boolean) => void) {
+async function handlePopoverConfirm(confirmSignup: ReturnType<typeof useConfirmSignup>, event: GameTimeEventBlock, selection: { characterId: string; role?: CharacterRole | undefined }, setShowModal: (v: boolean) => void) {
     try {
         await confirmSignup.mutateAsync({ signupId: event.signupId, characterId: selection.characterId });
         toast.success('Signup confirmed!');

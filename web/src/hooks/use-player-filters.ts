@@ -50,14 +50,25 @@ function parseSourcesParam(value: string | null): string[] | undefined {
 
 /** Read all filter values from URL search params. Supports legacy `source` (singular) param. */
 function readFiltersFromParams(sp: URLSearchParams): PlayerFilters {
+    const filters: PlayerFilters = {};
+    const gameId = parseIntParam(sp.get('gameId'));
+    if (gameId !== undefined) filters.gameId = gameId;
     const sources = parseSourcesParam(sp.get('sources')) ?? parseSourcesParam(sp.get('source'));
-    return {
-        gameId: parseIntParam(sp.get('gameId')),
-        sources,
-        playHistory: sp.get('playHistory') || undefined,
-        playtimeMin: parseIntParam(sp.get('playtimeMin')),
-        role: sp.get('role') || undefined,
-    };
+    if (sources) filters.sources = sources;
+    const playHistory = sp.get('playHistory');
+    if (playHistory) filters.playHistory = playHistory;
+    const playtimeMin = parseIntParam(sp.get('playtimeMin'));
+    if (playtimeMin !== undefined) filters.playtimeMin = playtimeMin;
+    const role = sp.get('role');
+    if (role) filters.role = role;
+    return filters;
+}
+
+/** API params: an absent filter is an absent key; a game filter defaults to every source. */
+function toApiParams(filters: PlayerFilters): PlayerApiParams {
+    const { sources: list, ...rest } = filters;
+    const sources = list?.join(',') || (filters.gameId ? ALL_SOURCES : undefined);
+    return sources ? { ...rest, sources } : rest;
 }
 
 /** Count how many filters are active (sources excluded — it refines the game filter, not a standalone filter). */
@@ -96,10 +107,7 @@ export function usePlayerFilters(): UsePlayerFiltersResult {
     }, [setSearchParams]);
     const clearAll = useCallback(() => setSearchParams({}, { replace: true }), [setSearchParams]);
     const toggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
-    const apiParams = useMemo((): PlayerApiParams => ({
-        gameId: filters.gameId, sources: filters.sources?.join(',') || (filters.gameId ? ALL_SOURCES : undefined),
-        playHistory: filters.playHistory, playtimeMin: filters.playtimeMin, role: filters.role,
-    }), [filters]);
+    const apiParams = useMemo(() => toApiParams(filters), [filters]);
 
     return { filters, setFilter, clearAll, activeFilterCount, apiParams, isOpen, toggleOpen };
 }

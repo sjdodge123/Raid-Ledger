@@ -52,7 +52,7 @@ function AwayRow({ row, ...handlers }: RowHandlers & { row: AwayRowItem }): JSX.
 
 /** The list: manual rows (or the empty box) then, when present, calendar rows. */
 export function AwayUpcomingList({ rows, heading, emptyText = DEFAULT_EMPTY, ...handlers }: RowHandlers & {
-    rows: AwayRowItem[]; heading?: string; emptyText?: string;
+    rows: AwayRowItem[]; heading?: string | undefined; emptyText?: string | undefined;
 }): JSX.Element {
     const manual = rows.filter((r) => r.source === 'manual');
     const calendar = rows.filter((r) => r.source === 'calendar');

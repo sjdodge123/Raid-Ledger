@@ -30,12 +30,12 @@ export interface LfgHeroProps {
      * note. One hint for both because one condition gates both: a viewer with
      * no intent can neither start the group's poll nor start it playing.
      */
-    primaryDisabledHint?: string;
+    primaryDisabledHint?: string | undefined;
     onStartPoll: () => void;
     /** ROK-1613 — open the "Start playing right now?" confirm. */
     onStartNow: () => void;
     /** A write is in flight — both actions gate on it, not just the join row. */
-    isBusy?: boolean;
+    isBusy?: boolean | undefined;
 }
 
 const ROW = 'flex w-full flex-col items-stretch gap-1 lg:items-end';
@@ -62,7 +62,7 @@ function StartNowButton({ disabled, onStartNow }: { disabled: boolean; onStartNo
 }
 
 /** The shared caption under the actions — the refusal, or the poll's note. */
-function ActionNote({ hint, fallback }: { hint?: string; fallback?: string }): JSX.Element | null {
+function ActionNote({ hint, fallback }: { hint?: string | undefined; fallback?: string | undefined }): JSX.Element | null {
     const text = hint ?? fallback;
     if (text == null || text === '') return null;
     return <p data-testid="lfg-start-poll-hint" className="text-xs text-muted">{text}</p>;
@@ -75,8 +75,8 @@ function ActionNote({ hint, fallback }: { hint?: string; fallback?: string }): J
  * now-hand count or on how many people are looking.
  */
 function PollRow({ hint, isBusy, onStartPoll, onStartNow }: {
-    hint?: string;
-    isBusy?: boolean;
+    hint?: string | undefined;
+    isBusy?: boolean | undefined;
     onStartPoll: () => void;
     onStartNow: () => void;
 }): JSX.Element {
@@ -109,8 +109,8 @@ function PollRow({ hint, isBusy, onStartPoll, onStartNow }: {
  */
 function OpenEventRow({ eventId, hint, isBusy, onStartNow }: {
     eventId: number;
-    hint?: string;
-    isBusy?: boolean;
+    hint?: string | undefined;
+    isBusy?: boolean | undefined;
     onStartNow: () => void;
 }): JSX.Element {
     return (

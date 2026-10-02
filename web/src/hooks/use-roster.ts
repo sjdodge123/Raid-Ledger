@@ -3,7 +3,7 @@ import type { RosterWithAssignments, RosterAssignmentResponse, UpdateRosterDto }
 import { getRosterWithAssignments, updateRoster, selfUnassignFromRoster, adminRemoveUserFromEvent } from '../lib/api-client';
 
 interface MutationContext {
-    previousRoster?: RosterWithAssignments;
+    previousRoster?: RosterWithAssignments | undefined;
 }
 
 /**

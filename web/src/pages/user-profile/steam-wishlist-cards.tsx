@@ -8,7 +8,7 @@ export function WishlistCard({
   pricing,
 }: {
   entry: SteamWishlistEntryDto;
-  pricing?: ItadGamePricingDto | null;
+  pricing?: ItadGamePricingDto | null | undefined;
 }): JSX.Element {
   return (
     <GameRowPill

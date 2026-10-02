@@ -22,9 +22,9 @@ export interface SheetTitleRowProps {
     onClose: () => void;
     testId?: string;
     /** When set, a 44px leading "‹" back button sits before the title (ROK-1585). */
-    onBack?: () => void;
-    backLabel?: string;
-    backTestId?: string;
+    onBack?: (() => void) | undefined;
+    backLabel?: string | undefined;
+    backTestId?: string | undefined;
 }
 
 const ICON_BUTTON = 'flex min-h-[44px] min-w-[44px] items-center justify-center text-muted transition-colors hover:text-foreground';

@@ -25,7 +25,7 @@ export async function searchGames(
     const params = new URLSearchParams({ q: query });
     return fetchApi(
         `/games/search?${params}`,
-        { signal },
+        signal === undefined ? {} : { signal },
         GameSearchResponseSchema,
     );
 }

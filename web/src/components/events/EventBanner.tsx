@@ -21,14 +21,14 @@ interface EventBannerProps {
         id: number;
         username: string;
         avatar?: string | null;
-        discordId?: string | null;
-        customAvatarUrl?: string | null;
+        discordId?: string | null | undefined;
+        customAvatarUrl?: string | null | undefined;
     };
     description?: string | null;
     voiceChannelName?: string | null;
     voiceChannelUrl?: string | null;
     isCollapsed?: boolean;
-    recurrenceGroupId?: string | null;
+    recurrenceGroupId?: string | null | undefined;
 }
 
 function useFormattedTimes(startTime: string, endTime: string) {
@@ -85,7 +85,7 @@ function GameBadge({ game }: { game: NonNullable<EventBannerProps['game']> }) {
     );
 }
 
-function VoiceChannel({ name, url }: { name: string; url?: string | null }) {
+function VoiceChannel({ name, url }: { name: string; url?: string | null | undefined }) {
     return (
         <>
             <span className="event-banner__separator">•</span>
@@ -99,8 +99,8 @@ function VoiceChannel({ name, url }: { name: string; url?: string | null }) {
 
 function FullBanner({ title, game, dateStr, timeStr, duration, creator, description, voiceChannelName, voiceChannelUrl, recurrenceGroupId }: {
     title: string; game: EventBannerProps['game']; dateStr: string; timeStr: string; duration: string;
-    creator: EventBannerProps['creator']; description?: string | null;
-    voiceChannelName?: string | null; voiceChannelUrl?: string | null; recurrenceGroupId?: string | null;
+    creator: EventBannerProps['creator']; description?: string | null | undefined;
+    voiceChannelName?: string | null | undefined; voiceChannelUrl?: string | null | undefined; recurrenceGroupId?: string | null | undefined;
 }) {
     return (
         <div className="event-banner">

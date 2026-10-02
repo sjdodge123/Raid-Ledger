@@ -168,7 +168,7 @@ function CandidatePreview({
 interface CardAction {
     label: string;
     onClick: () => void;
-    disabled?: boolean;
+    disabled?: boolean | undefined;
     className: string;
 }
 

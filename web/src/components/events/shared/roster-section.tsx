@@ -13,7 +13,7 @@ export interface RosterSectionProps {
     slotPlayer: number;
     maxAttendees: string;
     autoUnbench: boolean;
-    maxAttendeesError?: string;
+    maxAttendeesError?: string | undefined;
     maxAttendeesId?: string;
     onSlotTypeChange: (type: 'mmo' | 'generic') => void;
     onSlotTankChange: (v: number) => void;
@@ -57,7 +57,7 @@ function SlotSteppers(props: RosterSectionProps) {
 
 /** ROK-1649: Field + Input; `maxAttendeesId` stays the control id (scroll-to-error target). */
 function MaxAttendeesField({ maxAttendees, maxAttendeesError, maxAttendeesId, onChange }: {
-    maxAttendees: string; maxAttendeesError?: string; maxAttendeesId: string; onChange: (v: string) => void;
+    maxAttendees: string; maxAttendeesError?: string | undefined; maxAttendeesId: string; onChange: (v: string) => void;
 }) {
     return (
         <Field label="Max Attendees" id={maxAttendeesId} hint="Leave empty for unlimited" error={maxAttendeesError}>

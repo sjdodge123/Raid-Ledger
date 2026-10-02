@@ -1,7 +1,7 @@
 import type { UserRole } from '@raid-ledger/contract';
 
 interface RoleBadgeProps {
-    role?: UserRole;
+    role?: UserRole | undefined;
     className?: string;
 }
 
