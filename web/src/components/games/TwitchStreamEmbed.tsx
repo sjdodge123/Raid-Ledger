@@ -45,8 +45,8 @@ function StreamThumbnail({ stream, isActive, onClick }: { stream: TwitchStreamDt
 
 export function TwitchStreamEmbed({ streams, totalLive }: TwitchStreamEmbedProps) {
     const [activeStream, setActiveStream] = useState(0);
-    if (streams.length === 0) return null;
     const currentStream = streams[activeStream];
+    if (!currentStream) return null;
     const parentHost = window.location.hostname;
 
     return (

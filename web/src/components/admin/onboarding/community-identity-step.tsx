@@ -70,7 +70,7 @@ function LogoUploadSection({ logoUrl, isPending, onFile }: {
             <div className="flex items-center gap-4">
                 <LogoPreviewBox logoUrl={logoUrl} />
                 <FilePicker variant="secondary" accept={LOGO_ACCEPT_MIME} loading={isPending} loadingLabel="Uploading…"
-                    onFiles={(files) => onFile(files[0])}>
+                    onFiles={([file]) => { if (file) onFile(file); }}>
                     Upload Logo
                 </FilePicker>
             </div>

@@ -78,7 +78,8 @@ function useCreateBindingForm(channels: BindingChannelOption[]) {
     const handleChannelChange = (id: string) => {
         setChannelId(id);
         const next = channels.find((c) => c.id === id)?.channelType;
-        if (next) setPurpose(PURPOSE_BY_TYPE[next][0]);
+        const firstPurpose = next ? PURPOSE_BY_TYPE[next][0] : undefined;
+        if (firstPurpose) setPurpose(firstPurpose);
         setGame(null);
     };
 

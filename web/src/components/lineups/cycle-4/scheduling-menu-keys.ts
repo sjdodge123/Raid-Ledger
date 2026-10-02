@@ -40,7 +40,8 @@ export function onMenuKeyDown(e: KeyboardEvent<HTMLDivElement>): void {
     Home: 0,
     End: last,
   };
-  if (!(e.key in next)) return;
+  const index = next[e.key];
+  if (index === undefined) return;
   e.preventDefault();
-  items[next[e.key]].focus();
+  items[index]?.focus();
 }

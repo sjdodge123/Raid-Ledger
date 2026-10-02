@@ -89,7 +89,7 @@ export type DurationState = ReturnType<typeof useDurationState>;
 
 type Comparable = string | number | boolean | null | number[];
 
-function sameValue(a: Comparable, b: Comparable): boolean {
+function sameValue(a: Comparable, b: Comparable | undefined): boolean {
     if (Array.isArray(a) && Array.isArray(b)) {
         return a.length === b.length && a.every((v, i) => v === b[i]);
     }
@@ -101,8 +101,8 @@ export function useStartLineupDirty(
     values: Record<string, Comparable>,
 ): boolean {
     const [snapshot] = useState(values);
-    return Object.keys(snapshot).some(
-        (key) => !sameValue(snapshot[key], values[key]),
+    return Object.entries(snapshot).some(
+        ([key, value]) => !sameValue(value, values[key]),
     );
 }
 

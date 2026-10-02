@@ -60,7 +60,7 @@ function useScrolledPast(ref: React.RefObject<HTMLDivElement | null>): boolean {
         if (!node || typeof IntersectionObserver === 'undefined') return;
         const obs = new IntersectionObserver(
             ([entry]) => {
-                flushSync(() => setPast(!entry.isIntersecting));
+                if (entry) flushSync(() => setPast(!entry.isIntersecting));
             },
             { threshold: 0, rootMargin: '0px 0px -100% 0px' },
         );
