@@ -20,7 +20,7 @@ import * as schema from '../drizzle/schema';
 import { upsertGamesFromApi, upsertSingleGameRow } from './igdb-upsert.helpers';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 const IGDB_ID = 9_680_101;
 const STEAM_X = 9_680_001;
@@ -93,7 +93,7 @@ async function readGame(where: { id: number } | { igdbId: number }) {
       : eq(schema.games.igdbId, where.igdbId);
   const rows = await testApp.db.select().from(schema.games).where(cond);
   expect(rows).toHaveLength(1);
-  return rows[0];
+  return at(rows, 0);
 }
 
 describe.each(PATHS)('ROK-1680 IGDB steam_app_id_source — %s', (_, write) => {
