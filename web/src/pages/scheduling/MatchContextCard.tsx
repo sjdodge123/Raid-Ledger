@@ -82,11 +82,9 @@ export function MatchContextCard({ match, uniqueVoterCount }: MatchContextCardPr
     >
       {match.gameCoverUrl && (
         <img
-          src={match.gameCoverUrl}
-          alt={match.gameName}
+          src={match.gameCoverUrl} alt={match.gameName}
           {...COVER_INTRINSIC} loading="lazy" decoding="async"
-          {...coverSrcSetProps(match.gameCoverUrl, '64px')}
-          className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+          {...coverSrcSetProps(match.gameCoverUrl, '64px')} className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
         />
       )}
       <div className="flex-1 min-w-0">

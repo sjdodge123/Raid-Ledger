@@ -48,11 +48,9 @@ export function SchedulingGameRefBanner(
     >
       {match.gameCoverUrl && (
         <img
-          src={match.gameCoverUrl}
-          alt={match.gameName}
-          className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-          width={48} height={48} loading="lazy" decoding="async"
-          {...coverSrcSetProps(match.gameCoverUrl, '48px')}
+          src={match.gameCoverUrl} alt={match.gameName}
+          className="w-12 h-12 rounded-lg object-cover flex-shrink-0" width={48} height={48}
+          loading="lazy" decoding="async" {...coverSrcSetProps(match.gameCoverUrl, '48px')}
         />
       )}
       <div className="min-w-0">
