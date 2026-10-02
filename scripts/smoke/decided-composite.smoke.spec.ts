@@ -272,14 +272,24 @@ test.describe('Decided composite — responsive (AC9)', () => {
         await expect(hero).toBeVisible({ timeout: 10_000 });
 
         // Mobile-specific assertion: hero stays inside viewport width.
+        // Polled: a single boundingBox() sample right after toBeVisible can
+        // come back null (detach/re-render). A null box never counts as a pass.
         if (isPhoneLayout(testInfo)) {
-            const box = await hero.boundingBox();
             const viewport = page.viewportSize();
-            expect(box).not.toBeNull();
             expect(viewport).not.toBeNull();
-            if (box && viewport) {
-                expect(box.width).toBeLessThanOrEqual(viewport.width);
-            }
+            const viewportWidth = viewport!.width;
+            await expect
+                .poll(
+                    async () => {
+                        const box = await hero.boundingBox();
+                        return box === null ? null : box.width <= viewportWidth;
+                    },
+                    {
+                        message: `hero width must stay <= viewport width (${viewportWidth}px)`,
+                        timeout: 10_000,
+                    },
+                )
+                .toBe(true);
         }
     });
 });
