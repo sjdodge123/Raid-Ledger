@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CommunityIdentityStep } from './community-identity-step';
 import { LOGO_ACCEPT_MIME } from '../../../constants/branding';
+import { at } from '../../../test/defined';
 
 const mocks = vi.hoisted(() => ({
     updateMutate: vi.fn(),
@@ -343,7 +344,7 @@ describe('CommunityIdentityStep — FilePicker + loading Buttons (ROK-1648, ruli
         fireEvent.click(screen.getByRole('button', { name: /^next$/i }));
         expect(mocks.updateMutate).toHaveBeenCalledWith({ communityName: 'Test Guild' }, expect.anything());
         expect(onNext).not.toHaveBeenCalled();
-        mocks.updateMutate.mock.calls[0][1].onSuccess();
+        at(mocks.updateMutate.mock.calls, 0)[1].onSuccess();
         expect(onNext).toHaveBeenCalledOnce();
     });
 });

@@ -68,6 +68,7 @@ vi.mock('../../hooks/use-logs', async (importOriginal) => {
 
 // Import after mock so we get the mocked versions
 import { downloadLogFile, exportLogs } from '../../hooks/use-logs';
+import { at } from '../../test/defined';
 
 describe('LogsPanel — part 1', () => {
   beforeEach(() => {
@@ -329,7 +330,7 @@ describe('LogsPanel — part 5', () => {
       const downloadButtons = screen.getAllByRole('button', {
         name: /^download$/i,
       });
-      await user.click(downloadButtons[0]);
+      await user.click(at(downloadButtons, 0));
 
       expect(downloadLogFile).toHaveBeenCalledWith('api.log');
     });
@@ -349,7 +350,7 @@ describe('LogsPanel — part 5', () => {
       const downloadButtons = screen.getAllByRole('button', {
         name: /^download$/i,
       });
-      await user.click(downloadButtons[0]);
+      await user.click(at(downloadButtons, 0));
 
       expect(screen.getByText('Downloading...')).toBeInTheDocument();
 
@@ -375,7 +376,7 @@ describe('LogsPanel — part 5', () => {
       const downloadButtons = screen.getAllByRole('button', {
         name: /^download$/i,
       });
-      await user.click(downloadButtons[0]);
+      await user.click(at(downloadButtons, 0));
 
       // After error, button should return to normal state
       await waitFor(() => {
@@ -411,7 +412,7 @@ describe('LogsPanel — part 6', () => {
       const downloadButtons = screen.getAllByRole('button', {
         name: /^download$/i,
       });
-      await user.click(downloadButtons[0]);
+      await user.click(at(downloadButtons, 0));
 
       // The clicked button should be disabled
       expect(screen.getByText('Downloading...')).toBeDisabled();

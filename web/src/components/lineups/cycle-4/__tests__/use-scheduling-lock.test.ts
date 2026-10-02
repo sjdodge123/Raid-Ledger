@@ -45,6 +45,7 @@ import {
 } from '../../../../lib/api-client';
 import { toast } from '../../../../lib/toast';
 import { useSchedulingLock } from '../use-scheduling-lock';
+import { at } from '../../../../test/defined';
 
 const MATCH_ID = 500;
 const LINEUP_ID = 7;
@@ -179,8 +180,7 @@ describe('useSchedulingLock — commit', () => {
             FUTURE_TIME,
         );
         // Backend matches startTime to a slot via Date-getTime equality.
-        const [, , startTime] = vi.mocked(completeStandalonePoll).mock
-            .calls[0];
+        const [, , startTime] = at(vi.mocked(completeStandalonePoll).mock.calls, 0);
         expect(new Date(startTime!).getTime()).toBe(
             new Date(FUTURE_TIME).getTime(),
         );
@@ -218,8 +218,8 @@ describe('useSchedulingLock — commit', () => {
 
         await act(() => result.current.requestLock(buildSlot()));
 
-        const url = (navigate as unknown as { mock: { calls: string[][] } }).mock
-            .calls[0][0];
+        const { calls } = (navigate as unknown as { mock: { calls: string[][] } }).mock;
+        const url = at(at(calls, 0), 0);
         expect(new URLSearchParams(url.split('?')[1]).get('copyFromEventId')).toBe(
             '91',
         );
@@ -230,8 +230,8 @@ describe('useSchedulingLock — commit', () => {
 
         await act(() => result.current.requestLock(buildSlot()));
 
-        const url = (navigate as unknown as { mock: { calls: string[][] } }).mock
-            .calls[0][0];
+        const { calls } = (navigate as unknown as { mock: { calls: string[][] } }).mock;
+        const url = at(at(calls, 0), 0);
         expect(
             new URLSearchParams(url.split('?')[1]).has('copyFromEventId'),
         ).toBe(false);

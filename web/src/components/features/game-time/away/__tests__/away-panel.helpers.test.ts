@@ -7,6 +7,7 @@ import {
     upcomingAbsences,
 } from '../away-panel.helpers';
 import { toManualRows } from '../away-row.types';
+import { at } from '../../../../../test/defined';
 
 /** Frozen Thursday, local time — the presets and "upcoming" are relative to it. */
 const THURSDAY = new Date(2026, 7, 27, 12, 0, 0); // 2026-08-27
@@ -104,7 +105,7 @@ describe('toManualRows', () => {
     });
 
     it('normalises a missing reason to null', () => {
-        expect(toManualRows([{ id: 1, startDate: '2026-09-19', endDate: '2026-09-19' }])[0].reason)
+        expect(at(toManualRows([{ id: 1, startDate: '2026-09-19', endDate: '2026-09-19' }]), 0).reason)
             .toBeNull();
     });
 });

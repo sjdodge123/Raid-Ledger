@@ -1,6 +1,7 @@
 import { act, render, renderHook, screen } from '@testing-library/react';
 import { useRef } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { at } from '../test/defined';
 import { useFocusTrap } from './use-focus-trap';
 
 /**
@@ -90,7 +91,7 @@ it('cycles forward from last focusable element to first', () => {
             });
 
             // Focus the last button
-            buttons[2].focus();
+            at(buttons, 2).focus();
 
             // Press Tab on document — should wrap to first
             const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true });
@@ -125,7 +126,7 @@ it('cycles backward from first focusable element to last on Shift+Tab', () => {
             });
 
             // Focus the first button
-            buttons[0].focus();
+            at(buttons, 0).focus();
 
             // Press Shift+Tab — should wrap to last
             const event = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true });

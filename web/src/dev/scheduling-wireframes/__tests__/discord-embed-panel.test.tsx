@@ -9,6 +9,7 @@
  * would still pass a "it mounts" test.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { at } from '../../../test/defined';
 import { screen, fireEvent } from '@testing-library/react';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { DiscordEmbedPanel } from '../DiscordEmbedPanel';
@@ -92,7 +93,7 @@ describe('DiscordEmbedPanel — the action row is the whole point', () => {
 
   it('falls back to a single Vote button past Discord’s five-per-row limit', () => {
     const p = pollFor('open-unvoted');
-    const many = { ...p, slots: [1, 2, 3, 4, 5, 6].map((id) => ({ ...p.slots[0], id })) };
+    const many = { ...p, slots: [1, 2, 3, 4, 5, 6].map((id) => ({ ...at(p.slots, 0), id })) };
     const row = targetActionRow(many);
     expect(row?.map((b) => b.id)).toEqual(['vote', 'suggest']);
   });
@@ -100,11 +101,11 @@ describe('DiscordEmbedPanel — the action row is the whole point', () => {
   it('never models a row Discord would refuse — suggest counts toward the five', () => {
     const p = pollFor('open-unvoted');
     for (const count of [1, 2, 3, 4, 5, 6]) {
-      const slots = Array.from({ length: count }, (_, i) => ({ ...p.slots[0], id: i + 1 }));
+      const slots = Array.from({ length: count }, (_, i) => ({ ...at(p.slots, 0), id: i + 1 }));
       expect(targetActionRow({ ...p, slots })?.length).toBeLessThanOrEqual(5);
     }
     // Exactly five slots is the boundary: four buttons fit, five do not.
-    const five = Array.from({ length: 5 }, (_, i) => ({ ...p.slots[0], id: i + 1 }));
+    const five = Array.from({ length: 5 }, (_, i) => ({ ...at(p.slots, 0), id: i + 1 }));
     expect(targetActionRow({ ...p, slots: five })?.map((b) => b.id)).toEqual(['vote', 'suggest']);
   });
 
@@ -167,8 +168,8 @@ describe('DiscordEmbedPanel — per-viewer state and the terminal grammars', () 
 
   it('degrades to a multi-select, not a single pick, once the row is full', () => {
     const p = pollFor('open-unvoted');
-    const many = { ...p, slots: [1, 2, 3, 4, 5, 6].map((id) => ({ ...p.slots[0], id })) };
-    expect(targetActionRow(many)?.[0].label).toContain('pick any number');
+    const many = { ...p, slots: [1, 2, 3, 4, 5, 6].map((id) => ({ ...at(p.slots, 0), id })) };
+    expect(targetActionRow(many)?.[0]?.label).toContain('pick any number');
     expect(TARGET_OPEN_QUESTION).toContain('MULTI-select');
   });
 
@@ -211,7 +212,7 @@ describe('DiscordEmbedPanel — where the ephemeral is, and is not, used', () =>
 
   it('caps Today at three slot lines and Target at none', () => {
     const p = pollFor('open-unvoted');
-    const many = { ...p, slots: [1, 2, 3, 4, 5].map((id) => ({ ...p.slots[0], id, votes: 6 - id })) };
+    const many = { ...p, slots: [1, 2, 3, 4, 5].map((id) => ({ ...at(p.slots, 0), id, votes: 6 - id })) };
     expect(todaySlotLines(many)).toHaveLength(3);
     expect(targetEmbed(many).lines.filter((l) => l.id.startsWith('slot-'))).toHaveLength(5);
   });

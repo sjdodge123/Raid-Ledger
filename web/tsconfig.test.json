@@ -5,7 +5,10 @@
   // Gated: `npx tsc --noEmit -p web/tsconfig.test.json` runs in
   // scripts/validate-ci.sh run_typecheck (web scope) and in the CI lint job's
   // "Typecheck (web specs)" step. The spec error backlog was cleared to 0 on
-  // 2026-10-01, so any new error fails the PR.
+  // 2026-10-01, so any new error fails the PR. Specs inherit
+  // noUncheckedIndexedAccess from tsconfig.app.json (ROK-1161 phase 3), so
+  // unchecked index access in a spec is gated too; narrow it with the
+  // helpers in src/test/defined.ts.
   // Deliberately NOT referenced from tsconfig.json: that would put it in
   // `tsc -b`, i.e. the web build.
   // vitest-axe 0.1.0's `extend-expect` augments the legacy global `Vi`
@@ -15,11 +18,7 @@
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
-    "types": ["vite/client", "vitest/globals", "node"],
-    // ROK-1161 phase 3: specs (*.test.ts(x), src/test/**) still carry 436
-    // noUncheckedIndexedAccess errors in 122 files; delete this override once
-    // they are fixed. App code is gated by tsconfig.app.json.
-    "noUncheckedIndexedAccess": false
+    "types": ["vite/client", "vitest/globals", "node"]
   },
   "include": ["src"],
   "exclude": []

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AddCharacterModal } from './AddCharacterModal';
 import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
 import type { CharacterDto } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
 
 // Mock hooks used by AddCharacterModal
 vi.mock('../../hooks/use-character-mutations', () => ({
@@ -409,7 +410,7 @@ describe('AddCharacterModal — form primitives (ROK-1648)', () => {
         const alerts = screen.getAllByRole('alert');
         expect(alerts, 'only the Name Field error should announce').toHaveLength(1);
         expect(alerts[0]).toHaveTextContent('Character name is required');
-        expect(nameInput.getAttribute('aria-describedby') ?? '', 'the error should describe the Name input').toContain(alerts[0].id);
+        expect(nameInput.getAttribute('aria-describedby') ?? '', 'the error should describe the Name input').toContain(at(alerts, 0).id);
     });
 
     it('with no game picked, the game search shows "Please select a game" and no alert', () => {

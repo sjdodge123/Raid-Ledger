@@ -11,6 +11,7 @@ import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/co
 import { renderWithProviders } from '../../test/render-helpers';
 import { useChannelBindings } from '../../hooks/use-channel-bindings';
 import { DiscordChannelsPage } from './discord-channels-page';
+import { at } from '../../test/defined';
 
 vi.mock('../../hooks/use-channel-bindings', () => ({ useChannelBindings: vi.fn() }));
 vi.mock('../../hooks/use-game-search', () => ({
@@ -56,7 +57,7 @@ describe('DiscordChannelsPage — binding row editor resets the update error (TD
   it('resets the update mutation when a row editor opens and again when it closes', async () => {
     const user = userEvent.setup();
     renderWithProviders(<DiscordChannelsPage />);
-    const rowB = screen.getAllByTestId('channel-binding-row')[1];
+    const rowB = at(screen.getAllByTestId('channel-binding-row'), 1);
 
     await user.click(within(rowB).getByRole('button', { name: 'Edit' }));
     expect(resetUpdate).toHaveBeenCalledTimes(1);
@@ -91,7 +92,7 @@ describe('DiscordChannelsPage — switching rows never detaches an in-flight sav
     vi.mocked(useChannelBindings).mockImplementation(useBindingsWithRealUpdate);
     const user = userEvent.setup();
     renderWithProviders(<DiscordChannelsPage />);
-    const row = (i: number) => screen.getAllByTestId('channel-binding-row')[i];
+    const row = (i: number) => at(screen.getAllByTestId('channel-binding-row'), i);
 
     await user.click(within(row(0)).getByRole('button', { name: 'Edit' }));
     await user.click(screen.getByRole('button', { name: 'Save' }));

@@ -19,6 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { defined } from '../../test/defined';
 
 /** Repo-relative `web/src` root, resolved from this file's location. */
 const WEB_SRC = resolve(__dirname, '../..');
@@ -45,7 +46,7 @@ function localComponentNames(source: string): string[] {
     const constRe = /^\s*(?:export\s+)?const\s+([A-Z][A-Za-z0-9_]*)\s*[:=]/gm;
     for (const re of [fnRe, constRe]) {
         let match: RegExpExecArray | null;
-        while ((match = re.exec(source)) !== null) names.push(match[1]);
+        while ((match = re.exec(source)) !== null) names.push(defined(match[1], 'component name capture group'));
     }
     return names;
 }

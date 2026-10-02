@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimeSlot } from '@raid-ledger/contract';
+import { at } from '../../../test/defined';
 
 describe('GameTimeGrid — whole-day toggle (ROK-619)', () => {
     it('clicking day header selects all 24 hours when day is empty', () => {
@@ -11,7 +12,7 @@ describe('GameTimeGrid — whole-day toggle (ROK-619)', () => {
         fireEvent.click(screen.getByTestId('day-header-0'));
 
         expect(onChange).toHaveBeenCalledTimes(1);
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result).toHaveLength(24);
         const hours = result.map((s) => s.hour).sort((a, b) => a - b);
         expect(hours).toEqual(Array.from({ length: 24 }, (_, i) => i));
@@ -35,7 +36,7 @@ describe('GameTimeGrid — whole-day toggle (ROK-619)', () => {
         const onChange = vi.fn();
         render(<GameTimeGrid slots={slots} onChange={onChange} />);
         fireEvent.click(screen.getByTestId('day-header-0'));
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result).toHaveLength(24);
     });
 
@@ -44,7 +45,7 @@ describe('GameTimeGrid — whole-day toggle (ROK-619)', () => {
         const onChange = vi.fn();
         render(<GameTimeGrid slots={slots} onChange={onChange} />);
         fireEvent.click(screen.getByTestId('day-header-0'));
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result.filter((s) => s.dayOfWeek === 1)).toHaveLength(1);
         expect(result.filter((s) => s.dayOfWeek === 0)).toHaveLength(24);
     });
@@ -76,7 +77,7 @@ describe('GameTimeGrid — whole-day edge cases (ROK-619)', () => {
         const onChange = vi.fn();
         render(<GameTimeGrid slots={slots} onChange={onChange} />);
         fireEvent.click(screen.getByTestId('day-header-0'));
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result.find((s) => s.hour === 22)?.status).toBe('committed');
         expect(result.find((s) => s.hour === 23)?.status).toBe('blocked');
     });

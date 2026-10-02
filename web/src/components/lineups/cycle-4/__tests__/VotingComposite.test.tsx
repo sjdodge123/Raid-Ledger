@@ -21,6 +21,7 @@ import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { server } from '../../../../test/mocks/server';
 import { VotingComposite } from '../VotingComposite';
+import { at } from '../../../../test/defined';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -432,7 +433,7 @@ describe('VotingComposite — the top-pick star (ROK-1474)', () => {
         overrides: Partial<LineupDetailResponseDto> = {},
     ): LineupDetailResponseDto {
         const base = buildVotingLineup({ votingEligibleCount: 12 });
-        const [first] = base.entries;
+        const first = at(base.entries, 0);
         return buildVotingLineup({
             votingEligibleCount: 12,
             entries: [

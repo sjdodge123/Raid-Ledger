@@ -216,7 +216,7 @@ describe('deduplicateByName', () => {
         const quest = makeQuest({ questId: 1, name: 'Solo Quest' });
         const result = deduplicateByName([quest], 'Warrior', 'Orc');
         expect(result).toHaveLength(1);
-        expect(result[0].questId).toBe(1);
+        expect(result[0]?.questId).toBe(1);
     });
 
     it('keeps quests with different names', () => {
@@ -237,7 +237,7 @@ describe('deduplicateByName', () => {
         });
         const result = deduplicateByName([horde, alliance], 'Warrior', 'Orc');
         expect(result).toHaveLength(1);
-        expect(result[0].questId).toBe(1);
+        expect(result[0]?.questId).toBe(1);
     });
 
     it('keeps same-name quests from different dungeons separate', () => {
@@ -265,7 +265,7 @@ describe('deduplicateByName', () => {
             'Warrior', 'Orc',
         );
         expect(result).toHaveLength(1);
-        expect(result[0].questId).toBe(1);
+        expect(result[0]?.questId).toBe(1);
     });
 
     it('handles no race/class info on character by picking unrestricted', () => {
@@ -278,7 +278,7 @@ describe('deduplicateByName', () => {
         });
         const result = deduplicateByName([restricted, unrestricted], null, null);
         expect(result).toHaveLength(1);
-        expect(result[0].questId).toBe(2);
+        expect(result[0]?.questId).toBe(2);
     });
 
     it('handles multiple groups with deduplication in each', () => {

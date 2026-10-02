@@ -93,8 +93,9 @@ function installRafMocks() {
 
 function flushRafOnce() {
     // Execute one tick of the animation loop
-    const [id, cb] = [...rafCallbacks.entries()][0] ?? [];
-    if (cb) {
+    const entry = [...rafCallbacks.entries()][0];
+    if (entry) {
+        const [id, cb] = entry;
         rafCallbacks.delete(id);
         cb(0);
     }

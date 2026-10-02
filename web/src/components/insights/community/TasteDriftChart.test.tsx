@@ -63,7 +63,7 @@ describe('TasteDriftChart reshape()', () => {
         ]);
         expect(result.topAxes).toEqual(['rpg', 'co_op']);
         // Middle row missing rpg sample → falls back to 0
-        expect(result.rows[1].rpg).toBe(0);
-        expect(result.rows[1].co_op).toBe(25);
+        expect(result.rows[1]?.rpg).toBe(0);
+        expect(result.rows[1]?.co_op).toBe(25);
     });
 });

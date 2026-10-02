@@ -44,6 +44,7 @@ function renderAccountPanel() {
 
 import { useAuth, isImpersonating } from '../../hooks/use-auth';
 import { deleteMyAccount } from '../../lib/api-client';
+import { at } from '../../test/defined';
 
 const mockUseAuth = useAuth as ReturnType<typeof vi.fn>;
 const mockIsImpersonating = isImpersonating as ReturnType<typeof vi.fn>;
@@ -121,7 +122,7 @@ async function openDeleteModal(user: ReturnType<typeof userEvent.setup>) {
     renderAccountPanel();
     await user.click(screen.getByRole('button', { name: /delete my account/i }));
     const all = screen.getAllByRole('button', { name: /delete my account/i });
-    return all[all.length - 1];
+    return at(all, -1);
 }
 
 const isButton = (el: Element) => el.querySelector('[data-button-label]') !== null;

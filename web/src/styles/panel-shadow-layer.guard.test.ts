@@ -5,6 +5,7 @@
  * field in the six light schemes (found by the ROK-1649 fleet UI verification).
  */
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -19,7 +20,7 @@ function enclosingLayer(at: number): string | null {
             if (depth === 0) {
                 const head = css.slice(css.lastIndexOf('\n', i - 1) + 1, i).trim();
                 const m = /^@layer\s+([\w-]+)$/.exec(head);
-                if (m) return m[1];
+                if (m) return defined(m[1], '@layer name');
             } else depth -= 1;
         }
     }

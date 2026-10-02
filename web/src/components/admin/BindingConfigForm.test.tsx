@@ -23,6 +23,7 @@ import {
 // picker, so this mock is inert until the dev wires it in.
 vi.mock("../../hooks/use-game-search", () => ({ useGameSearch: vi.fn() }));
 import { useGameSearch } from "../../hooks/use-game-search";
+import { at } from "../../test/defined";
 
 function makeBinding(
   overrides: Partial<ChannelBindingDto> = {},
@@ -232,9 +233,9 @@ describe("BindingConfigForm — form submission", () => {
       config: null,
     });
     const inputs = screen.getAllByRole("spinbutton");
-    fireEvent.change(inputs[0], { target: { value: "10" } });
+    fireEvent.change(at(inputs, 0), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    const callArg = onSave.mock.calls[0][1] as {
+    const callArg = at(onSave.mock.calls, 0)[1] as {
       config: { minPlayers: number };
     };
     expect(callArg.config.minPlayers).toBe(10);
@@ -250,7 +251,7 @@ describe("BindingConfigForm — form submission", () => {
       screen.getByRole("checkbox", { name: autoCloseLabel() }),
     );
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    const callArg = onSave.mock.calls[0][1] as {
+    const callArg = at(onSave.mock.calls, 0)[1] as {
       config: { autoClose: boolean };
     };
     expect(callArg.config.autoClose).toBe(false);
@@ -488,7 +489,7 @@ describe("BindingConfigForm — ROK-1416 error surfacing + config prune", () => 
       within(select).getByRole("option", { name: /activity monitor/i }),
     );
     await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
-    const submitted = onSave.mock.calls[0][1] as {
+    const submitted = at(onSave.mock.calls, 0)[1] as {
       config: Record<string, unknown>;
     };
     expect(submitted.config).not.toHaveProperty("allowJustChatting");

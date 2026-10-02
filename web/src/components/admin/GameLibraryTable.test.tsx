@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { GameLibraryTable } from './GameLibraryTable';
+import { at } from '../../test/defined';
 
 // Mock toast
 vi.mock('../../lib/toast', () => ({
@@ -59,7 +60,7 @@ const mockUseAdminGamesArgs = vi.fn();
 /** The search term of the most recent query-hook call. */
 function lastQueriedSearch(): string {
     const calls = mockUseAdminGamesArgs.mock.calls;
-    return calls[calls.length - 1][0];
+    return at(calls, -1)[0];
 }
 
 vi.mock('../../hooks/use-admin-games', () => ({
@@ -362,7 +363,7 @@ describe('GameLibraryTable — Infinite scroll sentinel', () => {
 
         render(<GameLibraryTable />);
         const deleteButtons = screen.getAllByTitle('Remove game');
-        fireEvent.click(deleteButtons[0]);
+        fireEvent.click(at(deleteButtons, 0));
 
         await waitFor(() => {
             expect(mockDeleteGame.mutateAsync).toHaveBeenCalledWith(1);
@@ -376,7 +377,7 @@ describe('GameLibraryTable — Infinite scroll sentinel', () => {
 
         render(<GameLibraryTable />);
         const deleteButtons = screen.getAllByTitle('Remove game');
-        fireEvent.click(deleteButtons[0]);
+        fireEvent.click(at(deleteButtons, 0));
 
         expect(mockDeleteGame.mutateAsync).not.toHaveBeenCalled();
     });
