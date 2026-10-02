@@ -71,8 +71,9 @@ the operator laptop or when external chain is broken.
 ## The CLI
 
 > **Agents:** prefer the `mcp__mcp-rl-fleet__*` MCP tools (see CLAUDE.md
-> "`mcp-rl-fleet`"). Direct SSH as `rl-agent` is closed (ROK-1338 PR-3); the
-> CLI below is the operator-facing path that uses the operator SSH user.
+> "`mcp-rl-fleet`"). Direct SSH as `rl-agent` is prohibited for agents
+> (ROK-1338); the CLI below is the operator-facing path that uses the operator
+> SSH user.
 
 All operator interaction goes through `rl-infra/cli/rl` on the laptop. It SSHes
 to the VM as the operator user (`rl`) and dispatches to shell scripts in
@@ -283,8 +284,8 @@ Long-running orchestrator commands (validate-ci, image builds, env spins) are
 tracked as **tasks** with persistent VM-side state. State survives MCP-server
 restart on the laptop and is independently observable by the operator via
 SSH. Agents observe task state via `mcp__mcp-rl-fleet__rl_task_inspect` /
-`rl_task_status` / `rl_task_logs` — direct SSH as `rl-agent` is closed
-(ROK-1338 PR-3).
+`rl_task_status` / `rl_task_logs` — direct SSH as `rl-agent` is prohibited
+for agents (ROK-1338).
 
 **Directory layout** — `/srv/rl-infra/state/tasks/`:
 
@@ -351,8 +352,8 @@ sweeper handles size at end-of-life. `task-status` caps its returned `log_tail`
 ## Strong debugging
 
 Agent-side paths first, operator-only paths labelled. Direct SSH as `rl-agent`
-is closed (ROK-1338 PR-3) — anything below that requires an SSH session is
-intentionally operator-only.
+is prohibited for agents (ROK-1338) — anything below that requires an SSH
+session is intentionally operator-only.
 
 | Need                        | How                                                                          |
 | --------------------------- | ---------------------------------------------------------------------------- |
@@ -483,9 +484,10 @@ compose-managed services.)
 > closed.
 
 > **Audience:** operator only. This runbook is informational for agents but
-> not actionable by them — there is no agent path back to direct SSH and
-> there shouldn't be. Per ROK-1338 PR-3, agent-side SSH as `rl-agent` is
-> closed by default; the full agent surface lives in `mcp__mcp-rl-fleet__*`.
+> not actionable by them — it is not an agent path to direct SSH and there
+> shouldn't be one. Agents must not SSH as `rl-agent` (ROK-1338); the
+> daemon-level gate below is not applied yet (see the BLOCKED callout above).
+> The full agent surface lives in `mcp__mcp-rl-fleet__*`.
 
 ### Why this exists
 
