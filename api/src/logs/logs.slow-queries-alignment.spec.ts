@@ -115,14 +115,14 @@ describe('Regression: ROK-1266 — slow-queries seed/listing alignment', () => {
       filename: 'slow-queries.log',
       service: 'slow-queries',
     });
-    expect(files[0].sizeBytes).toBeGreaterThan(0);
+    expect(files[0]?.sizeBytes).toBeGreaterThan(0);
   });
 
   it('listing filtered by service="slow-queries" still surfaces the file', async () => {
     await slowQueriesService.appendDigestToLog();
     const filtered = logsService.listLogFiles('slow-queries');
     expect(filtered).toHaveLength(1);
-    expect(filtered[0].service).toBe('slow-queries');
+    expect(filtered[0]?.service).toBe('slow-queries');
   });
 
   it('appendDigestToLog returns false when LOG_DIR is unwritable', async () => {

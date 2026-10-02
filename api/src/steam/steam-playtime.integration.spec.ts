@@ -5,6 +5,7 @@
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { at } from '../common/testing/narrow';
 import {
   updateExistingPlaytime,
   type PlaytimeUpdateEntry,
@@ -78,7 +79,7 @@ function describeBatchPlaytimeUpdate() {
 
   it('should handle null playtime_2weeks', async () => {
     const toUpdate: PlaytimeUpdateEntry[] = [
-      { gameId: gameIds[0], playtimeForever: 500, playtime2weeks: null },
+      { gameId: at(gameIds, 0), playtimeForever: 500, playtime2weeks: null },
     ];
 
     const updated = await updateExistingPlaytime(testApp.db, userId, toUpdate);

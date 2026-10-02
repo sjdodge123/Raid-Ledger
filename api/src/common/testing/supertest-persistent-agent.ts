@@ -52,6 +52,7 @@
 import * as http from 'http';
 import type * as supertest from 'supertest';
 import type TestAgent from 'supertest/lib/agent';
+import { defined } from './narrow';
 
 const HTTP_METHODS = [
   'get',
@@ -86,7 +87,7 @@ export function wrapWithPersistentAgent(
       string,
       (...args: unknown[]) => supertest.Test
     >;
-    const orig = slot[method].bind(agent);
+    const orig = defined(slot[method], `agent.${method}`).bind(agent);
     slot[method] = (...args: unknown[]) => orig(...args).agent(persistent);
   }
   return agent;

@@ -127,10 +127,10 @@ function describeLogsService() {
 
       const result = service.listLogFiles();
       expect(result).toHaveLength(2);
-      expect(result[0].filename).toBe('nginx.log');
-      expect(result[0].service).toBe('nginx');
-      expect(result[1].filename).toBe('api.log');
-      expect(result[1].service).toBe('api');
+      expect(result[0]?.filename).toBe('nginx.log');
+      expect(result[0]?.service).toBe('nginx');
+      expect(result[1]?.filename).toBe('api.log');
+      expect(result[1]?.service).toBe('api');
     });
 
     it('should filter by service when specified', () => {
@@ -146,7 +146,7 @@ function describeLogsService() {
 
       const result = service.listLogFiles('api');
       expect(result).toHaveLength(1);
-      expect(result[0].service).toBe('api');
+      expect(result[0]?.service).toBe('api');
     });
 
     it('should include .log.gz files', () => {
@@ -161,7 +161,7 @@ function describeLogsService() {
 
       const result = service.listLogFiles();
       expect(result).toHaveLength(1);
-      expect(result[0].service).toBe('api');
+      expect(result[0]?.service).toBe('api');
     });
 
     it('should return empty array when directory does not exist', () => {

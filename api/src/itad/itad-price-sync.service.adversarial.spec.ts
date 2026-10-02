@@ -23,6 +23,7 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import type { ItadOverviewGameEntry } from './itad-price.types';
+import { at } from '../common/testing/narrow';
 
 function buildEntry(
   id: string,
@@ -257,7 +258,7 @@ describe('ItadPriceSyncService — adversarial', () => {
 
       await service.syncPricing();
 
-      const logMsg = logSpy.mock.calls[0][0] as string;
+      const logMsg = at(logSpy.mock.calls, 0)[0] as string;
       expect(logMsg).toContain('code=42703');
       expect(logMsg).toContain('detail=Column missing');
       expect(logMsg).toContain('hint=Check spelling');
