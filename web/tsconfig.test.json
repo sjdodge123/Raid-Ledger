@@ -19,7 +19,11 @@
     // ROK-1161 phase 3: specs (*.test.ts(x), src/test/**) still carry 436
     // noUncheckedIndexedAccess errors in 122 files; delete this override once
     // they are fixed. App code is gated by tsconfig.app.json.
-    "noUncheckedIndexedAccess": false
+    "noUncheckedIndexedAccess": false,
+    // ROK-1161 phase 5: specs still carry 43 exactOptionalPropertyTypes errors
+    // in 22 files; delete this override once they are fixed. App code is
+    // gated by tsconfig.app.json.
+    "exactOptionalPropertyTypes": false
   },
   "include": ["src"],
   "exclude": []
