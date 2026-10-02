@@ -109,11 +109,9 @@ describe('StarToggleButton — interaction', () => {
     });
 
     it('does not call onToggle when disabled', async () => {
-        const user = userEvent.setup();
+        const user = userEvent.setup({ pointerEventsCheck: 0 });
         const { onToggle } = renderStar({ disabled: true });
-        await user.click(screen.getByTestId('star-toggle'), {
-            pointerEventsCheck: 0,
-        });
+        await user.click(screen.getByTestId('star-toggle'));
         expect(onToggle).not.toHaveBeenCalled();
     });
 

@@ -13,6 +13,7 @@ function createMockHeartedGame(overrides: Partial<UserHeartedGameDto> = {}): Use
         name: 'Test Game',
         slug: 'test-game',
         coverUrl: null,
+        playtimeSeconds: null,
         ...overrides,
     };
 }

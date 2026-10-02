@@ -33,6 +33,7 @@ function makeGame(over: Partial<TieReadinessGameDto> = {}): TieReadinessGameDto 
         gameName: 'Deep Rock Galactic',
         gameCoverUrl: null,
         voteCount: 4,
+        starCount: 0,
         steamAppId: 548430,
         ownedCount: 7,
         rosterSize: 9,
