@@ -338,7 +338,7 @@ function describeUsersService() {
     });
 
     it('createOrUpdate rejects when the insert returns no row', async () => {
-      mockDb.query.users.findFirst.mockResolvedValue(undefined);
+      (mockDb.query.users.findFirst as jest.Mock).mockResolvedValue(undefined);
       await expect(
         service.createOrUpdate({ discordId: 'd-1', username: 'NewUser' }),
       ).rejects.toThrow(/^Expected .+ to be defined$/);

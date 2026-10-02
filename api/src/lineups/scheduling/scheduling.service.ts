@@ -147,8 +147,7 @@ export class SchedulingService {
       throw new BadRequestException('Cannot suggest a time in the past');
     }
     await assertNoDuplicateSlot(this.db, matchId, proposed);
-    const [slot] = await insertScheduleSlot(this.db, matchId, proposed, 'user');
-    if (!slot) throw new Error('Expected inserted schedule slot to be defined');
+    const slot = await insertScheduleSlot(this.db, matchId, proposed, 'user');
     if (userId) await this.autoVoteForSlot(slot.id, matchId, userId, source);
     this.pollEmbed.fireUpdateEmbed(matchId);
     return { id: slot.id };
