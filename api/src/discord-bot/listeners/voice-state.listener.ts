@@ -30,6 +30,7 @@ import { EphemeralVoiceService } from '../services/ephemeral-voice.service';
 import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { CHANNEL_BINDING_EVENTS } from '../services/channel-binding-events';
+import { traceBindingChanged } from './voice-bind-trace';
 import {
   DEBOUNCE_MS,
   buildDiscordMember,
@@ -184,7 +185,14 @@ export class VoiceStateListener implements OnApplicationShutdown {
    */
   @OnEvent(CHANNEL_BINDING_EVENTS.CHANGED)
   onBindingChanged({ channelId }: { channelId: string }): void {
+    const evicted = this.channelBindingCache.get(channelId)?.value;
     this.channelBindingCache.delete(channelId);
+    traceBindingChanged(
+      this.logger,
+      CHANNEL_BINDING_EVENTS.CHANGED,
+      channelId,
+      evicted,
+    );
   }
 
   onApplicationShutdown(): void {

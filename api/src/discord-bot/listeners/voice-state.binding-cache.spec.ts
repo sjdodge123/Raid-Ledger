@@ -7,6 +7,7 @@
  * ChannelBindingsService and EventEmitterModule are wired so the test covers
  * the emit, the subscription and the eviction together.
  */
+import { Logger } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
 import { VoiceStateListener } from './voice-state.listener';
@@ -112,5 +113,53 @@ describe('VoiceStateListener binding cache — evicted on a binding write', () =
 
     expect(await ctx.resolve()).toEqual(['b-1']);
     expect(ctx.stored).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('VoiceStateListener binding cache — [voice-bind] lines (ROK-1390)', () => {
+  let ctx: Awaited<ReturnType<typeof setup>>;
+  let log: jest.SpyInstance;
+  const SERIES_ROW = { ...row('b-1'), recurrenceGroupId: 'rg-1' };
+
+  const voiceBindLines = () =>
+    log.mock.calls
+      .map(([message]) => String(message))
+      .filter((m) => m.startsWith('[voice-bind]'));
+
+  beforeEach(async () => {
+    ctx = await setup();
+    log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(async () => {
+    log.mockRestore();
+    await ctx.module.close();
+  });
+
+  it('a lookup logs a miss with the guild queried, then a hit, naming each binding', async () => {
+    ctx.stored.mockResolvedValue([SERIES_ROW, row('b-2', 'vc-other')]);
+    await ctx.resolve();
+    await ctx.resolve();
+
+    expect(voiceBindLines()).toEqual([
+      '[voice-bind] resolve ch=vc-1 cache=miss guild=g-1 bindings=[b-1:game-voice-monitor:series=rg-1]',
+      expect.stringMatching(
+        /^\[voice-bind\] resolve ch=vc-1 cache=hit age=\d+ms bindings=\[b-1:game-voice-monitor:series=rg-1\]$/,
+      ),
+    ]);
+  });
+
+  it('a binding-changed event logs the channel and the binding ids it evicted', async () => {
+    ctx.stored.mockResolvedValue([SERIES_ROW]);
+    await ctx.resolve();
+    const emitter = ctx.module.get(EventEmitter2);
+    emitter.emit(CHANNEL_BINDING_EVENTS.CHANGED, { channelId: CH });
+    emitter.emit(CHANNEL_BINDING_EVENTS.CHANGED, { channelId: 'vc-unseen' });
+
+    expect(voiceBindLines()).toEqual([
+      '[voice-bind] resolve ch=vc-1 cache=miss guild=g-1 bindings=[b-1:game-voice-monitor:series=rg-1]',
+      '[voice-bind] event=channel-binding.changed ch=vc-1 evicted=[b-1:game-voice-monitor:series=rg-1]',
+      '[voice-bind] event=channel-binding.changed ch=vc-unseen evicted=none',
+    ]);
   });
 });
