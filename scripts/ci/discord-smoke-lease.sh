@@ -188,7 +188,7 @@ try_slot() {
 # re-run that finds slot 0 free takes slot 0 and leaves slot 1 locked by its
 # own dead attempt until the age backstop — halving the pool for ~2.5h.
 release_earlier_attempts() {
-  local idx ref code holder msg hid hatt
+  local idx ref code holder msg hid hatt current
   for idx in $(seq 0 $(( POOL_SIZE - 1 ))); do
     ref="${NS}/${NAME}/${idx}"
     code="$(api GET "git/ref/${ref}")"
@@ -199,6 +199,15 @@ release_earlier_attempts() {
     [ "$hid" = "$RUN_ID" ] || continue
     case "$hatt" in ""|*[!0-9]*) continue ;; esac
     [ "$hatt" -lt "$RUN_ATTEMPT" ] || continue
+    # Re-read just before the DELETE: a waiter may have taken the slot over since.
+    # GitHub has no conditional ref delete, so this narrows the window but cannot close it.
+    code="$(api GET "git/ref/${ref}")"
+    [ "$code" = 200 ] || continue
+    current="$(jq -r '.object.sha' "$BODY")"
+    if [ "$current" != "$holder" ]; then
+      echo "lease: ${ref} changed hands since it was read (now ${current}); not releasing"
+      continue
+    fi
     code="$(api DELETE "git/refs/${ref}")"
     if [ "$code" = 204 ]; then
       echo "lease: released ${ref}, left by attempt ${hatt} of this run"
@@ -258,6 +267,10 @@ release() {
   echo "::warning::lease: could not release ${ref} (last HTTP $code); waiters take it over once this run completes"
   return 0
 }
+
+# LEASE_LIB_ONLY=1 stops here so scripts/test can source the functions.
+# shellcheck disable=SC2317  # the `exit` runs only when executed, not sourced
+if [ "${LEASE_LIB_ONLY:-0}" = 1 ]; then return 0 2>/dev/null || exit 0; fi
 
 case "${1:-}" in
   acquire) acquire ;;

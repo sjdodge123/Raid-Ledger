@@ -212,6 +212,7 @@ invoke() {
             STUB_CURL_ARGV_FILE="$curl_argv_file" \
             STUB_NODE_ARGV_FILE="$node_argv_file" \
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
+            RL_DEPS_RUNNER_ROOT="/nonexistent-runner-root" \
             RL_WORKSPACE_ROOT="$INVOKE_WORKSPACE_ROOT" \
             PLAYWRIGHT_AUTH_DIR="$INVOKE_AUTH_DIR" \
             NODE_OPTIONS="$INVOKE_NODE_OPTIONS" \
@@ -229,6 +230,7 @@ invoke() {
             STUB_CURL_ARGV_FILE="$curl_argv_file" \
             STUB_NODE_ARGV_FILE="$node_argv_file" \
             RL_DISCORD_LOCK_DIR="/nonexistent-lock-dir" \
+            RL_DEPS_RUNNER_ROOT="/nonexistent-runner-root" \
             bash "$VALIDATE_CI_PATH" "$@" 2>"$err_file"
         ) || INVOKE_RC=$?
     fi
@@ -294,7 +296,7 @@ assert_grep 'for spec in .*src/smoke/\*\.selftest\.ts' \
 # invoked — CI's web job and run_unit_tests both `cd web` first. Unrun tests are
 # not coverage.
 CURRENT_TEST_NAME="AC2: the unit step runs the scripts/smoke helper specs"
-assert_grep 'vitest run --config vitest\.config\.ts scripts/smoke' "$npx_argv_file" "the unit step must run the root-config scripts/smoke specs"
+assert_grep 'vitest run --config vitest\.config\.mts scripts/smoke' "$npx_argv_file" "the unit step must run the root-config scripts/smoke specs"
 
 # The runner recipe. `--fleet --with-e2e` (task de3ead1d639b) died at
 # "Unit tests (no coverage)": ONE in-band jest process walked into the V8 heap

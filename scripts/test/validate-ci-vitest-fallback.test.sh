@@ -184,7 +184,7 @@ smoke_vitest=$(awk '
 if [[ "$smoke_vitest" -eq 1 ]]; then pass; else
     fail "run_smoke_helper_specs must hold exactly one vitest invocation, found $smoke_vitest"
 fi
-assert_grep 'npx vitest run --config vitest\.config\.ts scripts/smoke' "$VALIDATE_CI_PATH" "the smoke-helper step must be pinned to the root config + scripts/smoke path"
+assert_grep 'npx vitest run --config vitest\.config\.mts scripts/smoke' "$VALIDATE_CI_PATH" "the smoke-helper step must be pinned to the root config + scripts/smoke path"
 assert_not_grep 'run_smoke_helper_specs[^\n]*web' "$VALIDATE_CI_PATH" "the smoke-helper step must never target the web suite"
 
 # And the opt-out itself must be a single invocation — not a second chain.
