@@ -117,10 +117,13 @@ async function insertPlanDirectly(
   creatorId: number,
   overrides: Partial<typeof schema.eventPlans.$inferInsert> = {},
 ) {
-  const [plan] = await testApp.db
-    .insert(schema.eventPlans)
-    .values(basePlanValues(creatorId, overrides))
-    .returning();
+  const [plan] = nonEmpty(
+    await testApp.db
+      .insert(schema.eventPlans)
+      .values(basePlanValues(creatorId, overrides))
+      .returning(),
+    'plan',
+  );
   return plan;
 }
 
@@ -142,11 +145,14 @@ async function testPersistAllFields() {
     reminder24hour: true,
   });
 
-  const [retrieved] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
+  const [retrieved] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'retrieved',
+  );
 
   expect(retrieved).toBeDefined();
   expect(retrieved.title).toBe('Persistence Test');
@@ -421,7 +427,7 @@ async function testCreateEventFromPlan() {
     .where(eq(schema.events.id, updated.createdEventId!))
     .limit(1);
   expect(event).toBeDefined();
-  expect(event.title).toBe('Poll Winner Plan');
+  expect(event?.title).toBe('Poll Winner Plan');
 }
 
 async function testTieBreakPicksEarliest() {
@@ -508,7 +514,7 @@ async function testCreatorAutoSignup() {
     .from(schema.eventSignups)
     .where(eq(schema.eventSignups.eventId, updated.createdEventId!));
   expect(signups.length).toBe(1);
-  expect(signups[0].userId).toBe(testApp.seed.adminUser.id);
+  expect(signups[0]?.userId).toBe(testApp.seed.adminUser.id);
 }
 
 async function testSlotConfigPreserved() {
