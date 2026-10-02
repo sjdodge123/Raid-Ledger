@@ -14,7 +14,7 @@ export interface Particle {
     idleTimer?: number;
     lifeTimer?: number;
     maxLife?: number;
-    targetEl?: Element;
+    targetEl?: Element | undefined;
     edgeType?: 'top' | 'bottom' | 'left' | 'right';
     edgeT?: number;
     perpOffset?: number;
@@ -132,8 +132,7 @@ export function placePanelEdgeParticle(p: Particle, cfg: ParticleConfig, element
     const t = Math.random();
     const perp = (Math.random() - 0.5) * 8;
 
-    if (el) p.targetEl = el;
-    else delete p.targetEl;
+    p.targetEl = el ?? undefined;
     p.edgeType = edge;
     p.edgeT = t;
     p.perpOffset = perp;

@@ -21,13 +21,13 @@ interface AttendeePreview {
 interface GameTimeWidgetProps {
     eventStartTime: string;
     eventEndTime: string;
-    eventTitle?: string;
+    eventTitle?: string | undefined;
     gameName?: string | undefined;
     gameSlug?: string | undefined;
-    gameId?: number | null;
+    gameId?: number | null | undefined;
     coverUrl?: string | null | undefined;
-    description?: string | null;
-    creatorUsername?: string | null;
+    description?: string | null | undefined;
+    creatorUsername?: string | null | undefined;
     attendees?: AttendeePreview[] | undefined;
     attendeeCount?: number | undefined;
 }
@@ -44,6 +44,25 @@ interface PreviewBlockMeta {
     attendees?: AttendeePreview[];
     attendeeCount?: number;
     gameId?: number | null;
+}
+
+type PreviewMetaInput = Pick<GameTimeWidgetProps, 'eventTitle' | 'gameName' | 'gameSlug' | 'coverUrl' | 'description' | 'creatorUsername' | 'attendees' | 'attendeeCount' | 'gameId'>;
+
+/** The preview blocks' event metadata; a prop left undefined is omitted rather than carried as an `undefined` key. */
+function toPreviewMeta(p: PreviewMetaInput): PreviewBlockMeta {
+    return {
+        label: p.eventTitle ?? 'This Event',
+        variant: 'selected',
+        ...(p.eventTitle === undefined ? {} : { title: p.eventTitle }),
+        ...(p.gameName === undefined ? {} : { gameName: p.gameName }),
+        ...(p.gameSlug === undefined ? {} : { gameSlug: p.gameSlug }),
+        ...(p.coverUrl === undefined ? {} : { coverUrl: p.coverUrl }),
+        ...(p.description === undefined ? {} : { description: p.description }),
+        ...(p.creatorUsername === undefined ? {} : { creatorUsername: p.creatorUsername }),
+        ...(p.attendees === undefined ? {} : { attendees: p.attendees }),
+        ...(p.attendeeCount === undefined ? {} : { attendeeCount: p.attendeeCount }),
+        ...(p.gameId === undefined ? {} : { gameId: p.gameId }),
+    };
 }
 
 function collectDayHours(startTime: string, endTime: string): Map<number, number[]> {
@@ -165,19 +184,7 @@ function useGameTimeWidgetData(props: GameTimeWidgetProps) {
     const hasOverlap = useMemo(() => checkGameTimeOverlap(editor.slots, eventStartTime, eventEndTime), [editor.slots, eventStartTime, eventEndTime]);
     const previewBlocks = useMemo<GameTimePreviewBlock[]>(() => {
         const dayHours = collectDayHours(eventStartTime, eventEndTime);
-        const meta: PreviewBlockMeta = {
-            label: eventTitle ?? 'This Event',
-            variant: 'selected',
-            title: eventTitle,
-            gameName,
-            gameSlug,
-            coverUrl,
-            description,
-            creatorUsername,
-            attendees,
-            attendeeCount,
-            gameId,
-        };
+        const meta = toPreviewMeta({ eventTitle, gameName, gameSlug, coverUrl, description, creatorUsername, attendees, attendeeCount, gameId });
         return buildPreviewBlocks(dayHours, meta);
     }, [eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, gameId, coverUrl, description, creatorUsername, attendees, attendeeCount]);
     const eventTimeLabel = useMemo(() => formatTimeLabel(eventStartTime, eventEndTime), [eventStartTime, eventEndTime]);

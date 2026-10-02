@@ -103,12 +103,12 @@ function useHandleAssign(props: AssignmentPopupProps, state: ReturnType<typeof u
     }, [unassigned, isBrowseAll, onAssignToSlot, availableSlots, gameId, isMMO, enterSelectionStep, state]);
 }
 
-/** Builds selection confirm/skip and slot-pick handlers */
 /** The character / role picked in the selection step, with no key for what was not picked. */
 function assignSelection(characterId: string | null, role: RosterRole | null): { characterId?: string; role?: RosterRole } {
     return { ...(characterId === null ? {} : { characterId }), ...(role === null ? {} : { role }) };
 }
 
+/** Builds selection confirm/skip and slot-pick handlers */
 function useSelectionHandlers(props: AssignmentPopupProps, state: ReturnType<typeof useSelectionState>) {
     const { onAssign, onAssignToSlot, availableSlots, slotRole } = props;
     const isBrowseAll = slotRole === null;

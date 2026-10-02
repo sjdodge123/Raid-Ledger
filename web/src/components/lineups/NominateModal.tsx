@@ -75,7 +75,7 @@ function SearchResultItem({ game, onSelect, participantCount }: {
 function SearchResults({ results, onSelect, participantCount }: {
     results: SearchResultGame[];
     onSelect: (g: SelectedGame) => void;
-    participantCount?: number;
+    participantCount?: number | undefined;
 }): JSX.Element {
     return (
         <div className="space-y-1 max-h-60 overflow-y-auto">

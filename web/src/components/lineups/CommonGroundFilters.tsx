@@ -105,11 +105,6 @@ function useMaxPlayersIntentCapture(
     }, [participantCount, filters, onChange, suppressAutoSeed]);
 }
 
-/**
- * The filter body for the Common Ground panel. Stays mounted while the panel
- * is collapsed (the inline panel and the BottomSheet both keep children in
- * the DOM), so the ROK-1255 auto-seed runs on entry at every width.
- */
 /** `filters` with a numeric filter set, or its key removed when `value` is undefined (filter off). */
 function withNumericFilter(
     filters: CommonGroundParams, key: 'maxPlayers' | 'minOnlineCoop', value: number | undefined,
@@ -120,6 +115,11 @@ function withNumericFilter(
     return next;
 }
 
+/**
+ * The filter body for the Common Ground panel. Stays mounted while the panel
+ * is collapsed (the inline panel and the BottomSheet both keep children in
+ * the DOM), so the ROK-1255 auto-seed runs on entry at every width.
+ */
 export function CommonGroundFilters({ filters, onChange, participantCount, suppressAutoSeed, coopDataAvailable }: CommonGroundFiltersProps): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),

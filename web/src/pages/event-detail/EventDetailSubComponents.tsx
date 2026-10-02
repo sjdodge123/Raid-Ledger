@@ -15,8 +15,14 @@ import type { useEventDetailHandlers } from './use-event-detail-handlers';
 
 /** Omits an absent character name instead of carrying the key as `undefined`. */
 type AttendeeCharacter = { gameId: number | string; name?: string; avatarUrl: string | null };
-function toAttendeeCharacter({ gameId, name, avatarUrl }: { gameId: number | string; name?: string | undefined; avatarUrl: string | null }): AttendeeCharacter {
+type RawAttendeeCharacter = { gameId: number | string; name?: string | undefined; avatarUrl: string | null };
+function toAttendeeCharacter({ gameId, name, avatarUrl }: RawAttendeeCharacter): AttendeeCharacter {
     return { gameId, avatarUrl, ...(name === undefined ? {} : { name }) };
+}
+
+/** `{ characters }` when the user has a character list, `{}` otherwise, so no key carries `undefined`. */
+function withCharacters(chars: RawAttendeeCharacter[] | undefined): { characters?: AttendeeCharacter[] } {
+    return chars ? { characters: chars.map(toAttendeeCharacter) } : {};
 }
 
 function mapGameTimeAttendees(roster: EventRosterDto | undefined) {
@@ -26,8 +32,7 @@ function mapGameTimeAttendees(roster: EventRosterDto | undefined) {
         avatar: s.user.avatar ?? null,
         discordId: s.user.discordId ?? null,
         customAvatarUrl: s.user.customAvatarUrl ?? null,
-        characters: (s.user.characters as Array<{ gameId: number | string; name?: string; avatarUrl: string | null }> | undefined)
-            ?.map(toAttendeeCharacter),
+        ...withCharacters(s.user.characters as RawAttendeeCharacter[] | undefined),
     }));
 }
 
@@ -254,8 +259,7 @@ export function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortF
         ? [...roster!.signups].sort(sortFn).slice(0, 5).map(s => ({
             id: s.user.id, username: s.user.username, avatar: s.user.avatar ?? null,
             discordId: s.user.discordId ?? null, customAvatarUrl: s.user.customAvatarUrl ?? null,
-            characters: (s.user.characters as Array<{ gameId: number | string; name?: string; avatarUrl: string | null }> | undefined)
-                ?.map(toAttendeeCharacter),
+            ...withCharacters(s.user.characters as RawAttendeeCharacter[] | undefined),
         })) : null;
 
     return (
