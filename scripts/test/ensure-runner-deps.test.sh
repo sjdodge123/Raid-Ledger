@@ -69,6 +69,8 @@ mkdir -p "$STUB_BIN"
 cat >"$STUB_BIN/npm" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >>"$NPM_CALLS"
+# The install dir goes to its OWN file: ci_calls counts npm.calls lines.
+[ -n "${NPM_CWD:-}" ] && pwd >>"$NPM_CWD"
 case "${STUB_NPM_MODE:-ok}" in
   ok|rewrite)
     # Like real `npm ci`: wipe node_modules, then lay down a fresh tree. A
@@ -209,6 +211,90 @@ assert_eq 0 "$RC" "exit code"
 assert_eq 0 "$(ci_calls)" "npm ci calls"
 assert_absent_file "$MARKER" "auth-seam marker"
 assert_absent_file "$CASE_DIR/lock" "auth-seam lock"
+
+# ===== SUBDIR mode (TDB:2088): a standalone package such as tools/test-bot =====
+
+# new_sub_case <name>: new_case plus SUB_DIR=ROOT/tools/test-bot holding its
+# own package-lock.json.
+new_sub_case() {
+    new_case "$1"
+    SUB="tools/test-bot"
+    SUB_DIR="$ROOT/$SUB"
+    SUB_MARKER="$SUB_DIR/node_modules/.rl-lockfile-sha256"
+    mkdir -p "$SUB_DIR"
+    printf '{"name":"sub-fixture","lockfileVersion":3,"rev":1}\n' >"$SUB_DIR/package-lock.json"
+    : >"$CASE_DIR/npm.cwd"
+}
+
+# seed_sub_install [marker]: SUB_DIR/node_modules as an earlier install left it.
+seed_sub_install() {
+    mkdir -p "$SUB_DIR/node_modules"
+    : >"$SUB_DIR/node_modules/.package-lock.json"
+    touch -t 200001010000 "$SUB_DIR/node_modules/.package-lock.json"
+    if [ $# -gt 0 ]; then printf '%s\n' "$1" >"$SUB_MARKER"; fi
+}
+
+# run_helper_sub <runner|laptop> <ok|fail|noop|rewrite> [subdir, default $SUB]
+run_helper_sub() {
+    local runner_root="$CASE_DIR/not-root"
+    if [ "$1" = runner ]; then runner_root="$ROOT"; fi
+    OUT=$(PATH="$STUB_BIN:$PATH" RL_DEPS_RUNNER_ROOT="$runner_root" RL_WORKSPACE_ROOT="$CASE_DIR/not-root" \
+        RL_NPM_CI_LOCK="$CASE_DIR/lock" STUB_NPM_MODE="$2" NPM_CALLS="$CASE_DIR/npm.calls" \
+        NPM_CWD="$CASE_DIR/npm.cwd" bash "$HELPER" "$ROOT" "${3:-$SUB}" 2>&1)
+    RC=$?
+}
+
+sub_marker() { cat "$SUB_MARKER" 2>/dev/null || echo "<no marker>"; }
+
+new_sub_case "(s1) runner, SUBDIR marker matches its lockfile: no install"
+seed_install "$(sha_of "$ROOT/package-lock.json")"
+seed_sub_install "$(sha_of "$SUB_DIR/package-lock.json")"
+run_helper_sub runner ok
+assert_eq 0 "$RC" "exit code"
+assert_eq 0 "$(ci_calls)" "npm ci calls"
+
+new_sub_case "(s2) runner, SUBDIR lockfile changed: one npm ci IN SUBDIR, its marker re-stamped"
+seed_install "$(sha_of "$ROOT/package-lock.json")"
+seed_sub_install "$(sha_of "$SUB_DIR/package-lock.json")"
+printf '{"name":"sub-fixture","lockfileVersion":3,"rev":2}\n' >"$SUB_DIR/package-lock.json"
+run_helper_sub runner ok
+assert_eq 0 "$RC" "exit code"
+assert_eq 1 "$(ci_calls)" "npm ci calls after a SUBDIR lockfile change"
+assert_eq "$SUB_DIR" "$(cat "$CASE_DIR/npm.cwd")" "npm ci must run in ROOT/SUBDIR"
+assert_eq "$(sha_of "$SUB_DIR/package-lock.json")" "$(sub_marker)" "SUBDIR marker after re-install"
+
+new_sub_case "(s3) runner, a SUBDIR install and a root install never touch each other's marker"
+seed_install "0000root"
+seed_sub_install "0000sub"
+run_helper_sub runner ok
+assert_eq 1 "$(ci_calls)" "npm ci calls for the SUBDIR install"
+assert_eq "0000root" "$(marker)" "root marker after a SUBDIR install"
+assert_eq "$(sha_of "$SUB_DIR/package-lock.json")" "$(sub_marker)" "SUBDIR marker after its install"
+run_helper runner ok
+assert_eq 2 "$(ci_calls)" "npm ci calls after the root install"
+assert_eq "$(sha_of "$ROOT/package-lock.json")" "$(marker)" "root marker after its install"
+assert_eq "$(sha_of "$SUB_DIR/package-lock.json")" "$(sub_marker)" "SUBDIR marker after a root install"
+
+new_sub_case "(s4) laptop, SUBDIR node_modules present: no install, no marker"
+seed_sub_install
+run_helper_sub laptop ok
+assert_eq 0 "$RC" "exit code"
+assert_eq 0 "$(ci_calls)" "npm ci calls"
+assert_absent_file "$SUB_MARKER" "laptop SUBDIR marker"
+
+new_sub_case "(s5) laptop, SUBDIR node_modules missing: one npm ci in SUBDIR, no marker"
+run_helper_sub laptop ok
+assert_eq 0 "$RC" "exit code"
+assert_eq 1 "$(ci_calls)" "npm ci calls"
+assert_eq "$SUB_DIR" "$(cat "$CASE_DIR/npm.cwd")" "npm ci must run in ROOT/SUBDIR"
+assert_absent_file "$SUB_MARKER" "laptop SUBDIR marker"
+
+new_sub_case "(s6) an invalid SUBDIR exits 1 without installing"
+run_helper_sub runner ok "../x"
+assert_eq 1 "$RC" "exit code for SUBDIR ../x"
+run_helper_sub runner ok "tools/missing"
+assert_eq 1 "$RC" "exit code for a missing SUBDIR"
+assert_eq 0 "$(ci_calls)" "npm ci calls"
 
 echo
 echo "--- $CURRENT_TEST_FILE: $TEST_PASS_COUNT pass, $TEST_FAIL_COUNT fail ---"

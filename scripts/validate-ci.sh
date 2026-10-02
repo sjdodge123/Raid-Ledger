@@ -728,21 +728,23 @@ run_shell_parse_check() {
 # coverage is the Discord smoke suite, gated separately).
 # tools/test-bot is a standalone package, NOT an npm workspace, so the root
 # `npm install` (and the fleet runner image's baked install) does NOT cover it.
-# On a fresh fleet runner its node_modules are absent and anything that imports
-# from it dies at load (ERR_MODULE_NOT_FOUND: @discordjs/voice). NO-OP when
-# node_modules already exists (laptop runs and warm runners pay nothing).
-# Prefer `npm ci` (lockfile-exact); fall back to `npm install` on lockfile drift.
+# Without its node_modules anything that imports from it dies at load
+# (ERR_MODULE_NOT_FOUND: @discordjs/voice). scripts/ci/ensure-runner-deps.sh
+# with SUBDIR tools/test-bot installs it under the same lock as the root
+# install: on a laptop only when node_modules is missing; on a fleet runner
+# (where node_modules survives between claims) also whenever its
+# package-lock.json changed since the last install. Never wrap that call in a
+# second flock: the helper takes the shared lock itself. If `npm ci` fails
+# (lockfile drift) we fall back to `npm install` here, outside the helper, and
+# write no marker, so the next run retries until the lockfile is fixed.
 #
 # ROK-1466: shared by BOTH consumers — the Discord smoke step and the render-rule
 # self-test in run_tools_tests. The self-test shipped without it and would have
 # died at import on the first fresh runner.
 _ensure_test_bot_deps() {
-  [[ -d "$REPO_ROOT/tools/test-bot/node_modules" ]] && return 0
-  echo -e "${YELLOW}tools/test-bot/node_modules missing — installing companion-bot deps...${NC}"
-  if ! (cd "$REPO_ROOT/tools/test-bot" && npm ci); then
-    echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
-    (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
-  fi
+  bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" tools/test-bot && return 0
+  echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
+  (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
 }
 
 # ROK-1160: `scripts/*.spec.mjs` are plain node:test specs (the restore-drill
