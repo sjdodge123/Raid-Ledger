@@ -19,7 +19,7 @@ import { findMatchById } from '../lineups-match-query.helpers';
 import { findLineupPollMeta } from './scheduling-query.helpers';
 import {
   findLeadingFutureSlot,
-  type LeadingSlot,
+  type SlotWithYesCount,
 } from './scheduling-poll-expiry.helpers';
 import {
   countPollMembers,
@@ -101,7 +101,7 @@ const POLL: NudgePoll = {
   inDeadlineHandoff: false,
 };
 
-const LEADER: LeadingSlot = {
+const LEADER: SlotWithYesCount = {
   slotId: SLOT_ID,
   proposedTime: '2026-10-01T19:00:00.000Z',
   voteCount: 3,
@@ -115,7 +115,7 @@ const LEADER: LeadingSlot = {
  * passed"). A literal date would silently turn the whole named-slot section
  * red the day it went past; the leader path never looks at the clock, so
  * `LEADER` can stay a fixed instant. */
-const OTHER_SLOT: LeadingSlot = {
+const OTHER_SLOT: SlotWithYesCount = {
   slotId: OTHER_SLOT_ID,
   proposedTime: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
   voteCount: 0,
