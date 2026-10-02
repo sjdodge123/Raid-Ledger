@@ -14,6 +14,7 @@
  */
 import { groupRowsByConnectedKeys } from './games-dedup-union-find.helpers';
 import type { GameRow } from './games-dedup-audit.helpers';
+import { at } from '../common/testing/narrow';
 
 function row(
   partial: Partial<GameRow> & { id: number; name: string },
@@ -46,13 +47,13 @@ describe('Regression: ROK-1287 — strongestSharedKey determinism', () => {
     const permutations: GameRow[][] = [
       [...baseRows],
       [...baseRows].reverse(),
-      [baseRows[2], baseRows[0], baseRows[3], baseRows[1]],
+      [at(baseRows, 2), at(baseRows, 0), at(baseRows, 3), at(baseRows, 1)],
     ];
     const matchKeys = permutations.map((rows) => {
       const groups = groupRowsByConnectedKeys(rows);
       expect(groups).toHaveLength(1);
       expect(groups[0]?.matchType).toBe('igdb');
-      return groups[0].matchKey;
+      return at(groups, 0).matchKey;
     });
     expect(new Set(matchKeys).size).toBe(1);
     // Lowest igdb id is preferred under numeric sort.
@@ -63,7 +64,7 @@ describe('Regression: ROK-1287 — strongestSharedKey determinism', () => {
     const matchKeys: string[] = [];
     for (let i = 0; i < 50; i++) {
       const groups = groupRowsByConnectedKeys([...baseRows]);
-      matchKeys.push(groups[0].matchKey);
+      matchKeys.push(at(groups, 0).matchKey);
     }
     expect(new Set(matchKeys).size).toBe(1);
     expect(matchKeys[0]).toBe('111');
@@ -100,7 +101,7 @@ describe('Regression: ROK-1287 — strongestSharedKey determinism', () => {
     // selection at the strongest tier.
     expect(forward).toHaveLength(1);
     expect(reversed).toHaveLength(1);
-    expect(forward[0].matchType).toBe(reversed[0].matchType);
-    expect(forward[0].matchKey).toBe(reversed[0].matchKey);
+    expect(at(forward, 0).matchType).toBe(at(reversed, 0).matchType);
+    expect(at(forward, 0).matchKey).toBe(at(reversed, 0).matchKey);
   });
 });
