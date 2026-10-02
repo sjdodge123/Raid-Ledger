@@ -447,12 +447,14 @@ describe('mergeAndDeleteDuplicates — binding-change listener', () => {
     expect(result).toEqual({ merged: 1, errors: [] });
     warn.mockRestore();
   });
+});
 
+describe('mergeAndDeleteDuplicates — nothing to announce', () => {
   it('stays silent for a group whose losers hold no bindings', async () => {
-    const quietDb = createDrizzleMock();
+    const listener = jest.fn();
 
     await mergeAndDeleteDuplicates(
-      quietDb as never,
+      createDrizzleMock() as never,
       [makeGroup(1, [2])],
       listener,
     );
@@ -461,6 +463,8 @@ describe('mergeAndDeleteDuplicates — binding-change listener', () => {
   });
 
   it('issues no binding read when no listener is passed', async () => {
+    const mockDb = createDrizzleMock();
+
     await mergeAndDeleteDuplicates(mockDb as never, [makeGroup(1, [2])]);
 
     expect(bindingReads(mockDb)).toEqual([]);
