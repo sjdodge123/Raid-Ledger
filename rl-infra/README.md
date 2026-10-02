@@ -441,13 +441,23 @@ Runner containers (per slot) auto-install these via `rl-infra/runner/Dockerfile`
   `gnupg`, `ca-certificates`.
 
 After changing `rl-infra/runner/Dockerfile`, rebuild the runner image on
-the VM:
+the VM in two steps:
 
-```bash
-cd /srv/rl-infra
-docker compose build runner-1 runner-2
-docker compose up -d
-```
+1. From the laptop, sync the change to the VM: `./rl-infra/deploy.sh`. It
+   rsyncs `rl-infra/` to `/srv/rl-infra` and does NOT rebuild the runners
+   (it only rebuilds and restarts `gc-sweeper`).
+2. On the VM, and only when `rl_status` shows no claims and
+   `heavy_running=0`:
+
+   ```bash
+   cd /srv/rl-infra && docker compose build runner-1 && docker compose --profile extra-slots up -d runner-1 runner-2 runner-3 runner-4
+   ```
+
+All four runners share the image `rl-infra/runner:latest` (the
+`x-runner-base` anchor in `docker-compose.yml`), so building `runner-1`
+builds it for all of them; `runner-3`/`runner-4` sit behind
+`profiles: ["extra-slots"]`, so without `--profile extra-slots` they keep
+running the old image.
 
 (This is an operator-action: agents don't have permission to restart
 compose-managed services.)
