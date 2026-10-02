@@ -63,7 +63,8 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 
 `web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
 `bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`
-and `hover:bg-amber-500/10` are its two listed known gaps.
+and `hover:bg-amber-500/10` are its two listed known gaps. The same spec fails if a quest-log `!important`
+border rule reaches an `input`, `select` or `textarea`, which would hide the `aria-invalid` danger border.
 
 Only the hues listed at `:739-762` get the tint treatment — `red`, `amber`, `emerald`,
 `green`, `yellow`, `indigo`, `cyan`. A `bg-blue-500/10` or `bg-purple-500/10` surface has

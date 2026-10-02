@@ -573,6 +573,12 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   WCAG 1.4.11's 3:1 on `bg-panel` in both families (4.20:1 dark, 3.51:1 light; /50 measured 2.48:1 and
   2.09:1). Buttons add `ring-offset-2 ring-offset-surface`. The global `*:focus-visible` outline in `index.css`
   (for anything without its own ring) is `var(--color-success)` too — never a hex.
+- **quest-log restyles controls with its own rules**, not the card rule. Every control carries `bg-panel`,
+  and quest-log's `[class*="bg-panel"]` card rule forces a parchment border with `!important`, so that rule
+  excludes `input`, `select` and `textarea` (inside `:where()`, adding no specificity). Controls take
+  quest-log's input rules instead: parchment fill, `border-edge`, a `--ql-gold` border on focus, and the
+  danger border while `aria-invalid`. `web/src/styles/light-fill.guard.test.ts` fails if any quest-log
+  `!important` border rule reaches a control again (TDB:1888).
 - **`text-base` below `lg`** (16px stops iOS Safari zooming on focus), `lg:text-sm` above — the §4.18 split,
   not `sm:`/`md:`. Every control is 44px below `lg`; the only compact size (`fieldSize="sm"`, `size="sm"`)
   applies from `lg` up.
