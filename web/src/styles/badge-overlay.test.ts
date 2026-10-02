@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { at } from '../test/defined';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -26,7 +27,7 @@ function extractBadgeOverlayBlock(): string {
     // Gather all consecutive lines that are part of the badge-overlay block
     const blockLines: string[] = [];
     for (let i = startIdx; i < lines.length; i++) {
-        const line = lines[i];
+        const line = at(lines, i);
         // Stop when we hit the next CSS section comment
         if (i > startIdx && line.startsWith('/*') && !line.includes('badge-overlay') && !line.includes('Badge overlay')) {
             break;

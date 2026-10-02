@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { composite, contrastRatio, stripComments } from './wcag-contrast';
@@ -35,11 +36,11 @@ interface Fill {
 function lightAmberFills(): Map<string, Fill> {
     const fills = new Map<string, Fill>();
     for (const [, group, hover, alpha, raw] of css.matchAll(FILL_RULE)) {
-        const names = parseSchemeGroup(group);
+        const names = parseSchemeGroup(defined(group, 'scheme group'));
         if (!names || names.length !== LIGHT.length || !LIGHT.every((n) => names.includes(n))) continue;
-        const [r, g, b, a] = raw.split(',').map((n) => Number(n.trim()));
-        const rgb = `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`;
-        fills.set(`${hover ? 'hover:' : ''}bg-amber-500/${alpha}`, { rgb, alpha: a });
+        const [r, g, b, a] = defined(raw, 'rgba channels').split(',').map((n) => Number(n.trim()));
+        const rgb = `#${[r, g, b].map((c) => defined(c, 'rgb channel').toString(16).padStart(2, '0')).join('')}`;
+        fills.set(`${hover ? 'hover:' : ''}bg-amber-500/${alpha}`, { rgb, alpha: defined(a, 'alpha channel') });
     }
     return fills;
 }
@@ -144,8 +145,9 @@ const IMPORTANT_BORDER =
 
 /** Every quest-log selector whose rule forces a border colour with `!important`. */
 const QL_IMPORTANT_BORDERS = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
-    .filter(([, sel, body]) => sel.includes('[data-variant="quest-log"]') && IMPORTANT_BORDER.test(body))
-    .flatMap(([, sel, body]) => splitSelectors(sel.split(';').pop() ?? '').map((s) => ({ sel: s, body })));
+    .map(([, sel, body]) => ({ sel: defined(sel, 'rule selector'), body: defined(body, 'rule body') }))
+    .filter(({ sel, body }) => sel.includes('[data-variant="quest-log"]') && IMPORTANT_BORDER.test(body))
+    .flatMap(({ sel, body }) => splitSelectors(sel.split(';').pop() ?? '').map((s) => ({ sel: s, body })));
 
 /** A form control rendered the way the primitives render it, inside the quest-log variant. */
 function questLogControl(tag: 'input' | 'select' | 'textarea'): Element {
@@ -172,7 +174,7 @@ const CONTROLS = ['input', 'select', 'textarea'] as const;
 describe('quest-log invalid form controls (TDB:1888)', () => {
     const FOCUS = /\[data-variant="quest-log"\]\s+input:focus/.exec(css);
     const INVALID = [...css.matchAll(/(\[data-variant="quest-log"\][^{}]*\[aria-invalid="true"\][^{}]*)\{([^}]*)\}/g)];
-    const DANGER = INVALID.find(([, , body]) => /border-color:\s*var\(--color-danger\)/.test(body));
+    const DANGER = INVALID.find(([, , body]) => /border-color:\s*var\(--color-danger\)/.test(defined(body, 'rule body')));
 
     it('an aria-invalid rule paints input, select and textarea with the danger border', () => {
         expect(DANGER?.[1], 'no [data-variant="quest-log"] [aria-invalid="true"] rule sets border-color: var(--color-danger)').toBeDefined();

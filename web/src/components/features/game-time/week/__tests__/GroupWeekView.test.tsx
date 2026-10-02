@@ -100,8 +100,8 @@ describe('GroupWeekView — marks', () => {
         expect(blocks[0]).toHaveTextContent('Raid night');
         expect(blocks[0]).toHaveAttribute('data-day', String(WED));
         expect(blocks[0]).toHaveAttribute('data-start-hour', '19');
-        expect(blocks[0].className).toContain('pointer-events-none');
-        expect(blocks[0].style.height).toBe(`${3 * 40 - 4}px`);
+        expect(blocks[0]?.className).toContain('pointer-events-none');
+        expect(blocks[0]?.style.height).toBe(`${3 * 40 - 4}px`);
         fireEvent.click(cell(WED, 20));
         expect(props.onPick).toHaveBeenCalledWith(WED, 20);
     });

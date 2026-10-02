@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { at } from '../test/defined';
 import { initPerformanceMonitoring } from './performance';
 
 /**
@@ -65,38 +66,38 @@ describe('initPerformanceMonitoring — part 1', () => {
 
     it('FCP observer watches paint type with buffered:true', () => {
         initPerformanceMonitoring();
-        const fcpObserver = observerInstances[0];
+        const fcpObserver = at(observerInstances, 0);
         expect(fcpObserver.observeOptions).toEqual({ type: 'paint', buffered: true });
     });
 
     it('LCP observer watches largest-contentful-paint type with buffered:true', () => {
         initPerformanceMonitoring();
-        const lcpObserver = observerInstances[1];
+        const lcpObserver = at(observerInstances, 1);
         expect(lcpObserver.observeOptions).toEqual({ type: 'largest-contentful-paint', buffered: true });
     });
 
     it('CLS observer watches layout-shift type with buffered:true', () => {
         initPerformanceMonitoring();
-        const clsObserver = observerInstances[2];
+        const clsObserver = at(observerInstances, 2);
         expect(clsObserver.observeOptions).toEqual({ type: 'layout-shift', buffered: true });
     });
 
     it('TTFB observer watches navigation type with buffered:true', () => {
         initPerformanceMonitoring();
-        const navObserver = observerInstances[3];
+        const navObserver = at(observerInstances, 3);
         expect(navObserver.observeOptions).toEqual({ type: 'navigation', buffered: true });
     });
 
     it('FCP observer disconnects after processing first-contentful-paint', () => {
         initPerformanceMonitoring();
-        const fcpObserver = observerInstances[0];
+        const fcpObserver = at(observerInstances, 0);
         fcpObserver.trigger([{ name: 'first-contentful-paint', startTime: 1200, entryType: 'paint' } as PerformanceEntry]);
         expect(fcpObserver.disconnected).toBe(true);
     });
 
     it('FCP observer ignores non-FCP paint entries', () => {
         initPerformanceMonitoring();
-        const fcpObserver = observerInstances[0];
+        const fcpObserver = at(observerInstances, 0);
         // Trigger with a non-FCP paint entry
         fcpObserver.trigger([{ name: 'first-paint', startTime: 800, entryType: 'paint' } as PerformanceEntry]);
         // Should NOT disconnect since it only disconnects on first-contentful-paint
@@ -119,7 +120,7 @@ describe('initPerformanceMonitoring — part 2', () => {
 
     it('TTFB observer disconnects after navigation entry with positive TTFB', () => {
         initPerformanceMonitoring();
-        const navObserver = observerInstances[3];
+        const navObserver = at(observerInstances, 3);
         navObserver.trigger([
             {
                 entryType: 'navigation',
@@ -135,7 +136,7 @@ describe('initPerformanceMonitoring — part 2', () => {
     it('TTFB observer skips entry when TTFB is zero or negative', () => {
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         initPerformanceMonitoring();
-        const navObserver = observerInstances[3];
+        const navObserver = at(observerInstances, 3);
         navObserver.trigger([
             {
                 entryType: 'navigation',
@@ -152,7 +153,7 @@ describe('initPerformanceMonitoring — part 2', () => {
 
     it('LCP and CLS report on visibilitychange to hidden', () => {
         initPerformanceMonitoring();
-        const lcpObserver = observerInstances[1];
+        const lcpObserver = at(observerInstances, 1);
 
         // Trigger an LCP entry to set lcpValue
         lcpObserver.trigger([{ startTime: 2000, entryType: 'largest-contentful-paint', name: 'lcp' } as PerformanceEntry]);
@@ -182,7 +183,7 @@ describe('initPerformanceMonitoring — part 3', () => {
 
     it('CLS accumulates layout shift values without recent input', () => {
         initPerformanceMonitoring();
-        const clsObserver = observerInstances[2];
+        const clsObserver = at(observerInstances, 2);
 
         // Trigger multiple layout shift entries
         clsObserver.trigger([
@@ -197,7 +198,7 @@ describe('initPerformanceMonitoring — part 3', () => {
     it('CLS ignores layout shifts with recent input', () => {
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
         initPerformanceMonitoring();
-        const clsObserver = observerInstances[2];
+        const clsObserver = at(observerInstances, 2);
 
         // Trigger with hadRecentInput = true (should be ignored)
         clsObserver.trigger([
@@ -302,7 +303,7 @@ describe('rate function (via initPerformanceMonitoring integration)', () => {
         vi.stubGlobal('import', { meta: { env: { DEV: true } } });
 
         initPerformanceMonitoring();
-        const fcpObserver = observerInstances[0];
+        const fcpObserver = at(observerInstances, 0);
         fcpObserver.trigger([{ name: 'first-contentful-paint', startTime: 1800, entryType: 'paint' } as PerformanceEntry]);
 
         expect(consoleSpy).toHaveBeenCalledWith(
@@ -316,7 +317,7 @@ describe('rate function (via initPerformanceMonitoring integration)', () => {
         const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
         initPerformanceMonitoring();
-        const navObserver = observerInstances[3];
+        const navObserver = at(observerInstances, 3);
         navObserver.trigger([
             {
                 entryType: 'navigation',

@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { at } from '../test/defined';
 import React from 'react';
 import { useKeyboardNav } from './use-keyboard-nav';
 
@@ -49,7 +50,7 @@ describe('useKeyboardNav — part 1', () => {
         it('ArrowDown moves focus to next item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[0].focus();
+            at(items, 0).focus();
 
             const { result } = renderHook(() => useKeyboardNav());
             const event = makeKeyboardEvent('ArrowDown', container);
@@ -62,7 +63,7 @@ describe('useKeyboardNav — part 1', () => {
         it('ArrowDown wraps from last item to first', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[2].focus();
+            at(items, 2).focus();
 
             const { result } = renderHook(() => useKeyboardNav());
             const event = makeKeyboardEvent('ArrowDown', container);
@@ -74,7 +75,7 @@ describe('useKeyboardNav — part 1', () => {
         it('ArrowUp moves focus to previous item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[2].focus();
+            at(items, 2).focus();
 
             const { result } = renderHook(() => useKeyboardNav());
             const event = makeKeyboardEvent('ArrowUp', container);
@@ -87,7 +88,7 @@ describe('useKeyboardNav — part 1', () => {
         it('ArrowUp wraps from first item to last', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[0].focus();
+            at(items, 0).focus();
 
             const { result } = renderHook(() => useKeyboardNav());
             const event = makeKeyboardEvent('ArrowUp', container);
@@ -99,7 +100,7 @@ describe('useKeyboardNav — part 1', () => {
         it('ArrowLeft and ArrowRight have no effect in vertical mode', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[0].focus();
+            at(items, 0).focus();
 
             const { result } = renderHook(() => useKeyboardNav({ orientation: 'vertical' }));
 
@@ -124,7 +125,7 @@ describe('useKeyboardNav — part 2', () => {
         it('ArrowRight moves focus to next item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[0].focus();
+            at(items, 0).focus();
 
             const { result } = renderHook(() => useKeyboardNav({ orientation: 'horizontal' }));
             const event = makeKeyboardEvent('ArrowRight', container);
@@ -136,7 +137,7 @@ describe('useKeyboardNav — part 2', () => {
         it('ArrowLeft moves focus to previous item', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[2].focus();
+            at(items, 2).focus();
 
             const { result } = renderHook(() => useKeyboardNav({ orientation: 'horizontal' }));
             const event = makeKeyboardEvent('ArrowLeft', container);
@@ -148,7 +149,7 @@ describe('useKeyboardNav — part 2', () => {
         it('ArrowRight wraps from last to first', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[2].focus();
+            at(items, 2).focus();
 
             const { result } = renderHook(() => useKeyboardNav({ orientation: 'horizontal' }));
             const event = makeKeyboardEvent('ArrowRight', container);
@@ -160,7 +161,7 @@ describe('useKeyboardNav — part 2', () => {
         it('ArrowUp and ArrowDown have no effect in horizontal mode', () => {
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[0].focus();
+            at(items, 0).focus();
 
             const { result } = renderHook(() => useKeyboardNav({ orientation: 'horizontal' }));
 
@@ -181,7 +182,7 @@ describe('useKeyboardNav — part 3', () => {
         it('Home key moves focus to first item', () => {
             const container = createContainer(4);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[3].focus();
+            at(items, 3).focus();
 
             const { result } = renderHook(() => useKeyboardNav());
             const event = makeKeyboardEvent('Home', container);
@@ -194,7 +195,7 @@ describe('useKeyboardNav — part 3', () => {
         it('End key moves focus to last item', () => {
             const container = createContainer(4);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[0].focus();
+            at(items, 0).focus();
 
             const { result } = renderHook(() => useKeyboardNav());
             const event = makeKeyboardEvent('End', container);
@@ -210,7 +211,7 @@ describe('useKeyboardNav — part 3', () => {
             const onSelect = vi.fn();
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[1].focus();
+            at(items, 1).focus();
 
             const { result } = renderHook(() => useKeyboardNav({ onSelect }));
             const event = makeKeyboardEvent('Enter', container);
@@ -224,7 +225,7 @@ describe('useKeyboardNav — part 3', () => {
             const onSelect = vi.fn();
             const container = createContainer(3);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
-            items[2].focus();
+            at(items, 2).focus();
 
             const { result } = renderHook(() => useKeyboardNav({ onSelect }));
             const event = makeKeyboardEvent(' ', container);
@@ -295,7 +296,7 @@ describe('useKeyboardNav — part 4', () => {
             const container = createContainer(3, [0]);
             const items = Array.from(container.querySelectorAll<HTMLElement>('[data-nav-item]'));
             // items[0] is disabled and excluded — but we're focused on items[1]
-            items[1].focus();
+            at(items, 1).focus();
 
             const { result } = renderHook(() => useKeyboardNav());
             const event = makeKeyboardEvent('ArrowDown', container);

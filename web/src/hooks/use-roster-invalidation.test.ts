@@ -79,9 +79,9 @@ function rosterMutationExactInvalidation() {
 
         // Each key should be invalidated exactly once with exact: true
         expect(rosterCalls).toHaveLength(1);
-        expect(rosterCalls[0][0]).toHaveProperty('exact', true);
+        expect(rosterCalls[0]?.[0]).toHaveProperty('exact', true);
         expect(assignmentsCalls).toHaveLength(1);
-        expect(assignmentsCalls[0][0]).toHaveProperty('exact', true);
+        expect(assignmentsCalls[0]?.[0]).toHaveProperty('exact', true);
     });
 
     it('useSelfUnassign invalidates roster and assignments keys with exact: true', async () => {
@@ -102,9 +102,9 @@ function rosterMutationExactInvalidation() {
         );
 
         expect(rosterCalls).toHaveLength(1);
-        expect(rosterCalls[0][0]).toHaveProperty('exact', true);
+        expect(rosterCalls[0]?.[0]).toHaveProperty('exact', true);
         expect(assignmentsCalls).toHaveLength(1);
-        expect(assignmentsCalls[0][0]).toHaveProperty('exact', true);
+        expect(assignmentsCalls[0]?.[0]).toHaveProperty('exact', true);
     });
 
     it('useAdminRemoveUser invalidates roster and assignments keys with exact: true', async () => {
@@ -125,9 +125,9 @@ function rosterMutationExactInvalidation() {
         );
 
         expect(rosterCalls).toHaveLength(1);
-        expect(rosterCalls[0][0]).toHaveProperty('exact', true);
+        expect(rosterCalls[0]?.[0]).toHaveProperty('exact', true);
         expect(assignmentsCalls).toHaveLength(1);
-        expect(assignmentsCalls[0][0]).toHaveProperty('exact', true);
+        expect(assignmentsCalls[0]?.[0]).toHaveProperty('exact', true);
     });
 }
 
@@ -150,9 +150,9 @@ function signupAndCancelExactInvalidation() {
         );
 
         expect(rosterCalls).toHaveLength(1);
-        expect(rosterCalls[0][0]).toHaveProperty('exact', true);
+        expect(rosterCalls[0]?.[0]).toHaveProperty('exact', true);
         expect(assignmentsCalls).toHaveLength(1);
-        expect(assignmentsCalls[0][0]).toHaveProperty('exact', true);
+        expect(assignmentsCalls[0]?.[0]).toHaveProperty('exact', true);
     });
 
     it('useCancelSignup invalidates roster and assignments keys with exact: true', async () => {
@@ -173,9 +173,9 @@ function signupAndCancelExactInvalidation() {
         );
 
         expect(rosterCalls).toHaveLength(1);
-        expect(rosterCalls[0][0]).toHaveProperty('exact', true);
+        expect(rosterCalls[0]?.[0]).toHaveProperty('exact', true);
         expect(assignmentsCalls).toHaveLength(1);
-        expect(assignmentsCalls[0][0]).toHaveProperty('exact', true);
+        expect(assignmentsCalls[0]?.[0]).toHaveProperty('exact', true);
     });
 }
 
@@ -195,7 +195,7 @@ function confirmAndStatusExactInvalidation() {
         );
 
         expect(rosterCalls).toHaveLength(1);
-        expect(rosterCalls[0][0]).toHaveProperty('exact', true);
+        expect(rosterCalls[0]?.[0]).toHaveProperty('exact', true);
     });
 
     it('useUpdateSignupStatus invalidates roster and assignments keys with exact: true', async () => {
@@ -216,9 +216,9 @@ function confirmAndStatusExactInvalidation() {
         );
 
         expect(rosterCalls).toHaveLength(1);
-        expect(rosterCalls[0][0]).toHaveProperty('exact', true);
+        expect(rosterCalls[0]?.[0]).toHaveProperty('exact', true);
         expect(assignmentsCalls).toHaveLength(1);
-        expect(assignmentsCalls[0][0]).toHaveProperty('exact', true);
+        expect(assignmentsCalls[0]?.[0]).toHaveProperty('exact', true);
     });
 }
 

@@ -168,7 +168,7 @@ describe('useSearchQueryParam — writing keeps the URL in step (AC3)', () => {
         act(() => result.current.setSearchQuery('deep'));
 
         expect(setSearchParamsSpy).toHaveBeenCalled();
-        expect(setSearchParamsSpy.mock.calls[0][1]).toEqual({ replace: true });
+        expect(setSearchParamsSpy.mock.calls[0]?.[1]).toEqual({ replace: true });
     });
 
     it('deletes q when the box is cleared rather than leaving q=', () => {
@@ -185,7 +185,7 @@ describe('useSearchQueryParam — writing keeps the URL in step (AC3)', () => {
 
         act(() => result.current.setSearchQuery(''));
 
-        expect(setSearchParamsSpy.mock.calls[0][1]).toEqual({ replace: true });
+        expect(setSearchParamsSpy.mock.calls[0]?.[1]).toEqual({ replace: true });
     });
 });
 

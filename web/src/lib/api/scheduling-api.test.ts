@@ -6,6 +6,7 @@
  * and returns 400 from ParseIntPipe.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { at } from '../../test/defined';
 
 vi.mock('./fetch-api', () => ({
   fetchApi: vi.fn(),
@@ -83,7 +84,7 @@ describe('toggleScheduleVote — vote source (ROK-1550)', () => {
     await toggleScheduleVote(2, 5, 9);
 
     const body = JSON.parse(
-      (mockFetchApi.mock.calls[0][1] as { body: string }).body,
+      (at(mockFetchApi.mock.calls, 0)[1] as { body: string }).body,
     );
     expect(body).toEqual({ slotId: 9, stance: 'yes', source: 'web' });
   });
@@ -155,7 +156,7 @@ describe('getMatchAvailability (ROK-1570)', () => {
 
     await getMatchAvailability(4, 7, localSunday);
 
-    const url = mockFetchApi.mock.calls[0][0] as string;
+    const url = at(mockFetchApi.mock.calls, 0)[0] as string;
     expect(url.split('?')[0]).toBe('/lineups/4/schedule/7/availability');
     expect(new URLSearchParams(url.split('?')[1]).get('weekStart')).toBe(
       '2026-05-10T00:00:00.000Z',
@@ -169,7 +170,7 @@ describe('getMatchAvailability (ROK-1570)', () => {
 
     await getMatchAvailability(4, 7, localSunday);
 
-    const url = mockFetchApi.mock.calls[0][0] as string;
+    const url = at(mockFetchApi.mock.calls, 0)[0] as string;
     expect(new URLSearchParams(url.split('?')[1]).get('tzOffset')).toBe(
       String(localSunday.getTimezoneOffset()),
     );
@@ -180,7 +181,7 @@ describe('getMatchAvailability (ROK-1570)', () => {
 
     await getMatchAvailability(1, 2, localSunday);
 
-    const url = mockFetchApi.mock.calls[0][0] as string;
+    const url = at(mockFetchApi.mock.calls, 0)[0] as string;
     expect(new URLSearchParams(url.split('?')[1]).get('weekStart')).toBe(
       '2026-01-04T00:00:00.000Z',
     );

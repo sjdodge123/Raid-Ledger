@@ -12,6 +12,7 @@
  * against IGDB (3-7s each), occasionally arriving AFTER newer ones.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { at } from '../../test/defined';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -116,7 +117,7 @@ describe('useGameSearch — ROK-1233 cancel superseded requests', () => {
         rerender({ q: 'return' });
         await act(async () => { await vi.advanceTimersByTimeAsync(400); });
         await vi.waitFor(() => expect(mockSearchGames).toHaveBeenCalledTimes(1));
-        expect(signals[0].aborted).toBe(false);
+        expect(signals[0]?.aborted).toBe(false);
 
         // User keeps typing — "return to moria" — debounce fires, second
         // request kicks off and the FIRST one must be aborted.
@@ -124,8 +125,8 @@ describe('useGameSearch — ROK-1233 cancel superseded requests', () => {
         await act(async () => { await vi.advanceTimersByTimeAsync(400); });
         await vi.waitFor(() => expect(mockSearchGames).toHaveBeenCalledTimes(2));
 
-        await vi.waitFor(() => expect(signals[0].aborted).toBe(true));
-        expect(signals[1].aborted).toBe(false);
+        await vi.waitFor(() => expect(signals[0]?.aborted).toBe(true));
+        expect(signals[1]?.aborted).toBe(false);
         expect(mockSearchGames).toHaveBeenNthCalledWith(1, 'return', expect.any(AbortSignal));
         expect(mockSearchGames).toHaveBeenNthCalledWith(2, 'return to moria', expect.any(AbortSignal));
     });
@@ -156,7 +157,7 @@ describe('useGameSearch — ROK-1233 cancel superseded requests', () => {
             const inFlight = signals.filter((s) => !s.aborted);
             expect(inFlight).toHaveLength(1);
         });
-        expect(signals[signals.length - 1].aborted).toBe(false);
+        expect(signals[signals.length - 1]?.aborted).toBe(false);
     });
 });
 
@@ -197,7 +198,7 @@ describe('useGameSearch — ROK-1682 cancel is scoped to this instance', () => {
             await vi.advanceTimersByTimeAsync(0);
         });
 
-        expect(signals[0].aborted).toBe(false);
+        expect(signals[0]?.aborted).toBe(false);
         await vi.waitFor(() => expect(page.result.current.data).toEqual(response));
     });
 });
@@ -247,11 +248,11 @@ describe('useGameSearch — ROK-1682 shared term is not cancelled by one observe
         await act(async () => { await vi.advanceTimersByTimeAsync(400); });
 
         await act(async () => {
-            resolvers[0](response);
+            at(resolvers, 0)(response);
             await vi.advanceTimersByTimeAsync(0);
         });
 
-        expect(signals[0].aborted).toBe(false);
+        expect(signals[0]?.aborted).toBe(false);
         await vi.waitFor(() => expect(page.result.current.data).toEqual(response));
     });
 });

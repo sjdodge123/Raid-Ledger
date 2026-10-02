@@ -135,7 +135,7 @@ describe('useAbsenceSection — rows and remove', () => {
         ];
         const { result } = renderHook(() => useAbsenceSection());
         expect(result.current.rows.map((r) => r.key)).toEqual(['manual-3', 'manual-2']);
-        expect(result.current.rows[0].source).toBe('manual');
+        expect(result.current.rows[0]?.source).toBe('manual');
     });
 
     it('remove deletes, then toasts with an Undo that re-creates the same range + note', () => {

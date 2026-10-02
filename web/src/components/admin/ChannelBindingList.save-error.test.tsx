@@ -9,6 +9,7 @@ import { act, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { ChannelBindingDto, UpdateChannelBindingDto } from '@raid-ledger/contract';
 import { ChannelBindingList } from './ChannelBindingList';
+import { at } from '../../test/defined';
 
 // General Lobby bindings never render the game picker; mocked so no fetch can leak.
 vi.mock('../../hooks/use-game-search', () => ({
@@ -50,8 +51,8 @@ function deferred() {
 }
 
 function rows() {
-  const [rowA, rowB] = screen.getAllByTestId('channel-binding-row');
-  return { rowA, rowB };
+  const all = screen.getAllByTestId('channel-binding-row');
+  return { rowA: at(all, 0), rowB: at(all, 1) };
 }
 
 /** Opens row A's editor and saves it; resolves once the save outcome has rendered. */

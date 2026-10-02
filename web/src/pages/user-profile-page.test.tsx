@@ -11,6 +11,7 @@ import type {
   CharacterDto,
   UserHeartedGameDto,
 } from "@raid-ledger/contract";
+import { at } from "../test/defined";
 
 // Mock the hooks
 vi.mock("../hooks/use-user-profile");
@@ -312,7 +313,7 @@ describe("AC3: Characters sorted (main first, displayOrder) — part 1 (sub 1)",
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-    expect(within(characterLinks[0]).getByText("MainChar")).toBeInTheDocument();
+    expect(within(at(characterLinks, 0)).getByText("MainChar")).toBeInTheDocument();
   });
 });
 
@@ -341,9 +342,9 @@ describe("AC3: Characters sorted (main first, displayOrder) — part 1 (sub 2)",
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-    expect(within(characterLinks[0]).getByText("Char1")).toBeInTheDocument();
-    expect(within(characterLinks[1]).getByText("Char2")).toBeInTheDocument();
-    expect(within(characterLinks[2]).getByText("Char3")).toBeInTheDocument();
+    expect(within(at(characterLinks, 0)).getByText("Char1")).toBeInTheDocument();
+    expect(within(at(characterLinks, 1)).getByText("Char2")).toBeInTheDocument();
+    expect(within(at(characterLinks, 2)).getByText("Char3")).toBeInTheDocument();
   });
 });
 
@@ -373,9 +374,9 @@ describe("UserProfilePage - Game Grouping (ROK-308) — part 4", () => {
         .getAllByRole("link")
         .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-      expect(within(characterLinks[0]).getByText("MainChar")).toBeInTheDocument();
-      expect(within(characterLinks[1]).getByText("Alt1")).toBeInTheDocument();
-      expect(within(characterLinks[2]).getByText("Alt2")).toBeInTheDocument();
+      expect(within(at(characterLinks, 0)).getByText("MainChar")).toBeInTheDocument();
+      expect(within(at(characterLinks, 1)).getByText("Alt1")).toBeInTheDocument();
+      expect(within(at(characterLinks, 2)).getByText("Alt2")).toBeInTheDocument();
     });
   });
 });

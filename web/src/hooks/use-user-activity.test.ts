@@ -130,8 +130,8 @@ describe('useUserActivity (ROK-443) — part 1', () => {
         });
 
         expect(result.current.data?.data).toHaveLength(2);
-        expect(result.current.data?.data[0].isMostPlayed).toBe(true);
-        expect(result.current.data?.data[1].isMostPlayed).toBe(false);
+        expect(result.current.data?.data[0]?.isMostPlayed).toBe(true);
+        expect(result.current.data?.data[1]?.isMostPlayed).toBe(false);
     });
 
 });

@@ -132,8 +132,8 @@ describe('RosterBreakdownTable — part 2', () => {
         ];
         render(<RosterBreakdownTable roster={roster} hasVoiceData={false} />);
         const cells = screen.getAllByRole('cell').filter(c => c.textContent && ['Zara', 'Alice'].includes(c.textContent));
-        expect(cells[0].textContent).toBe('Alice');
-        expect(cells[1].textContent).toBe('Zara');
+        expect(cells[0]?.textContent).toBe('Alice');
+        expect(cells[1]?.textContent).toBe('Zara');
     });
 
     it('clicking Player column header toggles sort direction', async () => {
@@ -146,12 +146,12 @@ describe('RosterBreakdownTable — part 2', () => {
 
         // Initially sorted asc: Alice, Zara
         const cells = () => screen.getAllByRole('cell').filter(c => c.textContent && ['Zara', 'Alice'].includes(c.textContent));
-        expect(cells()[0].textContent).toBe('Alice');
+        expect(cells()[0]?.textContent).toBe('Alice');
 
         // Click Player header to toggle to desc
         await user.click(screen.getByText('Player'));
         const cellsAfter = screen.getAllByRole('cell').filter(c => c.textContent && ['Zara', 'Alice'].includes(c.textContent));
-        expect(cellsAfter[0].textContent).toBe('Zara');
+        expect(cellsAfter[0]?.textContent).toBe('Zara');
     });
 
     it('clicking Attendance header sorts by attendanceStatus', async () => {

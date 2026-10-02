@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AA_SMALL_TEXT, composite, contrastRatio, stripComments } from './wcag-contrast';
@@ -51,7 +52,7 @@ function extractBlock(source: string, startPattern: RegExp): string {
  */
 function declaredValue(block: string, token: string): string | null {
     const match = new RegExp(`--color-${token}\\s*:\\s*([^;]+);`).exec(block);
-    return match === null ? null : match[1].trim();
+    return match === null ? null : defined(match[1], 'declared value').trim();
 }
 
 const themeBlock = extractBlock(css, /@theme\s*\{/);

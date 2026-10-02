@@ -19,8 +19,8 @@ describe('plugin-registry — part 1', () => {
 
         const registrations = getSlotRegistrations('character-detail:sections');
         expect(registrations).toHaveLength(1);
-        expect(registrations[0].pluginSlug).toBe('test-plugin');
-        expect(registrations[0].component).toBe(StubComponent);
+        expect(registrations[0]?.pluginSlug).toBe('test-plugin');
+        expect(registrations[0]?.component).toBe(StubComponent);
     });
 
     it('returns empty array for slots with no registrations', () => {
@@ -62,8 +62,8 @@ describe('plugin-registry — part 1', () => {
 
         const registrations = getSlotRegistrations('character-detail:sections');
         expect(registrations).toHaveLength(2);
-        expect(registrations[0].pluginSlug).toBe('plugin-a');
-        expect(registrations[1].pluginSlug).toBe('plugin-b');
+        expect(registrations[0]?.pluginSlug).toBe('plugin-a');
+        expect(registrations[1]?.pluginSlug).toBe('plugin-b');
     });
 
 });
@@ -104,8 +104,8 @@ describe('plugin-registry — part 2', () => {
 
         const registrations = getSlotRegistrations('character-detail:header-badges');
         expect(registrations).toHaveLength(2);
-        expect(registrations[0].pluginSlug).toBe('plugin-a');
-        expect(registrations[1].pluginSlug).toBe('plugin-b');
+        expect(registrations[0]?.pluginSlug).toBe('plugin-a');
+        expect(registrations[1]?.pluginSlug).toBe('plugin-b');
     });
 
     it('registerPlugin stores badge metadata', () => {

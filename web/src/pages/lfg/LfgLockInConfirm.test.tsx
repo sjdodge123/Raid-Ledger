@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../test/render-helpers';
 import { createMockLfgMember, createMockOverlapWindow } from '../../test/lfg-factories';
 import { LfgLockInConfirm } from './LfgLockInConfirm';
+import { at } from '../../test/defined';
 
 const MEMBERS = [
     createMockLfgMember({ userId: 1, displayName: 'Ana' }),
@@ -44,9 +45,9 @@ describe('LfgLockInConfirm', () => {
         const rows = screen.getAllByTestId('lfg-lockin-member');
         expect(rows).toHaveLength(3);
         ['Ana', 'Bo', 'Cy'].forEach((name, i) => expect(rows[i]).toHaveTextContent(name));
-        expect(within(rows[0]).queryByTestId('lfg-lockin-not-free')).toBeNull();
-        expect(within(rows[1]).getByTestId('lfg-lockin-not-free')).toHaveTextContent('not free then');
-        expect(within(rows[2]).queryByTestId('lfg-lockin-not-free')).toBeNull();
+        expect(within(at(rows, 0)).queryByTestId('lfg-lockin-not-free')).toBeNull();
+        expect(within(at(rows, 1)).getByTestId('lfg-lockin-not-free')).toHaveTextContent('not free then');
+        expect(within(at(rows, 2)).queryByTestId('lfg-lockin-not-free')).toBeNull();
     });
 
     it('reads the event range capped at 3 hours for a longer window', () => {

@@ -13,6 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { ScheduleSlotWithVotesDto, ScheduleVoteStance } from '@raid-ledger/contract';
 import type { ToggleScheduleVoteVars } from '../../../../hooks/use-scheduling';
 import { buildPoll, ME } from './scheduling-poll-fixtures';
+import { at } from '../../../../test/defined';
 
 /**
  * The ladder presses through `mutateAsync` (ROK-1617 follow-up): the clear of
@@ -100,37 +101,37 @@ describe('useSchedulingLadder', () => {
 
     it('toggles the vote through the mutation with the viewer attached', () => {
         const { result } = renderLadder();
-        const slotId = result.current.slots[0].id;
+        const slotId = at(result.current.slots, 0).id;
         act(() => result.current.onToggleVote(slotId));
         expect(toggleMutate).toHaveBeenCalledTimes(1);
-        expect(toggleMutate.mock.calls[0][0]).toMatchObject({
+        expect(toggleMutate.mock.calls[0]?.[0]).toMatchObject({
             lineupId: 7,
             matchId: 500,
             slotId,
             source: 'web',
         });
-        expect(toggleMutate.mock.calls[0][0].viewer).toMatchObject({ userId: ME });
+        expect(toggleMutate.mock.calls[0]?.[0].viewer).toMatchObject({ userId: ME });
     });
 
     // ROK-1550: the Discord poll card deep-links `?src=discord`, and every vote
     // cast during that visit carries it — including the "doesn't work" answer.
     it('attributes votes to discord when the visit came from the poll card', () => {
         const { result } = renderLadder({}, '/community-lineup/7/schedule/500?src=discord');
-        act(() => result.current.onToggleVote(result.current.slots[0].id));
-        act(() => result.current.onToggleNo(result.current.slots[1].id));
-        expect(toggleMutate.mock.calls[0][0]).toMatchObject({ source: 'discord', stance: 'yes' });
-        expect(toggleMutate.mock.calls[1][0]).toMatchObject({ source: 'discord', stance: 'no' });
+        act(() => result.current.onToggleVote(at(result.current.slots, 0).id));
+        act(() => result.current.onToggleNo(at(result.current.slots, 1).id));
+        expect(toggleMutate.mock.calls[0]?.[0]).toMatchObject({ source: 'discord', stance: 'yes' });
+        expect(toggleMutate.mock.calls[1]?.[0]).toMatchObject({ source: 'discord', stance: 'no' });
     });
 
     it('maps an unknown ?src value to web rather than forwarding it', () => {
         const { result } = renderLadder({}, '/community-lineup/7/schedule/500?src=bogus');
-        act(() => result.current.onToggleVote(result.current.slots[0].id));
-        expect(toggleMutate.mock.calls[0][0]).toMatchObject({ source: 'web' });
+        act(() => result.current.onToggleVote(at(result.current.slots, 0).id));
+        expect(toggleMutate.mock.calls[0]?.[0]).toMatchObject({ source: 'web' });
     });
 
     it('ignores a second tap on the same slot while the first is in flight', () => {
         const { result } = renderLadder();
-        const slotId = result.current.slots[0].id;
+        const slotId = at(result.current.slots, 0).id;
         act(() => result.current.onToggleVote(slotId));
         act(() => result.current.onToggleVote(slotId));
         expect(toggleMutate).toHaveBeenCalledTimes(1);
@@ -138,7 +139,7 @@ describe('useSchedulingLadder', () => {
 
     it('does nothing at all when the viewer may not vote', () => {
         const { result } = renderLadder({ pollStatus: 'closed', canVote: false });
-        act(() => result.current.onToggleVote(result.current.slots[0].id));
+        act(() => result.current.onToggleVote(at(result.current.slots, 0).id));
         expect(toggleMutate).not.toHaveBeenCalled();
     });
 
@@ -169,7 +170,7 @@ describe('useSchedulingLadder', () => {
      */
     it('releases the in-flight guard when the press fails, so the next press goes out', async () => {
         const { result } = renderLadder();
-        const slotId = result.current.slots[0].id;
+        const slotId = at(result.current.slots, 0).id;
         act(() => result.current.onToggleVote(slotId));
         await act(async () => {
             failVote(new Error('nope'));

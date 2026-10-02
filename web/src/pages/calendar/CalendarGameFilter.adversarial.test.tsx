@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SectionedGameList } from './CalendarGameFilter';
 import type { GameWithLiked } from './game-filter-helpers';
+import { at } from '../../test/defined';
 
 vi.mock('../../constants/game-colors', () => ({
     getGameColors: () => ({ bg: '#000', border: '#111', icon: 'X' }),
@@ -153,7 +154,7 @@ describe('SectionedGameList — edge cases', () => {
         );
 
         const checkboxes = screen.getAllByRole('checkbox');
-        await user.click(checkboxes[0]);
+        await user.click(at(checkboxes, 0));
 
         expect(toggleGame).toHaveBeenCalledTimes(1);
     });

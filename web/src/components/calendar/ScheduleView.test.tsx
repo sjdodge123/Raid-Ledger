@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ScheduleView } from './ScheduleView';
 import type { CalendarEvent } from './CalendarView';
 import type { EventResponseDto } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
 
 const MOCK_NOW = new Date('2026-02-10T12:00:00Z');
 
@@ -355,7 +356,7 @@ describe('Swipe gesture handling — part 1 (sub 1)', () => {
         });
 
         expect(onDateChange).toHaveBeenCalledTimes(1);
-        const newDate = onDateChange.mock.calls[0][0] as Date;
+        const newDate = at(onDateChange.mock.calls, 0)[0] as Date;
         expect(newDate.getDate()).toBe(MOCK_NOW.getDate() + 1);
     });
 
@@ -394,7 +395,7 @@ describe('Swipe gesture handling — part 1 (sub 2)', () => {
         });
 
         expect(onDateChange).toHaveBeenCalledTimes(1);
-        const newDate = onDateChange.mock.calls[0][0] as Date;
+        const newDate = at(onDateChange.mock.calls, 0)[0] as Date;
         expect(newDate.getDate()).toBe(MOCK_NOW.getDate() - 1);
     });
 

@@ -6,6 +6,7 @@ import { AssignmentPopup } from './AssignmentPopup';
 import type { AssignmentPopupProps } from './assignment-popup.types';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import type { ReactElement } from 'react';
+import { at } from '../../test/defined';
 
 // Mock useUserCharacters so character-selection step does not make real HTTP calls
 vi.mock('../../hooks/use-characters', () => ({
@@ -186,7 +187,7 @@ describe('AssignmentPopup', () => {
         );
 
         const assignButtons = screen.getAllByText('Assign');
-        fireEvent.click(assignButtons[0]);
+        fireEvent.click(at(assignButtons, 0));
 
         expect(mockOnAssign).toHaveBeenCalledWith(expect.any(Number));
     });

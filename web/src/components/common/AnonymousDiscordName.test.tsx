@@ -5,6 +5,7 @@ import { render, screen } from '@testing-library/react';
 import { AnonymousDiscordName } from './AnonymousDiscordName';
 import { lightSchemes, lightTextRules, parseSchemeGroup } from '../../styles/light-scheme-css';
 import { stripComments } from '../../styles/wcag-contrast';
+import { at } from '../../test/defined';
 
 const css = stripComments(readFileSync(resolve(__dirname, '../../index.css'), 'utf-8'));
 const LIGHT = lightSchemes(css).map((s) => s.name).sort();
@@ -13,9 +14,9 @@ const lightTextClasses = new Set(lightTextRules(css, LIGHT).map((r) => r.cls));
 /** Every `.class` selector in a rule scoped to exactly the light scheme set, as written in markup. */
 function lightScopedClasses(): Set<string> {
     const found = new Set<string>();
-    for (const [, group, selector] of css.matchAll(/:is\(([^()]*)\)\s+\.([^\s{:]+)\s*\{/g)) {
-        const names = parseSchemeGroup(group)?.sort();
-        if (names && names.join() === LIGHT.join()) found.add(selector.replace(/\\\//g, '/'));
+    for (const match of css.matchAll(/:is\(([^()]*)\)\s+\.([^\s{:]+)\s*\{/g)) {
+        const names = parseSchemeGroup(at(match, 1))?.sort();
+        if (names && names.join() === LIGHT.join()) found.add(at(match, 2).replace(/\\\//g, '/'));
     }
     return found;
 }

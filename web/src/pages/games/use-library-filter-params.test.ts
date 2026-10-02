@@ -282,7 +282,7 @@ describe('useLibraryFilterParams — the genre row as URL state', () => {
         await waitFor(() => expect(result.current.selectedGenres).toEqual(new Set(['rpg'])));
 
         expect(setSearchParamsSpy).toHaveBeenCalledTimes(1);
-        expect(setSearchParamsSpy.mock.calls[0][1]).toEqual({ replace: true });
+        expect(setSearchParamsSpy.mock.calls[0]?.[1]).toEqual({ replace: true });
     });
 });
 

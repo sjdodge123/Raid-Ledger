@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { SpeedGauge } from './SpeedGauge';
 import { gaugeFraction, formatMbps } from './speed-gauge.helpers';
+import { at } from '../../../test/defined';
 
 describe('gaugeFraction', () => {
     it('is empty at zero, gives the first megabit a sixth of the sweep, and pins 100+ to the end', () => {
@@ -18,8 +19,8 @@ describe('gaugeFraction', () => {
     it('is monotonic across the whole scale', () => {
         const samples = [0, 0.2, 1, 2, 5, 10, 20, 50, 99, 100, 1000];
         const fractions = samples.map(gaugeFraction);
-        for (let i = 1; i < fractions.length; i += 1) {
-            expect(fractions[i]).toBeGreaterThanOrEqual(fractions[i - 1]);
+        for (const [i, fraction] of fractions.slice(1).entries()) {
+            expect(fraction).toBeGreaterThanOrEqual(at(fractions, i));
         }
     });
 });

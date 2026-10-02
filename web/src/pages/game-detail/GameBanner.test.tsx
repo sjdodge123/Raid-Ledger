@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { GameBanner, type GameBannerGame } from './GameBanner';
+import { at } from '../../test/defined';
 
 vi.mock('../../hooks/use-lfg-groups', () => ({
     useLfgGroupDetail: () => ({ data: undefined }),
@@ -32,8 +33,8 @@ function renderBanner(game: GameBannerGame) {
 }
 
 function bannerImages(container: HTMLElement): { backdrop: HTMLImageElement; cover: HTMLImageElement } {
-    const [backdrop, cover] = Array.from(container.querySelectorAll('img'));
-    return { backdrop, cover };
+    const images = Array.from(container.querySelectorAll('img'));
+    return { backdrop: at(images, 0), cover: at(images, 1) };
 }
 
 describe('GameBanner — cover art loading (ROK-1159)', () => {

@@ -4,6 +4,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { WeekStrip } from '../WeekStrip';
 import { BAND_FILL, GROUP_FILL, GROUP_GRADIENT } from '../week-strip.fills';
+import { at, defined } from '../../../../../test/defined';
 
 const HOURS = [17, 18, 19, 20, 21, 22, 23];
 const avail = (day: number, hours: number[]): GameTimeSlot[] =>
@@ -147,13 +148,13 @@ describe('WeekStrip — group mode', () => {
         renderGroup();
         expect(bars(2).map((b) => b.getAttribute('data-kind'))).toEqual(['none', 'most', 'few']);
         // ROK-1586: the ramp reads through the semantic tokens, not raw hues.
-        expect(bars(2)[2].className).toContain('bg-danger/50');
-        expect(bars(3)[1].className).toContain('bg-success');
+        expect(bars(2)[2]?.className).toContain('bg-danger/50');
+        expect(bars(3)[1]?.className).toContain('bg-success');
     });
 
     it('splits a band whose hours disagree into two tones, gapped by the surface', () => {
         renderGroup();
-        const split = bars(2)[1];
+        const split = at(bars(2), 1);
         expect(split).toHaveAttribute('data-two-tone', 'few');
         expect(split.className).toContain('strip-bar-split');
         // The heat colours ride on custom properties so the gradient itself can
@@ -163,16 +164,16 @@ describe('WeekStrip — group mode', () => {
         expect(style).toContain('--bar-r');
         // A single-tone band keeps its flat fill and no gradient.
         expect(bars(2)[2]).not.toHaveAttribute('data-two-tone');
-        expect(bars(2)[2].className).not.toContain('strip-bar-split');
+        expect(at(bars(2), 2).className).not.toContain('strip-bar-split');
     });
 
     it('caps a band with a busy hour in purple, and only that band', () => {
         renderGroup();
-        const cap = bars(3)[2].querySelector('[data-busy]');
+        const cap = at(bars(3), 2).querySelector('[data-busy]');
         expect(cap).not.toBeNull();
         expect(cap?.className).toContain('bg-busy');
         expect(cap?.className).toContain('w-[30%]');
-        expect(bars(3)[1].querySelector('[data-busy]')).toBeNull();
+        expect(at(bars(3), 1).querySelector('[data-busy]')).toBeNull();
     });
 
     it('never caps or splits the viewer’s own week', () => {
@@ -311,14 +312,14 @@ describe('WeekStrip — GROUP_FILL / GROUP_GRADIENT token parity', () => {
     const tokenOfClass = (cls: string): { token: string; alpha: number } => {
         const m = /^bg-([a-z-]+)(?:\/(\d+))?$/.exec(cls);
         if (!m) throw new Error(`GROUP_FILL entry "${cls}" is not a bg-<token>[/alpha] class`);
-        return { token: m[1], alpha: m[2] === undefined ? 100 : Number(m[2]) };
+        return { token: defined(m[1], 'token capture group'), alpha: m[2] === undefined ? 100 : Number(m[2]) };
     };
 
     /** `color-mix(in oklab, var(--color-warning) 70%, transparent)` → the same shape. */
     const tokenOfCss = (value: string): { token: string; alpha: number } => {
         const m = /var\(--color-([a-z-]+)\)(?:\s+(\d+)%)?/.exec(value);
         if (!m) throw new Error(`GROUP_GRADIENT entry "${value}" does not reference a --color-* token`);
-        return { token: m[1], alpha: m[2] === undefined ? 100 : Number(m[2]) };
+        return { token: defined(m[1], 'token capture group'), alpha: m[2] === undefined ? 100 : Number(m[2]) };
     };
 
     it('names the same token and alpha for every kind, in both spellings', () => {
