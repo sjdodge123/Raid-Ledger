@@ -10,6 +10,7 @@
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { CooptimusSyncService } from './cooptimus-sync.service';
 import { CooptimusService, type CooptimusLookup } from './cooptimus.service';
@@ -78,22 +79,28 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
   }
 
   async function seedGame(name: string, steamAppId: number | null = null) {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
-        steamAppId,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
+          steamAppId,
+        })
+        .returning(),
+      'seeded game',
+    );
     return g;
   }
 
   async function reload(id: number) {
-    const [g] = await testApp.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, id));
+    const [g] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.games)
+        .where(eq(schema.games.id, id)),
+      'reloaded game',
+    );
     return g;
   }
 
@@ -339,7 +346,7 @@ describe('CooptimusSyncService (integration, ROK-1397)', () => {
     expect(after.cooptimusSyncedAt).not.toBeNull(); // not re-queued weekly
     const queue = await sync.getReviewQueue();
     expect(queue.length).toBeGreaterThan(0);
-    expect(JSON.parse(queue[0])).toMatchObject({
+    expect(JSON.parse(at(queue, 0))).toMatchObject({
       gameId: g.id,
       baseTitle: 'Mortal Kombat 11',
     });
