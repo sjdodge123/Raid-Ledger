@@ -1,5 +1,8 @@
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import { NOOP_LIVENESS_INTERVAL_MS } from './cron-job.constants';
+import { computeNextRun } from './cron-job.helpers';
 import {
   LastRunBuffer,
   isDeferrableSchedule,
@@ -135,6 +138,51 @@ describe('LastRunBuffer.flush', () => {
 
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
     expect(mockDb.update).not.toHaveBeenCalled();
+    expect(buffer.pending.size).toBe(0);
+  });
+});
+
+/** The (id, last_run_at, next_run_at) tuple bound into a one-row flush. */
+function flushedRow(execute: jest.Mock): unknown[] {
+  const query = execute.mock.calls[0][0] as SQL;
+  return new PgDialect().sqlToQuery(query).params.slice(-3);
+}
+
+describe('LastRunBuffer.reschedule', () => {
+  const OLD = '*/5 * * * *';
+  const NEW = '*/10 * * * *';
+
+  beforeEach(() => {
+    jest.useFakeTimers({
+      now: new Date('2025-01-01T00:02:00Z'),
+      doNotFake: ['nextTick', 'queueMicrotask'],
+    });
+  });
+  afterEach(() => jest.useRealTimers());
+
+  it('flushes next_run_at from the new expression for a run queued before it', async () => {
+    const newNext = computeNextRun(NEW)?.toISOString();
+    expect(newNext).not.toBe(computeNextRun(OLD)?.toISOString());
+    const mockDb = createDrizzleMock();
+    const buffer = new LastRunBuffer();
+    const finishedAt = new Date('2025-01-01T00:01:00Z');
+    buffer.deferCompleted(mockJob({ cron: OLD }), finishedAt);
+
+    buffer.reschedule(42, NEW);
+    await buffer.flush(mockDb as any, logger);
+
+    expect(flushedRow(mockDb.execute)).toEqual([
+      42,
+      finishedAt.toISOString(),
+      newNext,
+    ]);
+  });
+
+  it('queues nothing for a job with no pending write', () => {
+    const buffer = new LastRunBuffer();
+
+    buffer.reschedule(42, NEW);
+
     expect(buffer.pending.size).toBe(0);
   });
 });
