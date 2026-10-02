@@ -3,6 +3,7 @@ import type { ChannelBindingConfig } from '@raid-ledger/contract';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CHANNEL_BINDING_EVENTS } from './channel-binding-events';
 
 // ─── Mock DB chain ──────────────────────────────────────────────────────────
 
@@ -64,6 +65,22 @@ const STORED: ChannelBindingConfig = {
  * omits keeps its stored value. Returns a getter for the row as it stands
  * "in the database" after the write.
  */
+/** A stored general-lobby row on the fixture channel. */
+function seedRow(): Record<string, unknown> {
+  return {
+    id: 'uuid-1',
+    guildId: GUILD,
+    channelId: CHANNEL,
+    channelType: 'voice',
+    bindingPurpose: 'general-lobby',
+    gameId: null,
+    recurrenceGroupId: null,
+    config: {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
 function seedExistingBinding(
   mocks: ReturnType<typeof buildMockDb>,
   config: ChannelBindingConfig | null,
@@ -89,6 +106,21 @@ function seedExistingBinding(
   return () => row;
 }
 
+/** The service under Nest DI with the mock DB and a recording emitter. */
+async function buildService(
+  mocks: ReturnType<typeof buildMockDb>,
+  emitter: { emit: jest.Mock },
+): Promise<ChannelBindingsService> {
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      ChannelBindingsService,
+      { provide: DrizzleAsyncProvider, useValue: mocks.mockDb },
+      { provide: EventEmitter2, useValue: emitter },
+    ],
+  }).compile();
+  return module.get(ChannelBindingsService);
+}
+
 describe('ChannelBindingsService', () => {
   let service: ChannelBindingsService;
   let mocks: ReturnType<typeof buildMockDb>;
@@ -99,15 +131,7 @@ describe('ChannelBindingsService', () => {
     mocks = buildMockDb();
     emitter = { emit: jest.fn() };
 
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        ChannelBindingsService,
-        { provide: DrizzleAsyncProvider, useValue: mocks.mockDb },
-        { provide: EventEmitter2, useValue: emitter },
-      ],
-    }).compile();
-
-    service = module.get(ChannelBindingsService);
+    service = await buildService(mocks, emitter);
   });
 
   describe('detectBehavior', () => {
@@ -312,5 +336,84 @@ describe('ChannelBindingsService', () => {
       expect(binding.config).toEqual({});
       expect(stored().config).toEqual({});
     });
+  });
+});
+
+/** Payloads emitted as CHANNEL_BINDING_EVENTS.CHANGED, in order. */
+function announcedVia(emitter: { emit: jest.Mock }): unknown[] {
+  return emitter.emit.mock.calls
+    .filter(([name]) => name === CHANNEL_BINDING_EVENTS.CHANGED)
+    .map(([, payload]) => payload as unknown);
+}
+
+describe('ChannelBindingsService — binding writes announce the channel (cache eviction)', () => {
+  let service: ChannelBindingsService;
+  let mocks: ReturnType<typeof buildMockDb>;
+  let emitter: { emit: jest.Mock };
+
+  beforeEach(async () => {
+    mocks = buildMockDb();
+    emitter = { emit: jest.fn() };
+    service = await buildService(mocks, emitter);
+  });
+
+  /** Payloads emitted as CHANNEL_BINDING_EVENTS.CHANGED, in order. */
+
+  it('bind announces the bound channel', async () => {
+    seedExistingBinding(mocks, STORED);
+    await service.bind(GUILD, CHANNEL, 'voice', 'general-lobby', null);
+    expect(announcedVia(emitter)).toEqual([{ channelId: CHANNEL }]);
+  });
+
+  it('a series re-bind also announces the channel it moved off', async () => {
+    seedExistingBinding(mocks, STORED);
+    const removed = [{ channelId: 'old-ch' }, { channelId: CHANNEL }];
+    mocks.mockDeleteReturning.mockResolvedValueOnce(removed);
+    await service.bind(
+      GUILD,
+      CHANNEL,
+      'voice',
+      'general-lobby',
+      null,
+      undefined,
+      'series-1',
+    );
+    expect(announcedVia(emitter)).toEqual([
+      { channelId: CHANNEL },
+      { channelId: 'old-ch' },
+    ]);
+  });
+
+  it('unbind announces the channel only when a row was removed', async () => {
+    mocks.mockDeleteReturning.mockResolvedValueOnce([]);
+    await service.unbind(GUILD, 'channel-999');
+    expect(announcedVia(emitter)).toEqual([]);
+
+    mocks.mockDeleteReturning.mockResolvedValueOnce([
+      { id: 'uuid-1', bindingPurpose: 'general-lobby' },
+    ]);
+    await service.unbind(GUILD, CHANNEL);
+    expect(announcedVia(emitter)).toEqual([{ channelId: CHANNEL }]);
+  });
+
+  it("unbindById announces the deleted row's channel", async () => {
+    mocks.mockDeleteReturning.mockResolvedValueOnce([]);
+    await service.unbindById('missing');
+    expect(announcedVia(emitter)).toEqual([]);
+
+    mocks.mockDeleteReturning.mockResolvedValueOnce([
+      { id: 'uuid-1', channelId: 'ch-9' },
+    ]);
+    await service.unbindById('uuid-1');
+    expect(announcedVia(emitter)).toEqual([{ channelId: 'ch-9' }]);
+  });
+
+  it("updateConfig announces the binding's channel after the write", async () => {
+    // A series row skips the sibling-conflict query.
+    const stored = { ...seedRow(), recurrenceGroupId: 'series-1' };
+    mocks.mockSelectLimit.mockResolvedValueOnce([stored]);
+    mocks.mockUpdateReturning.mockResolvedValueOnce([stored]);
+    await service.updateConfig('uuid-1', { minPlayers: 3 });
+    expect(announcedVia(emitter)).toEqual([{ channelId: CHANNEL }]);
   });
 });
