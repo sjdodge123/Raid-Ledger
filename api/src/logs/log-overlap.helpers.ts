@@ -7,6 +7,7 @@ import {
   type ExportFile,
   type SkippedFile,
 } from './export-budget.helpers';
+import { defined } from '../common/defined.helpers';
 
 /** Decompressed bytes compared at the start of two generations. */
 export const HEAD_BYTES = 4096;
@@ -78,7 +79,7 @@ async function readHeads(
   let next = 0;
   const worker = async () => {
     while (next < files.length) {
-      const file = files[next++];
+      const file = defined(files[next++], 'export file');
       heads.set(file, await readHead(file.filepath));
     }
   };

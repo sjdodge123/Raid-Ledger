@@ -19,6 +19,7 @@
  * The classification is pure so all four outcomes are unit-testable without a
  * database; the two queries live in `lfg-composer-search.db-helpers`.
  */
+import { defined } from '../../common/defined.helpers';
 import { stripSearchPunctuation } from '../../common/search.util';
 import { LFG_COMPOSER_MAX_CANDIDATES } from './lfg-composer.constants';
 
@@ -70,7 +71,9 @@ export function classifyComposerMatch(
   matches: LfgComposerGame[],
   fuzzy: LfgComposerGame[] = [],
 ): LfgComposerMatch {
-  if (matches.length === 1) return { kind: 'single', game: matches[0] };
+  if (matches.length === 1) {
+    return { kind: 'single', game: defined(matches[0], 'single match') };
+  }
   if (matches.length > 1) {
     return {
       kind: 'candidates',

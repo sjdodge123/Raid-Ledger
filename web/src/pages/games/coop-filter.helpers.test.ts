@@ -145,7 +145,7 @@ describe('ROK-1402 — active filter counting', () => {
 
     it('does not count onlineMinPlayers of 0 or undefined', () => {
         expect(countActiveCoopFilters({ onlineMinPlayers: 0 })).toBe(0);
-        expect(countActiveCoopFilters({ onlineMinPlayers: undefined })).toBe(0);
+        expect(countActiveCoopFilters({})).toBe(0);
     });
 
     it('counts onlineMinPlayers of 1 or more', () => {

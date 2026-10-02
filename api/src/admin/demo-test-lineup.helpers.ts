@@ -11,6 +11,7 @@ import { sql, and, like, inArray } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { ratchetNominationCap } from '../lineups/lineups-nomination-cap.helpers';
 import { generatePublicSlug } from '../lineups/public-lineup-slug.helpers';
 import { LineupPhaseQueueService } from '../lineups/queue/lineup-phase.queue';
@@ -42,7 +43,7 @@ export async function createBuildingLineupForTest(
       publicSlug: generatePublicSlug(),
     })
     .returning({ id: schema.communityLineups.id });
-  return { lineupId: row.id };
+  return { lineupId: defined(row, 'created lineup row').id };
 }
 
 /** Insert a lineup entry directly (bypasses service caps). Idempotent. */

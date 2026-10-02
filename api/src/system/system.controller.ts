@@ -33,9 +33,8 @@ export class SystemController {
     adapterConfigured: boolean[],
   ): LoginMethodDto[] {
     const providers: LoginMethodDto[] = [];
-    for (let i = 0; i < adapterEntries.length; i++) {
-      if (adapterConfigured[i])
-        providers.push(adapterEntries[i][1].getLoginMethod());
+    for (const [i, [, adapter]] of adapterEntries.entries()) {
+      if (adapterConfigured[i]) providers.push(adapter.getLoginMethod());
     }
     return providers;
   }

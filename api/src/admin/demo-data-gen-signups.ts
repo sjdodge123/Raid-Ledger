@@ -71,11 +71,11 @@ export function generateSignups(
 ): GeneratedSignup[] {
   const { charLookup, slugByIgdbId } = buildSignupLookups(characters, games);
   const signups: GeneratedSignup[] = [];
-  for (let i = 0; i < events.length; i++) {
+  for (const [i, event] of events.entries()) {
     signups.push(
       ...generateEventSignups(
         rng,
-        events[i],
+        event,
         i,
         allUsernames,
         charLookup,

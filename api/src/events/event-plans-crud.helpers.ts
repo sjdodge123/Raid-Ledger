@@ -11,6 +11,7 @@ import { SignupsService } from './signups.service';
 import type { CreateEventPlanDto } from '@raid-ledger/contract';
 import { dmOrganizer } from './event-plans-discord.helpers';
 import { autoSignupPollVoters } from './event-plans-auto-signup.helpers';
+import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('EventPlansCrud');
 type PlanRow = typeof schema.eventPlans.$inferSelect;
@@ -64,7 +65,7 @@ export async function insertPlan(
       ...buildNewPlanValues(dto),
     })
     .returning();
-  return plan;
+  return defined(plan, 'inserted event plan row');
 }
 
 /** Builds insert values specific to a converted event plan. */
@@ -114,7 +115,7 @@ export async function insertConvertedPlan(
       ),
     })
     .returning();
-  return plan;
+  return defined(plan, 'inserted event plan row');
 }
 
 /** Builds the slot config type for event creation. */
@@ -231,7 +232,7 @@ function resolveWinningTimes(
     date: string;
     label: string;
   }>;
-  const winningOption = pollOptions[winnerIndex];
+  const winningOption = defined(pollOptions[winnerIndex], 'winning option');
   const startTime = new Date(winningOption.date);
   const endTime = new Date(
     startTime.getTime() + plan.durationMinutes * 60 * 1000,

@@ -81,7 +81,7 @@ export const GITHUB_COMPARE_API =
 const FIX_SUBJECT_RE = /(^|[^A-Za-z0-9])fix(\([^)]+\))?!?(:|\s+\+)/;
 
 export function countFixCommits(messages: string[]): number {
-  return messages.filter((m) => FIX_SUBJECT_RE.test(m.split('\n', 1)[0]))
+  return messages.filter((m) => FIX_SUBJECT_RE.test(m.split('\n', 1)[0] ?? ''))
     .length;
 }
 

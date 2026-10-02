@@ -54,7 +54,7 @@ describe('Combobox — ARIA wiring', () => {
     });
 
     it('marks the current value aria-selected', async () => {
-        render(<Harness initial={GAMES[2]} />);
+        render(<Harness initial={at(GAMES, 2)} />);
         await userEvent.type(box(), '{ArrowDown}');
         expect(screen.getByRole('option', { name: 'Dota 2' })).toHaveAttribute('aria-selected', 'true');
         expect(screen.getByRole('option', { name: 'Diablo IV' })).toHaveAttribute('aria-selected', 'false');
@@ -115,7 +115,7 @@ describe('Combobox — keyboard: commit and dismiss', () => {
 
     it('Escape closes; a second Escape clears the text and the value', async () => {
         const spy = vi.fn();
-        render(<Harness spy={spy} initial={GAMES[0]} inputValue={undefined} />);
+        render(<Harness spy={spy} initial={at(GAMES, 0)} />);
         await userEvent.clear(box());
         await userEvent.type(box(), 'Dia{ArrowDown}{Escape}');
         expect(box()).toHaveAttribute('aria-expanded', 'false');

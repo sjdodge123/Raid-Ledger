@@ -20,6 +20,7 @@ export type { SignupsPreviewMap } from './game-time-signups.helpers';
 export { buildEventBlocks } from './game-time-blocks.helpers';
 import type { SignupsPreviewMap } from './game-time-signups.helpers';
 import { buildEventBlocks } from './game-time-blocks.helpers';
+import { defined } from '../common/defined.helpers';
 
 /** Select columns for signed-up event queries. */
 const SIGNED_UP_EVENT_COLUMNS = {
@@ -182,7 +183,7 @@ export function buildCompositeSlots(
   const slots = templateSlots.map((s) => {
     const dayDate = new Date(weekStart);
     dayDate.setDate(dayDate.getDate() + s.dayOfWeek);
-    const dateStr = dayDate.toISOString().split('T')[0];
+    const dateStr = defined(dayDate.toISOString().split('T')[0], 'slot date');
     const status = resolveSlotStatus(
       dateStr,
       s.hour,
@@ -195,10 +196,11 @@ export function buildCompositeSlots(
   });
   for (const key of committedSet) {
     if (!templateSet.has(key)) {
+      // Keys are built as `${day}:${hour}`, so both parts exist.
       const [day, hour] = key.split(':').map(Number);
       slots.push({
-        dayOfWeek: day,
-        hour,
+        dayOfWeek: defined(day, 'committed slot day'),
+        hour: defined(hour, 'committed slot hour'),
         status: 'committed',
         fromTemplate: false,
       });
@@ -217,7 +219,9 @@ export function buildAbsenceDateSet(
     const end = new Date(absence.endDate);
     const cursor = new Date(start);
     while (cursor <= end) {
-      absenceDates.add(cursor.toISOString().split('T')[0]);
+      absenceDates.add(
+        defined(cursor.toISOString().split('T')[0], 'absence date'),
+      );
       cursor.setDate(cursor.getDate() + 1);
     }
   }

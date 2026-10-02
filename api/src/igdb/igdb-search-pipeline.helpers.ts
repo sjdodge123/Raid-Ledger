@@ -23,6 +23,7 @@ import {
 } from './igdb-search-executor.helpers';
 import { fetchFromIgdb, fetchWithRetry } from './igdb-api.helpers';
 import { searchLocalGames } from './igdb-search.helpers';
+import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('IgdbSearchPipeline');
 
@@ -54,7 +55,10 @@ export interface SearchPipelineParams {
  */
 export function isPartialPrefixQuery(normalized: string): boolean {
   const tokens = normalized.trim().split(/\s+/);
-  return tokens.length >= 2 && tokens[tokens.length - 1].length < 3;
+  return (
+    tokens.length >= 2 &&
+    defined(tokens[tokens.length - 1], 'last query token').length < 3
+  );
 }
 
 /**

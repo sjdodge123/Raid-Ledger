@@ -23,7 +23,8 @@ type TiebreakerRow = typeof schema.communityLineupTiebreakers.$inferSelect;
 
 /** Fetch game name + cover URL map for a list of game IDs. */
 async function fetchGameMap(db: Db, gameIds: number[]) {
-  if (gameIds.length === 0) return new Map();
+  const [firstId] = gameIds;
+  if (firstId === undefined) return new Map();
   const rows = await db
     .select({
       id: schema.games.id,
@@ -33,8 +34,8 @@ async function fetchGameMap(db: Db, gameIds: number[]) {
     .from(schema.games)
     .where(
       gameIds.length === 1
-        ? eq(schema.games.id, gameIds[0])
-        : eq(schema.games.id, gameIds[0]), // fallback; real impl below
+        ? eq(schema.games.id, firstId)
+        : eq(schema.games.id, firstId), // fallback; real impl below
     );
   // Re-fetch properly for multiple IDs
   const allRows =

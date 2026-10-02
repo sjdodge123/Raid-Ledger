@@ -4,6 +4,7 @@ import * as schema from '../drizzle/schema';
 import { games } from '../drizzle/schema';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
+import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -85,7 +86,7 @@ export async function upsertSeedGame(
       .insert(games)
       .values(game)
       .returning({ id: games.id });
-    return { id: inserted.id, action: 'created' };
+    return { id: defined(inserted, 'inserted game').id, action: 'created' };
   });
 }
 

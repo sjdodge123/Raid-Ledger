@@ -9,6 +9,7 @@ import { benchSuffix } from './signup-bench-feedback.helpers';
 import { derivePreferredRoles } from './signup-role-derive.helpers';
 import { buildReplyEmbed } from './signup-reply-embed.helpers';
 import { getConflictSuffix } from './signup-conflict-warning.helpers';
+import { defined } from '../../common/defined.helpers';
 
 /**
  * Handle character selection for linked users.
@@ -46,13 +47,13 @@ async function processCharacterSelect(
   deps: SignupInteractionDeps,
   signupStatus?: 'tentative',
 ): Promise<void> {
-  const characterId = interaction.values[0];
   const linkedUser = await findLinkedUser(interaction.user.id, deps);
 
   if (!linkedUser) {
     await replyNoLinkedAccount(interaction);
     return;
   }
+  const characterId = defined(interaction.values[0], 'selected character id');
 
   const redirected = await tryMmoRoleRedirect(
     interaction,

@@ -162,6 +162,11 @@ jobs:
       # files (e.g. against the shared drizzle-mock) slip past the build step.
       # Run the full-project typecheck — same command validate-ci.sh uses —
       # so test-file tsc errors fail the PR instead of leaking to main.
+      # ROK-1161 phase 7: api/tsconfig.build.json (the Build API step) now
+      # carries noUncheckedIndexedAccess for shipped code, while this
+      # full-project typecheck keeps the tracked phase-8 override in
+      # api/tsconfig.json. No new step is needed: nest build already gates
+      # validate-ci run_build (api scope, --static) and this lint job.
       - name: Typecheck (full project, incl. tests)
         run: npx tsc --noEmit -p api/tsconfig.json
 

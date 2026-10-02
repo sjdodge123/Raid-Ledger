@@ -30,6 +30,7 @@ import * as rosterQH from './signups-roster-query.helpers';
 import * as flowH from './signups-flow.helpers';
 import * as discordSignupH from './signups-discord-signup.helpers';
 import * as reconfirmH from './signups-reconfirm.helpers';
+import * as signupRowH from './signups-row.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
@@ -146,11 +147,9 @@ export class SignupsService {
     dto: UpdateSignupStatusDto,
   ): Promise<SignupResponseDto> {
     const signup = await cancelH.findSignupByIdentifier(this.db, eventId, id);
-    const [updated] = await this.db
-      .update(schema.eventSignups)
-      .set({ status: dto.status })
-      .where(eq(schema.eventSignups.id, signup.id))
-      .returning();
+    const updated = await signupRowH.updateSignupById(this.db, signup.id, {
+      status: dto.status,
+    });
     this.logger.log(
       `Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`,
     );
@@ -229,11 +228,10 @@ export class SignupsService {
     );
     const newStatus: ConfirmationStatus =
       signup.confirmationStatus === 'pending' ? 'confirmed' : 'changed';
-    const [updated] = await this.db
-      .update(schema.eventSignups)
-      .set({ characterId: dto.characterId, confirmationStatus: newStatus })
-      .where(eq(schema.eventSignups.id, signupId))
-      .returning();
+    const updated = await signupRowH.updateSignupById(this.db, signupId, {
+      characterId: dto.characterId,
+      confirmationStatus: newStatus,
+    });
     const user = await cancelH.fetchUserById(this.db, userId);
     this.logger.log(
       `User ${userId} confirmed signup ${signupId} with character ${dto.characterId}`,

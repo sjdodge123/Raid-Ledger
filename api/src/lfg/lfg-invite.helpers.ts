@@ -11,6 +11,7 @@
  */
 import { and, count, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { isDiscordSnowflake } from '../notifications/discord-notification.constants';
 import { resolveChannelPrefs } from '../notifications/notification-mapping.helpers';
 import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
@@ -167,7 +168,7 @@ export async function insertInvite(
   input: { recipientUserId: number; inviterUserId: number; gameId: number },
 ): Promise<LfgInviteRow> {
   const [row] = await db.insert(schema.lfgInvites).values(input).returning();
-  return row;
+  return defined(row, 'inserted invite row');
 }
 
 /**

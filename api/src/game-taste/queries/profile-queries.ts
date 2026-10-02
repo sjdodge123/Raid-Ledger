@@ -28,8 +28,8 @@ export async function getGameTasteProfile(
     .from(schema.gameTasteVectors)
     .where(eq(schema.gameTasteVectors.gameId, gameId))
     .limit(1);
-  if (rows.length === 0) return null;
-  const row = rows[0];
+  const [row] = rows;
+  if (row === undefined) return null;
   return {
     gameId,
     vector: row.vector,
@@ -56,10 +56,10 @@ export async function getVectorWithDerivation(
     .from(schema.gameTasteVectors)
     .where(eq(schema.gameTasteVectors.gameId, gameId))
     .limit(1);
-  if (rows.length === 0) return null;
+  const [row] = rows;
+  if (row === undefined) return null;
   const derivation = await rebuildDerivation(db, gameId);
   if (derivation === null) return null;
-  const row = rows[0];
   return {
     gameId,
     vector: row.vector,

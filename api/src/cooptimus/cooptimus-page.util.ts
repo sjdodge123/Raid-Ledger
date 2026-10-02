@@ -19,6 +19,8 @@
  * claim underneath the "Co-op data from Co-Optimus" credit.
  */
 
+import { defined } from '../common/defined.helpers';
+
 export interface CooptimusPageFacts {
   /** null = we could not determine it (missing/changed markup). */
   comboCoop: boolean | null;
@@ -56,9 +58,10 @@ function readCombo(
 ): Pick<CooptimusPageFacts, 'comboCoop' | 'comboLabel'> {
   const block = CORE_BLOCK_RE.exec(html);
   if (!block) return { comboCoop: null, comboLabel: null };
-  for (const [, dt, dd] of block[1].matchAll(DT_DD_RE)) {
-    if (!/combo/i.test(text(dt))) continue;
-    const value = text(dd);
+  const core = defined(block[1], 'Co-Optimus core-features block');
+  for (const [, dt, dd] of core.matchAll(DT_DD_RE)) {
+    if (!/combo/i.test(text(defined(dt, 'Co-Optimus <dt> text')))) continue;
+    const value = text(defined(dd, 'Co-Optimus <dd> text'));
     if (!value) return { comboCoop: null, comboLabel: null };
     // "Not Supported" is a real reported negative — keep it as false, not null.
     if (/not\s+supported/i.test(value))
@@ -74,7 +77,10 @@ function readCombo(
 function readDownloadableOnly(html: string): boolean | null {
   const block = EXTRAS_BLOCK_RE.exec(html);
   if (!block) return null;
-  const items = [...block[1].matchAll(LI_RE)].map(([, li]) => text(li));
+  const extras = defined(block[1], 'Co-Optimus extras block');
+  const items = [...extras.matchAll(LI_RE)].map(([, li]) =>
+    text(defined(li, 'Co-Optimus extras <li> text')),
+  );
   if (items.length === 0) return null;
   return items.some((i) => /downloadable\s+only/i.test(i));
 }

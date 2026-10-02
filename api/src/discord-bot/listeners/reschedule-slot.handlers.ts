@@ -73,8 +73,9 @@ async function slotMmoRole(
   };
 
   for (const role of preferredRoles) {
-    if (!(role in capacity)) continue;
-    for (let pos = 1; pos <= capacity[role]; pos++) {
+    const roleCapacity = capacity[role];
+    if (!(role in capacity) || roleCapacity === undefined) continue;
+    for (let pos = 1; pos <= roleCapacity; pos++) {
       if (!occupied.has(`${role}:${pos}`)) {
         await insertAssignment(deps, eventId, signupId, role, pos);
         return;

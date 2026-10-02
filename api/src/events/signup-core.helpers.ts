@@ -2,6 +2,7 @@ import { Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { buildSignupResponse } from './signup-response.helpers';
 import {
@@ -49,7 +50,7 @@ type SignupTxArgs = {
   eventId: number;
   userId: number;
   event: EventRow;
-  user: UserRow;
+  user: UserRow | undefined;
   benchPromo: BenchPromotionService;
   dto?: CreateSignupDto;
 };
@@ -78,7 +79,7 @@ async function executeSignupTxBody(
     event,
     eventId,
     userId,
-    rows[0],
+    defined(rows[0], 'inserted signup row'),
     dto,
     autoBench,
     args.benchPromo,
@@ -173,7 +174,7 @@ export async function buildNewSignupResponse(
   eventId: number,
   userId: number,
   signup: typeof schema.eventSignups.$inferSelect,
-  user: UserRow,
+  user: UserRow | undefined,
   characterId?: string | null,
 ): Promise<SignupResponseDto> {
   cleanupMatchingPugSlots(db, eventId, userId).catch((err) =>
@@ -192,7 +193,7 @@ export async function prepareSignup(
   eventId: number,
   userId: number,
   characterId?: string | null,
-): Promise<{ event: EventRow; user: UserRow }> {
+): Promise<{ event: EventRow; user: UserRow | undefined }> {
   const event = await findEventOrThrow(db, eventId);
   const [user] = await db
     .select()

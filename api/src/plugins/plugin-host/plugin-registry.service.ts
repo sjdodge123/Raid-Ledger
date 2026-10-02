@@ -7,6 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { defined } from '../../common/defined.helpers';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -130,19 +131,19 @@ export class PluginRegistryService implements OnModuleInit {
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.INSTALLED, { slug, manifest });
     this.logger.log(`Plugin installed and activated: ${slug}`);
-    return record;
+    return defined(record, 'installed plugin row');
   }
 
   /** Uninstall a plugin (must be deactivated first). */
   async uninstall(slug: string): Promise<void> {
-    const existing = await this.db
+    const [existing] = await this.db
       .select()
       .from(plugins)
       .where(eq(plugins.slug, slug))
       .limit(1);
-    if (existing.length === 0)
+    if (!existing)
       throw new NotFoundException(`Plugin "${slug}" is not installed`);
-    if (existing[0].active)
+    if (existing.active)
       throw new BadRequestException(
         `Plugin "${slug}" must be deactivated before uninstalling`,
       );
@@ -163,14 +164,14 @@ export class PluginRegistryService implements OnModuleInit {
 
   /** Activate an installed plugin. */
   async activate(slug: string): Promise<void> {
-    const existing = await this.db
+    const [existing] = await this.db
       .select()
       .from(plugins)
       .where(eq(plugins.slug, slug))
       .limit(1);
-    if (existing.length === 0)
+    if (!existing)
       throw new NotFoundException(`Plugin "${slug}" is not installed`);
-    if (existing[0].active) return;
+    if (existing.active) return;
     await this.db
       .update(plugins)
       .set({ active: true, updatedAt: new Date() })
@@ -182,14 +183,14 @@ export class PluginRegistryService implements OnModuleInit {
 
   /** Deactivate an installed plugin. */
   async deactivate(slug: string): Promise<void> {
-    const existing = await this.db
+    const [existing] = await this.db
       .select()
       .from(plugins)
       .where(eq(plugins.slug, slug))
       .limit(1);
-    if (existing.length === 0)
+    if (!existing)
       throw new NotFoundException(`Plugin "${slug}" is not installed`);
-    if (!existing[0].active) return;
+    if (!existing.active) return;
     await this.db
       .update(plugins)
       .set({ active: false, updatedAt: new Date() })

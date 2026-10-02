@@ -6,6 +6,7 @@ import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { type ChainResult } from './signup-chain.helpers';
 import { insertAssignment, confirmSignup } from './signup-allocation.helpers';
@@ -27,7 +28,8 @@ function applyChainMove(
   occupied[move.fromRole]?.delete(move.position);
   occupied[move.toRole]?.add(newPos);
   if (!nextMove || nextMove.fromRole !== move.toRole) {
-    filledPerRole[move.toRole]++;
+    const filled = defined(filledPerRole[move.toRole], `${move.toRole} fill`);
+    filledPerRole[move.toRole] = filled + 1;
   }
   return newPos;
 }
@@ -41,8 +43,8 @@ async function persistChainMoves(
   findPos: (role: string) => number,
 ): Promise<void> {
   for (let i = chain.moves.length - 1; i >= 0; i--) {
-    const move = chain.moves[i];
-    const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
+    const move = defined(chain.moves[i], `chain move ${i}`);
+    const nextMove = chain.moves[i + 1] ?? null;
     const newPos = applyChainMove(
       move,
       nextMove,
@@ -69,7 +71,7 @@ async function finalizeChainAllocation(
   benchPromo: BenchPromotionService,
 ): Promise<void> {
   const { freedRole } = chain;
-  const freedPosition = chain.moves[0].position;
+  const freedPosition = defined(chain.moves[0], 'first chain move').position;
   await insertAssignment(tx, eventId, newSignupId, freedRole, freedPosition);
   await confirmSignup(tx, newSignupId);
   logger.log(

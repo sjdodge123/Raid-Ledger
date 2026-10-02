@@ -19,6 +19,7 @@ import type {
   CoPlayPartnerRow,
   TasteProfileResult,
 } from '../../taste-profile/queries/taste-profile-queries';
+import { defined } from '../../common/defined.helpers';
 import { TasteProfileService } from '../../taste-profile/taste-profile.service';
 import { UsersService } from '../../users/users.service';
 
@@ -71,7 +72,7 @@ export class TasteProfileContextBuilder {
       intensityMetrics: profile.intensityMetrics,
       topAxes: pickTopAxes(profile.dimensions, MAX_TOP_AXES),
       lowAxes: pickLowAxes(profile.dimensions, MAX_LOW_AXES),
-      coPlayPartners: partnerLists[i],
+      coPlayPartners: defined(partnerLists[i], 'partner contexts'),
     }));
 
     return { contexts, missingUserIds };

@@ -19,6 +19,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { namesMatch, tokenCount } from '@raid-ledger/contract';
 import { normalizeForDedup } from './igdb-search-dedup.helpers';
+import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -228,7 +229,7 @@ function splitGroups(buckets: Map<string, NameDedupRow[]>): {
   const skipped: NameDuplicateGroup[] = [];
   for (const [key, rows] of buckets) {
     if (rows.length < 2) continue;
-    const normalizedName = key.split('|')[0];
+    const normalizedName = defined(key.split('|')[0], 'normalized name key');
     const distinctIgdbIds = new Set(
       rows.map((r) => r.igdbId).filter((id): id is number => id != null),
     );
@@ -252,6 +253,6 @@ export function pickNameGroupWinner(rows: NameDedupRow[]): NameDedupRow {
     sorted.find((r) => r.igdbId != null) ??
     sorted.find((r) => r.itadGameId != null) ??
     sorted.find((r) => r.steamAppId != null) ??
-    sorted[0]
+    defined(sorted[0], 'name group winner')
   );
 }

@@ -73,7 +73,7 @@ function parseArrayResilient(content: string, start: number): unknown {
   let i = from;
   while (i < content.length) {
     // skip whitespace + comma
-    while (i < content.length && /[\s,]/.test(content[i])) i += 1;
+    while (i < content.length && /[\s,]/.test(content.charAt(i))) i += 1;
     if (i >= content.length || content[i] !== '{') break;
     const objStart = i;
     let depth = 0;

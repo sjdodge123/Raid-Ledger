@@ -27,31 +27,49 @@ type OnChange = (next: CommonGroundParams) => void;
 // auto-seed effect stays quiet and every onChange we assert on is ours.
 const baseFilters: CommonGroundParams = {
     minOwners: 2,
-    genre: undefined,
     maxPlayers: 4,
 };
 
-function renderFilters(
-    overrides: Partial<CommonGroundParams> = {},
-    props: {
-        onChange?: Mock<OnChange>;
-        participantCount?: number;
-        // Round 2: the control is dormant until the catalogue has
-        // Co-Optimus data. Default true so the co-op suites below exercise
-        // the live control; the dormant path has its own describe block.
-        coopDataAvailable?: boolean;
-    } = {},
-) {
+/**
+ * The base filters with `maxPlayers` dropped: a first visit where nobody has
+ * picked a player count yet. The key is omitted, never set to `undefined`.
+ */
+function filtersWithoutMaxPlayers(): CommonGroundParams {
+    const filters: CommonGroundParams = { ...baseFilters };
+    delete filters.maxPlayers;
+    return filters;
+}
+
+interface RenderProps {
+    onChange?: Mock<OnChange>;
+    participantCount?: number;
+    // Round 2: the control is dormant until the catalogue has
+    // Co-Optimus data. Default true so the co-op suites below exercise
+    // the live control; the dormant path has its own describe block.
+    coopDataAvailable?: boolean;
+}
+
+/** Renders with `filters` exactly as given (no merge over the base). */
+function renderWithFilters(filters: CommonGroundParams, props: RenderProps = {}) {
     const onChange = props.onChange ?? vi.fn<OnChange>();
     const result = render(
         <CommonGroundFilters
-            filters={{ ...baseFilters, ...overrides }}
+            filters={filters}
             onChange={onChange}
-            participantCount={props.participantCount}
+            {...(props.participantCount === undefined
+                ? {}
+                : { participantCount: props.participantCount })}
             coopDataAvailable={props.coopDataAvailable ?? true}
         />,
     );
     return { onChange, ...result };
+}
+
+function renderFilters(
+    overrides: Partial<CommonGroundParams> = {},
+    props: RenderProps = {},
+) {
+    return renderWithFilters({ ...baseFilters, ...overrides }, props);
 }
 
 describe('CommonGroundFilters — co-op toggle rendering (ROK-1400)', () => {
@@ -63,7 +81,7 @@ describe('CommonGroundFilters — co-op toggle rendering (ROK-1400)', () => {
     });
 
     it('is unchecked when minOnlineCoop is undefined', () => {
-        renderFilters({ minOnlineCoop: undefined });
+        renderFilters();
         expect(
             screen.getByRole('checkbox', { name: /co-op for our group size/i }),
         ).not.toBeChecked();
@@ -77,7 +95,7 @@ describe('CommonGroundFilters — co-op toggle rendering (ROK-1400)', () => {
     });
 
     it('does NOT render the group-size control while the toggle is off', () => {
-        renderFilters({ minOnlineCoop: undefined });
+        renderFilters();
         expect(
             screen.queryByRole('slider', { name: /co-op group size/i }),
         ).not.toBeInTheDocument();
@@ -144,7 +162,7 @@ describe('CommonGroundFilters — co-op NULL-data hint (ROK-1400)', () => {
     });
 
     it('hides the hint while the filter is inactive', () => {
-        renderFilters({ minOnlineCoop: undefined });
+        renderFilters();
         expect(
             screen.queryByText(/showing games with co-op data/i),
         ).not.toBeInTheDocument();
@@ -155,7 +173,7 @@ describe('CommonGroundFilters — co-op auto-seed from participantCount (ROK-140
     it('seeds minOnlineCoop from participantCount when the toggle is switched on', async () => {
         const user = userEvent.setup();
         const onChange = vi.fn<OnChange>();
-        renderFilters({ minOnlineCoop: undefined }, { onChange, participantCount: 3 });
+        renderFilters({}, { onChange, participantCount: 3 });
 
         await user.click(
             screen.getByRole('checkbox', { name: /co-op for our group size/i }),
@@ -169,7 +187,7 @@ describe('CommonGroundFilters — co-op auto-seed from participantCount (ROK-140
     it('seeds to 1 when participantCount is unknown', async () => {
         const user = userEvent.setup();
         const onChange = vi.fn<OnChange>();
-        renderFilters({ minOnlineCoop: undefined }, { onChange });
+        renderFilters({}, { onChange });
 
         await user.click(
             screen.getByRole('checkbox', { name: /co-op for our group size/i }),
@@ -183,7 +201,7 @@ describe('CommonGroundFilters — co-op auto-seed from participantCount (ROK-140
     it('seeds to 1 when participantCount is 0', async () => {
         const user = userEvent.setup();
         const onChange = vi.fn<OnChange>();
-        renderFilters({ minOnlineCoop: undefined }, { onChange, participantCount: 0 });
+        renderFilters({}, { onChange, participantCount: 0 });
 
         await user.click(
             screen.getByRole('checkbox', { name: /co-op for our group size/i }),
@@ -196,7 +214,7 @@ describe('CommonGroundFilters — co-op auto-seed from participantCount (ROK-140
 
     it('does NOT activate the co-op filter on mount (opt-in only)', () => {
         const onChange = vi.fn<OnChange>();
-        renderFilters({ minOnlineCoop: undefined }, { onChange, participantCount: 4 });
+        renderFilters({}, { onChange, participantCount: 4 });
 
         const coopCalls = onChange.mock.calls.filter(
             ([next]) => (next as CommonGroundParams).minOnlineCoop != null,
@@ -243,10 +261,10 @@ describe('CommonGroundFilters — co-op clearable (ROK-1400)', () => {
 describe('CommonGroundFilters — suppressAutoSeed (ROK-1400)', () => {
     it('still auto-seeds maxPlayers on a first visit', () => {
         const onChange = vi.fn<OnChange>();
-        renderFilters(
-            { maxPlayers: undefined },
-            { onChange, participantCount: 4 },
-        );
+        renderWithFilters(filtersWithoutMaxPlayers(), {
+            onChange,
+            participantCount: 4,
+        });
 
         expect(onChange).toHaveBeenCalledWith(
             expect.objectContaining({ maxPlayers: 4 }),
@@ -257,7 +275,7 @@ describe('CommonGroundFilters — suppressAutoSeed (ROK-1400)', () => {
         const onChange = vi.fn<OnChange>();
         render(
             <CommonGroundFilters
-                filters={{ ...baseFilters, maxPlayers: undefined }}
+                filters={filtersWithoutMaxPlayers()}
                 onChange={onChange}
                 participantCount={4}
                 suppressAutoSeed

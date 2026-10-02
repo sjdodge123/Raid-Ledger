@@ -141,7 +141,7 @@ export function parseGoCustomId(customId: string): LfgComposerGoState | null {
     Number.isSafeInteger(gameId) &&
     gameId > 0 &&
     (originFlag === 'c' || originFlag === 's');
-  if (!valid) return null;
+  if (!valid || urgencyKey === undefined) return null;
   return {
     urgencyKey,
     gameId,

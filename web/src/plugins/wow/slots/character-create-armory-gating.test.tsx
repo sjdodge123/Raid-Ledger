@@ -44,7 +44,8 @@ function Harness({ gameSlug, initial, eventId }: { gameSlug: string; initial: 'm
     const [tab, setTab] = useState(initial);
     return (
         <>
-            <CharacterCreateImportForm onClose={() => {}} gameSlug={gameSlug} activeTab={tab} onTabChange={setTab} eventId={eventId} />
+            <CharacterCreateImportForm onClose={() => {}} gameSlug={gameSlug} activeTab={tab} onTabChange={setTab}
+                {...(eventId === undefined ? {} : { eventId })} />
             <span data-testid="active-tab">{tab}</span>
         </>
     );

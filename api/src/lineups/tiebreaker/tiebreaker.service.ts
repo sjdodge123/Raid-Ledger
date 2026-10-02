@@ -54,6 +54,7 @@ import {
 } from './tie-pick.helpers';
 import type { TieHoldState } from './tie-hold.helpers';
 import { findLineupById } from '../lineups-query.helpers';
+import { defined } from '../../common/defined.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
 import {
@@ -119,13 +120,14 @@ export class TiebreakerService {
       throw new BadRequestException('No ties detected in this lineup');
     }
 
-    const [tiebreaker] = await insertTiebreaker(
+    const [inserted] = await insertTiebreaker(
       this.db,
       lineupId,
       dto,
       ties.tiedGameIds,
       ties.voteCount,
     );
+    const tiebreaker = defined(inserted, 'inserted tiebreaker row');
     await linkTiebreakerToLineup(this.db, lineupId, tiebreaker.id);
 
     if (dto.mode === 'bracket') {
@@ -345,7 +347,7 @@ export class TiebreakerService {
       // If bracket isn't done, pick highest-seeded remaining
       const matchups = await findMatchups(this.db, tb.id);
       const final = matchups.find((m) => m.winnerGameId);
-      return final?.winnerGameId ?? tiedGameIds[0];
+      return final?.winnerGameId ?? defined(tiedGameIds[0], 'top tied game');
     }
 
     // Veto mode: reveal and find survivor

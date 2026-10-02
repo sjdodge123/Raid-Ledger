@@ -127,14 +127,15 @@ export async function fetchTwitchStreams(
     .where(eq(schema.games.id, gameId))
     .limit(1);
 
-  if (gameRows.length === 0 || !gameRows[0].twitchGameId) {
+  const twitchGameId = gameRows[0]?.twitchGameId;
+  if (!twitchGameId) {
     return EMPTY_STREAMS;
   }
 
   try {
     const { clientId } = await getCredentials();
     const token = await getToken();
-    return await callTwitchApi(gameRows[0].twitchGameId, clientId, token);
+    return await callTwitchApi(twitchGameId, clientId, token);
   } catch (error) {
     logger.error(`Failed to fetch Twitch streams: ${error}`);
     return EMPTY_STREAMS;

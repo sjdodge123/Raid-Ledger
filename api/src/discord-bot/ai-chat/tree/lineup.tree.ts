@@ -1,3 +1,4 @@
+import { defined } from '../../../common/defined.helpers';
 import { aiCustomId } from '../ai-chat.constants';
 import type { TreeResult, AiChatDeps, TreeSession } from './tree.types';
 
@@ -47,7 +48,7 @@ async function fetchActiveLineup(
       return leaf(null, 'No active lineup right now.', deps);
     }
     const lineup = await deps.lineupsService.findById(
-      active[0].id,
+      defined(active[0], 'active lineup').id,
       userId ?? undefined,
     );
     const gameName = lineup.decidedGameName ?? 'TBD';
@@ -78,7 +79,7 @@ async function fetchNominations(
       return leaf(null, 'No active lineup right now.', deps);
     }
     const lineup = await deps.lineupsService.findById(
-      active[0].id,
+      defined(active[0], 'active lineup').id,
       userId ?? undefined,
     );
     const entries = lineup.entries ?? [];

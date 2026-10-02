@@ -86,7 +86,11 @@ function sortAndRenumber(
     if (b.memberUserIds.length !== a.memberUserIds.length) {
       return b.memberUserIds.length - a.memberUserIds.length;
     }
-    return a.memberUserIds[0] - b.memberUserIds[0];
+    const [aFirst] = a.memberUserIds;
+    const [bFirst] = b.memberUserIds;
+    // Equal lengths: both empty (old NaN, which sort reads as 0) or both set.
+    if (aFirst === undefined || bFirst === undefined) return 0;
+    return aFirst - bFirst;
   });
   return groups.map((g, idx) => ({
     cliqueId: idx + 1,

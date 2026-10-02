@@ -4,6 +4,7 @@
  */
 import { Logger } from '@nestjs/common';
 import { IGDB_CONFIG, type IgdbApiGame } from '../igdb/igdb.constants';
+import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('SteamIgdbEnrichment');
 
@@ -90,7 +91,10 @@ export async function enrichFromIgdb(
     const query = buildSteamLookupQuery(steamAppId);
     const games = await queryIgdb(query);
     if (games.length === 0) return null;
-    return mapIgdbToEnrichment(games[0], steamAppId);
+    return mapIgdbToEnrichment(
+      defined(games[0], 'first IGDB match'),
+      steamAppId,
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     logger.warn(`IGDB enrichment failed for Steam app ${steamAppId}: ${msg}`);

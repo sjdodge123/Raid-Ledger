@@ -6,7 +6,7 @@ import { Switch } from './switch';
 function renderSwitch(props: { checked?: boolean; disabled?: boolean } = {}) {
     const onChange = vi.fn();
     render(<Switch label="Enable thing" checked={props.checked ?? false}
-        disabled={props.disabled} onChange={onChange} />);
+        {...(props.disabled === undefined ? {} : { disabled: props.disabled })} onChange={onChange} />);
     return { onChange, control: screen.getByRole('switch', { name: 'Enable thing' }) };
 }
 

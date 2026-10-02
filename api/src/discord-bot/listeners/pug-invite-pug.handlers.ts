@@ -30,6 +30,7 @@ export async function handlePugButtonInteraction(
   const parts = interaction.customId.split(':');
   if (parts.length !== 2) return;
   const [action, pugSlotId] = parts;
+  if (action === undefined || pugSlotId === undefined) return;
   if (!isPugAction(action)) return;
   if (!(await safeDeferReply(interaction, deps.logger))) return;
   try {

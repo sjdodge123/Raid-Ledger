@@ -9,6 +9,7 @@
  *
  * Pairs are stored canonically: user_id_a < user_id_b (CHECK constraint).
  */
+import { defined } from '../common/defined.helpers';
 
 export interface VoiceSessionRow {
   eventId: number;
@@ -112,11 +113,10 @@ export function aggregateCoPlay(
   const map = new Map<string, CoPlayAggregate>();
 
   for (const [, sessions] of voiceSessionsByEvent) {
-    for (let i = 0; i < sessions.length; i++) {
-      const a = sessions[i];
+    for (const [i, a] of sessions.entries()) {
       if (a.userId === null) continue;
       for (let j = i + 1; j < sessions.length; j++) {
-        const b = sessions[j];
+        const b = defined(sessions[j], 'voice session');
         if (b.userId === null || a.userId === b.userId) continue;
         const minutes = voiceOverlapMinutes(a, b);
         if (minutes === 0) continue;
@@ -141,11 +141,10 @@ export function aggregateCoPlay(
     // "last played", and it always won the max() over real voice timestamps.
     const eventStartAt = signups[0]?.eventStartAt;
     if (!eventStartAt || eventStartAt > now) continue;
-    for (let i = 0; i < signups.length; i++) {
-      const a = signups[i];
+    for (const [i, a] of signups.entries()) {
       if (a.userId === null) continue;
       for (let j = i + 1; j < signups.length; j++) {
-        const b = signups[j];
+        const b = defined(signups[j], 'event signup');
         if (b.userId === null || a.userId === b.userId) continue;
         upsertAggregate(
           map,

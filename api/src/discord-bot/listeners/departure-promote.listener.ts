@@ -199,6 +199,13 @@ function parseDepartureButton(customId: string): DepartureButtonParsed | null {
   const parts = customId.split(':');
   if (parts.length !== 4) return null;
   const [action, eventIdStr, role, positionStr] = parts;
+  if (
+    action === undefined ||
+    eventIdStr === undefined ||
+    role === undefined ||
+    positionStr === undefined
+  )
+    return null;
   const eventId = parseInt(eventIdStr, 10);
   const position = parseInt(positionStr, 10);
   if (isNaN(eventId) || isNaN(position)) return null;

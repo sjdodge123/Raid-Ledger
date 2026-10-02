@@ -68,6 +68,7 @@ export function parseSteamNominateButtonId(
   const parts = customId.split(':');
   if (parts.length !== 2) return null;
   const [action, gameIdStr] = parts;
+  if (action === undefined || gameIdStr === undefined) return null;
   const gameId = parseInt(gameIdStr, 10);
   if (isNaN(gameId)) return null;
   const validActions: string[] = [
