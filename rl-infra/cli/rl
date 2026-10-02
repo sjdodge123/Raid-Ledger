@@ -1044,8 +1044,10 @@ restore_runner_exec_bits() {
 #                                     branches are legal mid-development)
 # ROK-1326 fix-11: preempt `npm ci` so the first validate-ci/test run on
 # a freshly-claimed slot doesn't pay the 1-2min dep-install cost on top
-# of its own work. Mutagen-excludes node_modules (large + OS-specific
-# binaries) so /workspace/node_modules is empty on every fresh claim.
+# of its own work. Mutagen excludes node_modules (large + OS-specific
+# binaries), so /workspace/node_modules is never synced from the laptop: it
+# persists on the runner between claims and may be missing (a new runner)
+# or stale (installed for another branch's package-lock.json).
 # Runs in the background from cmd_claim — claim returns to the user
 # immediately and deps populate while they read the claim output.
 # The root install goes through scripts/ci/ensure-runner-deps.sh, the
