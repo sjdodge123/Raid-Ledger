@@ -69,7 +69,7 @@ describe('computeWishlistDiff', () => {
     const result = computeWishlistDiff(input);
 
     expect(result.toInsert).toHaveLength(1);
-    expect(result.toInsert[0].gameId).toBe(1);
+    expect(result.toInsert[0]?.gameId).toBe(1);
   });
 
   it('handles combined insert and remove scenario', () => {
@@ -90,7 +90,7 @@ describe('computeWishlistDiff', () => {
 
     // game 2 (appid 200) is new
     expect(result.toInsert).toHaveLength(1);
-    expect(result.toInsert[0].gameId).toBe(2);
+    expect(result.toInsert[0]?.gameId).toBe(2);
     // game 1 is no longer wishlisted
     expect(result.toRemoveGameIds).toEqual([1]);
   });
@@ -120,8 +120,8 @@ describe('computeWishlistDiff', () => {
 
     const result = computeWishlistDiff(input);
 
-    expect(result.toInsert[0].lastSyncedAt).toBeInstanceOf(Date);
-    expect(result.toInsert[0].lastSyncedAt.getTime()).toBeGreaterThanOrEqual(
+    expect(result.toInsert[0]?.lastSyncedAt).toBeInstanceOf(Date);
+    expect(result.toInsert[0]?.lastSyncedAt.getTime()).toBeGreaterThanOrEqual(
       before.getTime(),
     );
   });
@@ -222,7 +222,7 @@ describe('computeWishlistDiff', () => {
 
     // game 2 is new, game 1 is existing and still current
     expect(result.toInsert).toHaveLength(1);
-    expect(result.toInsert[0].gameId).toBe(2);
+    expect(result.toInsert[0]?.gameId).toBe(2);
     expect(result.toRemoveGameIds).toHaveLength(0);
   });
 });
