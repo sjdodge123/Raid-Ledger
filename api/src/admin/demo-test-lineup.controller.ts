@@ -11,6 +11,10 @@
  *   - admin abort from each phase
  *   - public-share toggle accessibility + 404
  *
+ * Plus `carryover-from`, which re-runs lineup carryover from an explicit
+ * source lineup so the carryover smoke is not affected by lineups other
+ * smoke runs decide or archive in parallel.
+ *
  * All endpoints are DEMO_MODE-only. The controller is a thin parser /
  * gate; the actual DB writes live in `demo-test-lineup-edge.helpers.ts`.
  */
@@ -36,12 +40,14 @@ import { LINEUP_PHASE_TRANSITION } from '../lineups/queue/lineup-phase.constants
 import {
   advanceLineupToVotingForTest,
   castVoteForTest,
+  recarryLineupFromForTest,
   setLineupVisibilityForTest,
   setLineupChannelOverrideForTest,
 } from './demo-test-lineup-edge.helpers';
 import {
   AdvanceLineupZeroNomsSchema,
   SeedSingleVoterSchema,
+  RecarryLineupFromSchema,
   SetLineupPrivateSchema,
   RevokeChannelPermsSchema,
   FireLineupDeadlineSchema,
@@ -98,6 +104,25 @@ export class DemoTestLineupController {
       parsed.lineupId,
       parsed.gameId,
       parsed.userId,
+    );
+    return { success: true };
+  }
+
+  /**
+   * Drop the carried entries `POST /lineups` copied onto `lineupId` and
+   * re-carry from `previousLineupId`. The automatic source is the newest
+   * public decided/archived lineup on the whole instance, which a parallel
+   * smoke run can change between the spec's archive and its create.
+   */
+  @Post('carryover-from')
+  @HttpCode(HttpStatus.OK)
+  async carryoverFrom(@Body() body: unknown): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const parsed = parseDemoBody(RecarryLineupFromSchema, body);
+    await recarryLineupFromForTest(
+      this.db,
+      parsed.lineupId,
+      parsed.previousLineupId,
     );
     return { success: true };
   }

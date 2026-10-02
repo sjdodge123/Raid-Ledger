@@ -101,7 +101,7 @@ describe('hasHourOutsideWindow — the shift worker opens expanded', () => {
 
     it('ignores hours that are not actually claimed', () => {
         expect(hasHourOutsideWindow(
-            [{ dayOfWeek: 2, hour: 10, status: 'unavailable' }], window8, head,
+            [{ dayOfWeek: 2, hour: 10, status: 'blocked' }], window8, head,
         )).toBe(false);
     });
 });
@@ -112,7 +112,7 @@ describe('hasClaimedHourIn — the night owl opens the later band', () => {
     });
 
     it('is false for an unclaimed hour, or one outside the band', () => {
-        expect(hasClaimedHourIn([{ dayOfWeek: 6, hour: 3, status: 'unavailable' }], LATER_HOURS)).toBe(false);
+        expect(hasClaimedHourIn([{ dayOfWeek: 6, hour: 3, status: 'blocked' }], LATER_HOURS)).toBe(false);
         expect(hasClaimedHourIn([{ dayOfWeek: 6, hour: 20, status: 'available' }], LATER_HOURS)).toBe(false);
     });
 });

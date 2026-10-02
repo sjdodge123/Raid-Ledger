@@ -27,7 +27,8 @@ function makeSlot(id: number, proposedTime: string): ScheduleSlotWithVotesDto {
         suggestedBy: 'user',
         createdAt: '2026-06-01T00:00:00.000Z',
         votes: [],
-    } as ScheduleSlotWithVotesDto;
+        noVotes: [],
+    };
 }
 
 function makeLeader(
@@ -35,7 +36,7 @@ function makeLeader(
     votes: number,
     proposedTime = '2030-07-01T20:00:00.000Z',
 ): SchedulingLeader {
-    return { slot: makeSlot(id, proposedTime), votes, tied: false };
+    return { slot: makeSlot(id, proposedTime), votes, noVotes: 0, tied: false };
 }
 
 describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
@@ -74,7 +75,7 @@ describe('useSchedulingAnnouncer (ROK-1546 AC2)', () => {
         const { result, rerender } = renderHook(
             ({ leader }: { leader: SchedulingLeader | null }) =>
                 useSchedulingAnnouncer(leader),
-            { initialProps: { leader: makeLeader(1, 1) } },
+            { initialProps: { leader: makeLeader(1, 1) as SchedulingLeader | null } },
         );
 
         rerender({ leader: null });

@@ -36,7 +36,7 @@ const makeResponse = (
     discordId: m.discordId,
     steamLinked: m.steamLinked ?? true,
   })),
-  meta: { total: members.length, page: 1, pageSize: 20, hasMore: false },
+  meta: { total: members.length, page: 1, limit: 20, hasMore: false },
 });
 
 describe('InviteeMultiSelect', () => {

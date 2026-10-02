@@ -20,7 +20,10 @@
 import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import { suppressScheduled } from './ad-hoc-suppression.helpers';
+import {
+  suppressScheduled,
+  type SuppressionWindowHook,
+} from './ad-hoc-suppression.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -54,14 +57,17 @@ export type SpawnClearance = SpawnClearanceReceipt;
  * Run the ROK-959 guard once. Returns `null` (after bound-extending the live
  * scheduled event's `extended_until` window) when ad-hoc creation is
  * suppressed; otherwise the receipt the spawn path must present.
+ * `onExtended` (ROK-1696) is told when that write moves the end forward.
  */
 export async function checkSuppression(
   db: Db,
   bindingId: string,
   gameId: number | null | undefined,
   channelId?: string,
+  onExtended?: SuppressionWindowHook,
 ): Promise<SpawnClearance | null> {
-  if (await suppressScheduled(db, bindingId, gameId, channelId)) return null;
+  if (await suppressScheduled(db, bindingId, gameId, channelId, onExtended))
+    return null;
   return new SpawnClearanceReceipt(bindingId, gameId, channelId);
 }
 
@@ -76,6 +82,7 @@ export async function resolveSpawnClearance(
   gameId: number | null | undefined,
   channelId: string | undefined,
   supplied?: SpawnClearance,
+  onExtended?: SuppressionWindowHook,
 ): Promise<SpawnClearance | null> {
   if (supplied) {
     if (supplied.matches(bindingId, gameId) && supplied.consume())
@@ -84,5 +91,5 @@ export async function resolveSpawnClearance(
       `[voice-spawn] rejected stale/foreign spawn clearance binding=${bindingId} game=${gameId ?? '-'} — re-running suppression guard`,
     );
   }
-  return checkSuppression(db, bindingId, gameId, channelId);
+  return checkSuppression(db, bindingId, gameId, channelId, onExtended);
 }

@@ -22,6 +22,7 @@ function mockSystemStatus(data: Partial<SystemStatusDto>) {
         isFirstRun: false,
         discordConfigured: false,
         blizzardConfigured: false,
+        steamConfigured: false,
         activePlugins: [],
         authProviders: [],
     };

@@ -142,7 +142,7 @@ describe('EditLineupMetadataModal — save', () => {
  */
 const CONFIRM = 'Discard your changes?';
 /** Let the guard's one-macrotask Escape latch clear. */
-const settle = (): Promise<void> => act(() => new Promise((r) => { setTimeout(r, 0); }));
+const settle = (): Promise<void> => act(() => new Promise<void>((r) => { setTimeout(r, 0); }));
 const editDialog = (): HTMLElement => screen.getByRole('dialog', { name: 'Edit Lineup' });
 const descriptionInput = () => screen.getByRole('textbox', { name: /^Description/ });
 

@@ -1,7 +1,10 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   recordNoOp,
   recordCompleted,
+  recordDegraded,
   recordFailed,
   shouldUpdateLiveness,
   flushPendingUpdates,
@@ -303,6 +306,55 @@ describe('flushPendingUpdates (ROK-1414 — batched flush)', () => {
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
   });
 
+  it('never rolls last_run_at back: keeps the newer of stored vs queued', async () => {
+    await flushPendingUpdates(mockDb as any, pending(), logger);
+
+    const statement = mockDb.execute.mock.calls[0][0] as SQL;
+    const { sql: text } = new PgDialect().sqlToQuery(statement);
+    expect(text).toContain('GREATEST(c.last_run_at, v.last_run_at)');
+  });
+
+  it('re-queues every entry when the batched UPDATE fails', async () => {
+    mockDb.execute.mockRejectedValueOnce(new Error('connection reset'));
+    const map = pending();
+    const before = new Map(map);
+
+    await flushPendingUpdates(mockDb as any, map, logger);
+
+    expect(map).toEqual(before);
+  });
+
+  it('keeps a value queued during the failed flush over the re-queued one', async () => {
+    const map = pending();
+    const newer = {
+      lastRunAt: new Date('2025-01-01T05:00:00Z'),
+      cronExpression: '0 * * * *',
+    };
+    mockDb.execute.mockImplementationOnce(() => {
+      map.set(1, newer);
+      return Promise.reject(new Error('connection reset'));
+    });
+
+    await flushPendingUpdates(mockDb as any, map, logger);
+
+    expect(map.get(1)).toBe(newer);
+    expect(map.size).toBe(3);
+  });
+
+  it('does not re-queue an unserialisable entry after a failed flush', async () => {
+    mockDb.execute.mockRejectedValueOnce(new Error('connection reset'));
+    const map = pending();
+    map.set(4, {
+      lastRunAt: new Date('not-a-date'),
+      cronExpression: '0 * * * *',
+    });
+
+    await flushPendingUpdates(mockDb as any, map, logger);
+
+    expect(map.has(4)).toBe(false);
+    expect([...map.keys()]).toEqual([1, 2, 3]);
+  });
+
   it('issues no statement when every pending row is unserialisable', async () => {
     const map = new Map([
       [7, { lastRunAt: new Date('not-a-date'), cronExpression: '0 * * * *' }],
@@ -333,5 +385,133 @@ describe('shouldUpdateLiveness', () => {
   it('should return true when exactly at the interval boundary', () => {
     const exact = new Date(Date.now() - 300_000); // exactly 5 minutes ago
     expect(shouldUpdateLiveness(exact, 300_000)).toBe(true);
+  });
+});
+
+const START = new Date('2025-01-01T00:00:00Z');
+const FINISH = new Date('2025-01-01T00:00:01Z');
+
+describe('deferred last_run_at — queued runs (ROK-1380)', () => {
+  let mockDb: MockDb;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+  });
+
+  it('recordCompleted skips the per-run UPDATE when deferLastRun queues it', async () => {
+    const job = mockJob();
+    const deferLastRun = jest.fn().mockReturnValue(true);
+
+    await recordCompleted(
+      mockDb as any,
+      job,
+      'test-job',
+      START,
+      FINISH,
+      undefined,
+      undefined,
+      deferLastRun,
+    );
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({ cronJobId: 42, status: 'completed' }),
+    );
+    expect(deferLastRun).toHaveBeenCalledWith(job, FINISH);
+    expect(mockDb.update).not.toHaveBeenCalled();
+    // The cached row still reflects the run for the liveness check.
+    expect(job.lastRunAt).toBe(FINISH);
+  });
+
+  it('recordDegraded skips the per-run UPDATE when deferLastRun queues it', async () => {
+    const deferLastRun = jest.fn().mockReturnValue(true);
+
+    await recordDegraded(
+      mockDb as any,
+      mockJob(),
+      'test-job',
+      START,
+      FINISH,
+      undefined,
+      undefined,
+      deferLastRun,
+    );
+
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'degraded' }),
+    );
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('deferred last_run_at — immediate writes (ROK-1380)', () => {
+  let mockDb: MockDb;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+  });
+
+  it('writes immediately when deferLastRun declines (manual trigger)', async () => {
+    const deferLastRun = jest.fn().mockReturnValue(false);
+
+    await recordCompleted(
+      mockDb as any,
+      mockJob(),
+      'test-job',
+      START,
+      FINISH,
+      undefined,
+      undefined,
+      deferLastRun,
+    );
+
+    expect(deferLastRun).toHaveBeenCalledTimes(1);
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ lastRunAt: FINISH }),
+    );
+  });
+
+  it('recordFailed still writes last_run_at immediately', async () => {
+    await recordFailed(
+      mockDb as any,
+      mockJob(),
+      'test-job',
+      START,
+      FINISH,
+      'boom',
+      { error: jest.fn() } as any,
+    );
+
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    expect(mockDb.set).toHaveBeenCalledWith(
+      expect.objectContaining({ lastRunAt: FINISH }),
+    );
+  });
+});
+
+describe('deferred last_run_at — FK self-heal (ROK-1380)', () => {
+  it('hands deferLastRun the FRESH row, not the stale cached one', async () => {
+    const mockDb = createDrizzleMock();
+    const fresh = { ...mockJob(), id: 99 };
+    const fkErr = Object.assign(new Error('violates FK'), { code: '23503' });
+    mockDb.values.mockRejectedValueOnce(fkErr).mockResolvedValueOnce(undefined);
+    const deferLastRun = jest.fn().mockReturnValue(true);
+
+    await recordCompleted(
+      mockDb as any,
+      mockJob(), // stale id 42
+      'test-job',
+      START,
+      FINISH,
+      jest.fn().mockResolvedValue(fresh),
+      { warn: jest.fn(), error: jest.fn() } as any,
+      deferLastRun,
+    );
+
+    expect(deferLastRun).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 99 }),
+      FINISH,
+    );
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 });

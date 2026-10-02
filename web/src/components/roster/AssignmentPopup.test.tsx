@@ -1,8 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AssignmentPopup } from './AssignmentPopup';
+import type { AssignmentPopupProps } from './assignment-popup.types';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import type { ReactElement } from 'react';
 
@@ -432,7 +433,7 @@ const baseProps = {
         slotRole: 'player' as RosterRole,
         slotPosition: 1,
     };
-let mockOnAssign: ReturnType<typeof vi.fn>;
+let mockOnAssign: Mock<AssignmentPopupProps['onAssign']>;
 function assignmentpopupROK486GenericRosterGroup1() {
 it('targeted mode: directly calls onAssign without character modal when isMMO is false', () => {
         const player = makePlayer();
@@ -626,7 +627,7 @@ it('targeted mode: skips character modal when gameId is absent even if isMMO is 
 
 describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
 beforeEach(() => {
-        mockOnAssign = vi.fn();
+        mockOnAssign = vi.fn<AssignmentPopupProps['onAssign']>();
         vi.clearAllMocks();
     });
 

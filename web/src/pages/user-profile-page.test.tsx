@@ -45,6 +45,8 @@ const createMockCharacter = (
   region: "us",
   gameVariant: "classic",
   equipment: null,
+  talents: null,
+  professions: null,
   displayOrder: 1,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
@@ -392,7 +394,7 @@ describe("AC4: Section repositioned (Characters below Events)", () => {
     });
 
     const heartedGames: UserHeartedGameDto[] = [
-      { id: 1, igdbId: 12345, name: "Final Fantasy XIV", slug: "final-fantasy-xiv", coverUrl: null },
+      { id: 1, igdbId: 12345, name: "Final Fantasy XIV", slug: "final-fantasy-xiv", coverUrl: null, playtimeSeconds: null },
     ];
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({

@@ -47,7 +47,7 @@ const mockSocket = {
 
 // `socket.io-client` is the real package the hook will pull in. We mock
 // `io(...)` to return the controllable socket above.
-const mockIo = vi.fn(() => mockSocket);
+const mockIo = vi.fn<(...args: unknown[]) => typeof mockSocket>(() => mockSocket);
 vi.mock('socket.io-client', () => ({
     io: (...args: unknown[]) => mockIo(...args),
     Socket: class {},

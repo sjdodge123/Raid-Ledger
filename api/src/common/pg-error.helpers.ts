@@ -33,3 +33,21 @@ export function extractErrorDetail(err: unknown): string {
     .filter(Boolean)
     .join(' | ');
 }
+
+/**
+ * The SQLSTATE of a Postgres error, raw (postgres-js) or wrapped by Drizzle.
+ * Drizzle's DrizzleQueryError keeps the PG error on `cause`, so a top-level
+ * `code` check alone never sees it.
+ */
+export function pgErrorCode(err: unknown): string | undefined {
+  if (typeof err !== 'object' || err === null) return undefined;
+  const e = err as PgErrorLike;
+  if (typeof e.code === 'string') return e.code;
+  const causeCode = e.cause?.code;
+  return typeof causeCode === 'string' ? causeCode : undefined;
+}
+
+/** True for "relation does not exist" (42P01), raw or Drizzle-wrapped. */
+export function isMissingTableError(err: unknown): boolean {
+  return pgErrorCode(err) === '42P01';
+}

@@ -38,6 +38,24 @@ vi.mock('../../hooks/use-want-to-play-batch', () => ({
 }));
 
 const mockUseWantToPlay = vi.mocked(useWantToPlay);
+
+type WantToPlayResult = ReturnType<typeof useWantToPlay>;
+
+/** A complete hook result: the card reads only the toggle fields, the rest are idle defaults. */
+function wantToPlayResult(
+    overrides: Pick<WantToPlayResult, 'wantToPlay' | 'toggle' | 'isToggling' | 'count'>,
+): WantToPlayResult {
+    return {
+        source: undefined,
+        players: [],
+        owners: [],
+        ownerCount: 0,
+        wishlisters: [],
+        wishlistedCount: 0,
+        isLoading: false,
+        ...overrides,
+    };
+}
 const mockUseAuth = vi.mocked(useAuth);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -101,12 +119,12 @@ describe('OnboardingCardWrapper — useWantToPlay wiring (ROK-805)', () => {
 
     it('calls useWantToPlay with game.id when authenticated', () => {
         const mockToggle = vi.fn();
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: false,
             toggle: mockToggle,
             isToggling: false,
             count: 0,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
 
         renderWithProviders(<OnboardingCardWrapper game={createGame(42)} />);
 
@@ -119,12 +137,12 @@ describe('OnboardingCardWrapper — useWantToPlay wiring (ROK-805)', () => {
             user: null,
         } as ReturnType<typeof useAuth>);
         const mockToggle = vi.fn();
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: false,
             toggle: mockToggle,
             isToggling: false,
             count: 0,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
 
         renderWithProviders(<OnboardingCardWrapper game={createGame(7)} />);
 
@@ -132,12 +150,12 @@ describe('OnboardingCardWrapper — useWantToPlay wiring (ROK-805)', () => {
     });
 
     it('renders game name in the toggle card', () => {
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: false,
             toggle: vi.fn(),
             isToggling: false,
             count: 0,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
 
         renderWithProviders(<OnboardingCardWrapper game={createGame(1, 'Dark Souls')} />);
 
@@ -147,12 +165,12 @@ describe('OnboardingCardWrapper — useWantToPlay wiring (ROK-805)', () => {
     it('calls toggle(true) when clicked and wantToPlay is false', async () => {
         const user = userEvent.setup();
         const mockToggle = vi.fn();
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: false,
             toggle: mockToggle,
             isToggling: false,
             count: 0,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
 
         renderWithProviders(<OnboardingCardWrapper game={createGame(5)} />);
         await user.click(screen.getByRole('button'));
@@ -163,12 +181,12 @@ describe('OnboardingCardWrapper — useWantToPlay wiring (ROK-805)', () => {
     it('calls toggle(false) when clicked and wantToPlay is true', async () => {
         const user = userEvent.setup();
         const mockToggle = vi.fn();
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: true,
             toggle: mockToggle,
             isToggling: false,
             count: 2,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
 
         renderWithProviders(<OnboardingCardWrapper game={createGame(6)} />);
         await user.click(screen.getByRole('button'));
@@ -179,12 +197,12 @@ describe('OnboardingCardWrapper — useWantToPlay wiring (ROK-805)', () => {
     it('does not call toggle while isToggling=true (prevents double-fire)', async () => {
         const user = userEvent.setup();
         const mockToggle = vi.fn();
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: false,
             toggle: mockToggle,
             isToggling: true,
             count: 0,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
 
         renderWithProviders(<OnboardingCardWrapper game={createGame(8)} />);
         await user.click(screen.getByRole('button'));
@@ -199,12 +217,12 @@ describe('OnboardingCardWrapper — useWantToPlay wiring (ROK-805)', () => {
             isAuthenticated: false,
             user: null,
         } as ReturnType<typeof useAuth>);
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: false,
             toggle: mockToggle,
             isToggling: false,
             count: 0,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
 
         renderWithProviders(<OnboardingCardWrapper game={createGame(9)} />);
         await user.click(screen.getByRole('button'));
@@ -222,12 +240,12 @@ describe('UnifiedGameCard toggle — dimWhenInactive (ROK-805)', () => {
             isAuthenticated: false,
             user: null,
         } as ReturnType<typeof useAuth>);
-        mockUseWantToPlay.mockReturnValue({
+        mockUseWantToPlay.mockReturnValue(wantToPlayResult({
             wantToPlay: false,
             toggle: vi.fn(),
             isToggling: false,
             count: 0,
-        } as ReturnType<typeof useWantToPlay>);
+        }));
     });
 
     it('applies opacity-50 to unselected card when dimWhenInactive=true', () => {
