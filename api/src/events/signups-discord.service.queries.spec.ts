@@ -99,7 +99,7 @@ function createMockDb() {
 }
 
 let service: SignupsService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: ReturnType<typeof createMockDb>;
 
 async function setupEach() {
   mockDb = createMockDb();
