@@ -27,6 +27,7 @@ import { DemoTestStandalonePollController } from './demo-test-standalone-poll.co
 import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
 import { DemoTestWeeklyDigestController } from './demo-test-weekly-digest.controller';
 import { DemoTestRenderDmEmbedController } from './demo-test-render-dm-embed.controller';
+import { DemoTestRenderPugInviteEmbedController } from './demo-test-render-pug-invite-embed.controller';
 import { DemoTestBackupController } from './demo-test-backup.controller';
 import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
@@ -122,6 +123,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestRecruitmentController,
     DemoTestWeeklyDigestController,
     DemoTestRenderDmEmbedController,
+    DemoTestRenderPugInviteEmbedController,
     DemoTestBackupController,
     DemoTestSignInLinkController,
     AiChatTestController,
