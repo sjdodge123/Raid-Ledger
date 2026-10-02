@@ -54,4 +54,16 @@ describe('SocialGraph', () => {
         );
         expect(screen.getByRole('table')).toBeInTheDocument();
     });
+
+    // ROK-1128 #13: rows carry no action, so they must not be tab stops.
+    it('fallback table rows are not keyboard tab stops', async () => {
+        renderWithProviders(<SocialGraph />);
+        fireEvent.click(await screen.findByRole('button', { name: /show as table/i }));
+        const table = await screen.findByRole('table');
+        const focusableRows = Array.from(table.querySelectorAll('tbody tr'))
+            .filter((tr) => tr.hasAttribute('tabindex'))
+            .map((tr) => tr.textContent);
+        expect(table.querySelectorAll('tbody tr')).toHaveLength(2);
+        expect(focusableRows).toEqual([]);
+    });
 });

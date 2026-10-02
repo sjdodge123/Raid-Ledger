@@ -19,8 +19,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { CommunityInsightsSettingsDto } from './settings-community-insights.dto';
-
-const DEFAULT_CHURN_THRESHOLD_PCT = 70;
+import { DEFAULT_CHURN_THRESHOLD_PCT } from '../community-insights/community-insights.constants';
 
 @Controller('admin/settings')
 @UseGuards(AuthGuard('jwt'), AdminGuard)

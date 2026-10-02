@@ -24,14 +24,14 @@ export async function getSocialGraphResponse(
   const edges = filterEdges(stored.edges, cappedIds, minWeight);
   // Drop nodes with no surviving in-set edges — orphans imply "no
   // connections" to the viewer when they actually do connect outside
-  // the cap. Cleaner to omit them than mislead.
-  const connectedIds = new Set<number>();
-  for (const e of edges) {
-    connectedIds.add(e.sourceUserId);
-    connectedIds.add(e.targetUserId);
-  }
-  const nodes = capped.filter((n) => connectedIds.has(n.userId));
-  const nodeIds = connectedIds;
+  // the cap. Cleaner to omit them than mislead. Surviving nodes report
+  // their degree within the returned edge set, not the stored full-graph
+  // degree (which only drives the cap ranking above).
+  const visibleDegree = countDegrees(edges);
+  const nodes = capped
+    .filter((n) => visibleDegree.has(n.userId))
+    .map((n) => ({ ...n, degree: visibleDegree.get(n.userId) ?? 0 }));
+  const nodeIds = new Set(visibleDegree.keys());
   return {
     snapshotDate: stored.snapshotDate,
     nodes,
@@ -60,6 +60,15 @@ function filterEdges(
       nodeIds.has(e.sourceUserId) &&
       nodeIds.has(e.targetUserId),
   );
+}
+
+function countDegrees(edges: SocialGraphEdgeDto[]): Map<number, number> {
+  const degree = new Map<number, number>();
+  for (const e of edges) {
+    degree.set(e.sourceUserId, (degree.get(e.sourceUserId) ?? 0) + 1);
+    degree.set(e.targetUserId, (degree.get(e.targetUserId) ?? 0) + 1);
+  }
+  return degree;
 }
 
 function filterCliques(
