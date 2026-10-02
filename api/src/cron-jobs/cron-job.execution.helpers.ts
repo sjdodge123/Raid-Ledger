@@ -15,6 +15,7 @@ import {
   recordCompleted,
   recordDegraded,
   recordFailed,
+  type DeferLastRun,
 } from './cron-job.helpers';
 import { type ReresolveJob } from './cron-job.fk-recovery.helpers';
 
@@ -29,6 +30,11 @@ export interface RecordDeps {
   reresolve: ReresolveJob;
   /** Queue a liveness heartbeat for a no-op run (mutates service state). */
   onNoOp: (job: CronJobRow) => void;
+  /**
+   * Queue a completed/degraded run's last_run_at for the batched flush
+   * (ROK-1380); false means write it now. Failed runs never defer.
+   */
+  deferLastRun: DeferLastRun;
 }
 
 /**
@@ -59,6 +65,7 @@ async function recordHandlerSuccess(
     finishedAt,
     deps.reresolve,
     deps.logger,
+    deps.deferLastRun,
   );
   return true;
 }

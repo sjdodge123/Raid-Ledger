@@ -37,7 +37,7 @@ describe('CohortMemoryResponseDto (ROK-1309)', () => {
     it('parses a valid payload', () => {
         const parsed = CohortMemoryResponseSchema.parse(baseResponse());
         expect(parsed.cohortSize).toBe(3);
-        expect(parsed.entries[0].resolution).toBe('decided');
+        expect(parsed.entries[0]?.resolution).toBe('decided');
     });
 
     it('accepts an empty entries array (no cohort match)', () => {

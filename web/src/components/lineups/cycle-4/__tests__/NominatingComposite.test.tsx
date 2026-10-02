@@ -46,6 +46,8 @@ function buildBuildingLineup(
         totalMembers: 5,
         votingEligibleCount: 5,
         myVotes: [],
+        myTopPickGameId: null,
+        decisionReason: null,
         unlinkedSteamCount: 0,
         unlinkedSteamMembers: [],
         createdAt: '2026-05-15T00:00:00.000Z',
@@ -58,6 +60,7 @@ function buildBuildingLineup(
         stillWaitingOnVoters: [],
         publicShareEnabled: true,
         publicSlug: 'test-lineup',
+        includeSchedulingPhase: true,
         // ROK-1444: early-advance target + its published denominator.
         nominationTargetPct: null,
         nominationCap: 20,

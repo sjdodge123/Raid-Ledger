@@ -22,6 +22,7 @@ function makeGame(): TieReadinessGameDto {
         gameName: 'Deep Rock Galactic',
         gameCoverUrl: null,
         voteCount: 4,
+        starCount: 0,
         steamAppId: null,
         ownedCount: 7,
         rosterSize: 9,
@@ -31,6 +32,7 @@ function makeGame(): TieReadinessGameDto {
         installSizeSource: null,
         installSizeUpdatedAt: null,
         estimatedDownloadMinutes: null,
+        rosterEtas: [],
     };
 }
 

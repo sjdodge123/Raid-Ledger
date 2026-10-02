@@ -92,6 +92,7 @@ function renderHandlers(opts: {
                 shouldShowCharacterModal:
                     opts.shouldShowCharacterModal ?? false,
                 canManageRoster: opts.canManageRoster ?? false,
+                pugs: [],
             }),
         { wrapper: Wrapper },
     );

@@ -21,6 +21,10 @@ npm run test:integration -w api        # Uses Testcontainers (auto-manages Postg
 # Frontend
 npm run test -w web                    # Run all
 cd web && npx vitest run --coverage    # With coverage enforcement
+npx tsc --noEmit -p web/tsconfig.test.json  # Typecheck the specs (vitest does not)
+
+# Typecheck (web)
+npm run build -w web                   # tsc -b && vite build — authoritative
 
 # Contract schemas (Zod)
 npm test -w @raid-ledger/contract      # Run all
@@ -28,6 +32,17 @@ npm test -w @raid-ledger/contract      # Run all
 # Smoke tests (Playwright)
 npx playwright test                    # Auto-starts dev server
 ```
+
+**Web typecheck:** `web/tsconfig.json` is a solution-style config (`files: []`
+plus `references`), so `npx tsc --noEmit -p web/tsconfig.json` typechecks
+nothing and still exits 0. Use `npm run build -w web` (`tsc -b`), or the two
+leaf configs `scripts/validate-ci.sh` runs:
+`npx tsc --noEmit -p web/tsconfig.app.json` and
+`npx tsc --noEmit -p web/tsconfig.node.json`. Neither covers web test files —
+`web/tsconfig.app.json` excludes `src/**/*.test.ts(x)` and `src/test/**`.
+To typecheck web specs, run `npx tsc --noEmit -p web/tsconfig.test.json`. It is
+ungated and carries known pre-existing spec errors (see `TECH-DEBT-BACKLOG.md`),
+so filter its output to the files you touched.
 
 Contract schema specs live in `packages/contract/src/__tests__/*.spec.ts` and run
 under their own node-environment Vitest config (`packages/contract/vitest.config.ts`,
@@ -206,6 +221,8 @@ import { renderWithProviders } from '../../test/render-helpers';
 
 renderWithProviders(<MyPage />);
 ```
+
+When a `vi.mocked(useX).mockReturnValue(...)` needs only some of the hook's fields, use `partialResult<ReturnType<typeof useX>>({ ... })` from `web/src/test/partial-result.ts` instead of an inline `as` cast, so the fields you do give are still typechecked. Specs are typechecked by `web/tsconfig.test.json` in `validate-ci.sh` and the CI lint job.
 
 ## Integration Tests (Backend)
 

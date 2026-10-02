@@ -13,7 +13,7 @@ import { screen } from '@testing-library/react';
 import type { ActiveStandalonePollDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
 
-const activePolls = vi.fn<[], ActiveStandalonePollDto[] | undefined>(() => []);
+const activePolls = vi.fn<() => ActiveStandalonePollDto[] | undefined>(() => []);
 vi.mock('../../../hooks/use-standalone-poll', () => ({
   useActiveStandalonePolls: () => ({
     data: activePolls(),

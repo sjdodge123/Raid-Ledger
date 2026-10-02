@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -11,6 +12,14 @@ import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { ActiveEventCacheService } from '../../events/active-event-cache.service';
+import {
+  type EndTimeFanOutDeps,
+  fanOutEndTimeExtension,
+} from './event-end-time-fanout.helpers';
+import {
+  SUPPRESSION_WINDOW_EVENTS,
+  type SuppressionWindowExtendedPayload,
+} from './suppression-window-events';
 
 /** Look-ahead window: find events ending within the next 5 minutes (ms). */
 const WINDOW_AHEAD_MS = 5 * 60 * 1000;
@@ -57,6 +66,32 @@ export class EventAutoExtendService {
       'EventAutoExtendService_checkExtensions',
       () => this.checkAndExtendEvents(),
     );
+  }
+
+  /**
+   * A suppressed Quick Play join wrote a scheduled event's `extended_until`
+   * forward (ROK-1696). Push it to the same consumers the cron extension
+   * reaches. Deliberately NOT gated by the admin auto-extend toggle: the
+   * write already happened, so Discord and web clients must see it.
+   */
+  @OnEvent(SUPPRESSION_WINDOW_EVENTS.EXTENDED)
+  onSuppressionWindowExtended(p: SuppressionWindowExtendedPayload): void {
+    try {
+      this.logger.log(
+        `[voice-spawn] fan-out event=${p.eventId} until=${p.newEnd.toISOString()}`,
+      );
+      const target = {
+        id: p.eventId,
+        isAdHoc: false,
+        channelBindingId: null,
+        discordScheduledEventId: p.discordScheduledEventId,
+      };
+      fanOutEndTimeExtension(this.fanOutDeps(), target, p.newEnd);
+    } catch (err) {
+      this.logger.warn(
+        `Suppression-window fan-out failed for ${p.eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+      );
+    }
   }
 
   async checkAndExtendEvents(): Promise<void | false> {
@@ -162,27 +197,21 @@ export class EventAutoExtendService {
       .update(schema.events)
       .set({ extendedUntil: newEnd, updatedAt: new Date() })
       .where(eq(schema.events.id, c.id));
-    this.eventCache?.invalidate(c.id);
-    this.eventCache
-      ?.refresh()
-      .catch((e) =>
-        this.logger.warn(`Cache refresh after extend failed: ${e}`),
-      );
     this.logger.log(
       `Extended event ${c.id} until ${newEnd.toISOString()} (${activeCount} voice members)`,
     );
-    this.adHocGateway.emitEndTimeExtended(c.id, newEnd.toISOString());
-    if (c.isAdHoc && c.channelBindingId)
-      this.adHocNotificationService.queueUpdate(c.id, c.channelBindingId);
-    if (c.discordScheduledEventId) {
-      this.scheduledEventService
-        .updateEndTime(c.id, newEnd)
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `Failed to update scheduled event end time for ${c.id}: ${err instanceof Error ? err.message : 'Unknown'}`,
-          );
-        });
-    }
+    fanOutEndTimeExtension(this.fanOutDeps(), c, newEnd);
+  }
+
+  /** Collaborators shared with the end-time fan-out helper. */
+  private fanOutDeps(): EndTimeFanOutDeps {
+    return {
+      eventCache: this.eventCache ?? null,
+      adHocGateway: this.adHocGateway,
+      adHocNotificationService: this.adHocNotificationService,
+      scheduledEventService: this.scheduledEventService,
+      logger: this.logger,
+    };
   }
 }
 

@@ -4,6 +4,8 @@ import { BrowserRouter } from 'react-router-dom';
 import { NewMembersSection } from './NewMembersSection';
 import * as usePlayersModule from '../../hooks/use-players';
 
+type RecentPlayer = NonNullable<ReturnType<typeof usePlayersModule.useRecentPlayers>['data']>['data'][number];
+
 // Mock the useRecentPlayers hook
 vi.mock('../../hooks/use-players', () => ({
     useRecentPlayers: vi.fn(),
@@ -78,7 +80,7 @@ describe('NewMembersSection — part 1', () => {
 
     it('returns null when no recent members (empty array)', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
-            data: { data: [] },
+            data: { data: [] as RecentPlayer[] },
             isLoading: false,
         } as ReturnType<typeof usePlayersModule.useRecentPlayers>);
 
