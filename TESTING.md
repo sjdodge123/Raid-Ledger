@@ -22,12 +22,23 @@ npm run test:integration -w api        # Uses Testcontainers (auto-manages Postg
 npm run test -w web                    # Run all
 cd web && npx vitest run --coverage    # With coverage enforcement
 
+# Typecheck (web)
+npm run build -w web                   # tsc -b && vite build — authoritative
+
 # Contract schemas (Zod)
 npm test -w @raid-ledger/contract      # Run all
 
 # Smoke tests (Playwright)
 npx playwright test                    # Auto-starts dev server
 ```
+
+**Web typecheck:** `web/tsconfig.json` is a solution-style config (`files: []`
+plus `references`), so `npx tsc --noEmit -p web/tsconfig.json` typechecks
+nothing and still exits 0. Use `npm run build -w web` (`tsc -b`), or the two
+leaf configs `scripts/validate-ci.sh` runs:
+`npx tsc --noEmit -p web/tsconfig.app.json` and
+`npx tsc --noEmit -p web/tsconfig.node.json`. Neither covers web test files —
+`web/tsconfig.app.json` excludes `src/**/*.test.ts(x)` and `src/test/**`.
 
 Contract schema specs live in `packages/contract/src/__tests__/*.spec.ts` and run
 under their own node-environment Vitest config (`packages/contract/vitest.config.ts`,
