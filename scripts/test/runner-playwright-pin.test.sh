@@ -97,16 +97,25 @@ else
 fi
 
 out="$(check_pin "$FIXTURES/lock-163.json" "$FIXTURES/Dockerfile-1631")"; rc=$?
-if (( rc != 0 )); then ok "patch-only drift v1.63.1 vs lock 1.63.0 is red (exact match, not minor-only)"
-else bad "patch-only drift v1.63.1 vs lock 1.63.0 should be red (rc=$rc): $out"; fi
+if (( rc != 0 )) && grep -qF 'pin drift' <<<"$out" && grep -qF '1.63.1' <<<"$out"; then
+    ok "patch-only drift v1.63.1 vs lock 1.63.0 is red as pin drift (exact match, not minor-only)"
+else
+    bad "patch-only drift v1.63.1 vs lock 1.63.0 should be red with a 'pin drift' message naming 1.63.1 (rc=$rc): $out"
+fi
 
 out="$(check_pin "$FIXTURES/lock-split.json" "$FIXTURES/Dockerfile-163")"; rc=$?
-if (( rc != 0 )); then ok "@playwright/test 1.62.1 vs playwright-core 1.63.0 is red"
-else bad "@playwright/test 1.62.1 vs playwright-core 1.63.0 should be red (rc=$rc): $out"; fi
+if (( rc != 0 )) && grep -qF 'disagrees with itself' <<<"$out"; then
+    ok "@playwright/test 1.62.1 vs playwright-core 1.63.0 is red as a lockfile self-disagreement"
+else
+    bad "@playwright/test 1.62.1 vs playwright-core 1.63.0 should be red with 'disagrees with itself' (rc=$rc): $out"
+fi
 
 out="$(check_pin "$FIXTURES/lock-163.json" "$FIXTURES/Dockerfile-noble")"; rc=$?
-if (( rc != 0 )) && grep -qF 'FROM' <<<"$out"; then ok "a Dockerfile with no playwright:vX.Y.Z-jammy FROM line is red with a named message"
-else bad "a Dockerfile with no playwright:vX.Y.Z-jammy FROM line should be red (rc=$rc): $out"; fi
+if (( rc != 0 )) && grep -qF "no 'FROM" <<<"$out"; then
+    ok "a Dockerfile with no playwright:vX.Y.Z-jammy FROM line is red with the no-FROM-line message"
+else
+    bad "a Dockerfile with no playwright:vX.Y.Z-jammy FROM line should be red with \"no 'FROM\" (rc=$rc): $out"
+fi
 
 out="$(check_pin "$FIXTURES/lock-163.json" "$FIXTURES/Dockerfile-163")"; rc=$?
 if (( rc == 0 )); then ok "matching v1.63.0 vs lock 1.63.0 is green (the guard is not always red)"
