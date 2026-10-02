@@ -13,6 +13,7 @@ import { eq, and, ne } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { Tx } from './signups.service.types';
 import { determineCancelStatus } from './signups-roster.helpers';
+import { defined } from '../common/defined.helpers';
 
 export async function fetchEventOrThrow(db: Tx, eventId: number) {
   const [eventRow] = await db
@@ -62,7 +63,7 @@ export async function resolveCancelStatus(db: Tx, eventId: number) {
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
-  return determineCancelStatus(event?.duration);
+  return determineCancelStatus(event?.duration ?? null);
 }
 
 export async function findAssignmentForSignup(db: Tx, signupId: number) {
@@ -171,9 +172,10 @@ export async function gatherCancelNotifyData(
       .where(eq(schema.users.id, userId))
       .limit(1),
   ]);
+  const { creatorId, title } = defined(evt, `event ${eventId}`);
   return {
-    creatorId: evt.creatorId,
-    eventTitle: evt.title,
+    creatorId,
+    eventTitle: title,
     displayName: user?.username ?? 'Unknown',
   };
 }

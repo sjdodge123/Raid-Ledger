@@ -31,6 +31,7 @@ import * as flowH from './signups-flow.helpers';
 import * as discordSignupH from './signups-discord-signup.helpers';
 import * as reconfirmH from './signups-reconfirm.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { defined } from '../common/defined.helpers';
 
 /** Service for managing event signups (FR-006), character confirmation (ROK-131), and anonymous Discord signups (ROK-137). */
 @Injectable()
@@ -146,7 +147,7 @@ export class SignupsService {
     dto: UpdateSignupStatusDto,
   ): Promise<SignupResponseDto> {
     const signup = await cancelH.findSignupByIdentifier(this.db, eventId, id);
-    const [updated] = await this.db
+    const [updatedRow] = await this.db
       .update(schema.eventSignups)
       .set({ status: dto.status })
       .where(eq(schema.eventSignups.id, signup.id))
@@ -154,6 +155,7 @@ export class SignupsService {
     this.logger.log(
       `Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`,
     );
+    const updated = defined(updatedRow, `updated signup ${signup.id}`);
     this.emit(SIGNUP_EVENTS.UPDATED, {
       eventId,
       userId: updated.userId,
@@ -244,7 +246,11 @@ export class SignupsService {
       signupId,
       action: 'signup_confirmed',
     });
-    return rosterH.buildSignupResponseDto(updated, user, character);
+    return rosterH.buildSignupResponseDto(
+      defined(updated, `confirmed signup ${signupId}`),
+      user,
+      character,
+    );
   }
 
   async cancel(eventId: number, userId: number): Promise<void> {
