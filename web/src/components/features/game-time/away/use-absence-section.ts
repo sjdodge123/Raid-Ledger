@@ -57,7 +57,7 @@ function useAwayMutations() {
     const undoFailed = useCallback(() => toast.error('Could not undo'), []);
 
     const add = useCallback(async (range: AwayRange): Promise<boolean> => {
-        const input = { startDate: range.startDate, endDate: range.endDate, reason: range.reason || undefined };
+        const input = { startDate: range.startDate, endDate: range.endDate, ...(range.reason ? { reason: range.reason } : {}) };
         try {
             const created = await create.mutateAsync(input);
             const undo = undoToast(() => del.mutate(created.id, { onError: undoFailed }));
@@ -71,7 +71,7 @@ function useAwayMutations() {
 
     const remove = useCallback((row: AwayRowItem) => {
         if (row.id === null) return;
-        const recreate = { startDate: row.startDate, endDate: row.endDate, reason: row.reason ?? undefined };
+        const recreate = { startDate: row.startDate, endDate: row.endDate, ...(row.reason == null ? {} : { reason: row.reason }) };
         const label = awayRangeLabel(row.startDate, row.endDate);
         del.mutate(row.id, {
             onSuccess: () => toast.success(`Removed ${label}`, undoToast(() => create.mutate(recreate, { onError: undoFailed }))),

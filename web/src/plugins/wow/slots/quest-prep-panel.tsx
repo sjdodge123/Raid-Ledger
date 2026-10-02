@@ -60,7 +60,7 @@ interface QuestPrepPanelProps {
     characterId?: string;
 }
 
-interface ParsedInstance { id: number; name?: string }
+interface ParsedInstance { id: number; name?: string | undefined }
 
 function useParsedInstances(contentInstances: Record<string, unknown>[]): ParsedInstance[] {
     return useMemo(

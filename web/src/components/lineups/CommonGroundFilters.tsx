@@ -110,6 +110,16 @@ function useMaxPlayersIntentCapture(
  * is collapsed (the inline panel and the BottomSheet both keep children in
  * the DOM), so the ROK-1255 auto-seed runs on entry at every width.
  */
+/** `filters` with a numeric filter set, or its key removed when `value` is undefined (filter off). */
+function withNumericFilter(
+    filters: CommonGroundParams, key: 'maxPlayers' | 'minOnlineCoop', value: number | undefined,
+): CommonGroundParams {
+    const next: CommonGroundParams = { ...filters };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    return next;
+}
+
 export function CommonGroundFilters({ filters, onChange, participantCount, suppressAutoSeed, coopDataAvailable }: CommonGroundFiltersProps): JSX.Element {
     const update = useCallback(
         (patch: Partial<CommonGroundParams>) => onChange({ ...filters, ...patch }),
@@ -122,14 +132,14 @@ export function CommonGroundFilters({ filters, onChange, participantCount, suppr
             <Slider label="Min owners" min={0} max={15} value={filters.minOwners ?? 2} onChange={(v) => update({ minOwners: v })} />
             <Slider
                 label="Players" min={0} max={16} value={filters.maxPlayers ?? 0} formatValue={formatPlayers}
-                onChange={(v) => update({ maxPlayers: v === 0 ? undefined : v })}
+                onChange={(v) => onChange(withNumericFilter(filters, 'maxPlayers', v === 0 ? undefined : v))}
             />
             {/* Dormant until the catalogue has Co-Optimus data — see Props. */}
             {coopDataAvailable && (
                 <CoopGroupSizeFilter
                     value={filters.minOnlineCoop}
                     participantCount={participantCount}
-                    onChange={(v) => update({ minOnlineCoop: v })}
+                    onChange={(v) => onChange(withNumericFilter(filters, 'minOnlineCoop', v))}
                 />
             )}
         </div>
@@ -154,7 +164,7 @@ export function CommonGroundFilterEntry({ isOpen, onOpenChange, ...body }: Commo
             activeCount={commonGroundActiveFilterCount(filters, coopDataAvailable)}
             isOpen={isOpen}
             onOpenChange={onOpenChange}
-            onClearAll={() => onChange({ ...filters, minOnlineCoop: undefined })}
+            onClearAll={() => onChange(withNumericFilter(filters, 'minOnlineCoop', undefined))}
         >
             <CommonGroundFilters {...body} />
         </FilterEntry>

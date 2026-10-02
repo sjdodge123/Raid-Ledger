@@ -58,7 +58,7 @@ function GroupWeekCellImpl(props: GroupWeekCellProps): JSX.Element {
         'data-votes': votes !== undefined ? String(votes) : undefined,
         'data-picked': flag(picked),
         'data-current': flag(current),
-        'aria-label': groupCellAriaLabel(dayOfWeek, hour, cell, { votes, picked, current }),
+        'aria-label': groupCellAriaLabel(dayOfWeek, hour, cell, { picked, current, ...(votes === undefined ? {} : { votes }) }),
         className: weekCellClass({ busy: busy > 0, slot: votes !== undefined, picked, disabled }),
         style: { background: computeHeatmapBg(cell) },
     };

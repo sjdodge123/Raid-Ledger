@@ -147,7 +147,7 @@ function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creator
                                 avatar: attendee.avatar,
                                 discordId: attendee.discordId ?? null,
                                 customAvatarUrl: attendee.customAvatarUrl ?? null,
-                                characters: attendee.characters,
+                                ...(attendee.characters ? { characters: attendee.characters } : {}),
                             }))}
                             max={4}
                             gameId={gameId ?? undefined}

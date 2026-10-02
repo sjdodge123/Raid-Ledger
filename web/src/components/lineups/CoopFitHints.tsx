@@ -31,7 +31,7 @@ export function CoopFitHints({
     const coop = coopLabel({
         online: game.cooptimusOnlineMax,
         couch: game.cooptimusCouchMax,
-        combo: game.cooptimusComboCoop,
+        combo: game.cooptimusComboCoop ?? null,
     });
     const max = resolveEffectiveOnlineMax(game.cooptimusOnlineMax);
     if (coop == null && max == null) return null;

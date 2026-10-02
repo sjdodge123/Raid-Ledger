@@ -214,7 +214,7 @@ function SearchPane({ query, onQueryChange, isOpen, lineupId, participantCount, 
  * before discarding a selected game or a note (ROK-1655, `use-nominate-draft`).
  */
 export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, participantCount }: NominateModalProps): JSX.Element {
-    const draft = useNominateDraft({ isOpen, onClose, lineupId, preSelectedGame });
+    const draft = useNominateDraft({ isOpen, onClose, lineupId, preSelectedGame: preSelectedGame ?? null });
     const closeGuard = useDirtyCloseGuard(draft.isDirty, draft.handleClose);
     // Resolve any Steam store URL pasted into the search input. The
     // page-level paste detector skips the modal (its global listener

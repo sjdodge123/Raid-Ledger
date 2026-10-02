@@ -31,9 +31,9 @@ export function toGroupCellMap(cells: AggregateGameTimeCell[]): Map<string, Heat
         map.set(groupCellKey(cell.dayOfWeek, cell.hour), {
             available: cell.availableCount,
             total: cell.totalCount,
-            stale: cell.staleCount,
-            unknown: cell.unknownCount,
-            busy: cell.busyCount,
+            ...(cell.staleCount === undefined ? {} : { stale: cell.staleCount }),
+            ...(cell.unknownCount === undefined ? {} : { unknown: cell.unknownCount }),
+            ...(cell.busyCount === undefined ? {} : { busy: cell.busyCount }),
         });
     }
     return map;

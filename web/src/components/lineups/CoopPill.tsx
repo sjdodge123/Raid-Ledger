@@ -42,7 +42,7 @@ export function CoopPill({
     const resolved = coopLabel({
         online: cooptimusOnlineMax,
         couch: cooptimusCouchMax,
-        combo: cooptimusComboCoop,
+        combo: cooptimusComboCoop ?? null,
     });
     if (!resolved) return null;
     return (

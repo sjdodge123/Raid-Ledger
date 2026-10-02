@@ -166,21 +166,22 @@ export function useLineupHero(
         // registry (privacy-persona) wins; otherwise we infer.
         const inferredDisabled =
             copy.cta != null && copy.cta.disabled == null && onClick == null;
+        const { cta } = copy;
         return {
             tone: copy.tone,
-            label: copy.label,
+            ...(copy.label === undefined ? {} : { label: copy.label }),
             headline: copy.headline,
-            detail: copy.detail,
-            cta: copy.cta
-                ? {
-                    text: copy.cta.text,
-                    ariaLabel: copy.cta.ariaLabel,
-                    disabled: copy.cta.disabled ?? inferredDisabled,
-                    tooltip: copy.cta.tooltip,
+            ...(copy.detail === undefined ? {} : { detail: copy.detail }),
+            ...(cta ? {
+                cta: {
+                    text: cta.text,
+                    ...(cta.ariaLabel === undefined ? {} : { ariaLabel: cta.ariaLabel }),
+                    disabled: cta.disabled ?? inferredDisabled,
+                    ...(cta.tooltip === undefined ? {} : { tooltip: cta.tooltip }),
                     onClick: onClick ?? (() => undefined),
-                }
-                : undefined,
-            secondary: copy.secondary,
+                },
+            } : {}),
+            ...(copy.secondary === undefined ? {} : { secondary: copy.secondary }),
         };
     }, [copy, wireCta]);
 

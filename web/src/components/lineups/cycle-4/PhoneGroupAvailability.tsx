@@ -64,7 +64,7 @@ export interface PhoneGroupAvailabilityProps {
 export function PhoneGroupAvailability(props: PhoneGroupAvailabilityProps): JSX.Element | null {
     const { data, isLoading, weekStart } = props;
     const cells = useMemo(() => toGroupCellMap(data ? fillUnknownCells(data) : []), [data]);
-    const events = useViewerWeekEvents(weekStart, { excludeEventId: props.excludeEventId });
+    const events = useViewerWeekEvents(weekStart, props.excludeEventId === undefined ? {} : { excludeEventId: props.excludeEventId });
     // The day the pager is on, mirrored here for the subtitle's date — and fed
     // back as `initialDay` so a re-fetch (which remounts the editor under the
     // skeleton) resumes on the day the viewer paged to, not on today.
@@ -98,13 +98,15 @@ function overlayFor(
 ): GroupOverlay {
     const { readOnly, onPickHour, onWeekChange, weekStart, totalInPoll, sizeNoun = 'in poll' } = props;
     return {
-        cells: view.cells, events: view.events,
-        suggested: props.suggested, slotMarks: props.slotMarks,
+        cells: view.cells,
+        ...(view.events ? { events: view.events } : {}),
+        ...(props.suggested === undefined ? {} : { suggested: props.suggested }),
+        ...(props.slotMarks ? { slotMarks: props.slotMarks } : {}),
         // A closed poll still shows the group, but nothing is proposable —
         // no handler, so the cells render as labelled tiles rather than buttons.
-        onPickHour: readOnly ? undefined : onPickHour,
+        ...(readOnly || !onPickHour ? {} : { onPickHour }),
         subtitle: subtitleFor(weekStart, view.day, `${pollSize(data, totalInPoll)} ${sizeNoun}`),
-        onWeekStep: onWeekChange,
+        ...(onWeekChange ? { onWeekStep: onWeekChange } : {}),
     };
 }
 

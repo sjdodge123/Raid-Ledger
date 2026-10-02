@@ -53,11 +53,11 @@ interface CharacterCardCompactProps {
  * MiniCharacterCard to prevent visual drift.
  */
 interface ResolvedChar {
-    charId: string; charName: string; avatarUrl?: string | null; faction?: string | null;
-    level?: number | null; race?: string | null; charClass?: string | null;
-    spec?: string | null; role?: string | null; itemLevel?: number | null;
-    isMain?: boolean; variantLabel: string | null;
-    professions?: CharacterProfessionsDto | null;
+    charId: string; charName: string; avatarUrl?: string | null | undefined; faction?: string | null | undefined;
+    level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
+    spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
+    isMain?: boolean | undefined; variantLabel: string | null;
+    professions?: CharacterProfessionsDto | null | undefined;
 }
 
 function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
