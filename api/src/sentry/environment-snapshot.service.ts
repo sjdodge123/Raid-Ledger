@@ -5,6 +5,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { isMissingTableError } from '../common/pg-error.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema';
 
@@ -170,11 +171,7 @@ export class EnvironmentSnapshotService implements OnModuleInit {
         appliedAt: row.created_at,
       }));
     } catch (err: unknown) {
-      const isTableMissing =
-        err instanceof Error &&
-        'code' in err &&
-        (err as Error & { code: string }).code === '42P01';
-      if (isTableMissing) {
+      if (isMissingTableError(err)) {
         this.logger.debug(
           '__drizzle_migrations table not found — skipping migration snapshot',
         );
