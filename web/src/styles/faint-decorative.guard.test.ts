@@ -174,15 +174,15 @@ const css = stripComments(readFileSync(join(SRC, 'index.css'), 'utf-8'));
 
 /** `[data-scheme="light"] { … }` first, then the shared `:is(… [data-scheme="light"] …) { … }` token blocks. */
 const LIGHT_BLOCKS = [...css.matchAll(/(?:^|[\s}])(\[data-scheme="light"\]|:is\([^()]*\[data-scheme="light"\][^()]*\))\s*\{([^}]*)\}/g)]
-    .sort(([, a], [, b]) => Number(a.startsWith(':is')) - Number(b.startsWith(':is')))
-    .map(([, , body]) => body);
+    .sort(([, a = ''], [, b = '']) => Number(a.startsWith(':is')) - Number(b.startsWith(':is')))
+    .map(([, , body = '']) => body);
 
 /** `--color-{token}` as the default `light` scheme resolves it. */
 function lightToken(token: string): string {
     const pattern = new RegExp(`--color-${token}:\\s*(#[0-9a-fA-F]{6})`);
     for (const body of LIGHT_BLOCKS) {
-        const hit = pattern.exec(body);
-        if (hit) return hit[1].toLowerCase();
+        const hex = pattern.exec(body)?.[1];
+        if (hex) return hex.toLowerCase();
     }
     return '';
 }
