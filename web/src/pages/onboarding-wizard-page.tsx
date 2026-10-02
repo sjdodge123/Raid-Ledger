@@ -117,6 +117,14 @@ function getPostOnboardingRedirect(): string {
     return '/calendar';
 }
 
+/**
+ * Complete / Skip All failed (TDB:1993): stay on the wizard so the user can retry, and say so.
+ * The stable id keeps repeated failures to one toast.
+ */
+function notifyCompleteFailed(): void {
+    toast.error('Could not finish setup. Please try again.', { id: 'onboarding-complete-error' });
+}
+
 /** Completion callbacks: skip all and complete */
 function useCompletionHandlers(completeOnboarding: ReturnType<typeof useCompleteOnboardingFte>): {
     handleSkipAll: () => void; handleComplete: () => void;
@@ -130,12 +138,14 @@ function useCompletionHandlers(completeOnboarding: ReturnType<typeof useComplete
                 toast.info('Setup skipped. You can update your profile anytime.');
                 navigate(getPostOnboardingRedirect(), { replace: true });
             },
+            onError: notifyCompleteFailed,
         });
     }, [completeOnboarding, navigate]);
 
     const handleComplete = useCallback(() => {
         completeOnboarding.mutate(undefined, {
             onSuccess: () => { navigate(getPostOnboardingRedirect(), { replace: true }); },
+            onError: notifyCompleteFailed,
         });
     }, [completeOnboarding, navigate]);
 
@@ -214,7 +224,7 @@ function WizardShell({ currentStep, steps, isFinalStep, onSkipAll, setCurrentSte
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div className="relative w-full max-w-2xl mx-4 h-[90vh] flex flex-col bg-surface border border-edge/50 rounded-2xl shadow-2xl" role="dialog" aria-label="Onboarding wizard">
-                <WizardHeader currentStep={currentStep} totalSteps={steps.length} isFinalStep={isFinalStep} onSkipAll={onSkipAll} />
+                <WizardHeader currentStep={currentStep} totalSteps={steps.length} isFinalStep={isFinalStep} onSkipAll={onSkipAll} isPending={isPending} />
                 <OnboardingBreadcrumbs steps={steps} currentStep={currentStep} setCurrentStep={setCurrentStep} removeCharacterStep={removeCharacterStep} user={user} />
                 <WizardContent currentStepDef={currentStepDef} isCharacterStep={isCharacterStep} stepValidatorRef={stepValidatorRef} addCharacterStep={addCharacterStep} removeCharacterStep={removeCharacterStep} />
                 <WizardFooter isFirstStep={currentStep === 0} isFinalStep={isFinalStep} goBack={goBack} goNext={goNext} goSkip={goSkip} handleComplete={handleComplete} isPending={isPending} />
@@ -223,16 +233,17 @@ function WizardShell({ currentStep, steps, isFinalStep, onSkipAll, setCurrentSte
     );
 }
 
-/** Header with step counter and Skip All button */
-function WizardHeader({ currentStep, totalSteps, isFinalStep, onSkipAll }: {
-    currentStep: number; totalSteps: number; isFinalStep: boolean; onSkipAll: () => void;
+/** Header with step counter and Skip All button (disabled while Complete / Skip All is in flight) */
+function WizardHeader({ currentStep, totalSteps, isFinalStep, onSkipAll, isPending }: {
+    currentStep: number; totalSteps: number; isFinalStep: boolean; onSkipAll: () => void; isPending: boolean;
 }): JSX.Element {
     return (
         <div className="flex-shrink-0 border-b border-edge/30 px-6 py-4 flex items-center justify-between rounded-t-2xl">
             <div className="text-sm text-muted">Step {currentStep + 1} of {totalSteps}</div>
             {!isFinalStep && (
-                <button onClick={onSkipAll} className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-full hover:bg-edge/20">
-                    Skip All
+                <button type="button" onClick={onSkipAll} disabled={isPending} aria-busy={isPending || undefined}
+                    className="text-sm text-muted enabled:hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-full enabled:hover:bg-edge/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                    {isPending ? 'Skipping…' : 'Skip All'}
                 </button>
             )}
         </div>
