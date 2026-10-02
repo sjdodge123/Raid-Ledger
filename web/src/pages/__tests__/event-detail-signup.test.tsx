@@ -287,7 +287,7 @@ describe('EventDetailPage signup flow (ROK-600) — part 1', () => {
             gameRegistry: [{
                 id: 1, slug: 'world-of-warcraft', name: 'World of Warcraft',
                 hasRoles: true, hasSpecs: true, enabled: true, maxCharactersPerUser: 10,
-                shortName: 'WoW', coverUrl: null, colorHex: null,
+                shortName: 'WoW', coverUrl: null, colorHex: null, genres: [],
             }],
         });
 
@@ -313,7 +313,7 @@ describe('EventDetailPage signup flow (ROK-600) — part 1', () => {
             gameRegistry: [{
                 id: 2, slug: 'gta-v', name: 'GTA V',
                 hasRoles: false, hasSpecs: false, enabled: true, maxCharactersPerUser: 5,
-                shortName: 'GTA', coverUrl: null, colorHex: null,
+                shortName: 'GTA', coverUrl: null, colorHex: null, genres: [],
             }],
             userCharacters: [], // No characters
         });
@@ -378,7 +378,7 @@ describe('EventDetailPage signup flow (ROK-600) — part 2', () => {
             gameRegistry: [{
                 id: 2, slug: 'sea-of-thieves', name: 'Sea of Thieves',
                 hasRoles: false, hasSpecs: false, enabled: true, maxCharactersPerUser: 5,
-                shortName: 'SoT', coverUrl: null, colorHex: null,
+                shortName: 'SoT', coverUrl: null, colorHex: null, genres: [],
             }],
         });
 

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { GameTimeSlot } from '@raid-ledger/contract';
 import { checkGameTimeOverlap, walkEventHours } from './game-time-overlap.utils';
 
 /**
@@ -14,7 +15,7 @@ import { checkGameTimeOverlap, walkEventHours } from './game-time-overlap.utils'
  * day/hour values used to define the slots — regardless of CI timezone.
  */
 
-type Slot = { dayOfWeek: number; hour: number; status?: string };
+type Slot = Pick<GameTimeSlot, 'dayOfWeek' | 'hour' | 'status'>;
 
 /**
  * Build an ISO string for a specific local weekday + hour.

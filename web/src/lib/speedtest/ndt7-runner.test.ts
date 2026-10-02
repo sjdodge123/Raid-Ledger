@@ -115,7 +115,7 @@ describe('runSpeedTest', () => {
 
     it('tells ndt7 where its download worker lives (the library default is a page-relative url this app never serves)', async () => {
         const urls = Promise.resolve(['wss://ndt.example']);
-        const discoverServerURLs = vi.fn(() => urls);
+        const discoverServerURLs = vi.fn<(config: unknown) => typeof urls>(() => urls);
         const downloadTest = vi.fn(
             async (
                 _config: unknown,

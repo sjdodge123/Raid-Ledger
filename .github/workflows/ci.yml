@@ -173,6 +173,14 @@ jobs:
       - name: Typecheck (smoke specs + scripts)
         run: npx tsc --noEmit -p scripts/smoke/tsconfig.typecheck.json
 
+      # vitest transpiles without typechecking, and the web build project
+      # (tsconfig.app.json) excludes the specs and src/test/**, so a type
+      # error in a web spec or a fixture that drifted from a contract DTO
+      # failed no gate. tsconfig.test.json covers them. Same command
+      # validate-ci.sh's TypeScript step uses.
+      - name: Typecheck (web specs)
+        run: npx tsc --noEmit -p web/tsconfig.test.json
+
       - name: Lint
         run: npm run lint --workspaces
 

@@ -33,6 +33,7 @@ function makeEntry(
         note: null,
         carriedOver: false,
         voteCount: 1,
+        starCount: null,
         createdAt: '2026-05-15T00:00:00.000Z',
         ownerCount: 8,
         totalMembers: 12,

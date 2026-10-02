@@ -22,11 +22,21 @@ function buildSuggestion(overrides: Partial<AiSuggestionDto> = {}): AiSuggestion
     return {
         gameId: 42,
         name: 'Valheim',
+        slug: 'valheim',
         coverUrl: null,
         confidence: 0.8,
         reasoning: 'Fits co-op taste',
         ownershipCount: 3,
         voterTotal: 5,
+        communityOwnerCount: 0,
+        wishlistCount: 0,
+        nonOwnerPrice: null,
+        itadCurrentCut: null,
+        itadCurrentShop: null,
+        itadCurrentUrl: null,
+        earlyAccess: false,
+        itadTags: [],
+        playerCount: null,
         ...overrides,
     };
 }

@@ -13,10 +13,11 @@ vi.mock('../../components/features/game-time/GameTimeWidget', () => ({
 }));
 
 import { EventDetailGameTimeWidget, EventDetailTopbar, MoreActionsMenu } from './EventDetailSubComponents';
+import type { ComponentProps } from 'react';
 
 const defaultProps = {
     fromCalendar: false,
-    navState: null,
+    navState: null as ComponentProps<typeof EventDetailTopbar>['navState'],
     hasHistory: false,
     isAuthenticated: true,
     canManageRoster: true,
