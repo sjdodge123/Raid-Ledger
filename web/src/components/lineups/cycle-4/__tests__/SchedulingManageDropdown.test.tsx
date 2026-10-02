@@ -101,9 +101,9 @@ describe('SchedulingManageDropdown (ROK-1585)', () => {
             'menuitem:Cancel Poll',
         ]);
         const items = within(menu()).getAllByRole('menuitem');
-        expect(items[0].className).toContain('min-h-[40px]');
+        expect(items[0]?.className).toContain('min-h-[40px]');
         expect(items).toHaveLength(3);
-        expect(items[2].className).toContain('text-red-400');
+        expect(items[2]?.className).toContain('text-red-400');
         // Menu density: no sublines.
         expect(menu()).not.toHaveTextContent('invite more people');
     });

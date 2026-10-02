@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FilePicker } from './file-picker';
+import { at } from '../../test/defined';
 
 function png(name = 'logo.png'): File {
     return new File(['x'], name, { type: 'image/png' });
@@ -48,7 +49,7 @@ describe('FilePicker — picking files', () => {
         const file = png();
         await userEvent.upload(fileInput(container), file);
         expect(onFiles).toHaveBeenCalledTimes(1);
-        const arg = onFiles.mock.calls[0][0] as unknown;
+        const arg = at(onFiles.mock.calls, 0)[0] as unknown;
         expect(Array.isArray(arg)).toBe(true);
         expect(arg).toEqual([file]);
     });

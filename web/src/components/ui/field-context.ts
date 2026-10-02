@@ -27,21 +27,26 @@ export function useFieldContext(): FieldContextValue | null {
     return useContext(FieldContext);
 }
 
-/** Props a control may already carry that the Field merges with. */
+/**
+ * Props a control may already carry that the Field merges with. Each is
+ * `| undefined` like React's own DOM attribute types: a control forwards its
+ * destructured props here whether or not the caller set them.
+ */
 export interface FieldControlOwnProps {
-    id?: string;
-    'aria-describedby'?: string;
-    'aria-invalid'?: boolean | 'true' | 'false' | 'grammar' | 'spelling';
-    'aria-required'?: boolean | 'true' | 'false';
+    id?: string | undefined;
+    'aria-describedby'?: string | undefined;
+    'aria-invalid'?: boolean | 'true' | 'false' | 'grammar' | 'spelling' | undefined;
+    'aria-required'?: boolean | 'true' | 'false' | undefined;
     /** The primitive's own `invalid` prop. */
-    invalid?: boolean;
+    invalid?: boolean | undefined;
 }
 
+/** Spread onto the native element; an undefined attribute is not rendered, as in React's own types. */
 export interface FieldControlA11yProps {
-    id?: string;
-    'aria-describedby'?: string;
-    'aria-invalid'?: true;
-    'aria-required'?: true;
+    id?: string | undefined;
+    'aria-describedby'?: string | undefined;
+    'aria-invalid'?: true | undefined;
+    'aria-required'?: true | undefined;
 }
 
 function joinIds(...ids: (string | undefined)[]): string | undefined {

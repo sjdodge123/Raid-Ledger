@@ -21,13 +21,13 @@ export interface GroupDayViewProps {
     /** The poll aggregate, keyed by `groupCellKey` (see `toGroupCellMap`). */
     cells: Map<string, HeatmapCellData>;
     /** The viewer's own events in the displayed week — titled blocks on their day. */
-    events?: GameTimeEventBlock[];
+    events?: GameTimeEventBlock[] | undefined;
     /** The poll's existing slots for the displayed week, keyed by `groupCellKey` (ROK-1587). */
-    slotMarks?: Map<string, SlotMark>;
+    slotMarks?: Map<string, SlotMark> | undefined;
     /** The hour the viewer last tapped, if it is the one being suggested. */
-    suggested?: { dayOfWeek: number; hour: number } | null;
+    suggested?: { dayOfWeek: number; hour: number } | null | undefined;
     /** Absent in a read-only poll: cells render as labelled tiles, not 168 inert tab stops. */
-    onPickHour?: (hour: number) => void;
+    onPickHour?: ((hour: number) => void) | undefined;
 }
 
 /**
@@ -105,7 +105,7 @@ function marksOnDay(slotMarks: Map<string, SlotMark> | undefined, dayOfWeek: num
 /** The hour gutter and the day's group cells — rows stretch, never below 44px. */
 function GroupHourGrid({ dayOfWeek, hours, cells, slotMarks, onPickHour }: {
     dayOfWeek: number; hours: number[]; cells: Map<string, HeatmapCellData>;
-    slotMarks?: Map<string, SlotMark>; onPickHour?: (hour: number) => void;
+    slotMarks?: Map<string, SlotMark> | undefined; onPickHour?: ((hour: number) => void) | undefined;
 }): JSX.Element {
     return (
         <div
@@ -150,8 +150,8 @@ function HourLabel({ hour }: { hour: number }): JSX.Element {
  * plus `, N voted` when a poll slot starts in this hour (1587-6).
  */
 function GroupCell({ dayOfWeek, hour, cell, votes, onPick }: {
-    dayOfWeek: number; hour: number; cell?: HeatmapCellData; votes?: number;
-    onPick?: (hour: number) => void;
+    dayOfWeek: number; hour: number; cell?: HeatmapCellData | undefined; votes?: number | undefined;
+    onPick?: ((hour: number) => void) | undefined;
 }): JSX.Element {
     const base = computeHeatmapLabel(cell) ?? 'no data';
     const label = votes === undefined ? base : `${base}, ${votedLabel(votes)}`;
@@ -179,7 +179,7 @@ function GroupCell({ dayOfWeek, hour, cell, votes, onPick }: {
 }
 
 /** The right-aligned count — free/stale in the foreground, busy in purple. */
-function GroupCellCount({ cell }: { cell?: HeatmapCellData }): JSX.Element {
+function GroupCellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element {
     const busyLabel = groupCellBusyLabel(cell);
     return (
         <span className="absolute right-1.5 top-1 z-10 text-[11px] leading-none text-foreground/80">
@@ -192,8 +192,10 @@ function GroupCellCount({ cell }: { cell?: HeatmapCellData }): JSX.Element {
 /** The two hours a tap proposes — solid, because it is the answer being drafted. */
 function SuggestedBlock({ range, hours }: {
     range: { startIndex: number; endIndex: number }; hours: number[];
-}): JSX.Element {
+}): JSX.Element | null {
     const span = range.endIndex - range.startIndex;
+    const startHour = hours[range.startIndex];
+    if (startHour === undefined) return null;
     return (
         <div
             data-testid="phone-group-suggested-block"
@@ -205,7 +207,7 @@ function SuggestedBlock({ range, hours }: {
             style={blockGeometry(range.startIndex, range.endIndex, hours.length)}
         >
             <span className="text-[11px] font-semibold leading-none text-foreground">
-                {`${span}h · Suggested ${formatHour(hours[range.startIndex])}`}
+                {`${span}h · Suggested ${formatHour(startHour)}`}
             </span>
         </div>
     );

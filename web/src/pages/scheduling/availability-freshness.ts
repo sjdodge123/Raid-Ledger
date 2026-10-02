@@ -67,7 +67,7 @@ export interface MemberCounts {
  * legend omits the clause entirely.
  */
 export function memberCountsFrom(
-  data: AggregateGameTimeResponse & { staleMembers?: number },
+  data: AggregateGameTimeResponse & { staleMembers?: number | undefined },
 ): MemberCounts | undefined {
   if (data.freshnessDays === undefined) return undefined;
   const total = data.totalMembers ?? data.totalUsers;

@@ -47,7 +47,7 @@ const mockSocket = {
 
 // `socket.io-client` is the real package the hook will pull in. We mock
 // `io(...)` to return the controllable socket above.
-const mockIo = vi.fn(() => mockSocket);
+const mockIo = vi.fn<(...args: unknown[]) => typeof mockSocket>(() => mockSocket);
 vi.mock('socket.io-client', () => ({
     io: (...args: unknown[]) => mockIo(...args),
     Socket: class {},
@@ -136,7 +136,7 @@ describe('useLineupRealtime (ROK-1118)', () => {
             ([event]) => event === 'subscribe',
         );
         expect(subscribeCalls).toHaveLength(1);
-        expect(subscribeCalls[0][1]).toEqual({ lineupId: 42 });
+        expect(subscribeCalls[0]?.[1]).toEqual({ lineupId: 42 });
 
         // After unmount the hook should emit 'unsubscribe'.
         unmount();
@@ -145,7 +145,7 @@ describe('useLineupRealtime (ROK-1118)', () => {
             ([event]) => event === 'unsubscribe',
         );
         expect(unsubscribeCalls).toHaveLength(1);
-        expect(unsubscribeCalls[0][1]).toEqual({ lineupId: 42 });
+        expect(unsubscribeCalls[0]?.[1]).toEqual({ lineupId: 42 });
     });
 });
 

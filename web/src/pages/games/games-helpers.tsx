@@ -13,7 +13,7 @@ function ToggleSwitch({ enabled, isPending, onToggle, ariaLabel }: {
     );
 }
 
-function handleAdultFilterToggle(igdbAdultFilter: { data?: { enabled: boolean } }, updateAdultFilter: { mutateAsync: (v: boolean) => Promise<{ success: boolean; message: string }> }) {
+function handleAdultFilterToggle(igdbAdultFilter: { data?: { enabled: boolean } | undefined }, updateAdultFilter: { mutateAsync: (v: boolean) => Promise<{ success: boolean; message: string }> }) {
     const newValue = !igdbAdultFilter.data?.enabled;
     updateAdultFilter.mutateAsync(newValue).then((result) => {
         if (result.success) toast.success(result.message); else toast.error(result.message);

@@ -6,7 +6,12 @@
  * invokes the orchestrator in-process.
  */
 import * as bcrypt from 'bcrypt';
+import { eq } from 'drizzle-orm';
 import { Logger } from '@nestjs/common';
+import {
+  TASTE_PROFILE_AXIS_POOL,
+  type TasteProfilePoolAxis,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -66,22 +71,20 @@ async function createOperatorAndLogin(testApp: TestApp): Promise<string> {
 async function seedSnapshot(
   testApp: TestApp,
   snapshotDate: string,
-  options: { rpgDriftScore?: number } = {},
+  options: {
+    rpgDriftScore?: number;
+    drift?: { axis: TasteProfilePoolAxis; meanScore: number };
+  } = {},
 ): Promise<void> {
   const fixture = buildSnapshotFixture(snapshotDate);
-  const radarPayload =
-    options.rpgDriftScore !== undefined
-      ? {
-          ...fixture.radar,
-          driftSeries: [
-            {
-              weekStart: snapshotDate,
-              axis: 'rpg' as const,
-              meanScore: options.rpgDriftScore,
-            },
-          ],
-        }
-      : fixture.radar;
+  const drift =
+    options.drift ??
+    (options.rpgDriftScore !== undefined
+      ? { axis: 'rpg' as const, meanScore: options.rpgDriftScore }
+      : undefined);
+  const radarPayload = drift
+    ? { ...fixture.radar, driftSeries: [{ weekStart: snapshotDate, ...drift }] }
+    : fixture.radar;
   await testApp.db.insert(schema.communityInsightsSnapshots).values({
     snapshotDate,
     radarPayload,
@@ -147,6 +150,11 @@ describe('Community Insights (ROK-1099)', () => {
       expect(res.status).toBe(200);
       expect(res.body.nodes).toHaveLength(2);
       expect(res.body.edges).toHaveLength(1);
+      // Stored degrees are 3 and 2; each node has one edge in the response.
+      const degrees = (
+        res.body.nodes as Array<{ userId: number; degree: number }>
+      ).map((n) => [n.userId, n.degree]);
+      expect(Object.fromEntries(degrees)).toEqual({ 1: 1, 2: 1 });
     });
 
     it('GET /insights/community/temporal returns the heatmap payload', async () => {
@@ -248,6 +256,47 @@ describe('Community Insights (ROK-1099)', () => {
       ).sort();
       expect(weeks).toHaveLength(8);
       expect(weeks[weeks.length - 1]).toBe('2026-05-11');
+    });
+  });
+
+  describe('POST /insights/community/refresh genre-shift', () => {
+    it('compares against a prior week snapshot and stores only the current week', async () => {
+      // No taste vectors are seeded, so every current axis scores 0 and the
+      // top axis is the first pool axis; last week scored it 50 (-100%).
+      const day = 24 * 60 * 60 * 1000;
+      const today = new Date().toISOString().slice(0, 10);
+      const lastWeek = new Date(Date.now() - 7 * day)
+        .toISOString()
+        .slice(0, 10);
+      const topAxis = TASTE_PROFILE_AXIS_POOL[0];
+      await seedSnapshot(testApp, lastWeek, {
+        drift: { axis: topAxis, meanScore: 50 },
+      });
+
+      const refresh = await testApp.request
+        .post('/insights/community/refresh')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(refresh.status).toBe(202);
+
+      const res = await testApp.request
+        .get('/insights/community/key-insights')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      const insights = res.body.insights as Array<{ kind: string }>;
+      expect(insights.map((i) => i.kind)).toContain('genre-shift');
+      expect(insights.find((i) => i.kind === 'genre-shift')).toMatchObject({
+        axis: topAxis,
+        deltaPct: -100,
+      });
+
+      const [stored] = await testApp.db
+        .select()
+        .from(schema.communityInsightsSnapshots)
+        .where(eq(schema.communityInsightsSnapshots.snapshotDate, today));
+      const storedWeeks = stored.radarPayload.driftSeries.map(
+        (p) => p.weekStart,
+      );
+      expect(new Set(storedWeeks)).toEqual(new Set([today]));
     });
   });
 
@@ -383,6 +432,8 @@ describe('Community Insights (ROK-1099)', () => {
           String(call[0]).includes('churn'),
         );
         expect(churnLogCall).toBeDefined();
+        // The failure line carries the same job id the caller got back.
+        expect(String(churnLogCall?.[0])).toContain(result.jobId);
       } finally {
         findSpy.mockRestore();
         errorSpy.mockRestore();

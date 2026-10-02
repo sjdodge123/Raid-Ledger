@@ -6,18 +6,18 @@ import { StretchedAction } from '../ui/stretched-action';
 interface RosterSlotProps {
     role: RosterRole;
     position: number;
-    item?: RosterAssignmentResponse;
+    item?: RosterAssignmentResponse | undefined;
     color: string;
     /** ROK-183: Called when user clicks empty slot to join */
-    onJoinClick?: (role: RosterRole, position: number) => void;
+    onJoinClick?: ((role: RosterRole, position: number) => void) | undefined;
     /** ROK-184: Whether this slot belongs to the current user (for glow effect) */
     isCurrentUser?: boolean;
     /** ROK-208: Called when admin clicks slot to open assignment popup */
-    onAdminClick?: (role: RosterRole, position: number) => void;
+    onAdminClick?: ((role: RosterRole, position: number) => void) | undefined;
     /** ROK-208: Admin can remove player from slot */
-    onRemove?: (signupId: number) => void;
+    onRemove?: ((signupId: number) => void) | undefined;
     /** ROK-226: Current user can self-unassign from their own slot */
-    onSelfRemove?: () => void;
+    onSelfRemove?: (() => void) | undefined;
 }
 
 /**
@@ -67,7 +67,7 @@ function slotActionLabel(role: RosterRole, position: number, item: RosterAssignm
  * The badge paints above the stretched button and overhangs the frame (-top-2), so pointer-events-none
  * would still leave its top half dead: it forwards its own click instead (keyboard users have the button).
  */
-function PositionBadge({ className, onClick, children }: { className: string; onClick?: () => void; children: React.ReactNode }) {
+function PositionBadge({ className, onClick, children }: { className: string; onClick?: (() => void) | undefined; children: React.ReactNode }) {
     return (
         <span onClick={onClick} data-testid="roster-slot-badge"
             className={`absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold ${className} text-foreground`}>

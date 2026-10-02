@@ -35,6 +35,55 @@ async function apiPatch(
     });
 }
 
+/**
+ * A grid item's column span from its computed `grid-column-start` / `-end`
+ * ('span N' -> N, 'auto' -> 1). When both are spans CSS ignores the end one.
+ * Throws on explicit line placement, which {@link replayGridPlacement} cannot
+ * model.
+ */
+function columnSpan(start: string, end: string): number {
+    const spanOf = (v: string): number =>
+        v === 'auto' ? 1 : Number(/^span (\d+)$/.exec(v)?.[1] ?? NaN);
+    const span = start === 'auto' ? spanOf(end) : spanOf(start);
+    if (Number.isNaN(span)) {
+        throw new Error(`preset cell is not auto-placed: ${start} / ${end}`);
+    }
+    return span;
+}
+
+/**
+ * Replays CSS grid row-flow auto-placement (no `dense`, no explicit lines) of
+ * cells with the given column spans into `cols` tracks. An item that does not
+ * fit the rest of its row wraps and strands those cells; whatever is left of
+ * the last row after the final item is stranded too.
+ *
+ * @returns Each item's row index, and how many cells were left empty.
+ */
+function replayGridPlacement(
+    cols: number,
+    spans: readonly number[],
+): { rows: number[]; emptyCells: number } {
+    const rows: number[] = [];
+    let row = 0;
+    let cursor = 0;
+    let emptyCells = 0;
+    for (const span of spans) {
+        if (cursor > 0 && cursor + span > cols) {
+            emptyCells += cols - cursor;
+            row += 1;
+            cursor = 0;
+        }
+        rows.push(row);
+        cursor += span;
+        if (cursor >= cols) {
+            row += 1;
+            cursor = 0;
+        }
+    }
+    if (cursor > 0) emptyCells += cols - cursor;
+    return { rows, emptyCells };
+}
+
 // ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so sibling
 // workers don't archive each other's lineups mid-test.
 const FILE_PREFIX = 'lineup-creation';
@@ -376,34 +425,56 @@ test.describe('Operator ⋮ menu — phase transitions', () => {
             ).toBeVisible({ timeout: 5_000 });
         }
 
+        // The tiling is read from the computed grid, never from pixels: the
+        // old bounding-box checks (Custom flush within 2px of the row's right
+        // edge) drifted ~8px on the fleet (font metrics or the modal open
+        // animation; not pinned).
         const row = modal.getByRole('radiogroup', { name: 'Lineup preset' });
-        const rowBox = await row.boundingBox();
-        const custom = await modal
-            .locator('[data-testid="preset-custom"]')
-            .boundingBox();
-        const series = await modal
-            .locator('[data-testid="preset-series"]')
-            .boundingBox();
-        if (!rowBox || !custom || !series) {
-            throw new Error('preset row did not lay out');
-        }
+        const grid = await row.evaluate((el) => ({
+            tracks: getComputedStyle(el).gridTemplateColumns,
+            cells: Array.from(el.children).map((child) => ({
+                testId: child.getAttribute('data-testid'),
+                start: getComputedStyle(child).gridColumnStart,
+                end: getComputedStyle(child).gridColumnEnd,
+            })),
+        }));
+        expect(grid.cells.map((c) => c.testId)).toEqual([
+            'preset-lan',
+            'preset-tonight',
+            'preset-thisWeek',
+            'preset-series',
+            'preset-custom',
+        ]);
+        const cols = grid.tracks.split(' ').length;
+        const spans = grid.cells.map((c) => columnSpan(c.start, c.end));
+        const { rows, emptyCells } = replayGridPlacement(cols, spans);
+        const seriesRow = rows[3];
+        const customRow = rows[4];
 
-        // Custom always closes the final row flush with the grid's right edge.
+        // Every row is full: no option wraps early and none is left alone in
+        // a half-empty final row.
         expect(
-            Math.abs(custom.x + custom.width - (rowBox.x + rowBox.width)),
-        ).toBeLessThan(2);
+            emptyCells,
+            `empty cells tiling spans [${spans.join(', ')}] into ${cols} columns`,
+        ).toBe(0);
 
         // The preset grid keeps its own (sm/md) breakpoint — ROK-1584 moved only
         // the hero / poll / profile surfaces to 1024px — so the tablet project
         // (810px) sees the desktop 3-2 tiling here, not the phone 2-2-1.
+        // Spans are pinned exactly (start-lineup-presets.tsx PRESET_OPTIONS):
+        // a looser "fills the grid" check also passes when Custom shrinks to
+        // a 1/3- or 1/6-width cell.
         if (isMobile(testInfo)) {
             // 2-col grid: Custom spans both columns on a line of its own.
-            expect(custom.width).toBeGreaterThan(rowBox.width * 0.9);
-            expect(custom.y).toBeGreaterThan(series.y);
+            expect(cols).toBe(2);
+            expect(spans).toEqual([1, 1, 1, 1, 2]);
+            expect(customRow).toBe(seriesRow + 1);
         } else {
-            // 6-col grid: Series and Custom share the final row.
-            expect(Math.abs(custom.y - series.y)).toBeLessThan(2);
-            expect(custom.width).toBeGreaterThan(rowBox.width * 0.4);
+            // 6-col grid: three 1/3 cells, then Series and Custom share the
+            // final row half-and-half.
+            expect(cols).toBe(6);
+            expect(spans).toEqual([2, 2, 2, 3, 3]);
+            expect(customRow).toBe(seriesRow);
         }
     });
 

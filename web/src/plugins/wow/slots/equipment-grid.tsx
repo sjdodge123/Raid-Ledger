@@ -30,7 +30,8 @@ function SlotIcon({ item, iconBorderClass }: { item: EquipmentItemDto; iconBorde
     return (
         <>
             {item.iconUrl ? (
-                <img src={item.iconUrl} alt={item.name} className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
+                <img src={item.iconUrl} alt={item.name} width={32} height={32} loading="lazy" decoding="async"
+                    className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
                     onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
             ) : null}
             <div className={`w-8 h-8 rounded bg-faint flex items-center justify-center text-xs text-muted font-mono flex-shrink-0${item.iconUrl ? ' hidden' : ''}`}>
@@ -43,7 +44,7 @@ function SlotIcon({ item, iconBorderClass }: { item: EquipmentItemDto; iconBorde
 /** Single equipment slot with item display or empty placeholder */
 export function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: {
     item: EquipmentItemDto | undefined; slotName: string;
-    gameVariant: string | null; onItemClick?: () => void;
+    gameVariant: string | null; onItemClick?: (() => void) | undefined;
 }) {
     const [showFallback, setShowFallback] = useState(false);
     const isMobile = useMediaQuery('(max-width: 768px)');
@@ -78,6 +79,7 @@ function SlotSockets({ sockets }: { sockets: EquipmentItemDto['sockets'] }) {
 function SlotItemDetails({ item, qualityClass, gameVariant, isMobile }: {
     item: EquipmentItemDto; qualityClass: string; gameVariant: string | null; isMobile: boolean;
 }) {
+    const firstEnchant = item.enchantments?.[0];
     return (
         <div className="min-w-0 flex-1">
             <a href={getWowheadItemUrl(item.itemId, gameVariant)}
@@ -88,7 +90,7 @@ function SlotItemDetails({ item, qualityClass, gameVariant, isMobile }: {
                 <span>{SLOT_LABELS[item.slot] ?? item.slot}</span>
                 {item.itemSubclass && (<><span>·</span><span>{item.itemSubclass}</span></>)}
             </div>
-            {item.enchantments && item.enchantments.length > 0 && <div className="text-xs text-green-400 truncate">{item.enchantments[0].displayString}</div>}
+            {firstEnchant && <div className="text-xs text-green-400 truncate">{firstEnchant.displayString}</div>}
             <SlotSockets sockets={item.sockets} />
         </div>
     );
@@ -137,6 +139,18 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }
     );
 }
 
+/**
+ * Expected box of the character render, per layout (ROK-1159): Blizzard's
+ * `main-raw` render at an assumed 4:3, scaled to each layout's max height.
+ * The ratio is unverified, and the API falls back to the `main` asset when
+ * `main-raw` is missing, so these attributes must not pin the box: `w-auto`
+ * keeps the painted size on the natural render (capped by max-h) and the
+ * attributes only hint the ratio. The render is the character page's likely
+ * LCP image, so it is never lazy-loaded.
+ */
+const RENDER_BOX_DESKTOP = { width: 800, height: 600 } as const;
+const RENDER_BOX_MOBILE = { width: 400, height: 300 } as const;
+
 /** Desktop and mobile layouts with character render image */
 function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
     renderUrl: string; renderSlotColumn: (slots: string[]) => JSX.Element;
@@ -146,8 +160,8 @@ function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
             <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] gap-4 items-start">
                 {renderSlotColumn(LEFT_SLOTS)}
                 <div className="flex items-center justify-center px-2">
-                    <img src={renderUrl} alt="Character render"
-                        className="max-h-[600px] object-contain drop-shadow-lg"
+                    <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
+                        className="w-auto max-h-[600px] object-contain drop-shadow-lg"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 </div>
@@ -155,8 +169,8 @@ function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
             </div>
             <div className="lg:hidden space-y-4">
                 <div className="flex justify-center">
-                    <img src={renderUrl} alt="Character render"
-                        className="max-h-[300px] object-contain drop-shadow-lg"
+                    <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
+                        className="w-auto max-h-[300px] object-contain drop-shadow-lg"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 </div>

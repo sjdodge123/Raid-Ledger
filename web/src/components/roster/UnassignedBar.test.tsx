@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { UnassignedBar } from './UnassignedBar';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
 
 describe('UnassignedBar', () => {
     const makePlayers = (count: number): RosterAssignmentResponse[] =>
@@ -142,7 +143,7 @@ describe('UnassignedBar', () => {
         render(<UnassignedBar pool={pool} onBarClick={mockOnBarClick} />);
 
         // Original array should remain unchanged
-        expect(pool[0].username).toBe(originalOrder[0]);
-        expect(pool[1].username).toBe(originalOrder[1]);
+        expect(at(pool, 0).username).toBe(originalOrder[0]);
+        expect(at(pool, 1).username).toBe(originalOrder[1]);
     });
 });

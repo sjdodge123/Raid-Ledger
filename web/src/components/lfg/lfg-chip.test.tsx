@@ -44,7 +44,7 @@ import { LfgChip } from './lfg-chip';
 import { nowLine } from './lfg-chip-copy';
 
 /** The one game the real-card cases use. */
-const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic' };
+const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic', coverUrl: null };
 
 /**
  * The REAL card composition: `UnifiedGameCard variant="link"` inside
@@ -151,7 +151,7 @@ describe('LfgChip — lfm, two or more looking (AC1)', () => {
         renderChip({ activeCount: 2, state: 'lfm' });
 
         expect(screen.getByTestId('lfg-chip').className).toContain(
-            'bg-emerald-500/90',
+            'bg-emerald-700',
         );
     });
 });

@@ -305,3 +305,48 @@ describe('EquipmentGrid — mobile data-wowhead suppression across multiple slot
         }
     });
 });
+
+describe('EquipmentGrid — image loading (ROK-1159)', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    function renderGrid(): void {
+        mockMatchMedia(false);
+        render(
+            <EquipmentGrid
+                equipment={createEquipment([
+                    createItem({ slot: 'HEAD', name: 'Test Helm', itemId: 1, iconUrl: 'https://render.example/helm.jpg' }),
+                ])}
+                gameVariant="classic"
+                renderUrl="https://render.example/character-main-raw.png"
+                onItemClick={vi.fn()}
+            />,
+        );
+    }
+
+    it('lazy-loads slot icons into a reserved 32x32 box', () => {
+        renderGrid();
+        // The slot column renders once per layout (desktop + mobile).
+        const icons = screen.getAllByRole('img', { name: 'Test Helm' });
+        expect(icons.length).toBeGreaterThan(0);
+        for (const icon of icons) {
+            expect(icon).toHaveAttribute('width', '32');
+            expect(icon).toHaveAttribute('height', '32');
+            expect(icon).toHaveAttribute('loading', 'lazy');
+        }
+    });
+
+    it('hints the character render ratio on both layouts without pinning its width, and never lazy-loads it', () => {
+        renderGrid();
+        const renders = screen.getAllByRole('img', { name: 'Character render' });
+        expect(renders.map((img) => [img.getAttribute('width'), img.getAttribute('height')])).toEqual([
+            ['800', '600'],
+            ['400', '300'],
+        ]);
+        for (const img of renders) expect(img).not.toHaveAttribute('loading', 'lazy');
+        // jsdom does no layout, so the class is the only observable proof that the
+        // width attribute cannot become the CSS width (preflight sets height:auto only).
+        for (const img of renders) expect(img).toHaveClass('w-auto');
+    });
+});

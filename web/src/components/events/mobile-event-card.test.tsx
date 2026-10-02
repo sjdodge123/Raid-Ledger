@@ -94,16 +94,20 @@ describe('MobileEventCard — avatars & badges', () => {
         expect(avatarStack.children.length).toBe(3);
     });
 
-    it('applies badge-overlay class to status badge', () => {
+    // ROK-1472: the mobile chips sit on the card's themed surface, not on cover art, so they
+    // must take the light repaint. `.badge-overlay` kept cyan-300 #67e8f9 on the light cyan
+    // tint (~1.2:1) — CI's light-contrast smoke caught it on /events at phone width.
+    it('status badge does not opt out of the light repaint (no badge-overlay off the art)', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         const statusBadge = screen.getByTestId('mobile-event-status');
-        expect(statusBadge).toHaveClass('badge-overlay');
+        expect(statusBadge).not.toHaveClass('badge-overlay');
     });
 
-    it('applies badge-overlay class to game-time badge when matchesGameTime is true', () => {
+    it('game-time badge does not opt out of the light repaint (no badge-overlay off the art)', () => {
         render(<MobileEventCard event={createMockEvent()} matchesGameTime />);
         const gameTimeBadge = screen.getByText('Game Time').closest('span');
-        expect(gameTimeBadge).toHaveClass('badge-overlay');
+        expect(gameTimeBadge).toHaveClass('text-cyan-300', 'bg-cyan-500/20');
+        expect(gameTimeBadge).not.toHaveClass('badge-overlay');
     });
 
     it('does not render game-time badge when matchesGameTime is false', () => {

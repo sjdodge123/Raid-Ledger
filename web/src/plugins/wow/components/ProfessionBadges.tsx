@@ -45,7 +45,7 @@ function ProfessionPill({ entry }: { entry: ProfessionEntryDto }) {
     }
     return (
         <span className="inline-flex items-center gap-1" title={title}>
-            <img src={iconUrl} alt={entry.name} className="w-4 h-4" />
+            <img src={iconUrl} alt={entry.name} width={16} height={16} loading="lazy" decoding="async" className="w-4 h-4" />
             {entry.skillLevel}
         </span>
     );

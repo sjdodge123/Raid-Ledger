@@ -108,7 +108,9 @@ function usePlanFormState() {
     const [form, setForm] = useState<FormState>(getInitialFormState);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const registryGameId = useRegistryGameId(form.game);
-    const { data: suggestions, isLoading: suggestionsLoading } = useTimeSuggestions({ gameId: registryGameId, tzOffset: new Date().getTimezoneOffset() });
+    const { data: suggestions, isLoading: suggestionsLoading } = useTimeSuggestions({
+        ...(registryGameId === undefined ? {} : { gameId: registryGameId }), tzOffset: new Date().getTimezoneOffset(),
+    });
 
     function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
         setForm((prev) => ({ ...prev, [field]: value }));

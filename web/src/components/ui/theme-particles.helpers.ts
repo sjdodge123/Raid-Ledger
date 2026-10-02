@@ -14,7 +14,7 @@ export interface Particle {
     idleTimer?: number;
     lifeTimer?: number;
     maxLife?: number;
-    targetEl?: Element;
+    targetEl?: Element | undefined;
     edgeType?: 'top' | 'bottom' | 'left' | 'right';
     edgeT?: number;
     perpOffset?: number;
@@ -90,7 +90,7 @@ export function queryPanelElements(): Element[] {
 }
 
 type EdgeType = 'top' | 'bottom' | 'left' | 'right';
-const EDGES: EdgeType[] = ['top', 'bottom', 'left', 'right'];
+const EDGES: readonly [EdgeType, ...EdgeType[]] = ['top', 'bottom', 'left', 'right'];
 
 export function positionOnEdge(p: Particle, r: DOMRect) {
     const t = p.edgeT!;
@@ -108,6 +108,7 @@ function pickPanelElement(elements: Element[]): Element | null {
     const start = Math.floor(Math.random() * elements.length);
     for (let i = 0; i < elements.length; i++) {
         const candidate = elements[(start + i) % elements.length];
+        if (!candidate) continue;
         const r = candidate.getBoundingClientRect();
         if (r.width > 80 && r.height > 40) return candidate;
     }
@@ -127,7 +128,7 @@ function positionOnViewport(p: Particle, edge: EdgeType, t: number, perp: number
 
 export function placePanelEdgeParticle(p: Particle, cfg: ParticleConfig, elements: Element[]) {
     const el = pickPanelElement(elements);
-    const edge = EDGES[Math.floor(Math.random() * 4)];
+    const edge = EDGES[Math.floor(Math.random() * 4)] ?? EDGES[0];
     const t = Math.random();
     const perp = (Math.random() - 0.5) * 8;
 

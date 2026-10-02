@@ -93,8 +93,9 @@ function installRafMocks() {
 
 function flushRafOnce() {
     // Execute one tick of the animation loop
-    const [id, cb] = [...rafCallbacks.entries()][0] ?? [];
-    if (cb) {
+    const entry = [...rafCallbacks.entries()][0];
+    if (entry) {
+        const [id, cb] = entry;
         rafCallbacks.delete(id);
         cb(0);
     }
@@ -111,7 +112,10 @@ beforeEach(() => {
     mockResolvedTheme.mockReturnValue('default-dark');
 
     // Stub canvas getContext
-    HTMLCanvasElement.prototype.getContext = vi.fn(() => mockCtx as unknown as CanvasRenderingContext2D);
+    // getContext is overloaded per context id; the stub only serves the '2d' overload.
+    HTMLCanvasElement.prototype.getContext = vi.fn(
+        () => mockCtx as unknown as CanvasRenderingContext2D,
+    ) as unknown as HTMLCanvasElement['getContext'];
 
     // Reset DOM dimensions
     Object.defineProperty(window, 'innerWidth', { value: 1280, writable: true, configurable: true });

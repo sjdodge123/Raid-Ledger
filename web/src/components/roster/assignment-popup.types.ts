@@ -26,20 +26,20 @@ export interface AssignmentPopupProps {
     slotRole: RosterRole | null;
     slotPosition: number;
     unassigned: RosterAssignmentResponse[];
-    currentOccupant?: RosterAssignmentResponse;
+    currentOccupant?: RosterAssignmentResponse | undefined;
     onAssign: (signupId: number, selection?: { characterId?: string; role?: RosterRole }) => void;
-    onRemove?: (signupId: number) => void;
-    onSelfAssign?: () => void;
+    onRemove?: ((signupId: number) => void) | undefined;
+    onSelfAssign?: (() => void) | undefined;
     availableSlots?: AvailableSlot[];
     onAssignToSlot?: (signupId: number, role: RosterRole, position: number, selection?: { characterId?: string }) => void;
-    onGenerateInviteLink?: () => void;
-    onRemoveFromEvent?: (signupId: number, username: string) => void;
+    onGenerateInviteLink?: (() => void) | undefined;
+    onRemoveFromEvent?: ((signupId: number, username: string) => void) | undefined;
     onReassignToSlot?: (fromSignupId: number, toRole: RosterRole, toPosition: number) => void;
     assigned?: RosterAssignmentResponse[];
-    gameId?: number;
-    isMMO?: boolean;
-    currentUserId?: number;
-    onSelfSlotClick?: (role: RosterRole, position: number) => void;
+    gameId?: number | undefined;
+    isMMO?: boolean | undefined;
+    currentUserId?: number | undefined;
+    onSelfSlotClick?: ((role: RosterRole, position: number) => void) | undefined;
 }
 
 export interface SlotGroup {

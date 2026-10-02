@@ -38,6 +38,20 @@ describe('Select — frame', () => {
         expect(select).not.toHaveAttribute('size');
     });
 
+    it('keeps the value clear of the chevron at every fieldSize', () => {
+        const { unmount } = render(<Select aria-label="Region">{opts}</Select>);
+        const md = screen.getByRole('combobox', { name: 'Region' });
+        expect(md).toHaveClass('px-3', 'pr-9');
+        expect(md).not.toHaveClass('lg:px-2');
+        expect(md).not.toHaveClass('lg:pr-9');
+        unmount();
+        // sm's `lg:px-2` outranks a bare `pr-9` from `lg` up, so the chevron
+        // room must be restated at `lg:` or the value runs under the chevron.
+        render(<Select aria-label="Region" fieldSize="sm">{opts}</Select>);
+        expect(screen.getByRole('combobox', { name: 'Region' }))
+            .toHaveClass('lg:px-2', 'pr-9', 'lg:pr-9');
+    });
+
     it('placeholder renders an empty-value first option', () => {
         render(<Select aria-label="Region" placeholder="Pick a region" defaultValue="">{opts}</Select>);
         const first = screen.getAllByRole('option')[0];

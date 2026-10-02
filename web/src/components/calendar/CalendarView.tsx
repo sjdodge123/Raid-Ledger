@@ -38,7 +38,7 @@ interface CalendarViewProps {
     currentDate?: Date;
     onDateChange?: (date: Date) => void;
     selectedGames?: Set<string>;
-    gameTimeSlots?: Set<string>;
+    gameTimeSlots?: Set<string> | undefined;
     calendarView?: CalendarViewMode;
     onCalendarViewChange?: (view: CalendarViewMode) => void;
     /** ROK-1662: rendered at the right end of the month/week/day toolbar (the page's Filters funnel). */

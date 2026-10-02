@@ -7,6 +7,7 @@
  * AC-14, AC-15, AC-16.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { at } from '../test/defined';
 import { renderHook } from '@testing-library/react';
 import { act } from 'react';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
@@ -165,7 +166,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     const lineup = createMockLineupDetail({ status: 'building' });
     const { result } = renderHero(lineup, { onOpenNominate });
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     expect(onOpenNominate).toHaveBeenCalledTimes(1);
   });
@@ -181,11 +182,11 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     });
     const { result } = renderHero(lineup);
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     // Route shape lives in the spec — must reference the lineup id and a route segment.
     expect(mockNavigate).toHaveBeenCalledTimes(1);
-    const target = mockNavigate.mock.calls[0][0] as string;
+    const target = at(mockNavigate.mock.calls, 0)[0] as string;
     expect(target).toMatch(/community-lineup\/50/);
     expect(target).toMatch(/schedule/);
   });
@@ -209,7 +210,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     const { result } = renderHero(lineup);
     expect(result.current.tone).toBe('aborted');
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     expect(mockNavigate).toHaveBeenCalledWith('/games');
   });
@@ -241,7 +242,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     const { result } = renderHero(lineup, { tiebreaker });
     expect(result.current.cta?.text).toMatch(/force.*resolve/i);
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     expect(mockForceResolveMutate).toHaveBeenCalledWith(50);
   });

@@ -21,7 +21,7 @@ table). Solid accent fills are identical in both families.
 
 **Accent tokens first.** These are not rewritten per class — the variable itself flips, so
 every utility and every opacity modifier follows. Declared in `@theme` (`:50-62`) and the
-shared light block (`:114-123`) only; contrast on `#ffffff` is recomputed by
+shared light block (`:114-124`) only; contrast on `#ffffff` is recomputed by
 `web/src/styles/semantic-tokens.guard.test.ts`.
 
 | You write | Dark paints | Light paints | Anchor |
@@ -35,8 +35,8 @@ shared light block (`:114-123`) only; contrast on `#ffffff` is recomputed by
 `bg-X/N` on a token compiles to `color-mix(in oklab, var(--color-X) N%, transparent)`, so
 it is correct at any alpha in both families.
 
-**Raw hues.** You write ONE class. `:688-705` (text; `/60-/80` alphas `:709-715`, hovers
-`:718-723`), `:713-735` (fills; hovers `:737-745`), `:747-759` (borders) rewrite it under
+**Raw hues.** You write ONE class. `:701-718` (text; `/60-/80` alphas `:722-728`, hovers
+`:731-736`), `:739-762` (fills; hovers `:765-774`), `:777-789` (borders) rewrite it under
 `:is([data-scheme="light"], [data-scheme="quest-log"], [data-scheme="sky"],
 [data-scheme="dawn"], [data-scheme="holy"], [data-scheme="celestial"])`. Contrast figures
 are the ones `index.css` records beside each rule; "worst" is the lowest across all six light
@@ -44,27 +44,34 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 
 | You write | Dark paints | Light paints | Anchor |
 |---|---|---|---|
-| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#065f46` emerald-800, worst 5.27:1 (celestial tint) | `:696-697` |
-| `text-emerald-500` | `#10b981` | `#065f46` emerald-800 (`#047857` is 3.76:1 on the celestial tint) | `:698` |
-| `text-red-400` / `-300` | `#f87171` / `#fca5a5` | `#991b1b` red-800, worst 5.52:1 | `:688-689` |
-| `text-amber-400` / `-300` | `#fbbf24` / `#fcd34d` | `#92400e` amber-800 = warning, worst 5.0:1 | `:690-691` |
-| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#854d0e` yellow-800, worst 4.89:1 | `:692-693` |
-| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#166534` green-800, worst 4.97:1 | `:694-695` |
-| `text-purple-400` | `#c084fc` | `#6d28d9` violet-700, worst 4.73:1 | `:699` |
-| `text-indigo-400` / `-300` | `#818cf8` / `#a5b4fc` | `#4338ca` indigo-700, worst 5.25:1 | `:700-701` |
-| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:702-703` |
-| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:704-705` |
-| `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:713-735` |
+| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#065f46` emerald-800, worst 5.27:1 (celestial tint) | `:709-710` |
+| `text-emerald-500` | `#10b981` | `#065f46` emerald-800 (`#047857` is 3.76:1 on the celestial tint) | `:711` |
+| `text-red-400` / `-300` | `#f87171` / `#fca5a5` | `#991b1b` red-800, worst 5.52:1 | `:701-702` |
+| `text-amber-400` / `-300` | `#fbbf24` / `#fcd34d` | `#92400e` amber-800 = warning, worst 5.0:1 | `:703-704` |
+| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#854d0e` yellow-800, worst 4.89:1 | `:705-706` |
+| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#166534` green-800, worst 4.97:1 | `:707-708` |
+| `text-purple-400` | `#c084fc` | `#6d28d9` violet-700, worst 4.73:1 | `:712` |
+| `text-indigo-400` / `-300` | `#818cf8` / `#a5b4fc` | `#4338ca` indigo-700, worst 5.25:1 | `:713-714` |
+| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:715-716` |
+| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:717-718` |
+| `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:739-762` |
+| `bg-amber-500/15` / `bg-amber-500/20` fill (role badge, DemoDataCard badge, LFG "now" chip) | the raw 15% / 20% hue | `amber-100` at 0.6 / 0.7 alpha | `:745-746` |
+| `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:770-771` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
-| `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:747-759` |
+| `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:777-789` |
 | `bg-emerald-600` (button fill) | `#059669` | `#059669` — same fill both families | design-system.md §6.10 |
 
-Only the hues listed at `:713-735` get the tint treatment — `red`, `amber`, `emerald`,
+`web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
+`bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`
+and `hover:bg-amber-500/10` are its two listed known gaps. The same spec fails if a quest-log `!important`
+border rule reaches an `input`, `select` or `textarea`, which would hide the `aria-invalid` danger border.
+
+Only the hues listed at `:739-762` get the tint treatment — `red`, `amber`, `emerald`,
 `green`, `yellow`, `indigo`, `cyan`. A `bg-blue-500/10` or `bg-purple-500/10` surface has
 **no** light-family mapping.
 
 **Text on an accent fill.** Solid accent buttons keep their fill in both families, so the
-label would go near-black on light (`--color-foreground` is `#0f172a` there). `:780-787`
+label would go near-black on light (`--color-foreground` is `#0f172a` there). `:814-820`
 forces `--color-foreground: #ffffff` for `.text-foreground` on `.bg-blue-600`,
 `.bg-indigo-600`, `.bg-emerald-600`, `.bg-purple-600`, `.bg-red-600`, `.bg-red-500`,
 `.bg-amber-600`, `.bg-violet-600` and Discord's `#5865F2`. Use `text-foreground` on a
@@ -76,22 +83,23 @@ forced-white rule still applies (`JourneyHero.tsx:173-175`).
 
 **Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
 on the theme surface, so the light family's contrast bumps are wrong there. Put
-`.badge-overlay` on the badge or its container and `:767-779` restores the DARK shades
-under every light scheme. Consumers: `event-card.tsx`, `mobile-event-card.tsx`; guarded
-by `web/src/styles/badge-overlay.test.ts`.
+`.badge-overlay` on the badge or its container and `:801-813` restores the DARK shades
+under every light scheme. Consumer: `event-card.tsx` only — the badges that sit ON the cover art; a
+chip on the themed surface never carries it (ROK-1472). Guarded by `web/src/styles/badge-overlay.test.ts`
+and `web/src/styles/badge-overlay-art-only.guard.test.ts`.
 
 ---
 
 ## 2. Elevation
 
 - **Dark:** separation is the border (`border-edge`) plus the surface step `backdrop` →
-  `surface` → `panel`. `.glass-card` is translucent with `blur(12px)` (`:651-655`). No
+  `surface` → `panel`. `.glass-card` is translucent with `blur(12px)` (`:666-670`). No
   shadow — a shadow on `#020617` is invisible.
 - **Light:** the surface steps are ~4% apart (`#ffffff` → `#f1f5f9`), so the light family
   adds the shadow the dark family does not need: `.bg-panel` / `.bg-panel/50` /
-  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:789-793`), and `.glass-card` becomes
+  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:826-832`), and `.glass-card` becomes
   near-opaque — `color-mix(in srgb, var(--color-surface) 90%, transparent)` plus
-  `0 1px 3px rgba(0,0,0,.08)`, rising to 95% / `.1` on hover (`:663-671`).
+  `0 1px 3px rgba(0,0,0,.08)`, rising to 95% / `.1` on hover (`:677-686`).
 - You get this by using `bg-panel` / `.glass-card`. A hand-rolled `shadow-lg` (20 uses in
   `components/`) does not adapt and reads as a smudge on light.
 
@@ -124,16 +132,17 @@ does not: `GradientOverlay`'s `from-black/80 to-transparent`
 (`components/games/game-card-parts.tsx:66`) stays dark in both families because it exists
 to make white title text legible over the *image*, not over the theme surface. Anything
 layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
-`text-dim` — `#64748b`, the one token whose value is identical in both families — so an
-image-less tile reads the same either way.
+`text-dim` — `#64748b` dark, `#5a697f` light (the same slate, a step darker so it clears AA on
+the light panel and overlay) — so an image-less tile reads as the same quiet slate in
+either family.
 
 ### Chips (§4.3)
 
 OFF is tokens and flips cleanly (`bg-panel` `#1e293b` → `#f1f5f9`, `text-secondary`
 `#cbd5e1` → `#334155`). ON is three raw amber classes and only two are remapped: the fill
-`bg-amber-500/10` → amber-100 at .5 (`:718`) and the border `border-amber-500/30` →
-amber-300 at .5 (`:752`). `text-amber-300` has **no** light override — only its `hover:`
-variant does (`:706`) — so the ON label stays `#fcd34d` on a near-white wash, ≈1.4:1. A
+`bg-amber-500/10` → amber-100 at .5 (`:744`) and the border `border-amber-500/30` →
+amber-300 at .5 (`:782`). `text-amber-300` has **no** light override — only its `hover:`
+variant does (`:732`) — so the ON label stays `#fcd34d` on a near-white wash, ≈1.4:1. A
 chip's ON state is unreadable in all six light themes (design-system.md §6.9). Until it
 is fixed, a new ON-state label should use `text-amber-400`.
 
@@ -163,7 +172,7 @@ is a 10% emerald wash on dark and an emerald-100 wash on light. Body copy should
   a dark green with no light override, so a disabled primary button is a heavy dark block
   on a white page. Prefer `disabled:opacity-50` on the normal fill.
 - **Native controls.** `accent-emerald-500` sliders/checkboxes and UA widget chrome follow
-  `color-scheme`, which is set on `<html>` only (`:617-631`) — the one thing the scoped
+  `color-scheme`, which is set on `<html>` only (`:619-641`) — the one thing the scoped
   side-by-side preview cannot show you. Check those at the root.
 
 ### Count badges (§4.12)
@@ -215,9 +224,9 @@ Root-only regardless of family — verify these at the root, never in a scoped p
 
 | What | Where | Consequence |
 |---|---|---|
-| `color-scheme: dark/light` | `:617-631` | Native form controls, scrollbars, UA widgets |
+| `color-scheme: dark/light` | `:619-641` | Native form controls, scrollbars, UA widgets |
 | Page background | `body` `:633`, `#root` `:640` | A scoped column must paint its own `bg-backdrop` |
-| quest-log parchment | `[data-variant="quest-log"] body::before` `:1269`, `body::after` `:1282` | Scoped quest-log gets panels but no page texture |
+| quest-log parchment | `[data-variant="quest-log"] body::before` `:1302`, `body::after` `:1315` | Scoped quest-log gets panels but no page texture |
 | Ambient particles | `components/ui/ThemeParticles.tsx` | Mounted once at app level (§2.7) |
 
 ---

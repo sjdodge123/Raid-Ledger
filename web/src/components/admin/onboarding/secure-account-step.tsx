@@ -84,7 +84,7 @@ interface Reveal { revealed: boolean; onRevealedChange: (next: boolean) => void 
 
 interface SecretFieldProps {
     label: string; placeholder: string; autoComplete: string; value: string;
-    onChange: (v: string) => void; reveal: Reveal; error?: string; children?: ReactNode;
+    onChange: (v: string) => void; reveal: Reveal; error?: string | undefined; children?: ReactNode | undefined;
 }
 
 /** Field + shared PasswordInput. The sized wrapper (ruling 15) keeps the eye toggle inside the frame. */

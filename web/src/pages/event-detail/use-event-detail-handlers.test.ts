@@ -55,6 +55,7 @@ vi.mock('../../lib/toast', () => ({
 }));
 
 import { useEventDetailHandlers } from './use-event-detail-handlers';
+import { at } from '../../test/defined';
 
 // ---- Helpers ----------------------------------------------------------------
 
@@ -92,6 +93,7 @@ function renderHandlers(opts: {
                 shouldShowCharacterModal:
                     opts.shouldShowCharacterModal ?? false,
                 canManageRoster: opts.canManageRoster ?? false,
+                pugs: [],
             }),
         { wrapper: Wrapper },
     );
@@ -177,7 +179,7 @@ describe('handleSlotClick — ROK-548 preferredRoles filtering', () => {
                     slotPosition: 1,
                 }),
             );
-            const callArg = mockSignupForEvent.mock.calls[0][1];
+            const callArg = at(mockSignupForEvent.mock.calls, 0)[1];
             expect(callArg.preferredRoles).toBeUndefined();
         });
 
@@ -190,7 +192,7 @@ describe('handleSlotClick — ROK-548 preferredRoles filtering', () => {
                 result.current.handleSlotClick('flex', 2);
             });
 
-            const callArg = mockSignupForEvent.mock.calls[0][1];
+            const callArg = at(mockSignupForEvent.mock.calls, 0)[1];
             expect(callArg.preferredRoles).toBeUndefined();
         });
 
@@ -210,7 +212,7 @@ describe('handleSlotClick — ROK-548 preferredRoles filtering', () => {
                     slotPosition: 1,
                 }),
             );
-            const callArg = mockSignupForEvent.mock.calls[0][1];
+            const callArg = at(mockSignupForEvent.mock.calls, 0)[1];
             expect(callArg.preferredRoles).toBeUndefined();
         });
     });

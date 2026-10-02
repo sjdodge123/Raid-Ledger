@@ -92,7 +92,7 @@ function HourglassIcon({ colorClass }: { colorClass: string }): JSX.Element {
 }
 
 function CompactCountdown({ status, deadline, startedAt }: {
-  status: string; deadline: string; startedAt?: string | null;
+  status: string; deadline: string; startedAt?: string | null | undefined;
 }) {
   const [remaining, setRemaining] = useState(computeRemaining(deadline));
 

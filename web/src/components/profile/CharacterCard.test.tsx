@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { CharacterCard } from './CharacterCard';
 import * as useCharacterMutationsHook from '../../hooks/use-character-mutations';
 import type { CharacterDto } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
 
 // Mock the plugins module so PluginSlot renders nothing
 vi.mock('../../plugins', () => ({
@@ -34,6 +35,8 @@ const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDt
     region: 'us',
     gameVariant: 'retail',
     equipment: null,
+    talents: null,
+    professions: null,
     displayOrder: 1,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
@@ -104,7 +107,7 @@ it('mobile panel Edit calls onEdit and closes panel', () => {
             fireEvent.click(screen.getByLabelText('Character actions'));
             const panel = screen.getByTestId('mobile-actions-panel');
             const menuItems = panel.querySelectorAll('button');
-            fireEvent.click(menuItems[0]); // Edit
+            fireEvent.click(at(menuItems, 0)); // Edit
             expect(onEdit).toHaveBeenCalledWith(character);
             // Panel should be closed
             expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
@@ -123,7 +126,7 @@ it('mobile panel Delete calls handleDelete and closes panel', () => {
             fireEvent.click(screen.getByLabelText('Character actions'));
             const panel = screen.getByTestId('mobile-actions-panel');
             const menuItems = panel.querySelectorAll('button');
-            fireEvent.click(menuItems[1]); // Delete
+            fireEvent.click(at(menuItems, 1)); // Delete
             expect(mockDeleteMutate).toHaveBeenCalledWith('char-mobile-del');
             // Panel should be closed
             expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();

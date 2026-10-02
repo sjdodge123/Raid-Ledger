@@ -11,8 +11,10 @@ import { RoleIcon } from '../shared/RoleIcon';
 import { copyWithToast } from '../../lib/clipboard';
 
 /** Status indicator colors */
-const STATUS_COLORS: Record<string, { dot: string; label: string }> = {
-    pending: { dot: 'bg-gray-400', label: 'Pending' },
+type StatusColor = { dot: string; label: string };
+const PENDING_STATUS: StatusColor = { dot: 'bg-gray-400', label: 'Pending' };
+const STATUS_COLORS: Record<string, StatusColor> = {
+    pending: PENDING_STATUS,
     invited: { dot: 'bg-blue-400', label: 'Invited' },
     accepted: { dot: 'bg-emerald-400', label: 'Accepted' },
     claimed: { dot: 'bg-green-400', label: 'Claimed' },
@@ -23,11 +25,11 @@ interface PugCardProps {
     /** Whether the current user can edit/remove this PUG */
     canManage?: boolean;
     /** Called when edit is clicked */
-    onEdit?: (pug: PugSlotResponseDto) => void;
+    onEdit?: ((pug: PugSlotResponseDto) => void) | undefined;
     /** Called when remove is clicked */
-    onRemove?: (pugId: string) => void;
+    onRemove?: ((pugId: string) => void) | undefined;
     /** Called when regenerate invite link is clicked (ROK-263) */
-    onRegenerateLink?: (pugId: string) => void;
+    onRegenerateLink?: ((pugId: string) => void) | undefined;
     /** Whether to display the role badge (only for MMO games) */
     showRole?: boolean;
 }
@@ -94,8 +96,8 @@ function PugCardInfo({ pug, statusInfo, canManage, inviteUrl, showRole, onCopy }
 
 function PugCardMenu({ pug, inviteUrl, onEdit, onRemove, onRegenerateLink, onCopy }: {
     pug: PugSlotResponseDto; inviteUrl: string | null;
-    onEdit?: (pug: PugSlotResponseDto) => void; onRemove?: (id: string) => void;
-    onRegenerateLink?: (id: string) => void; onCopy: (e: React.MouseEvent) => void;
+    onEdit?: ((pug: PugSlotResponseDto) => void) | undefined; onRemove?: ((id: string) => void) | undefined;
+    onRegenerateLink?: ((id: string) => void) | undefined; onCopy: (e: React.MouseEvent) => void;
 }) {
     const [showMenu, setShowMenu] = useState(false);
     const menuAction = (e: React.MouseEvent, action: () => void) => { e.stopPropagation(); setShowMenu(false); action(); };
@@ -122,7 +124,7 @@ function PugCardMenu({ pug, inviteUrl, onEdit, onRemove, onRegenerateLink, onCop
 }
 
 export function PugCard({ pug, canManage = false, onEdit, onRemove, onRegenerateLink, showRole = false }: PugCardProps) {
-    const statusInfo = STATUS_COLORS[pug.status] ?? STATUS_COLORS.pending;
+    const statusInfo = STATUS_COLORS[pug.status] ?? PENDING_STATUS;
     const inviteUrl = pug.inviteCode ? `${window.location.origin}/i/${pug.inviteCode}` : null;
     const handleCopyInviteUrl = (e: React.MouseEvent) => {
         e.stopPropagation();

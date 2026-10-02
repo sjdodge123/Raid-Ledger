@@ -16,7 +16,7 @@ interface FilterCountBadgeProps {
     /** Id for the `sr-only` description; the opener points `aria-describedby` at it. */
     id: string;
     /** Screen-reader wording; defaults to "N active filters". */
-    describe?: DescribeFilterCount;
+    describe?: DescribeFilterCount | undefined;
     /** `fab`: 4px corner offset (the 56px FAB). `trigger`: 6px (the 44px toolbar funnel). */
     offset?: 'fab' | 'trigger';
 }

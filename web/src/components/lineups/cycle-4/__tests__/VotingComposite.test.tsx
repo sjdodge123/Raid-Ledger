@@ -21,15 +21,12 @@ import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../../test/render-helpers';
 import { server } from '../../../../test/mocks/server';
 import { VotingComposite } from '../VotingComposite';
+import { at } from '../../../../test/defined';
 
 const API_BASE = 'http://localhost:3000';
 
-interface VotingLineupOverrides extends Partial<LineupDetailResponseDto> {
-    votingEligibleCount?: number;
-}
-
 function buildVotingLineup(
-    overrides: VotingLineupOverrides = {},
+    overrides: Partial<LineupDetailResponseDto> = {},
 ): LineupDetailResponseDto {
     const base: LineupDetailResponseDto = {
         id: 7,
@@ -88,16 +85,19 @@ function buildVotingLineup(
         stillWaitingOnVoters: [],
         publicShareEnabled: true,
         publicSlug: 'sv-voting-lineup',
+        includeSchedulingPhase: true,
+        nominationTargetPct: null,
+        nominationCap: 20,
+        nominationTargetDisarmedAt: null,
+        nominationTargetArmed: true,
+        // ROK-1298: voter pool denominator; public lineups mirror totalMembers.
+        votingEligibleCount: 12,
         viewerSubmissions: {
             nominationsSubmittedAt: null,
             votesSubmittedAt: null,
         },
     };
-    // Inject the new ROK-1298 field; not yet in the DTO type but is on the
-    // runtime response shape.
-    return { ...base, ...overrides } as LineupDetailResponseDto & {
-        votingEligibleCount: number;
-    };
+    return { ...base, ...overrides };
 }
 
 beforeEach(() => {
@@ -430,10 +430,10 @@ describe('VotingComposite — a tie hold closes the vote (ROK-1374)', () => {
 describe('VotingComposite — the top-pick star (ROK-1474)', () => {
     /** Two-entry lineup so "the star moves" is observable. */
     function twoEntryLineup(
-        overrides: VotingLineupOverrides = {},
+        overrides: Partial<LineupDetailResponseDto> = {},
     ): LineupDetailResponseDto {
         const base = buildVotingLineup({ votingEligibleCount: 12 });
-        const [first] = base.entries;
+        const first = at(base.entries, 0);
         return buildVotingLineup({
             votingEligibleCount: 12,
             entries: [

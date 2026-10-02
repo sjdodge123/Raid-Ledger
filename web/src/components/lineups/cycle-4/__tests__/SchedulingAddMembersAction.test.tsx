@@ -92,7 +92,7 @@ describe('SchedulingAddMembersAction', () => {
         await user.click(row);
         await user.click(screen.getByTestId('add-poll-members-submit'));
         expect(addMutateAsync).toHaveBeenCalledTimes(1);
-        expect(addMutateAsync.mock.calls[0][0]).toEqual({
+        expect(addMutateAsync.mock.calls[0]?.[0]).toEqual({
             lineupId: 5,
             matchId: 9,
             userIds: [10],

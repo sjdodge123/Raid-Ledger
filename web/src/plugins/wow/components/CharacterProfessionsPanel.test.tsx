@@ -11,6 +11,7 @@
  * the ROK-1655 Discard → reopen round trip is exercised end to end.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { at } from '../../../test/defined';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CharacterProfessionsDto } from '@raid-ledger/contract';
@@ -68,14 +69,14 @@ const EMPTY_PROFESSIONS: CharacterProfessionsDto = {
 describe('CharacterProfessionsPanel — visibility short-circuit', () => {
     it('renders nothing when professions === null and viewer is NOT the owner', () => {
         const { container } = render(
-            <CharacterProfessionsPanel professions={null} isOwner={false} characterId="c1" />,
+            <CharacterProfessionsPanel professions={null} isOwner={false} characterId="c1" gameId={1} />,
         );
         expect(container).toBeEmptyDOMElement();
     });
 
     it('renders nothing when both arrays are empty and viewer is NOT the owner', () => {
         const { container } = render(
-            <CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner={false} characterId="c1" />,
+            <CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner={false} characterId="c1" gameId={1} />,
         );
         expect(container).toBeEmptyDOMElement();
     });
@@ -83,20 +84,20 @@ describe('CharacterProfessionsPanel — visibility short-circuit', () => {
 
 describe('CharacterProfessionsPanel — owner CTA when no data', () => {
     it('renders an "Add Professions" CTA when owner has no data', () => {
-        render(<CharacterProfessionsPanel professions={null} isOwner characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={null} isOwner characterId="c1" gameId={1} />);
         expect(screen.getByRole('heading', { name: /professions/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
     });
 
     it('renders the CTA when owner has empty arrays (sync-with-no-data path)', () => {
-        render(<CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={EMPTY_PROFESSIONS} isOwner characterId="c1" gameId={1} />);
         expect(screen.getByRole('button', { name: /add professions/i })).toBeInTheDocument();
     });
 });
 
 describe('CharacterProfessionsPanel — populated state', () => {
     it('renders primary, secondary, tiers, and skill numbers (non-owner)', () => {
-        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false} characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner={false} characterId="c1" gameId={1} />);
         expect(screen.getByRole('heading', { name: /professions/i })).toBeInTheDocument();
         expect(screen.getByText('Tailoring')).toBeInTheDocument();
         expect(screen.getByText(/450\s*\/\s*450/)).toBeInTheDocument();
@@ -109,7 +110,7 @@ describe('CharacterProfessionsPanel — populated state', () => {
     });
 
     it('renders an Edit affordance for owners with data', () => {
-        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} />);
         expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument();
     });
 
@@ -119,7 +120,7 @@ describe('CharacterProfessionsPanel — populated state', () => {
             secondary: [],
             syncedAt: '2026-04-28T00:00:00.000Z',
         };
-        render(<CharacterProfessionsPanel professions={unknown} isOwner={false} characterId="c1" />);
+        render(<CharacterProfessionsPanel professions={unknown} isOwner={false} characterId="c1" gameId={1} />);
         expect(screen.getByText('Mystery Craft')).toBeInTheDocument();
         expect(screen.queryByRole('img', { name: /mystery craft/i })).toBeNull();
     });
@@ -133,15 +134,15 @@ describe('CharacterProfessionsPanel — Discard really drops the draft (ROK-1655
         render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} />);
 
         await user.click(screen.getByRole('button', { name: /^edit$/i }));
-        expect(skillInputs()[0].value).toBe('450');
-        await user.clear(skillInputs()[0]);
-        await user.type(skillInputs()[0], '300');
+        expect(skillInputs()[0]?.value).toBe('450');
+        await user.clear(at(skillInputs(), 0));
+        await user.type(at(skillInputs(), 0), '300');
 
         await user.keyboard('{Escape}');
         await user.click(screen.getByTestId('discard-changes-discard'));
         expect(screen.queryByRole('dialog', { name: 'Edit Professions' })).toBeNull();
 
         await user.click(screen.getByRole('button', { name: /^edit$/i }));
-        expect(skillInputs()[0].value, 'Discard must drop the draft: reopen starts from the saved 450').toBe('450');
+        expect(skillInputs()[0]?.value, 'Discard must drop the draft: reopen starts from the saved 450').toBe('450');
     });
 });

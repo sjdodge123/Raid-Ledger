@@ -60,7 +60,7 @@ function useScrolledPast(ref: React.RefObject<HTMLDivElement | null>): boolean {
         if (!node || typeof IntersectionObserver === 'undefined') return;
         const obs = new IntersectionObserver(
             ([entry]) => {
-                flushSync(() => setPast(!entry.isIntersecting));
+                if (entry) flushSync(() => setPast(!entry.isIntersecting));
             },
             { threshold: 0, rootMargin: '0px 0px -100% 0px' },
         );
@@ -116,7 +116,7 @@ function HeroFull(props: HeroNextStepProps): JSX.Element {
 
 function HeroCompact({
     headline, cta, tone,
-}: { headline: string; cta?: HeroCta; tone: HeroTone }): JSX.Element {
+}: { headline: string; cta?: HeroCta | undefined; tone: HeroTone }): JSX.Element {
     return (
         <div className="flex items-center justify-between gap-3 min-h-[44px]">
             <p className={`text-sm font-semibold uppercase tracking-[0.15em] truncate ${TONE_LABEL_CLS[tone]}`}>

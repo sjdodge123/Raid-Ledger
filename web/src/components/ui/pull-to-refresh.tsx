@@ -38,15 +38,17 @@ function usePullTouch(onRefresh: () => Promise<void>) {
     const pulling = useRef(false);
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        if (Math.max(document.documentElement.scrollTop, document.body.scrollTop) <= 0 && !isRefreshing) {
-            startY.current = e.touches[0].clientY;
+        const touch = e.touches[0];
+        if (touch && Math.max(document.documentElement.scrollTop, document.body.scrollTop) <= 0 && !isRefreshing) {
+            startY.current = touch.clientY;
             pulling.current = true;
         }
     }, [isRefreshing]);
 
     const handleTouchMove = useCallback((e: React.TouchEvent) => {
-        if (!pulling.current) return;
-        const dy = e.touches[0].clientY - startY.current;
+        const touch = e.touches[0];
+        if (!pulling.current || !touch) return;
+        const dy = touch.clientY - startY.current;
         if (dy < 0) { pulling.current = false; setPullDistance(0); return; }
         setPullDistance(Math.min(dy * 0.5, THRESHOLD * 1.5));
     }, []);

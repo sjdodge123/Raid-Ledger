@@ -8,7 +8,7 @@ interface CalendarToolbarProps {
     currentDate: Date;
     tzAbbr: string;
     isHeaderHidden: boolean;
-    calendarView?: string;
+    calendarView?: string | undefined;
     onPrev: () => void;
     onNext: () => void;
     onToday: () => void;

@@ -30,8 +30,8 @@ export function useTiebreakerDetail(lineupId: number | undefined) {
 export function useStartTiebreaker() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (p: { lineupId: number; mode: 'bracket' | 'veto'; roundDurationHours?: number }) =>
-            startTiebreaker(p.lineupId, { mode: p.mode, roundDurationHours: p.roundDurationHours }),
+        mutationFn: ({ lineupId, ...body }: { lineupId: number; mode: 'bracket' | 'veto'; roundDurationHours?: number }) =>
+            startTiebreaker(lineupId, body),
         onSuccess: () => {
             void qc.invalidateQueries({ queryKey: [...LINEUPS_PREFIX] });
             void qc.invalidateQueries({ queryKey: [...TIEBREAKER_KEY] });

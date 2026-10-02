@@ -35,8 +35,8 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 /** Eagerly push avatar preference into React Query cache + module-level overlay. */
 function applyAvatarOptimistic(
     queryClient: ReturnType<typeof useQueryClient>,
-    pref: { type: SelectableAvatarType; characterName?: string },
-    opts?: { resolvedAvatarUrl?: string; customAvatarUrl?: string },
+    pref: { type: SelectableAvatarType; characterName?: string | undefined },
+    opts?: { resolvedAvatarUrl?: string | undefined; customAvatarUrl?: string | undefined },
 ) {
     queryClient.setQueryData<User | null>(['auth', 'me'], (old) => {
         if (!old) return old;
@@ -139,7 +139,7 @@ function AvatarUploadBar({ isUploading, uploadProgress, onUpload, onRemove, hasC
     // Ruling 7 exception: the upload percentage stays the visible label, so this is `disabled`, not `loading`.
     return (
         <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-edge-subtle">
-            <FilePicker variant="primary" accept={AVATAR_ACCEPT} disabled={isUploading} onFiles={(files) => onUpload(files[0])}>
+            <FilePicker variant="primary" accept={AVATAR_ACCEPT} disabled={isUploading} onFiles={([file]) => { if (file) onUpload(file); }}>
                 <svg aria-hidden className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
                 {isUploading ? `Uploading ${uploadProgress}%` : 'Upload Custom'}
             </FilePicker>

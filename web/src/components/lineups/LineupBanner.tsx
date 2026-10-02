@@ -16,6 +16,7 @@ import { PhaseCountdown } from './phase-countdown';
 import { formatTargetDate } from './lineup-banner-helpers';
 import { TiebreakerBadge } from './tiebreaker/TiebreakerBadge';
 import { OtherActiveLineups } from './OtherActiveLineups';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 /** Pulsing green dot indicator for active lineup. */
 function PulsingDot(): JSX.Element {
@@ -99,6 +100,10 @@ function GameThumbnail({ entry }: {
                     src={entry.gameCoverUrl}
                     alt={entry.gameName}
                     className="w-16 h-20 object-cover rounded-lg"
+                    width={64}
+                    height={80}
+                    decoding="async"
+                    {...coverSrcSetProps(entry.gameCoverUrl, '64px')}
                 />
             ) : (
                 <div className="w-16 h-20 bg-panel rounded-lg flex items-center justify-center">

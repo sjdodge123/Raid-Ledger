@@ -21,7 +21,7 @@ interface MemberPickerProps {
 function useCommunityMembers(search: string) {
   return useQuery({
     queryKey: ['players', 'member-picker', search],
-    queryFn: () => getPlayers({ search: search || undefined, page: 1 }),
+    queryFn: () => getPlayers({ ...(search ? { search } : {}), page: 1 }),
     select: (data) =>
       (data.data ?? []).map((u) => ({
         id: u.id,

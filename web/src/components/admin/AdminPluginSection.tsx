@@ -4,12 +4,12 @@ import { PluginBadge } from '../ui/plugin-badge';
 
 interface AdminPluginCardProps {
     title: string;
-    version?: string;
+    version?: string | undefined;
     description: string;
-    status?: 'active' | 'inactive' | 'not_installed';
+    status?: 'active' | 'inactive' | 'not_installed' | undefined;
     badge?: ReactNode;
     /** Plugin badge metadata — renders an image badge in the top-right corner */
-    pluginBadge?: PluginBadgeMeta;
+    pluginBadge?: PluginBadgeMeta | undefined;
     onMouseEnter?: () => void;
     actions?: ReactNode;
     children?: ReactNode;

@@ -28,7 +28,7 @@ export interface FilterFabProps {
     /** Sit above the page's create FAB (72 → 140 / 16 → 84) instead of in its place. */
     stackAboveCreate?: boolean;
     /** Screen-reader wording for the count; defaults to "N active filters". */
-    describeCount?: DescribeFilterCount;
+    describeCount?: DescribeFilterCount | undefined;
 }
 
 const FAB_CLASS = `fixed right-4 md:right-5 lg:hidden ${FILTER_FAB_FACE_CLASS}`;

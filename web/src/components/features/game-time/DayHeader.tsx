@@ -3,19 +3,19 @@ import { DAYS, FULL_DAYS } from './game-time-grid.utils';
 
 interface DayHeaderProps {
     dayIndex: number;
-    fullDayNames?: boolean;
-    todayIndex?: number;
+    fullDayNames?: boolean | undefined;
+    todayIndex?: number | undefined;
     hasRolling: boolean;
-    dateLabel?: string;
-    nextDateLabel?: string;
-    noStickyOffset?: boolean;
+    dateLabel?: string | undefined;
+    nextDateLabel?: string | undefined;
+    noStickyOffset?: boolean | undefined;
     isHeaderHidden: boolean;
     /** Click handler for whole-day toggle (undefined = non-interactive) */
-    onClick?: () => void;
+    onClick?: (() => void) | undefined;
     /** Whether all 24 hours are active for this day (drives aria-pressed) */
-    isAllActive?: boolean;
+    isAllActive?: boolean | undefined;
     /** The viewer is away this day (ROK-1585): "Sat · away", muted. */
-    isAway?: boolean;
+    isAway?: boolean | undefined;
 }
 
 /** Single day column header for the game-time grid */
@@ -24,7 +24,7 @@ export function DayHeader({
     dateLabel, nextDateLabel, noStickyOffset, isHeaderHidden, onClick, isAllActive, isAway,
 }: DayHeaderProps): JSX.Element {
     // An away day always takes the SHORT name ("Sat · away", ROK-1585 artboard).
-    const dayName = fullDayNames && !isAway ? FULL_DAYS[dayIndex] : DAYS[dayIndex];
+    const dayName = (fullDayNames && !isAway ? FULL_DAYS[dayIndex] : DAYS[dayIndex]) ?? '';
     const displayDay = isAway ? `${dayName} · away` : dayName;
     const isToday = todayIndex === dayIndex;
     const isTodaySplit = isToday && hasRolling;
@@ -67,7 +67,7 @@ function DayWithDate({ day, sub }: { day: string; sub: JSX.Element }): JSX.Eleme
 
 function DayLabel({ displayDay, isRollingPast, isTodaySplit, dateLabel, nextDateLabel }: {
     displayDay: string; isRollingPast: boolean; isTodaySplit: boolean;
-    dateLabel?: string; nextDateLabel?: string;
+    dateLabel?: string | undefined; nextDateLabel?: string | undefined;
 }): JSX.Element {
     if (isRollingPast && nextDateLabel) {
         return <DayWithDate day={displayDay} sub={<span className="text-xs opacity-80 leading-none">{nextDateLabel}</span>} />;

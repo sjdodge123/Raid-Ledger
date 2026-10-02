@@ -75,7 +75,7 @@ function PluginCardDetails({ plugin }: { plugin: PluginInfoDto }): JSX.Element {
     );
 }
 
-function PluginAuthor({ author }: { author: { name: string; url?: string | null } }): JSX.Element {
+function PluginAuthor({ author }: { author: { name: string; url?: string | null | undefined } }): JSX.Element {
     return (
         <div className="flex items-center gap-2 text-sm">
             <span className="text-dim">Author:</span>
@@ -103,7 +103,7 @@ function TagList({ label, items, className }: { label: string; items: string[]; 
 
 /** Plugin integrations list */
 function IntegrationsList({ integrations }: {
-    integrations: { key: string; name: string; description: string; configured: boolean; icon?: string }[];
+    integrations: { key: string; name: string; description: string; configured: boolean; icon?: string | undefined }[];
 }): JSX.Element {
     return (
         <div>

@@ -77,7 +77,7 @@ const CHOICES: readonly Choice[] = [
  * is the press that forms the group, so it reads `🎉 Right now · starts the
  * group` — the words carry the meaning (AC6), the glyph is `aria-hidden`.
  */
-function ChoiceLabel({ choice, spawnGlyph }: { choice: Choice; spawnGlyph?: string }): JSX.Element {
+function ChoiceLabel({ choice, spawnGlyph }: { choice: Choice; spawnGlyph?: string | undefined }): JSX.Element {
     if (choice.key !== 'now' || !spawnGlyph) return <>{choice.label}</>;
     return (
         <>
@@ -105,9 +105,9 @@ export function LfgUrgencyChoice({
     spawnGlyph,
 }: {
     label: string;
-    disabled?: boolean;
+    disabled?: boolean | undefined;
     onPick: (pick: LfgUrgencyPick) => void;
-    spawnGlyph?: string;
+    spawnGlyph?: string | undefined;
 }): JSX.Element {
     return (
         <div

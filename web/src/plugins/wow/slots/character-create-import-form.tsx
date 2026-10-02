@@ -40,7 +40,7 @@ function useImportFormVariant(gameSlug: string, eventId: number | undefined, exi
 type Tab = 'manual' | 'import';
 
 /** ROK-1636: `noteId` set = Armory unavailable for this variant — tab is aria-disabled and described by the note. */
-function TabToggle({ activeTab, onTabChange, noteId }: { activeTab: Tab; onTabChange: (tab: Tab) => void; noteId?: string }) {
+function TabToggle({ activeTab, onTabChange, noteId }: { activeTab: Tab; onTabChange: (tab: Tab) => void; noteId?: string | undefined }) {
     return (
         <div role="group" aria-label="Add character by" className={ARMORY_TAB_TRACK_CLS}>
             <Button variant="ghost" size="sm" className={ARMORY_TAB_CLS} aria-pressed={activeTab === 'manual'}

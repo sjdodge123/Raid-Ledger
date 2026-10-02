@@ -60,7 +60,7 @@ function EditFormActions({
     isSaving = false,
 }: {
     onCancel: () => void;
-    isSaving?: boolean;
+    isSaving?: boolean | undefined;
 }): JSX.Element {
     return (
         <div className="flex justify-end gap-3">

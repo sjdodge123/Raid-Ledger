@@ -36,7 +36,7 @@ export interface SchedulingTerminalBannerProps {
    */
   lockInLabel?: string | null;
   /** ROK-1610: open the confirm for the slot `lockInLabel` names. */
-  onLockIn?: () => void;
+  onLockIn?: (() => void) | undefined;
   /**
    * Review fix: the poll is `closed` because every proposed time has passed,
    * NOT because the deadline ran out — suggesting is still open, so the copy
@@ -122,8 +122,8 @@ function CancelledBody({ reason }: { reason: string | null }): JSX.Element {
  */
 function ExpiredBody(props: {
   lockInLabel: string | null;
-  onLockIn?: () => void;
-  timesPassed?: boolean;
+  onLockIn?: (() => void) | undefined;
+  timesPassed?: boolean | undefined;
 }): JSX.Element {
   const { lockInLabel, onLockIn, timesPassed } = props;
   const canSchedule = lockInLabel !== null && onLockIn !== undefined;

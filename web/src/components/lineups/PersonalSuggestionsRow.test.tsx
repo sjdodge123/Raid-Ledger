@@ -40,11 +40,21 @@ function buildResponse(overrides: Partial<AiSuggestionsResponseDto> = {}): AiSug
             {
                 gameId: 99,
                 name: 'It Takes Two',
+                slug: 'it-takes-two',
                 coverUrl: null,
                 confidence: 0.9,
                 reasoning: 'Personal co-op pick',
                 ownershipCount: 1,
                 voterTotal: 1,
+                communityOwnerCount: 0,
+                wishlistCount: 0,
+                nonOwnerPrice: null,
+                itadCurrentCut: null,
+                itadCurrentShop: null,
+                itadCurrentUrl: null,
+                earlyAccess: false,
+                itadTags: [],
+                playerCount: null,
             },
         ],
         generatedAt: '2026-04-22T05:00:00.000Z',
@@ -70,7 +80,7 @@ describe('PersonalSuggestionsRow (ROK-931)', () => {
         await waitFor(() => {
             expect(seen.length).toBeGreaterThan(0);
         });
-        expect(seen[0].searchParams.get('personalize')).toBe('me');
+        expect(seen[0]?.searchParams.get('personalize')).toBe('me');
     });
 
     it('renders nothing when suggestions is empty', async () => {

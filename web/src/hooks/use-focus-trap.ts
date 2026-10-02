@@ -27,10 +27,9 @@ function getFocusableElements(container: HTMLElement): HTMLElement[] {
 
 function handleTabTrap(e: KeyboardEvent, container: HTMLElement): void {
     const focusable = getFocusableElements(container);
-    if (focusable.length === 0) { e.preventDefault(); return; }
-
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
+    if (!first || !last) { e.preventDefault(); return; }
 
     if (e.shiftKey && document.activeElement === first) {
         e.preventDefault();

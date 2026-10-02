@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 
 /**
  * Tests for the manualChunks vendor bundle configuration (ROK-343).
@@ -43,7 +44,7 @@ describe('vite manualChunks configuration (ROK-343) — part 1', () => {
     });
 
     describe('react-vendor chunk', () => {
-        const chunk = manualChunks['react-vendor'];
+        const chunk = defined(manualChunks['react-vendor'], 'react-vendor chunk');
 
         it('includes react', () => {
             expect(chunk).toContain('react');
@@ -63,7 +64,7 @@ describe('vite manualChunks configuration (ROK-343) — part 1', () => {
     });
 
     describe('query-vendor chunk', () => {
-        const chunk = manualChunks['query-vendor'];
+        const chunk = defined(manualChunks['query-vendor'], 'query-vendor chunk');
 
         it('includes @tanstack/react-query', () => {
             expect(chunk).toContain('@tanstack/react-query');
@@ -82,7 +83,7 @@ describe('vite manualChunks configuration (ROK-343) — part 1', () => {
 
 describe('vite manualChunks configuration (ROK-343) — part 2', () => {
     describe('calendar-vendor chunk', () => {
-        const chunk = manualChunks['calendar-vendor'];
+        const chunk = defined(manualChunks['calendar-vendor'], 'calendar-vendor chunk');
 
         it('includes react-big-calendar', () => {
             expect(chunk).toContain('react-big-calendar');
@@ -98,7 +99,7 @@ describe('vite manualChunks configuration (ROK-343) — part 2', () => {
     });
 
     describe('sentry chunk', () => {
-        const chunk = manualChunks['sentry'];
+        const chunk = defined(manualChunks['sentry'], 'sentry chunk');
 
         it('includes @sentry/react', () => {
             expect(chunk).toContain('@sentry/react');
@@ -110,7 +111,7 @@ describe('vite manualChunks configuration (ROK-343) — part 2', () => {
     });
 
     describe('socket chunk', () => {
-        const chunk = manualChunks['socket'];
+        const chunk = defined(manualChunks['socket'], 'socket chunk');
 
         it('includes socket.io-client', () => {
             expect(chunk).toContain('socket.io-client');

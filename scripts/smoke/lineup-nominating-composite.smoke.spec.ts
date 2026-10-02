@@ -219,13 +219,36 @@ test.describe('Nominating composite — drawer interactions (ROK-1297)', () => {
         const firstTile = page.getByTestId('common-ground-tile').first();
         const nominateBtn = firstTile.getByTestId('common-ground-tile-nominate');
         await expect(nominateBtn).toBeVisible({ timeout: 10_000 });
+        await expect(nominateBtn).toBeEnabled();
         const beforeUrl = page.url();
+        // Arm before the click. Not asserting ok(): a re-run can hit an
+        // already-nominated game — the point is that the mutation settled.
+        const nominateResponse = page.waitForResponse(
+            (r) =>
+                r.request().method() === 'POST' &&
+                r.url().includes(`/lineups/${lineupId}/nominate`),
+            { timeout: 10_000 },
+        );
         await nominateBtn.click();
+        // If the regression returns, the click navigates and the POST never
+        // fires: report the navigation, not a bare response timeout.
+        await nominateResponse.catch((err: unknown) => {
+            expect(
+                page.url(),
+                'Nominate click navigated away instead of POSTing the nomination',
+            ).toBe(beforeUrl);
+            throw err;
+        });
+        // onSettled clears the in-flight "Adding…" label on every tile.
+        await expect(
+            page
+                .getByTestId('common-ground-tile-nominate')
+                .filter({ hasText: /adding/i }),
+        ).toHaveCount(0, { timeout: 10_000 });
 
         // URL must remain on the lineup detail page — the Nominate button
         // mutates state in place, it doesn't navigate to /games/:id.
-        await page.waitForTimeout(500);
-        expect(page.url()).toBe(beforeUrl);
+        await expect(page).toHaveURL(beforeUrl);
     });
 });
 

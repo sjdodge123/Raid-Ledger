@@ -17,15 +17,15 @@ export interface AdjacentPhase {
 /** The phase one step forward (idx+1), or null at the terminal phase. */
 export function nextPhase(status: LineupStatusDto): AdjacentPhase | null {
   const idx = PHASES.indexOf(status);
-  if (idx < 0 || idx >= PHASES.length - 1) return null;
-  const status_ = PHASES[idx + 1];
+  const status_ = idx < 0 ? undefined : PHASES[idx + 1];
+  if (status_ === undefined) return null;
   return { status: status_, label: PHASE_LABELS[status_] };
 }
 
 /** The phase one step back (idx−1), or null at the first phase. */
 export function prevPhase(status: LineupStatusDto): AdjacentPhase | null {
   const idx = PHASES.indexOf(status);
-  if (idx <= 0) return null;
-  const status_ = PHASES[idx - 1];
+  const status_ = idx > 0 ? PHASES[idx - 1] : undefined;
+  if (status_ === undefined) return null;
   return { status: status_, label: PHASE_LABELS[status_] };
 }

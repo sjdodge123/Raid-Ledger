@@ -2,7 +2,7 @@
  * Game nomination modal for Community Lineup (ROK-935).
  * Provides game search, preview with art, and optional note input.
  */
-import { type JSX, useEffect, useRef } from 'react';
+import { type JSX, useCallback, useEffect, useRef } from 'react';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { SearchInput } from '../ui/search-input';
@@ -50,7 +50,7 @@ function GameQueryInput({ value, onChange }: { value: string; onChange: (v: stri
 function SearchResultItem({ game, onSelect, participantCount }: {
     game: SearchResultGame;
     onSelect: (g: SelectedGame) => void;
-    participantCount?: number;
+    participantCount?: number | undefined;
 }): JSX.Element {
     return (
         <button
@@ -75,7 +75,7 @@ function SearchResultItem({ game, onSelect, participantCount }: {
 function SearchResults({ results, onSelect, participantCount }: {
     results: SearchResultGame[];
     onSelect: (g: SelectedGame) => void;
-    participantCount?: number;
+    participantCount?: number | undefined;
 }): JSX.Element {
     return (
         <div className="space-y-1 max-h-60 overflow-y-auto">
@@ -183,7 +183,7 @@ function SearchPane({ query, onQueryChange, isOpen, lineupId, participantCount, 
     onQueryChange: (v: string) => void;
     isOpen: boolean;
     lineupId: number;
-    participantCount?: number;
+    participantCount?: number | undefined;
     onSelect: (g: SelectedGame) => void;
 }): JSX.Element {
     // When a Steam URL is in the input we don't want to run the name
@@ -214,15 +214,19 @@ function SearchPane({ query, onQueryChange, isOpen, lineupId, participantCount, 
  * before discarding a selected game or a note (ROK-1655, `use-nominate-draft`).
  */
 export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, participantCount }: NominateModalProps): JSX.Element {
-    const draft = useNominateDraft({ isOpen, onClose, lineupId, preSelectedGame });
+    const draft = useNominateDraft({ isOpen, onClose, lineupId, preSelectedGame: preSelectedGame ?? null });
     const closeGuard = useDirtyCloseGuard(draft.isDirty, draft.handleClose);
     // Resolve any Steam store URL pasted into the search input. The
     // page-level paste detector skips the modal (its global listener
     // bails when an input is focused), so the modal owns this flow.
-    useSteamUrlAutoResolve(draft.query, isOpen, (game) => {
-        draft.setSelected(game);
-        draft.setQuery('');
-    });
+    // `draft` is a new object every render; its setters are stable useState
+    // setters, so depend on them rather than on `draft`.
+    const { setSelected, setQuery } = draft;
+    const onSteamResolved = useCallback((game: SelectedGame) => {
+        setSelected(game);
+        setQuery('');
+    }, [setSelected, setQuery]);
+    useSteamUrlAutoResolve(draft.query, isOpen, onSteamResolved);
     const footer = draft.selected
         ? <NominateFooter onSubmit={draft.handleSubmit} isPending={draft.isPending} />
         : undefined;

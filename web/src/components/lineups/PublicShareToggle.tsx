@@ -45,7 +45,7 @@ function ShareSummary({ enabled }: { enabled: boolean }): JSX.Element {
 
 /** Copy link (when a slug exists and sharing is on) beside the on/off Switch. */
 function ShareControls({ enabled, onChange, slug, disabled }: Required<Omit<PublicShareToggleProps, 'slug'>> & {
-    slug?: string;
+    slug?: string | undefined;
 }): JSX.Element {
     return (
         <div className="flex items-center gap-2 flex-shrink-0">

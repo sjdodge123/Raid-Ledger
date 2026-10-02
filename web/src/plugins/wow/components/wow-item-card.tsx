@@ -56,9 +56,9 @@ export interface WowItemCardProps {
     /** Item level */
     itemLevel?: number | null;
     /** Icon URL */
-    iconUrl?: string | null;
+    iconUrl?: string | null | undefined;
     /** Enchant display string (e.g., "+5 Agility") */
-    enchant?: string | null;
+    enchant?: string | null | undefined;
     /** Wowhead tooltip data attribute string (e.g., "item=12345&domain=classic") */
     wowheadData?: string;
     /** Full Wowhead URL for the item link */
@@ -68,12 +68,13 @@ export interface WowItemCardProps {
 }
 
 function ItemIcon({ iconUrl, name, qKey, itemLevel }: {
-    iconUrl?: string | null; name: string; qKey: string; itemLevel?: number | null;
+    iconUrl?: string | null | undefined; name: string; qKey: string; itemLevel?: number | null | undefined;
 }) {
     return (
         <>
             {iconUrl ? (
-                <img src={iconUrl} alt={name} className={`wow-item-card__icon wow-item-card__icon--${qKey}`}
+                <img src={iconUrl} alt={name} width={28} height={28} loading="lazy" decoding="async"
+                    className={`wow-item-card__icon wow-item-card__icon--${qKey}`}
                     onError={(e) => { e.currentTarget.style.display = 'none'; const next = e.currentTarget.nextElementSibling; if (next) (next as HTMLElement).style.display = 'flex'; }} />
             ) : null}
             <div className="wow-item-card__icon-fallback" style={iconUrl ? { display: 'none' } : undefined}>
@@ -84,8 +85,8 @@ function ItemIcon({ iconUrl, name, qKey, itemLevel }: {
 }
 
 function ItemCardContent({ name, qKey, slotLabel, subclass, enchant, wowheadUrl, wowheadData, isMobile, onLinkClick }: {
-    name: string; qKey: string; slotLabel: string | null; subclass?: string | null;
-    enchant?: string | null; wowheadUrl?: string; wowheadData?: string;
+    name: string; qKey: string; slotLabel: string | null; subclass?: string | null | undefined;
+    enchant?: string | null | undefined; wowheadUrl?: string | undefined; wowheadData?: string | undefined;
     isMobile: boolean; onLinkClick: (e: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
     return (
@@ -108,10 +109,10 @@ function ItemCardContent({ name, qKey, slotLabel, subclass, enchant, wowheadUrl,
     );
 }
 
-function ModalItemHeader({ name, qKey, iconUrl, itemLevel }: { name: string; qKey: string; iconUrl?: string | null; itemLevel?: number | null }) {
+function ModalItemHeader({ name, qKey, iconUrl, itemLevel }: { name: string; qKey: string; iconUrl?: string | null | undefined; itemLevel?: number | null | undefined }) {
     return (
         <div className="flex items-center gap-3">
-            {iconUrl && <img src={iconUrl} alt={name} className={`w-10 h-10 rounded border-2 flex-shrink-0 wow-item-card__icon--${qKey}`} />}
+            {iconUrl && <img src={iconUrl} alt={name} width={40} height={40} loading="lazy" decoding="async" className={`w-10 h-10 rounded border-2 flex-shrink-0 wow-item-card__icon--${qKey}`} />}
             <div>
                 <div className={`text-base font-bold wow-item-card__name--${qKey}`}>{name}</div>
                 {itemLevel != null && itemLevel > 0 && <div className="text-sm text-yellow-400">Item Level {itemLevel}</div>}
@@ -121,9 +122,9 @@ function ModalItemHeader({ name, qKey, iconUrl, itemLevel }: { name: string; qKe
 }
 
 function ItemMobileModal({ name, qKey, iconUrl, itemLevel, slotLabel, subclass, enchant, wowheadUrl, onClose }: {
-    name: string; qKey: string; iconUrl?: string | null; itemLevel?: number | null;
-    slotLabel: string | null; subclass?: string | null; enchant?: string | null;
-    wowheadUrl?: string; onClose: () => void;
+    name: string; qKey: string; iconUrl?: string | null | undefined; itemLevel?: number | null | undefined;
+    slotLabel: string | null; subclass?: string | null | undefined; enchant?: string | null | undefined;
+    wowheadUrl?: string | undefined; onClose: () => void;
 }) {
     return (
         <Modal isOpen onClose={onClose} title={name} maxWidth="max-w-sm">

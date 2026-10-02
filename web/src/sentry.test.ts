@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { at } from './test/defined';
 
 vi.mock('@sentry/react', () => ({
     init: vi.fn(),
@@ -26,7 +27,7 @@ describe('web Sentry beforeSend (ROK-1162)', () => {
         const initMock = Sentry.init as unknown as ReturnType<typeof vi.fn>;
         initMock.mockClear();
         await import('./sentry');
-        const config = initMock.mock.calls[0][0] as { beforeSend: BeforeSend };
+        const config = at(initMock.mock.calls, 0)[0] as { beforeSend: BeforeSend };
         beforeSend = config.beforeSend;
     });
 
@@ -98,7 +99,7 @@ describe('web Sentry magic-link token scrubbing (ROK-1366)', () => {
         const initMock = Sentry.init as unknown as ReturnType<typeof vi.fn>;
         initMock.mockClear();
         await import('./sentry');
-        config = initMock.mock.calls[0][0] as ScrubConfig;
+        config = at(initMock.mock.calls, 0)[0] as ScrubConfig;
     });
 
     it('scrubs a fragment token from navigation breadcrumbs', () => {

@@ -15,11 +15,11 @@ import { getSignupToast } from './signup-toast.helpers';
  * Custom hook encapsulating all event detail page handler logic.
  * Extracts signup, roster, PUG, and admin removal handlers.
  */
-function buildConfirmOpts(selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }, pendingSlot: { role: RosterRole; position: number } | null) {
+function buildConfirmOpts(selection: { characterId: string; role?: CharacterRole | undefined; preferredRoles?: CharacterRole[] | undefined }, pendingSlot: { role: RosterRole; position: number } | null) {
     const opts: { characterId: string; slotRole?: string; slotPosition?: number; preferredRoles?: string[] } = { characterId: selection.characterId };
     if (selection.preferredRoles?.length) opts.preferredRoles = selection.preferredRoles;
     if (pendingSlot) { opts.slotRole = selection.role ?? pendingSlot.role; opts.slotPosition = pendingSlot.position; }
-    else if (selection.preferredRoles?.length === 1) opts.slotRole = selection.preferredRoles[0];
+    else if (selection.preferredRoles?.length === 1 && selection.preferredRoles[0]) opts.slotRole = selection.preferredRoles[0];
     else if (!selection.preferredRoles && selection.role) opts.slotRole = selection.role;
     return opts;
 }
@@ -29,7 +29,8 @@ function buildSkipOpts(pendingSlot: { role: RosterRole; position: number } | nul
     if (pendingSlot) { opts.slotRole = pendingSlot.role; opts.slotPosition = pendingSlot.position; }
     if (skipOpts?.preferredRoles?.length) {
         opts.preferredRoles = skipOpts.preferredRoles;
-        if (!opts.slotRole && skipOpts.preferredRoles.length === 1) opts.slotRole = skipOpts.preferredRoles[0];
+        const [onlyRole] = skipOpts.preferredRoles;
+        if (!opts.slotRole && skipOpts.preferredRoles.length === 1 && onlyRole) opts.slotRole = onlyRole;
     }
     return Object.keys(opts).length > 0 ? opts : undefined;
 }
@@ -53,7 +54,7 @@ function useSignupHandlers(eventId: number, options: { shouldShowCharacterModal:
         doSignup();
     }, [options.shouldShowCharacterModal, doSignup]);
 
-    const handleSelectionConfirm = useCallback(async (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => {
+    const handleSelectionConfirm = useCallback(async (selection: { characterId: string; role?: CharacterRole | undefined; preferredRoles?: CharacterRole[] | undefined }) => {
         try { const result = await signup.mutateAsync(buildConfirmOpts(selection, pendingSlot)); resetModal(); const t = getSignupToast(result.assignedSlot); toast.success(t.title, { description: t.description }); }
         catch (err) { toast.error('Failed to sign up', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [pendingSlot, signup, resetModal]);
@@ -132,8 +133,8 @@ function useSlotClickHandler(options: { isAuthenticated: boolean; shouldShowChar
             signupHandlers.setPreSelectedRole(CHARACTER_ROLES.includes(role as CharacterRole) ? (role as CharacterRole) : undefined);
             signupHandlers.setPendingSlot({ role, position }); signupHandlers.setShowConfirmModal(true); return;
         }
-        const preferredRoles = CHARACTER_ROLES.includes(role as CharacterRole) ? [role] : undefined;
-        signupHandlers.doSignup({ slotRole: role, slotPosition: position, preferredRoles });
+        const preferredRoles = CHARACTER_ROLES.includes(role as CharacterRole) ? { preferredRoles: [role] } : {};
+        signupHandlers.doSignup({ slotRole: role, slotPosition: position, ...preferredRoles });
     }, [options.isAuthenticated, options.shouldShowCharacterModal, signupHandlers]);
 }
 

@@ -74,6 +74,7 @@ function makeResponse(data: CommonGroundGameDto[]): CommonGroundResponseDto {
             activeLineupId: 1,
             nominatedCount: 0,
             maxNominations: 20,
+            participantCount: 0,
         },
     };
 }

@@ -79,11 +79,11 @@ export function ReassignSlotPickerView({
     );
 }
 
-function slotBtnStyle(colors: { bg: string; border: string; text: string }, isLocked: boolean): React.CSSProperties {
+function slotBtnStyle(colors: { bg: string; border: string; text: string } | undefined, isLocked: boolean): React.CSSProperties {
     return {
-        '--slot-bg': isLocked ? 'rgba(30, 41, 59, 0.6)' : colors.bg,
-        '--slot-border': isLocked ? 'rgba(51, 65, 85, 0.4)' : colors.border,
-        '--slot-text': isLocked ? '#475569' : colors.text,
+        '--slot-bg': isLocked ? 'rgba(30, 41, 59, 0.6)' : colors?.bg,
+        '--slot-border': isLocked ? 'rgba(51, 65, 85, 0.4)' : colors?.border,
+        '--slot-text': isLocked ? '#475569' : colors?.text,
     } as React.CSSProperties;
 }
 
@@ -91,7 +91,7 @@ function SlotRoleGroup({
     role, label, slots, playerRole, onSlotPick,
 }: {
     role: string; label: string; slots: AvailableSlot[];
-    playerRole?: string | null; onSlotPick: (role: RosterRole, position: number) => void;
+    playerRole?: string | null | undefined; onSlotPick: (role: RosterRole, position: number) => void;
 }) {
     return (
         <div className="assignment-popup__section">
@@ -115,11 +115,11 @@ function SlotRoleGroup({
     );
 }
 
-function reassignSlotStyle(isCurrent: boolean, isOccupied: boolean, colors: { bg: string; border: string; text: string }): React.CSSProperties {
+function reassignSlotStyle(isCurrent: boolean, isOccupied: boolean, colors: { bg: string; border: string; text: string } | undefined): React.CSSProperties {
     return {
-        '--slot-bg': isCurrent ? 'rgba(30, 41, 59, 0.6)' : isOccupied ? 'rgba(245, 158, 11, 0.08)' : colors.bg,
-        '--slot-border': isCurrent ? 'rgba(51, 65, 85, 0.4)' : isOccupied ? 'rgba(245, 158, 11, 0.4)' : colors.border,
-        '--slot-text': isCurrent ? '#475569' : isOccupied ? '#fbbf24' : colors.text,
+        '--slot-bg': isCurrent ? 'rgba(30, 41, 59, 0.6)' : isOccupied ? 'rgba(245, 158, 11, 0.08)' : colors?.bg,
+        '--slot-border': isCurrent ? 'rgba(51, 65, 85, 0.4)' : isOccupied ? 'rgba(245, 158, 11, 0.4)' : colors?.border,
+        '--slot-text': isCurrent ? '#475569' : isOccupied ? '#fbbf24' : colors?.text,
     } as React.CSSProperties;
 }
 
@@ -132,7 +132,7 @@ function reassignSlotClass(isCurrent: boolean, isOccupied: boolean, isMatch: boo
 
 function ReassignSlotButton({ slot, slotRole, slotPosition, occupantRole, onSlotPick }: {
     slot: AvailableSlot; slotRole: RosterRole | null; slotPosition: number;
-    occupantRole?: string | null; onSlotPick: (role: RosterRole, position: number) => void;
+    occupantRole?: string | null | undefined; onSlotPick: (role: RosterRole, position: number) => void;
 }) {
     const colors = ROLE_SLOT_COLORS[slot.role] ?? ROLE_SLOT_COLORS.player;
     const isCurrent = slot.role === slotRole && slot.position === slotPosition;

@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { ThreadMessageReactionDto } from '@raid-ledger/contract';
 import { ThreadMessageReactions } from './ThreadMessageReactions';
+import { at } from '../../test/defined';
 
 function reaction(
     over: Partial<ThreadMessageReactionDto> = {},
@@ -45,7 +46,7 @@ describe('ThreadMessageReactions', () => {
             screen.getByTestId('thread-message-reaction-count'),
         ).toHaveTextContent('3');
         expect(
-            pills[0].querySelector('img'),
+            at(pills, 0).querySelector('img'),
             'a unicode emoji must be a text node, not an image',
         ).toBeNull();
     });

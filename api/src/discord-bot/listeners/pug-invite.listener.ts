@@ -39,6 +39,10 @@ import {
 } from './pug-invite-member-select.handlers';
 import { handleJoinEventButton } from './pug-invite-join.handlers';
 import { errorStack } from '../../common/error-format.helpers';
+import {
+  DiscordListenerBinding,
+  gatewayBinding,
+} from './discord-listener-binding';
 
 /** Button ID prefix for the "Join Event" button on invite unfurls (ROK-263) */
 const PUG_JOIN_PREFIX = 'pug_join';
@@ -50,11 +54,10 @@ const PUG_JOIN_PREFIX = 'pug_join';
 @Injectable()
 export class PugInviteListener {
   private readonly logger = new Logger(PugInviteListener.name);
-  private guildMemberAddRegistered = false;
-  private boundGuildMemberAddHandler: ((member: GuildMember) => void) | null =
-    null;
-  private boundInteractionHandler:
-    ((interaction: import('discord.js').Interaction) => void) | null = null;
+  private readonly binding = new DiscordListenerBinding(
+    this.logger,
+    'PUG invite gateway',
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -79,19 +82,27 @@ export class PugInviteListener {
   /** When bot connects, register interaction + guildMemberAdd listeners. */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   handleBotConnected(): void {
-    const client = this.clientService.getClient();
-    if (!client) return;
-    this.registerGuildMemberAdd(client);
-    this.registerInteractionHandler(client);
-    this.logger.log('Registered PUG button interaction handler');
+    this.binding.attachToClient(this.clientService.getClient(), [
+      gatewayBinding(Events.GuildMemberAdd, (member) => {
+        this.handleGuildMemberAdd(member).catch((err: unknown) => {
+          this.logger.error(
+            `Error handling guildMemberAdd for ${member.user.username}`,
+            errorStack(err),
+          );
+        });
+      }),
+      gatewayBinding('interactionCreate', (interaction) => {
+        if (interaction.isButton()) void this.routeButton(interaction);
+        else if (interaction.isStringSelectMenu())
+          void this.routeSelectMenu(interaction);
+      }),
+    ]);
   }
 
-  /** When bot disconnects, reset registration flags. */
+  /** Detach both handlers so a reconnect re-attaches to the live client. */
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   handleBotDisconnected(): void {
-    this.guildMemberAddRegistered = false;
-    this.boundGuildMemberAddHandler = null;
-    this.boundInteractionHandler = null;
+    this.binding.detach();
   }
 
   /** Handle PUG slot created event. */
@@ -145,41 +156,6 @@ export class PugInviteListener {
       payload.notificationId,
       payload.gameId ?? null,
     );
-  }
-
-  // --- Private registration helpers ---
-
-  private registerGuildMemberAdd(
-    client: ReturnType<DiscordBotClientService['getClient']> & object,
-  ): void {
-    if (this.guildMemberAddRegistered) return;
-    this.boundGuildMemberAddHandler = (member: GuildMember) => {
-      this.handleGuildMemberAdd(member).catch((err: unknown) => {
-        this.logger.error(
-          `Error handling guildMemberAdd for ${member.user.username}`,
-          errorStack(err),
-        );
-      });
-    };
-    client.on(Events.GuildMemberAdd, this.boundGuildMemberAddHandler);
-    this.guildMemberAddRegistered = true;
-    this.logger.log('Registered guildMemberAdd listener for PUG invite flow');
-  }
-
-  private registerInteractionHandler(
-    client: ReturnType<DiscordBotClientService['getClient']> & object,
-  ): void {
-    if (this.boundInteractionHandler) {
-      client.removeListener('interactionCreate', this.boundInteractionHandler);
-    }
-    this.boundInteractionHandler = (
-      interaction: import('discord.js').Interaction,
-    ) => {
-      if (interaction.isButton()) void this.routeButton(interaction);
-      else if (interaction.isStringSelectMenu())
-        void this.routeSelectMenu(interaction);
-    };
-    client.on('interactionCreate', this.boundInteractionHandler);
   }
 
   private async handleGuildMemberAdd(member: GuildMember): Promise<void> {

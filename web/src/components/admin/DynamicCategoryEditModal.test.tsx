@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import type { DiscoveryCategorySuggestionDto } from '@raid-ledger/contract';
 import { DynamicCategoryEditModal } from './DynamicCategoryEditModal';
+import { at } from '../../test/defined';
 
 const SUGGESTION: DiscoveryCategorySuggestionDto = {
     id: '33333333-3333-4333-8333-333333333333',
@@ -169,7 +170,7 @@ describe('DynamicCategoryEditModal — dirty-close guard (ROK-1655)', () => {
     it('an edited description + × asks', () => {
         const { onClose } = renderGuarded();
         fireEvent.change(screen.getByLabelText(/^Description$/i), { target: { value: 'New desc' } });
-        CLOSE_PATHS[1][1]();
+        at(CLOSE_PATHS, 1)[1]();
         expect(screen.queryByText(CONFIRM), 'an edited description is dirty too').not.toBeNull();
         expect(onClose).not.toHaveBeenCalled();
     });

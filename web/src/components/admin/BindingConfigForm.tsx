@@ -18,7 +18,7 @@ interface BindingConfigFormProps {
   onCancel: () => void;
   isSaving: boolean;
   /** ROK-1416: a rejected PATCH (400/409) surfaced above the actions; the form stays open. */
-  saveError?: string | null;
+  saveError?: string | null | undefined;
 }
 
 /**

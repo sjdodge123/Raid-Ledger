@@ -20,12 +20,13 @@ function formatHourRange(startHour: number, endHour: number): string {
 }
 
 function StatusBadge({ status }: { status: string }) {
+    const pending = { label: 'Pending', classes: 'bg-amber-500/20 text-amber-400 border-amber-500/30' };
     const config: Record<string, { label: string; classes: string }> = {
         confirmed: { label: 'Confirmed', classes: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-        pending: { label: 'Pending', classes: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+        pending,
         changed: { label: 'Changed', classes: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
     };
-    const { label, classes } = config[status] ?? config.pending;
+    const { label, classes } = config[status] ?? pending;
     return (
         <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${classes}`}>
             {label}
@@ -61,7 +62,7 @@ function useCloseOnScroll(onClose: () => void) {
     }, [onClose]);
 }
 
-async function handlePopoverConfirm(confirmSignup: ReturnType<typeof useConfirmSignup>, event: GameTimeEventBlock, selection: { characterId: string; role?: CharacterRole }, setShowModal: (v: boolean) => void) {
+async function handlePopoverConfirm(confirmSignup: ReturnType<typeof useConfirmSignup>, event: GameTimeEventBlock, selection: { characterId: string; role?: CharacterRole | undefined }, setShowModal: (v: boolean) => void) {
     try {
         await confirmSignup.mutateAsync({ signupId: event.signupId, characterId: selection.characterId });
         toast.success('Signup confirmed!');

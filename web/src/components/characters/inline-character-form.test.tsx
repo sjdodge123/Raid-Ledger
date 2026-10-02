@@ -72,7 +72,7 @@ describe('InlineCharacterForm — validation', () => {
         fireEvent.change(screen.getByRole('combobox', { name: 'Role' }), { target: { value: 'tank' } });
         fireEvent.click(createButton());
         expect(mutate).toHaveBeenCalledTimes(1);
-        expect(mutate.mock.calls[0][0]).toMatchObject({ gameId: 7, name: 'Thrall', role: 'tank', isMain: true });
+        expect(mutate.mock.calls[0]?.[0]).toMatchObject({ gameId: 7, name: 'Thrall', role: 'tank', isMain: true });
         expect(nameInput().getAttribute('aria-invalid')).not.toBe('true');
     });
 });

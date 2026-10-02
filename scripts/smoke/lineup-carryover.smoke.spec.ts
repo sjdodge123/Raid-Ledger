@@ -7,27 +7,30 @@
  * nomination on the new lineup, carrying the original nominator and a
  * `carriedOverFrom` back-reference.
  *
- * Existing coverage prior to ROK-1068:
- *   - `lineup-decided.smoke.spec.ts` has a passive "if the carried-forward
- *     section is visible, expect chip count > 0" check that never actually
- *     drives the carryover path.
- *   - `lineups-matches.integration.spec.ts` exercises the helper end-to-end
- *     against the test DB, but no smoke spec exists.
- *
- * This spec drives the full flow against the live API:
+ * This spec drives the flow against the live API:
  *   1. Stand up a "previous" public lineup (lineup A) with two games,
  *      seed two distinct voters via the DEMO_MODE-only helper so that
  *      each game ends with 1/2 = 50% — under matchThreshold=60 both
  *      games become `status='suggested'` matches.
  *   2. Walk A through voting → decided → archived.
- *   3. POST /lineups (lineup B) and assert at least one entry on B
- *      has `carriedOver === true`. The full integration test asserts
- *      `carriedOverFrom` and game-id parity; smoke asserts the
- *      user-visible flag.
+ *   3. POST /lineups (lineup B) through the real create path, then pin
+ *      the carryover source to A via the DEMO_MODE-only
+ *      `/admin/test/lineup/carryover-from` seam, and assert at least one
+ *      entry on B has `carriedOver === true` for one of A's games.
  *
- * Per-worker title-prefix isolation (ROK-1147 pattern) — the suite never
- * touches sibling-worker lineups, so concurrent Playwright projects
- * (desktop + mobile) can run this file in parallel.
+ * Why the source is pinned (TDB:975): the automatic source lookup
+ * (`findPreviousLineup`) is instance-wide — the newest PUBLIC
+ * decided/archived lineup, whoever created it. The title prefix below
+ * isolates this file's own lineups, but it cannot stop a parallel spec
+ * from archiving a newer lineup between step 2 and step 3; that lineup
+ * then becomes the source, has no suggested matches, and nothing is
+ * carried. `carryover-from` drops whatever the create carried and
+ * re-carries from A.
+ *
+ * The create → automatic-carryover wiring (including `carriedOverFrom`
+ * pointing at the right lineup) stays covered against a single-tenant DB
+ * by `api/src/lineups/lineups-matches.integration.spec.ts`
+ * ('Auto-Carryover on Lineup Creation').
  */
 import { test, expect } from './base';
 import {
@@ -183,6 +186,18 @@ test.describe('Lineup carryover edge case', () => {
         }
         newLineupId = created.id;
         await awaitProcessing(adminToken);
+
+        // Pin the carryover source to this spec's own prior lineup (TDB:975).
+        const recarry = (await apiPost(
+            adminToken,
+            '/admin/test/lineup/carryover-from',
+            { lineupId: newLineupId, previousLineupId: priorLineupId },
+        )) as { success?: boolean };
+        if (recarry?.success !== true) {
+            throw new Error(
+                `carryover-from seam failed: ${JSON.stringify(recarry).slice(0, 200)}`,
+            );
+        }
 
         const detail = await apiGet(adminToken, `/lineups/${newLineupId}`);
         expect(detail).toBeTruthy();

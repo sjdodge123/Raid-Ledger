@@ -98,6 +98,8 @@ export const characters = pgTable(
       table.userId,
       table.name,
     ),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    gameIdIndex: index('idx_characters_game_id').on(table.gameId),
   }),
 );
 

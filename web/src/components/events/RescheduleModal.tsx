@@ -19,14 +19,14 @@ interface RescheduleModalProps {
     currentStartTime: string;
     currentEndTime: string;
     eventTitle: string;
-    gameId?: number;
-    gameSlug?: string | null;
-    gameName?: string | null;
-    coverUrl?: string | null;
-    description?: string | null;
-    creatorUsername?: string;
+    gameId?: number | undefined;
+    gameSlug?: string | null | undefined;
+    gameName?: string | null | undefined;
+    coverUrl?: string | null | undefined;
+    description?: string | null | undefined;
+    creatorUsername?: string | undefined;
     signupCount?: number;
-    initialReason?: string;
+    initialReason?: string | undefined;
 }
 
 function useRescheduleState(currentStartTime: string, currentEndTime: string) {
@@ -83,7 +83,7 @@ async function handleRescheduleConfirm(
 
 function RescheduleContent({ d, eventId, gameId, handleClose, navigate }: {
     d: ReturnType<typeof useRescheduleModalData>; eventId: number;
-    gameId?: number; handleClose: () => void; navigate: ReturnType<typeof useNavigate>;
+    gameId?: number | undefined; handleClose: () => void; navigate: ReturnType<typeof useNavigate>;
 }) {
     const createPoll = useCreateSchedulingPoll();
     const handlePoll = async () => {

@@ -59,14 +59,14 @@ export function SlotStepView({ isOpen, title, player, slotsByRole, onSlotPick, o
 export function PlayerListView({ isOpen, title, handleClose, search, setSearch, onSelfAssign, slotRole, slotPosition, currentOccupant, onRemove, onReassignToSlot, onRemoveFromEvent, matching, other, handleAssign, assigned, isBrowseAll, onReassignToSlotFn, canInvitePug, onGenerateInviteLink }: {
     isOpen: boolean; title: string; handleClose: () => void;
     search: string; setSearch: (v: string) => void;
-    onSelfAssign?: () => void; slotRole: RosterRole | null; slotPosition: number;
-    currentOccupant?: RosterAssignmentResponse; onRemove?: (id: number) => void;
-    onReassignToSlot?: () => void; onRemoveFromEvent?: (id: number, name: string) => void;
+    onSelfAssign?: (() => void) | undefined; slotRole: RosterRole | null; slotPosition: number;
+    currentOccupant?: RosterAssignmentResponse | undefined; onRemove?: ((id: number) => void) | undefined;
+    onReassignToSlot?: (() => void) | undefined; onRemoveFromEvent?: ((id: number, name: string) => void) | undefined;
     matching: RosterAssignmentResponse[]; other: RosterAssignmentResponse[];
     handleAssign: (id: number) => void; assigned: RosterAssignmentResponse[];
     isBrowseAll: boolean; canInvitePug: boolean;
-    onReassignToSlotFn?: (id: number, role: RosterRole, pos: number) => void;
-    onGenerateInviteLink?: () => void;
+    onReassignToSlotFn?: ((id: number, role: RosterRole, pos: number) => void) | undefined;
+    onGenerateInviteLink?: (() => void) | undefined;
 }): JSX.Element {
     return (
         <Modal isOpen={isOpen} onClose={handleClose} title={title} maxWidth="max-w-md">

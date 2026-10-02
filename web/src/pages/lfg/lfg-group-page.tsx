@@ -93,7 +93,7 @@ interface PanelProps {
     threadId: string | null;
     onLockIn: (window: LfgOverlapWindowDto) => void;
     isBusy: boolean;
-    lockInHint?: string;
+    lockInHint?: string | undefined;
 }
 
 /** The side-by-side pair: when the group is free, and when it last played. */

@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { JourneyHero } from './JourneyHero';
 import type { HeroTone, JourneyPhase } from './types';
+import { at } from '../../../test/defined';
 
 const PHASES: JourneyPhase[] = ['nominating', 'voting', 'decided', 'scheduling', 'done'];
 const TONES: HeroTone[] = ['action', 'waiting', 'set'];
@@ -191,7 +192,7 @@ describe('JourneyHero — a11y', () => {
         const current = items.filter((li) => li.getAttribute('aria-current') === 'step');
         expect(current).toHaveLength(1);
         // voting maps to active index 1 (0-based: nominate, vote, decide, schedule)
-        expect(items.indexOf(current[0])).toBe(1);
+        expect(items.indexOf(at(current, 0))).toBe(1);
     });
 
     it('outer container is role="region" with aria-labelledby pointing to badge id', () => {
@@ -272,8 +273,8 @@ describe('JourneyHero — H1-b relayout (ROK-1584)', () => {
         expect(row).toContainElement(headline);
         // headline block first (flex-1 min-w-0), chip after it.
         const blocks = Array.from(row.children);
-        expect(blocks[0].contains(headline)).toBe(true);
-        expect(blocks[blocks.length - 1].contains(chip)).toBe(true);
+        expect(blocks[0]?.contains(headline)).toBe(true);
+        expect(blocks[blocks.length - 1]?.contains(chip)).toBe(true);
         expect(blocks[0]).toHaveClass('flex-1', 'min-w-0');
     });
 

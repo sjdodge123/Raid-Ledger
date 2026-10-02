@@ -69,6 +69,9 @@ import * as useGamesDiscoverModule from "../hooks/use-games-discover";
 import * as useAuthHook from "../hooks/use-auth";
 import * as useWantToPlayModule from "../hooks/use-want-to-play";
 
+import { partialResult } from "../test/partial-result";
+import { at } from "../test/defined";
+
 vi.mock("../hooks/use-auth", () => ({
   useAuth: vi.fn(),
   // ROK-1453: the LFG hooks call getAuthToken() to gate their jwt-only
@@ -130,20 +133,20 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+    vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
       data: mockGame,
       isLoading: false,
       error: null,
-    } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+    }));
 
-    vi.mocked(useAuthHook.useAuth).mockReturnValue({
+    vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
       user: { id: 1, username: "Tester", role: "member" } as never,
       isAuthenticated: true,
-    } as ReturnType<typeof useAuthHook.useAuth>);
+    }));
   });
 
   it("renders Owned by section with owner count", () => {
-    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
       wantToPlay: false,
       count: 0,
       source: undefined,
@@ -153,7 +156,7 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
       isLoading: false,
       toggle: vi.fn(),
       isToggling: false,
-    });
+    }));
 
     renderDetailPage();
 
@@ -161,7 +164,7 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
   });
 
   it("hides Owned by section when ownerCount is 0", () => {
-    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
       wantToPlay: false,
       count: 0,
       source: undefined,
@@ -171,7 +174,7 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
       isLoading: false,
       toggle: vi.fn(),
       isToggling: false,
-    });
+    }));
 
     renderDetailPage();
 
@@ -179,17 +182,17 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
   });
 
   it("shows singular text when only 1 owner", () => {
-    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
       wantToPlay: false,
       count: 0,
       source: undefined,
       players: [],
-      owners: [mockOwners[0]],
+      owners: [at(mockOwners, 0)],
       ownerCount: 1,
       isLoading: false,
       toggle: vi.fn(),
       isToggling: false,
-    });
+    }));
 
     renderDetailPage();
 
@@ -197,12 +200,12 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
   });
 
   it("does not render Owned by when user is not authenticated", () => {
-    vi.mocked(useAuthHook.useAuth).mockReturnValue({
+    vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
       user: null,
       isAuthenticated: false,
-    } as ReturnType<typeof useAuthHook.useAuth>);
+    }));
 
-    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+    vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
       wantToPlay: false,
       count: 0,
       source: undefined,
@@ -212,7 +215,7 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
       isLoading: false,
       toggle: vi.fn(),
       isToggling: false,
-    });
+    }));
 
     renderDetailPage();
 

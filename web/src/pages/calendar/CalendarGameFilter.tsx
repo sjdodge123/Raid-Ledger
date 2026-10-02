@@ -15,6 +15,7 @@ import type { GameInfo } from '../../stores/game-filter-store';
 import {
     countHiddenGames, filterGamesByName, sortGamesWithLikedFirst, type GameWithLiked,
 } from './game-filter-helpers';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 export interface CalendarGameFilterControlsProps {
     allKnownGames: GameInfo[];
@@ -59,7 +60,7 @@ export function CalendarGameFilterControls({
 
 /** "N of M selected" + "None" (hide every game). */
 function SelectionSummary({ count, total, onNone, className }: {
-    count: number; total: number; onNone: () => void; className?: string;
+    count: number; total: number; onNone: () => void; className?: string | undefined;
 }): JSX.Element {
     return (
         <div className={`flex items-center justify-between gap-3 ${className ?? ''}`}>
@@ -163,7 +164,16 @@ function GameIcon({ coverUrl, icon, size = 'md' }: {
     return (
         <div className={`${size === 'sm' ? 'w-6 h-6' : 'w-8 h-8'} rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center bg-panel`}>
             {coverUrl
-                ? <img src={coverUrl} alt="" className="w-full h-full object-cover" />
+                ? <img
+                    src={coverUrl}
+                    alt=""
+                    width={COVER_INTRINSIC.width}
+                    height={COVER_INTRINSIC.height}
+                    loading="lazy"
+                    decoding="async"
+                    {...coverSrcSetProps(coverUrl, size === 'sm' ? '24px' : '32px')}
+                    className="w-full h-full object-cover"
+                />
                 : <span className="text-sm" aria-hidden="true">{icon}</span>}
         </div>
     );

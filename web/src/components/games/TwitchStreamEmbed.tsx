@@ -34,7 +34,7 @@ function StreamInfo({ stream }: { stream: TwitchStreamDto }) {
 function StreamThumbnail({ stream, isActive, onClick }: { stream: TwitchStreamDto; isActive: boolean; onClick: () => void }) {
     return (
         <button onClick={onClick} className={`relative rounded-lg overflow-hidden text-left transition-all ${isActive ? 'ring-2 ring-emerald-500' : 'hover:ring-1 hover:ring-edge'}`}>
-            <img src={stream.thumbnailUrl} alt={stream.title} className="w-full aspect-video object-cover" loading="lazy" />
+            <img src={stream.thumbnailUrl} alt={stream.title} className="w-full aspect-video object-cover" width={440} height={248} loading="lazy" />
             <div className="p-2 bg-panel">
                 <p className="text-xs font-medium text-foreground truncate">{stream.userName}</p>
                 <p className="text-[10px] text-muted">{stream.viewerCount.toLocaleString()} viewers</p>
@@ -45,8 +45,8 @@ function StreamThumbnail({ stream, isActive, onClick }: { stream: TwitchStreamDt
 
 export function TwitchStreamEmbed({ streams, totalLive }: TwitchStreamEmbedProps) {
     const [activeStream, setActiveStream] = useState(0);
-    if (streams.length === 0) return null;
     const currentStream = streams[activeStream];
+    if (!currentStream) return null;
     const parentHost = window.location.hostname;
 
     return (

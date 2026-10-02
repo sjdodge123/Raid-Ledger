@@ -84,7 +84,7 @@ function SetupProgressCard({ setup, isLoading }: {
     );
 }
 
-function BotStatusCard({ botData }: { botData: { connecting?: boolean; connected?: boolean; guildName?: string; memberCount?: number | null } | undefined }) {
+function BotStatusCard({ botData }: { botData: { connecting?: boolean | undefined; connected?: boolean | undefined; guildName?: string | undefined; memberCount?: number | null | undefined } | undefined }) {
     const dotClass = botData?.connecting
         ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] animate-pulse'
         : botData?.connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-red-400 shadow-[0_0_8px_rgba(239,68,68,0.6)]';

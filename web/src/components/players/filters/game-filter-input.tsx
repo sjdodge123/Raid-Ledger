@@ -9,7 +9,7 @@ import { GameSearchInput } from '../../events/game-search-input';
 import { useGameRegistry } from '../../../hooks/use-game-registry';
 
 interface GameFilterInputProps {
-    gameId?: number;
+    gameId?: number | undefined;
     onChange: (gameId?: number) => void;
 }
 

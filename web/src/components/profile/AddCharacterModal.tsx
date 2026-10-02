@@ -13,8 +13,8 @@ import { CharacterFormFields } from './character-form-fields';
 interface AddCharacterModalProps {
     isOpen: boolean;
     onClose: () => void;
-    gameId?: number;
-    gameName?: string;
+    gameId?: number | undefined;
+    gameName?: string | undefined;
     editingCharacter?: CharacterDto | null;
 }
 
@@ -174,7 +174,7 @@ function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, edi
 }
 
 function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiveGameName, currentSlug, isArmorySynced }: {
-    formId: string; s: ReturnType<typeof useCharacterModalState>; editingCharacter?: CharacterDto | null;
+    formId: string; s: ReturnType<typeof useCharacterModalState>; editingCharacter?: CharacterDto | null | undefined;
     onClose: () => void; effectiveGameName: string; currentSlug: string; isArmorySynced: boolean;
 }) {
     return (

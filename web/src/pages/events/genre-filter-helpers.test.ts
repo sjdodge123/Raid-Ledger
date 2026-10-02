@@ -86,13 +86,13 @@ describe('filterEventsByGenre — filtering', () => {
     it('filters to only RPG games when genreKey is "rpg"', () => {
         const result = filterEventsByGenre(TEST_EVENTS, TEST_GAMES, 'rpg');
         expect(result).toHaveLength(1);
-        expect(result[0].title).toBe('WoW Raid');
+        expect(result[0]?.title).toBe('WoW Raid');
     });
 
     it('filters to only Shooter games when genreKey is "shooter"', () => {
         const result = filterEventsByGenre(TEST_EVENTS, TEST_GAMES, 'shooter');
         expect(result).toHaveLength(1);
-        expect(result[0].title).toBe('Fortnite Match');
+        expect(result[0]?.title).toBe('Fortnite Match');
     });
 
     it('returns empty array when no events match genre', () => {
@@ -106,7 +106,7 @@ describe('filterEventsByGenre — filtering', () => {
         ];
         const result = filterEventsByGenre(eventsWithNull, TEST_GAMES, 'rpg');
         expect(result).toHaveLength(1);
-        expect(result[0].title).toBe('WoW Raid');
+        expect(result[0]?.title).toBe('WoW Raid');
     });
 
     it('handles events whose game is not in registry', () => {

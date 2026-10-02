@@ -71,8 +71,9 @@ the operator laptop or when external chain is broken.
 ## The CLI
 
 > **Agents:** prefer the `mcp__mcp-rl-fleet__*` MCP tools (see CLAUDE.md
-> "`mcp-rl-fleet`"). Direct SSH as `rl-agent` is closed (ROK-1338 PR-3); the
-> CLI below is the operator-facing path that uses the operator SSH user.
+> "`mcp-rl-fleet`"). Direct SSH as `rl-agent` is prohibited for agents
+> (ROK-1338); the CLI below is the operator-facing path that uses the operator
+> SSH user.
 
 All operator interaction goes through `rl-infra/cli/rl` on the laptop. It SSHes
 to the VM as the operator user (`rl`) and dispatches to shell scripts in
@@ -283,8 +284,8 @@ Long-running orchestrator commands (validate-ci, image builds, env spins) are
 tracked as **tasks** with persistent VM-side state. State survives MCP-server
 restart on the laptop and is independently observable by the operator via
 SSH. Agents observe task state via `mcp__mcp-rl-fleet__rl_task_inspect` /
-`rl_task_status` / `rl_task_logs` — direct SSH as `rl-agent` is closed
-(ROK-1338 PR-3).
+`rl_task_status` / `rl_task_logs` — direct SSH as `rl-agent` is prohibited
+for agents (ROK-1338).
 
 **Directory layout** — `/srv/rl-infra/state/tasks/`:
 
@@ -351,8 +352,8 @@ sweeper handles size at end-of-life. `task-status` caps its returned `log_tail`
 ## Strong debugging
 
 Agent-side paths first, operator-only paths labelled. Direct SSH as `rl-agent`
-is closed (ROK-1338 PR-3) — anything below that requires an SSH session is
-intentionally operator-only.
+is prohibited for agents (ROK-1338) — anything below that requires an SSH
+session is intentionally operator-only.
 
 | Need                        | How                                                                          |
 | --------------------------- | ---------------------------------------------------------------------------- |
@@ -483,9 +484,10 @@ compose-managed services.)
 > closed.
 
 > **Audience:** operator only. This runbook is informational for agents but
-> not actionable by them — there is no agent path back to direct SSH and
-> there shouldn't be. Per ROK-1338 PR-3, agent-side SSH as `rl-agent` is
-> closed by default; the full agent surface lives in `mcp__mcp-rl-fleet__*`.
+> not actionable by them — it is not an agent path to direct SSH and there
+> shouldn't be one. Agents must not SSH as `rl-agent` (ROK-1338); the
+> daemon-level gate below is not applied yet (see the BLOCKED callout above).
+> The full agent surface lives in `mcp__mcp-rl-fleet__*`.
 
 ### Why this exists
 
@@ -932,9 +934,9 @@ three places, all fixed together in ROK-1565: the sentinel's summary parser
 
 | Field | Meaning |
 |-------|---------|
-| `gate_verified` | The pre-push gate was satisfied for the synced worktree, and the sentinel was written. |
-| `gate_sentinel` | Path of the surface-keyed sentinel (falls back to the sha-keyed one). |
-| `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed), or `null` when nothing was written. |
+| `gate_verified` | The pre-push gate was satisfied for the synced worktree: the surface-keyed sentinel was written, or the run is `nosurface` (no file needed — the hook allows it outright). |
+| `gate_sentinel` | Path of the surface-keyed sentinel; `null` for a `nosurface` run (nothing is written) and whenever `gate_verified` is false. |
+| `gate_tier` | `static` (a green build+tsc+lint run) or `playwright` (the Playwright row PASSed) — set for a `nosurface` pass too — or `null` whenever `gate_verified` is false. |
 | `playwright_verified` | Legacy alias of `gate_verified`, kept for older callers. |
 | `playwright_sentinel` | Legacy alias of `gate_sentinel`. |
 | `surface_hash` | The surface the run verified. `nosurface` = the branch changes nothing Playwright exercises, so the push hook allows it outright. |
@@ -942,10 +944,9 @@ three places, all fixed together in ROK-1565: the sentinel's summary parser
 
 Why the surface and not HEAD: a docs-only or test-only follow-up commit, and
 GitHub's identical-tree "merge main" rewrite of a remote branch, both used to
-invalidate a green gate without changing a byte Playwright runs. The sha-named
-file is ALSO written for one cycle so in-flight branches gated under the old
-hook are not stranded — drop that dual write once no open branch predates
-ROK-1566.
+invalidate a green gate without changing a byte Playwright runs. The surface
+hash is the ONLY key: TDB:1416 retired the one-cycle sha-named dual write and
+the hook's sha fallback, so a sha-named file no longer satisfies the gate.
 
 #### One claim per worktree — `rl_claim` is idempotent on agent identity
 

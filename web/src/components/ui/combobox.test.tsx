@@ -11,6 +11,7 @@ import userEvent from '@testing-library/user-event';
 import { Combobox, type ComboboxProps } from './combobox';
 import { Field } from './field';
 import { Modal } from './modal';
+import { at } from '../../test/defined';
 
 interface Game { id: string; name: string }
 const GAMES: Game[] = [{ id: '1', name: 'Diablo IV' }, { id: '2', name: 'Destiny 2' }, { id: '3', name: 'Dota 2' }];
@@ -206,7 +207,7 @@ describe('Combobox — IME, external reset, portal target, live region', () => {
 
     it('an external reset of value to null clears the stale label', () => {
         const props = { label: 'Game', options: GAMES, getKey: (g: Game) => g.id, getLabel: (g: Game) => g.name, onChange: () => undefined };
-        const { rerender } = render(<Combobox<Game> {...props} value={GAMES[1]} />);
+        const { rerender } = render(<Combobox<Game> {...props} value={at(GAMES, 1)} />);
         expect(box()).toHaveValue('Destiny 2');
         rerender(<Combobox<Game> {...props} value={null} />);
         expect(box(), 'the input kept the label of a value that was reset to null').toHaveValue('');

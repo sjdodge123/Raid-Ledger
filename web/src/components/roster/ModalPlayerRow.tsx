@@ -9,7 +9,7 @@ import { PlayerCard } from '../events/player-card';
 function RemoveFromEventButton({ player, onRemoveFromEvent, onClose }: {
     player: RosterAssignmentResponse;
     onRemoveFromEvent: (signupId: number, username: string) => void;
-    onClose?: () => void;
+    onClose?: (() => void) | undefined;
 }) {
     return (
         <button onClick={() => { onRemoveFromEvent(player.signupId, player.username); onClose?.(); }}
@@ -26,8 +26,8 @@ export function ModalPlayerRow({
 }: {
     player: RosterAssignmentResponse;
     onAssign: (signupId: number) => void;
-    accentColor?: string;
-    onRemoveFromEvent?: (signupId: number, username: string) => void;
+    accentColor?: string | undefined;
+    onRemoveFromEvent?: ((signupId: number, username: string) => void) | undefined;
     onClose?: () => void;
 }) {
     return (

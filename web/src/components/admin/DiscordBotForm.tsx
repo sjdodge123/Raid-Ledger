@@ -40,20 +40,20 @@ function EnableToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () =>
     );
 }
 
-function botStatusLabel(data: { connecting?: boolean; connected?: boolean }) {
+function botStatusLabel(data: { connecting?: boolean | undefined; connected?: boolean | undefined }) {
     if (data.connecting) return 'Starting...';
     if (data.connected) return 'Online';
     return 'Offline';
 }
 
-function botStatusDotClass(data: { connecting?: boolean; connected?: boolean }) {
+function botStatusDotClass(data: { connecting?: boolean | undefined; connected?: boolean | undefined }) {
     if (data.connecting) return 'bg-warning animate-pulse';
     if (data.connected) return 'bg-success';
     return 'bg-danger';
 }
 
 function BotStatusBar({ data, onCheckPermissions, isChecking }: {
-    data: { connecting?: boolean; connected?: boolean; guildName?: string; memberCount?: number | null };
+    data: { connecting?: boolean | undefined; connected?: boolean | undefined; guildName?: string | undefined; memberCount?: number | null | undefined };
     onCheckPermissions: () => void; isChecking: boolean;
 }) {
     return (
@@ -125,7 +125,7 @@ function useBotFormState() {
     const [botToken, setBotToken] = useState('');
     const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
     const [showToken, setShowToken] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; guildName?: string; message: string } | null>(null);
+    const [testResult, setTestResult] = useState<{ success: boolean; guildName?: string | undefined; message: string } | null>(null);
     const [permissionsResult, setPermissionsResult] = useState<{ allGranted: boolean; permissions: { name: string; granted: boolean }[] } | null>(null);
     const enabled = enabledOverride ?? discordBotStatus.data?.enabled ?? true;
 
@@ -156,7 +156,7 @@ function useBotHandlers() {
 
     const handleTest = async () => {
         s.setTestResult(null);
-        try { const r = await s.testDiscordBot.mutateAsync({ botToken: s.botToken || undefined }); s.setTestResult(r); if (r.success) toast.success(r.message); }
+        try { const r = await s.testDiscordBot.mutateAsync(s.botToken ? { botToken: s.botToken } : {}); s.setTestResult(r); if (r.success) toast.success(r.message); }
         catch { toast.error('Failed to test connection'); }
     };
 

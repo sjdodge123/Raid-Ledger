@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
@@ -77,12 +78,12 @@ function themeBlock(css: string): string {
 /** Every `--color-X` declared in `@theme`: the only ones Tailwind turns into utilities. */
 function declaredTokens(css: string): Set<string> {
     const block = themeBlock(stripComments(css, false));
-    return new Set([...block.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+    return new Set([...block.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => defined(m[1], 'token name')));
 }
 
 /** Every `--color-X` declared anywhere in `index.css` (`@theme` or a scheme block): valid in `var()`. */
 function declaredVars(css: string): Set<string> {
-    return new Set([...stripComments(css, false).matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+    return new Set([...stripComments(css, false).matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((m) => defined(m[1], 'token name')));
 }
 
 const PALETTE =
@@ -122,9 +123,9 @@ const THEME_FN = /theme\(\s*--color-([a-z0-9-]+)[^)]*\)/g;
 /** True when `value` after `prefix-` names a real colour or a non-colour utility. */
 function isKnown(prefix: string, value: string, tokens: Set<string>): boolean {
     const side = prefix === 'border' ? /^[xytblrse]-(.+)$/.exec(value) : null;
-    if (side !== null && isKnown(prefix, side[1], tokens)) return true;
+    if (side !== null && isKnown(prefix, defined(side[1], 'border side value'), tokens)) return true;
     return (
-        tokens.has(value) || PALETTE.test(value) || KEYWORDS.has(value) || NON_COLOUR[prefix].test(value)
+        tokens.has(value) || PALETTE.test(value) || KEYWORDS.has(value) || defined(NON_COLOUR[prefix], `NON_COLOUR.${prefix}`).test(value)
     );
 }
 
@@ -137,7 +138,7 @@ function isKnown(prefix: string, value: string, tokens: Set<string>): boolean {
 const COLLIDING = new Set(['from', 'via', 'to', 'shadow', 'decoration', 'caret']);
 const KNOWN_WORDS = new Set(['from-lineup-match']);
 function isIdentifier(line: string, m: RegExpMatchArray): boolean {
-    if (!COLLIDING.has(m[1])) return false;
+    if (!COLLIDING.has(defined(m[1], 'utility prefix'))) return false;
     if (KNOWN_WORDS.has(m[0])) return true;
     const [before, after] = [line[(m.index ?? 0) - 1], line[(m.index ?? 0) + m[0].length]];
     return before === after && (before === "'" || before === '"' || before === '`');
@@ -149,13 +150,13 @@ const isVar = (name: string, vars: Set<string>): boolean => vars.has(name) || PA
 /** Every undefined colour reference in one comment-stripped line. */
 function lineHits(line: string, isCss: boolean, tokens: Set<string>, vars: Set<string>): string[] {
     const hits: string[] = [];
-    for (const m of line.matchAll(CSS_VAR)) if (!isVar(m[1], vars)) hits.push(`var(--color-${m[1]})`);
-    for (const m of line.matchAll(THEME_FN)) if (!isVar(m[1], vars)) hits.push(m[0]);
+    for (const m of line.matchAll(CSS_VAR)) if (!isVar(defined(m[1], 'token name'), vars)) hits.push(`var(--color-${m[1]})`);
+    for (const m of line.matchAll(THEME_FN)) if (!isVar(defined(m[1], 'token name'), vars)) hits.push(m[0]);
     if (isCss) return hits;
     for (const m of line.matchAll(UTILITY)) {
-        if (!isKnown(m[1], m[2], tokens) && !isIdentifier(line, m)) hits.push(m[0]);
+        if (!isKnown(defined(m[1], 'utility prefix'), defined(m[2], 'utility value'), tokens) && !isIdentifier(line, m)) hits.push(m[0]);
     }
-    for (const m of line.matchAll(SHORTHAND)) if (!isVar(m[1], vars)) hits.push(m[0]);
+    for (const m of line.matchAll(SHORTHAND)) if (!isVar(defined(m[1], 'token name'), vars)) hits.push(m[0]);
     return hits;
 }
 

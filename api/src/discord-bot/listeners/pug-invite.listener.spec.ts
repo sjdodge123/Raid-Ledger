@@ -168,6 +168,11 @@ function createMockClientWithListeners() {
   return { mockOn, mockRemoveListener, mockClient };
 }
 
+/** How many times `mock` was called with `event` as its first argument. */
+function countCallsFor(mock: jest.Mock, event: string): number {
+  return mock.mock.calls.filter(([e]: [string]) => e === event).length;
+}
+
 function botConnectedTests() {
   it('should register guildMemberAdd and interactionCreate listeners', () => {
     const { mockOn } = createMockClientWithListeners();
@@ -182,14 +187,14 @@ function botConnectedTests() {
     );
   });
 
-  it('should not register guildMemberAdd twice on repeated connect events', () => {
-    const { mockOn } = createMockClientWithListeners();
+  it('leaves exactly one live handler per event on repeated connect events', () => {
+    const { mockOn, mockRemoveListener } = createMockClientWithListeners();
     listener.handleBotConnected();
     listener.handleBotConnected();
-    const guildMemberCalls = mockOn.mock.calls.filter(
-      ([event]: [string]) => event === (Events.GuildMemberAdd as string),
-    );
-    expect(guildMemberCalls).toHaveLength(1);
+    const liveCount = (event: string) =>
+      countCallsFor(mockOn, event) - countCallsFor(mockRemoveListener, event);
+    expect(liveCount(Events.GuildMemberAdd)).toBe(1);
+    expect(liveCount('interactionCreate')).toBe(1);
   });
 
   it('should skip when client is null', () => {
@@ -223,7 +228,7 @@ function botConnectedTests() {
 
 function botDisconnectedTests() {
   it('should allow guildMemberAdd re-registration after disconnect', () => {
-    const { mockOn } = createMockClientWithListeners();
+    const { mockOn, mockRemoveListener } = createMockClientWithListeners();
     listener.handleBotConnected();
     listener.handleBotDisconnected();
     listener.handleBotConnected();
@@ -231,14 +236,21 @@ function botDisconnectedTests() {
       ([event]: [string]) => event === (Events.GuildMemberAdd as string),
     );
     expect(guildMemberCalls).toHaveLength(2);
+    expect(countCallsFor(mockRemoveListener, Events.GuildMemberAdd)).toBe(1);
   });
 
-  it('should clear boundInteractionHandler reference on disconnect', () => {
-    const { mockRemoveListener } = createMockClientWithListeners();
+  it('detaches both gateway handlers on disconnect', () => {
+    const { mockOn, mockRemoveListener } = createMockClientWithListeners();
     listener.handleBotConnected();
     listener.handleBotDisconnected();
+    expect(mockRemoveListener).toHaveBeenCalledTimes(2);
+    for (const event of [Events.GuildMemberAdd, 'interactionCreate']) {
+      const attached = mockOn.mock.calls.find(([e]: [string]) => e === event);
+      expect(mockRemoveListener).toHaveBeenCalledWith(event, attached?.[1]);
+    }
+
     listener.handleBotConnected();
-    expect(mockRemoveListener).not.toHaveBeenCalled();
+    expect(mockRemoveListener).toHaveBeenCalledTimes(2);
   });
 }
 

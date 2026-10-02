@@ -118,7 +118,7 @@ function SuggestionRow({
                     <ReasonChips reasons={suggestion.reasons} />
                 </div>
                 <p className="text-xs text-muted">
-                    {REASON_SUBTITLE[suggestion.reasons[0]]}
+                    {suggestion.reasons[0] && REASON_SUBTITLE[suggestion.reasons[0]]}
                 </p>
             </div>
             <InviteButton suggestion={suggestion} invite={invite} />
@@ -133,7 +133,7 @@ function CapNotice({ message }: { message: string | null }): JSX.Element | null 
         <p
             role="status"
             data-testid="lfg-invite-cap"
-            className="mb-2 text-xs text-amber-400"
+            className="mb-2 text-xs text-warning"
         >
             {message}
         </p>
@@ -143,9 +143,14 @@ function CapNotice({ message }: { message: string | null }): JSX.Element | null 
 /**
  * The three no-rows states, in precedence order.
  *
- * ROK-1535 — `isError` is checked BEFORE `isEmpty` because a failed read also
- * arrives with zero rows: without this, every 429 / 401 / 500 / schema
+ * ROK-1535 — the failure copy is checked BEFORE `isEmpty` because a failed read
+ * also arrives with zero rows: without this, every 429 / 401 / 500 / schema
  * rejection told the operator the community had nobody to suggest.
+ *
+ * It renders only when there are no rows. A failed BACKGROUND refetch keeps the
+ * last good `data`, so the rows stay on screen with no failure copy above them:
+ * a stale list is more useful than a warning over live rows (accepted
+ * trade-off).
  */
 function PanelState({
     isLoading,
@@ -157,12 +162,12 @@ function PanelState({
     isEmpty: boolean;
 }): JSX.Element | null {
     if (isLoading) return <p className="text-sm text-muted">Loading…</p>;
-    if (isError) {
+    if (isError && isEmpty) {
         return (
             <p
                 role="status"
                 data-testid="lfg-suggestions-error"
-                className="text-sm text-amber-400"
+                className="text-sm text-warning"
             >
                 {LFG_COPY.suggestionsFailed}
             </p>

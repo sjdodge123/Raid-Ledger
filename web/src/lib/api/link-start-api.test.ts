@@ -12,6 +12,7 @@ const fetchWithAuth = vi.fn();
 vi.mock('./fetch-api', () => ({ fetchWithAuth: (...args: unknown[]) => fetchWithAuth(...args) }));
 
 import { API_BASE_URL } from '../config';
+import { at } from '../../test/defined';
 import { startAccountLink } from './link-start-api';
 
 beforeEach(() => {
@@ -37,7 +38,7 @@ describe('startAccountLink — browser-bound nonce cookie', () => {
         await expect(startAccountLink('steam', '/profile/integrations')).resolves.toBe(
             `${API_BASE_URL}/auth/steam/link?nonce=n0nce`,
         );
-        const init = fetchWithAuth.mock.calls[0][1] as RequestInit;
+        const init = at(fetchWithAuth.mock.calls, 0)[1] as RequestInit;
         expect(JSON.parse(String(init.body))).toEqual({ returnTo: '/profile/integrations' });
         expect(init.credentials).toBe('include');
     });

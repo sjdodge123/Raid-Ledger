@@ -31,9 +31,9 @@ export function toGroupCellMap(cells: AggregateGameTimeCell[]): Map<string, Heat
         map.set(groupCellKey(cell.dayOfWeek, cell.hour), {
             available: cell.availableCount,
             total: cell.totalCount,
-            stale: cell.staleCount,
-            unknown: cell.unknownCount,
-            busy: cell.busyCount,
+            ...(cell.staleCount === undefined ? {} : { stale: cell.staleCount }),
+            ...(cell.unknownCount === undefined ? {} : { unknown: cell.unknownCount }),
+            ...(cell.busyCount === undefined ? {} : { busy: cell.busyCount }),
         });
     }
     return map;
@@ -186,12 +186,14 @@ export function groupStripLabel(dayOfWeek: number, bands: GroupBandShare[]): str
     if (!bands.length) return `${day}, nobody free`;
     const index = bestBandIndex(bands);
     const band = bands[index];
+    const strip = STRIP_BANDS[index];
+    if (!band || !strip) return `${day}, nobody free`;
     const kind = groupBandKind(band.best);
     const busy = bands.some((b) => b.busy) ? ', busy' : '';
     // A day nobody is known free on has no band worth naming.
     if (kind === 'none') return `${day}, nobody free${busy}`;
     const other = band.other === null ? '' : ` to ${KIND_COPY[groupBandKind(band.other)]}`;
-    const where = BAND_COPY[STRIP_BANDS[index].id] ?? STRIP_BANDS[index].id;
+    const where = BAND_COPY[strip.id] ?? strip.id;
     return `${day}, ${where}: ${KIND_COPY[kind]}${other} free${busy}`;
 }
 

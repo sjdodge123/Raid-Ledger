@@ -21,15 +21,15 @@ interface AttendeePreview {
 interface GameTimeWidgetProps {
     eventStartTime: string;
     eventEndTime: string;
-    eventTitle?: string;
-    gameName?: string;
-    gameSlug?: string;
-    gameId?: number | null;
-    coverUrl?: string | null;
-    description?: string | null;
-    creatorUsername?: string | null;
-    attendees?: AttendeePreview[];
-    attendeeCount?: number;
+    eventTitle?: string | undefined;
+    gameName?: string | undefined;
+    gameSlug?: string | undefined;
+    gameId?: number | null | undefined;
+    coverUrl?: string | null | undefined;
+    description?: string | null | undefined;
+    creatorUsername?: string | null | undefined;
+    attendees?: AttendeePreview[] | undefined;
+    attendeeCount?: number | undefined;
 }
 
 interface PreviewBlockMeta {
@@ -44,6 +44,25 @@ interface PreviewBlockMeta {
     attendees?: AttendeePreview[];
     attendeeCount?: number;
     gameId?: number | null;
+}
+
+type PreviewMetaInput = Pick<GameTimeWidgetProps, 'eventTitle' | 'gameName' | 'gameSlug' | 'coverUrl' | 'description' | 'creatorUsername' | 'attendees' | 'attendeeCount' | 'gameId'>;
+
+/** The preview blocks' event metadata; a prop left undefined is omitted rather than carried as an `undefined` key. */
+function toPreviewMeta(p: PreviewMetaInput): PreviewBlockMeta {
+    return {
+        label: p.eventTitle ?? 'This Event',
+        variant: 'selected',
+        ...(p.eventTitle === undefined ? {} : { title: p.eventTitle }),
+        ...(p.gameName === undefined ? {} : { gameName: p.gameName }),
+        ...(p.gameSlug === undefined ? {} : { gameSlug: p.gameSlug }),
+        ...(p.coverUrl === undefined ? {} : { coverUrl: p.coverUrl }),
+        ...(p.description === undefined ? {} : { description: p.description }),
+        ...(p.creatorUsername === undefined ? {} : { creatorUsername: p.creatorUsername }),
+        ...(p.attendees === undefined ? {} : { attendees: p.attendees }),
+        ...(p.attendeeCount === undefined ? {} : { attendeeCount: p.attendeeCount }),
+        ...(p.gameId === undefined ? {} : { gameId: p.gameId }),
+    };
 }
 
 function collectDayHours(startTime: string, endTime: string): Map<number, number[]> {
@@ -64,14 +83,16 @@ function buildPreviewBlocks(
     for (const [dayOfWeek, hours] of dayHours) {
         hours.sort((a, b) => a - b);
         let blockStart = hours[0];
-        let prev = hours[0];
-        for (let i = 1; i <= hours.length; i++) {
-            if (i === hours.length || hours[i] !== prev + 1) {
+        if (blockStart === undefined) continue;
+        let prev = blockStart;
+        for (const hour of hours.slice(1)) {
+            if (hour !== prev + 1) {
                 blocks.push({ dayOfWeek, startHour: blockStart, endHour: prev + 1, ...meta });
-                if (i < hours.length) blockStart = hours[i];
+                blockStart = hour;
             }
-            if (i < hours.length) prev = hours[i];
+            prev = hour;
         }
+        blocks.push({ dayOfWeek, startHour: blockStart, endHour: prev + 1, ...meta });
     }
     return blocks;
 }
@@ -109,7 +130,7 @@ function OverlapBadge({ hasOverlap }: { hasOverlap: boolean }) {
 }
 
 function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUsername }: {
-    title: string; coverUrl?: string | null; gameName?: string; timeLabel: string; creatorUsername?: string | null;
+    title: string; coverUrl?: string | null | undefined; gameName?: string | undefined; timeLabel: string; creatorUsername?: string | null | undefined;
 }) {
     return (
         <>
@@ -119,7 +140,7 @@ function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUserna
                 <h4 className="text-sm font-semibold text-foreground truncate mt-1">{title}</h4>
                 <div className="flex items-center gap-2 mt-1 text-xs text-muted">
                     {gameName && <span>{gameName}</span>}
-                    {gameName && timeLabel && <span className="text-faint">·</span>}
+                    {gameName && timeLabel && <span className="text-faint" aria-hidden="true">·</span>}
                     {timeLabel && <span>{timeLabel}</span>}
                 </div>
                 {creatorUsername && <p className="text-[11px] text-dim mt-1">Hosted by {creatorUsername}</p>}
@@ -129,8 +150,8 @@ function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUserna
 }
 
 function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creatorUsername, attendees }: {
-    title: string; coverUrl?: string | null; gameName?: string; timeLabel: string; creatorUsername?: string | null;
-    gameId?: number | null; attendees?: AttendeePreview[];
+    title: string; coverUrl?: string | null | undefined; gameName?: string | undefined; timeLabel: string; creatorUsername?: string | null | undefined;
+    gameId?: number | null | undefined; attendees?: AttendeePreview[] | undefined;
 }) {
     return (
         <div className="rounded-lg border border-edge bg-panel/50 overflow-hidden">
@@ -145,7 +166,7 @@ function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creator
                                 avatar: attendee.avatar,
                                 discordId: attendee.discordId ?? null,
                                 customAvatarUrl: attendee.customAvatarUrl ?? null,
-                                characters: attendee.characters,
+                                ...(attendee.characters ? { characters: attendee.characters } : {}),
                             }))}
                             max={4}
                             gameId={gameId ?? undefined}
@@ -163,19 +184,7 @@ function useGameTimeWidgetData(props: GameTimeWidgetProps) {
     const hasOverlap = useMemo(() => checkGameTimeOverlap(editor.slots, eventStartTime, eventEndTime), [editor.slots, eventStartTime, eventEndTime]);
     const previewBlocks = useMemo<GameTimePreviewBlock[]>(() => {
         const dayHours = collectDayHours(eventStartTime, eventEndTime);
-        const meta: PreviewBlockMeta = {
-            label: eventTitle ?? 'This Event',
-            variant: 'selected',
-            title: eventTitle,
-            gameName,
-            gameSlug,
-            coverUrl,
-            description,
-            creatorUsername,
-            attendees,
-            attendeeCount,
-            gameId,
-        };
+        const meta = toPreviewMeta({ eventTitle, gameName, gameSlug, coverUrl, description, creatorUsername, attendees, attendeeCount, gameId });
         return buildPreviewBlocks(dayHours, meta);
     }, [eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, gameId, coverUrl, description, creatorUsername, attendees, attendeeCount]);
     const eventTimeLabel = useMemo(() => formatTimeLabel(eventStartTime, eventEndTime), [eventStartTime, eventEndTime]);
@@ -206,8 +215,8 @@ function GameTimeWidgetModalHeader({ onClose }: { onClose: () => void }) {
 
 function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, gameName, gameId, eventTimeLabel, creatorUsername, attendees, onClose }: {
     editor: ReturnType<typeof useGameTimeEditor>; previewBlocks: GameTimePreviewBlock[];
-    eventTitle?: string; coverUrl?: string | null; gameName?: string; gameId?: number | null; eventTimeLabel: string; creatorUsername?: string | null;
-    attendees?: AttendeePreview[];
+    eventTitle?: string | undefined; coverUrl?: string | null | undefined; gameName?: string | undefined; gameId?: number | null | undefined; eventTimeLabel: string; creatorUsername?: string | null | undefined;
+    attendees?: AttendeePreview[] | undefined;
     onClose: () => void;
 }) {
     const isMobile = useMediaQuery(PHONE_MQ);

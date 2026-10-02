@@ -30,14 +30,11 @@ import {
 } from './identity-hooks';
 import { toast } from '../../lib/toast';
 import { getMyPreferences, updatePreference } from '../../lib/api-client';
+import { at } from '../../test/defined';
 
 const mockGetMyPreferences = getMyPreferences as ReturnType<typeof vi.fn>;
 const mockUpdatePreference = updatePreference as ReturnType<typeof vi.fn>;
-const mockToast = toast as {
-    success: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
-};
+const mockToast = vi.mocked(toast, true);
 
 function createWrapper() {
     const queryClient = new QueryClient({
@@ -159,7 +156,7 @@ describe('useAutoHeart preference key consistency (ROK-548 AC: both panels share
         await waitFor(() => expect(result.current.autoHeartEnabled).toBe(true));
         act(() => { result.current.toggleAutoHeart(true); });
         await waitFor(() => expect(mockUpdatePreference).toHaveBeenCalled());
-        const [keyArg] = mockUpdatePreference.mock.calls[0];
+        const [keyArg] = at(mockUpdatePreference.mock.calls, 0);
         expect(keyArg).toBe('autoHeartGames');
         queryClient.clear();
     });

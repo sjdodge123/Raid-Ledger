@@ -3,6 +3,7 @@
  * points must disable "Import from Armory" for wow_forever and keep Manual.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { at } from '../../../test/defined';
 import { useState } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -36,7 +37,7 @@ function contextVariantClient(eventId: number, gameVariant: string) {
 function gameVersionSelect(): HTMLSelectElement {
     const selects = screen.getAllByRole('combobox').filter((el): el is HTMLSelectElement => el instanceof HTMLSelectElement);
     expect(selects).toHaveLength(1);
-    return selects[0];
+    return at(selects, 0);
 }
 
 function Harness({ gameSlug, initial, eventId }: { gameSlug: string; initial: 'manual' | 'import'; eventId?: number }) {

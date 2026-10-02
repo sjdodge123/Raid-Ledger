@@ -11,6 +11,7 @@ import type {
   CharacterDto,
   UserHeartedGameDto,
 } from "@raid-ledger/contract";
+import { at } from "../test/defined";
 
 // Mock the hooks
 vi.mock("../hooks/use-user-profile");
@@ -45,6 +46,8 @@ const createMockCharacter = (
   region: "us",
   gameVariant: "classic",
   equipment: null,
+  talents: null,
+  professions: null,
   displayOrder: 1,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
@@ -310,7 +313,7 @@ describe("AC3: Characters sorted (main first, displayOrder) — part 1 (sub 1)",
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-    expect(within(characterLinks[0]).getByText("MainChar")).toBeInTheDocument();
+    expect(within(at(characterLinks, 0)).getByText("MainChar")).toBeInTheDocument();
   });
 });
 
@@ -339,9 +342,9 @@ describe("AC3: Characters sorted (main first, displayOrder) — part 1 (sub 2)",
       .getAllByRole("link")
       .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-    expect(within(characterLinks[0]).getByText("Char1")).toBeInTheDocument();
-    expect(within(characterLinks[1]).getByText("Char2")).toBeInTheDocument();
-    expect(within(characterLinks[2]).getByText("Char3")).toBeInTheDocument();
+    expect(within(at(characterLinks, 0)).getByText("Char1")).toBeInTheDocument();
+    expect(within(at(characterLinks, 1)).getByText("Char2")).toBeInTheDocument();
+    expect(within(at(characterLinks, 2)).getByText("Char3")).toBeInTheDocument();
   });
 });
 
@@ -371,9 +374,9 @@ describe("UserProfilePage - Game Grouping (ROK-308) — part 4", () => {
         .getAllByRole("link")
         .filter((link) => link.getAttribute("href")?.startsWith("/characters/"));
 
-      expect(within(characterLinks[0]).getByText("MainChar")).toBeInTheDocument();
-      expect(within(characterLinks[1]).getByText("Alt1")).toBeInTheDocument();
-      expect(within(characterLinks[2]).getByText("Alt2")).toBeInTheDocument();
+      expect(within(at(characterLinks, 0)).getByText("MainChar")).toBeInTheDocument();
+      expect(within(at(characterLinks, 1)).getByText("Alt1")).toBeInTheDocument();
+      expect(within(at(characterLinks, 2)).getByText("Alt2")).toBeInTheDocument();
     });
   });
 });
@@ -392,7 +395,7 @@ describe("AC4: Section repositioned (Characters below Events)", () => {
     });
 
     const heartedGames: UserHeartedGameDto[] = [
-      { id: 1, igdbId: 12345, name: "Final Fantasy XIV", slug: "final-fantasy-xiv", coverUrl: null },
+      { id: 1, igdbId: 12345, name: "Final Fantasy XIV", slug: "final-fantasy-xiv", coverUrl: null, playtimeSeconds: null },
     ];
 
     vi.spyOn(useUserProfileHook, "useUserProfile").mockReturnValue({

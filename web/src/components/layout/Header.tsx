@@ -64,7 +64,7 @@ function DesktopActions({ user }: { user: User | null }) {
 function CommunityLogo({ logoUrl, name }: { logoUrl: string | null; name: string }) {
     return (
         <Link to="/" className="flex items-center gap-2 text-xl font-bold text-foreground hover:text-emerald-400 transition-colors">
-            {logoUrl ? <img src={logoUrl} alt={name} className="w-8 h-8 rounded-lg object-contain" /> : <span className="text-2xl">&#x2694;&#xFE0F;</span>}
+            {logoUrl ? <img src={logoUrl} alt={name} className="w-8 h-8 rounded-lg object-contain" width={32} height={32} /> : <span className="text-2xl">&#x2694;&#xFE0F;</span>}
             {name}
         </Link>
     );

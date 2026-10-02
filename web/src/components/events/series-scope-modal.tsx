@@ -9,7 +9,7 @@ interface SeriesScopeModalProps {
     onClose: () => void;
     onConfirm: (scope: SeriesScope) => void;
     action: 'edit' | 'delete' | 'cancel';
-    isPending?: boolean;
+    isPending?: boolean | undefined;
 }
 
 const SCOPE_OPTIONS: readonly RadioOption<SeriesScope>[] = [
@@ -18,7 +18,7 @@ const SCOPE_OPTIONS: readonly RadioOption<SeriesScope>[] = [
     { value: 'all', label: 'All events in series', description: 'Every event in the recurring series.' },
 ];
 
-const ACTION_LABELS: Record<string, { title: string; button: string }> = {
+const ACTION_LABELS: Record<SeriesScopeModalProps['action'], { title: string; button: string }> = {
     edit: { title: 'Edit Series Event', button: 'Continue' },
     delete: { title: 'Delete Series Event', button: 'Delete' },
     cancel: { title: 'Cancel Series Event', button: 'Cancel Events' },

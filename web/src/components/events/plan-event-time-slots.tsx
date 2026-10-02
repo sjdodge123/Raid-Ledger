@@ -39,7 +39,7 @@ interface TimeSlotsProps {
     onCustomDateChange: (value: string) => void;
     onCustomTimeChange: (value: string) => void;
     onAddCustomTime: () => void;
-    timeSlotsError?: string;
+    timeSlotsError?: string | undefined;
 }
 
 function SuggestionButton({ s, isSelected, onAdd, disabled }: {

@@ -11,9 +11,9 @@ interface InterestPlayerAvatarsProps {
     /** Maximum avatars to show before overflow (default 6) */
     maxVisible?: number;
     /** Game ID for the "+N more" overflow link to the filtered players page */
-    gameId?: number;
+    gameId?: number | undefined;
     /** Custom link URL (overrides default /players?gameId=X) */
-    linkTo?: string;
+    linkTo?: string | undefined;
     /** Custom label formatter (default: "X players interested") */
     formatLabel?: (totalCount: number, overflowCount: number) => string;
 }
@@ -26,7 +26,7 @@ const INITIALS_COLORS = [
 
 function getInitialsBg(username: string): string {
     const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return INITIALS_COLORS[hash % INITIALS_COLORS.length];
+    return INITIALS_COLORS[hash % INITIALS_COLORS.length]!;
 }
 
 function formatCountText(totalCount: number, overflowCount: number) {
@@ -47,7 +47,7 @@ function PlayerAvatar({ player, index, total }: { player: InterestPlayerPreviewD
     );
 }
 
-function CountLabel({ text, linkTo }: { text: string; linkTo?: string }) {
+function CountLabel({ text, linkTo }: { text: string; linkTo?: string | undefined }) {
     if (linkTo) return <Link to={linkTo} className="text-sm text-emerald-400 hover:text-emerald-300 whitespace-nowrap transition-colors">{text}</Link>;
     return <span className="text-sm text-muted whitespace-nowrap">{text}</span>;
 }

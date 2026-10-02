@@ -6,6 +6,7 @@ import { useRoster } from '../../hooks/use-roster';
 import { isMMOSlotConfig } from '../../utils/game-utils';
 import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
+import { toAttendeePreviews } from './attendee-previews';
 import { SignupConfirmationModal } from '../events/signup-confirmation-modal';
 import { useDayEventSignup } from './use-day-event-signup';
 import { SeriesBadge } from '../events/SeriesBadge';
@@ -89,7 +90,7 @@ function useDayEventData(event: CalendarEvent, eventOverlapsGameTime: (s: Date, 
     const coverUrl = event.resource?.game?.coverUrl;
     const gameName = event.resource?.game?.name || 'Event';
     const signupCount = event.resource?.signupCount ?? 0;
-    const signupsPreview = event.resource?.signupsPreview;
+    const signupsPreview = toAttendeePreviews(event.resource?.signupsPreview);
     const description = event.resource?.description || '';
     const colors = getGameColors(gameSlug);
     const overlaps = eventOverlapsGameTime(event.start, event.end);
@@ -97,7 +98,7 @@ function useDayEventData(event: CalendarEvent, eventOverlapsGameTime: (s: Date, 
     const descriptionPreview = description.length > 80 ? `${description.slice(0, 80)}...` : description;
     const slots = rosterAssignments?.slots;
     const assignments = rosterAssignments?.assignments ?? [];
-    const isMMOGame = isMMOSlotConfig(slots);
+    const isMMOGame = isMMOSlotConfig(slots && { tank: slots.tank ?? 0, healer: slots.healer ?? 0, dps: slots.dps ?? 0 });
     const eventEnded = event.end ? event.end < new Date() : false;
     const allRosterUsers = [...(rosterAssignments?.pool ?? []), ...assignments];
     const getFilledCount = (role: string) => assignments.filter((a) => a.slot === role).length;
@@ -169,7 +170,7 @@ function DayEventConfirmModal({ s, event, d }: { s: ReturnType<typeof useDayEven
     return (
         <div onClick={(e) => e.stopPropagation()}>
             <SignupConfirmationModal isOpen={s.showConfirmModal} onClose={s.handleConfirmModalClose}
-                onConfirm={s.handleSignupConfirm} onSkip={s.handleSignupSkip} isConfirming={s.signup.isPending}
+                onConfirm={(sel) => s.handleSignupConfirm({ characterId: sel.characterId, ...(sel.role === undefined ? {} : { role: sel.role }) })} onSkip={s.handleSignupSkip} isConfirming={s.signup.isPending}
                 gameId={event.resource?.game?.id ?? undefined} gameName={d.gameName} hasRoles={d.isMMOGame} gameSlug={d.gameSlug}
                 preSelectedRole={s.pendingRole === 'tank' || s.pendingRole === 'healer' || s.pendingRole === 'dps' ? (s.pendingRole as CharacterRole) : undefined}
                 eventId={event.resource?.id} />

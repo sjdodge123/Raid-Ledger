@@ -320,7 +320,7 @@ describe('useGameTimeEditor - applyPreset — part 5', () => {
             await waitFor(() => {
                 const mondaySlots = result.current.slots.filter(s => s.dayOfWeek === 1);
                 expect(mondaySlots).toHaveLength(1);
-                expect(mondaySlots[0].hour).toBe(10);
+                expect(mondaySlots[0]?.hour).toBe(10);
             });
         });
     });
@@ -379,7 +379,7 @@ describe('Edge Cases — part 1 (sub 1)', () => {
         await waitFor(() => {
             const remainingSlots = result.current.slots.filter(s => s.dayOfWeek === 0);
             expect(remainingSlots).toHaveLength(1);
-            expect(remainingSlots[0].hour).toBe(14);
+            expect(remainingSlots[0]?.hour).toBe(14);
         });
     });
 

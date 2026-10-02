@@ -47,17 +47,17 @@ interface WeekStripProps {
      * from `groupBandShares`. When given, it replaces the viewer-derived bars
      * and the label reads "Wednesday, evening: most to a few free, busy".
      */
-    groupBands?: GroupBandShare[][];
+    groupBands?: GroupBandShare[][] | undefined;
     /**
      * Days of the week the viewer is away (ROK-1585, Q1) — from
      * `awayDaysOfWeek`. Each reads as a dashed "away" tile; ignored in group mode.
      */
-    awayDays?: ReadonlySet<number>;
+    awayDays?: ReadonlySet<number> | undefined;
     /**
      * GROUP mode (ROK-1587): poll slots starting on each day of the displayed
      * week, index 0 = Sunday — from `slotCountsByDay`. Read only with `groupBands`.
      */
-    groupVotes?: number[];
+    groupVotes?: number[] | undefined;
 }
 
 /** ", 2 suggested times" — the strip column's vote clause; empty for none. */
@@ -126,7 +126,7 @@ function columnTone(active: boolean, away: boolean): string {
  */
 function StripColumn({ dayOfWeek, active, away, label, bars, votes, onPick }: {
     dayOfWeek: number; active: boolean; away: boolean; label: string; bars: BarSpec[];
-    votes?: number; onPick: (dayOfWeek: number) => void;
+    votes?: number | undefined; onPick: (dayOfWeek: number) => void;
 }): JSX.Element {
     return (
         <button
@@ -146,7 +146,7 @@ function StripColumn({ dayOfWeek, active, away, label, bars, votes, onPick }: {
                 />
             ))}
             <span className={`pt-0.5 text-center text-[10px] ${active ? 'text-foreground' : 'text-dim'}`}>
-                {FULL_DAYS[dayOfWeek][0]}
+                {FULL_DAYS[dayOfWeek]?.[0]}
             </span>
             {votes !== undefined && <VotesMarker votes={votes} />}
         </button>

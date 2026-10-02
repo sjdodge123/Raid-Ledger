@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, fireEvent, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, type JsonBodyType } from 'msw';
 import type { DiscoveryCategorySuggestionDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { DynamicCategoriesPanel } from './dynamic-categories-panel';
+import { at } from '../../test/defined';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -251,7 +252,7 @@ describe('DynamicCategoriesPanel', () => {
         await screen.findByText(/no suggestions yet/i);
         // Click the header Regenerate button (first one).
         const buttons = screen.getAllByRole('button', { name: /regenerate/i });
-        fireEvent.click(buttons[0]);
+        fireEvent.click(at(buttons, 0));
         await waitFor(() => expect(regenCalled).toBe(true));
     });
 });
@@ -300,7 +301,7 @@ describe('DynamicCategoriesPanel — regenerate toast counts (ROK-1530 A7)', () 
         );
     });
 
-    async function clickRegenerate(body: unknown) {
+    async function clickRegenerate(body: JsonBodyType) {
         stubList({ pending: [] });
         server.use(
             http.post(`${API_BASE}/admin/discovery-categories/regenerate`, () =>
@@ -309,7 +310,7 @@ describe('DynamicCategoriesPanel — regenerate toast counts (ROK-1530 A7)', () 
         );
         renderWithProviders(<DynamicCategoriesPanel />);
         await screen.findByText(/no suggestions yet/i);
-        fireEvent.click(screen.getAllByRole('button', { name: /regenerate/i })[0]);
+        fireEvent.click(at(screen.getAllByRole('button', { name: /regenerate/i }), 0));
     }
 
     it('reports the inserted and expired counts in the success toast', async () => {

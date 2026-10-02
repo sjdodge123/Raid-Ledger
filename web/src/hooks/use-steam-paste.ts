@@ -5,7 +5,6 @@
  * Attaches a global paste listener that:
  * - Extracts Steam App IDs from store.steampowered.com URLs
  * - Skips detection when an input/textarea/contenteditable is focused
- * - Skips detection when the modal is already open
  * - Calls GET /games/by-steam-id/:id to resolve the game
  * - Returns the resolved game or shows an error toast
  */
@@ -29,22 +28,15 @@ function isInputFocused(): boolean {
 
 /** Extract a numeric Steam App ID from pasted text, or null. */
 export function extractSteamAppId(text: string): number | null {
-  const match = STEAM_URL_RE.exec(text);
-  if (!match) return null;
-  const id = parseInt(match[1], 10);
+  const digits = STEAM_URL_RE.exec(text)?.[1];
+  if (!digits) return null;
+  const id = parseInt(digits, 10);
   return Number.isFinite(id) ? id : null;
 }
 
 interface UseSteamPasteOptions {
   /** Only listen when true (e.g. lineup is in building status). */
   enabled: boolean;
-  /**
-   * Modal-open flag. Retained for backward compatibility but no longer
-   * gates the listener — the modal's own input-focused check is enough
-   * to prevent double-handling, and detaching the page-level handler
-   * meant pasting outside the search input did nothing (ROK-1114).
-   */
-  modalOpen?: boolean;
   /** Called with the resolved game to open the modal. */
   onGameResolved: (game: IgdbGameDto) => void;
 }

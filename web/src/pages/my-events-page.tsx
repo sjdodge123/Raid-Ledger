@@ -30,7 +30,7 @@ function MyEventsEmptyState({ activeTab, isAdmin, onTabChange }: { activeTab: Ta
     return (
         <div className="py-8 px-4">
             <div className="max-w-7xl mx-auto">
-                <h1 className="text-3xl font-bold text-foreground mb-4">Event Metrics</h1>
+                <h2 className="text-3xl font-bold text-foreground mb-4">Event Metrics</h2>
                 {isAdmin && <TabSwitcher activeTab={activeTab} onTabChange={onTabChange} />}
                 <div className="text-center py-16">
                     <p className="text-lg text-muted mb-4">{isAdmin ? 'No upcoming events yet.' : "You don't have any upcoming events yet."}</p>
@@ -66,7 +66,7 @@ export function MyEventsPage() {
     return (
         <div className="py-8 px-4">
             <div className="max-w-7xl mx-auto">
-                <h1 className="text-3xl font-bold text-foreground mb-4">Event Metrics</h1>
+                <h2 className="text-3xl font-bold text-foreground mb-4">Event Metrics</h2>
                 {isAdmin && <TabSwitcher activeTab={activeTab} onTabChange={setActiveTab} />}
                 {activeTab === 'dashboard'
                     ? <DashboardTab dashboard={dashboard} highlightGaps={highlightGaps} eventsGridRef={eventsGridRef} handleNeedsAttentionClick={handleNeedsAttentionClick} isAdmin={isAdmin} />

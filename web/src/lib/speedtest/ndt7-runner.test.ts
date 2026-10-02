@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { at, defined } from '../../test/defined';
 import vendoredWorker from '../../../public/ndt7-download-worker.js?raw';
 import { runSpeedTest, SPEED_TEST_TIMEOUT_MS } from './ndt7-runner';
 
@@ -58,7 +59,7 @@ describe('runSpeedTest', () => {
                 urlPromise: Promise<unknown>,
             ) => {
                 await urlPromise;
-                callbacks.downloadMeasurement({
+                defined(callbacks.downloadMeasurement, 'downloadMeasurement callback')({
                     Source: 'client',
                     Data: { MeanClientMbps: 87.5 },
                 });
@@ -73,7 +74,7 @@ describe('runSpeedTest', () => {
         ).resolves.toBe(87.5);
 
         expect(downloadTest).toHaveBeenCalledTimes(1);
-        expect(downloadTest.mock.calls[0][2]).toBe(urls);
+        expect(downloadTest.mock.calls[0]?.[2]).toBe(urls);
         expect(test).not.toHaveBeenCalled();
     });
 
@@ -115,13 +116,13 @@ describe('runSpeedTest', () => {
 
     it('tells ndt7 where its download worker lives (the library default is a page-relative url this app never serves)', async () => {
         const urls = Promise.resolve(['wss://ndt.example']);
-        const discoverServerURLs = vi.fn(() => urls);
+        const discoverServerURLs = vi.fn<(config: unknown) => typeof urls>(() => urls);
         const downloadTest = vi.fn(
             async (
                 _config: unknown,
                 callbacks: Record<string, (data: unknown) => void>,
             ) => {
-                callbacks.downloadMeasurement({
+                defined(callbacks.downloadMeasurement, 'downloadMeasurement callback')({
                     Source: 'client',
                     Data: { MeanClientMbps: 12 },
                 });
@@ -135,10 +136,10 @@ describe('runSpeedTest', () => {
             })),
         ).resolves.toBe(12);
 
-        const config = downloadTest.mock.calls[0][0] as Record<string, unknown>;
+        const config = at(downloadTest.mock.calls, 0)[0] as Record<string, unknown>;
         expect(typeof config.downloadworkerfile).toBe('string');
         expect(config.downloadworkerfile).not.toBe('');
-        expect(discoverServerURLs.mock.calls[0][0]).toBe(config);
+        expect(at(discoverServerURLs.mock.calls, 0)[0]).toBe(config);
     });
 });
 

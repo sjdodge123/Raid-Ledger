@@ -51,7 +51,7 @@ function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: b
 }
 
 function SavedCharacterView({ savedCharacter, onDelete, isDeleting, onAddAnother }: {
-    savedCharacter: CharacterDto; onDelete: (id: string) => void; isDeleting: boolean; onAddAnother?: () => void;
+    savedCharacter: CharacterDto; onDelete: (id: string) => void; isDeleting: boolean; onAddAnother?: (() => void) | undefined;
 }) {
     return (
         <div className="max-w-md mx-auto space-y-3">
@@ -134,7 +134,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
 
 function CharacterStepForm({ s, preselectedGame, onRegisterValidator, handleSubmit }: {
     s: ReturnType<typeof useCharacterStepState>; preselectedGame: GameRegistryDto;
-    onRegisterValidator?: (fn: () => boolean) => void; handleSubmit: (e: React.FormEvent) => void;
+    onRegisterValidator?: ((fn: () => boolean) => void) | undefined; handleSubmit: (e: React.FormEvent) => void;
 }) {
     return (
         <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">

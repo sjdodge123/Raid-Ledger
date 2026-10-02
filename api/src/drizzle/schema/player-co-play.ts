@@ -5,6 +5,7 @@ import {
   jsonb,
   primaryKey,
   check,
+  index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users';
@@ -35,5 +36,7 @@ export const playerCoPlay = pgTable(
       'chk_player_co_play_canonical_order',
       sql`${table.userIdA} < ${table.userIdB}`,
     ),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    userIdBIdx: index('idx_player_co_play_user_id_b').on(table.userIdB),
   }),
 );

@@ -7,11 +7,13 @@ import {
     endOfWeek,
     isSameWeek,
     isSameMonth,
+    parse,
 } from 'date-fns';
 import { getGameColors } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { AttendeeAvatars } from './AttendeeAvatars';
+import { toAttendeePreviews } from './attendee-previews';
 import type { CalendarEvent } from './CalendarView';
 import { coverSrcSetProps } from '../../lib/igdb-image';
 
@@ -50,7 +52,7 @@ function formatWeekRange(date: Date): string {
  * Rich event card for the schedule view.
  * Shows game cover, title, game name, time range, and avatar stack.
  */
-function ScheduleEventCover({ coverUrl, icon }: { coverUrl?: string | null; icon: string }) {
+function ScheduleEventCover({ coverUrl, icon }: { coverUrl?: string | null | undefined; icon: string }) {
     return (
         <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-panel">
             {coverUrl ? <img src={coverUrl} alt="" className="w-full h-full object-cover"
@@ -77,7 +79,7 @@ function ScheduleEventInfo({ event, resolved }: { event: CalendarEvent; resolved
 function ScheduleEventCard({ event, onSelect }: { event: CalendarEvent; onSelect: (e: CalendarEvent) => void }) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const colors = getGameColors(event.resource.game?.slug);
-    const signups = event.resource.signupsPreview ?? [];
+    const signups = toAttendeePreviews(event.resource.signupsPreview) ?? [];
     const signupCount = event.resource.signupCount ?? signups.length;
 
     return (
@@ -147,14 +149,18 @@ function useSwipeNavigation(currentDate: Date, onDateChange: (d: Date) => void) 
     const touchStartTarget = useRef<EventTarget | null>(null);
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        touchStartX.current = e.touches[0].clientX;
-        touchStartY.current = e.touches[0].clientY;
+        const touch = e.touches[0];
+        if (!touch) return;
+        touchStartX.current = touch.clientX;
+        touchStartY.current = touch.clientY;
         touchStartTarget.current = e.target;
     }, []);
 
     const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-        const dx = e.changedTouches[0].clientX - touchStartX.current;
-        const dy = e.changedTouches[0].clientY - touchStartY.current;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.clientX - touchStartX.current;
+        const dy = touch.clientY - touchStartY.current;
         const startedOnButton = touchStartTarget.current instanceof HTMLElement && touchStartTarget.current.closest('button');
         const threshold = startedOnButton ? 100 : 50;
         if (Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy)) {
@@ -185,7 +191,7 @@ function useScheduleData(events: CalendarEvent[]) {
         const todayKey = format(startOfDay(new Date()), 'yyyy-MM-dd');
         const keys = new Set(eventsByDate.keys());
         keys.add(todayKey);
-        return [...keys].sort().map((k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); });
+        return [...keys].sort().map((k) => parse(k, 'yyyy-MM-dd', new Date()));
     }, [eventsByDate]);
 
     return { eventsByDate, daysWithEvents };

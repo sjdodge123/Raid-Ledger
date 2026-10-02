@@ -21,6 +21,7 @@ import { createMockSuggestion } from '../../test/lfg-factories';
 import { toast } from '../../lib/toast';
 import { LFG_COPY } from './lfg-copy';
 import { LfgSuggestionsPanel } from './LfgSuggestionsPanel';
+import { at } from '../../test/defined';
 
 const GAME_ID = 7;
 
@@ -92,7 +93,38 @@ describe('LfgSuggestionsPanel', () => {
         expect(screen.getByTestId('lfg-suggestions-error')).toHaveTextContent(
             LFG_COPY.suggestionsFailed,
         );
+        expect(screen.getByTestId('lfg-suggestions-error')).toHaveClass(
+            'text-warning',
+        );
         expect(screen.queryByText(LFG_COPY.suggestionsEmpty)).toBeNull();
+    });
+
+    /**
+     * A failed BACKGROUND refetch keeps the last good `data`, so `isError`
+     * arrives alongside live rows. The failure copy is for the no-rows case
+     * only — printing it above a list the player can still act on reads as
+     * "these rows are wrong".
+     */
+    it('a failed background refetch with rows keeps the rows and shows no failure copy', () => {
+        renderWithProviders(
+            <LfgSuggestionsPanel
+                gameId={GAME_ID}
+                suggestions={{
+                    gameId: GAME_ID,
+                    suggestions: [
+                        createMockSuggestion({ userId: 2, displayName: 'Bo' }),
+                        createMockSuggestion({ userId: 3, displayName: 'Cy' }),
+                    ],
+                }}
+                isError
+            />,
+        );
+
+        expect(screen.getByText('Bo')).toBeInTheDocument();
+        expect(screen.getByText('Cy')).toBeInTheDocument();
+        expect(screen.getAllByTestId('lfg-invite-button')).toHaveLength(2);
+        expect(screen.queryByTestId('lfg-suggestions-error')).toBeNull();
+        expect(screen.queryByText(LFG_COPY.suggestionsFailed)).toBeNull();
     });
 
     it('shows the loading state, not the empty copy, while the read is in flight', () => {
@@ -164,11 +196,12 @@ describe('LfgSuggestionsPanel — invite button (ROK-1455)', () => {
             }),
         ]);
 
-        await userEvent.click(screen.getAllByTestId('lfg-invite-button')[0]);
+        await userEvent.click(at(screen.getAllByTestId('lfg-invite-button'), 0));
 
         expect(
             await screen.findByText(LFG_INVITE_CAP_FIXTURE_MESSAGE),
         ).toBeInTheDocument();
+        expect(screen.getByTestId('lfg-invite-cap')).toHaveClass('text-warning');
         // The cap state is entered on the coded body specifically — see T-C3e
         // for the throttler's un-coded 429, which must NOT lock the panel.
         expect(bodies).toEqual([{ gameId: String(GAME_ID), userId: 2 }]);

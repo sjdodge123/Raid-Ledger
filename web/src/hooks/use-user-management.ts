@@ -29,7 +29,7 @@ export function useUserManagement(params?: { search?: string }) {
     const queryClient = useQueryClient();
     const users = useInfiniteList<UserManagementDto>({
         queryKey: ['user-management', params?.search ?? ''],
-        queryFn: (page) => getUsersForManagement({ page, limit: 20, search: params?.search || undefined }),
+        queryFn: (page) => getUsersForManagement({ page, limit: 20, ...(params?.search ? { search: params.search } : {}) }),
     });
 
     return {

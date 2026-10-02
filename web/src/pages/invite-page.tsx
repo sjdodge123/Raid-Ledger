@@ -60,15 +60,15 @@ function handleClaimError(err: unknown, resolveData: InviteCodeResolveResponseDt
     }
 }
 
-function useImportHandler(refetchCharacters: () => Promise<{ data?: { data?: { id: string; name: string; roleOverride: string | null; role: string | null; createdAt: string }[] } }>, handleClaim: (role?: PugRole, charId?: string) => Promise<void>) {
+function useImportHandler(refetchCharacters: () => Promise<{ data?: { data?: { id: string; name: string; roleOverride: string | null; role: string | null; createdAt: string }[] | undefined } | undefined }>, handleClaim: (role?: PugRole, charId?: string) => Promise<void>) {
     const [showManualRoleSelector, setShowManualRoleSelector] = useState(false);
     const [showImportForm, setShowImportForm] = useState(false);
 
     const handleImportSuccess = useCallback(async () => {
         const result = await refetchCharacters();
         const chars = result.data?.data;
-        if (chars && chars.length > 0) {
-            const newest = [...chars].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        const newest = [...(chars ?? [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        if (newest) {
             const importedRole = (newest.roleOverride ?? newest.role) as PugRole | null;
             if (importedRole) {
                 toast.success('Character imported! Joining event...', { description: `${newest.name} (${formatRole(importedRole)})` });

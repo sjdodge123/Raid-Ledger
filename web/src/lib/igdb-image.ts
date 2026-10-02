@@ -14,8 +14,11 @@
  * entirely rather than emitting a set that resolves to broken images.
  */
 
+/** An IGDB rendition token and the true intrinsic width it serves. */
+type Rendition = { token: string; width: number };
+
 /** IGDB renditions used for cover art, with their true intrinsic widths. */
-const COVER_RENDITIONS: ReadonlyArray<{ token: string; width: number }> = [
+const COVER_RENDITIONS: readonly Rendition[] = [
     { token: 't_cover_small', width: 90 },
     { token: 't_cover_big', width: 264 },
     { token: 't_cover_big_2x', width: 528 },
@@ -45,11 +48,16 @@ export function isIgdbImageUrl(url: string | null | undefined): boolean {
  * when the URL is not a rewritable IGDB image (ITAD boxart, Steam, uploads).
  */
 export function coverSrcSet(url: string | null | undefined): string | null {
+    return renditionSrcSet(url, COVER_RENDITIONS);
+}
+
+/** Rewrites `url`'s rendition segment once per entry, or `null` when it has none. */
+function renditionSrcSet(url: string | null | undefined, renditions: readonly Rendition[]): string | null {
     if (typeof url !== 'string') return null;
     const match = IGDB_RENDITION.exec(url);
     if (!match) return null;
     const [, prefix, suffix] = match;
-    return COVER_RENDITIONS.map((r) => `${prefix}${r.token}${suffix} ${r.width}w`).join(', ');
+    return renditions.map((r) => `${prefix}${r.token}${suffix} ${r.width}w`).join(', ');
 }
 
 /**
@@ -63,5 +71,32 @@ export function coverSrcSetProps(
     sizes: string,
 ): { srcSet: string; sizes: string } | Record<string, never> {
     const srcSet = coverSrcSet(url);
+    return srcSet ? { srcSet, sizes } : {};
+}
+
+/**
+ * IGDB renditions used for game screenshots. The API stores `t_screenshot_big`
+ * (`api/src/igdb/igdb.constants.ts`), so the 889w candidate is the stored URL
+ * and the other two are the same frame at a smaller and a larger size.
+ */
+const SCREENSHOT_RENDITIONS: readonly Rendition[] = [
+    { token: 't_screenshot_med', width: 569 },
+    { token: 't_screenshot_big', width: 889 },
+    { token: 't_screenshot_huge', width: 1280 },
+];
+
+/** Intrinsic pixel size of IGDB's `t_screenshot_big` rendition (16:9). */
+export const SCREENSHOT_INTRINSIC = { width: 889, height: 500 } as const;
+
+/**
+ * `srcSet`/`sizes` props for a screenshot `<img>`, spread-ready and empty for
+ * non-IGDB URLs. Screenshots are landscape, so the cover renditions (portrait
+ * crops) must never be offered for them.
+ */
+export function screenshotSrcSetProps(
+    url: string | null | undefined,
+    sizes: string,
+): { srcSet: string; sizes: string } | Record<string, never> {
+    const srcSet = renditionSrcSet(url, SCREENSHOT_RENDITIONS);
     return srcSet ? { srcSet, sizes } : {};
 }

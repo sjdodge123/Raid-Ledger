@@ -8,7 +8,7 @@ interface GridCellProps {
     hour: number;
     rangeStart: number;
     rangeEnd: number;
-    compact?: boolean;
+    compact?: boolean | undefined;
     getSlotStatus: (d: number, h: number) => string | undefined;
     isCellLocked: (d: number, h: number) => boolean;
     isPastCell: (d: number, h: number) => boolean;
@@ -18,10 +18,10 @@ interface GridCellProps {
     hoverHour: number;
     isInteractive: boolean;
     nextWeekSlotMap: Map<string, GameTimeSlot> | null;
-    onCellClick?: (d: number, h: number) => void;
+    onCellClick?: ((d: number, h: number) => void) | undefined;
     onPointerEnter: (d: number, h: number) => void;
     /** Days the viewer is away this week (ROK-1585) — an empty cell tints `bg-overlay/40`. */
-    awayDays?: ReadonlySet<number>;
+    awayDays?: ReadonlySet<number> | undefined;
 }
 
 /** Single cell in the game-time grid */

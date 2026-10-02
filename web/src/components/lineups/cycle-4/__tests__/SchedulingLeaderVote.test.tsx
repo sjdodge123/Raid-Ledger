@@ -40,14 +40,14 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
     }),
 }));
 
-const lineupMatchesData = vi.fn<[], GroupedMatchesResponseDto | undefined>(
+const lineupMatchesData = vi.fn<() => GroupedMatchesResponseDto | undefined>(
     () => undefined,
 );
 vi.mock('../../../../hooks/use-lineup-matches', () => ({
     useLineupMatches: () => ({ data: lineupMatchesData(), isLoading: false }),
 }));
 
-const authUser = vi.fn<[], { id: number; role?: string } | null>(() => ({
+const authUser = vi.fn<() => { id: number; role?: string } | null>(() => ({
     id: 99,
 }));
 vi.mock('../../../../hooks/use-auth', () => ({
@@ -66,6 +66,7 @@ import { SchedulingLeaderVoteControls } from '../SchedulingLeaderVoteControls';
 import type { SchedulingSlotListProps } from '../SchedulingSlotList';
 import { formatSlotTime } from '../scheduling-slot-time';
 import { ME, addSlot, buildPoll } from './scheduling-poll-fixtures';
+import { at } from '../../../../test/defined';
 
 /** A never-leading listed time, added by the cases that need a ladder row. */
 const LISTED_SLOT_ID = 1003;
@@ -151,7 +152,7 @@ function addVotersTo(
 /** Add extra YES voters to the leading slot so it still clears the floor. */
 function addSupporters(poll: SchedulePollPageResponseDto, n: number): void {
     for (let i = 0; i < n; i += 1) {
-        poll.slots[0].votes.push({
+        at(poll.slots, 0).votes.push({
             userId: 200 + i,
             displayName: `Yes ${i}`,
             avatar: null,
@@ -394,7 +395,7 @@ describe('leading card vote controls — the past gate (review item 6)', () => {
      */
     it('renders the ballot for a future time and nothing for a past one', async () => {
         const poll = buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' });
-        const future = poll.slots[0];
+        const future = at(poll.slots, 0);
         const past = { ...future, proposedTime: '2020-01-02T20:00:00.000Z' };
 
         const { unmount } = renderWithProviders(
@@ -426,8 +427,8 @@ describe('leading card vote controls — the past gate (review item 6)', () => {
         const poll = buildPoll({ mySubmittedAt: '2026-05-20T10:00:00.000Z' });
         renderWithProviders(
             <SchedulingLeaderVoteControls
-                ladder={buildLadder([poll.slots[0]])}
-                slot={poll.slots[0]}
+                ladder={buildLadder([at(poll.slots, 0)])}
+                slot={at(poll.slots, 0)}
             />,
         );
 

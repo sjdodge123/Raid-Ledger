@@ -34,20 +34,20 @@ export interface GameProps {
     aggregatedRating?: number | null;
     rating?: number | null;
     /** When present, renders a small Steam badge on the card cover. */
-    steamAppId?: number | null;
+    steamAppId?: number | null | undefined;
     /** ROK-1399: max online co-op players (Co-Optimus). Drives the info-bar co-op badge. */
-    cooptimusOnlineMax?: number | null;
+    cooptimusOnlineMax?: number | null | undefined;
     /** ROK-1399: max couch/local co-op players (Co-Optimus). */
-    cooptimusCouchMax?: number | null;
+    cooptimusCouchMax?: number | null | undefined;
     /**
      * ROK-1401: Co-Optimus `Combo Co-Op (Local + Online)` flag. Additive —
      * a stale cached row without it simply falls through to online/local.
      */
-    cooptimusComboCoop?: boolean | null;
+    cooptimusComboCoop?: boolean | null | undefined;
     /** ROK-1314: does the CURRENT viewer own this game? Absent ⇒ no pill. */
-    currentUserOwns?: boolean;
+    currentUserOwns?: boolean | undefined;
     /** ROK-1314: has the CURRENT viewer wishlisted this game? */
-    currentUserWishlisted?: boolean;
+    currentUserWishlisted?: boolean | undefined;
     /**
      * ROK-1314 follow-up: community-wide Steam-ownership tally, so the card
      * renders `[You own] [N own]` and not the pill alone. Absent ⇒ no
@@ -56,9 +56,9 @@ export interface GameProps {
      * Distinct from the heart count on the heart button: that is want-to-play
      * (`manual` hearts included), this is `steam_library` ownership only.
      */
-    ownerCount?: number;
+    ownerCount?: number | undefined;
     /** ROK-1314 follow-up: community-wide Steam-wishlist tally. */
-    wishlistCount?: number;
+    wishlistCount?: number | undefined;
 }
 
 /** Corner chip marking a game as purchasable on Steam. */

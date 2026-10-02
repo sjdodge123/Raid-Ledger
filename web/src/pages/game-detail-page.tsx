@@ -76,9 +76,9 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
     wtp: ReturnType<typeof useWantToPlay>; gameEvents: EventResponseDto[] | undefined; igdbId: number | null | undefined;
 }): JSX.Element {
     const rating = game.aggregatedRating ?? game.rating;
-    const genres = game.genres.map((id) => GENRE_MAP[id]).filter(Boolean);
-    const platforms = game.platforms.map((id) => PLATFORM_MAP[id]).filter(Boolean);
-    const modes = game.gameModes.map((id) => MODE_MAP[id]).filter(Boolean);
+    const genres = game.genres.flatMap((id) => GENRE_MAP[id] || []);
+    const platforms = game.platforms.flatMap((id) => PLATFORM_MAP[id] || []);
+    const modes = game.gameModes.flatMap((id) => MODE_MAP[id] || []);
     const { data: pricingResponse } = useGamePricing(gameId, !!game.itadGameId);
     const pricing = pricingResponse?.data ?? null;
 
@@ -118,7 +118,7 @@ function CoopSupportAndActivity({ game, gameId }: {
 }
 
 function GameMediaSections({ game, streamsData }: {
-    game: { screenshots: string[]; videos: { videoId: string; name?: string }[]; name: string };
+    game: { screenshots: string[]; videos: { videoId: string; name?: string | undefined }[]; name: string };
     streamsData: ReturnType<typeof useGameStreams>['data'];
 }): JSX.Element {
     return (
@@ -229,7 +229,7 @@ function UpcomingEventsSection({ events, igdbId, navigate }: {
 }
 
 /** Trailers / YouTube embeds section */
-function TrailersSection({ videos }: { videos: { videoId: string; name?: string }[] }): JSX.Element {
+function TrailersSection({ videos }: { videos: { videoId: string; name?: string | undefined }[] }): JSX.Element {
     return (
         <section className="mb-8">
             <h2 className="text-lg font-semibold text-foreground mb-3">Trailers</h2>

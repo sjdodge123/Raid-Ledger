@@ -20,7 +20,7 @@ export interface FilterPanelTriggerProps {
     isOpen?: boolean;
     onClick: () => void;
     /** Screen-reader wording for the count; defaults to "N active filters". */
-    describeCount?: DescribeFilterCount;
+    describeCount?: DescribeFilterCount | undefined;
 }
 
 const TRIGGER_CLASS = 'relative inline-flex shrink-0 items-center justify-center w-11 h-11 rounded-lg '

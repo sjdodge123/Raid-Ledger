@@ -13,7 +13,7 @@ interface EventCardProps {
     signupCount?: number;
     onClick?: () => void;
     /** Show a "Fits your schedule" badge when event overlaps with game time */
-    matchesGameTime?: boolean;
+    matchesGameTime?: boolean | undefined;
 }
 
 function StatusBadge({ status }: { status: EventDisplayStatus }) {
@@ -25,18 +25,20 @@ function StatusBadge({ status }: { status: EventDisplayStatus }) {
     );
 }
 
+const GENERIC_PLACEHOLDER_PATH = '/placeholders/generic-placeholder.svg';
+
 const GAME_PLACEHOLDER_PATHS: Record<string, string> = {
     wow: '/placeholders/wow-placeholder.svg',
     ffxiv: '/placeholders/ffxiv-placeholder.svg',
     valheim: '/placeholders/valheim-placeholder.svg',
     'world-of-warcraft': '/placeholders/wow-placeholder.svg',
     'final-fantasy-xiv-online': '/placeholders/ffxiv-placeholder.svg',
-    generic: '/placeholders/generic-placeholder.svg',
+    generic: GENERIC_PLACEHOLDER_PATH,
 };
 
 function getPlaceholderPath(slug: string | undefined): string {
     if (slug && GAME_PLACEHOLDER_PATHS[slug]) return GAME_PLACEHOLDER_PATHS[slug];
-    return GAME_PLACEHOLDER_PATHS.generic;
+    return GENERIC_PLACEHOLDER_PATH;
 }
 
 function GameTimeBadge() {
@@ -75,7 +77,7 @@ function CoverArt({ event, showPlaceholder, gameCoverUrl, placeholderPath, onIma
 
 function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPath, matchesGameTime, status, onImageError }: {
     event: EventResponseDto; showPlaceholder: boolean; gameCoverUrl: string | null;
-    placeholderPath: string; matchesGameTime?: boolean; status: EventDisplayStatus; onImageError: () => void;
+    placeholderPath: string; matchesGameTime?: boolean | undefined; status: EventDisplayStatus; onImageError: () => void;
 }) {
     return (
         <div className="aspect-[3/4] relative overflow-hidden bg-panel badge-overlay">
@@ -119,7 +121,7 @@ function EventInfoSection({ event, signupCount, resolved }: {
             </h3>
             <div className="flex items-center gap-2 mb-3">
                 <p className="text-muted text-sm">{formatEventTime(event.startTime, resolved)}</p>
-                <span className="text-faint">&#8226;</span>
+                <span className="text-faint" aria-hidden="true">&#8226;</span>
                 <p data-testid="relative-time" className="text-sm text-dim">{relativeTime}</p>
             </div>
             <div className="flex items-center justify-between">
@@ -147,7 +149,7 @@ export const EventCard = React.memo(function EventCard({ event, signupCount = 0,
     const showPlaceholder = !gameCoverUrl || imageError;
 
     return (
-        <div onClick={onClick}
+        <div onClick={onClick} data-testid="event-card"
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
             role="button" tabIndex={0}
             className={`group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl focus:outline-none transition-all duration-200 ${isCancelled ? 'opacity-60 hover:shadow-red-500/10 focus:border-red-500' : 'hover:shadow-emerald-500/10 focus:border-emerald-500'}`}>

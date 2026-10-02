@@ -87,6 +87,7 @@ function CharacterAvatar({ preview }: { preview: BlizzardCharacterPreviewDto }) 
         return (
             <img
                 src={preview.avatarUrl} alt={preview.name}
+                width={64} height={64} loading="lazy" decoding="async"
                 className="w-16 h-16 rounded-lg object-cover border border-edge/50"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
@@ -137,7 +138,7 @@ function MainToggleButton({ setAsMain, onSetAsMainChange }: { setAsMain: boolean
 /** Action buttons: Main toggle, Dismiss, Save */
 function ActionButtons({ setAsMain, onSetAsMainChange, onImport, onBack, isImporting, highlightActions }: {
     setAsMain: boolean; onSetAsMainChange: (v: boolean) => void;
-    onImport: () => void; onBack: () => void; isImporting: boolean; highlightActions?: boolean;
+    onImport: () => void; onBack: () => void; isImporting: boolean; highlightActions?: boolean | undefined;
 }) {
     const hl = highlightActions ?? false;
     return (

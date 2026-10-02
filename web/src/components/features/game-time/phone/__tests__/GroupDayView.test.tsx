@@ -98,8 +98,8 @@ describe('GroupDayView — overlays', () => {
         const blocks = screen.getAllByTestId('phone-group-event-7');
         expect(blocks).toHaveLength(1);
         expect(blocks[0]).toHaveTextContent('Raid night');
-        expect(blocks[0].style.top).toBe(`${(2 / 7) * 100}%`);
-        expect(blocks[0].style.height).toBe(`${(3 / 7) * 100}%`);
+        expect(blocks[0]?.style.top).toBe(`${(2 / 7) * 100}%`);
+        expect(blocks[0]?.style.height).toBe(`${(3 / 7) * 100}%`);
     });
 
     it('draws one block per event, each on its own hours', () => {

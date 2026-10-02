@@ -21,7 +21,7 @@ interface GameTimeStatus {
 
 /** One sidebar link; the Game Time link carries its status dot and summary line. */
 function SidebarLink({ child, active, onNavigate, gameTime }: {
-    child: NavItem; active: boolean; onNavigate?: () => void; gameTime: GameTimeStatus;
+    child: NavItem; active: boolean; onNavigate?: (() => void) | undefined; gameTime: GameTimeStatus;
 }) {
     const isGameTime = child.to === GAME_TIME_PATH;
     return (
@@ -43,7 +43,7 @@ function SidebarLink({ child, active, onNavigate, gameTime }: {
 
 /** Renders a single sidebar section with its children links. */
 function SidebarSection({ section, onNavigate, gameTime }: {
-    section: NavSection; onNavigate?: () => void; gameTime: GameTimeStatus;
+    section: NavSection; onNavigate?: (() => void) | undefined; gameTime: GameTimeStatus;
 }) {
     const location = useLocation();
     return (
@@ -62,7 +62,7 @@ function SidebarSection({ section, onNavigate, gameTime }: {
 }
 
 /** Re-run setup wizard button at the bottom of the sidebar. */
-function RerunWizardButton({ onNavigate }: { onNavigate?: () => void }) {
+function RerunWizardButton({ onNavigate }: { onNavigate?: (() => void) | undefined }) {
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
     return (

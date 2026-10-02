@@ -74,7 +74,7 @@ function ThemeStrip({ vector }: { vector: number[] }) {
                 {vector.slice(0, 7).map((raw, i) => (
                     <ThemeBar
                         key={AXIS_LABELS[i]}
-                        label={AXIS_LABELS[i]}
+                        label={AXIS_LABELS[i] ?? ''}
                         raw={raw}
                     />
                 ))}
@@ -90,6 +90,8 @@ function CandidateThumb({ game }: { game: AdminCandidateGameDto }) {
                 <img
                     src={game.coverUrl}
                     alt={game.name}
+                    width={64}
+                    height={80}
                     loading="lazy"
                     className="w-16 h-20 object-cover rounded border border-edge/50"
                 />
@@ -166,7 +168,7 @@ function CandidatePreview({
 interface CardAction {
     label: string;
     onClick: () => void;
-    disabled?: boolean;
+    disabled?: boolean | undefined;
     className: string;
 }
 

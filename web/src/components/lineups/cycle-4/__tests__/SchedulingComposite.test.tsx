@@ -34,6 +34,7 @@ import type {
     MatchDetailResponseDto,
     GroupedMatchesResponseDto,
 } from '@raid-ledger/contract';
+import type { ToggleScheduleVoteVars } from '../../../../hooks/use-scheduling';
 import { renderWithProviders } from '../../../../test/render-helpers';
 
 /** Renders the current MemoryRouter path so nav targets can be asserted. */
@@ -49,7 +50,9 @@ function LocationProbe(): JSX.Element {
 // ROK-1617 follow-up: the ladder presses through `mutateAsync`, so the mock
 // hands back a promise. The default NEVER settles — the in-flight-guard cases
 // below depend on the guard still being held after the press.
-const toggleVoteMutate = vi.fn(() => new Promise<never>(() => {}));
+const toggleVoteMutate = vi.fn<(vars: ToggleScheduleVoteVars) => Promise<never>>(
+    () => new Promise<never>(() => {}),
+);
 const suggestSlotMutate = vi.fn();
 const cancelPollMutate = vi.fn();
 
@@ -93,14 +96,14 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
     }),
 }));
 
-const lineupMatchesData = vi.fn<[], GroupedMatchesResponseDto | undefined>(
+const lineupMatchesData = vi.fn<() => GroupedMatchesResponseDto | undefined>(
     () => undefined,
 );
 vi.mock('../../../../hooks/use-lineup-matches', () => ({
     useLineupMatches: () => ({ data: lineupMatchesData(), isLoading: false }),
 }));
 
-const authUser = vi.fn<[], { id: number; role?: string } | null>(() => ({
+const authUser = vi.fn<() => { id: number; role?: string } | null>(() => ({
     id: 99,
 }));
 // Preserve isOperatorOrAdmin (SchedulingCancelAction gates on it) while
@@ -122,6 +125,7 @@ vi.mock('../../../../lib/api-client', async (importOriginal) => ({
 import { SchedulingComposite } from '../SchedulingComposite';
 import { ME, addSlot, buildMember, buildPoll } from './scheduling-poll-fixtures';
 import { getSchedulePoll } from '../../../../lib/api-client';
+import { at } from '../../../../test/defined';
 
 /** Two-match grouped response so "Match N of M" can resolve M>1. */
 function buildMultiMatchGroups(): GroupedMatchesResponseDto {
@@ -282,13 +286,13 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
         const voteButtons = await screen.findAllByRole('button', {
             name: /vote/i,
         });
-        await user.click(voteButtons[0]);
+        await user.click(at(voteButtons, 0));
 
         await waitFor(() => {
             expect(toggleVoteMutate).toHaveBeenCalledTimes(1);
         });
         // Payload carries lineupId + matchId + a slotId from the fixture.
-        const arg = toggleVoteMutate.mock.calls[0][0];
+        const arg = at(toggleVoteMutate.mock.calls, 0)[0];
         expect(arg).toMatchObject({ lineupId: 7, matchId: 500 });
         expect([1001, 1002]).toContain(arg.slotId);
     });
@@ -316,7 +320,7 @@ describe('SchedulingComposite — per-row vote toggle (AC3)', () => {
         await screen.findByTestId('scheduling-leader-card');
 
         const rows = screen.getAllByTestId('schedule-slot');
-        const label = within(rows[0]).getByRole('button', {
+        const label = within(at(rows, 0)).getByRole('button', {
             name: /^vote for/i,
         });
         await user.click(label);
@@ -373,9 +377,9 @@ describe('SchedulingComposite — operator-gated lock (AC4)', () => {
 
         const rows = await screen.findAllByTestId('schedule-slot');
         expect(rows.length).toBeGreaterThanOrEqual(1);
-        await user.click(within(rows[0]).getByTestId('scheduling-slot-menu'));
+        await user.click(within(at(rows, 0)).getByTestId('scheduling-slot-menu'));
         expect(
-            within(rows[0]).getByRole('menuitem', { name: /^Lock this time — / }),
+            within(at(rows, 0)).getByRole('menuitem', { name: /^Lock this time — / }),
         ).toBeVisible();
     });
 
@@ -463,9 +467,7 @@ describe('SchedulingComposite — one-tap voting, no member Submit (ROK-1544)', 
         const poll = buildPoll({ lineupCreatedById: ME });
         // The leading slot must be in the future — locking a past time is
         // refused by the same guard the per-row lock uses.
-        poll.slots[0].proposedTime = new Date(
-            Date.now() + 24 * 60 * 60 * 1000,
-        ).toISOString();
+        at(poll.slots, 0).proposedTime = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
         vi.mocked(getSchedulePoll).mockResolvedValue(poll);
         renderWithProviders(
             <>
@@ -803,7 +805,7 @@ describe('SchedulingComposite — Layout B leader card (ROK-1543 AC1)', () => {
         );
 
         const card = await screen.findByTestId('scheduling-leader-card');
-        const firstSlot = screen.getAllByTestId('schedule-slot')[0];
+        const firstSlot = at(screen.getAllByTestId('schedule-slot'), 0);
         // DOCUMENT_POSITION_FOLLOWING (4) → the slot list comes AFTER the card.
         expect(
             card.compareDocumentPosition(firstSlot) &
@@ -930,7 +932,8 @@ describe('SchedulingComposite — terminal states (ROK-1545)', () => {
             pollStatus: 'cancelled',
             cancelReason: 'Half the roster is out.',
         });
-        poll.match.status = 'cancelled';
+        // A cancelled poll archives its match (scheduling-cancel.helpers.ts).
+        poll.match.status = 'archived';
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );

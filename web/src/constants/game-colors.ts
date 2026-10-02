@@ -17,6 +17,15 @@ export interface GameColorConfig {
     icon: string;
 }
 
+/** Fallback colours for a game with no entry of its own. */
+const GENERIC_COLORS: GameColorConfig = {
+    bg: '#6b7280',
+    border: '#9ca3af',
+    text: '#ffffff',
+    gradient: 'linear-gradient(135deg, #6b7280, #374151)',
+    icon: '🎮',
+};
+
 /**
  * Color configurations by game slug.
  * Supports both short registry slugs (wow, ffxiv) and full IGDB slugs (world-of-warcraft).
@@ -60,13 +69,7 @@ export const GAME_COLORS: Record<string, GameColorConfig> = {
         icon: '🏠',
     },
     // Generic fallback
-    generic: {
-        bg: '#6b7280',
-        border: '#9ca3af',
-        text: '#ffffff',
-        gradient: 'linear-gradient(135deg, #6b7280, #374151)',
-        icon: '🎮',
-    },
+    generic: GENERIC_COLORS,
 };
 
 /**
@@ -76,7 +79,7 @@ export function getGameColors(slug: string | undefined): GameColorConfig {
     if (slug && GAME_COLORS[slug]) {
         return GAME_COLORS[slug];
     }
-    return GAME_COLORS.generic;
+    return GENERIC_COLORS;
 }
 
 /**

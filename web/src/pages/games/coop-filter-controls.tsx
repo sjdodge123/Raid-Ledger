@@ -26,6 +26,14 @@ interface CoopFilterControlsProps {
     onChange: (next: CoopFilterState) => void;
 }
 
+/** Clearing the slider drops the key rather than storing an explicit `undefined`. */
+function withOnlineMin(state: CoopFilterState, onlineMinPlayers: number | undefined): CoopFilterState {
+    const next: CoopFilterState = { ...state };
+    if (onlineMinPlayers === undefined) delete next.onlineMinPlayers;
+    else next.onlineMinPlayers = onlineMinPlayers;
+    return next;
+}
+
 /**
  * Panel body: online-player minimum plus the co-op mode toggles. The whole
  * section is gated on co-op data existing (see `hasAnyCoopData`), so by the time
@@ -36,7 +44,7 @@ export function CoopFilterControls({ state, onChange }: CoopFilterControlsProps)
         <div className="flex flex-col gap-4">
             <MinOnlinePlayersSlider
                 value={state.onlineMinPlayers}
-                onChange={(onlineMinPlayers) => onChange({ ...state, onlineMinPlayers })}
+                onChange={(onlineMinPlayers) => onChange(withOnlineMin(state, onlineMinPlayers))}
             />
             <fieldset>
                 <legend className="text-xs font-medium text-muted mb-2">Co-op modes</legend>
