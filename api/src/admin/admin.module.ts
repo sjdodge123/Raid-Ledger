@@ -12,6 +12,7 @@ import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notificatio
 import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
 import { DemoTestLfgNowVoiceController } from './demo-test-lfg-now-voice.controller';
+import { DemoTestQuickPlayVoiceController } from './demo-test-quick-play-voice.controller';
 import { DemoTestThreadMirrorController } from './demo-test-thread-mirror.controller';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
@@ -106,6 +107,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestVoiceController,
     DemoTestLfgController,
     DemoTestLfgNowVoiceController,
+    DemoTestQuickPlayVoiceController,
     DemoTestThreadMirrorController,
     DemoTestScheduledEventsController,
     DemoTestSignupsController,
