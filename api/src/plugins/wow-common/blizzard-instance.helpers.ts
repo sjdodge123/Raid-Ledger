@@ -71,7 +71,11 @@ export async function fetchExpansionIndex(
     { headers: { Authorization: `Bearer ${token}` } },
   );
   if (!res.ok)
-    throw new Error(`Failed to fetch expansion index (${res.status})`);
+    throw blizzardUpstreamError(
+      res.status,
+      'instances',
+      `Failed to fetch expansion index from Blizzard (${res.status}). Please try again later.`,
+    );
   return ((await res.json()) as { tiers: Array<{ id: number; name: string }> })
     .tiers;
 }
