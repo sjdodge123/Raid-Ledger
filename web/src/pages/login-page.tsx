@@ -161,7 +161,7 @@ function LoginHeader({ communityName, communityLogoUrl }: {
     return (
         <div className="text-center mb-8">
             {communityLogoUrl ? (
-                <img src={communityLogoUrl} alt={communityName} className="w-16 h-16 mx-auto rounded-xl object-contain" />
+                <img src={communityLogoUrl} alt={communityName} width={64} height={64} className="w-16 h-16 mx-auto rounded-xl object-contain" />
             ) : (
                 <span className="text-4xl">&#x2694;&#xFE0F;</span>
             )}

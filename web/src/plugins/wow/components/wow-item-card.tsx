@@ -73,7 +73,8 @@ function ItemIcon({ iconUrl, name, qKey, itemLevel }: {
     return (
         <>
             {iconUrl ? (
-                <img src={iconUrl} alt={name} className={`wow-item-card__icon wow-item-card__icon--${qKey}`}
+                <img src={iconUrl} alt={name} width={28} height={28} loading="lazy" decoding="async"
+                    className={`wow-item-card__icon wow-item-card__icon--${qKey}`}
                     onError={(e) => { e.currentTarget.style.display = 'none'; const next = e.currentTarget.nextElementSibling; if (next) (next as HTMLElement).style.display = 'flex'; }} />
             ) : null}
             <div className="wow-item-card__icon-fallback" style={iconUrl ? { display: 'none' } : undefined}>
@@ -111,7 +112,7 @@ function ItemCardContent({ name, qKey, slotLabel, subclass, enchant, wowheadUrl,
 function ModalItemHeader({ name, qKey, iconUrl, itemLevel }: { name: string; qKey: string; iconUrl?: string | null; itemLevel?: number | null }) {
     return (
         <div className="flex items-center gap-3">
-            {iconUrl && <img src={iconUrl} alt={name} className={`w-10 h-10 rounded border-2 flex-shrink-0 wow-item-card__icon--${qKey}`} />}
+            {iconUrl && <img src={iconUrl} alt={name} width={40} height={40} loading="lazy" decoding="async" className={`w-10 h-10 rounded border-2 flex-shrink-0 wow-item-card__icon--${qKey}`} />}
             <div>
                 <div className={`text-base font-bold wow-item-card__name--${qKey}`}>{name}</div>
                 {itemLevel != null && itemLevel > 0 && <div className="text-sm text-yellow-400">Item Level {itemLevel}</div>}

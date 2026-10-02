@@ -5,6 +5,7 @@
 import type { JSX } from 'react';
 import { useSchedulingBanner } from '../../hooks/use-scheduling';
 import { NavChip } from '../ui/nav-chip';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 /** Single poll entry inside the banner. */
 function PollEntry({ lineupId, poll }: {
@@ -14,7 +15,9 @@ function PollEntry({ lineupId, poll }: {
   return (
     <NavChip to={`/community-lineup/${lineupId}/schedule/${poll.matchId}`}>
       {poll.gameCoverUrl && (
-        <img src={poll.gameCoverUrl} alt={poll.gameName} className="w-5 h-5 rounded object-cover" />
+        <img src={poll.gameCoverUrl} alt={poll.gameName} className="w-5 h-5 rounded object-cover"
+          width={20} height={20} loading="lazy" decoding="async"
+          {...coverSrcSetProps(poll.gameCoverUrl, '20px')} />
       )}
       <span className="text-foreground font-medium">{poll.gameName}</span>
       <span className="text-muted text-xs">

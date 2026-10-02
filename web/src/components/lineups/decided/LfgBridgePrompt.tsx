@@ -18,6 +18,7 @@ import { Link } from 'react-router-dom';
 import type { LfgBridgeOfferDto } from '@raid-ledger/contract';
 import { useLfgBridgeOffers } from '../../../hooks/use-lfg-bridge';
 import { useJoinGroup } from '../../../hooks/use-lfg-join';
+import { coverSrcSetProps } from '../../../lib/igdb-image';
 
 /** Session flag prefix — suffixed with the lineup id. */
 const DISMISS_KEY_PREFIX = 'lfg-bridge-prompt-dismissed:';
@@ -95,9 +96,10 @@ function OfferEntry({
         >
             {offer.gameCoverUrl && (
                 <img
-                    src={offer.gameCoverUrl}
-                    alt=""
+                    src={offer.gameCoverUrl} alt=""
                     className="w-5 h-5 rounded object-cover"
+                    width={20} height={20} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(offer.gameCoverUrl, '20px')}
                 />
             )}
             <span className="text-foreground font-medium">{offer.gameName}</span>

@@ -106,7 +106,7 @@ function ProfessionRow({ entry }: { entry: ProfessionEntryDto }) {
         <div>
             <div className="flex items-center gap-2 text-foreground">
                 {iconUrl && (
-                    <img src={iconUrl} alt={entry.name} className="w-6 h-6 rounded-sm" />
+                    <img src={iconUrl} alt={entry.name} width={24} height={24} loading="lazy" decoding="async" className="w-6 h-6 rounded-sm" />
                 )}
                 <span className="font-medium">{entry.name}</span>
                 <span className="text-sm text-muted">

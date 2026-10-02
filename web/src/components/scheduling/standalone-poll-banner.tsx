@@ -6,6 +6,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { ActiveStandalonePollDto } from '@raid-ledger/contract';
 import { useActiveStandalonePolls } from '../../hooks/use-standalone-poll';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 function PollLink({ poll }: { poll: ActiveStandalonePollDto }): JSX.Element {
   return (
@@ -14,7 +15,9 @@ function PollLink({ poll }: { poll: ActiveStandalonePollDto }): JSX.Element {
       className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface hover:bg-overlay transition-colors text-sm"
     >
       {poll.gameCoverUrl && (
-        <img src={poll.gameCoverUrl} alt={poll.gameName} className="w-5 h-5 rounded object-cover" />
+        <img src={poll.gameCoverUrl} alt={poll.gameName} className="w-5 h-5 rounded object-cover"
+          width={20} height={20} loading="lazy" decoding="async"
+          {...coverSrcSetProps(poll.gameCoverUrl, '20px')} />
       )}
       <span className="text-foreground font-medium">{poll.gameName}</span>
       <span className="text-muted text-xs">
