@@ -10,7 +10,9 @@
  * This ratchet reads the latest drizzle snapshot (meta/_journal.json head ->
  * meta/<NNNN>_snapshot.json) and lists every FK whose first column is not the
  * leading column of an index, a unique constraint, a composite primary key,
- * or a primary-key / unique column. The list must equal DEFERRED_UNINDEXED_FKS
+ * or a primary-key / unique column. A partial index (snapshot `where` set) does
+ * not count: the RI trigger's `WHERE fk = $1` does not imply the index
+ * predicate, so Postgres cannot use it. The list must equal DEFERRED_UNINDEXED_FKS
  * exactly, so a new unindexed FK fails here, and indexing a deferred column
  * fails until it is removed from the list.
  *
@@ -36,7 +38,10 @@ interface SnapshotTable {
   columns: Record<string, SnapshotColumn>;
   indexes?: Record<
     string,
-    { columns: { expression: string; isExpression?: boolean }[] }
+    {
+      columns: { expression: string; isExpression?: boolean }[];
+      where?: string;
+    }
   >;
   foreignKeys?: Record<string, { columnsFrom: string[] }>;
   compositePrimaryKeys?: Record<string, { columns: string[] }>;
@@ -88,13 +93,17 @@ const DEFERRED_UNINDEXED_FKS = [
   'feedback.user_id',
   'game_interest_suppressions.game_id',
   'games_dedup_audit.canonical_game_id',
+  'lfg_group_messages.game_id',
   'lfg_intents.converted_to_poll_id',
+  'lfg_intents.game_id',
+  'lfg_intents.user_id',
   'lfg_invites.inviter_user_id',
   'local_credentials.user_id',
   'post_event_followup_sent.match_id',
   'post_event_reminders_sent.pug_slot_id',
   'pug_slots.claimed_by_user_id',
   'pug_slots.created_by',
+  'pug_slots.event_id',
   'sessions.user_id',
   'wow_classic_quest_progress.user_id',
 ];
@@ -113,10 +122,11 @@ const ROK_1157_INDEXED_FKS = [
   'player_intensity_snapshots.longest_session_game_id',
 ];
 
-/** Columns that lead an index, unique constraint or primary key. */
+/** Columns that lead a non-partial index, unique constraint or primary key. */
 function leadingColumns(table: SnapshotTable): Set<string> {
   const leads = new Set<string>();
   for (const index of Object.values(table.indexes ?? {})) {
+    if (index.where) continue;
     const first = index.columns[0];
     if (first && !first.isExpression) leads.add(first.expression);
   }
@@ -180,5 +190,32 @@ describe('foreign-key index coverage (ROK-1157)', () => {
   it('the deferred list is the pre-index gap minus the ROK-1157 indexes', () => {
     const expected = [...DEFERRED_UNINDEXED_FKS, ...ROK_1157_INDEXED_FKS];
     expect(preIndex).toEqual(expected.sort());
+  });
+});
+
+/** A one-FK child table whose only index leads on the FK column. */
+function childTable(where?: string): Snapshot {
+  const table: SnapshotTable = {
+    name: 'child',
+    columns: {
+      id: { name: 'id', primaryKey: true },
+      parent_id: { name: 'parent_id' },
+    },
+    indexes: {
+      idx_child_parent_id: { columns: [{ expression: 'parent_id' }], where },
+    },
+    foreignKeys: { child_parent_id_fk: { columnsFrom: ['parent_id'] } },
+  };
+  return { tables: { child: table } };
+}
+
+describe('foreign-key index coverage rule (ROK-1157)', () => {
+  it('counts a plain index leading on the FK column as covering it', () => {
+    expect(uncoveredFks(childTable())).toEqual([]);
+  });
+
+  it('does not count a partial index as covering its leading FK column', () => {
+    const partial = childTable(`"child"."status" = 'active'`);
+    expect(uncoveredFks(partial)).toEqual(['child.parent_id']);
   });
 });
