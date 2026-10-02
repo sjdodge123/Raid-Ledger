@@ -5,7 +5,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
 function describeAvailabilityService() {
   let service: AvailabilityService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'delete' | 'insert' | 'select' | 'update', jest.Mock>;
 
   const mockAvailability = {
     id: 'avail-uuid-1',
@@ -181,7 +181,7 @@ function describeAvailabilityService() {
 
       expect(result.conflicts).toBeDefined();
       expect(result.conflicts).toHaveLength(1);
-      expect(result.conflicts![0].status).toBe('committed');
+      expect(result.conflicts![0]?.status).toBe('committed');
     });
   }
   describe('create', () => describeCreate());
@@ -251,7 +251,7 @@ function describeAvailabilityService() {
       );
 
       expect(conflicts).toHaveLength(1);
-      expect(conflicts[0].status).toBe('committed');
+      expect(conflicts[0]?.status).toBe('committed');
     });
 
     it('should exclude self when excludeId is provided', async () => {

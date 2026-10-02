@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Readable } from 'node:stream';
 import { LogsService } from './logs.service';
+import { at } from '../common/testing/narrow';
 
 const SECRET_LINE = 'boot DATABASE_URL=postgresql://u:p@h/db\nhello\n';
 const SCRUBBED_LINE = 'boot DATABASE_URL=[REDACTED]\nhello\n';
@@ -100,8 +101,8 @@ function describeGzExport() {
       ['api.log.2.decompressed', scrubbedGen('2')],
     ]);
     // the manifest documents the .decompressed naming
-    expect(entries[2][0]).toBe('MANIFEST.txt');
-    expect(entries[2][1]).toContain('.decompressed');
+    expect(entries[2]?.[0]).toBe('MANIFEST.txt');
+    expect(entries[2]?.[1]).toContain('.decompressed');
   });
 
   it('skips a history .gz whose declared size is over the cap instead of 413ing', async () => {
@@ -118,7 +119,7 @@ function describeGzExport() {
     );
 
     expect(entries.map(([name]) => name)).toEqual(['MANIFEST.txt']);
-    expect(entries[0][1]).toContain(
+    expect(entries[0]?.[1]).toContain(
       `api.log.3.gz\t${0xffffffff} bytes\tskipped: over cap`,
     );
   });
@@ -180,7 +181,7 @@ function describeHistoryCap() {
       'api.log.2.decompressed',
       'MANIFEST.txt',
     ]);
-    const manifest = entries[3][1];
+    const manifest = at(entries, 3)[1];
     expect(manifest).toContain(
       `api.log.3.gz\t${bigSize} bytes\tskipped: over cap`,
     );
@@ -231,7 +232,7 @@ function describeOverlap() {
       .flatMap(([, text]) => text.split('\n'))
       .filter((line) => line !== '');
     expect(lines.filter((line, i) => lines.indexOf(line) !== i)).toEqual([]);
-    expect(entries[2][1]).toContain(
+    expect(entries[2]?.[1]).toContain(
       `api.log.4.gz\t${Buffer.byteLength(older)} bytes\tskipped: duplicate of api.log.3.gz`,
     );
   });
@@ -261,7 +262,7 @@ function describeOverlapVsCap() {
       'api.log',
       'MANIFEST.txt',
     ]);
-    expect(result.entries?.[1][1]).toContain(
+    expect(result.entries?.[1]?.[1]).toContain(
       `api.log.1\t${50 * MB} bytes\tskipped: duplicate of api.log`,
     );
   }, 30_000);
@@ -315,7 +316,7 @@ function describeRealBytes() {
       'api.log',
       'MANIFEST.txt',
     ]);
-    expect(result.entries?.[1][1]).toMatch(
+    expect(result.entries?.[1]?.[1]).toMatch(
       /api\.log\.2\.gz\t.*skipped: over cap/,
     );
   });
@@ -356,7 +357,7 @@ function describeRealBytes() {
       'api.log.decompressed',
       'MANIFEST.txt',
     ]);
-    expect(result.entries?.[4][1]).toContain('.decompressed');
+    expect(result.entries?.[4]?.[1]).toContain('.decompressed');
   });
 }
 

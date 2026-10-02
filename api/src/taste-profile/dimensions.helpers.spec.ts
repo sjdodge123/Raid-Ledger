@@ -13,6 +13,7 @@ import {
   TasteProfileDimensionsSchema,
 } from '@raid-ledger/contract';
 import { normalizeDimensions } from './dimensions.helpers';
+import { at } from '../common/testing/narrow';
 
 /** A stored row written before the axis was appended: every key but the last. */
 function legacyDimensions(): Record<string, number> {
@@ -22,8 +23,7 @@ function legacyDimensions(): Record<string, number> {
 }
 
 describe('normalizeDimensions (ROK-1102 #5 D8)', () => {
-  const newestAxis =
-    TASTE_PROFILE_AXIS_POOL[TASTE_PROFILE_AXIS_POOL.length - 1];
+  const newestAxis = at(TASTE_PROFILE_AXIS_POOL, -1);
 
   it('fills the pool axis missing from a legacy row with 0', () => {
     const normalized = normalizeDimensions(legacyDimensions());

@@ -19,6 +19,7 @@ import {
   resolveTrustProxy,
 } from './main.helpers';
 import { RateLimitModule } from './throttler/throttler.module';
+import { defined } from './common/testing/narrow';
 import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
 
 const CLIENT_A = '203.0.113.7';
@@ -236,7 +237,7 @@ const DOCS = ['README.md', '.env.example'];
 function publicProxyExamples(doc: string): string[] {
   const text = fs.readFileSync(path.join(REPO_ROOT, doc), 'utf8');
   const found = text.matchAll(/TRUST_PROXY=(\d+|[^`\n]*<proxy-ip>)/g);
-  return [...found].map((m) => m[1]);
+  return [...found].map((m) => defined(m[1], `TRUST_PROXY value in ${doc}`));
 }
 
 describe('documented TRUST_PROXY examples for a public proxy (ROK-1665 AC5)', () => {

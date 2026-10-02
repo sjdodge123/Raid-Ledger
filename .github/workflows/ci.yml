@@ -76,6 +76,10 @@ jobs:
               # only one of them must still run it to catch the drift.
               - '.github/workflows/discord-smoke.yml'
               - 'rl-infra/orchestrator/bin/env-spin'
+              # TDB:552: the lint job runs
+              # scripts/test/runner-playwright-pin.test.sh, which pins this
+              # file's Playwright tag to package-lock.json.
+              - 'rl-infra/runner/Dockerfile'
             api:
               - 'api/package.json'
               - 'package-lock.json'
@@ -169,6 +173,15 @@ jobs:
       # validate-ci run_build (api scope, --static) and this lint job.
       - name: Typecheck (full project, incl. tests)
         run: npx tsc --noEmit -p api/tsconfig.json
+
+      # ROK-1161 phase 8 ratchet: the full-project typecheck above keeps
+      # noUncheckedIndexedAccess OFF for specs + test infra until the flip.
+      # This step typechecks the spec dirs that are already clean with the flag
+      # ON, so they cannot regress; api/tsconfig.spec-nuia.json `exclude` lists
+      # the dirs still to convert. Same command validate-ci.sh's TypeScript
+      # step uses. Delete it with that config once `exclude` is empty.
+      - name: Typecheck (api specs, noUncheckedIndexedAccess ratchet)
+        run: npx tsc --noEmit -p api/tsconfig.spec-nuia.json
 
       # Playwright transpiles the smoke specs without typechecking them, so a
       # type error in scripts/smoke/**, scripts/*.ts or playwright.config.ts

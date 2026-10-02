@@ -22,6 +22,7 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { perfLog } from '../common/perf-logger';
 import type { ItadOverviewGameEntry } from './itad-price.types';
 import { ITAD_BACKGROUND_FETCH } from './itad.constants';
+import { at } from '../common/testing/narrow';
 
 describe('ItadPriceSyncService', () => {
   let service: ItadPriceSyncService;
@@ -106,7 +107,7 @@ describe('ItadPriceSyncService', () => {
       expect(mockDb.execute).toHaveBeenCalled();
 
       // Verify buildUpdateData produces the correct pricing shape
-      const data = buildUpdateData(entries[0], new Date());
+      const data = buildUpdateData(at(entries, 0), new Date());
       expect(data).toMatchObject({
         itadCurrentPrice: '9.99',
         itadCurrentCut: 75,

@@ -109,11 +109,11 @@ describe('aggregateCoPlay (ROK-948 AC 11)', () => {
     ]);
     const result = aggregateCoPlay(voice, new Map());
     expect(result).toHaveLength(1);
-    expect(result[0].userIdA).toBe(3);
-    expect(result[0].userIdB).toBe(7);
-    expect(result[0].sessionCount).toBe(1);
-    expect(result[0].totalMinutes).toBe(30);
-    expect(result[0].gamesPlayed).toEqual([10]);
+    expect(result[0]?.userIdA).toBe(3);
+    expect(result[0]?.userIdB).toBe(7);
+    expect(result[0]?.sessionCount).toBe(1);
+    expect(result[0]?.totalMinutes).toBe(30);
+    expect(result[0]?.gamesPlayed).toEqual([10]);
   });
 
   it('builds pairs from shared signups when no voice sessions exist', () => {
@@ -186,7 +186,7 @@ describe('aggregateCoPlay (ROK-948 AC 11)', () => {
       new Date('2026-04-12T00:00:00Z'),
     );
     expect(result).toHaveLength(1);
-    expect(result[0].lastPlayedAt).toEqual(eventStartAt);
+    expect(result[0]?.lastPlayedAt).toEqual(eventStartAt);
   });
 
   it('skips signups whose event start is unknown', () => {
@@ -248,7 +248,7 @@ describe('aggregateCoPlay (ROK-948 AC 11)', () => {
     );
     expect(result).toHaveLength(1);
     // Voice overlap ended after the signup event started → voice wins.
-    expect(result[0].lastPlayedAt).toEqual(new Date('2026-04-10T19:00:00Z'));
+    expect(result[0]?.lastPlayedAt).toEqual(new Date('2026-04-10T19:00:00Z'));
   });
 
   it('combines voice and signup evidence for the same pair', () => {
@@ -296,13 +296,13 @@ describe('aggregateCoPlay (ROK-948 AC 11)', () => {
       new Date('2026-04-12T00:00:00Z'),
     );
     expect(result).toHaveLength(1);
-    expect(result[0].userIdA).toBe(1);
-    expect(result[0].userIdB).toBe(2);
-    expect(result[0].sessionCount).toBe(2);
+    expect(result[0]?.userIdA).toBe(1);
+    expect(result[0]?.userIdB).toBe(2);
+    expect(result[0]?.sessionCount).toBe(2);
     // Game IDs from BOTH sources accumulated
-    expect(result[0].gamesPlayed.sort()).toEqual([10, 20]);
+    expect(result[0]?.gamesPlayed.sort()).toEqual([10, 20]);
     // Signup event started after the voice overlap ended → signup start wins.
-    expect(result[0].lastPlayedAt).toEqual(new Date('2026-04-11T20:00:00Z'));
+    expect(result[0]?.lastPlayedAt).toEqual(new Date('2026-04-11T20:00:00Z'));
   });
 
   it('skips anonymous (null userId) voice sessions', () => {

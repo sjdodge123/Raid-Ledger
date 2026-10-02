@@ -14,6 +14,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Helper to create a member user with local credentials and return their token. */
 async function createMemberAndLogin(
@@ -23,14 +24,17 @@ async function createMemberAndLogin(
 ): Promise<{ userId: number; token: string }> {
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
 
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${email}`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${email}`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
 
   await testApp.db.insert(schema.localCredentials).values({
     email,
@@ -485,11 +489,14 @@ function describeCharactersUserManagement() {
         .set('Authorization', `Bearer ${adminToken}`);
 
       // Verify event was reassigned to admin
-      const [event] = await testApp.db
-        .select({ creatorId: schema.events.creatorId })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
+      const [event] = nonEmpty(
+        await testApp.db
+          .select({ creatorId: schema.events.creatorId })
+          .from(schema.events)
+          .where(eq(schema.events.id, eventId))
+          .limit(1),
+        'event',
+      );
 
       expect(event.creatorId).toBe(testApp.seed.adminUser.id);
     }
@@ -505,14 +512,17 @@ function describeCharactersUserManagement() {
   function describeDiscordLinkUnlink() {
     it('should unlink discord and prefix with unlinked:', async () => {
       // Create a user with a real discord ID (not local:)
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: '123456789',
-          username: 'discorduser',
-          role: 'member',
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: '123456789',
+            username: 'discorduser',
+            role: 'member',
+          })
+          .returning(),
+        'user',
+      );
 
       // Create local credentials for login
       const passwordHash = await bcrypt.hash('TestPassword123!', 4);
@@ -535,11 +545,14 @@ function describeCharactersUserManagement() {
       expect(unlinkRes.status).toBe(204);
 
       // Verify discordId now has unlinked: prefix
-      const [updated] = await testApp.db
-        .select({ discordId: schema.users.discordId })
-        .from(schema.users)
-        .where(eq(schema.users.id, user.id))
-        .limit(1);
+      const [updated] = nonEmpty(
+        await testApp.db
+          .select({ discordId: schema.users.discordId })
+          .from(schema.users)
+          .where(eq(schema.users.id, user.id))
+          .limit(1),
+        'updated',
+      );
 
       expect(updated.discordId).toBe('unlinked:123456789');
     });
@@ -698,15 +711,18 @@ async function ensureWowGame(testApp: TestApp): Promise<number> {
     .where(eq(schema.games.slug, 'world-of-warcraft'))
     .limit(1);
   if (existing[0]) return existing[0].id;
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name: 'World of Warcraft',
-      slug: 'world-of-warcraft',
-      coverUrl: null,
-      igdbId: null,
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'World of Warcraft',
+        slug: 'world-of-warcraft',
+        coverUrl: null,
+        igdbId: null,
+      })
+      .returning(),
+    'game',
+  );
   return game.id;
 }
 
@@ -716,22 +732,25 @@ async function insertSyncableCharacter(
   gameId: number,
   overrides: Partial<typeof schema.characters.$inferInsert> = {},
 ): Promise<typeof schema.characters.$inferSelect> {
-  const [char] = await testApp.db
-    .insert(schema.characters)
-    .values({
-      userId,
-      gameId,
-      name: 'Profsync',
-      realm: 'area-52',
-      class: 'Mage',
-      spec: 'Frost',
-      role: 'dps',
-      isMain: true,
-      region: 'us',
-      gameVariant: 'retail',
-      ...overrides,
-    })
-    .returning();
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId,
+        gameId,
+        name: 'Profsync',
+        realm: 'area-52',
+        class: 'Mage',
+        spec: 'Frost',
+        role: 'dps',
+        isMain: true,
+        region: 'us',
+        gameVariant: 'retail',
+        ...overrides,
+      })
+      .returning(),
+    'inserted syncable character',
+  );
   return char;
 }
 
@@ -796,11 +815,14 @@ function describeProfessionSync() {
     const char = await insertSyncableCharacter(testApp, userId, gameId);
     await charactersService.syncAllCharacters();
 
-    const [reloaded] = await testApp.db
-      .select()
-      .from(schema.characters)
-      .where(eq(schema.characters.id, char.id))
-      .limit(1);
+    const [reloaded] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, char.id))
+        .limit(1),
+      'reloaded',
+    );
     expect(reloaded.professions).toEqual(fixture);
   });
 
@@ -816,17 +838,20 @@ function describeProfessionSync() {
     await charactersService.syncAllCharacters();
     await charactersService.syncAllCharacters();
 
-    const [reloaded] = await testApp.db
-      .select()
-      .from(schema.characters)
-      .where(eq(schema.characters.id, char.id))
-      .limit(1);
+    const [reloaded] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, char.id))
+        .limit(1),
+      'reloaded',
+    );
     expect(spy).toHaveBeenCalledTimes(2);
     expect(reloaded.professions).toEqual(second);
     // Defensive: not a concat / not duplicated
     const professions = reloaded.professions as ProfessionFixture | null;
     expect(professions?.primary).toHaveLength(1);
-    expect(professions?.primary[0].name).toBe('Enchanting');
+    expect(professions?.primary[0]?.name).toBe('Enchanting');
   });
 
   it('leaves prior professions untouched when service returns null (5xx — architect §3)', async () => {
@@ -842,11 +867,14 @@ function describeProfessionSync() {
 
     await charactersService.syncAllCharacters();
 
-    const [reloaded] = await testApp.db
-      .select()
-      .from(schema.characters)
-      .where(eq(schema.characters.id, char.id))
-      .limit(1);
+    const [reloaded] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, char.id))
+        .limit(1),
+      'reloaded',
+    );
     expect(reloaded.professions).toEqual(prior);
   });
 
@@ -861,11 +889,14 @@ function describeProfessionSync() {
     const char = await insertSyncableCharacter(testApp, userId, gameId);
     await charactersService.syncAllCharacters();
 
-    const [reloaded] = await testApp.db
-      .select()
-      .from(schema.characters)
-      .where(eq(schema.characters.id, char.id))
-      .limit(1);
+    const [reloaded] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.characters)
+        .where(eq(schema.characters.id, char.id))
+        .limit(1),
+      'reloaded',
+    );
     expect(reloaded.professions).toEqual(empty);
   });
 }
@@ -890,7 +921,7 @@ describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
     expect(result).not.toBeNull();
     expect(Array.isArray(result!.primary)).toBe(true);
     expect(result!.primary.length).toBeGreaterThan(0);
-    expect(result!.primary[0].tiers.length).toBeGreaterThan(0);
+    expect(result!.primary[0]?.tiers.length).toBeGreaterThan(0);
     expect(typeof result!.syncedAt).toBe('string');
   });
 
@@ -899,7 +930,7 @@ describe('seed-testing buildSeedProfessions (ROK-1130, AC #14)', () => {
       await import('../../scripts/seed-testing.helpers.js');
     const result = buildSeedProfessions('Mage', 'world-of-warcraft-classic');
     expect(result).not.toBeNull();
-    expect(result!.primary[0].tiers).toEqual([]);
+    expect(result!.primary[0]?.tiers).toEqual([]);
   });
 
   it('returns null for non-WoW games', async () => {

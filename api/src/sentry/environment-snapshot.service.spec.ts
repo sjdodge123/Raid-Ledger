@@ -5,6 +5,7 @@ import { EnvironmentSnapshotService } from './environment-snapshot.service';
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SETTING_KEYS } from '../drizzle/schema';
+import { at } from '../common/testing/narrow';
 
 jest.mock('@sentry/nestjs', () => ({
   addEventProcessor: jest.fn(),
@@ -55,7 +56,7 @@ function describeEnvironmentSnapshotService() {
   it('registers a Sentry event processor on module init', () => {
     service.onModuleInit();
     expect(addEventProcessorMock).toHaveBeenCalledTimes(1);
-    expect(typeof addEventProcessorMock.mock.calls[0][0]).toBe('function');
+    expect(typeof addEventProcessorMock.mock.calls[0]?.[0]).toBe('function');
   });
 
   it('returns null snapshot before first collection', () => {
@@ -202,7 +203,7 @@ function describeEnvironmentSnapshotService() {
       // Wait for the eager collection triggered by onModuleInit
       await service.collectSnapshot();
 
-      const processor = addEventProcessorMock.mock.calls[0][0] as (
+      const processor = at(addEventProcessorMock.mock.calls, 0)[0] as (
         event: Record<string, unknown>,
       ) => Record<string, unknown>;
 
@@ -225,7 +226,7 @@ function describeEnvironmentSnapshotService() {
     it('returns event unchanged when no snapshot is cached', () => {
       service.onModuleInit();
 
-      const processor = addEventProcessorMock.mock.calls[0][0] as (
+      const processor = at(addEventProcessorMock.mock.calls, 0)[0] as (
         event: Record<string, unknown>,
       ) => Record<string, unknown>;
 
