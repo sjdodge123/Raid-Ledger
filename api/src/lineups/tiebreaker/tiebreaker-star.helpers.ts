@@ -67,7 +67,7 @@ export function resolveTieFromStarCounts(
     return { kind: 'unresolved', starCounts, reason: 'no-stars' };
   }
   const sorted = [...tallies].sort((a, b) => b.stars - a.stars);
-  // Non-empty: an empty tally passed the all-zero guard above.
+  // Non-empty here: an empty tally already returned at the all-zero guard.
   const top = defined(sorted[0], 'top star tally');
   const runnerUp = sorted[1]?.stars ?? -1;
   if (top.stars === runnerUp) {
