@@ -16,6 +16,7 @@
  * Idempotent: if a lineup with the same title exists, skip.
  */
 import { eq, sql } from 'drizzle-orm';
+import { defined } from '../src/common/defined.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../src/drizzle/schema';
 import { nanoid } from 'nanoid';
@@ -45,8 +46,9 @@ export async function seedVotingLineup(
     .from(schema.communityLineups)
     .where(eq(schema.communityLineups.title, DEMO_TITLE))
     .limit(1);
-  if (existing.length > 0) {
-    console.log(`  ⏭️  Skipped — already exists (lineup #${existing[0].id})`);
+  const [found] = existing;
+  if (found) {
+    console.log(`  ⏭️  Skipped — already exists (lineup #${found.id})`);
     return;
   }
 
@@ -102,7 +104,7 @@ export async function seedVotingLineup(
 
   // Insert the lineup row.
   const phaseDeadline = new Date(Date.now() + 26 * 60 * 60 * 1000);
-  const [lineup] = await db
+  const [insertedLineup] = await db
     .insert(schema.communityLineups)
     .values({
       title: DEMO_TITLE,
@@ -116,6 +118,7 @@ export async function seedVotingLineup(
       publicShareEnabled: false,
     })
     .returning();
+  const lineup = defined(insertedLineup, 'inserted demo lineup');
   console.log(`  ✅ Created lineup #${lineup.id} (private)`);
 
   // 5 invitees so eligibleCount = 1 (creator) + 5 (invitees) = 6 voters.
@@ -144,14 +147,15 @@ export async function seedVotingLineup(
     gameId: number;
   }[] = [];
   let voterCursor = 0;
-  for (let i = 0; i < picked.length; i++) {
-    const n = VOTE_DISTRIBUTION[i];
+  for (const [i, game] of picked.entries()) {
+    // A game past the distribution's end gets no votes.
+    const n = VOTE_DISTRIBUTION[i] ?? 0;
     for (let j = 0; j < n; j++) {
-      const voter = voters[voterCursor % voters.length];
+      const voter = defined(voters[voterCursor % voters.length], 'voter');
       voteRows.push({
         lineupId: lineup.id,
         userId: voter.id,
-        gameId: picked[i].id,
+        gameId: game.id,
       });
       voterCursor++;
     }

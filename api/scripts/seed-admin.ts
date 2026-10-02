@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { defined } from '../src/common/defined.helpers';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DrizzleModule } from '../src/drizzle/drizzle.module';
@@ -37,7 +38,7 @@ async function bootstrap() {
             process.exit(1);
         }
         const updated = await usersService.setRole(user.id, 'admin');
-        console.log('✅ User promoted successfully:', updated.username);
+        console.log('✅ User promoted successfully:', defined(updated, 'promoted user').username);
     } catch (err) {
         console.error('❌ Failed to promote user:', err);
     } finally {
