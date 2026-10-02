@@ -8,7 +8,8 @@
  *
  * ROK-1625 — a join on the game's open LFG-born event converts the joiner's own
  * hand instead, keyed on the exact event id, and is driven by the roster seam
- * (PARTICIPANT_JOINED), never by voiceStateUpdate.
+ * (PARTICIPANT_JOINED), never by voiceStateUpdate. A row that moved is then
+ * announced as GROUP_CHANGED (`playing`), after the write.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -73,7 +74,7 @@ describe('LfgQuickPlayListener', () => {
 
   it('emits QUICK_PLAY_MATCH when the participant holds a matching intent', async () => {
     db.limit
-      .mockResolvedValueOnce([{ gameId: 99, isAdHoc: true }]) // event lookup
+      .mockResolvedValueOnce([{ gameId: 99 }]) // event lookup
       .mockResolvedValueOnce([{ id: 5 }]); // active intent
 
     await listener.onParticipantJoined({ eventId: 42, userId: 7 });
@@ -89,7 +90,7 @@ describe('LfgQuickPlayListener', () => {
 
   it('stays silent when the participant holds no intent for that game', async () => {
     db.limit
-      .mockResolvedValueOnce([{ gameId: 99, isAdHoc: true }])
+      .mockResolvedValueOnce([{ gameId: 99 }])
       .mockResolvedValueOnce([]);
 
     await listener.onParticipantJoined({ eventId: 42, userId: 7 });
@@ -107,7 +108,7 @@ describe('LfgQuickPlayListener', () => {
   });
 
   it('stays silent when the session has no game', async () => {
-    db.limit.mockResolvedValueOnce([{ gameId: null, isAdHoc: true }]);
+    db.limit.mockResolvedValueOnce([{ gameId: null }]);
 
     await listener.onParticipantJoined({ eventId: 42, userId: 7 });
 
@@ -133,22 +134,48 @@ describe('LfgQuickPlayListener — ROK-1625 join on the LFG-born session', () =>
     ({ db, emitter, listener } = harness());
   });
 
-  it("converts the joiner's own hand and emits no Quick Play signal", async () => {
+  it("converts the joiner's own hand, then repaints as playing — no Quick Play signal", async () => {
+    // MUTATION: drop the GROUP_CHANGED emit after a conversion and the
+    // `toHaveBeenNthCalledWith` below fails with Number of calls: 0.
     findOpen.mockResolvedValue(42);
-    db.limit.mockResolvedValueOnce([{ gameId: 99, isAdHoc: true }]);
+    db.limit
+      .mockResolvedValueOnce([{ gameId: 99 }]) // event lookup
+      .mockResolvedValueOnce([{ id: 5 }]); // live intent
 
     await listener.onParticipantJoined({ eventId: 42, userId: 7 });
 
     expect(findOpen).toHaveBeenCalledWith(db, 99);
     expect(convertHolder).toHaveBeenCalledTimes(1);
     expect(convertHolder).toHaveBeenCalledWith(db, 99, 7, { eventId: 42 });
+    expect(emitter.emit).toHaveBeenNthCalledWith(1, LFG_EVENTS.GROUP_CHANGED, {
+      gameId: 99,
+      reason: 'playing',
+      eventId: 42,
+    });
+    expect(emitter.emit).toHaveBeenCalledTimes(1);
+  });
+
+  it('never reaches the LFG-born read for a joiner holding no live hand', async () => {
+    // MUTATION: run `convertIfLfgBorn` before `holdsLiveIntent` and the
+    // events x lfg_intents join is paid for a joiner with nothing to convert.
+    findOpen.mockResolvedValue(42);
+    db.limit
+      .mockResolvedValueOnce([{ gameId: 99 }]) // event lookup
+      .mockResolvedValueOnce([]); // no live intent
+
+    await listener.onParticipantJoined({ eventId: 42, userId: 7 });
+
+    expect(findOpen).not.toHaveBeenCalled();
+    expect(convertHolder).not.toHaveBeenCalled();
     expect(emitter.emit).not.toHaveBeenCalled();
   });
 
   it('is a safe no-op when the joiner already converted (AC4)', async () => {
     findOpen.mockResolvedValue(42);
     convertHolder.mockResolvedValue(0);
-    db.limit.mockResolvedValueOnce([{ gameId: 99, isAdHoc: true }]);
+    db.limit
+      .mockResolvedValueOnce([{ gameId: 99 }])
+      .mockResolvedValueOnce([{ id: 5 }]);
 
     await expect(
       listener.onParticipantJoined({ eventId: 42, userId: 7 }),
@@ -174,7 +201,7 @@ describe('LfgQuickPlayListener — ROK-1625 scoping and failure', () => {
   it('scopes to the exact event: a Quick Play join for the same game only signals (AC2)', async () => {
     findOpen.mockResolvedValue(77); // LFG-born session 77 is open for game 99
     db.limit
-      .mockResolvedValueOnce([{ gameId: 99, isAdHoc: true }]) // QP event 42
+      .mockResolvedValueOnce([{ gameId: 99 }]) // QP event 42
       .mockResolvedValueOnce([{ id: 5 }]); // live intent
 
     await listener.onParticipantJoined({ eventId: 42, userId: 7 });
@@ -193,14 +220,18 @@ describe('LfgQuickPlayListener — ROK-1625 scoping and failure', () => {
       .mockImplementation(() => undefined);
     findOpen.mockResolvedValue(42);
     convertHolder.mockRejectedValue(new Error('deadlock detected'));
-    db.limit.mockResolvedValueOnce([{ gameId: 99, isAdHoc: true }]);
+    db.limit
+      .mockResolvedValueOnce([{ gameId: 99 }])
+      .mockResolvedValueOnce([{ id: 5 }]);
 
     await expect(
       listener.onParticipantJoined({ eventId: 42, userId: 7 }),
     ).resolves.toBeUndefined();
     expect(emitter.emit).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/event 42: deadlock detected/),
+      expect.stringMatching(
+        /LFG roster-join handling failed for event 42: deadlock detected/,
+      ),
     );
   });
 

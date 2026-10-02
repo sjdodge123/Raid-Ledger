@@ -154,11 +154,14 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
       manual: { starterUserId: STARTER_ID },
     });
 
+    // MUTATION: drop `now` from the call and the starter's liveness is read
+    // at a later instant than the one the start was decided against.
     expect(convertStarter).toHaveBeenCalledWith(
       expect.anything(),
       GAME_ID,
       STARTER_ID,
       { eventId: 900 },
+      NOW,
     );
     expect(convert).not.toHaveBeenCalled();
   });
