@@ -33,7 +33,8 @@ function Harness({ spy, initial = null, poll = false, suggestions }: {
     const onChange = (g: IgdbGameDto | null): void => { setValue(g); spy(g); };
     return poll
         ? <PollGameSearch value={value} onChange={onChange} />
-        : <GameSearchInput value={value} onChange={onChange} initialSuggestions={suggestions} />;
+        : <GameSearchInput value={value} onChange={onChange}
+            {...(suggestions === undefined ? {} : { initialSuggestions: suggestions })} />;
 }
 
 const box = (): HTMLElement => screen.getByRole('combobox', { name: 'Game' });
