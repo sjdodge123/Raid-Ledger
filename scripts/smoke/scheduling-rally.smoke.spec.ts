@@ -23,12 +23,12 @@
  *   6. Escape closes the menu and returns focus to the trigger; on the sheet
  *            the title row's "Close sheet" control does the same
  *
- * NOT covered here (deliberate): the "Nudged N members" success path. The
- * rally's audience is resolved server-side and excludes members younger than
- * `POLL_NUDGE_MIN_MEMBER_AGE_HOURS` (24h), so a member added by a smoke
- * fixture seconds earlier can never be nudged — a browser case for it would
- * have to fake the audience. That path is pinned by
- * `api/src/lineups/scheduling/scheduling-rally.integration.spec.ts` instead.
+ * The "Nudged N members" success toast is pinned by case 5b. Unlike the cron
+ * nudge, the rally's audience has no member-age floor
+ * (`POLL_NUDGE_MIN_MEMBER_AGE_HOURS` applies to the cron only) — it is every
+ * member with no stance on the rallied time — so a fixture member who joined
+ * seconds earlier is nudged. The DM row itself is pinned by
+ * `api/src/lineups/scheduling/scheduling-rally.integration.spec.ts`.
  *
  * Every test seeds its OWN poll and deletes it in `finally` — a shared poll
  * mutated by a neighbouring case produced a one-shard flake in the sibling
@@ -528,6 +528,16 @@ test.describe('Scheduling poll — leader-card Poll actions menu (ROK-1618)', ()
             // Voting enrols them as a poll member (open roster). They answer
             // A only, so B — the row under test — owes exactly one answer.
             const voter = await seedFixtureVoter(token, 6);
+            // A rally counts a member as nudged only when their in-app
+            // notification row is created, and that is skipped while their
+            // `community_lineup` in-app pref is off. Slot 6 is a shared
+            // fixture user, so pin the pref instead of trusting its default.
+            const prefs = await apiPatch(
+                voter.jwt,
+                '/notifications/preferences',
+                { channelPrefs: { community_lineup: { inApp: true } } },
+            );
+            expect(prefs?.channelPrefs?.community_lineup?.inApp).toBe(true);
             await voteAs(voter.jwt, seeded, seeded.slotId);
             await waitForSlotCounts(token, seeded, seeded.slotId, {
                 yes: 2,
@@ -561,16 +571,14 @@ test.describe('Scheduling poll — leader-card Poll actions menu (ROK-1618)', ()
                 slotId: seeded.slotIdB,
             });
 
-            // The organiser is told what happened (§3.5 success table). Both
-            // wordings are successes — which one lands depends on whether the
-            // DM dispatch itself reached the seeded member.
+            // The organiser is told what happened (§3.5 success table). The
+            // one pending member is fresh to this poll's dedup window and has
+            // the in-app pref pinned on above, so exactly one DM row is
+            // created — anything else is a regression, not another success.
             await expect(
                 page
                     .locator('[data-sonner-toast]')
-                    .filter({
-                        hasText:
-                            /Nudged \d+ member|Everyone left was already rallied recently/,
-                    })
+                    .filter({ hasText: /^Nudged 1 member$/ })
                     .first(),
             ).toBeVisible({ timeout: 15_000 });
 
