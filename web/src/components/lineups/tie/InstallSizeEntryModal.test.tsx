@@ -28,6 +28,7 @@ const game: TieReadinessGameDto = {
     gameName: 'Deep Rock Galactic',
     gameCoverUrl: null,
     voteCount: 4,
+    starCount: 0,
     steamAppId: 548430,
     ownedCount: 7,
     rosterSize: 9,
@@ -49,7 +50,7 @@ function renderSize() {
 }
 
 /** Let the guard's one-macrotask Escape latch clear. */
-const settle = (): Promise<void> => act(() => new Promise((r) => { setTimeout(r, 0); }));
+const settle = (): Promise<void> => act(() => new Promise<void>((r) => { setTimeout(r, 0); }));
 const sizeDialog = (): HTMLElement => screen.getByRole('dialog', { name: TITLE });
 const sizeField = (): HTMLElement => screen.getByLabelText(/Install size \(GB\)/);
 const saveButton = (): HTMLElement => screen.getByRole('button', { name: 'Save size' });
