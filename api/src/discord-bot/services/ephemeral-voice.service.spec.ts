@@ -18,7 +18,8 @@ jest.mock('@sentry/node', () => ({ captureException: jest.fn() }));
 
 const guild = { id: 'g1' } as never;
 
-async function build(memberCount: number) {
+/** The service's injected stubs and the testing-module provider list. */
+function buildProviders() {
   const client = {
     isConnected: jest.fn().mockReturnValue(true),
     getGuild: jest.fn().mockReturnValue(guild),
@@ -31,17 +32,21 @@ async function build(memberCount: number) {
     getEphemeralVoiceCategoryId: jest.fn().mockResolvedValue(null),
     getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
   };
-  const module = await Test.createTestingModule({
-    providers: [
-      EphemeralVoiceService,
-      { provide: DrizzleAsyncProvider, useValue: {} },
-      { provide: DiscordBotClientService, useValue: client },
-      { provide: SettingsService, useValue: settings },
-      { provide: ScheduledEventService, useValue: scheduledEvent },
-      { provide: EmbedSyncQueueService, useValue: embed },
-      { provide: VoiceAttendanceService, useValue: voiceAttendance },
-    ],
-  }).compile();
+  const providers = [
+    EphemeralVoiceService,
+    { provide: DrizzleAsyncProvider, useValue: {} },
+    { provide: DiscordBotClientService, useValue: client },
+    { provide: SettingsService, useValue: settings },
+    { provide: ScheduledEventService, useValue: scheduledEvent },
+    { provide: EmbedSyncQueueService, useValue: embed },
+    { provide: VoiceAttendanceService, useValue: voiceAttendance },
+  ];
+  return { client, voiceAttendance, providers };
+}
+
+async function build(memberCount: number) {
+  const { client, voiceAttendance, providers } = buildProviders();
+  const module = await Test.createTestingModule({ providers }).compile();
   jest
     .spyOn(discordOps, 'getChannelMemberCountFresh')
     .mockResolvedValue(memberCount);
