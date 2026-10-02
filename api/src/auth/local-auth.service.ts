@@ -20,6 +20,37 @@ import { defined } from '../common/defined.helpers';
 
 const SALT_ROUNDS = 12;
 
+type Tx = Parameters<
+  Parameters<PostgresJsDatabase<typeof schema>['transaction']>[0]
+>[0];
+
+/** Insert a local-only admin's user row (placeholder discordId). */
+async function insertLocalAdminUser(tx: Tx, email: string, username?: string) {
+  const [row] = await tx
+    .insert(users)
+    .values({
+      discordId: `local:${email}`, // Unique placeholder for local-only users
+      username: username || defined(email.split('@')[0], 'email local part'),
+      role: 'admin',
+    })
+    .returning();
+  return defined(row, 'inserted local admin user row');
+}
+
+/** Insert the hashed local credential linked to `userId`. */
+async function insertLocalCredential(
+  tx: Tx,
+  email: string,
+  passwordHash: string,
+  userId: number,
+) {
+  const [row] = await tx
+    .insert(localCredentials)
+    .values({ email: email.toLowerCase(), passwordHash, userId })
+    .returning();
+  return defined(row, 'inserted local credential row');
+}
+
 @Injectable()
 export class LocalAuthService {
   private readonly logger = new Logger(LocalAuthService.name);
@@ -99,32 +130,14 @@ export class LocalAuthService {
 
     // Use transaction to ensure atomicity
     return await this.db.transaction(async (tx) => {
-      // Create user record first (with a placeholder discordId for local-only users)
-      const [userRow] = await tx
-        .insert(users)
-        .values({
-          discordId: `local:${email}`, // Unique placeholder for local-only users
-          username:
-            username || defined(email.split('@')[0], 'email local part'),
-          role: 'admin',
-        })
-        .returning();
-      const user = defined(userRow, 'inserted local admin user row');
-
-      // Create local credential linked to user
-      const [localAdminRow] = await tx
-        .insert(localCredentials)
-        .values({
-          email: email.toLowerCase(),
-          passwordHash,
-          userId: user.id,
-        })
-        .returning();
-      const localAdmin = defined(
-        localAdminRow,
-        'inserted local credential row',
+      // Create the user record first, then the credential linked to it
+      const user = await insertLocalAdminUser(tx, email, username);
+      const localAdmin = await insertLocalCredential(
+        tx,
+        email,
+        passwordHash,
+        user.id,
       );
-
       return { localAdmin, user };
     });
   }

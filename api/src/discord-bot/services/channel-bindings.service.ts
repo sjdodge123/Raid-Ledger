@@ -101,14 +101,8 @@ export class ChannelBindingsService {
       `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
         (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
     );
-    const announced = this.announced(
-      [channelId, ...replacedChannelIds],
-      binding,
-    );
-    return {
-      binding: defined(announced, 'upserted channel binding'),
-      replacedChannelIds,
-    };
+    const result = { binding, replacedChannelIds };
+    return this.announced([channelId, ...replacedChannelIds], result);
   }
 
   /**
@@ -124,9 +118,7 @@ export class ChannelBindingsService {
    * the UPDATE leaves the stored config untouched. An explicit object
    * (including `{}`) replaces it. A new row still defaults to `{}`.
    */
-  private async upsertBinding(
-    opts: UpsertBindingOpts,
-  ): Promise<BindingRecord | undefined> {
+  private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
     // ROK-1415: covers BOTH branches — the UPDATE branch never writes gameId,
     // and findExistingBinding matches on gameId, so opts.gameId IS the stored
     // value there. This closes the second, undocumented route into the inert
@@ -151,7 +143,7 @@ export class ChannelBindingsService {
           .where(eq(schema.channelBindings.id, existing.id))
           .returning(),
       );
-      return result;
+      return defined(result, 'updated channel binding');
     }
     const [result] = await mappingConflicts(() =>
       this.db
@@ -167,7 +159,7 @@ export class ChannelBindingsService {
         })
         .returning(),
     );
-    return result;
+    return defined(result, 'inserted channel binding');
   }
 
   /**
