@@ -101,9 +101,8 @@ export async function findEligibleEvents(
   const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
   const rows = await db.execute<EligibleEventRow>(sql`
-    SELECT e.id, e.title, e.game_id, g.name AS game_name, e.creator_id,
-      ${isoUtc(sql`lower(e.duration)`)} AS start_time, e.max_attendees,
-      ${isoUtc(sql`e.created_at`)} AS created_at,
+    SELECT e.id, e.title, e.game_id, g.name AS game_name, e.creator_id, e.max_attendees,
+      ${isoUtc(sql`lower(e.duration)`)} AS start_time, ${isoUtc(sql`e.created_at`)} AS created_at,
       e.recurrence_group_id::text AS recurrence_group_id,
       e.notification_channel_override,
       (SELECT count(*) FROM event_signups es WHERE es.event_id = e.id AND es.status NOT IN ('roached_out', 'departed', 'declined'))::text AS signup_count,
