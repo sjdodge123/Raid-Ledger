@@ -49,7 +49,7 @@ describe('GameBanner — cover art loading (ROK-1159)', () => {
         const { container } = renderBanner(makeGame());
         const { backdrop, cover } = bannerImages(container);
         expect(backdrop).toHaveAttribute('alt', '');
-        expect(cover.getAttribute('srcset')).toContain('t_cover_big_2x/co1abc.jpg 528w');
+        expect(cover).toHaveAttribute('srcset', expect.stringContaining('t_cover_big_2x/co1abc.jpg 528w'));
         expect(backdrop.getAttribute('srcset')).toBe(cover.getAttribute('srcset'));
         expect(backdrop.getAttribute('sizes')).toBe('(min-width: 640px) 192px, 160px');
         expect(cover.getAttribute('sizes')).toBe(backdrop.getAttribute('sizes'));
