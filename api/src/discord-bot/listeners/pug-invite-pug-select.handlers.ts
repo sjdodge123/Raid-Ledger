@@ -18,6 +18,7 @@ import {
 } from './pug-invite.helpers';
 import { createPugSignup } from './pug-invite-signup.helpers';
 import { errorStack } from '../../common/error-format.helpers';
+import { defined } from '../../common/defined.helpers';
 
 type PugSlot = typeof schema.pugSlots.$inferSelect;
 
@@ -129,7 +130,7 @@ async function doPugCharacterSelect(
   }
   const character = await deps.charactersService.findOne(
     linkedUser.id,
-    characterId,
+    defined(characterId, 'selected character'),
   );
   await routeCharacterResult(deps, interaction, slot, pugSlotId, character);
 }
@@ -155,7 +156,7 @@ async function routeCharacterResult(
     .where(eq(schema.events.id, slot.eventId))
     .limit(1);
   const sc = event?.slotConfig as Record<string, unknown> | null;
-  if (sc?.type === 'mmo') {
+  if (event && sc?.type === 'mmo') {
     await showPugRoleSelect(interaction, pugSlotId, event.title, {
       name: character.name,
       role: character.roleOverride ?? character.role ?? null,

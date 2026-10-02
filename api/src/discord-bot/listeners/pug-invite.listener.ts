@@ -170,9 +170,10 @@ export class PugInviteListener {
   }
 
   private async routeButton(interaction: ButtonInteraction): Promise<void> {
-    const action = interaction.customId.split(':')[0];
+    const [action, inviteCode] = interaction.customId.split(':');
+    if (action === undefined) return;
     if (action === PUG_JOIN_PREFIX) {
-      const inviteCode = interaction.customId.split(':')[1];
+      if (inviteCode === undefined) return;
       await handleJoinEventButton(this.deps, interaction, inviteCode);
     } else if (isPugAction(action)) {
       await handlePugButtonInteraction(this.deps, interaction);
@@ -185,21 +186,21 @@ export class PugInviteListener {
     interaction: StringSelectMenuInteraction,
   ): Promise<void> {
     const parts = interaction.customId.split(':');
-    if (parts.length < 2) return;
-    const [action] = parts;
+    const [action, targetId] = parts;
+    if (targetId === undefined) return;
     if (action === PUG_BUTTON_IDS.CHARACTER_SELECT) {
-      await handlePugCharacterSelectMenu(this.deps, interaction, parts[1]);
+      await handlePugCharacterSelectMenu(this.deps, interaction, targetId);
     } else if (action === PUG_BUTTON_IDS.ROLE_SELECT) {
       const charName = parts.length >= 3 ? parts.slice(2).join(':') : undefined;
-      await handlePugRoleSelectMenu(this.deps, interaction, parts[1], charName);
+      await handlePugRoleSelectMenu(this.deps, interaction, targetId, charName);
     } else if (action === MEMBER_INVITE_BUTTON_IDS.CHARACTER_SELECT) {
-      await handleMemberCharacterSelectMenu(this.deps, interaction, parts[1]);
+      await handleMemberCharacterSelectMenu(this.deps, interaction, targetId);
     } else if (action === MEMBER_INVITE_BUTTON_IDS.ROLE_SELECT) {
       const characterId = parts.length >= 3 ? parts[2] : undefined;
       await handleMemberRoleSelectMenu(
         this.deps,
         interaction,
-        parts[1],
+        targetId,
         characterId,
       );
     }
