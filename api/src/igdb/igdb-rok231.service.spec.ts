@@ -42,7 +42,7 @@ function thenableResult(data: unknown[]): ThenableQuery {
 
 describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
   let service: IgdbService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select' | 'update', jest.Mock>;
   let mockRedis: Record<'del' | 'get' | 'keys' | 'setex', jest.Mock>;
   let mockSettingsService: Record<
     'get' | 'getIgdbConfig' | 'isIgdbConfigured' | 'set',
