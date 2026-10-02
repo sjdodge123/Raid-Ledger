@@ -15,18 +15,10 @@ export function SocialGraphFallbackTable({ data }: Props) {
         <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
                 <caption className="sr-only">Community social graph as a table</caption>
-                <thead>
-                    <tr className="text-left text-xs uppercase tracking-wider text-muted">
-                        <th scope="col" className="py-2 pr-4">Player</th>
-                        <th scope="col" className="py-2 pr-4">Tier</th>
-                        <th scope="col" className="py-2 pr-4">Clique</th>
-                        <th scope="col" className="py-2 pr-4">Connections</th>
-                        <th scope="col" className="py-2">Top partners</th>
-                    </tr>
-                </thead>
+                <FallbackTableHead />
                 <tbody>
                     {data.nodes.map((n) => (
-                        <tr key={n.userId} className="border-t border-edge/30" tabIndex={0}>
+                        <tr key={n.userId} className="border-t border-edge/30">
                             <td className="py-2 pr-4 text-foreground">{n.username}</td>
                             <td className="py-2 pr-4 text-muted">{n.intensityTier}</td>
                             <td className="py-2 pr-4 text-muted">#{n.cliqueId}</td>
@@ -39,6 +31,20 @@ export function SocialGraphFallbackTable({ data }: Props) {
                 </tbody>
             </table>
         </div>
+    );
+}
+
+function FallbackTableHead() {
+    return (
+        <thead>
+            <tr className="text-left text-xs uppercase tracking-wider text-muted">
+                <th scope="col" className="py-2 pr-4">Player</th>
+                <th scope="col" className="py-2 pr-4">Tier</th>
+                <th scope="col" className="py-2 pr-4">Clique</th>
+                <th scope="col" className="py-2 pr-4">Connections</th>
+                <th scope="col" className="py-2">Top partners</th>
+            </tr>
+        </thead>
     );
 }
 

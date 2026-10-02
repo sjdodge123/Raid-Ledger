@@ -7,6 +7,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { CommunityInsightsSection } from './CommunityInsightsSection';
+import { toast } from '../../lib/toast';
+
+type MutateOpts = { onSuccess: () => void; onError: (err: Error) => void };
 
 const mocks = vi.hoisted(() => ({
     settings: { isLoading: false, data: { churnThresholdPct: 70 } },
@@ -28,6 +31,8 @@ const NAME = 'Churn risk threshold';
 
 beforeEach(() => {
     vi.clearAllMocks();
+    mocks.updateSettings.mutate.mockReset();
+    mocks.settings.data = { churnThresholdPct: 70 };
     mocks.updateSettings.isPending = false;
     mocks.refresh.isPending = false;
 });
@@ -61,6 +66,58 @@ describe('CommunityInsightsSection — threshold slider', () => {
         rerender(<CommunityInsightsSection />);
         expect(live).toHaveTextContent('saving…');
         expect(screen.getByRole('slider', { name: NAME })).toBe(slider);
+    });
+});
+
+describe('CommunityInsightsSection — server hydration and save', () => {
+    it('hydrates the slider and its % readout from the server threshold', () => {
+        mocks.settings.data = { churnThresholdPct: 55 };
+        render(<CommunityInsightsSection />);
+        const slider = screen.getByRole('slider', { name: NAME });
+        expect(slider).toHaveValue('55');
+        expect(screen.getByTestId('slider-value')).toHaveTextContent('55%');
+    });
+
+    it('toasts the saved value once the debounced save succeeds', () => {
+        vi.useFakeTimers();
+        mocks.updateSettings.mutate.mockImplementation((_vars: unknown, opts: MutateOpts) => opts.onSuccess());
+        render(<CommunityInsightsSection />);
+        fireEvent.change(screen.getByRole('slider', { name: NAME }), { target: { value: '45' } });
+        expect(toast.success).not.toHaveBeenCalled();
+
+        act(() => { vi.advanceTimersByTime(500); });
+        expect(toast.success).toHaveBeenCalledWith('Churn threshold saved → 45%');
+    });
+
+    it('a server refetch mid-edit does not clobber the local value; after the save the server value shows', () => {
+        vi.useFakeTimers();
+        let pending: MutateOpts | undefined;
+        mocks.updateSettings.mutate.mockImplementation((_vars: unknown, opts: MutateOpts) => { pending = opts; });
+        const { rerender } = render(<CommunityInsightsSection />);
+        const slider = screen.getByRole('slider', { name: NAME });
+        const readout = screen.getByTestId('slider-value');
+
+        fireEvent.change(slider, { target: { value: '80' } });
+        // The settings query resolves (or refetches) with a stale value before the debounce fires.
+        mocks.settings.data = { churnThresholdPct: 40 };
+        rerender(<CommunityInsightsSection />);
+        expect(slider).toHaveValue('80');
+        expect(readout).toHaveTextContent('80%');
+
+        act(() => { vi.advanceTimersByTime(500); });
+        expect(mocks.updateSettings.mutate).toHaveBeenCalledWith({ churnThresholdPct: 80 }, expect.any(Object));
+        expect(slider).toHaveValue('80');
+
+        // The hook invalidates the settings query before the caller's onSuccess runs.
+        mocks.settings.data = { churnThresholdPct: 80 };
+        act(() => pending?.onSuccess());
+        expect(slider).toHaveValue('80');
+
+        // With the local edit released, a later server value (e.g. another admin's save) shows.
+        mocks.settings.data = { churnThresholdPct: 65 };
+        rerender(<CommunityInsightsSection />);
+        expect(slider).toHaveValue('65');
+        expect(readout).toHaveTextContent('65%');
     });
 });
 
