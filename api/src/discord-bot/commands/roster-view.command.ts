@@ -1,3 +1,4 @@
+import { defined } from '../../common/defined.helpers';
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
@@ -86,7 +87,7 @@ export class RosterViewCommand
       await interaction.editReply(`No event found matching "${input}".`);
       return null;
     }
-    return events[0].id;
+    return defined(events[0], 'matched event').id;
   }
 
   /** Build and display the roster embed for an event. */

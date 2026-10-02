@@ -65,6 +65,7 @@ export function mapClassification(output: string): string | null {
     stats: 'stats',
     stat: 'stats',
   };
+  if (word === undefined) return null;
   return map[word] ?? null;
 }
 

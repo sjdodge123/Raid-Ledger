@@ -1,3 +1,4 @@
+import { defined } from '../../../common/defined.helpers';
 import { aiCustomId } from '../ai-chat.constants';
 import type { TreeResult, AiChatDeps, TreeSession } from './tree.types';
 
@@ -112,7 +113,7 @@ function mergeRankedEvents(
         id: e.id,
         title: e.title,
         startTime: e.startTime,
-        gameName: games[i].name,
+        gameName: defined(games[i], 'fan-out game').name,
       });
     }
   });
@@ -155,7 +156,8 @@ function formatMergedEvents(
   const uniqueNames = new Set(events.map((e) => e.gameName));
   if (uniqueNames.size === 1) {
     const list = events.map((e) => buildEventBullet(e, deps)).join('\n');
-    return `**Upcoming events for ${events[0].gameName}:**\n${list}`;
+    const { gameName } = defined(events[0], 'first merged event');
+    return `**Upcoming events for ${gameName}:**\n${list}`;
   }
   const list = events
     .map((e) => buildEventBullet(e, deps, ` (${e.gameName})`))

@@ -80,15 +80,18 @@ async function filterRateLimited(
   candidates: DispatchManyInput[],
 ): Promise<DispatchManyInput[]> {
   if (candidates.length === 0) return [];
-  const keys = candidates.map(rateLimitKeyFor);
-  const results = await redis.mget(...keys);
+  const keyed = candidates.map((input) => ({
+    input,
+    key: rateLimitKeyFor(input),
+  }));
+  const results = await redis.mget(...keyed.map(({ key }) => key));
   const allowed: DispatchManyInput[] = [];
   const pipeline = redis.pipeline();
-  for (let i = 0; i < candidates.length; i++) {
+  for (const [i, { input, key }] of keyed.entries()) {
     const recent = results[i];
     if (recent && parseInt(recent, 10) > 0) continue;
-    allowed.push(candidates[i]);
-    pipeline.set(keys[i], '1', 'PX', RATE_LIMIT_WINDOW_MS);
+    allowed.push(input);
+    pipeline.set(key, '1', 'PX', RATE_LIMIT_WINDOW_MS);
   }
   if (allowed.length > 0) await pipeline.exec();
   return allowed;
