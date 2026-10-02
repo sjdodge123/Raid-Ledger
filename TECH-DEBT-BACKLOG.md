@@ -2131,3 +2131,14 @@ same day (#1278, #1279, #1280).
 
 - **[nit]** `api/src/lfg/lfg-quickplay.listener.ts:31` (`LfgQuickPlayListener`): since ROK-1625 the class also converts the joiner's hand on the game's LFG-born session and emits `GROUP_CHANGED` (`playing`), so "Quick Play" no longer names everything it does. The log text and both docblocks were updated on the branch. The rename was left out because it touches eight files for no behaviour change: `lfg.module.ts` (the provider), the listener and its unit spec, the integration spec's spy target, and doc references in `discord-bot.constants.ts`, `ad-hoc-participant.service.ts` (plus its spec) and `lfg-now-manual-start.helpers.ts`.
   Suggested: rename to `LfgRosterJoinListener` (file `lfg-roster-join.listener.ts`) in one mechanical commit.
+
+### 2026-10-02 — fix/b46-tz-naive-bounds-1002 (TDB:1981 residual scope after the events.duration reader fix)
+
+- **[low]** The branch moved the scheduled-event, ephemeral-voice, LFG-now, recruitment-reminder and game-affinity readers onto shared UTC fragments (`utcIsoText`, `utcWallClock`, `NOW_UTC` in `api/src/drizzle/timestamp-utils.ts`). It also fixed two sites TDB:1981 did not name: the reconcile-backoff compare in `scheduled-event.db-helpers.ts` `findReconciliationCandidates`, and `voice-attendance-ephemeral.helpers.ts` `findActiveEventsByEphemeralChannel`. These TDB:1981 sites still compare the zone-less `events.duration` / `extended_until` with a `timestamptz`, so each window shifts by the DB session's UTC offset on a non-UTC session:
+  - `api/src/discord-bot/services/voice-attendance-flush.helpers.ts:91`/`:92`, `:111`/`:112`, `:151` (`${now.toISOString()}::timestamptz`)
+  - `api/src/lineups/ai-suggestions/voter-activity.helpers.ts:166` (`now() - interval ...`)
+  - `api/src/events/analytics-queries.helpers.ts:30`, `:110`, `:127`, `:179` (`<= NOW()`)
+  - `api/src/notifications/post-event-reminder.service.ts:99` (`BETWEEN (now() - ...) AND (now() - ...)`)
+  
+  Suggested: swap each for `utcWallClock(...)` / `NOW_UTC` from `timestamp-utils`, and add a `SET LOCAL TIME ZONE 'America/New_York'` integration case per reader, as `scheduled-event.db-helpers.tz.integration.spec.ts` does.
+- **[nit]** Inline copies of the ISO-Z `to_char` reader remain in `api/src/lineups/scheduling/scheduling-poll-state.helpers.ts:91`, `scheduling-poll-embed-data.helpers.ts:86`, `scheduling-unanimous.helpers.ts:78` and `scheduling-rally.helpers.ts:213`. Suggested: use `utcIsoText(...)`. For the `proposed_time AT TIME ZONE 'UTC'` pair, pass that expression in as the argument.
