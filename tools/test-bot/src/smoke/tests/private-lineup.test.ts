@@ -25,6 +25,7 @@ import {
   assertConditionNeverMet,
 } from '../fixtures.js';
 import { pollForCondition } from '../../helpers/polling.js';
+import { isLeftoverLineup, isMilestoneCardFor } from '../lineup-milestone-match.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
 import type { SimpleMessage } from '../../helpers/messages.js';
@@ -46,15 +47,34 @@ interface TestNotification {
   createdAt?: string;
 }
 
-/** Best-effort archival of any currently active lineup(s) so create succeeds. */
-async function archiveAllLineups(api: ApiClient): Promise<void> {
+/** Title prefixes of the lineups this file creates (each is `<prefix> <Date.now()>`). */
+const OWN_TITLE_PREFIXES = [
+  'Private Smoke ',
+  'Private Phase ',
+  'Private Invitees ',
+  'Private MS-check ',
+  'Concurrent A ',
+  'Concurrent B ',
+];
+
+/** Lineups stamped at or after this instant belong to the current run; never archived here. */
+const RUN_STARTED_AT = Date.now();
+
+
+/**
+ * Best-effort archival of this file's leftover active lineups. Scoped, not
+ * global: multiple active lineups have been allowed since ROK-1065, and a
+ * global archive here aborted other tests' lineups mid-run (TDB:1071).
+ */
+async function archiveOwnLeftoverLineups(api: ApiClient): Promise<void> {
   try {
     const res = await api.get<
-      { id: number }[] | { id: number } | null
+      { id: number; title?: string }[] | { id: number; title?: string } | null
     >('/lineups/active');
     const list = Array.isArray(res) ? res : res ? [res] : [];
     for (const row of list) {
       if (!row?.id) continue;
+      if (!isLeftoverLineup(row.title, OWN_TITLE_PREFIXES, RUN_STARTED_AT)) continue;
       await api
         .patch(`/lineups/${row.id}/status`, { status: 'archived' })
         .catch(() => null);
@@ -131,7 +151,7 @@ const privateLineupDmsInviteeNoChannelEmbed: SmokeTest = {
   name: 'Private lineup creation DMs invitee and suppresses channel embed (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api);
 
     const title = `Private Smoke ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
@@ -188,7 +208,7 @@ const privateLineupPhaseTransitionSuppressesChannel: SmokeTest = {
   name: 'Private lineup building→voting DMs invitee and suppresses channel embed (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api);
 
     const title = `Private Phase ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
@@ -239,7 +259,7 @@ const privateLineupResponseIncludesInvitees: SmokeTest = {
   name: 'Private lineup create response includes invitees array (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api);
 
     const title = `Private Invitees ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
@@ -274,7 +294,7 @@ const multipleConcurrentLineupsAllowed: SmokeTest = {
   name: 'Multiple concurrent active lineups permitted — no 409 (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api);
 
     const firstTitle = `Concurrent A ${Date.now()}`;
     const secondTitle = `Concurrent B ${Date.now()}`;
@@ -324,9 +344,9 @@ const privateLineupMilestoneSuppressesChannel: SmokeTest = {
   name: 'Private lineup nomination milestone DMs invitee and suppresses channel embed (ROK-1115)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api);
 
-    const title = `Private Milestone ${Date.now()}`;
+    const title = `Private MS-check ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
     try {
       // Trigger a nomination as the invitee — this is the cheapest way to
@@ -347,19 +367,9 @@ const privateLineupMilestoneSuppressesChannel: SmokeTest = {
       await assertConditionNeverMet(
         async () => {
           const msgs = await readLastMessages(ctx.defaultChannelId, 25);
+          // Structural (footer label + title): TDB:1071.
           return msgs.some((m) =>
-            m.embeds.some((e) => {
-              // ROK-1461: state headlines moved onto the author line.
-              const hay = [
-                e.title ?? '',
-                e.author ?? '',
-                e.description ?? '',
-              ].join(' ');
-              return (
-                /milestone|nominations filled|nominated/i.test(hay) &&
-                hay.includes(title)
-              );
-            }),
+            m.embeds.some((e) => isMilestoneCardFor(e, title)),
           );
         },
         8_000,

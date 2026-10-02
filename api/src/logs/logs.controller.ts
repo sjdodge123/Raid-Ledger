@@ -49,7 +49,7 @@ export class LogsController {
 
   @Get('export')
   @RateLimit('export')
-  exportLogs(
+  async exportLogs(
     @Res() res: Response,
     @Query('service') service?: string,
     @Query('files') fileList?: string,
@@ -63,7 +63,8 @@ export class LogsController {
       res.status(200).json({ files: [], total: 0 });
       return;
     }
-    const stream = this.logsService.createExportStream(filenames);
+    // Awaited before any header is set, so a 413 is still a clean response.
+    const stream = await this.logsService.createExportStream(filenames);
     const timestamp = new Date()
       .toISOString()
       .replace(/[:.]/g, '-')
