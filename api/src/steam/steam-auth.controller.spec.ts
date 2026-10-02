@@ -33,19 +33,28 @@ import type { AuthenticatedExpressRequest } from '../auth/types';
 
 const LINK_EXPIRED_COPY = 'Link request expired. Please try again.';
 
+/** The browser-binding cookie POST /link/start sets: sha256(nonce), hex. */
+const sha256 = (v: string) =>
+  crypto.createHash('sha256').update(v).digest('hex');
+const boundTo = (nonce: string) => ({ rl_link_steam: sha256(nonce) });
+
 function createMockResponse(): Response {
   return {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
     redirect: jest.fn(),
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
   } as unknown as Response;
 }
 
+/** Defaults to a browser holding the cookie for 'valid-nonce'. */
 function createMockRequest(overrides: Partial<Request> = {}): Request {
   return {
     protocol: 'https',
     headers: { host: 'raid.gamernight.net' },
     query: {},
+    cookies: boundTo('valid-nonce'),
     ...overrides,
   } as unknown as Request;
 }
@@ -286,7 +295,7 @@ describe('SteamAuthController', () => {
 
       await controller.steamLink(
         'the-nonce',
-        createMockRequest(),
+        createMockRequest({ cookies: boundTo('the-nonce') }),
         createMockResponse(),
       );
 
@@ -315,6 +324,44 @@ describe('SteamAuthController', () => {
         expect(mocks.settings.isSteamConfigured).not.toHaveBeenCalled();
       },
     );
+
+    it.each<[string, Record<string, string> | undefined]>([
+      ['no binding cookie (a forwarded link)', undefined],
+      ['a cookie for a different nonce', boundTo('someone-elses-nonce')],
+      ['the raw nonce instead of its hash', { rl_link_steam: 'valid-nonce' }],
+    ])(
+      'redirects %s to the error landing without consuming the nonce',
+      async (_label, cookies) => {
+        mocks.linkNonce.consume.mockResolvedValue({ userId: 42 });
+        mocks.settings.isSteamConfigured.mockResolvedValue(true);
+        const res = createMockResponse();
+
+        await controller.steamLink(
+          'valid-nonce',
+          createMockRequest({ cookies }),
+          res,
+        );
+
+        expect(res.redirect).toHaveBeenCalledTimes(1);
+        expect(res.redirect).toHaveBeenCalledWith(
+          `https://raid.gamernight.net/profile/integrations?steam=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
+        );
+        expect(mocks.linkNonce.consume).not.toHaveBeenCalled();
+      },
+    );
+
+    it('clears the binding cookie once it has been matched', async () => {
+      mocks.linkNonce.consume.mockResolvedValue({ userId: 42 });
+      mocks.settings.isSteamConfigured.mockResolvedValue(true);
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-nonce', createMockRequest(), res);
+
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'rl_link_steam',
+        expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }),
+      );
+    });
 
     it('declares @Query("nonce") and no @Query("token")', () => {
       const args = Reflect.getMetadata(

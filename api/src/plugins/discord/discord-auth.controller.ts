@@ -38,6 +38,9 @@ import {
   LinkNonceService,
   LINK_REQUEST_EXPIRED_MESSAGE,
 } from '../../auth/link-nonce.service';
+import { consumeBrowserBoundNonce } from '../../auth/link-nonce-cookie.helpers';
+import { bindLinkStateToBrowser } from '../../auth/link-state-cookie.helpers';
+import { verifyDiscordLinkState } from './discord-link-state.helpers';
 
 interface RequestWithUser extends Request {
   user: {
@@ -194,8 +197,10 @@ export class DiscordAuthController {
       );
       return;
     }
+    // `r` binds the state to this browser through the callback (ROK-1366).
+    const r = bindLinkStateToBrowser(res, 'discord');
     const state = signOAuthState(
-      { userId, action: 'link', timestamp: Date.now() },
+      { userId, action: 'link', timestamp: Date.now(), r },
       this.getSecret(),
     );
     const redirectUri = oauthConfig.callbackUrl.replace(
@@ -205,7 +210,7 @@ export class DiscordAuthController {
     res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
   }
 
-  /** GET /auth/discord/link?nonce= — single-use nonce from POST .../link/start (ROK-1630). */
+  /** GET /auth/discord/link?nonce= — single-use nonce from POST .../link/start (ROK-1630), bound to the minting browser's cookie. */
   @RateLimit('auth')
   @Get('discord/link')
   async discordLink(
@@ -214,7 +219,13 @@ export class DiscordAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    const claims = await this.linkNonceService.consume('discord', nonce);
+    const claims = await consumeBrowserBoundNonce(
+      this.linkNonceService,
+      'discord',
+      nonce,
+      req,
+      res,
+    );
     if (!claims) {
       res.redirect(
         `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE)}`,
@@ -225,11 +236,8 @@ export class DiscordAuthController {
   }
 
   /** Complete the Discord link: persist link, emit event, send DM. */
-  private async completeLinkFlow(code: string, state: string): Promise<number> {
-    const { userId, discordProfile } = await this.performLinkExchange(
-      code,
-      state,
-    );
+  private async completeLinkFlow(code: string, userId: number): Promise<void> {
+    const discordProfile = await this.performLinkExchange(code, userId);
     await this.usersService.linkDiscord(
       userId,
       discordProfile.id,
@@ -241,7 +249,6 @@ export class DiscordAuthController {
       discordId: discordProfile.id,
     } satisfies DiscordLoginPayload);
     this.sendWelcomeDMSafe(userId);
-    return userId;
   }
 
   /** GET /auth/discord/link/callback — handle Discord OAuth callback for linking. */
@@ -255,7 +262,15 @@ export class DiscordAuthController {
   ) {
     const clientUrl = this.getClientUrl(req);
     try {
-      await this.completeLinkFlow(code, state);
+      // Verified first: the state must come back to the browser the GET hop
+      // bound it to (ROK-1366) before any code exchange happens.
+      const userId = verifyDiscordLinkState(
+        state,
+        this.getSecret(),
+        this.logger,
+        { req, res },
+      );
+      await this.completeLinkFlow(code, userId);
       res.redirect(`${clientUrl}/profile?linked=success`);
     } catch (error) {
       this.logger.error('Discord link error:', error);
@@ -266,25 +281,13 @@ export class DiscordAuthController {
     }
   }
 
-  /** Verify link state and extract userId. */
-  private verifyLinkState(state: string): number {
-    const stateData = verifyOAuthState(state, this.getSecret(), this.logger);
-    if (!stateData || stateData.action !== 'link')
-      throw new Error('Invalid or tampered state parameter');
-    return stateData.userId as number;
-  }
-
-  /** Perform the link OAuth exchange: verify state, exchange code, fetch profile. */
+  /** Perform the link OAuth exchange for a verified userId: exchange code, fetch profile. */
   private async performLinkExchange(
     code: string,
-    state: string,
-  ): Promise<{
-    userId: number;
-    discordProfile: { id: string; username: string; avatar?: string };
-  }> {
+    userId: number,
+  ): Promise<{ id: string; username: string; avatar?: string }> {
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) throw new Error('Discord OAuth is not configured');
-    const userId = this.verifyLinkState(state);
     const redirectUri = oauthConfig.callbackUrl.replace(
       '/callback',
       '/link/callback',
@@ -301,7 +304,7 @@ export class DiscordAuthController {
       discordFetch,
     );
     await this.validateNoExistingLink(discordProfile.id, userId);
-    return { userId, discordProfile };
+    return discordProfile;
   }
 
   /** Validate that the Discord account isn't already linked to another user. */
