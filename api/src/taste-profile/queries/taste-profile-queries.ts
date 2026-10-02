@@ -80,7 +80,8 @@ export async function getTasteProfile(
   const coPlayPartners = await topCoPlayPartners(db, userId);
   const now = new Date().toISOString();
 
-  if (vec.length === 0) {
+  const row = vec[0];
+  if (row === undefined) {
     return {
       userId,
       dimensions: normalizeDimensions(null),
@@ -91,7 +92,6 @@ export async function getTasteProfile(
     };
   }
 
-  const row = vec[0];
   return {
     userId,
     // ROK-1102 #5 (D8): normalise the stored jsonb against the current pool
@@ -118,9 +118,10 @@ export async function findSimilarPlayers(
     .from(schema.playerTasteVectors)
     .where(eq(schema.playerTasteVectors.userId, userId))
     .limit(1);
-  if (anchor.length === 0) return [];
+  const anchorRow = anchor[0];
+  if (anchorRow === undefined) return [];
 
-  const anchorVector = `[${anchor[0].vector.join(',')}]`;
+  const anchorVector = `[${anchorRow.vector.join(',')}]`;
   // ROK-1083: archetype is now jsonb — extract intensityTier via
   // `->>'intensityTier'` so we still ship the compact tier string on
   // similar-player cards without parsing the whole payload client-side.
