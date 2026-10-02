@@ -42,6 +42,7 @@
  */
 import type { GameRow } from './games-dedup-audit.helpers';
 import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
+import { defined } from '../common/defined.helpers';
 
 /** Strength of a shared key. Higher = preferred when reporting matchType. */
 const KEY_STRENGTH: Record<'igdb' | 'steam' | 'name', number> = {
@@ -177,7 +178,10 @@ function strongestSharedKey(rows: GameRow[]): {
         c.kind === 'name' ? a.localeCompare(b) : Number(a) - Number(b),
       );
     if (sharedValues.length > 0) {
-      return { matchType: c.kind, matchKey: sharedValues[0] };
+      return {
+        matchType: c.kind,
+        matchKey: defined(sharedValues[0], 'shared key value'),
+      };
     }
   }
   // Connected components of ≥ 2 rows ALWAYS share at least one key; the loop
