@@ -1,6 +1,7 @@
 /**
  * Seeded PRNG utilities for deterministic demo data generation.
  */
+import { defined } from '../common/defined.helpers';
 
 const DEFAULT_SEED = 0xdeadbeef;
 
@@ -25,7 +26,8 @@ export function createRng(seed = DEFAULT_SEED): Rng {
 /** Pick a random element from an array. */
 export function pick<T>(rng: Rng, arr: readonly T[]): T {
   if (arr.length === 0) throw new Error('pick() called on empty array');
-  return arr[Math.floor(rng() * arr.length)];
+  const i = Math.floor(rng() * arr.length);
+  return defined(arr[i], `pick() element ${i}`);
 }
 
 /** Pick N random elements from an array. */
@@ -44,7 +46,9 @@ export function randInt(rng: Rng, min: number, max: number): number {
 export function shuffle<T>(rng: Rng, arr: T[]): T[] {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
+    const atI = defined(arr[i], `shuffle() element ${i}`);
+    arr[i] = defined(arr[j], `shuffle() element ${j}`);
+    arr[j] = atI;
   }
   return arr;
 }
@@ -57,9 +61,10 @@ export function weightedPick<T>(
 ): T {
   const total = weights.reduce((s, w) => s + w, 0);
   let r = rng() * total;
-  for (let i = 0; i < items.length; i++) {
-    r -= weights[i];
-    if (r <= 0) return items[i];
+  for (const [i, item] of items.entries()) {
+    // A missing weight made `r -= weights[i]` NaN (never <= 0); keep that.
+    r -= weights[i] ?? NaN;
+    if (r <= 0) return item;
   }
-  return items[items.length - 1];
+  return defined(items[items.length - 1], 'weightedPick() last item');
 }
