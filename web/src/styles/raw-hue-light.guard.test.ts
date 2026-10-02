@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { AA_SMALL_TEXT, composite, contrastRatio, stripComments } from './wcag-contrast';
@@ -71,7 +72,7 @@ const CASES = RULES.filter((r) => TINT_500[r.hue] !== undefined).flatMap((r) =>
         ([
             ['--color-surface', surface],
             ['--color-panel', panel],
-            [`bg-${r.hue}-500/10 over --color-panel`, composite(TINT_500[r.hue], panel, 0.1)],
+            [`bg-${r.hue}-500/10 over --color-panel`, composite(defined(TINT_500[r.hue], `TINT_500.${r.hue}`), panel, 0.1)],
         ] as const).map(([bgName, bg]) => {
             const painted = r.alpha === 1 ? r.color : composite(r.color, bg, r.alpha);
             return [r.cls, `${name} · ${bgName}`, painted, bg] as const;
