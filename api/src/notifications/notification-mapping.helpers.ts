@@ -4,6 +4,7 @@
  */
 import {
   DEFAULT_CHANNEL_PREFS,
+  NOTIFICATION_TYPES,
   type ChannelPrefs,
   type NotificationType,
 } from '../drizzle/schema/notification-preferences';
@@ -50,6 +51,21 @@ export function resolveChannelPrefs(stored: unknown): ChannelPrefs {
     }
   }
   return merged;
+}
+
+/**
+ * The resolved matrix with Discord OFF for EVERY notification type, keeping
+ * the stored inApp/push values (TDB:1956). Starts from the resolved matrix, not
+ * the stored keys: a type missing from the row resolves to its default
+ * (Discord on) on every send path, so flipping only stored keys kept DMing.
+ */
+export function buildDiscordDisabledPrefs(stored: unknown): ChannelPrefs {
+  const resolved = resolveChannelPrefs(stored);
+  const disabled = {} as ChannelPrefs;
+  for (const type of NOTIFICATION_TYPES) {
+    disabled[type] = { ...resolved[type], discord: false };
+  }
+  return disabled;
 }
 
 /** Types whose resolved Discord channel is OFF for a stored prefs value. */
