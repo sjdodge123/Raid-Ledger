@@ -123,16 +123,15 @@ export GIT_CONFIG_PARAMETERS="'safe.directory=*'"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-# ROK-1326 fix-11: when this script runs inside the rl-infra fleet runner,
-# node_modules is intentionally Mutagen-excluded (large + OS-specific
-# binaries) so the freshly-claimed slot has an empty
-# /workspace/node_modules. Without `npm ci` the build step fails
-# immediately: 'sh: 1: tsc: not found' / 'sh: 1: nest: not found'. On
-# laptop runs node_modules is already populated by `npm install` at
-# worktree setup, so the guard is a no-op there.
-if [ ! -x "$REPO_ROOT/node_modules/.bin/tsc" ]; then
-  echo "[validate-ci] node_modules missing or incomplete — running npm ci..."
-  npm ci --silent --no-audit --no-fund 2>&1 | tail -5
+# ROK-1326 fix-11 / TDB:924: the fleet runner's node_modules is Mutagen-excluded,
+# so scripts/ci/ensure-runner-deps.sh installs (or refreshes) it there and is a
+# no-op on a laptop. Skipped under RL_VALIDATE_CI_DRY=1: the scripts/test
+# harnesses source this file and must never trigger an install.
+if [ "${RL_VALIDATE_CI_DRY:-0}" != "1" ]; then
+  bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" || {
+    echo "[validate-ci] dependency install failed (see above)" >&2
+    exit 1
+  }
 fi
 
 # ---------------------------------------------------------------------------
@@ -280,7 +279,7 @@ print(json.dumps(extra, separators=(',', ':')))
     python3 -c "
 import json, sys
 print(json.dumps({'ts': sys.argv[1], 'event': sys.argv[2], 'rc': int(sys.argv[3]), 'stderr': sys.argv[4], 'PERF_LOG_LOCAL': sys.argv[5]}))
-" "$ts" "$event" "$emit_rc" "$emit_out" "$PERF_LOG_LOCAL" 2>/dev/null \
+" "$ts" "$event" "$emit_rc" "$emit_out" "$PERF_LOG_LOCAL" \
       >> "${PERF_LOG_LOCAL}.errors" 2>/dev/null || true
   fi
 }
@@ -778,6 +777,9 @@ resolve_heap_mb() {
   [ -n "$limit_bytes" ] || return 0
   [ "$limit_bytes" != "max" ] || return 0
   case "$limit_bytes" in ''|*[!0-9]*) return 0 ;; esac
+  # Integer MB first, then 3/4 of it: scripts/test/validate-ci-heap-clamp.test.sh
+  # pins the values this exact order produces, so the order is not "improved".
+  # shellcheck disable=SC2017
   local heap_mb=$(( limit_bytes / 1024 / 1024 * 3 / 4 ))
   if [ "$heap_mb" -gt 0 ] && [ "$heap_mb" -le 16384 ]; then
     echo "$heap_mb"
@@ -796,7 +798,7 @@ resolve_heap_mb() {
 # unless the caller already set NODE_OPTIONS, which then wins untouched.
 # ROK-1466 W4: scripts/smoke/*.spec.ts (target / auth-paths / login-retry /
 # browser-preflight, plus the ROK-1085 api-helpers cache tests) are included by
-# the ROOT vitest.config.ts, which nothing ever invoked — GitHub CI's web job
+# the ROOT vitest.config.mts, which nothing ever invoked — GitHub CI's web job
 # and this script both `cd web` first, picking up web/vitest.config.ts instead.
 # They are the only coverage the Playwright harness helpers have.
 # Args: $1 - NODE_OPTIONS to run under (defaults to the inherited value). The
@@ -807,7 +809,7 @@ run_smoke_helper_specs() {
   local node_opts="${1:-${NODE_OPTIONS:-}}"
   echo "--- scripts/smoke helper specs (root vitest config) ---"
   (cd "$REPO_ROOT" && NODE_OPTIONS="$node_opts" \
-     npx vitest run --config vitest.config.ts scripts/smoke)
+     npx vitest run --config vitest.config.mts scripts/smoke)
 }
 
 # Replace (or add) --max-old-space-size inside a NODE_OPTIONS string, leaving
@@ -1230,13 +1232,11 @@ run_migration_validation() {
   # TDB:1150: each snapshot's prevId must be the previous snapshot's id —
   # drizzle-kit never checks the link, only prevId collisions.
   node "$REPO_ROOT/scripts/check-migration-snapshot-chain.mjs" || return 1
-  # ROK-1343: Mutagen sync on the rl-infra fleet runner strips POSIX exec
-  # bits even though git stores `scripts/validate-migrations.sh` as 100755.
-  # GitHub CI honors the git mode; the fleet does not. Re-assert +x defensively
-  # so the step survives both environments. See TECH-DEBT-BACKLOG.md 2026-05-22
-  # for the upstream Mutagen-side fix tracking.
-  chmod +x "$REPO_ROOT/scripts/validate-migrations.sh"
-  "$REPO_ROOT/scripts/validate-migrations.sh"
+  # ROK-1343 / TDB:654: Mutagen strips POSIX exec bits on the fleet runner even
+  # though git stores this file 100755, so run it through bash instead of by
+  # mode. That works in every environment and never chmods the working tree
+  # (same convention as scripts/test/run-all.sh).
+  bash "$REPO_ROOT/scripts/validate-migrations.sh"
 }
 
 run_container_validation() {
@@ -1247,7 +1247,11 @@ run_container_validation() {
   fi
 
   local cname="rl-ci-test-$$"
-  # Ensure cleanup on any exit path
+  # Ensure cleanup on any exit path. The double quotes expand $cname NOW, on
+  # purpose: a RETURN trap stays set after this function returns and can fire
+  # again on a later return, where this local no longer exists and `set -u`
+  # would abort the script.
+  # shellcheck disable=SC2064
   trap "docker stop '$cname' >/dev/null 2>&1 || true" RETURN
 
   # ROK-1331 M13: choose a non-conflicting host port for the allinone container.
@@ -1267,7 +1271,7 @@ run_container_validation() {
   docker build -f Dockerfile.allinone -t rl:ci-test .
   docker run --rm -d \
     --name "$cname" \
-    -p ${host_port}:80 \
+    -p "${host_port}:80" \
     -e ADMIN_PASSWORD=ci-test \
     rl:ci-test
 
@@ -1317,7 +1321,7 @@ _wait_for_container_health() {
       2>/dev/null || echo 000)
   else
     http_code=$(curl -s -o /dev/null -w "%{http_code}" \
-      http://127.0.0.1:${host_port}/api/health)
+      "http://127.0.0.1:${host_port}/api/health")
   fi
   if [ "$http_code" != "200" ]; then
     echo -e "${RED}Nginx proxy returned $http_code${NC}"
@@ -1511,7 +1515,7 @@ _check_container_security_headers() {
   _fetch_headers() {
     local url="$1" fwd="${2-}" path
     if [ -d /workspace ] && [ -n "$cname" ]; then
-      path="${url#http://127.0.0.1:${host_port}}"
+      path="${url#"http://127.0.0.1:${host_port}"}"
       docker exec "$cname" wget -qS -O /dev/null ${fwd:+--header="X-Forwarded-Proto: $fwd"} "http://127.0.0.1:80${path}" 2>&1 \
         | sed -E 's/^[[:space:]]+//' \
         | grep -E '^(HTTP|[A-Za-z][A-Za-z0-9-]+:)'
@@ -1522,7 +1526,7 @@ _check_container_security_headers() {
   _fetch_body() {
     local url="$1" path
     if [ -d /workspace ] && [ -n "$cname" ]; then
-      path="${url#http://127.0.0.1:${host_port}}"
+      path="${url#"http://127.0.0.1:${host_port}"}"
       docker exec "$cname" wget -qO- "http://127.0.0.1:80${path}" 2>/dev/null
     else
       curl -s "$url"
@@ -1699,8 +1703,10 @@ run_playwright_e2e() {
   # Never narrowed with --project; only the SPEC LIST is scoped (ROK-1565).
   if [ -n "$PLAYWRIGHT_SCOPED_SPECS" ]; then
     echo "Scoped spec list:"
+    # Deliberate word splitting on both lines: the list is space-separated and
+    # spec paths never contain spaces.
+    # shellcheck disable=SC2086
     printf '  %s\n' $PLAYWRIGHT_SCOPED_SPECS
-    # Deliberate word splitting — spec paths never contain spaces.
     # shellcheck disable=SC2086
     npx playwright test $PLAYWRIGHT_SCOPED_SPECS
   else
@@ -1797,7 +1803,8 @@ run_discord_smoke() {
   if [[ -d "$lock_dir" ]] && _discord_lock_required; then
     local lock_file="$lock_dir/discord.lock"
     echo "Acquiring fleet Discord lock at $lock_file (up to 45 min)..."
-    local wait_start=$(date +%s)
+    local wait_start
+    wait_start=$(date +%s)
     # flock fd 9 against the lock file. -w 2700 waits up to 45 min before
     # timing out. Subshell scopes the fd so the lock auto-releases when smoke
     # exits. ROK-1689: CI parity (concurrency 1, 2 retries, 90s timeouts) makes
@@ -1809,7 +1816,8 @@ run_discord_smoke() {
         echo -e "${RED}  Check: docker exec <runner> cat /state-locks/discord.lock — empty file but a flock holder.${NC}" >&2
         exit 75   # sysexits.h EX_TEMPFAIL — signals lock-acquisition failure to outer shell
       fi
-      local wait_end=$(date +%s)
+      local wait_end
+      wait_end=$(date +%s)
       echo "Got Discord lock (waited $((wait_end - wait_start))s); running smoke."
       cd "$REPO_ROOT/tools/test-bot" && npm run smoke
     )
