@@ -77,8 +77,23 @@ describe('planSuppressionExtension (ROK-1418)', () => {
   });
 
   it('skips a fresh window (currentExtended >= now+15m) → skip-fresh', () => {
-    const result = planSuppressionExtension(at(120), at(40), now);
+    // The window (now+40m) already ends past the scheduled end (now+30m).
+    const result = planSuppressionExtension(at(30), at(40), now);
     expect(result).toEqual({ action: 'skip-fresh' });
+  });
+
+  it('lifts a fresh window stored before the scheduled end up to the scheduled end (ROK-1696)', () => {
+    // A pre-floor write left now+40m on an event that ends at now+2h, so the
+    // effective end reads now+40m. The 60m target (now+1h) is still inside the
+    // schedule, so the repair writes the scheduled end itself.
+    const result = planSuppressionExtension(at(120), at(40), now);
+    expect(result).toEqual({ action: 'extend', newEnd: at(120) });
+  });
+
+  it('lifts a fresh window stored before the scheduled end to the 60m target when that is later (ROK-1696)', () => {
+    // Stored now+20m (fresh) before a now+30m end; target now+1h wins.
+    const result = planSuppressionExtension(at(30), at(20), now);
+    expect(result).toEqual({ action: 'extend', newEnd: at(60) });
   });
 
   it('extends when the current window is stale-ish (currentExtended < now+15m)', () => {

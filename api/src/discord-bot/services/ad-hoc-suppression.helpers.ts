@@ -60,7 +60,8 @@ export type SuppressionPlan =
  * Every consumer reads the effective end as COALESCE(extended_until,
  * upper(duration)), so such a write would pull the event's end FORWARD.
  * Suppression does not need it: buildTimeConditions matches on
- * upper(duration) alone until the scheduled end has passed.
+ * upper(duration) alone until the scheduled end has passed. A window already
+ * stored below scheduledEnd is lifted first (see `planBelowScheduleRepair`).
  */
 export function planSuppressionExtension(
   scheduledEnd: Date,
@@ -73,6 +74,8 @@ export function planSuppressionExtension(
   const target = new Date(
     Math.min(now.getTime() + SUPPRESSION_WINDOW_MS, ceiling.getTime()),
   );
+  const repair = planBelowScheduleRepair(scheduledEnd, currentExtended, target);
+  if (repair) return repair;
   const freshFloor = now.getTime() + SUPPRESSION_REFRESH_THRESHOLD_MS;
   if (currentExtended && currentExtended.getTime() >= freshFloor) {
     return { action: 'skip-fresh' };
@@ -87,6 +90,25 @@ export function planSuppressionExtension(
     return { action: 'skip-capped', ceiling };
   }
   return { action: 'extend', newEnd: target };
+}
+
+/**
+ * ROK-1696 repair: a stored window that ends BEFORE the scheduled end (the
+ * planner wrote now+60m into longer events before the floor above existed)
+ * pulls COALESCE(extended_until, upper(duration)) forward, and with the floor
+ * in place nothing would ever roll it on. Lift it to the later of the 60m
+ * target and the scheduled end, even while it is still fresh. Returns null
+ * when the stored window already ends at or after the scheduled end.
+ */
+function planBelowScheduleRepair(
+  scheduledEnd: Date,
+  currentExtended: Date | null,
+  target: Date,
+): SuppressionPlan | null {
+  if (!currentExtended) return null;
+  if (currentExtended.getTime() >= scheduledEnd.getTime()) return null;
+  const newEnd = Math.max(target.getTime(), scheduledEnd.getTime());
+  return { action: 'extend', newEnd: new Date(newEnd) };
 }
 
 /**

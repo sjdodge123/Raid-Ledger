@@ -217,7 +217,8 @@ describe('AdHocEventService — voice', () => {
         .mockResolvedValueOnce({
           id: 55,
           extendedUntil: new Date(Date.now() + 40 * 60_000),
-          scheduledEnd: new Date(Date.now() + 2 * 60 * 60_000),
+          // ROK-1696: the window ends past the scheduled end, so it is left alone.
+          scheduledEnd: new Date(Date.now() + 30 * 60_000),
           matchedBy: 'game',
         } as never);
 
@@ -262,7 +263,8 @@ describe('AdHocEventService — voice', () => {
         .mockResolvedValueOnce({
           id: 55,
           extendedUntil: new Date(Date.now() + 40 * 60_000), // fresh (>= now+15m)
-          scheduledEnd: new Date(Date.now() + 2 * 60 * 60_000),
+          // ROK-1696: past the scheduled end, so no below-schedule repair applies.
+          scheduledEnd: new Date(Date.now() + 30 * 60_000),
           matchedBy: 'game',
         } as never);
 

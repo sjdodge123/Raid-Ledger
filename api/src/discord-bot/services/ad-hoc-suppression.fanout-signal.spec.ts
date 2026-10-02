@@ -94,6 +94,22 @@ describe('suppressScheduled — onExtended hook (ROK-1696)', () => {
     expect(hook).not.toHaveBeenCalled();
   });
 
+  it('lifts a window stored before the scheduled end to that end, without calling the hook', async () => {
+    const event = scheduledEvent(120, 40);
+    findSpy.mockResolvedValueOnce(event);
+    db.returning.mockResolvedValueOnce([{ id: 77 }]);
+    const hook = jest.fn();
+
+    await expect(run(hook)).resolves.toBe(true);
+
+    // The write restores the scheduled end; the effective end does not move
+    // past it, so there is nothing to fan out.
+    expect(db.set).toHaveBeenCalledWith(
+      expect.objectContaining({ extendedUntil: event.scheduledEnd }),
+    );
+    expect(hook).not.toHaveBeenCalled();
+  });
+
   it('does not call the hook when the guarded write touches 0 rows', async () => {
     findSpy.mockResolvedValueOnce(scheduledEvent(30, null));
     db.returning.mockResolvedValueOnce([]);
@@ -157,17 +173,33 @@ describe('AdHocEventService — suppression window signal (ROK-1696)', () => {
     ]);
   });
 
-  it('emits through ensureNotSuppressed too, and not when the join is within schedule', async () => {
+  it('emits through ensureNotSuppressed on a suppressed join that writes', async () => {
+    const { service, mocks } = await setupAdHocTestModule();
+    jest
+      .spyOn(helpers, 'findActiveScheduledEvent')
+      .mockResolvedValueOnce(scheduledEvent(30, null));
+    mocks.db.returning.mockResolvedValueOnce([{ id: 77 }]);
+    const received = listen(service);
+
+    await expect(
+      service.ensureNotSuppressed('binding-A', 10, 'voice-1'),
+    ).resolves.toBeNull();
+
+    expect(received).toEqual([
+      {
+        eventId: 77,
+        newEnd: expect.any(Date),
+        discordScheduledEventId: DISCORD_SE_ID,
+      },
+    ]);
+  });
+
+  it('does not emit through ensureNotSuppressed when the join is within schedule', async () => {
     const { service } = await setupAdHocTestModule();
-    const spy = jest.spyOn(helpers, 'findActiveScheduledEvent');
-    spy.mockResolvedValueOnce(scheduledEvent(120, null));
-    const emitter = (service as unknown as { eventEmitter: EventEmitter2 })
-      .eventEmitter;
-    const received: SuppressionWindowExtendedPayload[] = [];
-    emitter.on(
-      SUPPRESSION_WINDOW_EVENTS.EXTENDED,
-      (p: SuppressionWindowExtendedPayload) => received.push(p),
-    );
+    jest
+      .spyOn(helpers, 'findActiveScheduledEvent')
+      .mockResolvedValueOnce(scheduledEvent(120, null));
+    const received = listen(service);
 
     await expect(
       service.ensureNotSuppressed('binding-A', 10, 'voice-1'),
@@ -176,3 +208,14 @@ describe('AdHocEventService — suppression window signal (ROK-1696)', () => {
     expect(received).toEqual([]);
   });
 });
+
+/** Collect EXTENDED payloads from the real EventEmitter2 the service holds. */
+function listen(service: unknown): SuppressionWindowExtendedPayload[] {
+  const emitter = (service as { eventEmitter: EventEmitter2 }).eventEmitter;
+  const received: SuppressionWindowExtendedPayload[] = [];
+  emitter.on(
+    SUPPRESSION_WINDOW_EVENTS.EXTENDED,
+    (p: SuppressionWindowExtendedPayload) => received.push(p),
+  );
+  return received;
+}
