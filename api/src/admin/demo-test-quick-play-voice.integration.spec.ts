@@ -5,10 +5,12 @@
  * The series quick-play smoke drives this seam, and the smoke runs only on
  * Discord-path PRs. This spec pins what it cannot see cheaply: the
  * `AdHocEventService` / `ChannelBindingsService` / `UsersService` injection in
- * `AdminModule`, the event a join really mints, and the refusals the smoke's
- * fixture documents (404 unknown binding, 400 wrong purpose or unlinked user).
+ * `AdminModule`, the event a join really mints, the refusals the smoke's
+ * fixture documents (404 unknown binding, 400 wrong purpose, wrong channel or
+ * unlinked user), and the JWT + admin guards in front of it all.
  * Discord I/O is stubbed: the LIVE embed post is the smoke's job, not this one.
  */
+import { JwtService } from '@nestjs/jwt';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -22,6 +24,8 @@ import { SettingsService } from '../settings/settings.service';
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 /** The bound voice channel — a snowflake, as the body schema requires. */
 const VOICE_CHANNEL = '1390000000000000001';
+/** Another real-shaped voice channel the binding does not monitor. */
+const OTHER_CHANNEL = '1390000000000000999';
 /** A real-shaped Discord id: `local:` / `unlinked:` users are refused. */
 const DISCORD_ID = '1390000000000000777';
 /** A well-formed binding id no row carries. */
@@ -90,11 +94,14 @@ async function seedBinding(purpose: string): Promise<string> {
   return binding.id;
 }
 
-function postJoin(body: { userId: number; bindingId: string }) {
+function postJoin(
+  body: { userId: number; bindingId: string },
+  channelId = VOICE_CHANNEL,
+) {
   return testApp.request
     .post('/admin/test/quick-play/voice-join')
     .set('Authorization', `Bearer ${adminToken}`)
-    .send({ ...body, channelId: VOICE_CHANNEL });
+    .send({ ...body, channelId });
 }
 
 function eventsOf(bindingId: string) {
@@ -156,5 +163,48 @@ describe('POST /admin/test/quick-play/voice-join', () => {
     const res = await postJoin({ userId, bindingId });
     expect(res.status).toBe(400);
     expect(await eventsOf(bindingId)).toHaveLength(0);
+  });
+
+  it('400s a channel the binding does not monitor', async () => {
+    await testApp.app.get(SettingsService).setAdHocEventsEnabled(true);
+    const userId = await seedUser(DISCORD_ID);
+    const bindingId = await seedBinding('game-voice-monitor');
+    const res = await postJoin({ userId, bindingId }, OTHER_CHANNEL);
+    expect(res.status).toBe(400);
+    expect(await eventsOf(bindingId)).toHaveLength(0);
+  });
+});
+
+describe('POST /admin/test/quick-play/voice-join guards', () => {
+  async function seededJoin() {
+    const userId = await seedUser(DISCORD_ID);
+    const bindingId = await seedBinding('game-voice-monitor');
+    return { userId, bindingId, channelId: VOICE_CHANNEL };
+  }
+
+  it('401s a request without a token', async () => {
+    const res = await testApp.request
+      .post('/admin/test/quick-play/voice-join')
+      .send(await seededJoin());
+    expect(res.status).toBe(401);
+  });
+
+  it('403s a member who is not an admin', async () => {
+    const join = await seededJoin();
+    const token = testApp.app
+      .get(JwtService)
+      .sign({ sub: join.userId, username: 'quickplayer' });
+    const res = await testApp.request
+      .post('/admin/test/quick-play/voice-join')
+      .set('Authorization', `Bearer ${token}`)
+      .send(join);
+    expect(res.status).toBe(403);
+    expect(await eventsOf(join.bindingId)).toHaveLength(0);
+  });
+
+  it('403s an admin while DEMO_MODE is off', async () => {
+    process.env.DEMO_MODE = 'false';
+    const res = await postJoin(await seededJoin());
+    expect(res.status).toBe(403);
   });
 });
