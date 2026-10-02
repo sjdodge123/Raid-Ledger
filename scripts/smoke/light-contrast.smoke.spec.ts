@@ -12,7 +12,6 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
-import { isPhoneLayout } from './helpers';
 import {
     expectLightScheme,
     expectNoContrastViolations,
@@ -23,7 +22,7 @@ import {
 interface LightRoute {
     path: string;
     /** Resolves once the route's own content (not a skeleton) is on screen. */
-    ready: (page: Page, phone: boolean) => Promise<void>;
+    ready: (page: Page) => Promise<void>;
 }
 
 const ROUTES: LightRoute[] = [
@@ -36,11 +35,13 @@ const ROUTES: LightRoute[] = [
     },
     {
         path: '/events',
-        ready: async (page, phone) => {
+        ready: async (page) => {
             await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
-            const card = phone
-                ? page.getByTestId('mobile-event-card')
-                : page.locator('.hidden.md\\:grid [role="button"]');
+            // Phone cards and the md+ grid are both in the DOM; one is hidden.
+            const card = page
+                .getByTestId('mobile-event-card')
+                .or(page.locator('.hidden.md\\:grid [role="button"]'))
+                .filter({ visible: true });
             await expect(card.first()).toBeVisible({ timeout: 10_000 });
         },
     },
@@ -71,10 +72,10 @@ test.describe('Light scheme colour contrast (default-light)', () => {
     });
 
     for (const route of ROUTES) {
-        test(`${route.path} has no color-contrast violations`, async ({ page }, testInfo) => {
+        test(`${route.path} has no color-contrast violations`, async ({ page }) => {
             await page.goto(route.path);
             await expectLightScheme(page);
-            await route.ready(page, isPhoneLayout(testInfo));
+            await route.ready(page);
             await waitForFiniteAnimations(page);
             await expectNoContrastViolations(page);
         });
