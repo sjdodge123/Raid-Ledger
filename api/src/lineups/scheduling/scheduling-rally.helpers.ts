@@ -141,7 +141,8 @@ export async function countPollMembers(
     JOIN users u ON u.id = lmm.user_id
     WHERE lmm.match_id = ${matchId}
   `)) as unknown as Array<{ count: number }>;
-  return rows.length > 0 ? Number(rows[0].count) : 0;
+  const [row] = rows;
+  return row === undefined ? 0 : Number(row.count);
 }
 
 /** Unix seconds for a Discord `<t:…>` token. */
@@ -223,8 +224,8 @@ export async function findSlotInMatch(
     proposedTime: string;
     voteCount: number;
   }>;
-  if (rows.length === 0) return null;
   const [row] = rows;
+  if (row === undefined) return null;
   return {
     slotId: Number(row.slotId),
     proposedTime: new Date(row.proposedTime).toISOString(),
