@@ -74,7 +74,7 @@ function twelveSnapshotFixture(): string[] {
     const i = names.indexOf(n);
     return i < 0 ? minutes(-1440) : minutes(at(ranks, i));
   });
-  return [names[6], names[2]].map(migrationPath).sort();
+  return [at(names, 6), at(names, 2)].map(migrationPath).sort();
 }
 
 const unlinkedPaths = (): string[] =>
@@ -286,7 +286,7 @@ function describeBackupService() {
       );
       expect(dirsRead).toEqual([MIGRATION_DIR]);
       expect(unlinkedPaths()).toEqual(
-        [names[0], names[1]].map(migrationPath).sort(),
+        [at(names, 0), at(names, 1)].map(migrationPath).sort(),
       );
     });
 
