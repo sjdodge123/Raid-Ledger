@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WowCronRegistrar } from './wow-cron-registrar';
 import { CharactersService } from '../../characters/characters.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
+import { at } from '../../common/testing/narrow';
 
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
@@ -36,7 +37,7 @@ async function testPreventConcurrentSyncs() {
   );
 
   const jobs = registrar.getCronJobs();
-  const handler = jobs[0].handler;
+  const handler = at(jobs, 0).handler;
 
   const firstSync = handler();
   await handler();
@@ -55,10 +56,10 @@ describe('WowCronRegistrar — getCronJobs', () => {
     expect(jobs).toHaveLength(2);
     expect(jobs[0]?.name).toBe('character-auto-sync');
     expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
-    expect(typeof jobs[0].handler).toBe('function');
+    expect(typeof at(jobs, 0).handler).toBe('function');
     expect(jobs[1]?.name).toBe('boss-data-refresh');
     expect(jobs[1]?.cronExpression).toBe('0 0 4 * * 0');
-    expect(typeof jobs[1].handler).toBe('function');
+    expect(typeof at(jobs, 1).handler).toBe('function');
   });
 });
 
@@ -72,7 +73,7 @@ describe('WowCronRegistrar — handlers', () => {
         failed: 1,
       });
       const jobs = registrar.getCronJobs();
-      await jobs[0].handler();
+      await at(jobs, 0).handler();
       expect(mockCharactersService.syncAllCharacters).toHaveBeenCalledTimes(1);
     });
 
@@ -83,7 +84,7 @@ describe('WowCronRegistrar — handlers', () => {
         .mockRejectedValueOnce(new Error('API down'))
         .mockResolvedValueOnce({ synced: 3, failed: 0 });
       const jobs = registrar.getCronJobs();
-      const handler = jobs[0].handler;
+      const handler = at(jobs, 0).handler;
       await handler();
       await handler();
       expect(mockCharactersService.syncAllCharacters).toHaveBeenCalledTimes(2);
@@ -94,7 +95,7 @@ describe('WowCronRegistrar — handlers', () => {
     it('should call refresh()', async () => {
       mockBossDataRefresh.refresh.mockResolvedValue({ bosses: 10, loot: 50 });
       const jobs = registrar.getCronJobs();
-      await jobs[1].handler();
+      await at(jobs, 1).handler();
       expect(mockBossDataRefresh.refresh).toHaveBeenCalledTimes(1);
     });
   });

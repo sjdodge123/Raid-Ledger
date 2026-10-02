@@ -4,6 +4,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
+import { at } from '../../common/testing/narrow';
 
 interface ThenableQueryResult {
   then: (
@@ -58,7 +59,7 @@ const depManifest: PluginManifest = {
 };
 
 let service: PluginRegistryService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: ReturnType<typeof buildMockDb>;
 let mockEventEmitter: { emit: jest.Mock };
 
 let selectResults: unknown[];
@@ -146,7 +147,7 @@ async function testListPluginsMerge() {
   expect(result).toHaveLength(1);
   expect(result[0]?.slug).toBe('test-plugin');
   expect(result[0]?.status).toBe('active');
-  expect(result[0].installedAt).toBe(installedAt.toISOString());
+  expect(at(result, 0).installedAt).toBe(installedAt.toISOString());
 }
 
 async function testConfiguredFlag() {
@@ -270,7 +271,7 @@ describe('PluginRegistryService — manifest registration', () => {
       mockSelectWithCredentials([], []);
       const result = await service.listPlugins();
       expect(result[0]?.status).toBe('not_installed');
-      expect(result[0].installedAt).toBeNull();
+      expect(at(result, 0).installedAt).toBeNull();
     });
 
     it('should resolve configured flag for integrations', () =>

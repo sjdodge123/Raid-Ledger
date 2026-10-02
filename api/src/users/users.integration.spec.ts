@@ -42,10 +42,13 @@ async function createDiscordUser(
   username: string,
   discordId: string,
 ): Promise<typeof schema.users.$inferSelect> {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId, username, role: 'member' })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId, username, role: 'member' })
+      .returning(),
+    'user',
+  );
   return user;
 }
 
@@ -341,8 +344,8 @@ async function testLinkDiscordUpdatesDiscordId() {
     'linker_discord',
     'avatar_hash',
   );
-  expect(updated.discordId).toBe('999888777');
-  expect(updated.username).toBe('linker_discord');
+  expect(updated?.discordId).toBe('999888777');
+  expect(updated?.username).toBe('linker_discord');
 
   // Verify persistence
   const [row] = nonEmpty(
@@ -385,11 +388,14 @@ async function testUnlinkDiscordPrefixesAndClearsAvatar() {
     .set('Authorization', `Bearer ${token}`);
   expect(res.status).toBe(204);
 
-  const [row] = await testApp.db
-    .select()
-    .from(schema.users)
-    .where(eq(schema.users.id, user.id))
-    .limit(1);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, user.id))
+      .limit(1),
+    'row',
+  );
   expect(row.discordId).toBe('unlinked:444555666');
   expect(row.avatar).toBeNull();
 }
