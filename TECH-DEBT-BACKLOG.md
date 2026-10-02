@@ -2131,3 +2131,8 @@ same day (#1278, #1279, #1280).
 
 - **[nit]** `api/src/lfg/lfg-quickplay.listener.ts:31` (`LfgQuickPlayListener`): since ROK-1625 the class also converts the joiner's hand on the game's LFG-born session and emits `GROUP_CHANGED` (`playing`), so "Quick Play" no longer names everything it does. The log text and both docblocks were updated on the branch. The rename was left out because it touches eight files for no behaviour change: `lfg.module.ts` (the provider), the listener and its unit spec, the integration spec's spy target, and doc references in `discord-bot.constants.ts`, `ad-hoc-participant.service.ts` (plus its spec) and `lfg-now-manual-start.helpers.ts`.
   Suggested: rename to `LfgRosterJoinListener` (file `lfg-roster-join.listener.ts`) in one mechanical commit.
+
+### 2026-10-02 — fix/b45-lineups-timestamptz-1002 (surfaced during TDB:1980)
+
+- **[low]** `api/src/drizzle/schema/community-lineup-tiebreakers.ts:46`: `round_deadline` is still a zone-less `timestamp`, and `api/src/lineups/lineup-tiebreaker-reminder.helpers.ts:94` compares it with a `${now.toISOString()}::timestamp` parameter. The comparison is UTC-correct only because prod (and fleet) Postgres run in UTC; on a non-UTC session the stored wall clock and the cast parameter are both zone-less, so a writer that ever stamps it with SQL `NOW()` would drift by the session offset. Found while converting the sibling lineup and match columns to `timestamptz` in migration 0197; deliberately left out of that change.
+  Suggested: the same `timestamptz` conversion as 0197 (`USING "round_deadline" AT TIME ZONE 'UTC'`), plus switching the reminder helper's cast to `::timestamptz` in the same PR.
