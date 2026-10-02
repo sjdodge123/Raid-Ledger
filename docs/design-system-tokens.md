@@ -124,8 +124,8 @@ does not: `GradientOverlay`'s `from-black/80 to-transparent`
 (`components/games/game-card-parts.tsx:66`) stays dark in both families because it exists
 to make white title text legible over the *image*, not over the theme surface. Anything
 layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
-`text-dim` — `#64748b`, the one token whose value is identical in both families — so an
-image-less tile reads the same either way.
+`text-dim` — `#64748b` dark, `#5a697f` light (the same slate, a step darker so it clears AA on
+the light panel and overlay) — so an image-less tile reads the same either way.
 
 ### Chips (§4.3)
 
