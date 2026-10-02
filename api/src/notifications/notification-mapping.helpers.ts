@@ -60,12 +60,11 @@ export function resolveChannelPrefs(stored: unknown): ChannelPrefs {
  * (Discord on) on every send path, so flipping only stored keys kept DMing.
  */
 export function buildDiscordDisabledPrefs(stored: unknown): ChannelPrefs {
-  const resolved = resolveChannelPrefs(stored);
-  const disabled = {} as ChannelPrefs;
+  const prefs = resolveChannelPrefs(stored);
   for (const type of NOTIFICATION_TYPES) {
-    disabled[type] = { ...resolved[type], discord: false };
+    prefs[type] = { ...prefs[type], discord: false };
   }
-  return disabled;
+  return prefs;
 }
 
 /** Types whose resolved Discord channel is OFF for a stored prefs value. */

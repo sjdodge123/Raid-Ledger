@@ -6,7 +6,10 @@ import { BadRequestException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import * as schema from '../drizzle/schema';
-import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
+import {
+  DEFAULT_CHANNEL_PREFS,
+  NOTIFICATION_TYPES,
+} from '../drizzle/schema/notification-preferences';
 import { DemoTestDeactivationController } from './demo-test-deactivation.controller';
 import type { SettingsService } from '../settings/settings.service';
 import {
@@ -31,6 +34,9 @@ describe('parseQuietDms', () => {
   });
 });
 
+/** Taken at import, before any test can have mutated the shared matrix. */
+const PRISTINE_DEFAULTS = structuredClone(DEFAULT_CHANNEL_PREFS);
+
 describe('buildQuietDmChannelPrefs', () => {
   it('turns Discord off for EVERY notification type, including the nudge paths', () => {
     const prefs = buildQuietDmChannelPrefs();
@@ -39,6 +45,11 @@ describe('buildQuietDmChannelPrefs', () => {
     );
     expect(stillOn).toEqual([]);
     expect(prefs.lineup_steam_nudge.inApp).toBe(true);
+  });
+
+  it('leaves the shared DEFAULT_CHANNEL_PREFS matrix untouched', () => {
+    buildQuietDmChannelPrefs();
+    expect(DEFAULT_CHANNEL_PREFS).toEqual(PRISTINE_DEFAULTS);
   });
 });
 
