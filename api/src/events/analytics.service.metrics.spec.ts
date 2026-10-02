@@ -298,14 +298,14 @@ async function testDiscordUsernameFallback() {
   ];
   setupThreeSelects([mockEventRow], signups, []);
   const result = await service.getEventMetrics(10);
-  expect(result.rosterBreakdown[0].username).toBe('Anonymous#9999');
+  expect(result.rosterBreakdown[0]?.username).toBe('Anonymous#9999');
 }
 
 async function testUnknownFallback() {
   const signups = [makeSignup({})];
   setupThreeSelects([mockEventRow], signups, []);
   const result = await service.getEventMetrics(10);
-  expect(result.rosterBreakdown[0].username).toBe('Unknown');
+  expect(result.rosterBreakdown[0]?.username).toBe('Unknown');
 }
 
 async function testSerializesTimestamps() {

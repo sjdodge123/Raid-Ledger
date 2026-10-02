@@ -322,8 +322,8 @@ describe('findRoleChanges', () => {
     const after = [{ id: 1, signupId: 10, role: 'tank', position: 1 }];
     const changes = findRoleChanges(before, after, 0);
     expect(changes).toHaveLength(1);
-    expect(changes[0].fromRole).toBe('unknown');
-    expect(changes[0].toRole).toBe('tank');
+    expect(changes[0]?.fromRole).toBe('unknown');
+    expect(changes[0]?.toRole).toBe('tank');
   });
 
   it('ignores signups not present in before snapshot', () => {

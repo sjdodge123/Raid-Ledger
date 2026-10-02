@@ -51,7 +51,7 @@ describe('Regression: ROK-1287 — strongestSharedKey determinism', () => {
     const matchKeys = permutations.map((rows) => {
       const groups = groupRowsByConnectedKeys(rows);
       expect(groups).toHaveLength(1);
-      expect(groups[0].matchType).toBe('igdb');
+      expect(groups[0]?.matchType).toBe('igdb');
       return groups[0].matchKey;
     });
     expect(new Set(matchKeys).size).toBe(1);
@@ -78,10 +78,10 @@ describe('Regression: ROK-1287 — strongestSharedKey determinism', () => {
     ];
     const forward = groupRowsByConnectedKeys([...rows]);
     const reversed = groupRowsByConnectedKeys([...rows].reverse());
-    expect(forward[0].matchType).toBe('steam');
-    expect(reversed[0].matchType).toBe('steam');
-    expect(forward[0].matchKey).toBe('123');
-    expect(reversed[0].matchKey).toBe('123');
+    expect(forward[0]?.matchType).toBe('steam');
+    expect(reversed[0]?.matchType).toBe('steam');
+    expect(forward[0]?.matchKey).toBe('123');
+    expect(reversed[0]?.matchKey).toBe('123');
   });
 
   it('is deterministic for name-tier components with multiple shared values', () => {

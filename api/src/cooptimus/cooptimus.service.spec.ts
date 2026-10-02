@@ -200,7 +200,7 @@ describe('CooptimusService.fetchGamePageFacts (game-page source)', () => {
       comboLabel: null,
       downloadableOnly: null,
     });
-    expect(spy.mock.calls[0][1]).toMatchObject({ redirect: 'error' });
+    expect(spy.mock.calls[0]?.[1]).toMatchObject({ redirect: 'error' });
   });
 
   it('degrades to unknown when the request throws', async () => {

@@ -55,7 +55,7 @@ describe('ActiveEventCacheService', () => {
 
       const result = service.getActiveEvents(now);
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe(1);
+      expect(result[0]?.id).toBe(1);
     });
 
     it('excludes cancelled events', () => {
@@ -84,7 +84,7 @@ describe('ActiveEventCacheService', () => {
       const twoHoursMs = 2 * 60 * 60 * 1000;
       const result = service.getUpcomingEvents(now, twoHoursMs);
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe(1);
+      expect(result[0]?.id).toBe(1);
     });
   });
 
@@ -105,7 +105,7 @@ describe('ActiveEventCacheService', () => {
       const oneHourMs = 60 * 60 * 1000;
       const result = service.getRecentlyEndedEvents(now, oneHourMs);
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe(1);
+      expect(result[0]?.id).toBe(1);
     });
   });
 

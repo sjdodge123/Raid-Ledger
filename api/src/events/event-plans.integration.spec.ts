@@ -17,6 +17,7 @@ import { handleNoWinner } from './event-plans-lifecycle.helpers';
 import type { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -37,14 +38,17 @@ async function createMemberAndLogin(
   discordId?: string,
 ): Promise<{ userId: number; token: string }> {
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: discordId ?? `local:${email}`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: discordId ?? `local:${email}`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email,
     passwordHash,
@@ -199,11 +203,14 @@ async function testCancelPlan() {
     .set('Authorization', `Bearer ${adminToken}`);
   expect(res.status).toBe(200);
   expect(res.body.status).toBe('cancelled');
-  const [retrieved] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
+  const [retrieved] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'retrieved',
+  );
   expect(retrieved.status).toBe('cancelled');
 }
 
@@ -256,11 +263,14 @@ async function testPersistCompletedWithEvent() {
     createdEventId: eventId,
     winningOption: 0,
   });
-  const [retrieved] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
+  const [retrieved] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'retrieved',
+  );
   expect(retrieved.status).toBe('completed');
   expect(retrieved.createdEventId).toBe(eventId);
 }
@@ -302,15 +312,18 @@ async function testGameInterestSuggestions() {
 }
 
 async function testFallbackNoInterests() {
-  const [otherGame] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name: 'Unpopular Game',
-      slug: 'unpopular-game',
-      coverUrl: null,
-      igdbId: null,
-    })
-    .returning();
+  const [otherGame] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Unpopular Game',
+        slug: 'unpopular-game',
+        coverUrl: null,
+        igdbId: null,
+      })
+      .returning(),
+    'otherGame',
+  );
   const res = await testApp.request.get(
     `/event-plans/time-suggestions?gameId=${otherGame.id}`,
   );
@@ -391,11 +404,14 @@ async function testCreateEventFromPlan() {
     plan,
     0,
   );
-  const [updated] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
+  const [updated] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'updated',
+  );
   expect(updated.status).toBe('completed');
   expect(updated.winningOption).toBe(0);
   expect(updated.createdEventId).toEqual(expect.any(Number));
@@ -430,11 +446,14 @@ async function testTieBreakPicksEarliest() {
     plan,
     1,
   );
-  const [updated] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
+  const [updated] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'updated',
+  );
   expect(updated.status).toBe('completed');
   expect(updated.winningOption).toBe(1);
   const [event] = await testApp.db
@@ -450,11 +469,14 @@ async function testNoVotesExpires() {
     title: 'No Votes Plan',
   });
   await handleNoWinner(testApp.db, mockDiscordClient(), plan);
-  const [updated] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
+  const [updated] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'updated',
+  );
   expect(updated.status).toBe('expired');
 }
 
@@ -473,11 +495,14 @@ async function testCreatorAutoSignup() {
     plan,
     0,
   );
-  const [updated] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
+  const [updated] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'updated',
+  );
   const signups = await testApp.db
     .select()
     .from(schema.eventSignups)
@@ -511,16 +536,22 @@ async function testSlotConfigPreserved() {
     plan,
     0,
   );
-  const [updated] = await testApp.db
-    .select()
-    .from(schema.eventPlans)
-    .where(eq(schema.eventPlans.id, plan.id))
-    .limit(1);
-  const [event] = await testApp.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, updated.createdEventId!))
-    .limit(1);
+  const [updated] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, plan.id))
+      .limit(1),
+    'updated',
+  );
+  const [event] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, updated.createdEventId!))
+      .limit(1),
+    'event',
+  );
   const sc = event.slotConfig as Record<string, unknown>;
   expect(sc.type).toBe('mmo');
   expect(sc.tank).toBe(2);
@@ -534,11 +565,14 @@ async function testConvertPreservesFields() {
     title: 'Convert Me',
     gameId: testApp.seed.game.id,
   });
-  const [event] = await testApp.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
+  const [event] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1),
+    'event',
+  );
   const start = new Date(event.duration[0]);
   const end = new Date(event.duration[1]);
   const durationMinutes = Math.round((end.getTime() - start.getTime()) / 60000);

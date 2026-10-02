@@ -222,7 +222,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions).toHaveLength(1);
-    expect(result.signupMentions![0].username).toBe('alice');
+    expect(result.signupMentions![0]?.username).toBe('alice');
   });
 
   it('excludes rows with no discordId and no username', async () => {
@@ -249,7 +249,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions).toHaveLength(1);
-    expect(result.signupMentions![0].discordId).toBe('u1');
+    expect(result.signupMentions![0]?.discordId).toBe('u1');
   });
 
   it('maps role correctly for assigned user', async () => {
@@ -311,7 +311,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(result.signupMentions![0].displayName).toBe('Ana Lyst');
+    expect(result.signupMentions![0]?.displayName).toBe('Ana Lyst');
   });
 
   it('renders the bold displayName in the roster, not the username', async () => {
@@ -356,7 +356,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const data = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(data.signupMentions![0].discordUsername).toBe('raider');
+    expect(data.signupMentions![0]?.discordUsername).toBe('raider');
     const { embed } = makeFactory().buildEventEmbed(data, {
       communityName: 'Test Guild',
       clientUrl: 'http://localhost:5173',

@@ -16,7 +16,10 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 
 describe('SignupsService — confirm', () => {
   let service: SignupsService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  >;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
@@ -212,9 +215,9 @@ describe('SignupsService — confirm', () => {
 
       expect(result.eventId).toBe(1);
       expect(result.count).toBe(1);
-      expect(result.signups[0].user.username).toBe('testuser');
-      expect(result.signups[0].character?.name).toBe('Frostweaver');
-      expect(result.signups[0].confirmationStatus).toBe('confirmed');
+      expect(result.signups[0]?.user.username).toBe('testuser');
+      expect(result.signups[0]?.character?.name).toBe('Frostweaver');
+      expect(result.signups[0]?.confirmationStatus).toBe('confirmed');
     });
 
     it('should return roster with null character for pending signups', async () => {
@@ -240,7 +243,7 @@ describe('SignupsService — confirm', () => {
       const result = await service.getRoster(1);
 
       expect(result.signups[0].character).toBeNull();
-      expect(result.signups[0].confirmationStatus).toBe('pending');
+      expect(result.signups[0]?.confirmationStatus).toBe('pending');
     });
 
     it('should throw NotFoundException when event does not exist', async () => {

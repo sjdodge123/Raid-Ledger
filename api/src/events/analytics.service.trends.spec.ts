@@ -204,7 +204,7 @@ async function testReliabilityRate() {
     ])
     .mockResolvedValueOnce([{ count: '1' }]);
   const result = await service.getUserReliability(20, 0);
-  expect(result.users[0].attendanceRate).toBe(0.75);
+  expect(result.users[0]?.attendanceRate).toBe(0.75);
 }
 
 async function testReliabilityZeroEvents() {
@@ -222,7 +222,7 @@ async function testReliabilityZeroEvents() {
     ])
     .mockResolvedValueOnce([{ count: '1' }]);
   const result = await service.getUserReliability(20, 0);
-  expect(result.users[0].attendanceRate).toBe(0);
+  expect(result.users[0]?.attendanceRate).toBe(0);
 }
 
 async function testReliabilityNullAvatar() {
@@ -301,8 +301,8 @@ async function testGameRates() {
     },
   ]);
   const result = await service.getGameAttendance();
-  expect(result.games[0].avgAttendanceRate).toBe(0.75);
-  expect(result.games[0].avgNoShowRate).toBe(0.2);
+  expect(result.games[0]?.avgAttendanceRate).toBe(0.75);
+  expect(result.games[0]?.avgNoShowRate).toBe(0.2);
 }
 
 async function testGameZeroSignups() {
@@ -318,8 +318,8 @@ async function testGameZeroSignups() {
     },
   ]);
   const result = await service.getGameAttendance();
-  expect(result.games[0].avgAttendanceRate).toBe(0);
-  expect(result.games[0].avgNoShowRate).toBe(0);
+  expect(result.games[0]?.avgAttendanceRate).toBe(0);
+  expect(result.games[0]?.avgNoShowRate).toBe(0);
 }
 
 async function testGameNullCover() {
@@ -361,8 +361,8 @@ async function testGameMultiple() {
   ]);
   const result = await service.getGameAttendance();
   expect(result.games).toHaveLength(2);
-  expect(result.games[0].gameName).toBe('Game A');
-  expect(result.games[1].gameName).toBe('Game B');
+  expect(result.games[0]?.gameName).toBe('Game A');
+  expect(result.games[1]?.gameName).toBe('Game B');
 }
 
 beforeEach(() => setupEach());

@@ -16,6 +16,7 @@ import {
   truncateAllTables,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 interface AuditResponse {
   summary: {
@@ -381,14 +382,17 @@ describe('POST /admin/games/dedup-audit/run', () => {
       .from(schema.localCredentials)
       .where(eq(schema.localCredentials.userId, testApp.seed.adminUser.id));
 
-    const [nonAdmin] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:nonadmin@test.local',
-        username: 'nonadmin',
-        role: 'member',
-      })
-      .returning();
+    const [nonAdmin] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:nonadmin@test.local',
+          username: 'nonadmin',
+          role: 'member',
+        })
+        .returning(),
+      'nonAdmin',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'nonadmin@test.local',
       passwordHash,
@@ -688,37 +692,46 @@ describe('POST /admin/games/dedup-audit/run', () => {
     // so the vote row is the ONLY new-FK row attached to the dup id.
     // publicSlug is varchar(16) — keep it short to satisfy the column cap.
     const slug = `tb${Date.now().toString(36).slice(-8)}`;
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Tiebreaker Lineup',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: slug,
-      })
-      .returning({ id: schema.communityLineups.id });
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Tiebreaker Lineup',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: slug,
+        })
+        .returning({ id: schema.communityLineups.id }),
+      'lineup',
+    );
 
-    const [tiebreaker] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId: lineup.id,
-        mode: 'bracket',
-        tiedGameIds: [steamDupIds[0], steamDupIds[1]],
-        originalVoteCount: 0,
-      })
-      .returning({ id: schema.communityLineupTiebreakers.id });
+    const [tiebreaker] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId: lineup.id,
+          mode: 'bracket',
+          tiedGameIds: [steamDupIds[0], steamDupIds[1]],
+          originalVoteCount: 0,
+        })
+        .returning({ id: schema.communityLineupTiebreakers.id }),
+      'tiebreaker',
+    );
 
-    const [matchup] = await testApp.db
-      .insert(schema.communityLineupTiebreakerBracketMatchups)
-      .values({
-        tiebreakerId: tiebreaker.id,
-        round: 1,
-        position: 1,
-        gameAId: steamDupIds[0],
-        gameBId: steamDupIds[0],
-      })
-      .returning({
-        id: schema.communityLineupTiebreakerBracketMatchups.id,
-      });
+    const [matchup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakerBracketMatchups)
+        .values({
+          tiebreakerId: tiebreaker.id,
+          round: 1,
+          position: 1,
+          gameAId: steamDupIds[0],
+          gameBId: steamDupIds[0],
+        })
+        .returning({
+          id: schema.communityLineupTiebreakerBracketMatchups.id,
+        }),
+      'matchup',
+    );
 
     // The actual new-FK row we care about — vote.game_id = dup id.
     await testApp.db

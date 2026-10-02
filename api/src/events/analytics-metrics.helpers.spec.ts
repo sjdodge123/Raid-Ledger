@@ -60,8 +60,8 @@ function testMatchByDiscordUserId() {
   const result = buildRosterBreakdown([signup], [voice]);
 
   expect(result).toHaveLength(1);
-  expect(result[0].voiceClassification).toBe('full');
-  expect(result[0].voiceDurationSec).toBe(7200);
+  expect(result[0]?.voiceClassification).toBe('full');
+  expect(result[0]?.voiceDurationSec).toBe(7200);
 }
 
 function testMatchByUserIdWhenDiscordUserIdNull() {
@@ -80,8 +80,8 @@ function testMatchByUserIdWhenDiscordUserIdNull() {
   const result = buildRosterBreakdown([signup], [voice]);
 
   expect(result).toHaveLength(1);
-  expect(result[0].voiceClassification).toBe('partial');
-  expect(result[0].voiceDurationSec).toBe(3600);
+  expect(result[0]?.voiceClassification).toBe('partial');
+  expect(result[0]?.voiceDurationSec).toBe(3600);
 }
 
 function testNoMatchReturnsNullVoiceData() {
@@ -157,8 +157,8 @@ function testPreferDiscordUserIdWhenBothPresent() {
 
   expect(result).toHaveLength(1);
   // Must pick the discordUserId match (full, 7200s), not the userId match
-  expect(result[0].voiceClassification).toBe('full');
-  expect(result[0].voiceDurationSec).toBe(7200);
+  expect(result[0]?.voiceClassification).toBe('full');
+  expect(result[0]?.voiceDurationSec).toBe(7200);
 }
 
 function testVoiceOnlyWithNoSignupsAppearsAsEntry() {
@@ -169,7 +169,7 @@ function testVoiceOnlyWithNoSignupsAppearsAsEntry() {
   // ROK-985: voice-only participants now appear even with zero signups
   expect(result).toHaveLength(1);
   expect(result[0].signupStatus).toBeNull();
-  expect(result[0].voiceClassification).toBe('full');
+  expect(result[0]?.voiceClassification).toBe('full');
 }
 
 function testEmptyVoiceSessionsNullsVoiceData() {
@@ -205,10 +205,10 @@ function testAnonymousDiscordParticipantMatchesByDiscordUserId() {
   const result = buildRosterBreakdown([signup], [voice]);
 
   expect(result).toHaveLength(1);
-  expect(result[0].voiceClassification).toBe('late');
-  expect(result[0].voiceDurationSec).toBe(2700);
+  expect(result[0]?.voiceClassification).toBe('late');
+  expect(result[0]?.voiceDurationSec).toBe(2700);
   // Falls back to discordUsername when username is null
-  expect(result[0].username).toBe('DiscordOnly#0001');
+  expect(result[0]?.username).toBe('DiscordOnly#0001');
 }
 
 function testVoiceSessionWithNullClassification() {
@@ -228,7 +228,7 @@ function testVoiceSessionWithNullClassification() {
   // voiceClassification should be null — not a missing session, just unclassified
   expect(result[0].voiceClassification).toBeNull();
   // Duration is still populated — the session matched
-  expect(result[0].voiceDurationSec).toBe(500);
+  expect(result[0]?.voiceDurationSec).toBe(500);
 }
 
 // ─── Test Suite ─────────────────────────────────────────────────────────────
