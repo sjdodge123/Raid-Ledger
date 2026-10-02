@@ -9,7 +9,11 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('./base', () => ({ expect: vi.fn() }));
 vi.mock('@axe-core/playwright', () => ({ default: class {} }));
 
-import { formatContrastViolations } from './axe-contrast';
+import {
+    formatContrastViolations,
+    pinLightPreferences,
+    withoutKnownViolations,
+} from './axe-contrast';
 
 type Violations = Parameters<typeof formatContrastViolations>[0];
 
@@ -56,5 +60,41 @@ describe('formatContrastViolations', () => {
     it('still names the node when axe attached no contrast data', () => {
         const msg = formatContrastViolations(violations(node(['p.note'], undefined)));
         expect(msg).toContain('  p.note — fg ? on bg ? = ?:1 (needs ?)');
+    });
+});
+
+describe('withoutKnownViolations', () => {
+    const fill = { fgColor: '#ffffff', bgColor: '#009966', contrastRatio: 3.65 };
+    const known = [{ target: /^a\[href="\/lineup\/\d+"\]$/, fg: '#ffffff', bg: '#009966' }];
+
+    it('drops a node whose selector and colour pair both match', () => {
+        expect(withoutKnownViolations(violations(node(['a[href="/lineup/7"]'], fill)), known)).toEqual([]);
+    });
+
+    it('keeps a known selector when its colours differ from the recorded pair', () => {
+        const other = { ...fill, bgColor: '#10b981', contrastRatio: 2.53 };
+        const left = withoutKnownViolations(violations(node(['a[href="/lineup/7"]'], other)), known);
+        expect(formatContrastViolations(left)).toContain('a[href="/lineup/7"] — fg #ffffff on bg #10b981');
+    });
+
+    it('keeps a node with the recorded colours under any other selector', () => {
+        const left = withoutKnownViolations(violations(node(['.bg-emerald-600'], fill)), [
+            { target: 'button[type="submit"]', fg: '#ffffff', bg: '#009966' },
+        ]);
+        expect(formatContrastViolations(left)).toContain('.bg-emerald-600 — fg #ffffff on bg #009966');
+    });
+});
+
+describe('pinLightPreferences', () => {
+    it('forces the theme fields to light and keeps every other preference', () => {
+        const body = { data: { themeMode: 'dark', lightTheme: 'quest-log', timezone: 'UTC' } };
+        expect(pinLightPreferences(body, 'default-light')).toEqual({
+            data: { themeMode: 'light', lightTheme: 'default-light', timezone: 'UTC' },
+        });
+    });
+
+    it('passes a body without a data object through unchanged', () => {
+        expect(pinLightPreferences({ error: 'nope' }, 'default-light')).toEqual({ error: 'nope' });
+        expect(pinLightPreferences(null, 'default-light')).toBeNull();
     });
 });

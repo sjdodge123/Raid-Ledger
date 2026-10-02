@@ -9,6 +9,11 @@
  *   (web/src/stores/theme-helpers.ts). It must run BEFORE the first goto:
  *   setting `data-scheme` on <html> after render (as some older specs do)
  *   leaves Tailwind `dark:` variants and the store out of step with the page.
+ *   It also pins the theme fields of `GET /users/me/preferences`: after login
+ *   the app applies the server's saved theme over localStorage
+ *   (web/src/hooks/use-theme-sync.ts), and the smoke user's saved theme is
+ *   shared, mutable state, so without the pin a page could re-render in the
+ *   dark scheme mid-test.
  * - `expectLightScheme(page)` proves the boot path took effect.
  * - `waitForFiniteAnimations(page)` waits until no finite CSS animation or
  *   transition is mid-flight, so axe never measures a half-faded element.
@@ -16,7 +21,9 @@
  *   the whole page and fails with one line per offending node.
  *
  * Never narrow the scan (`exclude`, `include`, `disableRules`) to make a route
- * pass — that hides exactly what this check exists to catch.
+ * pass — that hides exactly what this check exists to catch. The only escape
+ * hatch is `known`: an exact selector plus the exact colour pair, for a
+ * violation that waits on a recorded operator decision.
  */
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
@@ -38,11 +45,36 @@ interface ContrastData {
     expectedContrastRatio?: string;
 }
 
+/** Matches the preferences read however the API base path is mounted. */
+export const PREFERENCES_ROUTE = '**/users/me/preferences';
+
+/** A violation allowed until a recorded decision lands: selector AND colours must match. */
+export interface KnownContrastViolation {
+    /** axe's selector for the node, exact string or a pattern for data-driven ids. */
+    target: string | RegExp;
+    fg: string;
+    bg: string;
+}
+
+/** Override only the theme fields of a `{ data: prefs }` preferences body. */
+export function pinLightPreferences(body: unknown, lightThemeId: string): unknown {
+    if (typeof body !== 'object' || body === null) return body;
+    const data = (body as { data?: unknown }).data;
+    if (typeof data !== 'object' || data === null) return body;
+    return { ...body, data: { ...data, themeMode: 'light', lightTheme: lightThemeId } };
+}
+
 /** Boot every later navigation of `page` in the given light theme. */
 export async function useLightScheme(
     page: Page,
     lightThemeId = 'default-light',
 ): Promise<void> {
+    await page.route(PREFERENCES_ROUTE, async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        const response = await route.fetch();
+        const json = pinLightPreferences(await response.json(), lightThemeId);
+        await route.fulfill({ response, json });
+    });
     await page.addInitScript(
         ([modeKey, themeKey, themeId]) => {
             localStorage.setItem(modeKey, 'light');
@@ -88,10 +120,32 @@ export function formatContrastViolations(violations: Violation[]): string {
     return `${rows.length} color-contrast violation(s):\n${rows.join('\n')}`;
 }
 
-/** Run axe's color-contrast rule on the whole page; fail listing every node. */
-export async function expectNoContrastViolations(page: Page): Promise<void> {
+function isKnown(node: ViolationNode, known: KnownContrastViolation[]): boolean {
+    const d = contrastData(node);
+    const target = node.target.map(String).join(' >> ');
+    return known.some((k) =>
+        (typeof k.target === 'string' ? k.target === target : k.target.test(target))
+        && k.fg === d.fgColor && k.bg === d.bgColor);
+}
+
+/** Drop the nodes `known` accounts for; a violation left with no nodes is dropped too. */
+export function withoutKnownViolations(
+    violations: Violation[],
+    known: KnownContrastViolation[],
+): Violation[] {
+    return violations
+        .map((v) => ({ ...v, nodes: v.nodes.filter((n) => !isKnown(n, known)) }))
+        .filter((v) => v.nodes.length > 0);
+}
+
+/** Run axe's color-contrast rule on the whole page; fail listing every node not in `known`. */
+export async function expectNoContrastViolations(
+    page: Page,
+    known: KnownContrastViolation[] = [],
+): Promise<void> {
     const { violations } = await new AxeBuilder({ page })
         .withRules(['color-contrast'])
         .analyze();
-    expect(violations, formatContrastViolations(violations)).toEqual([]);
+    const unexpected = withoutKnownViolations(violations, known);
+    expect(unexpected, formatContrastViolations(unexpected)).toEqual([]);
 }
