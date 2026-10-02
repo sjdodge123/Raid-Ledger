@@ -135,7 +135,6 @@ export function LineupDetailPage(): JSX.Element {
 
   useSteamPasteDetection({
     enabled: !!canNominate,
-    modalOpen,
     onGameResolved: handleGameResolved,
   });
 

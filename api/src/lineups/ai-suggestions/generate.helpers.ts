@@ -12,7 +12,7 @@ import type { AiSuggestionsResponseDto } from '@raid-ledger/contract';
 import type { LlmService } from '../../ai/llm.service';
 import type { GameTasteService } from '../../game-taste/game-taste.service';
 import type { SettingsService } from '../../settings/settings.service';
-import { AI_DEFAULTS, AI_SETTING_KEYS } from '../../ai/llm.constants';
+import { AI_SETTING_KEYS } from '../../ai/llm.constants';
 import * as schema from '../../drizzle/schema';
 import {
   type ResolvedVoterScope,
@@ -40,7 +40,15 @@ export interface GenerateDeps {
   gameTaste: GameTasteService;
 }
 
-/** Resolve the active provider + model for telemetry / cache provenance. */
+/**
+ * Resolve the active provider + model for telemetry / cache provenance.
+ *
+ * `model` is the active provider's default model — the one `LlmService.chat`
+ * actually sends, because the curator call passes no `options.model`. The
+ * saved `ai_model` setting is deliberately NOT consulted: it is never passed
+ * to the chat call, so recording it would mislabel e.g. a Claude run as a
+ * stale Ollama model name.
+ */
 export async function activeProviderInfo(
   deps: GenerateDeps,
 ): Promise<{ provider: string; model: string }> {
@@ -48,8 +56,7 @@ export async function activeProviderInfo(
     (await deps.settings.get(AI_SETTING_KEYS.PROVIDER)) ??
     (await deps.llmService.getActiveProviderKey()) ??
     'unknown';
-  const model =
-    (await deps.settings.get(AI_SETTING_KEYS.MODEL)) ?? AI_DEFAULTS.model;
+  const model = (await deps.llmService.getActiveDefaultModel()) ?? 'unknown';
   return { provider, model };
 }
 
