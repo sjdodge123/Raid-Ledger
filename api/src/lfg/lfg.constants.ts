@@ -226,8 +226,8 @@ export type LfgGroupChangedReason =
 export interface LfgGroupChangedPayload {
   gameId: number;
   reason: LfgGroupChangedReason;
-  pollId?: number | null;
-  eventId?: number | null;
+  pollId?: number;
+  eventId?: number;
   /**
    * ROK-1541 — the users this change is ABOUT: the joiner on `joined`, the
    * withdrawer on `withdrawn`, and (ROK-1605) the members whose intent just
