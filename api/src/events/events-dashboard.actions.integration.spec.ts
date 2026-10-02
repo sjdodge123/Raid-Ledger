@@ -76,6 +76,24 @@ async function resetAfterEach() {
 
 // ─── cancel tests ───────────────────────────────────────────────────────────
 
+/** The one event_signups row for `userId` (throws when there is none). */
+async function signupOf(userId: number) {
+  const rows = await testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.userId, userId));
+  return nonEmpty(rows, `signup of user ${userId}`)[0];
+}
+
+/** The events row for `eventId` (throws when there is none). */
+async function eventRow(eventId: number) {
+  const rows = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  return nonEmpty(rows, `event ${eventId}`)[0];
+}
+
 async function testSoftCancel() {
   const eventId = await createFutureEvent(testApp, adminToken, {
     title: 'Cancelled Raid',
@@ -273,13 +291,7 @@ async function testRescheduleResetsTentativeStatus() {
     .patch(`/events/${eventId}/reschedule`)
     .set('Authorization', `Bearer ${adminToken}`)
     .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
-  const [signup] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.userId, userId)),
-    'signup',
-  );
+  const signup = await signupOf(userId);
   expect(signup.status).toBe('signed_up');
   expect(signup.confirmationStatus).toBe('pending');
 }
@@ -305,13 +317,7 @@ async function testRescheduleDoesNotResetDeclined() {
     .patch(`/events/${eventId}/reschedule`)
     .set('Authorization', `Bearer ${adminToken}`)
     .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
-  const [signup] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.userId, userId)),
-    'signup',
-  );
+  const signup = await signupOf(userId);
   expect(signup.status).toBe('declined');
 }
 
@@ -413,13 +419,7 @@ async function testRescheduleTentativeReschedulerStaysTentative() {
     .patch(`/events/${eventId}/reschedule`)
     .set('Authorization', `Bearer ${adminToken}`)
     .send({ startTime: newStart.toISOString(), endTime: newEnd.toISOString() });
-  const [signup] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.userId, testApp.seed.adminUser.id)),
-    'signup',
-  );
+  const signup = await signupOf(testApp.seed.adminUser.id);
   // tentative + confirmed preserved (UPDATE skipped because user excluded)
   expect(signup.status).toBe('tentative');
   expect(signup.confirmationStatus).toBe('confirmed');
@@ -442,13 +442,7 @@ async function testRosterUpdateLogsSignupReconfirmed() {
     status: 'signed_up',
     confirmationStatus: 'pending',
   });
-  const [signup] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.userId, memberId)),
-    'signup',
-  );
+  const signup = await signupOf(memberId);
   const rosterRes = await testApp.request
     .patch(`/events/${eventId}/roster`)
     .set('Authorization', `Bearer ${adminToken}`)
@@ -463,13 +457,7 @@ async function testRosterUpdateLogsSignupReconfirmed() {
       ],
     });
   expect(rosterRes.status).toBe(200);
-  const [flipped] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.userId, memberId)),
-    'flipped',
-  );
+  const flipped = await signupOf(memberId);
   expect(flipped.confirmationStatus).toBe('confirmed');
   const activity = await testApp.request.get(`/events/${eventId}/activity`);
   expect(activity.status).toBe(200);
@@ -657,36 +645,18 @@ async function testDelayShiftsAndPreservesConfirmation() {
     status: 'signed_up',
     confirmationStatus: 'confirmed',
   });
-  const [before] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId)),
-    'before',
-  );
+  const before = await eventRow(eventId);
   const oldStart = before.duration[0].getTime();
 
   await testApp.app
     .get(EventsService)
     .delayEvent(eventId, 15, testApp.seed.adminUser.id);
 
-  const [after] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId)),
-    'after',
-  );
+  const after = await eventRow(eventId);
   expect(after.duration[0].getTime()).toBe(oldStart + 15 * 60_000);
 
   // Delay must NOT reset confirmations (the key difference from reschedule).
-  const [signup] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.userId, userId)),
-    'signup',
-  );
+  const signup = await signupOf(userId);
   expect(signup.confirmationStatus).toBe('confirmed');
 
   // Non-actor signed-up user gets event_delayed (NOT event_rescheduled).
@@ -753,13 +723,7 @@ async function testRunningLateNotifiesActiveAttendeesAndHost() {
   await seedSignup(eventId, other.userId);
   await seedSignup(eventId, declined.userId, 'declined');
 
-  const [event] = nonEmpty(
-    await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId)),
-    'event',
-  );
+  const event = await eventRow(eventId);
 
   await testApp.app.get(RunningLateService).notifyRunningLate(
     {
