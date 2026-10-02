@@ -96,11 +96,19 @@ export async function createRecurringFlow(
       r.id === primaryId ? (dto.followupForEventId ?? null) : null;
     emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, r, followup);
   }
-  const first = defined(
-    allResponses.find((r) => r.id === primaryId) ?? allResponses[0],
+  const first = pickPrimaryResponse(allResponses, primaryId);
+  return { ...first, allEventIds: events.map((e) => e.id) };
+}
+
+/** The primary instance's response, else the first one returned. */
+function pickPrimaryResponse(
+  responses: EventResponseDto[],
+  primaryId: number,
+): EventResponseDto {
+  return defined(
+    responses.find((r) => r.id === primaryId) ?? responses[0],
     'primary recurring event response',
   );
-  return { ...first, allEventIds: events.map((e) => e.id) };
 }
 
 /** Creates a single event and returns it. */
