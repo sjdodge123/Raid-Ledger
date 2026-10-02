@@ -1,11 +1,16 @@
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import { NOOP_LIVENESS_INTERVAL_MS } from './cron-job.constants';
-import { LastRunBuffer } from './cron-job.last-run-buffer';
+import {
+  LastRunBuffer,
+  isDeferrableSchedule,
+} from './cron-job.last-run-buffer';
 
-const mockJob = (overrides: { id?: number; lastRunAt?: Date | null } = {}) => ({
+const mockJob = (
+  overrides: { id?: number; lastRunAt?: Date | null; cron?: string } = {},
+) => ({
   id: overrides.id ?? 42,
   name: 'test-job',
-  cronExpression: '*/5 * * * *',
+  cronExpression: overrides.cron ?? '*/5 * * * *',
   source: 'core' as const,
   pluginSlug: null,
   description: null,
@@ -57,6 +62,39 @@ describe('LastRunBuffer.deferCompleted (ROK-1380)', () => {
     expect(buffer.deferCompleted(mockJob(), new Date())).toBe(false);
     // A later flush must not roll the immediate write back to the old value.
     expect(buffer.pending.has(42)).toBe(false);
+  });
+});
+
+describe('LastRunBuffer.deferCompleted — schedule gate (ROK-1380)', () => {
+  it('writes a daily job immediately: returns false and queues nothing', () => {
+    const buffer = new LastRunBuffer();
+    const daily = mockJob({ cron: '0 0 0 * * *' });
+
+    expect(buffer.deferCompleted(daily, new Date())).toBe(false);
+    expect(buffer.pending.size).toBe(0);
+  });
+
+  it('consumes an immediate mark on a low-frequency job too', () => {
+    const buffer = new LastRunBuffer();
+    buffer.markImmediate('test-job');
+    buffer.deferCompleted(mockJob({ cron: '0 * * * *' }), new Date());
+
+    expect(buffer.deferCompleted(mockJob(), new Date())).toBe(true);
+  });
+});
+
+describe('isDeferrableSchedule', () => {
+  it.each([
+    ['* * * * *', true],
+    ['*/5 * * * *', true],
+    ['*/15 * * * *', true],
+    ['0 */30 * * * *', false],
+    ['0 * * * *', false],
+    ['0 0 0 * * *', false],
+    ['0 0 6 * * 0', false],
+    ['not a cron', false],
+  ])('%s -> %s', (expression, expected) => {
+    expect(isDeferrableSchedule(expression)).toBe(expected);
   });
 });
 

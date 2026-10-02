@@ -1,3 +1,5 @@
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   recordNoOp,
@@ -302,6 +304,55 @@ describe('flushPendingUpdates (ROK-1414 — batched flush)', () => {
       expect.stringContaining('job(s) 4'),
     );
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('never rolls last_run_at back: keeps the newer of stored vs queued', async () => {
+    await flushPendingUpdates(mockDb as any, pending(), logger);
+
+    const statement = mockDb.execute.mock.calls[0][0] as SQL;
+    const { sql: text } = new PgDialect().sqlToQuery(statement);
+    expect(text).toContain('GREATEST(c.last_run_at, v.last_run_at)');
+  });
+
+  it('re-queues every entry when the batched UPDATE fails', async () => {
+    mockDb.execute.mockRejectedValueOnce(new Error('connection reset'));
+    const map = pending();
+    const before = new Map(map);
+
+    await flushPendingUpdates(mockDb as any, map, logger);
+
+    expect(map).toEqual(before);
+  });
+
+  it('keeps a value queued during the failed flush over the re-queued one', async () => {
+    const map = pending();
+    const newer = {
+      lastRunAt: new Date('2025-01-01T05:00:00Z'),
+      cronExpression: '0 * * * *',
+    };
+    mockDb.execute.mockImplementationOnce(() => {
+      map.set(1, newer);
+      return Promise.reject(new Error('connection reset'));
+    });
+
+    await flushPendingUpdates(mockDb as any, map, logger);
+
+    expect(map.get(1)).toBe(newer);
+    expect(map.size).toBe(3);
+  });
+
+  it('does not re-queue an unserialisable entry after a failed flush', async () => {
+    mockDb.execute.mockRejectedValueOnce(new Error('connection reset'));
+    const map = pending();
+    map.set(4, {
+      lastRunAt: new Date('not-a-date'),
+      cronExpression: '0 * * * *',
+    });
+
+    await flushPendingUpdates(mockDb as any, map, logger);
+
+    expect(map.has(4)).toBe(false);
+    expect([...map.keys()]).toEqual([1, 2, 3]);
   });
 
   it('issues no statement when every pending row is unserialisable', async () => {

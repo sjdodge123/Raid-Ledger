@@ -41,16 +41,20 @@ const deferrableBySchedule = new Map<string, boolean>();
 export function isDeferrableSchedule(cronExpression: string): boolean {
   const cached = deferrableBySchedule.get(cronExpression);
   if (cached !== undefined) return cached;
-  let deferrable = false;
+  const deferrable = scheduleGapMs(cronExpression) <= DEFER_MAX_INTERVAL_MS;
+  deferrableBySchedule.set(cronExpression, deferrable);
+  return deferrable;
+}
+
+/** Gap between a schedule's next two fire times; Infinity if unparseable. */
+function scheduleGapMs(cronExpression: string): number {
   try {
     const [first, second] = new CronTime(cronExpression).sendAt(2);
     const gapMs = second.toMillis() - first.toMillis();
-    deferrable = gapMs > 0 && gapMs <= DEFER_MAX_INTERVAL_MS;
+    return gapMs > 0 ? gapMs : Infinity;
   } catch {
-    deferrable = false;
+    return Infinity;
   }
-  deferrableBySchedule.set(cronExpression, deferrable);
-  return deferrable;
 }
 
 /** One queued last_run_at write; next_run_at is derived at flush time. */
