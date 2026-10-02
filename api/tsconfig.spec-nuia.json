@@ -1,20 +1,20 @@
 // ROK-1161 phase 8 ratchet: specs + test infra under noUncheckedIndexedAccess.
-// `exclude` lists the spec dirs NOT yet clean; each phase-8 workflow PR deletes
-// its own lines (or narrows them to the glob named in its comment). Imported
-// app files are pulled in too; tsconfig.build.json already gates them ON.
-// Delete this file, and the CI lint-job step + validate-ci run_typecheck line
-// that run it, when `exclude` is empty (the WF8 flip sets the flag in
-// tsconfig.json itself).
+// `exclude` lists the spec dirs that are NOT yet clean. Each later phase-8 PR
+// deletes the lines for the dirs it converts, or narrows one to the subtree
+// still left. Imported app files are pulled in too; tsconfig.build.json already
+// gates them ON. When `exclude` is empty, set the flag in tsconfig.json itself
+// and delete this file, plus the CI lint-job step and the validate-ci
+// run_typecheck line that run it.
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "noUncheckedIndexedAccess": true, "noEmit": true, "incremental": false },
   "include": ["src/**/*.spec*.ts", "src/**/*.test-fixtures.ts", "src/common/testing/**/*.ts", "test/**/*.ts"],
   "exclude": [
-    "src/discovery-categories/**", "src/drizzle/**", "src/backup/**", "src/game-taste/**", "src/plugins/**", // WF2
-    "src/auth/**", "src/ai/**", "src/users/**", "src/community-insights/**", "src/cron-jobs/**", "src/igdb/**", // WF2
-    "src/events/**", "src/cooptimus/**", "src/admin/**", // WF3
-    "src/discord-bot/**", // WF4 replaces with "src/discord-bot/services/**" (WF8)
-    "src/lineups/**", // WF5 replaces with "src/lineups/*/*", "src/lineups/lineups-*" (WF6)
-    "src/lfg/**", "src/notifications/**" // WF7 replaces notifications with "src/notifications/post-event*" (WF8)
+    "src/discovery-categories/**", "src/drizzle/**", "src/backup/**", "src/game-taste/**", "src/plugins/**",
+    "src/auth/**", "src/ai/**", "src/users/**", "src/community-insights/**", "src/cron-jobs/**", "src/igdb/**",
+    "src/events/**", "src/cooptimus/**", "src/admin/**",
+    "src/discord-bot/**",
+    "src/lineups/**",
+    "src/lfg/**", "src/notifications/**"
   ]
 }

@@ -14,6 +14,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Helper to create a member user with local credentials and return their token. */
 async function createMemberAndLogin(
@@ -636,7 +637,6 @@ describe('Characters & User Management (integration)', () =>
 
 import { CharactersService } from './characters.service';
 import { BlizzardService } from '../plugins/wow-common/blizzard.service';
-import { nonEmpty } from '../common/testing/narrow';
 
 interface ProfessionFixture {
   primary: Array<{

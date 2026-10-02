@@ -201,7 +201,6 @@ describe('Taste Profile (ROK-948)', () => {
           .where(sql`user_id = ${userId}`),
         'taste vector row',
       );
-      expect(row).toBeDefined();
       expect(row.dimensions).toEqual(
         expect.objectContaining({
           co_op: expect.any(Number),
@@ -285,7 +284,6 @@ describe('Taste Profile (ROK-948)', () => {
           .where(sql`user_id = ${userId}`),
         'intensity snapshot',
       );
-      expect(snap).toBeDefined();
       expect(Number(snap.totalHours)).toBeCloseTo(11.67, 1);
       expect(snap.uniqueGames).toBe(2);
       expect(Number(snap.longestSessionHours)).toBeCloseTo(8.33, 1);
