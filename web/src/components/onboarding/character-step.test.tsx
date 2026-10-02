@@ -44,6 +44,7 @@ const baseGame: GameRegistryDto = {
     colorHex: '#F58518',
     maxCharactersPerUser: 10,
     enabled: true,
+    genres: [],
 };
 
 const nonMmoGame: GameRegistryDto = {
@@ -57,6 +58,7 @@ const nonMmoGame: GameRegistryDto = {
     colorHex: '#6B7280',
     maxCharactersPerUser: 5,
     enabled: true,
+    genres: [],
 };
 
 function createQueryClient() {

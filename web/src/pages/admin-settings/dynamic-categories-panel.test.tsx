@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, fireEvent, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, type JsonBodyType } from 'msw';
 import type { DiscoveryCategorySuggestionDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
@@ -300,7 +300,7 @@ describe('DynamicCategoriesPanel — regenerate toast counts (ROK-1530 A7)', () 
         );
     });
 
-    async function clickRegenerate(body: unknown) {
+    async function clickRegenerate(body: JsonBodyType) {
         stubList({ pending: [] });
         server.use(
             http.post(`${API_BASE}/admin/discovery-categories/regenerate`, () =>

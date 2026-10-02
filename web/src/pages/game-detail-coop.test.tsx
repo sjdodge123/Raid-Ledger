@@ -77,7 +77,9 @@ const enrichedGame = {
     cooptimusExtras: { system: 'PC', downloadableOnly: true },
 };
 
-function setupMocks(game: typeof baseGame) {
+type GameDetail = NonNullable<ReturnType<typeof useGamesDiscoverHook.useGameDetail>['data']>;
+
+function setupMocks(game: GameDetail) {
     vi.spyOn(useGamesDiscoverHook, 'useGameDetail').mockReturnValue({
         data: game, isLoading: false, error: null,
     } as never);

@@ -66,6 +66,7 @@ function buildMember(
         discordId: null,
         customAvatarUrl: null,
         schedulingSubmittedAt: null,
+        joinedAt: '2026-05-15T00:00:00.000Z',
     };
 }
 
@@ -88,6 +89,7 @@ function buildMatch(
         updatedAt: '2026-05-15T00:00:00.000Z',
         gameName: 'Valheim',
         gameCoverUrl: null,
+        playerCap: null,
         lineupCreatedById: 1,
         members: [buildMember(1), buildMember(2)],
         ...overrides,
@@ -113,6 +115,7 @@ function buildSlot(
         suggestedBy: 'system',
         createdAt: '2026-05-16T00:00:00.000Z',
         votes: voterIds.map(vote),
+        noVotes: [],
     };
 }
 
