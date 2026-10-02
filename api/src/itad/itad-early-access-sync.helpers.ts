@@ -3,6 +3,7 @@
  * Enriches games with earlyAccess status from ITAD game info.
  */
 import { sql } from 'drizzle-orm';
+import { defined } from '../common/defined.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { ItadService } from './itad.service';
@@ -120,10 +121,12 @@ export async function enrichChunkEarlyAccess(
     const slice = chunk.slice(i, i + EARLY_ACCESS_CONCURRENCY);
     const settled = await fetchSlice(itadService, slice);
     settled.forEach((res, j) => {
-      if (res.status === 'rejected') failedGames.push(slice[j]);
+      // allSettled keeps order and length, so `j` always indexes `slice`.
+      const game = defined(slice[j], 'early-access slice game');
+      if (res.status === 'rejected') failedGames.push(game);
       else if (res.value)
         updates.push({
-          id: slice[j].id,
+          id: game.id,
           earlyAccess: res.value.earlyAccess ?? false,
         });
     });

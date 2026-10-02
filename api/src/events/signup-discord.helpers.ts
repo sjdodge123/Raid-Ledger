@@ -4,6 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and, ne } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import {
   buildAnonymousSignupResponse,
@@ -61,7 +62,7 @@ async function findExistingDiscordSignup(
       ),
     )
     .limit(1);
-  return existing;
+  return defined(existing, 'existing discord signup row');
 }
 
 export async function executeDiscordSignupTx(
@@ -76,7 +77,7 @@ export async function executeDiscordSignupTx(
     if (rows.length === 0)
       return findExistingDiscordSignup(tx, eventId, dto.discordUserId);
 
-    const [inserted] = rows;
+    const inserted = defined(rows[0], 'inserted discord signup row');
     await assignDiscordSignupSlot(
       tx,
       event,

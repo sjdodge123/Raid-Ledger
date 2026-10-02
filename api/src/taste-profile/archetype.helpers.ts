@@ -86,7 +86,12 @@ export function computeVectorTitleScores(
   >;
   return entries.map(([title, axes]) => {
     const score = Math.max(...axes.map((axis) => dimensions[axis]));
-    const primaryAxisIndex = TASTE_PROFILE_AXIS_POOL.indexOf(axes[0]);
+    const [primaryAxis] = axes;
+    // An empty axis list keeps the -1 that indexOf(undefined) returned.
+    const primaryAxisIndex =
+      primaryAxis === undefined
+        ? -1
+        : TASTE_PROFILE_AXIS_POOL.indexOf(primaryAxis);
     return { title, score, primaryAxisIndex };
   });
 }

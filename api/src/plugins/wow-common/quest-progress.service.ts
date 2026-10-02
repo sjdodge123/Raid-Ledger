@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { defined } from '../../common/defined.helpers';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and } from 'drizzle-orm';
 
@@ -100,11 +101,12 @@ export class QuestProgressService {
     update: { pickedUp?: boolean; completed?: boolean },
   ): Promise<QuestProgressDto> {
     const existing = await this.findExistingProgress(eventId, userId, questId);
-    const row = existing
+    const written = existing
       ? await this.updateExistingProgress(existing.id, update)
       : await this.insertNewProgress(eventId, userId, questId, update);
     this.coverageCache.delete(`coverage:${eventId}`);
     const username = await this.fetchUsername(userId);
+    const row = defined(written, 'quest progress row');
     return {
       id: row.id,
       eventId: row.eventId,

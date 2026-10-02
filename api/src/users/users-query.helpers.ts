@@ -18,6 +18,7 @@ import {
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
 import { activeUsersFilter } from './users-active.helpers';
 import { USER_LIST_COLUMNS, type UserListResult } from './users-list-columns';
+import { defined } from '../common/defined.helpers';
 
 /** Build search conditions from a search string. */
 function buildSearchCondition(search?: string) {
@@ -110,7 +111,18 @@ async function queryGameInterestResults(
     .orderBy(schema.users.id, asc(schema.users.username))
     .limit(limit)
     .offset(offset);
-  return { data: rows, total: Number(countResult.count) };
+  const total = Number(defined(countResult, 'user count row').count);
+  return { data: rows, total };
+}
+
+/** Total row count of the users table (backs UsersService.count's cache). */
+export async function countAllUsers(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<number> {
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.users);
+  return Number(defined(row, 'user count row').count);
 }
 
 /** Build combined search + role WHERE condition (ROK-821). Always filters deactivated (ROK-1260). */
@@ -140,7 +152,8 @@ export async function findAllUsers(
     .orderBy(asc(schema.users.username))
     .limit(limit)
     .offset(offset);
-  return { data: rows, total: Number(countResult.count) };
+  const total = Number(defined(countResult, 'user count row').count);
+  return { data: rows, total };
 }
 
 /** Find all users with role information for admin panel. */
@@ -170,7 +183,8 @@ export async function findAllWithRolesQuery(
     .orderBy(asc(schema.users.username))
     .limit(limit)
     .offset(offset);
-  return { data: rows, total: Number(countResult.count) };
+  const total = Number(defined(countResult, 'user count row').count);
+  return { data: rows, total };
 }
 
 /** Find the first admin user (for fallback assignments). */
@@ -231,7 +245,8 @@ export async function fetchHeartedGames(
     .orderBy(asc(schema.games.name))
     .limit(limit)
     .offset(offset);
-  return { data: rows, total: Number(countResult.count) };
+  const total = Number(defined(countResult, 'user count row').count);
+  return { data: rows, total };
 }
 
 /** Activity query select columns. */

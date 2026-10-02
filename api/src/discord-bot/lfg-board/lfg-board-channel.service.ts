@@ -15,6 +15,7 @@
  *     setting before it calls Discord so a restart mid-burst cannot double up
  *     either (E6).
  */
+import { defined } from '../../common/defined.helpers';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ChannelType } from 'discord.js';
 import type {
@@ -231,7 +232,9 @@ export class LfgBoardChannelService {
           'another with the lfg-board purpose to override this choice.',
       );
     }
-    const chosen = matches.find((f) => f.id === preferId) ?? matches[0];
+    const chosen =
+      matches.find((f) => f.id === preferId) ??
+      defined(matches[0], 'marked forum');
     await setLfgBoardChannelId(this.settingsService, chosen.id);
     return this.reconcileForum(guild, await this.ensureTags(chosen));
   }

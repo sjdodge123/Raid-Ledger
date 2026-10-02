@@ -2,6 +2,7 @@ import { eq, and, ne } from 'drizzle-orm';
 import { Logger, NotFoundException } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { reslotTentativePlayer } from './signup-tentative-reslot.helpers';
 import type { SignupEventPayload } from '../discord-bot/discord-bot.constants';
@@ -110,9 +111,10 @@ export async function gatherCancelNotifyData(
       .where(eq(schema.users.id, userId))
       .limit(1),
   ]);
+  const found = defined(evt, 'event for cancel notification');
   return {
-    creatorId: evt.creatorId,
-    eventTitle: evt.title,
+    creatorId: found.creatorId,
+    eventTitle: found.title,
     role: assignment.role,
     displayName: user?.username ?? 'Unknown',
   };

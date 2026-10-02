@@ -5,6 +5,7 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import type {
   ActivityPeriod,
   GameActivityEntryDto,
@@ -188,5 +189,8 @@ export async function fetchSteamLibrary(
     .orderBy(desc(schema.gameInterests.playtimeForever))
     .limit(limit)
     .offset(offset);
-  return { data: mapSteamLibraryRows(rows), total: Number(countResult.count) };
+  return {
+    data: mapSteamLibraryRows(rows),
+    total: Number(defined(countResult, 'steam library count row').count),
+  };
 }

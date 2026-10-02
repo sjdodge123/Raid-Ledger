@@ -12,6 +12,7 @@ import type {
   CommonGroundScoreBreakdownDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import {
   OWNER_WEIGHT,
   SALE_BONUS,
@@ -275,7 +276,9 @@ function gameToTasteVector7(itadTags: string[]): number[] {
   const pool = gameToTasteVector(itadTags);
   // Match stored pgvector column order: co_op, pvp, rpg, survival, strategy, social, mmo.
   // Indices in TASTE_PROFILE_AXIS_POOL (declared in contract): 0, 1, 9, 14, 13, 19, 3.
-  return [pool[0], pool[1], pool[9], pool[14], pool[13], pool[19], pool[3]];
+  return [0, 1, 9, 14, 13, 19, 3].map((i) =>
+    defined(pool[i], `pool axis ${i}`),
+  );
 }
 
 /**

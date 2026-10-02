@@ -31,6 +31,7 @@ import { AdminGuard } from '../auth/admin.guard';
 import { AuthService } from '../auth/auth.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { SettingsService } from '../settings/settings.service';
 
 /** Stable identifier for the smoke invitee fixture row (slot 1). */
@@ -140,7 +141,7 @@ export class DemoTestFixtureUserController {
         username: schema.users.username,
         role: schema.users.role,
       });
-    return user;
+    return defined(user, 'upserted fixture user row');
   }
 
   private async assertDemoMode(): Promise<void> {

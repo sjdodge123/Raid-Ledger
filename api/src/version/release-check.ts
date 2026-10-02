@@ -85,8 +85,9 @@ async function fetchLatestTag(
     });
     if (!response.ok) return null;
     const tags = (await response.json()) as Array<{ name: string }>;
-    if (tags.length === 0) return null;
-    return { version: normalizeVersion(tags[0].name), htmlUrl: null };
+    const [latest] = tags;
+    if (!latest) return null;
+    return { version: normalizeVersion(latest.name), htmlUrl: null };
   } catch {
     return null;
   }

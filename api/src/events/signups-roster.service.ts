@@ -54,7 +54,7 @@ export class SignupsRosterService {
     await cancelH.executeCancelSignup(
       this.db,
       signup.id,
-      assignment,
+      assignment ?? undefined,
       cancelInfo.cancelStatus,
       cancelInfo.isGracefulDecline,
       cancelInfo.now,

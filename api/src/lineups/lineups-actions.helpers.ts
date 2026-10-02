@@ -23,6 +23,7 @@ import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { scheduleTransitionBestEffort } from './queue/lineup-phase-schedule.helpers';
 import type { LineupSteamNudgeService } from './lineup-steam-nudge.service';
 import type { LineupNotificationService } from './lineup-notification.service';
+import { defined } from '../common/defined.helpers';
 import { findLineupById } from './lineups-query.helpers';
 import { assertUserCanParticipate } from './lineups-eligibility.helpers';
 import { insertLineup } from './lineups-lifecycle.helpers';
@@ -81,12 +82,9 @@ export async function runCreateLineup(
   const overrides = hasDurationParams(dto) ? buildOverrides(dto) : null;
   const phaseDeadline = computeInitialDeadline(dto);
 
-  const [row] = await insertLineup(
-    deps.db,
-    dto,
-    userId,
-    phaseDeadline,
-    overrides,
+  const row = defined(
+    (await insertLineup(deps.db, dto, userId, phaseDeadline, overrides))[0],
+    'inserted lineup row',
   );
   await deps.activityLog.log('lineup', row.id, 'lineup_created', userId);
   if (row.visibility === 'public') {

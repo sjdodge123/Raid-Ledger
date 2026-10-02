@@ -125,6 +125,7 @@ export function parseButtonCustomId(
   const parts = customId.split(':');
   if (parts.length !== 2) return null;
   const [action, eventIdStr] = parts;
+  if (action === undefined || eventIdStr === undefined) return null;
   const eventId = parseInt(eventIdStr, 10);
   if (isNaN(eventId)) return null;
   const validActions = [

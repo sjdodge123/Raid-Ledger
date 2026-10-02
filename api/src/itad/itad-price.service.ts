@@ -101,9 +101,10 @@ export class ItadPriceService {
     const results = await Promise.all(
       ids.map((id) => getCachedPrice<ItadOverviewGameEntry>(this.redis, id)),
     );
-    for (let i = 0; i < ids.length; i++) {
-      if (results[i]) cached.push(results[i]!);
-      else missingIds.push(ids[i]);
+    for (const [i, id] of ids.entries()) {
+      const hit = results[i];
+      if (hit) cached.push(hit);
+      else missingIds.push(id);
     }
     return { cached, missingIds };
   }

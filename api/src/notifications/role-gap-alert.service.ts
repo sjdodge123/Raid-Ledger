@@ -1,3 +1,4 @@
+import { defined } from '../common/defined.helpers';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -291,7 +292,7 @@ export class RoleGapAlertService {
       .where(and(...conditions));
 
     if (rows.length === 0) return defaultTimezone;
-    const tz = rows[0].value as string;
+    const tz = defined(rows[0], 'timezone preference row').value as string;
     return tz && tz !== 'auto' ? tz : defaultTimezone;
   }
 }

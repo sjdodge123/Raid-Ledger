@@ -1,4 +1,5 @@
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { defined } from '../src/common/defined.helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../src/drizzle/schema';
 import { buildSeedProfessions } from './seed-testing.helpers';
@@ -48,7 +49,7 @@ export async function seedUsers(db: Db): Promise<User[]> {
           role: 'member',
         })
         .returning();
-      user = newUser;
+      user = defined(newUser, `inserted user ${gamer.username}`);
       console.log(`  ✅ Created user: ${gamer.username}`);
     } else {
       console.log(`  ⏭️  Skipped: ${gamer.username} (exists)`);

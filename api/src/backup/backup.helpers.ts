@@ -8,6 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 import { runBootMigrations } from '../../scripts/run-migrations-with-sentry';
+import { defined } from '../common/defined.helpers';
 
 const execFileAsync = promisify(execFile);
 
@@ -240,7 +241,7 @@ export async function bootstrapAdmin(apiRoot: string): Promise<string> {
       'Reset completed but failed to extract new admin credentials',
     );
   }
-  return match[1].trim();
+  return defined(match[1], 'reset admin password capture group').trim();
 }
 
 /** Run seed scripts for game data. */

@@ -46,6 +46,7 @@ import {
   tryCancelOriginal,
   buildOpsDeps,
 } from './event-plans-service.helpers';
+import { defined } from '../common/defined.helpers';
 
 export const EVENT_PLANS_QUEUE = 'event-plans';
 export interface PollClosedJobData {
@@ -151,7 +152,7 @@ export class EventPlansService {
       plan.creatorId,
       `Your event plan "${plan.title}" has been cancelled.`,
     );
-    return toResponseDto(updated);
+    return toResponseDto(defined(updated, 'cancelled event plan row'));
   }
 
   /** Returns live poll results for a plan. */

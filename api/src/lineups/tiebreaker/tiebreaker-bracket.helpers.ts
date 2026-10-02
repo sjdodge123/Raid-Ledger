@@ -5,6 +5,7 @@
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/defined.helpers';
 import { countMatchupVotes, findMatchups } from './tiebreaker-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -40,8 +41,9 @@ export async function buildBracket(
   const matchups = [];
 
   for (let i = 0; i < seeded.length; i += 2) {
-    const gameA = seeded[i];
-    const gameB = seeded[i + 1];
+    // `seeded` has `size` entries, a power of two, so both slots are in range.
+    const gameA = defined(seeded[i], 'bracket seed A');
+    const gameB = defined(seeded[i + 1], 'bracket seed B');
     const isBye = gameA === -1 || gameB === -1;
     const realA = gameA === -1 ? gameB : gameA;
     const realB = gameB === -1 ? null : gameB === realA ? null : gameB;
@@ -116,7 +118,7 @@ export async function advanceBracket(
 
   // Check if this was the final round
   if (roundMatchups.length === 1) {
-    return roundMatchups[0].winnerGameId;
+    return defined(roundMatchups[0], 'final-round matchup').winnerGameId;
   }
 
   // Create next round matchups
@@ -147,7 +149,7 @@ async function createNextRoundMatchups(
 ) {
   const matchups = [];
   for (let i = 0; i < winners.length; i += 2) {
-    const gameA = winners[i];
+    const gameA = defined(winners[i], 'next-round seed');
     const gameB = winners[i + 1] ?? null;
     matchups.push({
       tiebreakerId,

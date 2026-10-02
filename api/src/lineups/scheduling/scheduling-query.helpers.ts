@@ -9,6 +9,7 @@ import type {
   ScheduleVoteStance,
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -110,17 +111,18 @@ export function findScheduleVotes(
     .where(inArray(schema.communityLineupScheduleVotes.slotId, slotIds));
 }
 
-/** Insert a new schedule slot. */
-export function insertScheduleSlot(
+/** Insert a new schedule slot and return the inserted row. */
+export async function insertScheduleSlot(
   db: Db,
   matchId: number,
   proposedTime: Date,
   suggestedBy: 'system' | 'user',
 ) {
-  return db
+  const [slot] = await db
     .insert(schema.communityLineupScheduleSlots)
     .values({ matchId, proposedTime, suggestedBy })
     .returning();
+  return defined(slot, 'inserted schedule slot');
 }
 
 /**

@@ -181,15 +181,15 @@ export async function deriveTopVotedGame(
   lineupId: number,
 ): Promise<number | null> {
   const counts = await countVotesPerGame(db, lineupId);
-  if (counts.length === 0) return null;
-  const sorted = [...counts].sort(
+  const [top, runnerUp] = [...counts].sort(
     (a, b) => b.voteCount - a.voteCount || a.gameId - b.gameId,
   );
+  if (top === undefined) return null;
   // ROK-1374 (Q2): uniqueness is this function's OWN invariant, not a
   // cross-function assumption. A vote landing between the tie-detection query
   // and this one would otherwise let the lowest game id "win" a joint top.
-  if (sorted.length > 1 && sorted[1].voteCount === sorted[0].voteCount) {
+  if (runnerUp !== undefined && runnerUp.voteCount === top.voteCount) {
     return null;
   }
-  return sorted[0].gameId;
+  return top.gameId;
 }

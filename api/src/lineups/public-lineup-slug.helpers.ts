@@ -35,8 +35,8 @@ const ALPHABET_MASK = ALPHABET.length - 1;
 export function generatePublicSlug(): string {
   const bytes = randomBytes(SLUG_LENGTH);
   let slug = '';
-  for (let i = 0; i < SLUG_LENGTH; i++) {
-    slug += ALPHABET[bytes[i] & ALPHABET_MASK];
+  for (const byte of bytes) {
+    slug += ALPHABET[byte & ALPHABET_MASK];
   }
   return slug;
 }

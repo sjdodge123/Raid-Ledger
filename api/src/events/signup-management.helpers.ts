@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { NotificationService } from '../notifications/notification.service';
 import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
@@ -100,7 +101,7 @@ export async function selfUnassign(
   emitSelfUnassign(eventEmitter, eventId, userId, signup.id);
   bufferLeave(
     rosterNotificationBuffer,
-    event,
+    defined(event, 'event for self-unassign'),
     eventId,
     userId,
     user,

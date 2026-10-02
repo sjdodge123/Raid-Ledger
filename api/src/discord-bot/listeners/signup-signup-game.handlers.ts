@@ -71,12 +71,13 @@ async function tryCharacterSignupPath(
     );
     return true;
   }
-  if (ctx.characters.length === 1)
+  const [single] = ctx.characters;
+  if (ctx.characters.length === 1 && single !== undefined)
     return signupSingleCharacter(
       interaction,
       eventId,
       args.userId,
-      ctx.characters[0],
+      single,
       deps,
     );
 

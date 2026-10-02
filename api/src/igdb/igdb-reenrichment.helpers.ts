@@ -137,7 +137,8 @@ async function enrichSingleCandidate(
 ): Promise<SingleResult> {
   try {
     const byId = await queryIgdb(buildExternalGamesQuery(candidate.steamAppId));
-    if (byId.length > 0) return handleSuccess(db, candidate, byId[0]);
+    const first = byId[0];
+    if (first !== undefined) return handleSuccess(db, candidate, first);
     const byName = await searchByName(queryIgdb, candidate.name);
     if (byName) return handleSuccess(db, candidate, byName);
     return handleNotFound(db, candidate);

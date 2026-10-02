@@ -17,8 +17,8 @@ export async function getRadarResponse(
   service: CommunityInsightsService,
 ): Promise<CommunityRadarResponseDto | null> {
   const rows = await service.readRecentSnapshots(DRIFT_SNAPSHOT_LIMIT);
-  if (rows.length === 0) return null;
-  const latest = rows[0];
+  const [latest] = rows;
+  if (latest === undefined) return null;
   return {
     ...latest.radarPayload,
     driftSeries: mergeWeeklyDrift(rows, DRIFT_WEEK_COUNT),

@@ -179,7 +179,7 @@ export async function tryRearrangeVictim(
     const filled = p.currentAssignments.filter(
       (a) => a.role === altRole,
     ).length;
-    if (filled >= p.roleCapacity[altRole]) continue;
+    if (filled >= (p.roleCapacity[altRole] ?? Infinity)) continue;
     const newPos = p.findPos(altRole);
     await p.tx
       .update(schema.rosterAssignments)

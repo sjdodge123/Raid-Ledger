@@ -158,7 +158,7 @@ export function createTarHeader(filename: string, size: number): Buffer {
 
   // Checksum = sum of all bytes with the checksum field read as spaces.
   let checksum = 0;
-  for (let i = 0; i < 512; i++) checksum += header[i];
+  for (const byte of header) checksum += byte;
   header.write(checksum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'utf-8');
   return header;
 }

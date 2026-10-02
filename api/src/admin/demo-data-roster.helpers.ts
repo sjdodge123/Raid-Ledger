@@ -5,6 +5,7 @@
 import { inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { createRng } from './demo-data-generator';
 import type { GeneratedEvent } from './demo-data-generator';
 
@@ -32,9 +33,9 @@ function buildMaxAttendeesMap(
   genEvents: (typeof schema.events.$inferSelect)[],
 ): Map<number, number | null> {
   const map = new Map<number, number | null>();
-  for (let i = 0; i < generatedEvents.length; i++) {
+  for (const [i, generated] of generatedEvents.entries()) {
     const dbEvent = genEvents[i];
-    if (dbEvent) map.set(dbEvent.id, generatedEvents[i].maxPlayers);
+    if (dbEvent) map.set(dbEvent.id, generated.maxPlayers);
   }
   return map;
 }
@@ -155,7 +156,10 @@ async function reassignGeneratedEvents(
 
   for (const event of genEvents) {
     if (rng() < 0.3) {
-      const creator = nonAdminUsers[Math.floor(rng() * nonAdminUsers.length)];
+      const creator = defined(
+        nonAdminUsers[Math.floor(rng() * nonAdminUsers.length)],
+        'non-admin creator',
+      );
       const ids = reassignByCreator.get(creator.id) ?? [];
       ids.push(event.id);
       reassignByCreator.set(creator.id, ids);

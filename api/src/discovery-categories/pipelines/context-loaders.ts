@@ -84,11 +84,12 @@ export async function loadTrending(db: Db, n: number): Promise<TrendingGame[]> {
     .where(eq(schema.gameActivityRollups.period, 'week'))
     .orderBy(desc(schema.gameActivityRollups.periodStart))
     .limit(2);
-  if (weeks.length < 2) return [];
+  const [currWeek, prevWeek] = weeks;
+  if (currWeek === undefined || prevWeek === undefined) return [];
   const rows = await fetchWeekOverWeekTotals(
     db,
-    weeks[0].periodStart,
-    weeks[1].periodStart,
+    currWeek.periodStart,
+    prevWeek.periodStart,
   );
   return projectTrending(rows, n);
 }

@@ -5,6 +5,7 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import {
   FAKE_GAMERS,
   ORIGINAL_GAMER_COUNT,
@@ -52,7 +53,10 @@ export async function installUsers(
     schema.users,
     gamerValues,
   )) as (typeof schema.users.$inferSelect)[];
-  const allUsers = [seedAdmin, ...insertedGamers];
+  const allUsers = [
+    defined(seedAdmin, 'inserted SeedAdmin user row'),
+    ...insertedGamers,
+  ];
   const userByName = new Map(allUsers.map((u) => [u.username, u]));
   return { allUsers, userByName };
 }
