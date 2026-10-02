@@ -39,7 +39,6 @@ import {
   parsePagination,
 } from './users-controller.helpers';
 import { mapManagementRow } from './users-management.helpers';
-import { defined } from '../common/defined.helpers';
 
 @Controller('users')
 export class UsersManagementController {
@@ -83,10 +82,7 @@ export class UsersManagementController {
     if (!targetUser) throw new NotFoundException('User not found');
     if (targetUser.role === 'admin')
       throw new ForbiddenException('Cannot modify admin role via API');
-    const updated = defined(
-      await this.usersService.setRole(id, dto.role),
-      'updated user row',
-    );
+    const updated = await this.usersService.setRole(id, dto.role);
     return {
       data: { id: updated.id, username: updated.username, role: updated.role },
     };

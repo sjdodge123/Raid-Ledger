@@ -37,7 +37,6 @@ import {
   validateAndDeleteAccount,
 } from './users-me-discord.helpers';
 import type { AuthenticatedRequest } from '../auth/types';
-import { defined } from '../common/defined.helpers';
 
 /** Controller for /users/me/* (current user) and /users/check-display-name. */
 @Controller('users')
@@ -81,9 +80,9 @@ export class UsersMeController {
     );
     if (!available)
       throw new BadRequestException('Display name is already taken');
-    const updated = defined(
-      await this.usersService.setDisplayName(req.user.id, dto.displayName),
-      'updated user row',
+    const updated = await this.usersService.setDisplayName(
+      req.user.id,
+      dto.displayName,
     );
     return {
       data: {
@@ -98,10 +97,7 @@ export class UsersMeController {
   @Post('me/complete-onboarding')
   @UseGuards(AuthGuard('jwt'))
   async completeOnboarding(@Request() req: AuthenticatedRequest) {
-    const updated = defined(
-      await this.usersService.completeOnboarding(req.user.id),
-      'onboarded user row',
-    );
+    const updated = await this.usersService.completeOnboarding(req.user.id);
     return {
       success: true,
       onboardingCompletedAt: updated.onboardingCompletedAt!.toISOString(),

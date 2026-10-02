@@ -11,7 +11,6 @@ import {
 } from './auth-status.helpers';
 import type { UserRole } from '@raid-ledger/contract';
 import { promoteFirstDiscordLogin } from './fleet-first-login-admin.helpers';
-import { defined } from '../common/defined.helpers';
 
 /** Event name emitted after Discord OAuth login/link (ROK-292). */
 export const AUTH_EVENTS = {
@@ -61,14 +60,11 @@ export class AuthService {
         : relinked;
     }
 
-    const user = defined(
-      await this.usersService.createOrUpdate({
-        discordId,
-        username,
-        avatar: avatar || undefined,
-      }),
-      'created or updated discord user row',
-    );
+    const user = await this.usersService.createOrUpdate({
+      discordId,
+      username,
+      avatar: avatar || undefined,
+    });
     this.emitDiscordLogin(user.id, discordId);
     // ROK-1537: fleet-only first-login admin; a no-op outside a fleet env.
     return promoteFirstDiscordLogin(this.db, user, discordId);

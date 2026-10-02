@@ -63,7 +63,7 @@ export class UsersService {
         })
         .where(eq(schema.users.discordId, profile.discordId))
         .returning();
-      return updated;
+      return defined(updated, 'updated discord user row');
     }
     const [created] = await this.db
       .insert(schema.users)
@@ -74,7 +74,7 @@ export class UsersService {
       })
       .returning();
     this.invalidateCountCache();
-    return created;
+    return defined(created, 'created discord user row');
   }
 
   async findById(id: number) {
@@ -96,7 +96,7 @@ export class UsersService {
       .returning();
     invalidateAuthUser(userId);
     await this.tokenBlocklist.blockUser(userId);
-    return updated;
+    return defined(updated, `role-updated user ${userId}`);
   }
 
   /** List all users with role information for admin management panel. */
@@ -284,7 +284,7 @@ export class UsersService {
       .set({ displayName, updatedAt: new Date() })
       .where(eq(schema.users.id, userId))
       .returning();
-    return updated;
+    return defined(updated, `renamed user ${userId}`);
   }
 
   /** Mark onboarding as completed (ROK-219). */
@@ -295,7 +295,7 @@ export class UsersService {
       .set({ onboardingCompletedAt: now, updatedAt: now })
       .where(eq(schema.users.id, userId))
       .returning();
-    return updated;
+    return defined(updated, `onboarded user ${userId}`);
   }
 
   /** Reset onboarding (ROK-219). */
