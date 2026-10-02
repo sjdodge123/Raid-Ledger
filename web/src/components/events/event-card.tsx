@@ -119,7 +119,7 @@ function EventInfoSection({ event, signupCount, resolved }: {
             </h3>
             <div className="flex items-center gap-2 mb-3">
                 <p className="text-muted text-sm">{formatEventTime(event.startTime, resolved)}</p>
-                <span className="text-faint">&#8226;</span>
+                <span className="text-faint" aria-hidden="true">&#8226;</span>
                 <p data-testid="relative-time" className="text-sm text-dim">{relativeTime}</p>
             </div>
             <div className="flex items-center justify-between">

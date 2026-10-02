@@ -119,7 +119,7 @@ function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUserna
                 <h4 className="text-sm font-semibold text-foreground truncate mt-1">{title}</h4>
                 <div className="flex items-center gap-2 mt-1 text-xs text-muted">
                     {gameName && <span>{gameName}</span>}
-                    {gameName && timeLabel && <span className="text-faint">·</span>}
+                    {gameName && timeLabel && <span className="text-faint" aria-hidden="true">·</span>}
                     {timeLabel && <span>{timeLabel}</span>}
                 </div>
                 {creatorUsername && <p className="text-[11px] text-dim mt-1">Hosted by {creatorUsername}</p>}
