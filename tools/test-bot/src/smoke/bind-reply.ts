@@ -49,11 +49,26 @@ export function bindRefusalText(res: BindReply | null | undefined): string {
   return `no reply text (raw reply: ${JSON.stringify(res ?? null)})`;
 }
 
-/** Throw `/bind <label> refused: <text>` unless the reply is a success embed. */
+/**
+ * ` [author: X]` for the reply's first embed, or '' when it has none. A /bind
+ * success embed whose author line drifted from BIND_SAVED_AUTHOR would
+ * otherwise read as a refusal quoting the success description.
+ */
+function authorTag(res: BindReply | null | undefined): string {
+  const name = res?.embeds?.[0]?.author?.name;
+  return name ? ` [author: ${name}]` : '';
+}
+
+/**
+ * Throw `/bind <label> refused [author: X]: <text>` unless the reply is a
+ * success embed. The author tag is omitted when the first embed has none.
+ */
 export function assertBindSucceeded(
   res: BindReply | null | undefined,
   label: string,
 ): void {
   if (isBindSuccess(res)) return;
-  throw new Error(`/bind ${label} refused: ${bindRefusalText(res)}`);
+  throw new Error(
+    `/bind ${label} refused${authorTag(res)}: ${bindRefusalText(res)}`,
+  );
 }

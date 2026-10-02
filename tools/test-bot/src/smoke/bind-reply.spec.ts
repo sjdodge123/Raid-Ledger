@@ -71,7 +71,8 @@ test('a reject embed throws with its description', () => {
   };
   assert.equal(
     refusalOf(res),
-    `/bind ${LABEL} refused: Game "X" is already bound to #other.`,
+    `/bind ${LABEL} refused [author: ⚙ BINDING REJECTED]: ` +
+      'Game "X" is already bound to #other.',
   );
 });
 
@@ -82,11 +83,42 @@ test('an empty reply throws and shows the raw reply', () => {
   );
 });
 
-test('a title-only embed without the saved author is a refusal', () => {
-  const res = { embeds: [{ title: 'Confirm multiple monitors?' }] };
+test('a title-only embed without an author is a refusal quoting the title', () => {
+  const res = { embeds: [{ title: 'Something went wrong' }] };
+  assert.equal(refusalOf(res), `/bind ${LABEL} refused: Something went wrong`);
+});
+
+// The multi-monitor confirm path as the harness really returns it:
+// FakeInteraction.editReply has no awaitMessageComponent, so awaitConfirmation
+// lands in replyCancelled, and `embeds: []` serializes away, leaving the
+// earlier warning embed next to the cancellation sentence.
+test('a timed-out multi-monitor confirm surfaces the cancellation sentence', () => {
+  const res = {
+    content: 'Confirmation timed out. Binding cancelled.',
+    embeds: [
+      {
+        author: { name: '⚠ CONFIRM BINDING' },
+        description:
+          'This voice channel already has an activity monitor for a ' +
+          'different game. ... Continue?',
+      },
+    ],
+  };
   assert.equal(
     refusalOf(res),
-    `/bind ${LABEL} refused: Confirm multiple monitors?`,
+    `/bind ${LABEL} refused [author: ⚠ CONFIRM BINDING]: ` +
+      'Confirmation timed out. Binding cancelled.',
+  );
+});
+
+test('a success embed whose author line drifted names that author', () => {
+  const res = {
+    embeds: [{ author: { name: '⚙ BIND STORED' }, description: '#v1 → Voice' }],
+  };
+  assert.equal(
+    refusalOf(res),
+    `/bind ${LABEL} refused [author: ⚙ BIND STORED]: #v1 → Voice`,
+    'a drifted success author must be visible in the failure text',
   );
 });
 
