@@ -313,6 +313,8 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     const handler = findPluginHandler(job, this.pluginRegistry);
     // "Run now" writes last_run_at immediately (ROK-1380). A mark left by a
     // no-op/paused/failed manual run costs the next completed run one write.
+    // The mark is per job, not per run: a scheduled tick finishing while this
+    // run is still going consumes it, and this run then defers (≤5 min).
     this.lastRun.markImmediate(job.name);
     if (handler) {
       await this.executeWithTracking(job.name, handler);
