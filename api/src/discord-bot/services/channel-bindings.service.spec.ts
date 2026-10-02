@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import type { ChannelBindingConfig } from '@raid-ledger/contract';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 // ─── Mock DB chain ──────────────────────────────────────────────────────────
 
@@ -91,15 +92,18 @@ function seedExistingBinding(
 describe('ChannelBindingsService', () => {
   let service: ChannelBindingsService;
   let mocks: ReturnType<typeof buildMockDb>;
+  let emitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     jest.clearAllMocks();
     mocks = buildMockDb();
+    emitter = { emit: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChannelBindingsService,
         { provide: DrizzleAsyncProvider, useValue: mocks.mockDb },
+        { provide: EventEmitter2, useValue: emitter },
       ],
     }).compile();
 
