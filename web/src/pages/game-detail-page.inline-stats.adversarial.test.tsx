@@ -67,6 +67,11 @@ import * as useGamesDiscoverModule from '../hooks/use-games-discover';
 import * as useAuthHook from '../hooks/use-auth';
 import * as useWantToPlayModule from '../hooks/use-want-to-play';
 
+/** Typed partial hook result: every field given is checked against T. */
+function partialResult<T>(fields: Partial<T>): T {
+    return fields as T;
+}
+
 vi.mock('../hooks/use-auth', () => ({
     useAuth: vi.fn(),
     // ROK-1453: the LFG hooks call getAuthToken() to gate their jwt-only
@@ -141,18 +146,18 @@ function mockWtp(overrides: Partial<ReturnType<typeof useWantToPlayModule.useWan
 describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: mockGame,
             isLoading: false,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
     });
 
     it('does NOT render the player stats row when user is not authenticated', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: null,
             isAuthenticated: false,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
         mockWtp({});
 
         renderDetailPage();
@@ -161,10 +166,10 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('renders the player stats row when user is authenticated', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
         mockWtp({ count: 1, players: [mockPlayer] });
 
         renderDetailPage();
@@ -173,10 +178,10 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('does not show OwnedBy avatars when ownerCount is 0', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
         mockWtp({ owners: [], ownerCount: 0, wishlisters: [mockPlayer], wishlistedCount: 1 });
 
         renderDetailPage();
@@ -189,10 +194,10 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('does not show WishlistedBy avatars when wishlistedCount is 0', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
         mockWtp({ owners: [mockPlayer], ownerCount: 1, wishlisters: [], wishlistedCount: 0 });
 
         renderDetailPage();
@@ -203,10 +208,10 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('renders all three stat sections (interested, owns, wishlisted) in one container', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
         mockWtp({
             count: 3,
             players: [mockPlayer],
@@ -230,15 +235,15 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('shows loading state when game is loading', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: null,
             isAuthenticated: false,
-        } as ReturnType<typeof useAuthHook.useAuth>);
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        }));
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: undefined,
             isLoading: true,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
         mockWtp({});
 
         renderDetailPage();
@@ -249,15 +254,15 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('shows not-found state when game returns an error', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: null,
             isAuthenticated: false,
-        } as ReturnType<typeof useAuthHook.useAuth>);
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        }));
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: undefined,
             isLoading: false,
             error: new Error('Not found'),
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
         mockWtp({});
 
         renderDetailPage();
@@ -266,10 +271,10 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('wishlisted label uses correct format for single wishlister', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
         mockWtp({ wishlisters: [mockPlayer], wishlistedCount: 1 });
 
         renderDetailPage();
@@ -280,10 +285,10 @@ describe('GameDetailPage — inline player stats adversarial (ROK-803)', () => {
     });
 
     it('owned label uses correct format for multiple owners', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
         mockWtp({ owners: [mockPlayer], ownerCount: 5 });
 
         renderDetailPage();

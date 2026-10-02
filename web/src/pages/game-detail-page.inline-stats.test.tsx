@@ -66,6 +66,11 @@ import * as useGamesDiscoverModule from '../hooks/use-games-discover';
 import * as useAuthHook from '../hooks/use-auth';
 import * as useWantToPlayModule from '../hooks/use-want-to-play';
 
+/** Typed partial hook result: every field given is checked against T. */
+function partialResult<T>(fields: Partial<T>): T {
+    return fields as T;
+}
+
 vi.mock('../hooks/use-auth', () => ({
     useAuth: vi.fn(),
     // ROK-1453: the LFG hooks call getAuthToken() to gate their jwt-only
@@ -128,20 +133,20 @@ function renderDetailPage() {
 describe('GameDetailPage — inline player stats (ROK-803)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: mockGame,
             isLoading: false,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
 
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
     });
 
     it('renders player stats container when authenticated', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: true,
             count: 3,
             source: 'manual',
@@ -153,7 +158,7 @@ describe('GameDetailPage — inline player stats (ROK-803)', () => {
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
 
@@ -162,7 +167,7 @@ describe('GameDetailPage — inline player stats (ROK-803)', () => {
     });
 
     it('groups owns and wishlisted stats within the same container', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: false,
             count: 0,
             source: undefined,
@@ -174,7 +179,7 @@ describe('GameDetailPage — inline player stats (ROK-803)', () => {
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
 

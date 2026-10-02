@@ -61,6 +61,11 @@ import * as useGamesDiscoverModule from '../hooks/use-games-discover';
 import * as useAuthHook from '../hooks/use-auth';
 import * as useWantToPlayModule from '../hooks/use-want-to-play';
 
+/** Typed partial hook result: every field given is checked against T. */
+function partialResult<T>(fields: Partial<T>): T {
+    return fields as T;
+}
+
 // Mock auth and want-to-play
 vi.mock('../hooks/use-auth', () => ({
     useAuth: vi.fn(),
@@ -118,22 +123,22 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — AC 
     beforeEach(() => {
         vi.clearAllMocks();
 
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: mockGame,
             isLoading: false,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
 
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
-            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
+            user: { id: 1, username: 'Tester', role: 'member' } as NonNullable<ReturnType<typeof useAuthHook.useAuth>['user']>,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
     });
 
     // ── AC #4: Tooltip on discord-sourced hearts ─────────────────────────────
 
     it('shows title tooltip when source is discord', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: true,
             count: 3,
             source: 'discord',
@@ -141,7 +146,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — AC 
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
 
@@ -153,7 +158,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — AC 
     });
 
     it('does NOT show tooltip when source is manual', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: true,
             count: 1,
             source: 'manual',
@@ -161,7 +166,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — AC 
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
 
@@ -175,20 +180,20 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — But
     beforeEach(() => {
         vi.clearAllMocks();
 
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: mockGame,
             isLoading: false,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
 
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
-            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
+            user: { id: 1, username: 'Tester', role: 'member' } as NonNullable<ReturnType<typeof useAuthHook.useAuth>['user']>,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
     });
 
     it('does NOT show tooltip when source is undefined (not hearted)', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: false,
             count: 0,
             source: undefined,
@@ -196,7 +201,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — But
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
 
@@ -205,7 +210,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — But
     });
 
     it('does NOT show tooltip when source is steam', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: true,
             count: 2,
             source: 'steam',
@@ -213,7 +218,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — But
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
 
@@ -225,7 +230,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — But
     // ── Button text (regression) ─────────────────────────────────────────────
 
     it('shows "Remove from List" when wantToPlay is true', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: true,
             count: 1,
             source: 'discord',
@@ -233,7 +238,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — But
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
         expect(screen.getByRole('button', { name: /remove from list/i })).toBeInTheDocument();
@@ -245,20 +250,20 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Hea
     beforeEach(() => {
         vi.clearAllMocks();
 
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: mockGame,
             isLoading: false,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
 
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
-            user: { id: 1, username: 'Tester', role: 'member' } as Parameters<typeof useAuthHook.useAuth>[0] extends undefined ? ReturnType<typeof useAuthHook.useAuth>['user'] : never,
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
+            user: { id: 1, username: 'Tester', role: 'member' } as NonNullable<ReturnType<typeof useAuthHook.useAuth>['user']>,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
     });
 
     it('shows "Want to Play" when wantToPlay is false', () => {
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: false,
             count: 0,
             source: undefined,
@@ -266,7 +271,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Hea
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
         expect(screen.getByRole('button', { name: /want to play/i })).toBeInTheDocument();
@@ -275,12 +280,12 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Hea
     // ── Heart button not rendered when not authenticated ─────────────────────
 
     it('does not render the heart button when user is not authenticated', () => {
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: null,
             isAuthenticated: false,
-        } as ReturnType<typeof useAuthHook.useAuth>);
+        }));
 
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: false,
             count: 0,
             source: undefined,
@@ -288,7 +293,7 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Hea
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
 
         renderDetailPage();
 
@@ -303,11 +308,11 @@ describe('GameDetailPage — discord auto-heart tooltip (ROK-444, AC #4) — Hea
 describe('GameDetailPage — loading and error states', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(useAuthHook.useAuth).mockReturnValue({
+        vi.mocked(useAuthHook.useAuth).mockReturnValue(partialResult<ReturnType<typeof useAuthHook.useAuth>>({
             user: { id: 1, username: 'Tester', role: 'member' } as never,
             isAuthenticated: true,
-        } as ReturnType<typeof useAuthHook.useAuth>);
-        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue({
+        }));
+        vi.mocked(useWantToPlayModule.useWantToPlay).mockReturnValue(partialResult<ReturnType<typeof useWantToPlayModule.useWantToPlay>>({
             wantToPlay: false,
             count: 0,
             source: undefined,
@@ -315,15 +320,15 @@ describe('GameDetailPage — loading and error states', () => {
             isLoading: false,
             toggle: vi.fn(),
             isToggling: false,
-        });
+        }));
     });
 
     it('shows loading skeleton when game data is loading', () => {
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: undefined,
             isLoading: true,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
 
         const { container } = renderDetailPage();
         // Skeleton has animate-pulse class
@@ -331,22 +336,22 @@ describe('GameDetailPage — loading and error states', () => {
     });
 
     it('shows error state when game is not found', () => {
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: undefined,
             isLoading: false,
             error: new Error('Not found'),
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
 
         renderDetailPage();
         expect(screen.getByText(/game not found/i)).toBeInTheDocument();
     });
 
     it('renders game name when data is available', () => {
-        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue({
+        vi.mocked(useGamesDiscoverModule.useGameDetail).mockReturnValue(partialResult<ReturnType<typeof useGamesDiscoverModule.useGameDetail>>({
             data: mockGame,
             isLoading: false,
             error: null,
-        } as ReturnType<typeof useGamesDiscoverModule.useGameDetail>);
+        }));
 
         renderDetailPage();
         expect(screen.getByText('Valheim')).toBeInTheDocument();
