@@ -78,8 +78,9 @@ export async function pruneExecutions(
     .orderBy(desc(schema.cronJobExecutions.startedAt))
     .limit(1)
     .offset(MAX_EXECUTIONS_PER_JOB);
-  if (rows.length === 0) return;
-  const cutoffId = rows[0].id;
+  const [cutoff] = rows;
+  if (cutoff === undefined) return;
+  const cutoffId = cutoff.id;
   await db
     .delete(schema.cronJobExecutions)
     .where(
@@ -294,7 +295,7 @@ export function extractRegistryJobMeta(
   }
   return {
     source: isPlugin ? 'plugin' : 'core',
-    pluginSlug: isPlugin ? name.split(':')[0] : null,
+    pluginSlug: isPlugin ? name.slice(0, name.indexOf(':')) : null,
     cronExpression: parseCronTime(job.cronTime),
     category: meta?.category ?? (isPlugin ? 'Plugin' : 'Other'),
     description: meta?.description ?? null,

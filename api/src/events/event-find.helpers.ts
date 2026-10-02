@@ -33,10 +33,11 @@ export async function findOneEvent(
     .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
     .where(eq(schema.events.id, id))
     .limit(1);
-  if (results.length === 0) {
+  const [row] = results;
+  if (row === undefined) {
     throw new NotFoundException(`Event with ID ${id} not found`);
   }
-  return results[0];
+  return row;
 }
 
 /** Builds a signup count subquery filtered by the given event IDs. */

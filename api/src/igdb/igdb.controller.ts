@@ -65,6 +65,7 @@ import {
 } from './igdb-personalization.helpers';
 import { parseBatchIds } from './igdb-batch.util';
 import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
+import { defined } from '../common/defined.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -252,7 +253,7 @@ export class IgdbController {
       viewerIdOf(req),
       [game],
     );
-    return personalized;
+    return defined(personalized, 'personalized game detail');
   }
 
   /** GET /games/:id/streams -- Live Twitch streams for a game (SWR cached). */

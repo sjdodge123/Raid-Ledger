@@ -6,6 +6,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { autoAllocateSignup } from './signup-allocation.helpers';
 import { resolveGenericSlotRole } from './signup-promote.helpers';
@@ -285,7 +286,7 @@ export async function checkAutoBench(
 ): Promise<boolean> {
   if (!event.maxAttendees || dto?.slotRole === 'bench') return false;
 
-  const [{ count }] = await tx
+  const [countRow] = await tx
     .select({ count: sql<number>`count(*)` })
     .from(schema.eventSignups)
     .innerJoin(
@@ -298,6 +299,7 @@ export async function checkAutoBench(
         sql`${schema.rosterAssignments.role} != 'bench'`,
       ),
     );
+  const { count } = defined(countRow, 'signup count row');
 
   return Number(count) >= event.maxAttendees;
 }

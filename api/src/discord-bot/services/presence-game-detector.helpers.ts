@@ -62,7 +62,8 @@ export function applyConsensus(
 function collapseNullGroups(
   nullGroups: DetectedGameGroup[],
 ): DetectedGameGroup {
-  if (nullGroups.length === 1) return nullGroups[0];
+  const [only] = nullGroups;
+  if (nullGroups.length === 1 && only !== undefined) return only;
   return {
     ...FALLBACK_GROUP,
     memberIds: nullGroups.flatMap((g) => g.memberIds),

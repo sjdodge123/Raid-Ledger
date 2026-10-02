@@ -4,6 +4,7 @@
  */
 import type { EventBlockDescriptor, SignedUpEventRow } from './game-time.types';
 import type { SignupsPreviewMap } from './game-time-signups.helpers';
+import { defined } from '../common/defined.helpers';
 
 /** Signups data shape for block building. */
 type SignupsBlockData =
@@ -74,8 +75,9 @@ function buildSingleBlock(
     confirmationStatus: event.confirmationStatus as
       'pending' | 'confirmed' | 'changed',
     dayOfWeek,
-    startHour: hours[0],
-    endHour: hours[hours.length - 1] + 1,
+    // The caller skips empty hour lists, so both ends exist.
+    startHour: defined(hours[0], 'first block hour'),
+    endHour: defined(hours[hours.length - 1], 'last block hour') + 1,
     signupsPreview: signupsData?.preview ?? [],
     signupCount: signupsData?.count ?? 0,
   };

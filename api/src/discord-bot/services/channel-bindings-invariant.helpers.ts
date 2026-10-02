@@ -21,6 +21,7 @@ import {
   type ChannelBindingConfig,
   type ChannelType,
 } from '@raid-ledger/contract';
+import { defined } from '../../common/defined.helpers';
 
 const guardLogger = new Logger('BindingInvariant');
 
@@ -265,7 +266,7 @@ async function planNormalization(
     bySlot.set(key, [...(bySlot.get(key) ?? []), b]);
   }
   for (const group of bySlot.values()) {
-    const [first] = group;
+    const first = defined(group[0], 'binding slot group head');
     const target = targetPurposeAfterNull(first);
     const [occupied] = await tx
       .select({ id: cb.id })
@@ -282,7 +283,7 @@ async function planNormalization(
       .limit(1);
     let survivor: BindingRow | undefined;
     if (!occupied) {
-      survivor = group.find((b) => b.bindingPurpose === target) ?? group[0];
+      survivor = group.find((b) => b.bindingPurpose === target) ?? first;
       if (survivor.bindingPurpose === target) plan.keepIds.push(survivor.id);
       else plan.retargetIds.push(survivor.id);
     }

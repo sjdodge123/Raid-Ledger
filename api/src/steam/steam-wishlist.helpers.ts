@@ -6,6 +6,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import type { SteamWishlistEntryDto } from '@raid-ledger/contract';
 import type { SteamWishlistItem } from './steam-http.util';
+import { defined } from '../common/defined.helpers';
 
 /** Input for the pure diff function. */
 export interface WishlistDiffInput {
@@ -149,6 +150,6 @@ export async function fetchSteamWishlist(
     .offset(offset);
   return {
     data: mapWishlistRows(rows),
-    total: Number(countResult.count),
+    total: Number(defined(countResult, 'wishlist count row').count),
   };
 }

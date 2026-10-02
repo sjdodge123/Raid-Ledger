@@ -12,6 +12,7 @@
  */
 import type { CooptimusEntry } from './cooptimus-xml.util';
 import { EDITION_SUFFIX_RE } from './cooptimus.constants';
+import { defined } from '../common/defined.helpers';
 
 // Known fold collisions: bare 'x'→'10' and 'v'→'5' make e.g. "Mega Man X" ≡
 // "Mega Man 10" under normalization. Accepted: a wrong AUTO-map additionally
@@ -110,7 +111,7 @@ export function matchEntries(
       // the arbitered set already covers, or two same-title extras fighting
       // over one system, must never displace the Steam-confirmed page in
       // pickPlatformEntry's newest-wins tiebreak.
-      const title = bySteam[0].title;
+      const title = defined(bySteam[0], 'steam-matched entry').title;
       const covered = new Set(bySteam.map((e) => e.system.toUpperCase()));
       const extras = entries.filter(
         (e) =>

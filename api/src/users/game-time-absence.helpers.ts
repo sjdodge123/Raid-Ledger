@@ -11,6 +11,7 @@ import { eq, and, gte } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { AbsenceRecord } from './game-time.types';
 import { isMissingTableError } from '../common/pg-error.helpers';
+import { defined } from '../common/defined.helpers';
 
 /**
  * Resolve "today" as a YYYY-MM-DD string in the caller's local timezone.
@@ -25,7 +26,10 @@ export function resolveLocalToday(
   now: Date = new Date(),
 ): string {
   const localMs = now.getTime() - tzOffset * 60 * 1000;
-  return new Date(localMs).toISOString().split('T')[0];
+  return defined(
+    new Date(localMs).toISOString().split('T')[0],
+    'ISO date part',
+  );
 }
 
 /**

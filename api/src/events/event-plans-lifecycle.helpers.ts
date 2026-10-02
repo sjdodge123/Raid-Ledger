@@ -10,6 +10,7 @@ import type {
   PollOptionResult,
   PollResultsResponse,
 } from '@raid-ledger/contract';
+import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('EventPlansLifecycle');
 
@@ -118,7 +119,9 @@ function mapOptionResults(
       isRegistered: true,
     }));
     const label =
-      idx < pollOptions.length ? pollOptions[idx].label : 'None of these work';
+      idx < pollOptions.length
+        ? defined(pollOptions[idx], 'poll option').label
+        : 'None of these work';
     const result: PollOptionResult = {
       index: idx,
       label,

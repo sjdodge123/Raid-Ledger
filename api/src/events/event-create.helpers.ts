@@ -6,6 +6,7 @@ import * as schema from '../drizzle/schema';
 import type { CreateEventDto } from '@raid-ledger/contract';
 import { randomUUID } from 'crypto';
 import { generateRecurringDates } from './recurrence.util';
+import { defined } from '../common/defined.helpers';
 
 /** Builds the base insert values shared by single and recurring events. */
 export function buildBaseValues(
@@ -73,7 +74,7 @@ export async function insertSingleEvent(
     .insert(schema.events)
     .values({ ...baseValues, duration: [startTime, endTime] } as never)
     .returning();
-  return event;
+  return defined(event, 'inserted event row');
 }
 
 /** Generates a recurrence group ID if the DTO has recurrence, else null. */

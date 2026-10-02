@@ -104,6 +104,7 @@ export class RescheduleResponseListener {
     const parts = i.customId.split(':');
     if (parts.length !== 2) return;
     const [action, idStr] = parts;
+    if (action === undefined || idStr === undefined) return;
     const eventId = parseInt(idStr, 10);
     if (isNaN(eventId) || !isRescheduleAction(action)) return;
     try {
@@ -198,8 +199,8 @@ export class RescheduleResponseListener {
     i: StringSelectMenuInteraction,
   ): Promise<void> {
     const parts = i.customId.split(':');
-    if (parts.length < 2 || parts.length > 4) return;
     const [action, idStr] = parts;
+    if (parts.length > 4 || action === undefined || idStr === undefined) return;
     const eventId = parseInt(idStr, 10);
     if (isNaN(eventId) || !isSelectAction(action)) return;
     try {

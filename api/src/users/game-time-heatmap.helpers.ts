@@ -9,6 +9,7 @@
  * column. Both now call this one helper so they cannot drift again.
  */
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
+import { defined } from '../common/defined.helpers';
 
 export interface HeatmapTemplateRow {
   dayOfWeek: number;
@@ -31,10 +32,11 @@ export function aggregateTemplatesToCells(
     countMap.set(key, (countMap.get(key) ?? 0) + 1);
   }
   return Array.from(countMap.entries()).map(([key, count]) => {
+    // Keys are built as `${day}:${hour}` above, so both parts exist.
     const [day, hour] = key.split(':').map(Number);
     return {
-      dayOfWeek: day,
-      hour,
+      dayOfWeek: defined(day, 'heatmap cell day'),
+      hour: defined(hour, 'heatmap cell hour'),
       availableCount: count,
       totalCount: totalUsers,
     };

@@ -13,6 +13,7 @@ import {
   fetchAbsencesEndingOnOrAfter,
 } from './game-time-absence.helpers';
 import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
+import { defined } from '../common/defined.helpers';
 
 // Re-export types for backward compatibility
 export type {
@@ -216,7 +217,7 @@ export class GameTimeService {
     // "I'm away some days" answers the game-time check too (ROK-1564).
     await this.updateGameTimeConfirmedAt(userId);
     this.invalidateUserCache(userId); // after the insert + stamp (review MINOR a)
-    return row;
+    return defined(row, 'inserted absence row');
   }
 
   /** Delete an absence. */

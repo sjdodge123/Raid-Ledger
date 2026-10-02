@@ -1,3 +1,4 @@
+import { defined } from '../common/defined.helpers';
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { eq, and } from 'drizzle-orm';
@@ -243,7 +244,7 @@ export class LiveNoShowService {
     stillAbsent: Array<{ displayName: string; role: string | null }>,
   ): string {
     if (stillAbsent.length === 1) {
-      const p = stillAbsent[0];
+      const p = defined(stillAbsent[0], 'absent player');
       return `${p.displayName} hasn't shown up for **${eventTitle}** \u2014 their${p.role ? ` ${p.role}` : ''} slot is available to PUG.`;
     }
     const lines = stillAbsent.map(

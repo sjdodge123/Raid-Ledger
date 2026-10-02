@@ -176,9 +176,8 @@ function strongestSharedKey(rows: GameRow[]): {
       .sort((a, b) =>
         c.kind === 'name' ? a.localeCompare(b) : Number(a) - Number(b),
       );
-    if (sharedValues.length > 0) {
-      return { matchType: c.kind, matchKey: sharedValues[0] };
-    }
+    const [matchKey] = sharedValues;
+    if (matchKey !== undefined) return { matchType: c.kind, matchKey };
   }
   // Connected components of ≥ 2 rows ALWAYS share at least one key; the loop
   // above is exhaustive. This throw is defensive against future regressions.

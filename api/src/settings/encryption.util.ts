@@ -4,6 +4,7 @@ import {
   randomBytes,
   scryptSync,
 } from 'crypto';
+import { defined } from '../common/defined.helpers';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
@@ -130,9 +131,12 @@ export function decryptWithKey(encryptedText: string, key: Buffer): string {
     throw new Error('Invalid encrypted value format');
   }
   const [ivHex, authTagHex, encryptedHex] = parts;
-  const iv = Buffer.from(ivHex, 'hex');
-  const authTag = Buffer.from(authTagHex, 'hex');
-  const encrypted = Buffer.from(encryptedHex, 'hex');
+  const iv = Buffer.from(defined(ivHex, 'iv part'), 'hex');
+  const authTag = Buffer.from(defined(authTagHex, 'auth tag part'), 'hex');
+  const encrypted = Buffer.from(
+    defined(encryptedHex, 'ciphertext part'),
+    'hex',
+  );
   const decipher = createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(authTag);
   const decrypted = Buffer.concat([
@@ -166,8 +170,8 @@ export function isEncrypted(value: string): boolean {
   if (parts.length !== 3) return false;
   const [ivHex, authTagHex, encryptedHex] = parts;
   return (
-    ivHex.length === IV_LENGTH * 2 &&
-    authTagHex.length === AUTH_TAG_LENGTH * 2 &&
-    encryptedHex.length > 0
+    defined(ivHex, 'iv part').length === IV_LENGTH * 2 &&
+    defined(authTagHex, 'auth tag part').length === AUTH_TAG_LENGTH * 2 &&
+    defined(encryptedHex, 'ciphertext part').length > 0
   );
 }

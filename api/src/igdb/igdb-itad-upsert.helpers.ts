@@ -11,6 +11,7 @@ import { mapDbRowToDetail } from './igdb.mappers';
 import { findGameByNormalizedName } from './igdb-name-dedup.helpers';
 import { withGameNameLock } from './games-name-lock.helpers';
 import { keepSeedOwned } from '../games-lookup/seed-owned-games.helpers';
+import { defined } from '../common/defined.helpers';
 
 /**
  * Upsert a single ITAD game to the database.
@@ -66,7 +67,8 @@ async function findExistingByAltKey(
       .from(g)
       .where(and(eq(g.steamAppId, steamId), ne(g.slug, game.slug)))
       .limit(1);
-    if (rows.length > 0) return rows[0];
+    const row = rows[0];
+    if (row !== undefined) return row;
   }
   if (game.igdbId) {
     const rows = await db
@@ -74,7 +76,8 @@ async function findExistingByAltKey(
       .from(g)
       .where(and(eq(g.igdbId, game.igdbId), ne(g.slug, game.slug)))
       .limit(1);
-    if (rows.length > 0) return rows[0];
+    const row = rows[0];
+    if (row !== undefined) return row;
   }
   return findExistingByName(db, game);
 }
@@ -205,5 +208,5 @@ async function fetchBySlug(
     .from(schema.games)
     .where(eq(schema.games.slug, slug))
     .limit(1);
-  return mapDbRowToDetail(rows[0]);
+  return mapDbRowToDetail(defined(rows[0], 'game row by slug'));
 }

@@ -6,6 +6,7 @@ import { eq, and, count } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 
 /** Map core identity fields from a character row. */
 function mapCoreFields(row: typeof schema.characters.$inferSelect) {
@@ -63,7 +64,7 @@ export async function resolveMainStatus(
   gameId: number,
   requestedIsMain?: boolean,
 ): Promise<{ shouldBeMain: boolean; charCount: number }> {
-  const [{ charCount }] = await tx
+  const [countRow] = await tx
     .select({ charCount: count() })
     .from(schema.characters)
     .where(
@@ -72,6 +73,7 @@ export async function resolveMainStatus(
         eq(schema.characters.gameId, gameId),
       ),
     );
+  const { charCount } = defined(countRow, 'character count row');
   const shouldBeMain = requestedIsMain === true || Number(charCount) === 0;
   return { shouldBeMain, charCount: Number(charCount) };
 }

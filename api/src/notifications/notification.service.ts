@@ -1,3 +1,4 @@
+import { defined } from '../common/defined.helpers';
 import {
   Inject,
   Injectable,
@@ -72,7 +73,7 @@ export class NotificationService {
       return null;
     }
 
-    const [created] = await this.db
+    const [row] = await this.db
       .insert(schema.notifications)
       .values({
         userId: input.userId,
@@ -83,6 +84,7 @@ export class NotificationService {
         expiresAt: input.expiresAt ?? null,
       })
       .returning();
+    const created = defined(row, 'inserted notification');
 
     this.logger.log(
       `Created notification ${created.id} for user ${input.userId} (${input.type})`,
@@ -143,7 +145,7 @@ export class NotificationService {
           isNull(schema.notifications.readAt),
         ),
       );
-    return Number(result.count);
+    return Number(defined(result, 'unread count row').count);
   }
 
   /** Mark a single notification as read. */
@@ -193,7 +195,9 @@ export class NotificationService {
         .values({ userId })
         .returning();
       this.logger.debug(`Created default preferences for user ${userId}`);
-      return mapPreferencesToDto(created);
+      return mapPreferencesToDto(
+        defined(created, 'inserted notification preferences'),
+      );
     }
     return mapPreferencesToDto(prefs);
   }
@@ -226,7 +230,9 @@ export class NotificationService {
           );
         });
     }
-    return mapPreferencesToDto(updated);
+    return mapPreferencesToDto(
+      defined(updated, 'updated notification preferences'),
+    );
   }
 
   @Cron('30 0 4 * * *', {

@@ -5,6 +5,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/defined.helpers';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
 import { activeUsersFilter } from '../../users/users-active.helpers';
 
@@ -84,7 +85,7 @@ export async function insertDecidedLineup(
         publicShareEnabled: false,
       })
       .returning({ id: schema.communityLineups.id });
-    return row;
+    return defined(row, 'inserted standalone lineup row');
   });
 }
 
@@ -108,7 +109,7 @@ export async function insertSchedulingMatch(
       minVoteThreshold: minVoteThreshold ?? null,
     })
     .returning({ id: schema.communityLineupMatches.id });
-  return row;
+  return defined(row, 'inserted scheduling match row');
 }
 
 /** Insert match member rows from a list of user IDs. */

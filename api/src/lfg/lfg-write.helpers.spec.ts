@@ -12,6 +12,7 @@
  */
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
+  convertHolderIntent,
   insertIntent,
   reviveIntent,
   toIntentDto,
@@ -303,5 +304,39 @@ describe('toIntentDto', () => {
     const dto = toIntentDto(intentRow({ urgency: 'week', ttlMinutes: null }));
     expect(dto.urgency).toBe('week');
     expect(dto.ttlMinutes).toBeNull();
+  });
+});
+
+describe('convertHolderIntent (ROK-1625)', () => {
+  let mockDb: MockDb;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+  });
+
+  it('flips the hand to converted into the event, with no poll provenance', async () => {
+    mockDb.returning.mockResolvedValueOnce([{ id: 5 }]);
+
+    const converted = await convertHolderIntent(
+      mockDb as unknown as LfgDb,
+      11,
+      22,
+      { eventId: 42 },
+    );
+
+    expect(converted).toBe(1);
+    expect(mockDb.set).toHaveBeenCalledWith({
+      status: 'converted',
+      convertedToPollId: null,
+      convertedToEventId: 42,
+    });
+  });
+
+  it('reports 0 when no live hand matched (already converted)', async () => {
+    mockDb.returning.mockResolvedValueOnce([]);
+
+    await expect(
+      convertHolderIntent(mockDb as unknown as LfgDb, 11, 22, { eventId: 42 }),
+    ).resolves.toBe(0);
   });
 });

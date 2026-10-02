@@ -18,6 +18,7 @@ import {
 } from './game-time-freshness.helpers';
 import { fetchGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 import type { TemplateSlot, CompositeViewResult } from './game-time.types';
+import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -29,8 +30,11 @@ export type TemplateReader = (
 /** Compute week date range strings for override/absence queries. */
 function weekDateRange(weekStart: Date, weekEnd: Date): [string, string] {
   return [
-    weekStart.toISOString().split('T')[0],
-    new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
+    defined(weekStart.toISOString().split('T')[0], 'week start date'),
+    defined(
+      new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
+      'week end date',
+    ),
   ];
 }
 

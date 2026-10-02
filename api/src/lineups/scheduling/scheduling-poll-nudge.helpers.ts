@@ -124,7 +124,8 @@ export async function loadNudgePollById(
   const rows = (await db.execute(
     nudgeablePollsQuery(sql`AND clm.id = ${matchId}`),
   )) as unknown as NudgePollRow[];
-  return rows.length > 0 ? toNudgePoll(rows[0]) : null;
+  const [row] = rows;
+  return row === undefined ? null : toNudgePoll(row);
 }
 
 /**
