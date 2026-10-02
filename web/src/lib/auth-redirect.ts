@@ -12,6 +12,12 @@ const AUTH_REDIRECT_SAVED_AT_KEY = 'authRedirectSavedAt';
 export const AUTH_REDIRECT_TTL_MS = 15 * 60 * 1000;
 
 /**
+ * How far in the future a save time may sit and still count: absorbs a small
+ * backwards wall-clock step (e.g. an NTP correction) between save and consume.
+ */
+export const AUTH_REDIRECT_CLOCK_SKEW_MS = 5000;
+
+/**
  * Save the intended destination for post-login redirect.
  * The path is stored raw; its save time goes in a sibling key.
  */
@@ -23,8 +29,8 @@ export function saveAuthRedirect(path: string): void {
 /**
  * Get and clear the saved auth redirect.
  * Both keys are always removed. Returns null when nothing is saved or the
- * entry is expired: a missing, unparseable, future-dated or older-than-TTL
- * save time all count as expired.
+ * entry is expired: a missing or unparseable save time, one more than
+ * AUTH_REDIRECT_CLOCK_SKEW_MS in the future, or one older than the TTL.
  */
 export function consumeAuthRedirect(): string | null {
     const redirect: string | null = sessionStorage.getItem(AUTH_REDIRECT_KEY);
@@ -35,5 +41,5 @@ export function consumeAuthRedirect(): string | null {
     const savedAt = Number(savedAtRaw);
     if (!Number.isFinite(savedAt)) return null;
     const age = Date.now() - savedAt;
-    return age >= 0 && age <= AUTH_REDIRECT_TTL_MS ? redirect : null;
+    return age >= -AUTH_REDIRECT_CLOCK_SKEW_MS && age <= AUTH_REDIRECT_TTL_MS ? redirect : null;
 }

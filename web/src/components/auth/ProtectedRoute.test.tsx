@@ -7,6 +7,7 @@ import {
     saveAuthRedirect,
     consumeAuthRedirect,
     AUTH_REDIRECT_TTL_MS,
+    AUTH_REDIRECT_CLOCK_SKEW_MS,
 } from '../../lib/auth-redirect';
 
 // Mock useAuth hook
@@ -132,9 +133,9 @@ afterEach(() => {
     protectedrouteGroup4();
 });
 
-describe('saveAuthRedirect / consumeAuthRedirect', () => {
-    const SAVED_AT = new Date('2026-10-02T12:00:00Z').getTime();
+const SAVED_AT = new Date('2026-10-02T12:00:00Z').getTime();
 
+function withFakeClockAndCleanStorage() {
     beforeEach(() => {
         sessionStorage.clear();
         vi.useFakeTimers();
@@ -144,6 +145,10 @@ describe('saveAuthRedirect / consumeAuthRedirect', () => {
         vi.useRealTimers();
         sessionStorage.clear();
     });
+}
+
+describe('saveAuthRedirect / consumeAuthRedirect', () => {
+    withFakeClockAndCleanStorage();
 
     it('saves and retrieves redirect path', () => {
         saveAuthRedirect('/some/path');
@@ -184,5 +189,30 @@ describe('saveAuthRedirect / consumeAuthRedirect', () => {
         expect(consumeAuthRedirect()).toBeNull();
         const path: string | null = sessionStorage.getItem('authRedirect');
         expect(path).toBeNull();
+    });
+});
+
+describe('consumeAuthRedirect — malformed and future-dated save times', () => {
+    withFakeClockAndCleanStorage();
+
+    it('treats an unparseable saved-at timestamp as expired', () => {
+        vi.setSystemTime(SAVED_AT);
+        sessionStorage.setItem('authRedirect', '/events/1');
+        sessionStorage.setItem('authRedirectSavedAt', 'abc');
+        expect(consumeAuthRedirect()).toBeNull();
+    });
+
+    it('drops a redirect saved further in the future than the clock-skew allowance', () => {
+        vi.setSystemTime(SAVED_AT + AUTH_REDIRECT_CLOCK_SKEW_MS + 1);
+        saveAuthRedirect('/events/1');
+        vi.setSystemTime(SAVED_AT);
+        expect(consumeAuthRedirect()).toBeNull();
+    });
+
+    it('keeps a redirect when the clock stepped back within the skew allowance', () => {
+        vi.setSystemTime(SAVED_AT + AUTH_REDIRECT_CLOCK_SKEW_MS);
+        saveAuthRedirect('/events/1');
+        vi.setSystemTime(SAVED_AT);
+        expect(consumeAuthRedirect()).toBe('/events/1');
     });
 });
