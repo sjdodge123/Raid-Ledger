@@ -11,6 +11,7 @@ import { renderHook, act } from '@testing-library/react';
 import { createElement, type ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import type { ScheduleSlotWithVotesDto, ScheduleVoteStance } from '@raid-ledger/contract';
+import type { ToggleScheduleVoteVars } from '../../../../hooks/use-scheduling';
 import { buildPoll, ME } from './scheduling-poll-fixtures';
 
 /**
@@ -23,7 +24,7 @@ type VoteResult = { voted: boolean; stance: ScheduleVoteStance | null };
 let settleVote: (value: VoteResult) => void = () => undefined;
 let failVote: (error: Error) => void = () => undefined;
 
-const toggleMutate = vi.fn(
+const toggleMutate = vi.fn<(vars: ToggleScheduleVoteVars) => Promise<VoteResult>>(
     () =>
         new Promise<VoteResult>((resolve, reject) => {
             settleVote = resolve;

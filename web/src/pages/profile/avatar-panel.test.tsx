@@ -33,7 +33,13 @@ vi.mock('../../lib/avatar', () => ({
         if (user.avatar) return { url: user.avatar, type: 'discord' };
         return { url: null, type: 'initials' };
     },
-    toAvatarUser: (user: Record<string, unknown>) => ({
+    toAvatarUser: (user: {
+        discordId?: string | null;
+        avatar?: string | null;
+        customAvatarUrl?: string | null;
+        characters?: unknown;
+        avatarPreference?: unknown;
+    }) => ({
         avatar: user.discordId && !user.discordId.startsWith('local:') && user.avatar
             ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
             : null,

@@ -12,6 +12,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { plugins } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { isMissingTableError } from '../../common/pg-error.helpers';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
 import { PluginInfoDto } from '@raid-ledger/contract';
 import {
@@ -280,11 +281,7 @@ export class PluginRegistryService implements OnModuleInit {
         .where(eq(plugins.active, true));
       this.activeSlugs = new Set(activeRecords.map((r) => r.slug));
     } catch (error: unknown) {
-      const isTableMissing =
-        error instanceof Error &&
-        'code' in error &&
-        (error as Error & { code: string }).code === '42P01';
-      if (isTableMissing) {
+      if (isMissingTableError(error)) {
         this.logger.warn(
           'plugins table not found — plugin system disabled until migration is applied',
         );

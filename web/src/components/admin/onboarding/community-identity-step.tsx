@@ -37,7 +37,7 @@ const PreviewPlaceholderIcon = (
 function LogoPreviewBox({ logoUrl }: { logoUrl: string | null }) {
     return (
         <div className="w-16 h-16 rounded-lg border border-edge/50 bg-surface/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-            {logoUrl ? <img src={logoUrl} alt="Community logo" className="w-full h-full object-contain" /> : PlaceholderIcon}
+            {logoUrl ? <img src={logoUrl} alt="Community logo" className="w-full h-full object-contain" width={64} height={64} /> : PlaceholderIcon}
         </div>
     );
 }
@@ -110,7 +110,7 @@ function LoginPagePreview({ logoUrl, communityName }: { logoUrl: string | null; 
             <h3 className="text-sm font-semibold text-foreground uppercase tracking-wider">Login Page Preview</h3>
             <div className="bg-backdrop/80 rounded-lg border border-edge/30 p-8 flex flex-col items-center gap-4">
                 <div className="w-16 h-16 rounded-xl overflow-hidden flex items-center justify-center bg-surface/30 border border-edge/50">
-                    {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : PreviewPlaceholderIcon}
+                    {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" width={64} height={64} /> : PreviewPlaceholderIcon}
                 </div>
                 <span className="text-lg font-bold text-foreground">{communityName.trim() || 'Raid Ledger'}</span>
                 <div className="w-56 space-y-2">

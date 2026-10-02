@@ -35,6 +35,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { OnEvent } from '@nestjs/event-emitter';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -50,6 +51,10 @@ import {
   type ResolvedBinding,
 } from '../listeners/voice-state.helpers';
 import { flushChannel } from './channel-presence-flush';
+import {
+  CHANNEL_BINDING_EVENTS,
+  type ChannelBindingChangedPayload,
+} from './channel-binding-events';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
 import type {
   RoomResolveDeps,
@@ -299,13 +304,21 @@ export class ChannelPresenceEmbedService
    * DEMO_MODE seam (ROK-1692): drop this channel's cached bindings so the next
    * flush reads the binding that exists NOW.
    *
-   * Nothing evicts the 60 s binding cache when a binding is created or
-   * deleted, so a smoke test that re-binds a channel could otherwise be
-   * flushed against the previous test's deleted binding — and schedule its
-   * grace re-check from that binding's grace, not its own.
+   * Binding writes through ChannelBindingsService now evict the entry via
+   * {@link onBindingChanged}; the seam still calls this so a smoke test never
+   * depends on that event having been delivered first.
    */
   forgetBinding(channelId: string): void {
     this.bindingCache.delete(channelId);
+  }
+
+  /**
+   * A binding on this channel was written: drop the 60 s cache entry so the
+   * next flush (and its grace re-check) uses the binding that exists now.
+   */
+  @OnEvent(CHANNEL_BINDING_EVENTS.CHANGED)
+  onBindingChanged({ channelId }: ChannelBindingChangedPayload): void {
+    this.forgetBinding(channelId);
   }
 
   /**

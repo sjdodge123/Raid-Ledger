@@ -126,5 +126,7 @@ export const eventSignups = pgTable(
     index('idx_event_signups_user_id').on(table.userId),
     // ROK-704: Composite index for roster queries that filter by event + status
     index('idx_event_signups_event_id_status').on(table.eventId, table.status),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    index('idx_event_signups_character_id').on(table.characterId),
   ],
 );

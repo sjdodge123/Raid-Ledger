@@ -6,9 +6,10 @@
  * the normal LineupsService API would reject (e.g. forcing a building
  * lineup with zero nominations into voting).
  */
-import { eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { carryOverFromLastDecided } from '../lineups/lineups-carryover.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -73,4 +74,41 @@ export async function setLineupChannelOverrideForTest(
     .update(schema.communityLineups)
     .set({ channelOverrideId, updatedAt: new Date() })
     .where(eq(schema.communityLineups.id, lineupId));
+}
+
+/**
+ * Re-run carryover for `lineupId` from an explicit source lineup.
+ *
+ * `POST /lineups` auto-carries from the newest PUBLIC decided/archived
+ * lineup on the whole instance, so under parallel smoke runs the source can
+ * be another spec's lineup rather than this spec's own. This drops the rows
+ * the auto-carry copied (carried rows only; real nominations stay) and
+ * re-carries from `previousLineupId`. The delete is required: the
+ * `uq_lineup_entry_game` unique key rejects re-inserting a game the
+ * auto-carry already copied.
+ *
+ * Only the carried ENTRIES are replaced. Lineup-level state the auto-carry
+ * derived from the first source's roster is not recomputed:
+ * `nomination_cap_peak` keeps whatever the auto-carry ratcheted it to (the
+ * ratchet only rises, so it can sit above what a direct carry from
+ * `previousLineupId` would set), and the early-advance nomination target that
+ * `armNominationTargetOnCreate` armed at create time stays as it was. The pinned
+ * source is also not checked against the auto-carry's PUBLIC + decided/archived
+ * filter (ROK-1065) — the caller picks it. Acceptable for this DEMO_MODE-only
+ * seam: no smoke assertion depends on the cap or the arm.
+ */
+export async function recarryLineupFromForTest(
+  db: Db,
+  lineupId: number,
+  previousLineupId: number,
+): Promise<void> {
+  await db
+    .delete(schema.communityLineupEntries)
+    .where(
+      and(
+        eq(schema.communityLineupEntries.lineupId, lineupId),
+        isNotNull(schema.communityLineupEntries.carriedOverFrom),
+      ),
+    );
+  await carryOverFromLastDecided(db, lineupId, { previousLineupId });
 }

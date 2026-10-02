@@ -2,7 +2,7 @@
  * Game nomination modal for Community Lineup (ROK-935).
  * Provides game search, preview with art, and optional note input.
  */
-import { type JSX, useEffect, useRef } from 'react';
+import { type JSX, useCallback, useEffect, useRef } from 'react';
 import { Modal } from '../ui/modal';
 import { Button } from '../ui/button';
 import { SearchInput } from '../ui/search-input';
@@ -219,10 +219,14 @@ export function NominateModal({ isOpen, onClose, lineupId, preSelectedGame, part
     // Resolve any Steam store URL pasted into the search input. The
     // page-level paste detector skips the modal (its global listener
     // bails when an input is focused), so the modal owns this flow.
-    useSteamUrlAutoResolve(draft.query, isOpen, (game) => {
-        draft.setSelected(game);
-        draft.setQuery('');
-    });
+    // `draft` is a new object every render; its setters are stable useState
+    // setters, so depend on them rather than on `draft`.
+    const { setSelected, setQuery } = draft;
+    const onSteamResolved = useCallback((game: SelectedGame) => {
+        setSelected(game);
+        setQuery('');
+    }, [setSelected, setQuery]);
+    useSteamUrlAutoResolve(draft.query, isOpen, onSteamResolved);
     const footer = draft.selected
         ? <NominateFooter onSubmit={draft.handleSubmit} isPending={draft.isPending} />
         : undefined;

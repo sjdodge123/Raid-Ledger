@@ -38,6 +38,7 @@ import { Link } from 'react-router-dom';
 import type { LfgHeartedGameDto } from '@raid-ledger/contract';
 import { useLfgHearted } from '../../hooks/use-lfg-hearted';
 import { useJoinGroup } from '../../hooks/use-lfg-join';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 import {
     LfgUrgencyChoice,
     type LfgUrgencyPick,
@@ -110,9 +111,9 @@ function PromptEntry({
         >
             {game.gameCoverUrl && (
                 <img
-                    src={game.gameCoverUrl}
-                    alt=""
-                    className="w-5 h-5 rounded object-cover"
+                    src={game.gameCoverUrl} alt="" className="w-5 h-5 rounded object-cover"
+                    width={20} height={20} loading="lazy" decoding="async"
+                    {...coverSrcSetProps(game.gameCoverUrl, '20px')}
                 />
             )}
             <span className="text-foreground font-medium">{game.gameName}</span>

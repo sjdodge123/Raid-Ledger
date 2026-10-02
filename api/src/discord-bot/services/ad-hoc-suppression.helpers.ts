@@ -22,7 +22,20 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { Logger } from '@nestjs/common';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
-import { findActiveScheduledEvent } from './ad-hoc-event.helpers';
+import {
+  findActiveScheduledEvent,
+  type ActiveScheduledEvent,
+} from './ad-hoc-event.helpers';
+import type { SuppressionWindowExtendedPayload } from './suppression-window-events';
+
+/**
+ * ROK-1696 — optional observer told when a suppressed join moves a scheduled
+ * event's effective end forward, so the caller can fan the new end out (cache,
+ * web clients, Discord). These helpers hold no service references.
+ */
+export type SuppressionWindowHook = (
+  payload: SuppressionWindowExtendedPayload,
+) => void;
 
 export const SUPPRESSION_WINDOW_MS = 60 * 60 * 1000;
 export const SUPPRESSION_REFRESH_THRESHOLD_MS = 15 * 60 * 1000;
@@ -35,12 +48,20 @@ export const SUPPRESSION_MAX_EXTENSION_MS = 6 * 60 * 60 * 1000;
 export type SuppressionPlan =
   | { action: 'extend'; newEnd: Date }
   | { action: 'skip-fresh' }
+  | { action: 'skip-within-schedule' }
   | { action: 'skip-capped'; ceiling: Date };
 
 /**
  * Pure planner for the suppression-window extension. Targets a 60m forward
  * window, never moves the window backward, never advances past scheduledEnd+6h,
  * and skips entirely while the current window is still fresh (>= now+15m).
+ *
+ * ROK-1696 floor: never writes a window that ends at or before scheduledEnd.
+ * Every consumer reads the effective end as COALESCE(extended_until,
+ * upper(duration)), so such a write would pull the event's end FORWARD.
+ * Suppression does not need it: buildTimeConditions matches on
+ * upper(duration) alone until the scheduled end has passed. A window already
+ * stored below scheduledEnd is lifted first (see `planBelowScheduleRepair`).
  */
 export function planSuppressionExtension(
   scheduledEnd: Date,
@@ -53,9 +74,14 @@ export function planSuppressionExtension(
   const target = new Date(
     Math.min(now.getTime() + SUPPRESSION_WINDOW_MS, ceiling.getTime()),
   );
+  const repair = planBelowScheduleRepair(scheduledEnd, currentExtended, target);
+  if (repair) return repair;
   const freshFloor = now.getTime() + SUPPRESSION_REFRESH_THRESHOLD_MS;
   if (currentExtended && currentExtended.getTime() >= freshFloor) {
     return { action: 'skip-fresh' };
+  }
+  if (target.getTime() <= scheduledEnd.getTime()) {
+    return { action: 'skip-within-schedule' };
   }
   if (
     target.getTime() <= now.getTime() ||
@@ -64,6 +90,25 @@ export function planSuppressionExtension(
     return { action: 'skip-capped', ceiling };
   }
   return { action: 'extend', newEnd: target };
+}
+
+/**
+ * ROK-1696 repair: a stored window that ends BEFORE the scheduled end (the
+ * planner wrote now+60m into longer events before the floor above existed)
+ * pulls COALESCE(extended_until, upper(duration)) forward, and with the floor
+ * in place nothing would ever roll it on. Lift it to the later of the 60m
+ * target and the scheduled end, even while it is still fresh. Returns null
+ * when the stored window already ends at or after the scheduled end.
+ */
+function planBelowScheduleRepair(
+  scheduledEnd: Date,
+  currentExtended: Date | null,
+  target: Date,
+): SuppressionPlan | null {
+  if (!currentExtended) return null;
+  if (currentExtended.getTime() >= scheduledEnd.getTime()) return null;
+  const newEnd = Math.max(target.getTime(), scheduledEnd.getTime());
+  return { action: 'extend', newEnd: new Date(newEnd) };
 }
 
 /**
@@ -198,13 +243,15 @@ let totalSkipped = 0;
  * Orchestrate scheduled-event suppression for a Quick Play voice join: find a
  * live scheduled event and, when found, bound-extend its suppression window per
  * `planSuppressionExtension`. Returns true whenever a scheduled event suppresses
- * the spawn, whether or not the window was rewritten.
+ * the spawn, whether or not the window was rewritten. `onExtended` fires only
+ * after a real write that ends past the scheduled end (ROK-1696).
  */
 export async function suppressScheduled(
   db: PostgresJsDatabase<typeof schema>,
   bindingId: string,
   effectiveGameId: number | null | undefined,
   channelId?: string,
+  onExtended?: SuppressionWindowHook,
 ): Promise<boolean> {
   const now = new Date();
   const scheduled = await findActiveScheduledEvent(
@@ -223,17 +270,19 @@ export async function suppressScheduled(
   logger.debug(
     `[voice-spawn] suppressed binding=${bindingId} channel=${channelId ?? '-'} game=${effectiveGameId ?? '-'} event=${scheduled.id} match=${scheduled.matchedBy} window=${scheduled.extendedUntil?.toISOString() ?? 'none'}`,
   );
-  await applySuppressionPlan(db, scheduled.id, plan, now);
+  await applySuppressionPlan(db, scheduled, plan, now, onExtended);
   return true;
 }
 
 /** Apply a resolved suppression plan: monotonic write + counter logging. */
 async function applySuppressionPlan(
   db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
+  scheduled: ActiveScheduledEvent,
   plan: SuppressionPlan,
   now: Date,
+  onExtended?: SuppressionWindowHook,
 ): Promise<void> {
+  const eventId = scheduled.id;
   if (plan.action === 'extend') {
     const wrote = await extendScheduledEventWindow(
       db,
@@ -246,11 +295,36 @@ async function applySuppressionPlan(
       logger.log(
         `[voice-spawn] extended event=${eventId} until=${plan.newEnd.toISOString()} writes=${totalWrites} skipped=${totalSkipped} window=60m`,
       );
+      notifyWindowExtended(scheduled, plan.newEnd, onExtended);
       return;
     }
   }
   totalSkipped += 1;
   if (plan.action === 'skip-capped') warnSkipCapped(eventId, plan.ceiling);
+}
+
+/**
+ * Tell the hook about a written window that ends past the scheduled end. A
+ * throwing hook is logged and swallowed: it must never break the guard.
+ */
+function notifyWindowExtended(
+  scheduled: ActiveScheduledEvent,
+  newEnd: Date,
+  onExtended?: SuppressionWindowHook,
+): void {
+  if (!onExtended) return;
+  if (newEnd.getTime() <= scheduled.scheduledEnd.getTime()) return;
+  try {
+    onExtended({
+      eventId: scheduled.id,
+      newEnd,
+      discordScheduledEventId: scheduled.discordScheduledEventId ?? null,
+    });
+  } catch (err) {
+    logger.warn(
+      `[voice-spawn] suppression-window hook failed event=${scheduled.id}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**

@@ -99,6 +99,7 @@ function member(
     discordId: null,
     customAvatarUrl: null,
     schedulingSubmittedAt: null,
+    joinedAt: '2026-05-15T00:00:00.000Z',
   };
 }
 

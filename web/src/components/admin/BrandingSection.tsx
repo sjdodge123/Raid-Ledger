@@ -52,7 +52,7 @@ function CommunityNameSection({ value, onChange }: { value: string; onChange: (v
 function LogoPreview({ logoUrl }: { logoUrl: string | null }) {
     return (
         <div className="w-16 h-16 rounded-lg border border-edge/50 bg-surface/30 flex items-center justify-center overflow-hidden flex-shrink-0">
-            {logoUrl ? <img src={logoUrl} alt="Community logo" className="w-full h-full object-contain" /> : <span className="text-2xl">&#x2694;&#xFE0F;</span>}
+            {logoUrl ? <img src={logoUrl} alt="Community logo" className="w-full h-full object-contain" width={64} height={64} /> : <span className="text-2xl">&#x2694;&#xFE0F;</span>}
         </div>
     );
 }
@@ -103,7 +103,7 @@ function BrandingPreview({ nameValue, logoUrl, colorValue }: { nameValue: string
             <div className="bg-backdrop/80 rounded-lg border border-edge/30 p-6">
                 <div className="flex items-center gap-3 mb-4 pb-4 border-b border-edge/30">
                     <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-surface/30">
-                        {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : <span className="text-base">&#x2694;&#xFE0F;</span>}
+                        {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" width={32} height={32} /> : <span className="text-base">&#x2694;&#xFE0F;</span>}
                     </div>
                     <span className="font-bold text-foreground">{nameValue || 'Raid Ledger'}</span>
                 </div>
