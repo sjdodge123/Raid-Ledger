@@ -8,6 +8,7 @@
  * arithmetic on top. Keeping the two apart is what makes the ranking rules
  * unit-testable without a fixture per case.
  */
+import { defined } from '../common/defined.helpers';
 import { LFG_OVERLAP_WINDOWS } from './lfg.constants';
 
 /** Milliseconds in one hour slot. */
@@ -96,8 +97,8 @@ function continues(prev: OverlapHour, next: OverlapHour): boolean {
 
 /** Close a run of hours into a window ending one hour after its last slot. */
 function toWindow(run: OverlapHour[], totalCount: number): OverlapWindow {
-  const first = run[0];
-  const last = run[run.length - 1];
+  const first = defined(run[0], 'first overlap hour');
+  const last = defined(run[run.length - 1], 'last overlap hour');
   return {
     start: first.start,
     end: new Date(Date.parse(last.start) + HOUR_MS).toISOString(),
@@ -124,7 +125,8 @@ export function groupIntoWindows(
   const windows: OverlapWindow[] = [];
   let run: OverlapHour[] = [];
   for (const hour of hours) {
-    if (run.length > 0 && !continues(run[run.length - 1], hour)) {
+    const prev = run[run.length - 1];
+    if (prev !== undefined && !continues(prev, hour)) {
       windows.push(toWindow(run, totalCount));
       run = [];
     }

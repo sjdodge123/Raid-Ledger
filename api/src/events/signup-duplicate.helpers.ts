@@ -1,6 +1,7 @@
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { assignExistingSignupSlot } from './signup-slot.helpers';
 import { getCharacterById } from './signup-roster.helpers';
@@ -26,7 +27,7 @@ async function findExistingSignup(
       ),
     )
     .limit(1);
-  return existing;
+  return defined(existing, 'existing signup row');
 }
 
 async function assignIfUnassigned(
@@ -59,7 +60,7 @@ async function assignIfUnassigned(
 async function buildDuplicateResponse(
   db: PostgresJsDatabase<typeof schema>,
   existing: SignupRow,
-  user: UserRow,
+  user: UserRow | undefined,
 ): Promise<{ isDuplicate: true; response: SignupResponseDto }> {
   const character = existing.characterId
     ? await getCharacterById(db, existing.characterId)
@@ -79,7 +80,7 @@ export async function handleDuplicateSignup(
   dto: CreateSignupDto | undefined,
   autoBench: boolean,
   hasCharacter: boolean,
-  user: UserRow,
+  user: UserRow | undefined,
   benchPromo: BenchPromotionService,
 ): Promise<{ isDuplicate: true; response: SignupResponseDto }> {
   const existing = await findExistingSignup(tx, eventId, userId);
