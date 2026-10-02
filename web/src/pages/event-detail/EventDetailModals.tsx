@@ -23,7 +23,7 @@ const SeriesScopeModal = lazy(() =>
 interface ConfirmModalProps {
     show: boolean;
     onClose: () => void;
-    onConfirm: (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => void;
+    onConfirm: (selection: { characterId: string; role?: CharacterRole | undefined; preferredRoles?: CharacterRole[] | undefined }) => void;
     onSkip: (opts?: { preferredRoles?: CharacterRole[] }) => void;
     isConfirming: boolean;
     gameId: number | undefined;

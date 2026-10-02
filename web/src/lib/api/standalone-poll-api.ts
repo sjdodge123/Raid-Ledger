@@ -24,7 +24,7 @@ export async function completeStandalonePoll(
   const body = eventId ? { eventId, startTime } : undefined;
   await fetchApi(`/scheduling-polls/${matchId}/complete`, {
     method: 'POST',
-    body: body ? JSON.stringify(body) : undefined,
+    ...(body ? { body: JSON.stringify(body) } : {}),
   });
 }
 

@@ -13,6 +13,11 @@ import { VoiceRoster } from '../../components/events/VoiceRoster';
 import { toast } from '../../lib/toast';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
 
+/** Omits an absent character name instead of carrying the key as `undefined`. */
+function toAttendeeCharacter({ gameId, name, avatarUrl }: { gameId: number | string; name?: string | undefined; avatarUrl: string | null }) {
+    return name === undefined ? { gameId, avatarUrl } : { gameId, name, avatarUrl };
+}
+
 function mapGameTimeAttendees(roster: EventRosterDto | undefined) {
     return roster?.signups.slice(0, 6).map(s => ({
         id: s.user.id,
@@ -21,7 +26,7 @@ function mapGameTimeAttendees(roster: EventRosterDto | undefined) {
         discordId: s.user.discordId ?? null,
         customAvatarUrl: s.user.customAvatarUrl ?? null,
         characters: (s.user.characters as Array<{ gameId: number | string; name?: string; avatarUrl: string | null }> | undefined)
-            ?.map((character) => ({ gameId: character.gameId, name: character.name, avatarUrl: character.avatarUrl })),
+            ?.map(toAttendeeCharacter),
     }));
 }
 
@@ -249,7 +254,7 @@ export function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortF
             id: s.user.id, username: s.user.username, avatar: s.user.avatar ?? null,
             discordId: s.user.discordId ?? null, customAvatarUrl: s.user.customAvatarUrl ?? null,
             characters: (s.user.characters as Array<{ gameId: number | string; name?: string; avatarUrl: string | null }> | undefined)
-                ?.map((character) => ({ gameId: character.gameId, name: character.name, avatarUrl: character.avatarUrl })),
+                ?.map(toAttendeeCharacter),
         })) : null;
 
     return (

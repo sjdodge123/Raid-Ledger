@@ -154,7 +154,7 @@ function useSaveEdit(
 ) {
     return async (
         id: string,
-        patch: { name?: string; description?: string },
+        patch: { name?: string | undefined; description?: string | undefined },
     ): Promise<void> => {
         await actions.patch.mutateAsync(
             { id, patch },

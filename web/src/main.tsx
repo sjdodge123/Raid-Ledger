@@ -11,11 +11,16 @@ import './index.css';
 import App from './App.tsx';
 import { ErrorFallback } from './components/ErrorFallback';
 
+const reportToSentry = Sentry.reactErrorHandler();
+// React hands an absent componentStack as `undefined`; Sentry's ErrorInfo wants the key omitted.
+const forwardToSentry = (error: unknown, { componentStack }: { componentStack?: string | undefined }) =>
+  reportToSentry(error, componentStack === undefined ? {} : { componentStack });
+
 const root = createRoot(document.getElementById('root')!, {
   // React 19 error hooks — forward uncaught/caught/recoverable errors to Sentry.
-  onUncaughtError: Sentry.reactErrorHandler(),
-  onCaughtError: Sentry.reactErrorHandler(),
-  onRecoverableError: Sentry.reactErrorHandler(),
+  onUncaughtError: forwardToSentry,
+  onCaughtError: forwardToSentry,
+  onRecoverableError: forwardToSentry,
 });
 
 // ROK-343: Web Vitals monitoring (FCP <1.8s, LCP <2.5s targets)

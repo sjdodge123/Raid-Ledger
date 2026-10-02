@@ -103,7 +103,7 @@ function TagList({ label, items, className }: { label: string; items: string[]; 
 
 /** Plugin integrations list */
 function IntegrationsList({ integrations }: {
-    integrations: { key: string; name: string; description: string; configured: boolean; icon?: string }[];
+    integrations: { key: string; name: string; description: string; configured: boolean; icon?: string | undefined }[];
 }): JSX.Element {
     return (
         <div>
