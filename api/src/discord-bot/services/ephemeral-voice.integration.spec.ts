@@ -259,6 +259,36 @@ describe('ephemeral-voice DB integration (ROK-1352)', () => {
     expect(ids).toEqual([soon]);
   });
 
+  it('attendance attach matches only the active ephemeral event under a non-UTC session', async () => {
+    const active = await insertEvent({
+      startOffsetMin: -5,
+      endOffsetMin: 55,
+      channelId: 'ch-tz-attach-active',
+    });
+    await insertEvent({
+      startOffsetMin: -180,
+      endOffsetMin: -120,
+      channelId: 'ch-tz-attach-ended',
+    });
+    const hits = await inNewYorkSession(async (db) => ({
+      active: (
+        await findActiveEventsByEphemeralChannel(
+          db,
+          'ch-tz-attach-active',
+          new Date(),
+        )
+      ).map((h) => h.eventId),
+      ended: (
+        await findActiveEventsByEphemeralChannel(
+          db,
+          'ch-tz-attach-ended',
+          new Date(),
+        )
+      ).map((h) => h.eventId),
+    }));
+    expect(hits).toEqual({ active: [active], ended: [] });
+  });
+
   it('name-reconcile scan skips an ended event under a non-UTC session', async () => {
     const live = await insertEvent({
       startOffsetMin: -5,

@@ -8,7 +8,7 @@
  * America/New_York inside one transaction, so it fails on ANY host if a reader
  * drops the explicit `Z` or a compare goes back to the session zone.
  */
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
@@ -126,5 +126,30 @@ describe('scheduled-event db-helpers under a non-UTC session', () => {
     );
 
     expect(offered).toBe(false);
+  });
+
+  it('offers an event whose reconcile backoff expired 2h ago, not one still backed off', async () => {
+    // backoff_until is zone-less UTC too. Read in the session zone it moves
+    // 4-5h later, so an expired backoff would still look active.
+    const now = Date.now();
+    const start = new Date(now + 26 * HOUR_MS);
+    const end = new Date(start.getTime() + 3 * HOUR_MS);
+    const expired = await insertEvent({ start, end, seId: null });
+    const active = await insertEvent({ start, end, seId: null });
+    await app.db
+      .update(schema.events)
+      .set({ scheduledEventReconcileBackoffUntil: new Date(now - 2 * HOUR_MS) })
+      .where(eq(schema.events.id, expired));
+    await app.db
+      .update(schema.events)
+      .set({ scheduledEventReconcileBackoffUntil: new Date(now + 2 * HOUR_MS) })
+      .where(eq(schema.events.id, active));
+
+    const offered = await inNewYorkSession(async (db) => {
+      const ids = (await findReconciliationCandidates(db)).map((r) => r.id);
+      return { expired: ids.includes(expired), active: ids.includes(active) };
+    });
+
+    expect(offered).toEqual({ expired: true, active: false });
   });
 });
