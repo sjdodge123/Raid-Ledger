@@ -39,14 +39,14 @@ vi.mock('../../../../hooks/use-scheduling', () => ({
     }),
 }));
 
-const lineupMatchesData = vi.fn<[], GroupedMatchesResponseDto | undefined>(
+const lineupMatchesData = vi.fn<() => GroupedMatchesResponseDto | undefined>(
     () => undefined,
 );
 vi.mock('../../../../hooks/use-lineup-matches', () => ({
     useLineupMatches: () => ({ data: lineupMatchesData(), isLoading: false }),
 }));
 
-const authUser = vi.fn<[], { id: number; role?: string } | null>(() => ({
+const authUser = vi.fn<() => { id: number; role?: string } | null>(() => ({
     id: 99,
 }));
 vi.mock('../../../../hooks/use-auth', () => ({

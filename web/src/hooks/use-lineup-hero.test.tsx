@@ -165,7 +165,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     const lineup = createMockLineupDetail({ status: 'building' });
     const { result } = renderHero(lineup, { onOpenNominate });
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     expect(onOpenNominate).toHaveBeenCalledTimes(1);
   });
@@ -181,7 +181,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     });
     const { result } = renderHero(lineup);
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     // Route shape lives in the spec — must reference the lineup id and a route segment.
     expect(mockNavigate).toHaveBeenCalledTimes(1);
@@ -209,7 +209,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     const { result } = renderHero(lineup);
     expect(result.current.tone).toBe('aborted');
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     expect(mockNavigate).toHaveBeenCalledWith('/games');
   });
@@ -241,7 +241,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     const { result } = renderHero(lineup, { tiebreaker });
     expect(result.current.cta?.text).toMatch(/force.*resolve/i);
     act(() => {
-      result.current.cta?.onClick();
+      result.current.cta?.onClick?.();
     });
     expect(mockForceResolveMutate).toHaveBeenCalledWith(50);
   });

@@ -21,7 +21,8 @@ function makeSlot(): ScheduleSlotWithVotesDto {
     suggestedBy: 'user',
     createdAt: '2026-06-01T00:00:00.000Z',
     votes: [],
-  } as ScheduleSlotWithVotesDto;
+    noVotes: [],
+  };
 }
 
 type RowOverrides = Partial<{

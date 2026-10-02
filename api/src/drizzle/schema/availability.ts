@@ -45,6 +45,10 @@ export const availability = pgTable(
   (table) => [
     // Performance index for user-scoped availability queries
     index('idx_availability_user_id').on(table.userId),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    index('idx_availability_source_event_id').on(table.sourceEventId),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    index('idx_availability_game_id').on(table.gameId),
     // L-5: GiST index on timeRange for overlap queries (matchmaking).
     // Managed in migration 0106 — Drizzle DSL cannot express GiST indexes natively.
   ],

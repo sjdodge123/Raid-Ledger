@@ -34,8 +34,9 @@ const playerListResponse = (
         username: m.username,
         avatar: null,
         discordId: m.discordId,
+        steamLinked: false,
     })),
-    meta: { total: members.length, page: 1, pageSize: 20, hasMore: false },
+    meta: { total: members.length, page: 1, limit: 20, hasMore: false },
 });
 
 function wrap({ children }: { children: ReactNode }) {

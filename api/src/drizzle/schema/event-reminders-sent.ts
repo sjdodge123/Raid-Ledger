@@ -5,6 +5,7 @@ import {
   varchar,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import { events } from './events';
 import { users } from './users';
@@ -33,6 +34,8 @@ export const eventRemindersSent = pgTable(
       table.userId,
       table.reminderType,
     ),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    index('idx_event_reminders_sent_user_id').on(table.userId),
   ],
 );
 
