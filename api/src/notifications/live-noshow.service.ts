@@ -43,7 +43,9 @@ export class LiveNoShowService {
     @Optional()
     @Inject(VoiceAttendanceService)
     private readonly voiceAttendance: VoiceAttendanceService | null,
-    @Optional() private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   /** Cron: runs every 60 seconds at second 40. */
