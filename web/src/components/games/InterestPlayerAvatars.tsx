@@ -26,7 +26,7 @@ const INITIALS_COLORS = [
 
 function getInitialsBg(username: string): string {
     const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return INITIALS_COLORS[hash % INITIALS_COLORS.length];
+    return INITIALS_COLORS[hash % INITIALS_COLORS.length]!;
 }
 
 function formatCountText(totalCount: number, overflowCount: number) {

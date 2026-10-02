@@ -156,8 +156,8 @@ function ItemFooter({ item, gameVariant }: { item: EquipmentItemDto; gameVariant
 
 export function ItemDetailModal({ isOpen, onClose, items, currentIndex, onNavigate, gameVariant }: ItemDetailModalProps) {
     useItemModalKeyboard(isOpen, onClose, items, currentIndex, onNavigate);
-    if (!isOpen || items.length === 0) return null;
     const item = items[currentIndex];
+    if (!isOpen || !item) return null;
     const normalizedQuality = item.quality.toUpperCase();
     const qualityClass = QUALITY_COLORS[normalizedQuality] ?? 'text-gray-300';
     const borderClass = QUALITY_BORDER[normalizedQuality] ?? 'border-edge';

@@ -91,7 +91,8 @@ export function setBlockRange(
     const locked = lockedHours(slots, dayOfWeek);
     const target = new Set<number>();
     for (let i = Math.max(0, startIndex); i < Math.min(hours.length, endIndex); i++) {
-        if (!locked.has(hours[i])) target.add(hours[i]);
+        const hour = hours[i];
+        if (hour !== undefined && !locked.has(hour)) target.add(hour);
     }
     if (target.size === 0) return slots;
 
@@ -139,4 +140,16 @@ export function moveBlock(
     const locked = lockedIndices(cleared, block.dayOfWeek, hours);
     for (let i = start; i < start + length; i++) if (locked.has(i)) return slots;
     return setBlockRange(cleared, block.dayOfWeek, start, start + length, true, hours);
+}
+
+/**
+ * The hour a block whose exclusive end is `endIndex` stops at. Past the last
+ * visible row it is the hour after that row, wrapping midnight (23 -> 0).
+ *
+ * @returns `undefined` only when `hours` is empty or `endIndex` is negative.
+ */
+export function blockEndHour(endIndex: number, hours: number[]): number | undefined {
+    if (endIndex < hours.length) return hours[endIndex];
+    const last = hours[hours.length - 1];
+    return last === undefined ? undefined : (last + 1) % 24;
 }

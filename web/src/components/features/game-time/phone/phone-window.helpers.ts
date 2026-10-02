@@ -70,8 +70,8 @@ export interface WindowChoice {
  * @returns `[start, end)` for `GameTimeGrid`'s `hourRange`.
  */
 export function desktopHourRange(choice: WindowChoice): [number, number] {
-    const start = choice.earlier ? EARLIER_HOURS[0] : EARLIER_HOURS[EARLIER_HOURS.length - 1] + 1;
-    const end = choice.later ? LATER_HOURS[LATER_HOURS.length - 1] + 1 : LATER_HOURS[0];
+    const start = choice.earlier ? Math.min(...EARLIER_HOURS) : Math.max(...EARLIER_HOURS) + 1;
+    const end = choice.later ? Math.max(...LATER_HOURS) + 1 : Math.min(...LATER_HOURS);
     return [start, end];
 }
 

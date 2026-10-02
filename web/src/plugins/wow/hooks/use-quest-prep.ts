@@ -32,16 +32,16 @@ export function useEnrichedQuests(
                 ),
             );
             const questsByInstance = new Map<number, EnrichedDungeonQuestDto[]>();
-            for (let i = 0; i < instanceIds.length; i++) {
+            for (const [i, instanceId] of instanceIds.entries()) {
                 const seen = new Set<number>();
                 const deduped: EnrichedDungeonQuestDto[] = [];
-                for (const quest of results[i]) {
+                for (const quest of results[i] ?? []) {
                     if (!seen.has(quest.questId)) {
                         seen.add(quest.questId);
                         deduped.push(quest);
                     }
                 }
-                questsByInstance.set(instanceIds[i], deduped);
+                questsByInstance.set(instanceId, deduped);
             }
             return questsByInstance;
         },

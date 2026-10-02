@@ -45,7 +45,7 @@ const SIZE_PX = { xs: 16, sm: 20, md: 24 };
 
 function getInitialsBg(username: string): string {
     const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return INITIALS_COLORS[hash % INITIALS_COLORS.length];
+    return INITIALS_COLORS[hash % INITIALS_COLORS.length]!;
 }
 
 function AvatarItem({ signup, index, size, accentColor, totalVisible, gameId }: {

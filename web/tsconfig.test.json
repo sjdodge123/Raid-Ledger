@@ -15,7 +15,11 @@
   "extends": "./tsconfig.app.json",
   "compilerOptions": {
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
-    "types": ["vite/client", "vitest/globals", "node"]
+    "types": ["vite/client", "vitest/globals", "node"],
+    // ROK-1161 phase 3: specs (*.test.ts(x), src/test/**) still carry 436
+    // noUncheckedIndexedAccess errors in 122 files; delete this override once
+    // they are fixed. App code is gated by tsconfig.app.json.
+    "noUncheckedIndexedAccess": false
   },
   "include": ["src"],
   "exclude": []

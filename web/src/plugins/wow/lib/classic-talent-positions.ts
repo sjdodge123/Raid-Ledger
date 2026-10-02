@@ -129,11 +129,9 @@ export function buildWowheadTalentString(
     const classPositions = CLASSIC_TALENT_POSITIONS[className];
     if (!classPositions) return null;
 
-    const treeOrder = Object.keys(classPositions);
     const treeStrings: string[] = [];
 
-    for (const treeName of treeOrder) {
-        const positionMap = classPositions[treeName];
+    for (const [treeName, positionMap] of Object.entries(classPositions)) {
         const treeData = trees.find((t) => t.name.toLowerCase() === treeName.toLowerCase());
         if (!treeData) { treeStrings.push('0'); continue; }
         treeStrings.push(buildTreeStringForData(treeData, positionMap));

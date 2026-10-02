@@ -25,18 +25,20 @@ function StatusBadge({ status }: { status: EventDisplayStatus }) {
     );
 }
 
+const GENERIC_PLACEHOLDER_PATH = '/placeholders/generic-placeholder.svg';
+
 const GAME_PLACEHOLDER_PATHS: Record<string, string> = {
     wow: '/placeholders/wow-placeholder.svg',
     ffxiv: '/placeholders/ffxiv-placeholder.svg',
     valheim: '/placeholders/valheim-placeholder.svg',
     'world-of-warcraft': '/placeholders/wow-placeholder.svg',
     'final-fantasy-xiv-online': '/placeholders/ffxiv-placeholder.svg',
-    generic: '/placeholders/generic-placeholder.svg',
+    generic: GENERIC_PLACEHOLDER_PATH,
 };
 
 function getPlaceholderPath(slug: string | undefined): string {
     if (slug && GAME_PLACEHOLDER_PATHS[slug]) return GAME_PLACEHOLDER_PATHS[slug];
-    return GAME_PLACEHOLDER_PATHS.generic;
+    return GENERIC_PLACEHOLDER_PATH;
 }
 
 function GameTimeBadge() {

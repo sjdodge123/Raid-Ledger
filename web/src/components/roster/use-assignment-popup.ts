@@ -46,13 +46,13 @@ function useFilteredPlayers(unassigned: RosterAssignmentResponse[], slotRole: Ro
 function useSlotsByRole(availableSlots: AssignmentPopupProps['availableSlots']): SlotGroup[] {
     return useMemo(() => {
         if (!availableSlots) return [];
-        const groups = new Map<string, typeof availableSlots>();
+        const groups = new Map<string, SlotGroup>();
         for (const slot of availableSlots) {
-            const existing = groups.get(slot.role) ?? [];
-            existing.push(slot);
-            groups.set(slot.role, existing);
+            const group = groups.get(slot.role);
+            if (group) group.slots.push(slot);
+            else groups.set(slot.role, { role: slot.role, label: slot.label, slots: [slot] });
         }
-        return Array.from(groups.entries()).map(([role, slots]) => ({ role, label: slots[0].label, slots }));
+        return Array.from(groups.values());
     }, [availableSlots]);
 }
 

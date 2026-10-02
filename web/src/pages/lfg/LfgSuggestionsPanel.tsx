@@ -118,7 +118,7 @@ function SuggestionRow({
                     <ReasonChips reasons={suggestion.reasons} />
                 </div>
                 <p className="text-xs text-muted">
-                    {REASON_SUBTITLE[suggestion.reasons[0]]}
+                    {suggestion.reasons[0] && REASON_SUBTITLE[suggestion.reasons[0]]}
                 </p>
             </div>
             <InviteButton suggestion={suggestion} invite={invite} />

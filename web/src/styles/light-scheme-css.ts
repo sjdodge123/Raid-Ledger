@@ -39,8 +39,9 @@ const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 function declared(css: string, selector: string, name: string): string | undefined {
     const blocks = new RegExp(`(?:^|[\\s}])${escape(selector)}\\s*\\{([^}]*)\\}`, 'g');
     for (const [, body] of css.matchAll(blocks)) {
-        const hit = new RegExp(`--color-${name}:\\s*(#[0-9a-fA-F]{6})`).exec(body);
-        if (hit) return hit[1].toLowerCase();
+        if (body === undefined) continue;
+        const hex = new RegExp(`--color-${name}:\\s*(#[0-9a-fA-F]{6})`).exec(body)?.[1];
+        if (hex) return hex.toLowerCase();
     }
     return undefined;
 }
@@ -52,6 +53,7 @@ function declared(css: string, selector: string, name: string): string | undefin
  */
 export function lightSchemes(css: string): LightScheme[] {
     for (const [, group] of css.matchAll(/:is\(([^()]*)\)\s*\{[^}]*--color-surface:/g)) {
+        if (group === undefined) continue;
         const names = parseSchemeGroup(group);
         if (!names) continue;
         const shared = `:is(${group})`;
@@ -71,6 +73,7 @@ const RULE =
 function toColor(raw: string): { color: string; alpha: number } {
     if (raw.startsWith('#')) return { color: raw.toLowerCase(), alpha: 1 };
     const [r, g, b, a] = raw.replace(/rgba\(|\)/g, '').split(',').map((n) => Number(n.trim()));
+    if (r === undefined || g === undefined || b === undefined || a === undefined) throw new Error(`Malformed rgba(): ${raw}`);
     const hex = [r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('');
     return { color: `#${hex}`, alpha: a };
 }
@@ -82,6 +85,7 @@ function toColor(raw: string): { color: string; alpha: number } {
  */
 export function lightTextRules(css: string, schemes: string[]): LightTextRule[] {
     return [...css.matchAll(RULE)].flatMap(([, group, hover, hue, shade, opacity, raw]) => {
+        if (group === undefined || hue === undefined || shade === undefined || raw === undefined) return [];
         const names = parseSchemeGroup(group);
         if (!names || !sameSet(names, schemes)) return [];
         const cls = `${hover ? 'hover:' : ''}text-${hue}-${shade}${opacity ? `/${opacity}` : ''}`;

@@ -130,11 +130,7 @@ export function presetForPlayerCount(
 ): PlayerCountPreset | null {
     if (playerCount == null) return null;
     const game: LibraryFilterableGame = { playerCount };
-    for (let i = PLAYER_COUNT_PRESETS.length - 1; i >= 0; i -= 1) {
-        const preset = PLAYER_COUNT_PRESETS[i];
-        if (supportsPlayerCount(game, preset)) return preset;
-    }
-    return null;
+    return [...PLAYER_COUNT_PRESETS].reverse().find((preset) => supportsPlayerCount(game, preset)) ?? null;
 }
 
 /**

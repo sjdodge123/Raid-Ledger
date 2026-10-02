@@ -70,7 +70,7 @@ export function MatchingSection({ slotRole, matching, onAssign, onRemoveFromEven
             {matching.map(player => (
                 <ModalPlayerRow
                     key={player.signupId} player={player} onAssign={onAssign}
-                    accentColor={(ROLE_SLOT_COLORS[slotRole] ?? ROLE_SLOT_COLORS.player).border}
+                    accentColor={(ROLE_SLOT_COLORS[slotRole] ?? ROLE_SLOT_COLORS.player)?.border}
                     onRemoveFromEvent={onRemoveFromEvent} onClose={onClose}
                 />
             ))}

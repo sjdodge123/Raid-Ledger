@@ -107,9 +107,9 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
     followupForEventId?: number | null) {
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
-    const errorKeys = Object.keys(validationErrors);
-    if (errorKeys.length > 0) {
-        const fieldId = ERROR_FIELD_MAP[errorKeys[0]];
+    const [firstErrorKey] = Object.keys(validationErrors);
+    if (firstErrorKey !== undefined) {
+        const fieldId = ERROR_FIELD_MAP[firstErrorKey];
         if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }

@@ -13,8 +13,7 @@ export function formatJobName(name: string): string {
 
     // Plugin jobs: "blizzard:character-auto-sync" -> "Character Auto Sync"
     if (name.includes(':')) {
-        return name
-            .split(':')[1]
+        return (name.split(':')[1] ?? '')
             .replace(/-/g, ' ')
             .replace(/\b\w/g, (c) => c.toUpperCase());
     }
@@ -52,7 +51,8 @@ function describeSpecificHours(hour: string): string | null {
     if (hour.includes('/') || hour.includes('-')) return null;
     const hours = hour.split(',').map((h) => parseInt(h, 10));
     if (!hours.every((h) => !isNaN(h))) return null;
-    if (hours.length === 1) return `Daily at ${formatHour(hours[0])}`;
+    const [first] = hours;
+    if (hours.length === 1 && first !== undefined) return `Daily at ${formatHour(first)}`;
     const labels = hours.map(formatHour);
     return `Daily at ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
 }
@@ -68,10 +68,15 @@ function describeSpecificTime(min: string, hour: string): string | null {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+type CronFields = [sec: string, min: string, hour: string, day: string, month: string, weekday: string];
+
+/** True when a split cron expression has exactly the six fields (seconds first). */
+const isSixFields = (parts: string[]): parts is CronFields => parts.length === 6;
+
 /** Convert a 6-field cron expression to a human-readable description */
 export function describeCron(expression: string): string {
     const parts = expression.trim().split(/\s+/);
-    if (parts.length !== 6) return expression;
+    if (!isSixFields(parts)) return expression;
     const [, min, hour, day, month, weekday] = parts;
     const isDaily = day === '*' && month === '*' && weekday === '*';
 
@@ -89,9 +94,9 @@ export function describeCron(expression: string): string {
 }
 
 function normalizeField(field: string, rangePattern: RegExp): string {
-    const match = field.match(rangePattern);
-    if (!match) return field;
-    const step = parseInt(match[1], 10);
+    const raw = field.match(rangePattern)?.[1];
+    if (raw === undefined) return field;
+    const step = parseInt(raw, 10);
     return step === 1 ? '*' : `*/${step}`;
 }
 
@@ -99,9 +104,10 @@ function tryCollapseHourCommas(normalizedHour: string): string {
     const hourCommaMatch = normalizedHour.match(/^(\d+(?:,\d+)*)$/);
     if (!hourCommaMatch) return normalizedHour;
     const hours = normalizedHour.split(',').map(Number).sort((a, b) => a - b);
-    if (hours.length < 2) return normalizedHour;
-    const interval = hours[1] - hours[0];
-    const isEvenlySpaced = hours.every((h, i) => i === 0 || h - hours[i - 1] === interval);
+    const [first, second] = hours;
+    if (first === undefined || second === undefined) return normalizedHour;
+    const interval = second - first;
+    const isEvenlySpaced = hours.every((h, i) => h === first + i * interval);
     return isEvenlySpaced && 24 % interval === 0 && hours.length === 24 / interval ? `*/${interval}` : normalizedHour;
 }
 
@@ -109,7 +115,7 @@ function tryCollapseHourCommas(normalizedHour: string): string {
 export function normalizeCron(expression: string): string {
     let parts = expression.trim().split(/\s+/);
     if (parts.length === 5) parts = ['0', ...parts];
-    if (parts.length !== 6) return expression;
+    if (!isSixFields(parts)) return expression;
 
     const [sec, min, hour, day, month, weekday] = parts;
     let normalizedHour = normalizeField(hour, /^0-23\/(\d+)$/);

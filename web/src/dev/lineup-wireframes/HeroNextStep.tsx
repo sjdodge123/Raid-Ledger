@@ -24,7 +24,7 @@ function useScrolledPast(ref: React.RefObject<HTMLDivElement | null>): boolean {
     const node = ref.current;
     if (!node) return;
     const obs = new IntersectionObserver(
-      ([entry]) => setScrolledPast(!entry.isIntersecting),
+      ([entry]) => { if (entry) setScrolledPast(!entry.isIntersecting); },
       { threshold: 0, rootMargin: '0px 0px -100% 0px' },
     );
     obs.observe(node);

@@ -67,8 +67,8 @@ function useImportHandler(refetchCharacters: () => Promise<{ data?: { data?: { i
     const handleImportSuccess = useCallback(async () => {
         const result = await refetchCharacters();
         const chars = result.data?.data;
-        if (chars && chars.length > 0) {
-            const newest = [...chars].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        const newest = [...(chars ?? [])].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        if (newest) {
             const importedRole = (newest.roleOverride ?? newest.role) as PugRole | null;
             if (importedRole) {
                 toast.success('Character imported! Joining event...', { description: `${newest.name} (${formatRole(importedRole)})` });

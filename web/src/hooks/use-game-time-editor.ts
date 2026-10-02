@@ -49,7 +49,7 @@ function getNextWeekStart(): string {
     const nextSunday = new Date(now);
     nextSunday.setDate(now.getDate() - day + 7);
     nextSunday.setHours(0, 0, 0, 0);
-    return nextSunday.toISOString().split('T')[0];
+    return nextSunday.toISOString().slice(0, 10);
 }
 
 function isAvailableSlot(s: GameTimeSlot): boolean {

@@ -82,8 +82,8 @@ export function summariseWeek(slots: readonly GameTimeSlot[]): string {
 
 /** "Sep 17" / "Sep 17–19" / "Sep 30–Oct 2", parsed without a timezone. */
 function rangeLabel(startDate: string, endDate: string): string {
-    const [, sm, sd] = startDate.split('-').map(Number);
-    const [, em, ed] = endDate.split('-').map(Number);
+    const [, sm = NaN, sd] = startDate.split('-').map(Number);
+    const [, em = NaN, ed] = endDate.split('-').map(Number);
     const from = `${MONTHS[sm - 1]} ${sd}`;
     if (startDate === endDate) return from;
     return sm === em ? `${from}–${ed}` : `${from}–${MONTHS[em - 1]} ${ed}`;
@@ -96,8 +96,8 @@ function rangeLabel(startDate: string, endDate: string): string {
  * @returns e.g. `Away Sep 17–19 +1 more`, or `null` when there are none.
  */
 export function summariseAbsences(absences: readonly GameTimeAbsence[]): string | null {
-    if (absences.length === 0) return null;
     const [first, ...rest] = [...absences].sort((a, b) => a.startDate.localeCompare(b.startDate));
+    if (first === undefined) return null;
     return `Away ${rangeLabel(first.startDate, first.endDate)}${rest.length ? ` +${rest.length} more` : ''}`;
 }
 

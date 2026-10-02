@@ -24,6 +24,18 @@ export function resolveSystemScheme(): ThemeMode {
         : 'light';
 }
 
+/** The registry's first theme, the last-resort fallback. */
+function firstTheme(): ThemeDefinition {
+    const [first] = THEME_REGISTRY;
+    if (!first) throw new Error('THEME_REGISTRY is empty');
+    return first;
+}
+
+/** The mode after `mode` in MODE_CYCLE, wrapping at the end. */
+export function nextThemeMode(mode: ThemeModePreference): ThemeModePreference {
+    return MODE_CYCLE[(MODE_CYCLE.indexOf(mode) + 1) % MODE_CYCLE.length] ?? mode;
+}
+
 /** Resolve the active ThemeDefinition from mode + per-mode IDs */
 export function resolveTheme(
     mode: ThemeModePreference,
@@ -37,7 +49,7 @@ export function resolveTheme(
     return (
         THEME_REGISTRY.find((t) => t.id === targetId) ??
         THEME_REGISTRY.find((t) => t.mode === effectiveMode) ??
-        THEME_REGISTRY[0]
+        firstTheme()
     );
 }
 

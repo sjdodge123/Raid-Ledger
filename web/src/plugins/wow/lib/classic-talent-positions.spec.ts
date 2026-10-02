@@ -19,7 +19,7 @@ function assertSlugMatchesTalent(
     treeName: string,
     apiTalentName: string,
 ): void {
-    const classMap = CLASSIC_TALENT_POSITIONS[className];
+    const classMap = classMapFor(className);
     const treeMap = classMap[treeName];
     const treeOrder = Object.keys(classMap);
 
@@ -49,7 +49,14 @@ function assertSlugMatchesTalent(
         .replace(/-+/g, '-')
         .replace(/^-|-$/g, '');
 
-    expect(treeMap[slug]).toBeDefined();
+    expect(treeMap?.[slug]).toBeDefined();
+}
+
+/** The class's position map; throws (failing the test) when the class has none. */
+function classMapFor(className: string): NonNullable<(typeof CLASSIC_TALENT_POSITIONS)[string]> {
+    const classMap = CLASSIC_TALENT_POSITIONS[className];
+    if (!classMap) throw new Error(`no talent position map for ${className}`);
+    return classMap;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +262,7 @@ describe('buildWowheadTalentString — part 3', () => {
             expect(result).not.toBeNull();
 
             // Verify the result contains the expected non-zero digits
-            const balanceString = result!.split('-')[0];
+            const [balanceString = ''] = (result ?? '').split('-');
             expect(balanceString.length).toBeGreaterThan(0);
             // The exact encoding depends on sorted positions, but should not be "0"
             expect(balanceString).not.toBe('0');
@@ -403,15 +410,14 @@ describe('buildWowheadTalentString — part 6', () => {
         ])('%s has exactly 3 talent trees', (className) => {
             const classMap = CLASSIC_TALENT_POSITIONS[className];
             expect(classMap).toBeDefined();
-            expect(Object.keys(classMap)).toHaveLength(3);
+            expect(Object.keys(classMap ?? {})).toHaveLength(3);
         });
 
         it.each([
             'Druid', 'Hunter', 'Mage', 'Paladin', 'Priest',
             'Rogue', 'Shaman', 'Warlock', 'Warrior',
         ])('%s returns a non-null result for empty trees', (className) => {
-            const classMap = CLASSIC_TALENT_POSITIONS[className];
-            const treeOrder = Object.keys(classMap);
+            const treeOrder = Object.keys(classMapFor(className));
 
             const trees = treeOrder.map((name) => ({
                 name,

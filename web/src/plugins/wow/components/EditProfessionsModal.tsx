@@ -86,7 +86,7 @@ function buildProfessionsPayload(
 
 function sameDrafts(a: DraftEntry[], b: DraftEntry[]): boolean {
     return a.length === b.length
-        && a.every((d, i) => d.name === b[i].name && d.skillLevel === b[i].skillLevel);
+        && a.every((d, i) => d.name === b[i]?.name && d.skillLevel === b[i]?.skillLevel);
 }
 
 /**

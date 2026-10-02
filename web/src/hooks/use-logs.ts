@@ -33,7 +33,7 @@ export function useLogs(service?: LogService) {
  */
 export function filenameFromDisposition(header: string | null): string | null {
   const match = header ? /filename="([^"]+)"/.exec(header) : null;
-  return match ? match[1] : null;
+  return match?.[1] ?? null;
 }
 
 export async function downloadLogFile(filename: string): Promise<void> {

@@ -31,7 +31,7 @@ function NominationCard({ g, mine }: { g: typeof GAMES[number]; mine: boolean })
 
 function NominationGrid({ persona }: { persona: Persona }): JSX.Element {
   const items = GAMES.slice(0, 6);
-  const myId = persona === 'invitee-acted' || persona === 'organizer' ? MY_NOMINATION.id : null;
+  const myId = persona === 'invitee-acted' || persona === 'organizer' ? MY_NOMINATION?.id ?? null : null;
   return (
     <section>
       <div className="flex items-center justify-between mb-3">

@@ -23,9 +23,9 @@ function buildSummaryItems(steps: Record<string, boolean> | undefined, dataSourc
         { label: 'Password Changed', done: steps?.secureAccount ?? false, skipMessage: 'Default password still in use', wizardStep: 0 },
         { label: 'Community Identity', done: steps?.communityIdentity ?? false, skipMessage: 'Using default settings', wizardStep: 1 },
         { label: 'Plugins', done: steps?.connectPlugins ?? false, skipMessage: 'No plugins configured', wizardStep: 2 },
-        { label: 'Blizzard API', done: dataSources?.blizzard.configured ?? false, skipMessage: 'Not connected', wizardStep: 2 },
-        { label: 'IGDB / Twitch API', done: dataSources?.igdb.configured ?? false, skipMessage: 'Not connected', wizardStep: 2 },
-        { label: 'Discord OAuth', done: dataSources?.discord.configured ?? false, skipMessage: 'Not configured', wizardStep: 0 },
+        { label: 'Blizzard API', done: dataSources?.blizzard?.configured ?? false, skipMessage: 'Not connected', wizardStep: 2 },
+        { label: 'IGDB / Twitch API', done: dataSources?.igdb?.configured ?? false, skipMessage: 'Not connected', wizardStep: 2 },
+        { label: 'Discord OAuth', done: dataSources?.discord?.configured ?? false, skipMessage: 'Not configured', wizardStep: 0 },
     ];
 }
 

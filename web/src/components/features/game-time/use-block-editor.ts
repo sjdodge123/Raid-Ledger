@@ -59,8 +59,10 @@ export function edgeBounds(
  * @returns The re-indexed block, or null when its hours left the window.
  */
 export function remapSelection(block: SlotBlock, before: number[], after: number[]): SlotBlock | null {
-    const start = after.indexOf(before[block.startIndex]);
-    const endHour = block.endIndex >= before.length ? null : before[block.endIndex];
+    const startHour = before[block.startIndex];
+    if (startHour === undefined) return null;
+    const start = after.indexOf(startHour);
+    const endHour = block.endIndex >= before.length ? null : before[block.endIndex] ?? null;
     const end = endHour === null ? after.length : after.indexOf(endHour);
     return start < 0 || end <= start ? null : { ...block, startIndex: start, endIndex: end };
 }

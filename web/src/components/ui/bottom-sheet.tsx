@@ -99,13 +99,13 @@ function useDragHandlers(
     const dragCurrentY = useRef<number>(0);
 
     const handleDragStart = (e: React.TouchEvent) => {
-        dragStartY.current = e.touches[0].clientY;
-        dragCurrentY.current = e.touches[0].clientY;
+        dragStartY.current = e.touches[0]?.clientY ?? dragStartY.current;
+        dragCurrentY.current = dragStartY.current;
         if (sheetRef.current) sheetRef.current.style.transition = 'none';
     };
 
     const handleDragMove = (e: React.TouchEvent) => {
-        dragCurrentY.current = e.touches[0].clientY;
+        dragCurrentY.current = e.touches[0]?.clientY ?? dragCurrentY.current;
         const delta = dragCurrentY.current - dragStartY.current;
         if (!sheetRef.current) return;
         const translate = delta > 0 ? delta : delta * 0.4;
