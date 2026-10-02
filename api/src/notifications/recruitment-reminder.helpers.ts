@@ -6,11 +6,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../drizzle/schema';
-import {
-  NOW_UTC,
-  utcIsoText,
-  utcWallClock,
-} from '../drizzle/timestamp-utils';
+import { NOW_UTC, utcIsoText, utcWallClock } from '../drizzle/timestamp-utils';
 import type { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import {
   createChannelEmbed,

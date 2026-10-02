@@ -1,10 +1,7 @@
 import { eq, and, isNull, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import {
-  utcIsoText,
-  utcWallClock,
-} from '../../drizzle/timestamp-utils';
+import { utcIsoText, utcWallClock } from '../../drizzle/timestamp-utils';
 import type { RosterSignupRow } from './ephemeral-voice.private.helpers';
 
 /**
