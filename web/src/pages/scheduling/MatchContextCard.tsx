@@ -84,10 +84,7 @@ export function MatchContextCard({ match, uniqueVoterCount }: MatchContextCardPr
         <img
           src={match.gameCoverUrl}
           alt={match.gameName}
-          width={COVER_INTRINSIC.width}
-          height={COVER_INTRINSIC.height}
-          loading="lazy"
-          decoding="async"
+          {...COVER_INTRINSIC} loading="lazy" decoding="async"
           {...coverSrcSetProps(match.gameCoverUrl, '64px')}
           className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
         />

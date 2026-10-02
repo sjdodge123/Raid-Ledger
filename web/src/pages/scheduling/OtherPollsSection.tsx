@@ -27,10 +27,7 @@ function PollLinkCard({ lineupId, poll }: {
         <img
           src={poll.gameCoverUrl}
           alt={poll.gameName}
-          width={COVER_INTRINSIC.width}
-          height={COVER_INTRINSIC.height}
-          loading="lazy"
-          decoding="async"
+          {...COVER_INTRINSIC} loading="lazy" decoding="async"
           {...coverSrcSetProps(poll.gameCoverUrl, '40px')}
           className="w-10 h-10 rounded object-cover flex-shrink-0"
         />
