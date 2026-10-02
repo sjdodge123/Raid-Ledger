@@ -22,7 +22,10 @@ import { withChannelDump } from '../channel-dump.js';
 import { assertBindSucceeded, type BindReply } from '../bind-reply.js';
 import { deleteSeriesBindings } from '../series-binding-cleanup.js';
 import { SmokeAssertionError } from '../assert.js';
-import { quickPlayVoiceJoin } from '../fixtures-quick-play.js';
+import {
+  quickPlayVoiceJoin,
+  withAdHocEventsEnabled,
+} from '../fixtures-quick-play.js';
 import {
   createEvent,
   deleteEvent,
@@ -388,20 +391,24 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
         voiceCh.id,
         game.name,
       );
-      // A seeded, linked human joins through the DEMO_MODE seam: the companion
-      // bot is never rostered (ROK-1445 AC9), so its own join mints nothing.
-      const joined = await quickPlayVoiceJoin(ctx.api, {
-        userId: fixture.userId,
-        bindingId,
-        channelId: voiceCh.id,
+      // Quick Play spawns only with the ROK-293 ad-hoc gate ON, and no seed or
+      // workflow sets it; the helper turns it on and restores the prior value.
+      await withAdHocEventsEnabled(ctx.api, async () => {
+        // A seeded, linked human joins through the DEMO_MODE seam: the companion
+        // bot is never rostered (ROK-1445 AC9), so its own join mints nothing.
+        const joined = await quickPlayVoiceJoin(ctx.api, {
+          userId: fixture.userId,
+          bindingId,
+          channelId: voiceCh.id,
+        });
+        mintedEventId = joined.eventId;
+        if (!joined.spawned) {
+          throw new Error(
+            `quick-play/voice-join did not spawn with ad-hoc events ON (reason=${joined.reason ?? 'none'}, eventId=${String(joined.eventId)})`,
+          );
+        }
+        await expectLiveEmbedInSeriesChannel(ctx, textCh);
       });
-      mintedEventId = joined.eventId;
-      if (!joined.spawned) {
-        throw new Error(
-          `quick-play/voice-join did not spawn (reason=${joined.reason ?? 'none'}, eventId=${String(joined.eventId)})`,
-        );
-      }
-      await expectLiveEmbedInSeriesChannel(ctx, textCh);
     } finally {
       if (mintedEventId !== null) await deleteEvent(ctx.api, mintedEventId);
       await deleteSeriesBindings(ctx.api, series.recurrenceGroupId);

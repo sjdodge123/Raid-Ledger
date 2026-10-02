@@ -13,7 +13,7 @@
  * join. What it SKIPS is the gateway → gate routing above it (the threshold
  * count and the bot roster filter); unit specs in the api pin those.
  */
-import { ApiClient } from "./api.js";
+import type { ApiClient } from "./api.js";
 
 /** `POST /admin/test/quick-play/voice-join` response. */
 export interface QuickPlayVoiceResult {
@@ -54,4 +54,41 @@ export function quickPlayVoiceJoin(
     "/admin/test/quick-play/voice-join",
     target,
   );
+}
+
+/** ROK-293's product gate: `AdHocEventService.isEnabled` reads this setting. */
+const AD_HOC_PATH = "/admin/settings/discord-bot/ad-hoc";
+
+/** What the ad-hoc gate helper needs from an ADMIN client. */
+export type AdHocGateApi = Pick<ApiClient, "get" | "put">;
+
+/**
+ * Run `fn` with ad-hoc events ON, then put the setting back as it was.
+ *
+ * `handleVoiceJoin` returns before the spawn when `ad_hoc_events_enabled` is
+ * not `'true'` (trace `[voice-gate] outcome=feature-disabled`), and nothing in
+ * the smoke harness, the demo seed or the CI workflow sets it. A run whose DB
+ * lacks the row — a fresh CI database, or a fleet env whose settings came from
+ * the shared bundle — can therefore never spawn. A test that needs a Quick Play
+ * spawn sets the flag itself through the admin settings API.
+ *
+ * When the flag is already ON nothing is written, so a run that enabled it on
+ * purpose keeps it. A failed restore is logged, never thrown: it must not hide
+ * the error `fn` threw.
+ */
+export async function withAdHocEventsEnabled<T>(
+  api: AdHocGateApi,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prior = await api.get<{ enabled: boolean }>(AD_HOC_PATH);
+  if (prior.enabled) return fn();
+  await api.put(AD_HOC_PATH, { enabled: true });
+  try {
+    return await fn();
+  } finally {
+    await api.put(AD_HOC_PATH, { enabled: false }).catch((err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`ad-hoc gate restore failed; the flag stays ON: ${msg}`);
+    });
+  }
 }
