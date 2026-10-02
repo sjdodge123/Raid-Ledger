@@ -209,7 +209,7 @@ describe('CommonGroundFilters — co-op auto-seed from participantCount (ROK-140
 });
 
 describe('CommonGroundFilters — co-op clearable (ROK-1400)', () => {
-    it('clears minOnlineCoop to undefined when the toggle is switched off', async () => {
+    it('clears minOnlineCoop by dropping the key when the toggle is switched off', async () => {
         const user = userEvent.setup();
         const onChange = vi.fn<OnChange>();
         renderFilters({ minOnlineCoop: 4 }, { onChange, participantCount: 4 });
@@ -218,9 +218,8 @@ describe('CommonGroundFilters — co-op clearable (ROK-1400)', () => {
             screen.getByRole('checkbox', { name: /co-op for our group size/i }),
         );
 
-        expect(onChange).toHaveBeenCalledWith(
-            expect.objectContaining({ minOnlineCoop: undefined }),
-        );
+        expect(onChange).toHaveBeenCalledTimes(1);
+        expect(onChange.mock.calls[0]?.[0]).not.toHaveProperty('minOnlineCoop');
     });
 
     it('preserves the other filters when the co-op toggle is cleared', async () => {
