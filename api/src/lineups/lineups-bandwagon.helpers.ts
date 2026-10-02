@@ -70,11 +70,11 @@ function deriveOriginalTotal(
  *
  * Schedule-vote enrollment is a second way into the member set, and it does
  * NOT run this check. Answering a slot on a 'suggested' or 'scheduling' match
- * enrolls the voter (`ensureMatchMember`, source 'bandwagon'), and
- * `countMatchMembers` counts every source. So the NEXT bandwagon join
- * measures its threshold against the enlarged member count and can promote
- * earlier than bandwagon joins alone would. This is current, unruled
- * behaviour: treating a slot vote as a demand signal is the presumed
+ * enrolls the voter as a member with source 'bandwagon' (the scheduling
+ * vote path), and `countMatchMembers` counts every source. So the NEXT
+ * bandwagon join measures its threshold against the enlarged member count
+ * and can promote earlier than bandwagon joins alone would. This is current,
+ * unruled behaviour: treating a slot vote as a demand signal is the presumed
  * rationale, not a recorded product decision. Changing it (running this
  * check after vote enrollment, or leaving vote-enrolled members out of the
  * count) needs an operator ruling.
