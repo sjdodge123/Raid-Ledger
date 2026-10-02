@@ -47,8 +47,11 @@ git worktree add ../Raid-Ledger--rok-<num> fix/rok-<num>
 cp .env ../Raid-Ledger--rok-<num>/
 cp api/.env ../Raid-Ledger--rok-<num>/api/
 
-# Install dependencies
-cd ../Raid-Ledger--rok-<num> && npm install && cd -
+# Install dependencies + build the shared contract (a fresh worktree has no packages/contract/dist;
+# the viability tsc below fails across ~200 files without it)
+(cd ../Raid-Ledger--rok-<num> && npm install && git checkout -- package-lock.json && npm run build -w packages/contract)
+# only if a story touches tools/test-bot/** (not an npm workspace; fleet-orchestrator/SKILL.md:111)
+(cd ../Raid-Ledger--rok-<num>/tools/test-bot && npm ci)
 
 # Viability check — ensure the worktree builds clean
 npx tsc --noEmit -p ../Raid-Ledger--rok-<num>/api/tsconfig.json

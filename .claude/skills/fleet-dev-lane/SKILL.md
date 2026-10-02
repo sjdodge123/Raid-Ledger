@@ -15,6 +15,10 @@ relayed with an error, and separately a stale runbook line told a dev to delete 
   `Cannot find name 'expect'` errors. That is invocation error, not a pre-existing failure — do not
   file it. The canonical form (matching `scripts/validate-ci.sh:627`) is:
   `npx tsc --noEmit -p api/tsconfig.json` run from the repo root.
+- **Fresh-worktree setup errors are setup, not repo failures — fix the setup, do not file them.**
+  `Cannot find module '@raid-ledger/contract'` (tsc) or `Failed to resolve import "@raid-ledger/contract"`
+  (vitest) = contract unbuilt: `npm run build -w packages/contract`. `Cannot find module '@discordjs/voice'`
+  under `tools/test-bot` = not installed: `(cd tools/test-bot && npm ci)` — declared deps, not a new dependency.
 - Quote glob patterns in `grep -r --include="*.ts"` — the Bash tool's shell is zsh, and an unquoted
   pattern fails with `no matches found` rather than being passed through.
 
