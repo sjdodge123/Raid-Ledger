@@ -61,10 +61,7 @@ import * as useGamesDiscoverModule from '../hooks/use-games-discover';
 import * as useAuthHook from '../hooks/use-auth';
 import * as useWantToPlayModule from '../hooks/use-want-to-play';
 
-/** Typed partial hook result: every field given is checked against T. */
-function partialResult<T>(fields: Partial<T>): T {
-    return fields as T;
-}
+import { partialResult } from '../test/partial-result';
 
 // Mock auth and want-to-play
 vi.mock('../hooks/use-auth', () => ({
