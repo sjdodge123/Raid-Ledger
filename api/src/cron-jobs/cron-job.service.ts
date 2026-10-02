@@ -351,7 +351,9 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
       cronExpression,
       this.logger,
     );
-    if (updated) this.jobCache.set(updated.name, updated);
+    if (!updated) return updated;
+    this.jobCache.set(updated.name, updated);
+    this.lastRun.reschedule(updated.id, updated.cronExpression);
     return updated;
   }
 

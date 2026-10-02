@@ -104,6 +104,17 @@ export class LastRunBuffer {
     return true;
   }
 
+  /**
+   * Point a queued write at the job's new schedule after an admin reschedule.
+   * The flush derives next_run_at from the queued expression, so without this
+   * a run queued under the old schedule would overwrite the next_run_at that
+   * the reschedule just wrote with one computed from the old expression.
+   */
+  reschedule(jobId: number, cronExpression: string): void {
+    const queued = this.pending.get(jobId);
+    if (queued) this.pending.set(jobId, { ...queued, cronExpression });
+  }
+
   /** Write every queued value in one batched UPDATE and drain the buffer. */
   flush(db: Db, logger: Logger): Promise<void> {
     return flushPendingUpdates(db, this.pending, logger);
