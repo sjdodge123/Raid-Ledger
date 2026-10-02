@@ -337,7 +337,7 @@ describe('EquipmentGrid — image loading (ROK-1159)', () => {
         }
     });
 
-    it('reserves the character render box on both layouts and never lazy-loads it', () => {
+    it('hints the character render ratio on both layouts without pinning its width, and never lazy-loads it', () => {
         renderGrid();
         const renders = screen.getAllByRole('img', { name: 'Character render' });
         expect(renders.map((img) => [img.getAttribute('width'), img.getAttribute('height')])).toEqual([
@@ -345,5 +345,8 @@ describe('EquipmentGrid — image loading (ROK-1159)', () => {
             ['400', '300'],
         ]);
         for (const img of renders) expect(img).not.toHaveAttribute('loading', 'lazy');
+        // jsdom does no layout, so the class is the only observable proof that the
+        // width attribute cannot become the CSS width (preflight sets height:auto only).
+        for (const img of renders) expect(img).toHaveClass('w-auto');
     });
 });

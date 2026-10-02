@@ -1,10 +1,11 @@
 /**
  * Vitest — GameBanner cover art (ROK-1159).
  *
- * The foreground cover is the game-detail page's LCP image: it alone loads at
- * high priority. The blurred backdrop paints the same URL, so it must carry the
- * SAME srcset/sizes — otherwise the browser picks a different candidate for
- * each image and downloads the art twice.
+ * The foreground cover is the game-detail page's LCP image. The blurred
+ * backdrop paints the same URL, so it must carry the SAME srcset/sizes —
+ * otherwise the browser picks a different candidate for each image and
+ * downloads the art twice — and the same high priority, because it is first in
+ * the DOM and so starts that one shared request.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -41,11 +42,12 @@ describe('GameBanner — cover art loading (ROK-1159)', () => {
         const cover = screen.getByRole('img', { name: 'Valheim' });
         expect(cover).toHaveAttribute('fetchpriority', 'high');
         expect(cover).toHaveAttribute('loading', 'eager');
+        expect(cover).toHaveAttribute('decoding', 'sync');
         expect(cover).toHaveAttribute('width', '264');
         expect(cover).toHaveAttribute('height', '374');
     });
 
-    it('gives the blurred backdrop the same srcset and sizes as the cover, without high priority', () => {
+    it('gives the blurred backdrop the same srcset, sizes and high priority as the cover, decoded async', () => {
         const { container } = renderBanner(makeGame());
         const { backdrop, cover } = bannerImages(container);
         expect(backdrop).toHaveAttribute('alt', '');
@@ -54,7 +56,8 @@ describe('GameBanner — cover art loading (ROK-1159)', () => {
         expect(backdrop.getAttribute('sizes')).toBe('(min-width: 640px) 192px, 160px');
         expect(cover.getAttribute('sizes')).toBe(backdrop.getAttribute('sizes'));
         expect(backdrop).toHaveAttribute('width', '264');
-        expect(backdrop).not.toHaveAttribute('fetchpriority');
+        expect(backdrop).toHaveAttribute('fetchpriority', 'high');
+        expect(backdrop).toHaveAttribute('decoding', 'async');
         expect(backdrop).not.toHaveAttribute('loading', 'lazy');
     });
 

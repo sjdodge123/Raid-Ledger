@@ -27,11 +27,13 @@ function LightboxNav({ direction, onClick }: { direction: 'prev' | 'next'; onCli
 /**
  * The opened screenshot. Not lazy: the user asked for it. It paints at
  * `max-w-[90vw]` capped by its 889px intrinsic width, which is what `sizes` says.
+ * No width/height attributes: the overlay is fixed, so there is no layout to
+ * protect, and a width attribute would pin the box at min(889px, 90vw). On a
+ * short viewport `max-h` would then letterbox the picture instead of scaling it.
  */
 function LightboxImage({ url, alt }: { url: string; alt: string }) {
     return (
-        <img src={url} alt={alt} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
-            width={SCREENSHOT_INTRINSIC.width} height={SCREENSHOT_INTRINSIC.height} decoding="async"
+        <img src={url} alt={alt} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" decoding="async"
             {...screenshotSrcSetProps(url, `(max-width: ${LIGHTBOX_VW_BREAKPOINT}px) 90vw, ${SCREENSHOT_INTRINSIC.width}px`)}
             onClick={(e) => e.stopPropagation()} />
     );

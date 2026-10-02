@@ -139,10 +139,13 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }
 }
 
 /**
- * Box the character render paints at, per layout (ROK-1159). Blizzard's
- * `main-raw` render is assumed 4:3 (1600x1200), scaled to each layout's
- * max height, so the box is reserved before the bytes land. The render is the
- * character page's likely LCP image, so it is never lazy-loaded.
+ * Expected box of the character render, per layout (ROK-1159): Blizzard's
+ * `main-raw` render at an assumed 4:3, scaled to each layout's max height.
+ * The ratio is unverified, and the API falls back to the `main` asset when
+ * `main-raw` is missing, so these attributes must not pin the box: `w-auto`
+ * keeps the painted size on the natural render (capped by max-h) and the
+ * attributes only hint the ratio. The render is the character page's likely
+ * LCP image, so it is never lazy-loaded.
  */
 const RENDER_BOX_DESKTOP = { width: 800, height: 600 } as const;
 const RENDER_BOX_MOBILE = { width: 400, height: 300 } as const;
@@ -157,7 +160,7 @@ function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
                 {renderSlotColumn(LEFT_SLOTS)}
                 <div className="flex items-center justify-center px-2">
                     <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
-                        className="max-h-[600px] object-contain drop-shadow-lg"
+                        className="w-auto max-h-[600px] object-contain drop-shadow-lg"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 </div>
@@ -166,7 +169,7 @@ function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
             <div className="lg:hidden space-y-4">
                 <div className="flex justify-center">
                     <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
-                        className="max-h-[300px] object-contain drop-shadow-lg"
+                        className="w-auto max-h-[300px] object-contain drop-shadow-lg"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }}
                     />
                 </div>

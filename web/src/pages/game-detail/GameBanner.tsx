@@ -78,20 +78,26 @@ function BannerContent({ game, rating, genres, platforms, modes, pricing }: Game
  */
 const BANNER_COVER_SIZES = '(min-width: 640px) 192px, 160px';
 
-/** Attributes the blurred backdrop and the foreground cover share (ROK-1159). */
+/**
+ * Attributes the blurred backdrop and the foreground cover share (ROK-1159).
+ * Both resolve to the same srcset candidate, so they are ONE request. The
+ * backdrop is first in the DOM and would start that request at default
+ * priority before the cover's hint is seen, so both carry the high priority.
+ */
 function bannerArtProps(url: string): ImgHTMLAttributes<HTMLImageElement> {
     return {
         src: url,
         width: COVER_INTRINSIC.width,
         height: COVER_INTRINSIC.height,
-        decoding: 'sync',
+        fetchPriority: 'high',
         ...coverSrcSetProps(url, BANNER_COVER_SIZES),
     };
 }
 
 /**
  * Game banner with cover, info, and details grid. ROK-773: IGDB cover > ITAD boxart > none.
- * The foreground cover is the page's LCP image, so it alone loads at high priority.
+ * The foreground cover is the page's LCP image, so it decodes synchronously to
+ * paint with the banner text; the decorative backdrop decodes async.
  */
 export function GameBanner(props: GameBannerProps): JSX.Element {
     const { game } = props;
@@ -99,7 +105,7 @@ export function GameBanner(props: GameBannerProps): JSX.Element {
     return (
         <div className="relative rounded-xl overflow-hidden mb-8">
             <div className="absolute inset-0">
-                {displayCover && <img {...bannerArtProps(displayCover)} alt="" className="w-full h-full object-cover blur-2xl scale-110 opacity-30" />}
+                {displayCover && <img {...bannerArtProps(displayCover)} alt="" decoding="async" className="w-full h-full object-cover blur-2xl scale-110 opacity-30" />}
                 <div className="absolute inset-0 bg-gradient-to-b from-backdrop/50 to-backdrop" />
             </div>
             <div className="relative p-6 sm:p-8 flex flex-col sm:flex-row gap-6">
@@ -109,7 +115,7 @@ export function GameBanner(props: GameBannerProps): JSX.Element {
                             {...bannerArtProps(displayCover)}
                             alt={game.name}
                             loading="eager"
-                            fetchPriority="high"
+                            decoding="sync"
                             className="absolute inset-0 h-full w-full object-cover"
                         />
                     </div>

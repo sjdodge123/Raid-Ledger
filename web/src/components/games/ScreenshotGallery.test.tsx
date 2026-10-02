@@ -56,13 +56,14 @@ describe('ScreenshotGallery — screenshot renditions (ROK-1159)', () => {
         expect(thumb.getAttribute('srcset')).not.toContain('t_cover_');
     });
 
-    it('the opened lightbox image is eager, sized and capped at its intrinsic width', async () => {
+    it('the opened lightbox image is eager, scales freely (no pinned width) and is capped at its intrinsic width', async () => {
         const user = userEvent.setup();
         render(<ScreenshotGallery screenshots={[IGDB_SHOT]} gameName="Test Game" />);
         await user.click(screen.getAllByRole('button')[0]);
         const [, opened] = screen.getAllByAltText('Test Game screenshot 1');
         expect(opened).not.toHaveAttribute('loading');
-        expect(opened).toHaveAttribute('width', '889');
+        expect(opened).not.toHaveAttribute('width');
+        expect(opened).not.toHaveAttribute('height');
         expect(opened).toHaveAttribute('sizes', '(max-width: 988px) 90vw, 889px');
         expect(opened.getAttribute('srcset')).toContain('t_screenshot_huge/sc6abc.jpg 1280w');
     });
