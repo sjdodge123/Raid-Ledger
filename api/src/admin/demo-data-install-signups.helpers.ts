@@ -13,6 +13,7 @@ import {
   generateEvents,
 } from './demo-data-generator';
 import type { Rng } from './demo-data-generator';
+import { swapAt } from './demo-data-install.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type BatchInsert = (
@@ -64,9 +65,9 @@ function buildMaxAttendeesMap(
   generatedEvents: { maxPlayers: number | null }[],
 ): Map<number, number | null> {
   const map = new Map<number, number | null>();
-  for (let i = 0; i < generatedEvents.length; i++) {
+  for (const [i, generated] of generatedEvents.entries()) {
     const dbEvent = genEvents[i];
-    if (dbEvent) map.set(dbEvent.id, generatedEvents[i].maxPlayers);
+    if (dbEvent) map.set(dbEvent.id, generated.maxPlayers);
   }
   return map;
 }
@@ -172,7 +173,7 @@ function buildOrigSignupValues(
     const shuffled = [...gamers];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(eventRng() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      swapAt(shuffled, i, j);
     }
     for (const user of shuffled.slice(0, numSignups)) {
       const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;
