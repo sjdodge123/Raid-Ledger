@@ -192,8 +192,10 @@ function GroupCellCount({ cell }: { cell?: HeatmapCellData }): JSX.Element {
 /** The two hours a tap proposes — solid, because it is the answer being drafted. */
 function SuggestedBlock({ range, hours }: {
     range: { startIndex: number; endIndex: number }; hours: number[];
-}): JSX.Element {
+}): JSX.Element | null {
     const span = range.endIndex - range.startIndex;
+    const startHour = hours[range.startIndex];
+    if (startHour === undefined) return null;
     return (
         <div
             data-testid="phone-group-suggested-block"
@@ -205,7 +207,7 @@ function SuggestedBlock({ range, hours }: {
             style={blockGeometry(range.startIndex, range.endIndex, hours.length)}
         >
             <span className="text-[11px] font-semibold leading-none text-foreground">
-                {`${span}h · Suggested ${formatHour(hours[range.startIndex])}`}
+                {`${span}h · Suggested ${formatHour(startHour)}`}
             </span>
         </div>
     );

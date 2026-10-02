@@ -77,6 +77,7 @@ function tickFirefly(ctx: CanvasRenderingContext2D, p: Particle, cfg: ParticleCo
         resetParticle(p, cfg, w, h); return;
     }
     const color = cfg.colors[p.colorIdx];
+    if (color === undefined) return;
     ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
     ctx.shadowBlur = cfg.glowRadius * 2;
     ctx.shadowColor = color;
@@ -88,6 +89,7 @@ function tickFirefly(ctx: CanvasRenderingContext2D, p: Particle, cfg: ParticleCo
 
 function drawParticle(ctx: CanvasRenderingContext2D, p: Particle, cfg: ParticleConfig) {
     const color = cfg.colors[p.colorIdx];
+    if (color === undefined) return;
     ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
     ctx.shadowBlur = cfg.glowRadius;
     ctx.shadowColor = color;
@@ -146,6 +148,7 @@ function tickDefault(
     if (isOutOfBounds(p, cfg, w, h)) { resetParticle(p, cfg, w, h); return; }
 
     const color = cfg.colors[p.colorIdx];
+    if (color === undefined) return;
     ctx.globalAlpha = Math.max(0, Math.min(1, p.alpha));
     if (cfg.glow) { ctx.shadowBlur = cfg.glowRadius; ctx.shadowColor = color; }
     else { ctx.shadowBlur = 0; }

@@ -17,6 +17,7 @@ function targetOf(key: string, day: number, hour: number, hours: number[]): [num
     const index = hours.indexOf(hour) + move[1];
     const nextDay = Math.min(6, Math.max(0, day + move[0]));
     const nextHour = hours[Math.min(hours.length - 1, Math.max(0, index))];
+    if (nextHour === undefined) return null;
     return [nextDay, nextHour];
 }
 
