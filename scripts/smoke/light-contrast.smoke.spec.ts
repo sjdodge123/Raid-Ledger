@@ -9,8 +9,10 @@
  * Do not narrow the scan with `exclude` / `include` / `disableRules` to get a
  * route green — fix the token or the markup, or drop the route with a note in
  * the story and the tech-debt backlog. `known` is not a way round that: it
- * holds only nodes waiting on a recorded operator decision, each pinned to its
- * exact selector AND colour pair, so any other colour on that node still fails.
+ * holds only nodes waiting on a recorded operator decision, each pinned to a
+ * CSS selector the element must match (never axe's generated selector string,
+ * which changes with the seed) AND the exact colour pair, so any other colour
+ * on that node, and any other element, still fails.
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
@@ -38,6 +40,20 @@ interface LightRoute {
  */
 const PRIMARY_FILL = { fg: '#ffffff', bg: '#009966' } as const;
 
+/** The label span inside a primary `Button` (web/src/components/ui/button.tsx). */
+const PRIMARY_BUTTON_LABEL = 'button.bg-emerald-600 > [data-button-label]';
+
+/*
+ * OPEN DESIGN DECISION — label colour on a brand fill: the admin branding
+ * preview's "Sample Button" (web/src/components/admin/BrandingSection.tsx)
+ * forces a white label onto the accent colour, the same idiom as Button
+ * `brandColor` (index.css forced-white list). White on the default accent
+ * #10b981 = 2.53:1. Options: pick the label colour by contrast against the
+ * fill, or ship a darker default accent. Tracked in TECH-DEBT-BACKLOG.md;
+ * delete this entry once that ruling lands.
+ */
+const BRAND_SAMPLE = { target: 'span[data-brand-fill]', fg: '#ffffff', bg: '#10b981' } as const;
+
 const ROUTES: LightRoute[] = [
     {
         path: '/players',
@@ -58,18 +74,29 @@ const ROUTES: LightRoute[] = [
             await expect(card.first()).toBeVisible({ timeout: 10_000 });
         },
         known: [
-            { target: '.shadow-emerald-600\\/25', ...PRIMARY_FILL },
-            { target: '.text-white.bg-emerald-600.py-2\\.5', ...PRIMARY_FILL },
+            // Create Event: the header link (EventsPageHeader) or the empty-state one.
+            { target: 'a[href="/events/new"]', ...PRIMARY_FILL },
+            // The phone toolbar's active tab (events-mobile-toolbar.tsx).
+            { target: 'button.bg-emerald-600.text-white.py-2\\.5', ...PRIMARY_FILL },
         ],
     },
     {
         path: '/games',
         ready: async (page) => {
-            const gameLink = page.locator('a[href*="/games/"]').filter({ visible: true });
-            await expect(gameLink.first()).toBeVisible({ timeout: 15_000 });
+            // md+ renders game cards as links; the phone renders DrawerCards
+            // (data-testid="game-ref-row"), which are buttons, not anchors.
+            const gameCard = page
+                .locator('a[href*="/games/"]')
+                .or(page.getByTestId('game-ref-row'))
+                .filter({ visible: true });
+            await expect(gameCard.first()).toBeVisible({ timeout: 15_000 });
         },
-        // The active lineup's call-to-action; its id differs per seed.
-        known: [{ target: /^a\[href="\/community-lineup\/\d+"\]$/, ...PRIMARY_FILL }],
+        // LineupBanner: "View Lineup" when a lineup is active (its id differs per
+        // seed), "Start Lineup" when none is — the banner state is global.
+        known: [
+            { target: 'a[href^="/community-lineup/"]', ...PRIMARY_FILL },
+            { target: '.border-dashed > button.bg-emerald-600.text-white', ...PRIMARY_FILL },
+        ],
     },
     {
         path: '/admin/settings/general',
@@ -79,13 +106,7 @@ const ROUTES: LightRoute[] = [
             ).toBeVisible({ timeout: 15_000 });
             await expect(page.getByRole('combobox').first()).toBeVisible({ timeout: 10_000 });
         },
-        known: [
-            { target: 'button[type="submit"] > .inline-flex.gap-2[data-button-label="true"]', ...PRIMARY_FILL },
-            {
-                target: 'div:nth-child(3) > .bg-emerald-600.hover\\:bg-emerald-500[type="button"] > .inline-flex.gap-2[data-button-label="true"]',
-                ...PRIMARY_FILL,
-            },
-        ],
+        known: [{ target: PRIMARY_BUTTON_LABEL, ...PRIMARY_FILL }, BRAND_SAMPLE],
     },
 ];
 

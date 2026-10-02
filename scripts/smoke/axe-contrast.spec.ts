@@ -4,14 +4,17 @@
  * this pins the part a red run is read through: one line per node naming the
  * selector, both colours and the measured vs required ratio.
  */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./base', () => ({ expect: vi.fn() }));
 vi.mock('@axe-core/playwright', () => ({ default: class {} }));
 
 import {
     formatContrastViolations,
+    knownMatcherFrom,
+    matchKnownSelectors,
     pinLightPreferences,
+    reportedTargets,
     withoutKnownViolations,
 } from './axe-contrast';
 
@@ -65,23 +68,48 @@ describe('formatContrastViolations', () => {
 
 describe('withoutKnownViolations', () => {
     const fill = { fgColor: '#ffffff', bgColor: '#009966', contrastRatio: 3.65 };
-    const known = [{ target: /^a\[href="\/lineup\/\d+"\]$/, fg: '#ffffff', bg: '#009966' }];
+    const lineupCta = { target: 'a[href^="/community-lineup/"]', fg: '#ffffff', bg: '#009966' };
 
-    it('drops a node whose selector and colour pair both match', () => {
-        expect(withoutKnownViolations(violations(node(['a[href="/lineup/7"]'], fill)), known)).toEqual([]);
+    /** The in-page matcher, run against jsdom's document instead of a browser page. */
+    function domMatcher(v: Violations, known: { target: string }[]) {
+        const targets = reportedTargets(v);
+        return knownMatcherFrom(targets, matchKnownSelectors([targets, known.map((k) => k.target)]));
+    }
+
+    function remaining(v: Violations, known: (typeof lineupCta)[]): string {
+        return formatContrastViolations(withoutKnownViolations(v, known, domMatcher(v, known)));
+    }
+
+    beforeEach(() => {
+        document.body.innerHTML = [
+            '<a href="/community-lineup/3" class="bg-emerald-600">View Lineup</a>',
+            '<button class="bg-emerald-600 text-white">Start Lineup</button>',
+        ].join('');
     });
 
-    it('keeps a known selector when its colours differ from the recorded pair', () => {
-        const other = { ...fill, bgColor: '#10b981', contrastRatio: 2.53 };
-        const left = withoutKnownViolations(violations(node(['a[href="/lineup/7"]'], other)), known);
-        expect(formatContrastViolations(left)).toContain('a[href="/lineup/7"] — fg #ffffff on bg #10b981');
+    it('drops the node by what the element is, whatever selector string axe generated for it', () => {
+        // axe picks the shortest unique selector for the DOM it saw: on one seed
+        // `a[href="/community-lineup/38"]`, on another `a[href$="community-lineup/3"]`.
+        const v = violations(node(['a[href$="community-lineup/3"]'], fill));
+        expect(remaining(v, [lineupCta]), 'a pattern entry must survive any seed').toBe('no color-contrast violations');
     });
 
-    it('keeps a node with the recorded colours under any other selector', () => {
-        const left = withoutKnownViolations(violations(node(['.bg-emerald-600'], fill)), [
-            { target: 'button[type="submit"]', fg: '#ffffff', bg: '#009966' },
-        ]);
-        expect(formatContrastViolations(left)).toContain('.bg-emerald-600 — fg #ffffff on bg #009966');
+    it('keeps a matching element when its colours differ from the recorded pair', () => {
+        const v = violations(node(['a[href$="community-lineup/3"]'], { ...fill, bgColor: '#10b981' }));
+        expect(remaining(v, [lineupCta])).toContain('a[href$="community-lineup/3"] — fg #ffffff on bg #10b981');
+    });
+
+    it('keeps a node with the recorded colours whose element does not match', () => {
+        const v = violations(node(['button.text-white'], fill));
+        expect(remaining(v, [lineupCta])).toContain('button.text-white — fg #ffffff on bg #009966');
+    });
+
+    it('keeps a node axe reported inside a frame or shadow root, or that no longer resolves', () => {
+        const v = violations(
+            node(['iframe', 'a[href^="/community-lineup/"]'], fill),
+            node(['a[href="/community-lineup/99"]'], fill),
+        );
+        expect(remaining(v, [lineupCta])).toMatch(/^2 color-contrast violation\(s\):/);
     });
 });
 

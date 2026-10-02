@@ -22,8 +22,8 @@
  *
  * Never narrow the scan (`exclude`, `include`, `disableRules`) to make a route
  * pass — that hides exactly what this check exists to catch. The only escape
- * hatch is `known`: an exact selector plus the exact colour pair, for a
- * violation that waits on a recorded operator decision.
+ * hatch is `known`: a CSS selector the reported element must match plus the
+ * exact colour pair, for a violation that waits on a recorded operator decision.
  */
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
@@ -48,13 +48,22 @@ interface ContrastData {
 /** Matches the preferences read however the API base path is mounted. */
 export const PREFERENCES_ROUTE = '**/users/me/preferences';
 
-/** A violation allowed until a recorded decision lands: selector AND colours must match. */
+/** A violation allowed until a recorded decision lands: element AND colours must match. */
 export interface KnownContrastViolation {
-    /** axe's selector for the node, exact string or a pattern for data-driven ids. */
-    target: string | RegExp;
+    /**
+     * A CSS selector the reported element itself must match (`Element.matches`
+     * in the page). Not axe's generated selector string: axe emits whatever is
+     * unique in that DOM (`a[href$="community-lineup/3"]`, `.shadow-x`,
+     * `div:nth-child(3) > …`), so the string changes with the seed while the
+     * element does not.
+     */
+    target: string;
     fg: string;
     bg: string;
 }
+
+/** Whether the element axe reported at `axeTarget` matches the CSS selector `selector`. */
+export type KnownMatcher = (axeTarget: string, selector: string) => boolean;
 
 /** Override only the theme fields of a `{ data: prefs }` preferences body. */
 export function pinLightPreferences(body: unknown, lightThemeId: string): unknown {
@@ -120,21 +129,53 @@ export function formatContrastViolations(violations: Violation[]): string {
     return `${rows.length} color-contrast violation(s):\n${rows.join('\n')}`;
 }
 
-function isKnown(node: ViolationNode, known: KnownContrastViolation[]): boolean {
+/** axe's selector for a top-document node; null for one inside a frame or shadow root. */
+function topTarget(node: ViolationNode): string | null {
+    const [first, ...rest] = node.target;
+    return rest.length === 0 && typeof first === 'string' ? first : null;
+}
+
+/** Every distinct top-document selector axe reported. */
+export function reportedTargets(violations: Violation[]): string[] {
+    const targets = violations.flatMap((v) => v.nodes.map(topTarget));
+    return [...new Set(targets.filter((t): t is string => t !== null))];
+}
+
+/**
+ * For each axe selector, the `selectors` its element matches. Runs INSIDE the
+ * page via `page.evaluate`, so it must stay self-contained (no imports, no
+ * closures). An axe selector that resolves to nothing matches nothing.
+ */
+export function matchKnownSelectors(
+    [targets, selectors]: readonly [string[], string[]],
+): string[][] {
+    return targets.map((target) => {
+        const element = document.querySelector(target);
+        return element ? selectors.filter((selector) => element.matches(selector)) : [];
+    });
+}
+
+/** Turn `matchKnownSelectors` output back into a lookup. */
+export function knownMatcherFrom(targets: string[], hits: string[][]): KnownMatcher {
+    const byTarget = new Map(targets.map((target, i) => [target, hits[i] ?? []]));
+    return (axeTarget, selector) => byTarget.get(axeTarget)?.includes(selector) ?? false;
+}
+
+function isKnown(node: ViolationNode, known: KnownContrastViolation[], matches: KnownMatcher): boolean {
     const d = contrastData(node);
-    const target = node.target.map(String).join(' >> ');
-    return known.some((k) =>
-        (typeof k.target === 'string' ? k.target === target : k.target.test(target))
-        && k.fg === d.fgColor && k.bg === d.bgColor);
+    const target = topTarget(node);
+    return target !== null && known.some((k) =>
+        matches(target, k.target) && k.fg === d.fgColor && k.bg === d.bgColor);
 }
 
 /** Drop the nodes `known` accounts for; a violation left with no nodes is dropped too. */
 export function withoutKnownViolations(
     violations: Violation[],
     known: KnownContrastViolation[],
+    matches: KnownMatcher,
 ): Violation[] {
     return violations
-        .map((v) => ({ ...v, nodes: v.nodes.filter((n) => !isKnown(n, known)) }))
+        .map((v) => ({ ...v, nodes: v.nodes.filter((n) => !isKnown(n, known, matches)) }))
         .filter((v) => v.nodes.length > 0);
 }
 
@@ -146,6 +187,10 @@ export async function expectNoContrastViolations(
     const { violations } = await new AxeBuilder({ page })
         .withRules(['color-contrast'])
         .analyze();
-    const unexpected = withoutKnownViolations(violations, known);
+    const targets = reportedTargets(violations);
+    const hits = known.length > 0 && targets.length > 0
+        ? await page.evaluate(matchKnownSelectors, [targets, known.map((k) => k.target)] as const)
+        : [];
+    const unexpected = withoutKnownViolations(violations, known, knownMatcherFrom(targets, hits));
     expect(unexpected, formatContrastViolations(unexpected)).toEqual([]);
 }
