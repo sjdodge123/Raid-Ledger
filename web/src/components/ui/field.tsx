@@ -32,7 +32,7 @@ function useFieldValue(p: FieldProps, base: string): FieldContextValue {
     const invalid = !!p.error;
     const required = !!p.required;
     const value = useMemo(
-        () => ({ id: base, labelId: `${base}-label`, describedBy, invalid, required }),
+        () => ({ id: base, labelId: `${base}-label`, ...(describedBy === undefined ? {} : { describedBy }), invalid, required }),
         [base, describedBy, invalid, required],
     );
     return value;

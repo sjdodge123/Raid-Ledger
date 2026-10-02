@@ -136,7 +136,8 @@ export function useRosterActions(args: UseRosterActionsArgs) {
     const state = useRosterActionsState();
 
     const handleAdminSlotClick = (role: RosterRole, position: number) => {
-        state.setAssignmentTarget({ role, position, occupant: args.assignments.find(a => a.slot === role && a.position === position) });
+        const occupant = args.assignments.find(a => a.slot === role && a.position === position);
+        state.setAssignmentTarget({ role, position, ...(occupant ? { occupant } : {}) });
     };
 
     const handleRemoveFromSlot = (signupId: number) => {

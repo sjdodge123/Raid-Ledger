@@ -66,7 +66,7 @@ function InviteConfirmationModal({ h, eventId }: { h: ReturnType<typeof useInvit
         <Suspense fallback={null}>
             <SignupConfirmationModal
                 isOpen={h.showConfirmation} onClose={() => h.setShowConfirmation(false)}
-                onConfirm={async (sel: { characterId: string; role?: CharacterRole }) => { await h.doSignup(sel.characterId); h.setShowConfirmation(false); }}
+                onConfirm={async (sel) => { await h.doSignup(sel.characterId); h.setShowConfirmation(false); }}
                 onSkip={async (opts?: { preferredRoles?: CharacterRole[] }) => { await h.doSignup(undefined, opts?.preferredRoles); h.setShowConfirmation(false); }}
                 isConfirming={h.signup.isPending}
                 gameId={h.gameRegistryEntry?.id ?? h.event?.game?.id ?? undefined}

@@ -125,7 +125,7 @@ function useBotFormState() {
     const [botToken, setBotToken] = useState('');
     const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
     const [showToken, setShowToken] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; guildName?: string; message: string } | null>(null);
+    const [testResult, setTestResult] = useState<{ success: boolean; guildName?: string | undefined; message: string } | null>(null);
     const [permissionsResult, setPermissionsResult] = useState<{ allGranted: boolean; permissions: { name: string; granted: boolean }[] } | null>(null);
     const enabled = enabledOverride ?? discordBotStatus.data?.enabled ?? true;
 
@@ -156,7 +156,7 @@ function useBotHandlers() {
 
     const handleTest = async () => {
         s.setTestResult(null);
-        try { const r = await s.testDiscordBot.mutateAsync({ botToken: s.botToken || undefined }); s.setTestResult(r); if (r.success) toast.success(r.message); }
+        try { const r = await s.testDiscordBot.mutateAsync(s.botToken ? { botToken: s.botToken } : {}); s.setTestResult(r); if (r.success) toast.success(r.message); }
         catch { toast.error('Failed to test connection'); }
     };
 

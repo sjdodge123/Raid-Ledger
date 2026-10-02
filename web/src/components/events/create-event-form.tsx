@@ -203,7 +203,7 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
                     return { ...prev, ...updates };
                 })}
                 onEventTypeIdChange={onEventTypeIdChange}
-                onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: undefined })); }}
+                onTitleChange={(title, isAuto) => { setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto })); if (!isAuto && errors.title) setErrors((prev) => { const next = { ...prev }; delete next.title; return next; }); }}
                 onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}
                 onSelectedInstancesChange={(instances) => setForm((prev) => ({ ...prev, selectedInstances: instances }))}
                 onEventTypeDefaults={(defaults: Partial<SlotState>) => setForm((prev) => ({ ...prev, ...defaults }))}
@@ -229,7 +229,7 @@ function RosterFormSection({ form, errors, updateField, setErrors }: {
                 onSlotTypeChange={(v) => updateField('slotType', v)} onSlotTankChange={(v) => updateField('slotTank', v)}
                 onSlotHealerChange={(v) => updateField('slotHealer', v)} onSlotDpsChange={(v) => updateField('slotDps', v)}
                 onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
-                onMaxAttendeesChange={(v) => { updateField('maxAttendees', v); setErrors((prev) => ({ ...prev, maxAttendees: undefined })); }}
+                onMaxAttendeesChange={(v) => { updateField('maxAttendees', v); setErrors((prev) => { const next = { ...prev }; delete next.maxAttendees; return next; }); }}
                 onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
             />
         </FormSection>

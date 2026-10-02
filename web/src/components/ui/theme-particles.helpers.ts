@@ -132,7 +132,8 @@ export function placePanelEdgeParticle(p: Particle, cfg: ParticleConfig, element
     const t = Math.random();
     const perp = (Math.random() - 0.5) * 8;
 
-    p.targetEl = el ?? undefined;
+    if (el) p.targetEl = el;
+    else delete p.targetEl;
     p.edgeType = edge;
     p.edgeT = t;
     p.perpOffset = perp;

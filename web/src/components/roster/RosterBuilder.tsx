@@ -71,7 +71,7 @@ function useAvailableSlots(roleSlots: { role: RosterRole; label: string; color: 
             const count = getSlotCount(role);
             for (let i = 1; i <= count; i++) {
                 const occupant = assignments.find(a => a.slot === role && a.position === i);
-                result.push({ role, position: i, label, color, occupantName: occupant?.username });
+                result.push({ role, position: i, label, color, ...(occupant ? { occupantName: occupant.username } : {}) });
             }
         }
         return result;
