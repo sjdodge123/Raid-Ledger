@@ -208,7 +208,24 @@ Where these are input-field borders, segmented-control edges or the *only* indic
 toggle's state, they fail. Where they are card outlines, they do not. **Resolving which is
 which needs the browser** — see §5.
 
-## 4. Recommended fix families (not yet implemented)
+## 4. Recommended fix families
+
+> **Status (2026-10-01).**
+> - **1–4 shipped** in ROK-1586 (PR #1318): the light remap is retargeted to `-700`/`-800`, carries the
+>   `-300`/`-200` entries and the missing hues, and every opacity variant still in shipped markup has a
+>   light repaint. `web/src/styles/raw-hue-light.guard.test.ts` measures each repaint on every light
+>   scheme's surface, panel and `/10` tint, and fails on an unrepainted `text-{hue}-{shade}/{alpha}`.
+> - **Focus ring** — the global `:focus-visible` outline is `var(--color-success)` (PR #1382), so it
+>   flips with the scheme instead of painting the dark-family `#10b981`.
+> - **5 done** in ROK-1472, without splitting the token: `text-faint` is decorative-only — the three
+>   shipped uses are `aria-hidden` — and the shared light `--color-dim` is `#5a697f` (5.58 surface,
+>   5.10 panel, 4.53 overlay; was 4.76 / 4.34 / 3.86). `web/src/styles/faint-decorative.guard.test.ts`
+>   holds both.
+> - **Open, design calls:** item 6, and the tinted-scheme `--color-dim` values, all still below 4.5:1 on
+>   their own surfaces — `sky` `#7B9AB5`, `dawn` `#B08060`, `holy` `#748AAD`, `celestial` `#8A7860`, and
+>   `quest-log` `#a89070` (2.75 / 2.42 / 2.16). quest-log is `data-scheme="light"` plus
+>   `data-variant="quest-log"`, and the variant block overrides the shared dim, so the F-4 table's
+>   `light` / `quest-log` row is the default `light` scheme only.
 
 Ordered by reach ÷ cost. All are token/layer changes, no component sweep.
 

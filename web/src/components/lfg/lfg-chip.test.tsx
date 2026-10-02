@@ -151,7 +151,7 @@ describe('LfgChip — lfm, two or more looking (AC1)', () => {
         renderChip({ activeCount: 2, state: 'lfm' });
 
         expect(screen.getByTestId('lfg-chip').className).toContain(
-            'bg-emerald-500/90',
+            'bg-emerald-700',
         );
     });
 });
