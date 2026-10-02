@@ -17,10 +17,7 @@ import {
   convertStarterIntent,
 } from './lfg-now-manual-start.helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
-import {
-  convertGroup,
-  convertHolderIntent,
-} from '../../lfg/lfg-write.helpers';
+import { convertGroup, convertHolderIntent } from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
 
 jest.mock('./lfg-now-event.helpers', () => ({

@@ -89,9 +89,7 @@ describe('LfgQuickPlayListener', () => {
   });
 
   it('stays silent when the participant holds no intent for that game', async () => {
-    db.limit
-      .mockResolvedValueOnce([{ gameId: 99 }])
-      .mockResolvedValueOnce([]);
+    db.limit.mockResolvedValueOnce([{ gameId: 99 }]).mockResolvedValueOnce([]);
 
     await listener.onParticipantJoined({ eventId: 42, userId: 7 });
 
