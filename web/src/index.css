@@ -705,6 +705,8 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4338ca; }  /* indigo-700: worst 5.25 (celestial tint) — indigo-600 is 4.18 there */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 (cyan-700 is 4.50 on the tint — no margin) */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-400 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-teal-400 { color: #115e59; }  /* teal-800: worst 5.04 (celestial raw /15) — teal-700 is 3.64 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-gray-400 { color: #374151; }  /* gray-700: worst 6.51 (celestial) — gray-600 is 4.78 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-300 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-400 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
 
@@ -733,6 +735,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/20 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-900\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/5 { background-color: rgba(254, 243, 199, 0.35); }     /* amber-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/15 { background-color: rgba(254, 243, 199, 0.6); }     /* amber-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/20 { background-color: rgba(254, 243, 199, 0.7); }     /* amber-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-900\/20 { background-color: rgba(209, 250, 229, 0.5); }   /* emerald-100 */
@@ -751,6 +754,10 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-500\/10 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/15 { background-color: rgba(207, 250, 254, 0.5); }      /* cyan-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/20 { background-color: rgba(207, 250, 254, 0.6); }      /* cyan-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-indigo-500\/15 { background-color: rgba(224, 231, 255, 0.6); }    /* indigo-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/15 { background-color: rgba(220, 252, 231, 0.6); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-teal-500\/15 { background-color: rgba(204, 251, 241, 0.6); }      /* teal-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-purple-500\/15 { background-color: rgba(243, 232, 255, 0.6); }    /* purple-100 */
 
 /* Hover backgrounds */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-950\/50:hover { background-color: rgba(254, 226, 226, 0.7); }
@@ -760,6 +767,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/30:hover { background-color: rgba(253, 230, 138, 0.6); }  /* amber-200: a visible step over the /20 amber-100 base */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/10:hover { background-color: rgba(252, 211, 77, 0.5); }  /* amber-300: ≥1.04 step over every light panel AND surface; amber-100/-200 are 1.01 on light/holy/quest-log */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
@@ -776,6 +784,9 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-yellow-700\/40 { border-color: rgba(202, 138, 4, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-emerald-500\/30 { border-color: rgba(110, 231, 183, 0.5); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-green-500\/30 { border-color: rgba(134, 239, 172, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-indigo-500\/30 { border-color: rgba(165, 180, 252, 0.5); }  /* indigo-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-teal-500\/30 { border-color: rgba(94, 234, 212, 0.5); }  /* teal-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-purple-500\/30 { border-color: rgba(216, 180, 254, 0.5); }  /* purple-300 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
 
@@ -801,6 +812,13 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
+
+/* --- Keep-dark: raw text on a fixed dark panel ---
+   The WoW item fallback tooltip (plugins/wow/components/item-fallback-tooltip.tsx) sits on a
+   fixed bg-gray-900 (#111827) in every scheme. gray-400 is 6.99:1 there; the gray-700 light
+   repaint above would be 1.72:1. Scoped by the dark ancestor, not .badge-overlay (that class
+   is for badges on cover art only — badge-overlay-art-only.guard.test.ts). */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-gray-400 { color: #9ca3af; }  /* gray-400: 6.99 on #111827 */
 
 /* --- Solid-color button text: force white on colored backgrounds ---
    Button brandColor is NOT listed: its label is picked by contrast below. */
