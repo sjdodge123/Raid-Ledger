@@ -238,6 +238,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'DMs members of an active scheduling poll every 24h until they vote on a still-future day. Skips polls whose phase deadline is within 24h (the deadline reminders own that window) and members added in the last 24h.',
     category: 'Notifications',
   },
+  SchedulingPollExpiryService_runSweep: {
+    description:
+      'Warns a scheduling poll creator once when their unlocked poll is within 12h of its deadline, then re-renders the cards of polls that just expired, every 5 minutes',
+    category: 'Notifications',
+  },
   SlowQueriesCron_appendDigest: {
     description:
       'Reads pg_stat_statements every hour and appends a top-N digest to slow-queries.log',
