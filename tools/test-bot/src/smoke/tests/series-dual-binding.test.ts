@@ -303,19 +303,30 @@ async function bindSeriesRoutingSlots(
 }
 
 /**
- * The series TEXT channel for the routing test: any text channel that is NOT
- * the default bot channel. On slot envs `textChannels[0]` IS the default
- * channel, and then an embed that fell through to the default channel would
- * pass the routing assertion too.
+ * The series TEXT channel for the routing test: a text channel that is NOT
+ * the default bot channel and NOT the game's own channel-pool binding. On slot
+ * envs `textChannels[0]` IS the default channel; either collision would let an
+ * embed routed by the wrong tier pass the routing assertion too.
  */
-function seriesTextChannel(ctx: TestContext): { id: string; name: string } {
-  const textCh = ctx.textChannels.find((c) => c.id !== ctx.defaultChannelId);
+function seriesTextChannel(
+  ctx: TestContext,
+  gameId: number,
+): { id: string; name: string } {
+  const gamePool = new Set(
+    (ctx.channelPool ?? [])
+      .filter((s) => s.gameId === gameId)
+      .map((s) => s.channelId),
+  );
+  const textCh = ctx.textChannels.find(
+    (c) => c.id !== ctx.defaultChannelId && !gamePool.has(c.id),
+  );
   if (!textCh) {
     const ids = ctx.textChannels.map((c) => c.id).join(', ');
     throw new SmokeAssertionError(
       `ROK-1390 needs a text channel other than the default channel ` +
         `${ctx.defaultChannelId} to tell the series-announce tier from the ` +
-        `default fall-through; textChannels=[${ids}]`,
+        `default fall-through (and not game ${String(gameId)}'s pool channel); ` +
+        `textChannels=[${ids}]`,
     );
   }
   return textCh;
@@ -359,11 +370,11 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
   name: 'ROK-1390: series-linked quick-play announces to series text channel, not #general',
   category: 'voice',
   async run(ctx) {
-    const textCh = seriesTextChannel(ctx);
     const voiceCh = ctx.voiceChannels[0];
     if (!voiceCh) throw new Error('No voice channel available');
 
     const game = await firstGame(ctx);
+    const textCh = seriesTextChannel(ctx, game.id);
     // Slot 7 is shared with the lfg-board joiner phase, which runs in the
     // parallel pool; voice tests run after it, and seeding re-links the slot.
     const fixture = await seedFixtureUser(ctx.api, 3, 7);
