@@ -76,7 +76,9 @@ jobs:
               # only one of them must still run it to catch the drift.
               - '.github/workflows/discord-smoke.yml'
               - 'rl-infra/orchestrator/bin/env-spin'
-              # TDB:552: the lint job runs scripts/test/runner-playwright-pin.test.sh, which pins this file's Playwright tag to package-lock.
+              # TDB:552: the lint job runs
+              # scripts/test/runner-playwright-pin.test.sh, which pins this
+              # file's Playwright tag to package-lock.json.
               - 'rl-infra/runner/Dockerfile'
             api:
               - 'api/package.json'
