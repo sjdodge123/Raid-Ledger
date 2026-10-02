@@ -17,6 +17,8 @@
  * Deterministic polling only — no fixed-delay waits.
  */
 import { pollForEmbed } from '../../helpers/polling.js';
+import { readLastMessages } from '../../helpers/messages.js';
+import { withChannelDump } from '../channel-dump.js';
 import { assertBindSucceeded, type BindReply } from '../bind-reply.js';
 import { deleteSeriesBindings } from '../series-binding-cleanup.js';
 import { joinVoice, leaveVoice } from '../../helpers/voice.js';
@@ -350,17 +352,25 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
       //
       // ROK-1447: the title is now the bare game name — "Quick Play" moved to
       // the author line, which SimpleEmbed carries since ROK-1459.
-      const announced = await pollForEmbed(
-        textCh.id,
-        (m) => m.embeds.some((e) => /quick play/i.test(e.author ?? '')),
-        ctx.config.timeoutMs,
+      //
+      // On a timeout the failure lists the last messages of the series text
+      // channel and the default channel, so an embed the predicate rejected
+      // reads differently from no embed at all.
+      await withChannelDump(
+        () =>
+          pollForEmbed(
+            textCh.id,
+            (m) => m.embeds.some((e) => /quick play/i.test(e.author ?? '')),
+            ctx.config.timeoutMs,
+          ),
+        `Expected quick-play LIVE embed in series announce channel #${textCh.name}; ` +
+          'series-announce routing tier (ROK-1390) did not fire',
+        [
+          { label: `series text #${textCh.name}`, channelId: textCh.id },
+          { label: 'default notification', channelId: ctx.defaultChannelId },
+        ],
+        (id, count) => readLastMessages(id, count, { allAuthors: true }),
       );
-      if (!announced) {
-        throw new Error(
-          `Expected quick-play LIVE embed in series announce channel #${textCh.name}; ` +
-            'series-announce routing tier (ROK-1390) did not fire',
-        );
-      }
     } finally {
       leaveVoice();
       await setPlayingOverride(ctx); // clear override
