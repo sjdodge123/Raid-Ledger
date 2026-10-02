@@ -1,4 +1,4 @@
-import { eq, and, isNull, isNotNull, sql } from 'drizzle-orm';
+import { eq, and, isNull, isNotNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { RosterSignupRow } from './ephemeral-voice.private.helpers';
@@ -34,12 +34,32 @@ export interface EphemeralEventRow {
   privateVoice: boolean | null;
 }
 
+/** Effective end: an extension (ROK-490) wins over the scheduled upper bound. */
+const effectiveEnd = (): SQL =>
+  sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))`;
+
+/**
+ * `duration` and `extended_until` are zone-less UTC. A raw read hands back a
+ * bare string that `new Date()` parses as LOCAL time, so spell the `Z` out
+ * (the column's own `fromDriver` does the same).
+ */
+const isoZ = (expr: SQL): SQL<string> =>
+  sql<string>`to_char(${expr}, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
+
+/**
+ * A JS instant as the UTC wall clock those zone-less columns hold. A bare
+ * `::timestamptz` makes Postgres read the column in the SESSION zone instead,
+ * shifting every compare by the session's offset when it is not UTC.
+ */
+const utcWall = (at: Date): SQL =>
+  sql`(${at.toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
+
 const EVENT_FIELDS = {
   id: schema.events.id,
   title: schema.events.title,
   gameId: schema.events.gameId,
-  startTime: sql<string>`lower(${schema.events.duration})::text`,
-  endTime: sql<string>`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))::text`,
+  startTime: isoZ(sql`lower(${schema.events.duration})`),
+  endTime: isoZ(effectiveEnd()),
   recurrenceGroupId: schema.events.recurrenceGroupId,
   ephemeralVoiceEnabled: schema.events.ephemeralVoiceEnabled,
   ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
@@ -68,8 +88,8 @@ export async function findCreateCandidates(
         // that an open reschedule poll is voting away.
         isNull(schema.events.reschedulingPollId),
         isNull(schema.events.ephemeralVoiceChannelId),
-        sql`lower(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
-        sql`lower(${schema.events.duration}) <= ${until.toISOString()}::timestamptz`,
+        sql`lower(${schema.events.duration}) >= ${utcWall(now)}`,
+        sql`lower(${schema.events.duration}) <= ${utcWall(until)}`,
       ),
     );
 }
@@ -91,7 +111,7 @@ export async function findReapCandidates(
     .where(
       and(
         isNotNull(schema.events.ephemeralVoiceChannelId),
-        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${cutoff.toISOString()}::timestamptz`,
+        sql`${effectiveEnd()} <= ${utcWall(cutoff)}`,
       ),
     );
 }
@@ -122,7 +142,7 @@ export async function findNameReconcileCandidates(
       and(
         isNotNull(schema.events.ephemeralVoiceChannelId),
         isNull(schema.events.cancelledAt),
-        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
+        sql`${effectiveEnd()} >= ${utcWall(now)}`,
       ),
     );
 }

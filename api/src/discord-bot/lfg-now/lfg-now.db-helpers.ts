@@ -7,7 +7,7 @@
  * `channel_binding_id IS NULL`), so a Quick Play roster change can never emit
  * an LFG `GROUP_CHANGED`.
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { EphemeralEventRow } from '../services/ephemeral-voice.db-helpers';
@@ -19,6 +19,13 @@ const LFG_BORN = and(
   eq(schema.events.isAdHoc, true),
   isNull(schema.events.channelBindingId),
 );
+
+/**
+ * `duration` and `extended_until` are zone-less UTC. A raw read hands back a
+ * bare string that `new Date()` parses as LOCAL time, so spell the `Z` out.
+ */
+const isoZ = (expr: SQL): SQL<string> =>
+  sql<string>`to_char(${expr}, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 /**
  * Load the ephemeral-voice view of a spawned event.
@@ -36,8 +43,10 @@ export async function loadLfgNowEphemeralRow(
       id: schema.events.id,
       title: schema.events.title,
       gameId: schema.events.gameId,
-      startTime: sql<string>`lower(${schema.events.duration})::text`,
-      endTime: sql<string>`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))::text`,
+      startTime: isoZ(sql`lower(${schema.events.duration})`),
+      endTime: isoZ(
+        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))`,
+      ),
       recurrenceGroupId: schema.events.recurrenceGroupId,
       ephemeralVoiceEnabled: schema.events.ephemeralVoiceEnabled,
       ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,
