@@ -223,7 +223,7 @@ interface ExtendConfig {
 
 interface ExtendCandidate {
   id: number;
-  duration: Date[];
+  duration: [Date, Date];
   extendedUntil: Date | null;
   discordScheduledEventId: string | null;
   isAdHoc: boolean;

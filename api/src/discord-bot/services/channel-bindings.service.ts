@@ -28,6 +28,7 @@ import type {
   ChannelType,
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
+import { defined } from '../../common/defined.helpers';
 
 export interface BindingRecord {
   id: string;
@@ -100,8 +101,14 @@ export class ChannelBindingsService {
       `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
         (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
     );
-    const result = { binding, replacedChannelIds };
-    return this.announced([channelId, ...replacedChannelIds], result);
+    const announced = this.announced(
+      [channelId, ...replacedChannelIds],
+      binding,
+    );
+    return {
+      binding: defined(announced, 'upserted channel binding'),
+      replacedChannelIds,
+    };
   }
 
   /**
@@ -117,7 +124,9 @@ export class ChannelBindingsService {
    * the UPDATE leaves the stored config untouched. An explicit object
    * (including `{}`) replaces it. A new row still defaults to `{}`.
    */
-  private async upsertBinding(opts: UpsertBindingOpts): Promise<BindingRecord> {
+  private async upsertBinding(
+    opts: UpsertBindingOpts,
+  ): Promise<BindingRecord | undefined> {
     // ROK-1415: covers BOTH branches — the UPDATE branch never writes gameId,
     // and findExistingBinding matches on gameId, so opts.gameId IS the stored
     // value there. This closes the second, undocumented route into the inert

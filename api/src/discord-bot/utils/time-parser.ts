@@ -27,11 +27,11 @@ export function parseNaturalTime(
     { forwardDate: true },
   );
 
-  if (results.length === 0) {
+  const [result] = results;
+  if (result === undefined) {
     return null;
   }
 
-  const result = results[0];
   const date = result.start.date();
 
   return {

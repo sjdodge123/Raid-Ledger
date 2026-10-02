@@ -153,7 +153,7 @@ type RecurrenceFreq = { frequency: 'weekly' | 'biweekly' | 'monthly' };
 
 interface DeferredEvent {
   id: number;
-  duration: Date[];
+  duration: [Date, Date];
   title: string;
   description: string | null;
   gameId: number | null;

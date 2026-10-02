@@ -15,6 +15,7 @@ import {
   formatDiscordError,
   type EmojiDef,
 } from './discord-emoji.constants';
+import { defined } from '../../common/defined.helpers';
 
 /** Base path for emoji asset files. */
 const ASSETS_BASE = path.resolve(__dirname, '../../../../assets');
@@ -128,7 +129,11 @@ export class DiscordEmojiService {
   ): { id: string; name: string } | undefined {
     if (!str) return undefined;
     const match = str.match(/^<:(\w+):(\d+)>$/);
-    return match ? { name: match[1], id: match[2] } : undefined;
+    if (!match) return undefined;
+    return {
+      name: defined(match[1], 'emoji name'),
+      id: defined(match[2], 'emoji id'),
+    };
   }
 
   /**
