@@ -173,7 +173,7 @@ describe('useGameFilterStore — reportGames edge cases', () => {
 
         const known = useGameFilterStore.getState().allKnownGames;
         expect(known).toHaveLength(1);
-        expect(known[0].slug).toBe('wow');
+        expect(known[0]?.slug).toBe('wow');
     });
 
     it('reportGames with mixed new and existing slugs only adds new ones to selection', () => {

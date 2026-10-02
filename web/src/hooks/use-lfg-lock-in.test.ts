@@ -60,7 +60,7 @@ describe('useLockInEvent', () => {
             startTime: WINDOW.start,
             endTime: WINDOW.end,
         });
-        expect(onSuccess.mock.calls[0][0]).toEqual({ id: 7 });
+        expect(onSuccess.mock.calls[0]?.[0]).toEqual({ id: 7 });
     });
 
     it('caps a 7-hour window at 3 hours from its start', async () => {
@@ -73,7 +73,7 @@ describe('useLockInEvent', () => {
         }));
 
         await waitFor(() => expect(createEvent).toHaveBeenCalledTimes(1));
-        expect(createEvent.mock.calls[0][0]).toMatchObject({
+        expect(createEvent.mock.calls[0]?.[0]).toMatchObject({
             startTime: '2026-09-23T01:00:00.000Z',
             endTime: '2026-09-23T04:00:00.000Z',
         });

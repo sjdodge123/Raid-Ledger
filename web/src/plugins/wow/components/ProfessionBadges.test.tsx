@@ -61,9 +61,9 @@ describe('ProfessionBadges — populated', () => {
         const imgs = screen.getAllByRole('img');
         expect(imgs).toHaveLength(3);
         // Order: primary first (Tailoring, Mining), then secondary (Cooking).
-        expect(imgs[0].getAttribute('alt')).toBe('Tailoring');
-        expect(imgs[1].getAttribute('alt')).toBe('Mining');
-        expect(imgs[2].getAttribute('alt')).toBe('Cooking');
+        expect(imgs[0]?.getAttribute('alt')).toBe('Tailoring');
+        expect(imgs[1]?.getAttribute('alt')).toBe('Mining');
+        expect(imgs[2]?.getAttribute('alt')).toBe('Cooking');
     });
 
     it('uses the {name} {skill}/{max} title format', () => {

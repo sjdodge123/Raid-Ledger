@@ -11,6 +11,7 @@
  * the ROK-1655 Discard → reopen round trip is exercised end to end.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { at } from '../../../test/defined';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { CharacterProfessionsDto } from '@raid-ledger/contract';
@@ -133,15 +134,15 @@ describe('CharacterProfessionsPanel — Discard really drops the draft (ROK-1655
         render(<CharacterProfessionsPanel professions={TAILORING_WITH_TIER} isOwner characterId="c1" gameId={1} />);
 
         await user.click(screen.getByRole('button', { name: /^edit$/i }));
-        expect(skillInputs()[0].value).toBe('450');
-        await user.clear(skillInputs()[0]);
-        await user.type(skillInputs()[0], '300');
+        expect(skillInputs()[0]?.value).toBe('450');
+        await user.clear(at(skillInputs(), 0));
+        await user.type(at(skillInputs(), 0), '300');
 
         await user.keyboard('{Escape}');
         await user.click(screen.getByTestId('discard-changes-discard'));
         expect(screen.queryByRole('dialog', { name: 'Edit Professions' })).toBeNull();
 
         await user.click(screen.getByRole('button', { name: /^edit$/i }));
-        expect(skillInputs()[0].value, 'Discard must drop the draft: reopen starts from the saved 450').toBe('450');
+        expect(skillInputs()[0]?.value, 'Discard must drop the draft: reopen starts from the saved 450').toBe('450');
     });
 });
