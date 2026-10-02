@@ -77,21 +77,33 @@ export class VersionController {
   }
 
   /** One Promise.all over every key the update-status DTO needs. */
-  private readStatusSettings(): Promise<(string | null)[]> {
-    return Promise.all(
-      [
-        SETTING_KEYS.LATEST_VERSION,
-        SETTING_KEYS.VERSION_CHECK_LAST_RUN,
-        SETTING_KEYS.UPDATE_AVAILABLE,
-        SETTING_KEYS.LATEST_RELEASE_URL,
-        SETTING_KEYS.FIXES_AVAILABLE,
-        SETTING_KEYS.LATEST_COMMIT_SHA,
-        SETTING_KEYS.FIXES_COMPARE_URL,
-        SETTING_KEYS.FIXES_COMPUTED_FOR_SHA,
-      ].map((key) => this.settingsService.get(key)),
-    );
+  private readStatusSettings(): Promise<StatusSettings> {
+    const settings = this.settingsService;
+    return Promise.all([
+      settings.get(SETTING_KEYS.LATEST_VERSION),
+      settings.get(SETTING_KEYS.VERSION_CHECK_LAST_RUN),
+      settings.get(SETTING_KEYS.UPDATE_AVAILABLE),
+      settings.get(SETTING_KEYS.LATEST_RELEASE_URL),
+      settings.get(SETTING_KEYS.FIXES_AVAILABLE),
+      settings.get(SETTING_KEYS.LATEST_COMMIT_SHA),
+      settings.get(SETTING_KEYS.FIXES_COMPARE_URL),
+      settings.get(SETTING_KEYS.FIXES_COMPUTED_FOR_SHA),
+    ]);
   }
 }
+
+type Setting = string | null;
+/** The update-status settings, in `getUpdateStatus` destructuring order. */
+type StatusSettings = [
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+  Setting,
+];
 
 function emptyToNull(value: string | null): string | null {
   return value && value !== '' ? value : null;
