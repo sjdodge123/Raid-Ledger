@@ -118,6 +118,58 @@ describe('text-faint is decorative-only (ROK-1472)', () => {
     });
 });
 
+/**
+ * `--color-faint` as a text colour in a stylesheet: `color: var(--color-faint…)` (not
+ * `background-color` / `border-color`) or an `@apply` that pulls in `text-faint`.
+ */
+const CSS_FAINT_TEXT = /(?<![\w-])color\s*:\s*var\(\s*--color-faint(?![\w-])|@apply[^;{}]*?(?<![\w-])(?:[\w-]+:)*text-faint(?![\w-])/g;
+
+/** Drop CSS block comments but keep their newlines, so a hit reports its real line. */
+const stripCssKeepLines = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ''));
+
+/** Each faint-as-text declaration in `src`, as `line: snippet`. */
+function cssFaintText(src: string): string[] {
+    const code = stripCssKeepLines(src);
+    return [...code.matchAll(CSS_FAINT_TEXT)].map(
+        (m) => `${code.slice(0, m.index).split('\n').length}: ${m[0].replace(/\s+/g, ' ')}`,
+    );
+}
+
+/** Every stylesheet in `web/src` minus `dev/`, as `[path, source]`. */
+const STYLESHEETS = (readdirSync(SRC, { recursive: true }) as string[])
+    .map((f) => f.split(sep).join('/'))
+    .filter((f) => f.endsWith('.css') && !f.startsWith('dev/'))
+    .sort()
+    .map((f) => [f, readFileSync(join(SRC, f), 'utf-8')] as const);
+
+describe('stylesheets never paint text in --color-faint (ROK-1472)', () => {
+    it.each([
+        ['color: var(--color-faint)', '.a { color: var(--color-faint); }', 1],
+        ['a var() fallback', '.a{color:var(--color-faint, #000)}', 1],
+        ['@apply text-faint', '.a { @apply text-sm hover:text-faint; }', 1],
+        ['background', '.a { background: var(--color-faint); }', 0],
+        ['background-color / border-color', '.a { background-color: var(--color-faint); border-color: var(--color-faint); }', 0],
+        ['a longer token name', '.a { color: var(--color-faint-x); }', 0],
+        ['a comment', '/* color: var(--color-faint) */ .a { color: red; }', 0],
+    ])('the CSS reader handles %s', (_name, src, hits) => {
+        expect(cssFaintText(src), src).toHaveLength(hits);
+    });
+
+    it('the CSS reader reports the line after a multi-line comment', () => {
+        expect(cssFaintText('/*\n\n*/\n.a {\n  color: var(--color-faint);\n}')).toEqual(['5: color: var(--color-faint']);
+    });
+
+    it('the scanner reads stylesheets: index.css and a --color-faint background are among them', () => {
+        expect(STYLESHEETS.map(([f]) => f)).toContain('index.css');
+        expect(STYLESHEETS.some(([, src]) => /background\s*:\s*var\(--color-faint/.test(src)), 'no --color-faint background found — the scanner is not reading CSS').toBe(true);
+    });
+
+    it('no stylesheet outside web/src/dev uses --color-faint as a text colour', () => {
+        const hits = STYLESHEETS.flatMap(([f, src]) => cssFaintText(src).map((h) => `${f}:${h}`));
+        expect(hits, '--color-faint is 1.2–1.9:1 as text on every light scheme; use var(--color-dim) for readable low-emphasis text').toEqual([]);
+    });
+});
+
 const css = stripComments(readFileSync(join(SRC, 'index.css'), 'utf-8'));
 
 /** `[data-scheme="light"] { … }` first, then the shared `:is(… [data-scheme="light"] …) { … }` token blocks. */
