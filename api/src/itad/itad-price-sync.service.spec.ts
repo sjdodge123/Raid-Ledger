@@ -356,16 +356,16 @@ describe('ItadPriceSyncService', () => {
   });
 
   // ─── End-of-phase retries (ITAD 429 bursts) + cron slot ──────────────────
-  describe('end-of-phase retries', () => {
-    function seedGames(count: number): void {
-      const games = Array.from({ length: count }, (_, i) => ({
-        id: i + 1,
-        itadGameId: `game-uuid-${i + 1}`,
-      }));
-      mockDb.where.mockResolvedValueOnce(games);
-      mockDb.returning.mockResolvedValue([]);
-    }
+  function seedGames(count: number): void {
+    const games = Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      itadGameId: `game-uuid-${i + 1}`,
+    }));
+    mockDb.where.mockResolvedValueOnce(games);
+    mockDb.returning.mockResolvedValue([]);
+  }
 
+  describe('end-of-phase retries', () => {
     function infoCallsFor(id: string): unknown[][] {
       return mockItadService.getGameInfo.mock.calls.filter((c) => c[0] === id);
     }
@@ -417,7 +417,9 @@ describe('ItadPriceSyncService', () => {
       expect(infoCallsFor('game-uuid-3')).toHaveLength(2);
       expect(result).toEqual({ degraded: true });
     });
+  });
 
+  describe('pricing breaker', () => {
     it('stops pricing after 3 consecutive exhausted overview fetches, still clears stale pricing, and skips earlyAccess', async () => {
       seedGames(200); // 4 chunks of CHUNK_SIZE
       mockItadPriceService.getOverviewBatch.mockRejectedValue(

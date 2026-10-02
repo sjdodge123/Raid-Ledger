@@ -29,9 +29,9 @@ export async function enqueuePriceSync(
 }
 
 /**
- * Outcome of one pricing chunk. `exhausted` means the overview fetch itself
- * failed after the HTTP util gave up (ItadOverviewFetchError); `failed` is
- * any other error (e.g. the DB update).
+ * Outcome of one pricing chunk. `exhausted` means the overview fetch returned
+ * no data (ItadOverviewFetchError: retries exhausted, or a non-retriable HTTP
+ * error such as a 401); `failed` is any other error (e.g. the DB update).
  */
 export type PricingChunkOutcome = 'ok' | 'failed' | 'exhausted';
 
