@@ -6,24 +6,26 @@ This audit checks every foreign key in the schema for a supporting index, adds t
 
 **Doc location.** The story body asks for the audit under `planning-artifacts/`, but that directory is gitignored (`.gitignore:29`), so a file there could never satisfy the "audit doc committed" AC. This doc lives under `docs/` so it stays tracked, following the precedent of `docs/sentry-audit-2026-Q2.md`.
 
-**Source of truth.** A static scan of the latest drizzle snapshot, `api/src/drizzle/migrations/meta/0195_snapshot.json`. The snapshot chain and the schema-vs-snapshot drift guards (`api/src/drizzle/migration-snapshots.spec.ts`) mean the snapshot matches the schema source. The scan also reads every raw-SQL `CREATE INDEX` in `api/src/drizzle/migrations/*.sql` and drops any index a later migration removes with `DROP INDEX`. The script is in the [appendix](#appendix-scanner).
+**Source of truth.** A static scan of the pre-change drizzle snapshot, `api/src/drizzle/migrations/meta/0195_snapshot.json` (the latest before this PR). The snapshot chain and the schema-vs-snapshot drift guards (`api/src/drizzle/migration-snapshots.spec.ts`) mean the snapshot matches the schema source. The scan also reads every raw-SQL `CREATE INDEX` in `api/src/drizzle/migrations/*.sql` and drops any index a later migration removes with `DROP INDEX`. Partial indexes are skipped in both sources (see below). The script is in the [appendix](#appendix-scanner).
 
 **What counts as covered.** A foreign-key column is covered when it is the **leading** column of one of the following:
 
-- an index in the snapshot (expression indexes do not count),
+- a non-partial index in the snapshot (expression and partial indexes do not count),
 - a unique constraint,
 - a composite primary key,
-- a raw-SQL `CREATE INDEX` that no later migration drops.
+- a raw-SQL `CREATE INDEX` with no `WHERE` predicate that no later migration drops.
 
 A column that is itself the primary key, or has a column-level `UNIQUE`, also counts. A column that appears only in a non-leading position, such as `user_id` in `(lineup_id, user_id)`, is **not** covered. Postgres cannot use that index for `WHERE user_id = $1`, and that is the predicate the referential-integrity trigger issues when a parent row is deleted.
+
+**Partial indexes do not count.** An index with a `WHERE` predicate (snapshot `where` set, or a raw-SQL `CREATE INDEX ... WHERE`) is not credited, even when the FK column leads it. The RI trigger's lookup is `WHERE fk = $1`, which does not imply the index predicate, so Postgres cannot use a partial index for it. Four foreign keys are covered only by a partial index and are therefore uncovered: `pug_slots.event_id` (`unique_event_pug ... WHERE discord_username IS NOT NULL`), `lfg_intents.user_id` (`uq_lfg_intents_user_game_active ... WHERE status = 'active'`), `lfg_intents.game_id` (`idx_lfg_intents_game_active`, same predicate) and `lfg_group_messages.game_id` (`uq_lfg_group_messages_game_open ... WHERE state = 'open'`).
 
 **Spot check.** The scan's output was checked by hand against the schema source (`sessions.ts:9`, `local-credentials.ts:13`, `event-voice-sessions.ts:30`, `characters.ts:33`, `availability.ts:39-41`, all under `api/src/drizzle/schema/`), and the scan agreed every time.
 
 ## 2. Headline
 
-**119 foreign keys: 61 covered, 58 uncovered.**
+**119 foreign keys: 57 covered, 62 uncovered.**
 
-Almost every *read* predicate on the 58 uncovered columns is already served by a composite unique whose leading column is the scope key. For example, `lineups-voting.helpers.ts:31` filters by `(lineup_id, user_id)`, which `uq_lineup_vote_user_game` serves, and the event-reminder inserts conflict on `unique_event_user_reminder (event_id, user_id, reminder_type)`. So the cost of a missing index is not slow reads. It is the **parent-row delete**. Postgres runs an RI trigger per deleted parent row that looks up the children by the FK column. With no index leading on that column, each lookup is a sequential scan of the child table. `CASCADE` and `SET NULL` then rewrite whatever the scan finds, and `NO ACTION` still scans to prove nothing references the parent.
+Almost every *read* predicate on the 62 uncovered columns is already served by a composite unique whose leading column is the scope key. For example, `lineups-voting.helpers.ts:31` filters by `(lineup_id, user_id)`, which `uq_lineup_vote_user_game` serves, and the event-reminder inserts conflict on `unique_event_user_reminder (event_id, user_id, reminder_type)`. So the cost of a missing index is not slow reads. It is the **parent-row delete**. Postgres runs an RI trigger per deleted parent row that looks up the children by the FK column. With no index leading on that column, each lookup is a sequential scan of the child table. `CASCADE` and `SET NULL` then rewrite whatever the scan finds, and `NO ACTION` still scans to prove nothing references the parent.
 
 The parent-delete paths that exist today:
 
@@ -38,7 +40,7 @@ The parent-delete paths that exist today:
 
 ## 3. Findings
 
-All 58 uncovered foreign keys. `ADD` means the index is added by migration `0196_fk_backing_indexes` in this PR; `DEFER` means no index now, for the reason given (section 5 groups the reasons).
+All 62 uncovered foreign keys. `ADD` means the index is added by migration `0196_fk_backing_indexes` in this PR; `DEFER` means no index now, for the reason given (section 5 groups the reasons).
 
 | # | table.column | → parent [onDelete] | Recommendation | Impact / why |
 |---|---|---|---|---|
@@ -88,18 +90,22 @@ All 58 uncovered foreign keys. `ADD` means the index is added by migration `0196
 | 44 | `feedback.user_id` | `users` [cascade] | DEFER | Small per-user table; low write volume. |
 | 45 | `game_interest_suppressions.game_id` | `games` [cascade] | DEFER | Small per-user table; 2nd column of `uq_user_game_suppression (user_id, game_id)`. |
 | 46 | `games_dedup_audit.canonical_game_id` | `games` [no action] | DEFER | Admin/audit table; written only by the dedup job. |
-| 47 | `lfg_intents.converted_to_event_id` | `events` [set null] | **ADD** | Event delete SET NULL scans every intent; also the join key in `api/src/lfg/lfg-playing.helpers.ts:59` and `:113`. |
-| 48 | `lfg_intents.converted_to_poll_id` | `community_lineup_matches` [set null] | DEFER | Rare conversion path; match rows are not deleted in normal operation. |
-| 49 | `lfg_invites.inviter_user_id` | `users` [cascade] | DEFER | Small per-user table; reads lead with `recipient_user_id` (`idx_lfg_invites_recipient_game_sent_at`). |
-| 50 | `local_credentials.user_id` | `users` [no action] | DEFER | Small per-user table; at most one row per local account. |
-| 51 | `player_co_play.user_id_b` | `users` [cascade] | **ADD** | The `user_id_b` arm of the voter-activity OR predicate (`voter-activity.helpers.ts:99-102`) forces a scan of an O(users²) table; also user delete cascade. |
-| 52 | `player_intensity_snapshots.longest_session_game_id` | `games` [set null] | **ADD** | Weekly per-user snapshot growth; a game dedup delete SET NULL scans the whole table. |
-| 53 | `post_event_followup_sent.match_id` | `community_lineup_matches` [set null] | DEFER | At most one row per match. |
-| 54 | `post_event_reminders_sent.pug_slot_id` | `pug_slots` [cascade] | DEFER | 2nd column of `unique_post_event_pug_reminder (event_id, pug_slot_id)`; PUG slots are rare. |
-| 55 | `pug_slots.claimed_by_user_id` | `users` [no action] | DEFER | Small table; PUG slots are rare. |
-| 56 | `pug_slots.created_by` | `users` [no action] | DEFER | Small table; PUG slots are rare. |
-| 57 | `sessions.user_id` | `users` [no action] | DEFER | Small per-user table; a few live sessions per user. |
-| 58 | `wow_classic_quest_progress.user_id` | `users` [cascade] | DEFER | Small per-user table; 2nd column of `uq_quest_progress_event_user_quest (event_id, user_id, quest_id)`. |
+| 47 | `lfg_group_messages.game_id` | `games` [cascade] | DEFER | Only the partial unique `uq_lfg_group_messages_game_open` (`state = 'open'`) leads on it, so the games dedup loser delete scans the table once per loser. One row per LFM group; closed rows are kept, so it grows slowly with history. |
+| 48 | `lfg_intents.converted_to_event_id` | `events` [set null] | **ADD** | Event delete SET NULL scans every intent; also the join key in `api/src/lfg/lfg-playing.helpers.ts:59` and `:113`. |
+| 49 | `lfg_intents.converted_to_poll_id` | `community_lineup_matches` [set null] | DEFER | Rare conversion path; match rows are not deleted in normal operation. |
+| 50 | `lfg_intents.game_id` | `games` [cascade] | DEFER | Only the partial `idx_lfg_intents_game_active` (`status = 'active'`) leads on it, so the games dedup loser delete scans the table once per loser. A few intents per user per game; rows are kept after they expire, so revisit if it grows with history. |
+| 51 | `lfg_intents.user_id` | `users` [cascade] | DEFER | Only the partial unique `uq_lfg_intents_user_game_active` (`status = 'active'`) leads on it. A few intents per user; same growth caveat as `lfg_intents.game_id`. |
+| 52 | `lfg_invites.inviter_user_id` | `users` [cascade] | DEFER | Small per-user table; reads lead with `recipient_user_id` (`idx_lfg_invites_recipient_game_sent_at`). |
+| 53 | `local_credentials.user_id` | `users` [no action] | DEFER | Small per-user table; at most one row per local account. |
+| 54 | `player_co_play.user_id_b` | `users` [cascade] | **ADD** | The `user_id_b` arm of the voter-activity OR predicate (`voter-activity.helpers.ts:99-102`) forces a scan of an O(users²) table; also user delete cascade. |
+| 55 | `player_intensity_snapshots.longest_session_game_id` | `games` [set null] | **ADD** | Weekly per-user snapshot growth; a game dedup delete SET NULL scans the whole table. |
+| 56 | `post_event_followup_sent.match_id` | `community_lineup_matches` [set null] | DEFER | At most one row per match. |
+| 57 | `post_event_reminders_sent.pug_slot_id` | `pug_slots` [cascade] | DEFER | 2nd column of `unique_post_event_pug_reminder (event_id, pug_slot_id)`; PUG slots are rare. |
+| 58 | `pug_slots.claimed_by_user_id` | `users` [no action] | DEFER | Small table; PUG slots are rare. |
+| 59 | `pug_slots.created_by` | `users` [no action] | DEFER | Small table; PUG slots are rare. |
+| 60 | `pug_slots.event_id` | `events` [cascade] | DEFER | Only the partial unique `unique_event_pug (event_id, discord_username) WHERE discord_username IS NOT NULL` leads on it, so event delete (single and series) scans the table. PUG slots are rare, so it stays small. |
+| 61 | `sessions.user_id` | `users` [no action] | DEFER | Small per-user table; a few live sessions per user. |
+| 62 | `wow_classic_quest_progress.user_id` | `users` [cascade] | DEFER | Small per-user table; 2nd column of `uq_quest_progress_event_user_quest (event_id, user_id, quest_id)`. |
 
 ## 4. Added in this PR
 
@@ -120,13 +126,14 @@ One drizzle-kit-generated migration, `0196_fk_backing_indexes.sql`, with its sna
 
 The longest name is 54 characters, under Postgres's 63-character identifier limit that `api/src/drizzle/constraint-name-length.spec.ts` enforces.
 
-**Regression guard.** `api/src/drizzle/fk-index-coverage.spec.ts` runs the same leading-column rule against the latest snapshot. It asserts that the uncovered set equals a frozen allowlist of the 48 deferred columns (`DEFERRED_UNINDEXED_FKS`), so any **new** foreign key without a covering index fails CI. Adding a column to the allowlist then has to be a deliberate, reviewed change. The same function reports all ten columns above as uncovered when pointed at `0195_snapshot.json`, which proves the spec would have caught them.
+**Regression guard.** `api/src/drizzle/fk-index-coverage.spec.ts` runs the same leading-column rule, partial indexes excluded, against the latest snapshot. Unlike the appendix scanner it reads the snapshot only, so an index that exists only in hand-written migration SQL is invisible to it: declare indexes in the schema so drizzle-kit records them. It asserts that the uncovered set equals a frozen allowlist of the 52 deferred columns (`DEFERRED_UNINDEXED_FKS`), so any **new** foreign key without a covering index fails CI. Adding a column to the allowlist then has to be a deliberate, reviewed change. The same function reports all ten columns above as uncovered when pointed at `0195_snapshot.json`, which proves the spec would have caught them. A synthetic one-table snapshot pins the partial-index rule: a plain index on the FK column covers it, the same index with a `WHERE` predicate does not.
 
-## 5. Deferred long tail (48) and why
+## 5. Deferred long tail (52) and why
 
 - **Lineup family (28 rows: `community_lineups` and every `community_lineup_*` table).** Row counts are bounded by the number of lineups, a community activity that runs a few times a month, not by history × users. Reads go through composite uniques that lead with the scope key (`lineup_id`, `match_id`, `slot_id`, `matchup_id`, `tiebreaker_id`). Lineups and matches are not deleted in normal operation, so the parent-delete cost only shows up on a user or game delete, against small tables.
 - **Admin / audit tables (3 rows: `admin_actions.actor_id`, `games_dedup_audit.canonical_game_id`, `discovery_category_suggestions.reviewed_by`).** Operator-driven or job-driven writes with low volume.
 - **Small per-user or bounded tables (16 rows).** `sessions`, `local_credentials`, `feedback`, `event_templates`, `pug_slots` (×2), `post_event_reminders_sent`, `post_event_followup_sent`, `wow_classic_quest_progress`, `lfg_invites.inviter_user_id`, `lfg_intents.converted_to_poll_id`, `game_interest_suppressions`, `event_plans` (×2), `discord_game_mappings`, `discord_channel_presence_occupancy`. Each holds a few rows per user, per match or per channel, so a sequential scan on parent delete costs about the same as an index probe.
+- **Covered only by a partial index (4 rows: `pug_slots.event_id`, `lfg_intents.user_id`, `lfg_intents.game_id`, `lfg_group_messages.game_id`).** Each has an index leading on the FK column, but only for active or open rows, which the RI lookup cannot use (section 1). All four tables are small today: PUG slots are rare, LFG intents are a few per user per game, and LFM group messages are one row per group. Two of them sit on parent-delete paths from section 2 (event delete scans `pug_slots`; the games dedup loser-delete loop scans `lfg_intents` and `lfg_group_messages`), and `lfg_intents` and `lfg_group_messages` keep rows after they expire or close, so these are the first rows to revisit if LFG usage grows.
 - **`ai_request_logs.user_id` (1 row): deliberately not proposed.** ROK-1148 owns this table and added its read-path index in migration 0178. Any further index there belongs to that story.
 
 `game_interests` does not appear in the findings at all. Its `game_id` foreign key is already covered by `idx_game_interests_game_id_source_user` (migration 0188, ROK-1109), and its `user_id` leads `uq_user_game_interest_source`. Nothing is proposed for it.
@@ -156,7 +163,7 @@ The other half of ROK-1157 needs production `pg_stat_*` data, which this PR cann
 
 ## Appendix: scanner
 
-Run it from anywhere with the repo root as the first argument. An optional second argument names a snapshot file; without it the scanner uses the highest-numbered snapshot. Pointed at `0195_snapshot.json` it reproduces the section 2 numbers (58 uncovered); on the latest snapshot it reports the 48 deferred rows.
+Run it from anywhere with the repo root as the first argument. An optional second argument names a snapshot file; without it the scanner uses the highest-numbered snapshot. Pointed at `0195_snapshot.json` it reproduces the section 2 numbers (62 uncovered); on the latest snapshot it reports the 52 deferred rows.
 
 ```python
 import json, sys, re, glob, os
@@ -175,7 +182,9 @@ for f in sorted(glob.glob(W + '/api/src/drizzle/migrations/*.sql')):
     if os.path.basename(f).split('_')[0] > upto:
         continue
     s = open(f).read()
-    for m in re.finditer(r'CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF NOT EXISTS\s+)?"?(\w+)"?\s+ON\s+"?(?:public"?\."?)?(\w+)"?\s*(?:USING\s+\w+\s*)?\(\s*"?(\w+)"?', s, re.I):
+    for m in re.finditer(r'CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:CONCURRENTLY\s+)?(?:IF NOT EXISTS\s+)?"?(\w+)"?\s+ON\s+"?(?:public"?\."?)?(\w+)"?\s*(?:USING\s+\w+\s*)?\(\s*"?(\w+)"?([^;]*)', s, re.I):
+        if re.search(r'\bWHERE\b', m.group(4), re.I):
+            continue  # partial index: the RI lookup cannot use it
         raw.setdefault(m.group(2), {})[m.group(1)] = (m.group(3), os.path.basename(f))
     for m in re.finditer(r'DROP\s+INDEX\s+(?:IF EXISTS\s+)?"?(?:public"?\."?)?(\w+)"?', s, re.I):
         for t in raw.values():
@@ -185,6 +194,8 @@ missing, covered = [], 0
 for t in tables.values():
     name, leads = t['name'], set()
     for ix in t.get('indexes', {}).values():
+        if ix.get('where'):
+            continue  # partial index: the RI lookup cannot use it
         cols = ix['columns']
         if cols and not cols[0].get('isExpression'):
             leads.add(cols[0]['expression'])
