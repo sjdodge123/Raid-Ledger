@@ -71,8 +71,8 @@ assert_grep '8080' "$VALIDATE_CI_PATH" \
 # references remaining must be in the default-assignment line).
 CURRENT_TEST_NAME="AC-M13-4: docker run + curl use the chosen port var"
 # A variable named *PORT* (matching RL_CONTAINER_STARTUP_PORT) must be
-# substituted into the docker run -p mapping.
-assert_grep '[[:space:]]-p[[:space:]]\$\{?[A-Za-z_][A-Za-z0-9_]*' "$VALIDATE_CI_PATH" \
+# substituted into the docker run -p mapping (quoted or not).
+assert_grep '[[:space:]]-p[[:space:]]"?\$\{?[A-Za-z_][A-Za-z0-9_]*\}?:80' "$VALIDATE_CI_PATH" \
     "docker run -p must use a port variable, not a literal 8080"
 # At least one curl health line must reference the port var (not a literal).
 assert_grep 'http://127\.0\.0\.1:\$\{?[A-Za-z_][A-Za-z0-9_]*' "$VALIDATE_CI_PATH" \
