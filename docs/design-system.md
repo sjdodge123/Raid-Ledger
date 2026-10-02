@@ -158,7 +158,7 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
 text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
 (`:759-773`); solid fills are identical in both with the label forced white on light (`:796-803`), and
-`.badge-overlay` (`:774-794`) opts cover-art badges out. Every text repaint — and its `/60`–`/80` opacity variants
+`.badge-overlay` (`:774-794`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity
