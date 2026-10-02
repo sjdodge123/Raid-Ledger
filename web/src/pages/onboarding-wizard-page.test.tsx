@@ -115,6 +115,7 @@ vi.mock('../hooks/use-character-mutations', () => ({
 vi.mock('../lib/toast', () => ({
     toast: {
         info: vi.fn(),
+        error: vi.fn(),
     },
 }));
 

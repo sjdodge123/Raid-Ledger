@@ -8,6 +8,9 @@
  * location in a transition. If the timer wins, the wizard re-renders at
  * /onboarding and its `<Navigate to="/calendar">` replaces the invite claim —
  * and `invite_code` is already gone from sessionStorage, so the claim is lost.
+ *
+ * TDB:1993 — a failed Complete / Skip All must say so and keep the user on the
+ * wizard, and Skip All must not be clickable again while its request is in flight.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
@@ -40,7 +43,7 @@ vi.mock('./onboarding-wizard/use-conditional-step-flags', () => ({
 vi.mock('./onboarding-wizard/OnboardingBreadcrumbs', () => ({ OnboardingBreadcrumbs: () => null }));
 vi.mock('../hooks/use-game-registry', () => ({ useGameRegistry: () => ({ games: [] }) }));
 vi.mock('../hooks/use-user-profile', () => ({ useUserHeartedGames: () => ({ data: undefined }) }));
-vi.mock('../lib/toast', () => ({ toast: { info: vi.fn() } }));
+vi.mock('../lib/toast', () => ({ toast: { info: vi.fn(), error: vi.fn() } }));
 vi.mock('../components/onboarding/connect-step', () => ({ ConnectStep: () => null }));
 vi.mock('../components/onboarding/steam-step', () => ({ SteamStep: () => null }));
 vi.mock('../components/onboarding/discord-join-step', () => ({ DiscordJoinStep: () => null }));
@@ -63,7 +66,7 @@ function LocationProbe(): JSX.Element {
     return <output data-testid="location">{pathname + search}</output>;
 }
 
-function renderWizard(): void {
+function renderWizard(): QueryClient {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(['auth', 'me'], newUser);
     render(
@@ -78,6 +81,7 @@ function renderWizard(): void {
             </MemoryRouter>
         </QueryClientProvider>,
     );
+    return client;
 }
 
 /**
@@ -145,5 +149,72 @@ describe('OnboardingWizardPage — invite claim survives completion (TDB:982)', 
         await act(async () => { land({ success: true, onboardingCompletedAt: COMPLETED_AT } as CompleteOnboardingResponseDto); });
         await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(INVITE_CLAIM));
         expect(toast.info, 'Complete must not be reported as a skip').not.toHaveBeenCalled();
+    });
+});
+
+const COMPLETE_URL = '/users/me/complete-onboarding';
+const completePosts = (): unknown[][] => mockFetchApi.mock.calls.filter(([url]) => url === COMPLETE_URL);
+
+/**
+ * Lets the clicked mutation reach `until` (its POST sent, or settled), then
+ * flushes query-core's batched setTimeout(0) listener notify into React.
+ */
+async function settle(until: () => boolean): Promise<void> {
+    await act(async () => {
+        await vi.waitUntil(until);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+}
+
+describe('OnboardingWizardPage — Complete / Skip All in flight and failing (TDB:1993)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        sessionStorage.setItem('invite_code', 'ABC123');
+    });
+    afterEach(() => sessionStorage.clear());
+
+    it('Skip All is disabled and reads "Skipping…" while its request is in flight', async () => {
+        renderWizard();
+        mockFetchApi.mockReturnValue(new Promise<CompleteOnboardingResponseDto>(() => {}));
+        fireEvent.click(screen.getByRole('button', { name: 'Skip All' }));
+        await settle(() => completePosts().length === 1);
+
+        const skipAll = screen.getByRole('button', { name: /skip all|skipping/i });
+        expect(skipAll, 'the in-flight Skip All must name its state').toHaveAccessibleName(/skipping/i);
+        expect(skipAll, 'the in-flight Skip All must not be clickable').toBeDisabled();
+        expect(skipAll).toHaveAttribute('aria-busy', 'true');
+
+        fireEvent.click(skipAll);
+        await act(async () => {});
+        expect(completePosts().length, 'a second Skip All click must not send a second complete POST').toBe(1);
+    });
+
+    it('a failed Skip All shows an error, stays on the wizard and keeps the pending invite', async () => {
+        const client = renderWizard();
+        mockFetchApi.mockRejectedValue(new Error('Network down'));
+        fireEvent.click(screen.getByRole('button', { name: 'Skip All' }));
+        await settle(() => client.isMutating() === 0);
+
+        expect(toast.error, 'a failed Skip All must tell the user').toHaveBeenCalledTimes(1);
+        expect(toast.error).toHaveBeenCalledWith(
+            'Could not finish setup. Please try again.', { id: 'onboarding-complete-error' },
+        );
+        expect(toast.info, 'a failed Skip All must not be reported as skipped').not.toHaveBeenCalled();
+        expect(screen.getByTestId('location').textContent).toBe('/onboarding');
+        expect(sessionStorage.getItem('invite_code'), 'the pending invite must survive a failure').toBe('ABC123');
+        expect(screen.getByRole('button', { name: 'Skip All' }), 'Skip All must be retryable').toBeEnabled();
+    });
+
+    it('a failed Complete shows an error and stays on the final step', async () => {
+        const client = renderWizard();
+        for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+        mockFetchApi.mockRejectedValue(new Error('Network down'));
+        fireEvent.click(screen.getByRole('button', { name: 'Complete' }));
+        await settle(() => client.isMutating() === 0);
+
+        expect(toast.error, 'a failed Complete must tell the user').toHaveBeenCalledTimes(1);
+        expect(screen.getByTestId('location').textContent).toBe('/onboarding');
+        expect(sessionStorage.getItem('invite_code')).toBe('ABC123');
+        expect(screen.getByRole('button', { name: 'Complete' }), 'Complete must be retryable').toBeEnabled();
     });
 });
