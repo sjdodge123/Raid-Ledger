@@ -94,22 +94,6 @@ describe('suppressScheduled — onExtended hook (ROK-1696)', () => {
     expect(hook).not.toHaveBeenCalled();
   });
 
-  it('lifts a window stored before the scheduled end to that end, without calling the hook', async () => {
-    const event = scheduledEvent(120, 40);
-    findSpy.mockResolvedValueOnce(event);
-    db.returning.mockResolvedValueOnce([{ id: 77 }]);
-    const hook = jest.fn();
-
-    await expect(run(hook)).resolves.toBe(true);
-
-    // The write restores the scheduled end; the effective end does not move
-    // past it, so there is nothing to fan out.
-    expect(db.set).toHaveBeenCalledWith(
-      expect.objectContaining({ extendedUntil: event.scheduledEnd }),
-    );
-    expect(hook).not.toHaveBeenCalled();
-  });
-
   it('does not call the hook when the guarded write touches 0 rows', async () => {
     findSpy.mockResolvedValueOnce(scheduledEvent(30, null));
     db.returning.mockResolvedValueOnce([]);
@@ -131,6 +115,31 @@ describe('suppressScheduled — onExtended hook (ROK-1696)', () => {
     await expect(run(hook)).resolves.toBe(true);
 
     expect(hook).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('suppressScheduled — window stored before the scheduled end (ROK-1696)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('lifts it to the scheduled end, without calling the hook', async () => {
+    const db = createDrizzleMock();
+    const event = scheduledEvent(120, 40);
+    jest
+      .spyOn(helpers, 'findActiveScheduledEvent')
+      .mockResolvedValueOnce(event);
+    db.returning.mockResolvedValueOnce([{ id: 77 }]);
+    const hook = jest.fn();
+
+    await expect(
+      suppressScheduled(db as never, 'binding-A', 10, 'voice-1', hook),
+    ).resolves.toBe(true);
+
+    // The write restores the scheduled end; the effective end does not move
+    // past it, so there is nothing to fan out.
+    expect(db.set).toHaveBeenCalledWith(
+      expect.objectContaining({ extendedUntil: event.scheduledEnd }),
+    );
+    expect(hook).not.toHaveBeenCalled();
   });
 });
 
@@ -172,6 +181,10 @@ describe('AdHocEventService — suppression window signal (ROK-1696)', () => {
       },
     ]);
   });
+});
+
+describe('AdHocEventService.ensureNotSuppressed — suppression window signal (ROK-1696)', () => {
+  afterEach(() => jest.restoreAllMocks());
 
   it('emits through ensureNotSuppressed on a suppressed join that writes', async () => {
     const { service, mocks } = await setupAdHocTestModule();

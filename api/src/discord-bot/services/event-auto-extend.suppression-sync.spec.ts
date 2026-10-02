@@ -124,7 +124,7 @@ beforeEach(async () => {
 
 afterEach(() => jest.restoreAllMocks());
 
-describe('EventAutoExtendService — suppression-window fan-out (ROK-1696)', () => {
+describe('EventAutoExtendService — suppression-window listener wiring (ROK-1696)', () => {
   it('is subscribed to SUPPRESSION_WINDOW_EVENTS.EXTENDED', () => {
     // Scanned by method, so a missing or mistyped subscription reads as `[]`.
     const proto = EventAutoExtendService.prototype as unknown as Record<
@@ -135,15 +135,16 @@ describe('EventAutoExtendService — suppression-window fan-out (ROK-1696)', () 
       const method = proto[name];
       if (typeof method !== 'function') return false;
       const events = Reflect.getMetadata('EVENT_LISTENER_METADATA', method) as
-        | { event: unknown }[]
-        | undefined;
+        { event: unknown }[] | undefined;
       return (events ?? []).some(
         (e) => e.event === SUPPRESSION_WINDOW_EVENTS.EXTENDED,
       );
     });
     expect(listeners).toEqual(['onSuppressionWindowExtended']);
   });
+});
 
+describe('EventAutoExtendService — suppression-window fan-out (ROK-1696)', () => {
   it('pushes the new end to web clients, the cache and Discord with auto-extend OFF', () => {
     ctx.service.onSuppressionWindowExtended(payload());
 
