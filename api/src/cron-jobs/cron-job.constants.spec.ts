@@ -110,3 +110,17 @@ describe('CORE_JOB_METADATA — every live @Cron job is described', () => {
     });
   });
 });
+
+describe('CORE_JOB_METADATA — Regression: poll expiry sweep boot WARN', () => {
+  // The @Cron shipped without an entry, so every boot logged `Core cron job
+  // "SchedulingPollExpiryService_runSweep" is missing CORE_JOB_METADATA
+  // entry.` and Admin -> Scheduled Jobs showed it undescribed under Other.
+  it('should include SchedulingPollExpiryService_runSweep', () => {
+    const meta = CORE_JOB_METADATA['SchedulingPollExpiryService_runSweep'];
+
+    expect(meta).toBeDefined();
+    expect(meta.description).toEqual(expect.any(String));
+    expect(meta.description.length).toBeGreaterThan(0);
+    expect(meta.category).toBe('Notifications');
+  });
+});
