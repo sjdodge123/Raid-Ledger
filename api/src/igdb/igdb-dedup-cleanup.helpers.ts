@@ -17,6 +17,7 @@ import {
   reassignMiscFks,
   type Tx,
 } from './igdb-dedup-fk-reassign.helpers';
+import { collectBindingChannelIds } from './igdb-dedup-partial-index.helpers';
 import {
   findDuplicateGroupsByNormalizedName,
   pickNameGroupWinner,
@@ -41,18 +42,25 @@ export async function findDuplicateGames(
   return deduplicateGroups([...steamDups, ...igdbDups]);
 }
 
-/** Merge and delete duplicate game rows in a transaction. */
+/**
+ * Merge and delete duplicate game rows in a transaction.
+ * `onBindingsChanged` receives, once per committed group, the channels whose
+ * bindings the merge rewrote.
+ */
 export async function mergeAndDeleteDuplicates(
   db: PostgresJsDatabase<typeof schema>,
   groups: DuplicateGroup[],
+  onBindingsChanged?: (channelIds: string[]) => void,
 ): Promise<{ merged: number; errors: string[] }> {
   let merged = 0;
   const errors: string[] = [];
 
   for (const group of groups) {
     try {
-      await mergeGroup(db, group);
+      const sink: string[] | undefined = onBindingsChanged ? [] : undefined;
+      await mergeGroup(db, group, sink);
       merged++;
+      notifyBindingsChanged(onBindingsChanged, sink);
     } catch (err) {
       errors.push(`Group winner=${group.winnerId}: ${err}`);
     }
@@ -148,15 +156,34 @@ function deduplicateGroups(groups: DuplicateGroup[]): DuplicateGroup[] {
 async function mergeGroup(
   db: PostgresJsDatabase<typeof schema>,
   group: DuplicateGroup,
+  sink?: string[],
 ): Promise<void> {
   await db.transaction(async (tx) => {
     for (const loserId of group.loserIds) {
+      await collectBindingChannelIds(tx, loserId, sink);
       await reassignEventFks(tx, loserId, group.winnerId);
       await reassignLineupFks(tx, loserId, group.winnerId);
       await reassignMiscFks(tx, loserId, group.winnerId);
       await tx.delete(schema.games).where(eq(schema.games.id, loserId));
     }
   });
+}
+
+/**
+ * Hand a COMMITTED group's rewritten channels to the listener. Runs only after
+ * the transaction resolved; a throwing listener is logged, never rethrown, so
+ * it cannot turn a committed merge into a reported error.
+ */
+function notifyBindingsChanged(
+  listener: ((channelIds: string[]) => void) | undefined,
+  channelIds: string[] | undefined,
+): void {
+  if (!listener || !channelIds?.length) return;
+  try {
+    listener([...new Set(channelIds)]);
+  } catch (err) {
+    nameDedupLogger.warn(`Binding-change listener failed: ${err}`);
+  }
 }
 
 // ─── ROK-1113: normalized-name cleanup ──────────────────────────────────────
@@ -205,9 +232,11 @@ export async function dryRunNameDedup(
 /**
  * Commit-mode cleanup: merges all eligible name-keyed duplicate groups, deleting
  * losers. Idempotent — a second run on a clean DB returns `{ merged: 0 }`.
+ * `onBindingsChanged` behaves as in {@link mergeAndDeleteDuplicates}.
  */
 export async function mergeNameDuplicates(
   db: PostgresJsDatabase<typeof schema>,
+  onBindingsChanged?: (channelIds: string[]) => void,
 ): Promise<NameDedupCommitResult> {
   const { groups, skipped } = await findDuplicateGroupsByNormalizedName(db);
   const report: NameMergeReport[] = [];
@@ -215,8 +244,9 @@ export async function mergeNameDuplicates(
 
   for (const group of groups) {
     try {
-      const entry = await mergeNameGroup(db, group);
-      report.push(entry);
+      const sink: string[] | undefined = onBindingsChanged ? [] : undefined;
+      report.push(await mergeNameGroup(db, group, sink));
+      notifyBindingsChanged(onBindingsChanged, sink);
     } catch (err) {
       errors.push(`Group "${group.normalizedName}": ${err}`);
     }
@@ -229,6 +259,7 @@ export async function mergeNameDuplicates(
 async function mergeNameGroup(
   db: PostgresJsDatabase<typeof schema>,
   group: NameDuplicateGroup,
+  sink?: string[],
 ): Promise<NameMergeReport> {
   const winner = pickNameGroupWinner(group.rows);
   const loserIds = group.rows
@@ -237,6 +268,7 @@ async function mergeNameGroup(
 
   await db.transaction(async (tx) => {
     for (const loserId of loserIds) {
+      await collectBindingChannelIds(tx, loserId, sink);
       const carry = await captureCarryColumns(tx, loserId);
       await reassignEventFks(tx, loserId, winner.id);
       await reassignLineupFks(tx, loserId, winner.id);
