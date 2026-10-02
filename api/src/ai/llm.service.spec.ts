@@ -133,6 +133,17 @@ describe('LlmService', () => {
     });
   });
 
+  describe('getActiveDefaultModel', () => {
+    it("returns the active provider's default model", async () => {
+      await expect(service.getActiveDefaultModel()).resolves.toBe('mock-model');
+    });
+
+    it('returns null when no provider is configured', async () => {
+      mockRegistry.resolveActive.mockResolvedValue(undefined);
+      await expect(service.getActiveDefaultModel()).resolves.toBeNull();
+    });
+  });
+
   describe('listModels', () => {
     it('returns models from the active provider', async () => {
       const models = await service.listModels();

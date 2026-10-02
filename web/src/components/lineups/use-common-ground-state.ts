@@ -1,74 +1,33 @@
 /**
  * State + data plumbing for the Common Ground panel (ROK-1107).
  *
- * Owns:
+ * Composes the sub-hooks in `use-common-ground-sub-hooks.ts`:
  * - Resolving the active building lineup when no prop `lineupId`.
- * - Filters, search, and debounced API params.
+ * - Session-persisted filters, search, and debounced API params.
  * - Common Ground + AI-suggestions queries.
  * - The `aiSuggestionsByGameId` map that drives the ✨ AI badge.
- * - Blending AI-only picks into the Common Ground grid.
  * - Nomination mutation state (`nominatingId`, `onNominate`).
+ *
+ * Blends AI-only picks into the Common Ground grid itself.
  *
  * Extracted from `CommonGroundPanel.tsx` to keep the panel file below
  * the 300-line soft limit.
  */
-import { useCallback, useMemo, useState } from 'react';
-import { useSessionState } from '../../hooks/use-session-state';
+import { useMemo } from 'react';
 import type {
     AiSuggestionDto,
     CommonGroundResponseDto,
 } from '@raid-ledger/contract';
 import type { CommonGroundParams } from '../../lib/api-client';
-import {
-    useActiveLineups,
-    useCommonGround,
-    useNominateGame,
-} from '../../hooks/use-lineups';
-import { useAiSuggestions } from '../../hooks/use-ai-suggestions';
-import { useAiSuggestionsAvailable } from '../../hooks/use-ai-suggestions-available';
-import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { mergeAiIntoCommonGround } from './common-ground-ai-merge.helpers';
-
-/** sessionStorage key prefixes for the per-lineup persisted panel state. */
-const FILTERS_KEY_PREFIX = 'common-ground:filters:';
-const SEARCH_KEY_PREFIX = 'common-ground:search:';
-const DEFAULT_FILTERS: CommonGroundParams = { minOwners: 0 };
-
-/** Whole non-negative integer, for the numeric filter fields. */
-function asCount(raw: unknown, min: number): number | undefined {
-    return typeof raw === 'number' && Number.isInteger(raw) && raw >= min
-        ? raw
-        : undefined;
-}
-
-/**
- * Allow-list sanitizer for persisted filters (ROK-1400 review). Stored JSON
- * is untrusted — hand-editable, and shape-drifted blobs outlive deploys. Only
- * known keys with the right type survive; anything else is dropped rather
- * than handed to consumers that assume the shape (e.g. `search.trim()`).
- * Returns null only when the blob isn't a plain object at all, which evicts
- * the entry entirely.
- */
-function sanitizeFilters(raw: unknown): CommonGroundParams | null {
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-        return null;
-    }
-    const r = raw as Record<string, unknown>;
-    const clean: CommonGroundParams = {};
-    const minOwners = asCount(r.minOwners, 0);
-    if (minOwners !== undefined) clean.minOwners = minOwners;
-    const maxPlayers = asCount(r.maxPlayers, 1);
-    if (maxPlayers !== undefined) clean.maxPlayers = maxPlayers;
-    const minOnlineCoop = asCount(r.minOnlineCoop, 1);
-    if (minOnlineCoop !== undefined) clean.minOnlineCoop = minOnlineCoop;
-    if (typeof r.genre === 'string') clean.genre = r.genre;
-    return clean;
-}
-
-/** Persisted search must be a string — `search.trim()` runs on it. */
-function sanitizeSearch(raw: unknown): string | null {
-    return typeof raw === 'string' ? raw : null;
-}
+import {
+    useCommonGroundAi,
+    useCommonGroundMeta,
+    useCommonGroundQuery,
+    useGridNomination,
+    usePersistedCommonGroundFilters,
+    useResolvedLineupId,
+} from './use-common-ground-sub-hooks';
 
 export interface UseCommonGroundStateResult {
     hasBuilding: boolean;
@@ -132,172 +91,33 @@ export function useCommonGroundState(
     propLineupId: number | undefined,
     canParticipate: boolean,
 ): UseCommonGroundStateResult {
-    const { data: activeLineups } = useActiveLineups();
-    const newestBuilding =
-        activeLineups?.find((l) => l.status === 'building') ?? null;
-    const resolvedId = propLineupId ?? newestBuilding?.id;
-    const hasBuilding = propLineupId != null || !!newestBuilding;
-
-    // ROK-1400 (operator review 2026-08-20): the whole filter set — search,
-    // min owners, players, co-op toggle + size — survives navigating away
-    // and back, keyed per lineup so two lineups don't share a view. Session-
-    // scoped: a fresh browser session starts clean.
-    const {
-        value: filters,
-        setValue: setFilters,
-        restored: filtersRestored,
-    } = useSessionState<CommonGroundParams>(
-        resolvedId != null ? `${FILTERS_KEY_PREFIX}${resolvedId}` : null,
-        DEFAULT_FILTERS,
-        sanitizeFilters,
-    );
-    const { value: search, setValue: setSearch } = useSessionState<string>(
-        resolvedId != null ? `${SEARCH_KEY_PREFIX}${resolvedId}` : null,
-        '',
-        sanitizeSearch,
-    );
-
-    // ROK-1400: latched from `meta.coopDataAvailable` once the first response
-    // lands. Latched (never flips back) so an in-flight refetch can't make the
-    // co-op control blink out from under the user.
-    const [coopDataAvailable, setCoopDataAvailable] = useState(false);
-
-    // Defensive (operator, round 2): the co-op control is dormant until the
-    // catalogue has Co-Optimus data, but filters persisted from an earlier
-    // visit can still carry `minOnlineCoop`. Never send it while the control
-    // is hidden — a filter the user can neither see nor clear must not
-    // silently empty the grid.
-    const effectiveFilters = useMemo(() => {
-        const { minOnlineCoop, ...withoutCoop } = filters;
-        if (coopDataAvailable || minOnlineCoop == null) return filters;
-        return withoutCoop;
-    }, [filters, coopDataAvailable]);
-
-    const apiParams = useMemo(
-        () => ({
-            ...effectiveFilters,
-            search: search.trim() || undefined,
-            lineupId: resolvedId,
-        }),
-        [effectiveFilters, search, resolvedId],
-    );
-    const debouncedParams = useDebouncedValue(apiParams, 300);
-    const { data, isLoading, isError, refetch } = useCommonGround(
-        debouncedParams,
-        hasBuilding,
-    );
-    // Adjust-state-during-render (React docs pattern): promote the flag as
-    // soon as the response carries it, without a cascading-render effect.
-    if (data?.meta.coopDataAvailable === true && !coopDataAvailable) {
-        setCoopDataAvailable(true);
-    }
-    // ROK-931: fetch AI suggestions alongside Common Ground and blend
-    // them into the same grid. The map drives the ✨ AI badge + tooltip
-    // reasoning on matching cards; AI-only games (not owned yet) are
-    // synthesised as stub CommonGroundGameDto entries.
-    //
-    // ROK-1114 round 3: gate the entire AI side on the combined
-    // plugin+admin-toggle hook. When the AI surface is off, never fire
-    // the request and never seed the badge map — the grid keeps
-    // rendering, just without the ✨ AI overlay.
-    const aiAvailable = useAiSuggestionsAvailable();
-    const aiQuery = useAiSuggestions(resolvedId, {
-        enabled: hasBuilding && aiAvailable,
-    });
-    const aiSuggestionsByGameId = useMemo(() => {
-        const map = new Map<number, AiSuggestionDto>();
-        if (!aiAvailable) return map;
-        if (aiQuery.data?.kind === 'ok') {
-            for (const s of aiQuery.data.data.suggestions) map.set(s.gameId, s);
-        }
-        return map;
-    }, [aiAvailable, aiQuery.data]);
-
+    const { resolvedId, hasBuilding } = useResolvedLineupId(propLineupId);
+    const persisted = usePersistedCommonGroundFilters(resolvedId);
+    const { filters, search } = persisted;
+    const grid = useCommonGroundQuery(filters, search, resolvedId, hasBuilding);
+    const { data, effectiveFilters, ...queryState } = grid;
+    const ai = useCommonGroundAi(resolvedId, hasBuilding);
+    const aiMap = ai.aiSuggestionsByGameId;
     const mergedData = useMemo(
         // Effective (not raw) filters: the AI-stub mirror must agree with what
         // the server was actually asked for, or a dormant co-op filter would
         // drop stubs the query itself never filtered on (ROK-1400).
-        () =>
-            mergeAiIntoCommonGround(
-                data,
-                aiSuggestionsByGameId,
-                effectiveFilters,
-                search,
-            ),
-        [data, aiSuggestionsByGameId, effectiveFilters, search],
+        () => mergeAiIntoCommonGround(data, aiMap, effectiveFilters, search),
+        [data, aiMap, effectiveFilters, search],
     );
-
-    const atCap =
-        (data?.meta.nominatedCount ?? 0) >= (data?.meta.maxNominations ?? 20);
-    // ROK-1349: view-only is a permission state, kept distinct from atCap so
-    // non-invitees get an "ask the creator for an invite" label instead of
-    // the misleading "Lineup full" the conflated flag produced.
-    const viewOnly = !canParticipate;
-
-    const rawMeta = useMemo(
-        () => ({
-            nominatedCount: data?.meta.nominatedCount ?? 0,
-            maxNominations: data?.meta.maxNominations ?? 20,
-        }),
-        [data],
-    );
-    const participantCount = data?.meta.participantCount ?? 0;
-
-    const [nominatingId, setNominatingId] = useState<number | null>(null);
-    const nominate = useNominateGame();
-    const onNominate = useCallback(
-        (gameId: number) => {
-            if (!resolvedId) return;
-            setNominatingId(gameId);
-            nominate.mutate(
-                { lineupId: resolvedId, body: { gameId } },
-                { onSettled: () => setNominatingId(null) },
-            );
-        },
-        [resolvedId, nominate],
-    );
-
-    const stableRefetch = useCallback(() => void refetch(), [refetch]);
-
-    // When the AI feature is disabled (plugin off or admin toggle off),
-    // collapse all AI status flags so CommonGroundPanel never renders
-    // the AI status banner. The grid still renders normally.
-    const aiIsUnavailable = aiAvailable && aiQuery.data?.kind === 'unavailable';
-    // ROK-1316: a cold-cache read returns `pending: true` while the
-    // background pre-gen job warms; treat it as loading so the existing
-    // skeleton/loading state renders until the real payload arrives.
-    // Rework #3: once polling exhausts its cap and the payload is STILL
-    // pending (pre-gen never finished), stop showing the skeleton — fall
-    // back to the empty state instead of an infinite spinner.
-    const aiIsPending =
-        aiQuery.data?.kind === 'ok' &&
-        aiQuery.data.data.pending === true &&
-        !aiQuery.pollExhausted;
-    const aiIsLoading =
-        aiAvailable && hasBuilding && (aiQuery.isLoading || aiIsPending);
-    const aiIsError = aiAvailable && aiQuery.isError && !aiIsUnavailable;
-
+    const nomination = useGridNomination(resolvedId);
+    const meta = useCommonGroundMeta(data);
     return {
         hasBuilding,
         mergedData,
-        rawMeta,
-        filters,
-        setFilters,
-        filtersRestored,
-        coopDataAvailable,
-        search,
-        setSearch,
-        participantCount,
-        isLoading,
-        isError,
-        refetch: stableRefetch,
-        onNominate,
-        nominatingId,
-        atCap,
-        viewOnly,
-        aiSuggestionsByGameId,
-        aiIsLoading,
-        aiIsUnavailable,
-        aiIsError,
+        ...persisted,
+        ...queryState,
+        ...nomination,
+        ...meta,
+        // ROK-1349: view-only is a permission state, kept distinct from atCap
+        // so non-invitees get an "ask the creator for an invite" label instead
+        // of the misleading "Lineup full" the conflated flag produced.
+        viewOnly: !canParticipate,
+        ...ai,
     };
 }
