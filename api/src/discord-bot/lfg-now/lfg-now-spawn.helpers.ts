@@ -212,7 +212,13 @@ async function manualStart(
   const eventId =
     open ?? (await createLfgNowEventRow(tx, gameId, manual.starterUserId, now));
   if (starter) await signupNowHands(tx, eventId, [starter]);
-  await convertStarterIntent(tx, gameId, manual.starterUserId, { eventId });
+  await convertStarterIntent(
+    tx,
+    gameId,
+    manual.starterUserId,
+    { eventId },
+    now,
+  );
   return {
     eventId,
     spawned: open === null,

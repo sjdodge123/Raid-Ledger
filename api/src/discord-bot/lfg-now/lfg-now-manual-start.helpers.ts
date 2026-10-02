@@ -77,10 +77,16 @@ export async function listLiveGroupHands(
  * Since ROK-1625 an invitee ALSO converts on landing on the session's voice
  * roster (`LfgQuickPlayListener`); the accept path stays as it is.
  *
+ * Since ROK-1625 this applies the read-side liveness predicate
+ * (`liveGroupRow`: active, unexpired, holder neither deactivated nor banned)
+ * rather than `status = 'active'` alone, measured at the caller's decision
+ * instant so it agrees with `listLiveGroupHands` / `mayStartGroup`.
+ *
  * @param db - The spawn transaction handle.
  * @param gameId - Game whose group is starting.
  * @param userId - The starter.
  * @param target - The event the hand converted into.
+ * @param now - Decision instant (the one the start was decided against).
  * @returns How many rows flipped (0 or 1).
  */
 export async function convertStarterIntent(
@@ -88,8 +94,9 @@ export async function convertStarterIntent(
   gameId: number,
   userId: number,
   target: { eventId: number },
+  now: Date,
 ): Promise<number> {
-  return convertHolderIntent(db, gameId, userId, target);
+  return convertHolderIntent(db, gameId, userId, target, now);
 }
 
 /**
