@@ -14,10 +14,12 @@ import {
     apiPatch,
     createLineupOrRetry,
     pollForCondition,
+    claimBannerOwnership,
 } from './api-helpers';
 import type { Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
 import { isMobile, isPhoneLayout } from './helpers';
+import { revealStartLineupModalField } from './start-lineup-modal';
 
 /** Fetch real game IDs from the configured-games endpoint. */
 async function fetchGameIds(token: string, count: number): Promise<number[]> {
@@ -125,17 +127,13 @@ async function ensureActiveLineupInBuildingPhase(token: string): Promise<number>
     return resolvedId;
 }
 
-test.beforeAll(async ({}, testInfo) => {
-    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
-    lineupTitle = `${workerPrefix}Smoke Lineup`;
-
-    adminToken = await getAdminToken();
-
-    // ROK-1147: reset only THIS worker's lineups so sibling workers'
-    // in-flight lineups are untouched.
-    // ROK-1070: switched bare POST /lineups to createLineupOrRetry so a
-    // sibling-worker 409 collision triggers a prefix-scoped reset + retry
-    // rather than silently leaking another worker's lineup into our state.
+/**
+ * Create a NEW building lineup of this worker's own and return its id. Used by
+ * `beforeAll` and as the `create` callback for `claimBannerOwnership`.
+ * Unlike `ensureActiveLineupInBuildingPhase`, it never adopts whatever building
+ * lineup the banner shows (possibly a sibling's), so the claim can be won.
+ */
+async function createOwnBuildingLineup(): Promise<number> {
     const { id } = await createLineupOrRetry(
         adminToken,
         {
@@ -147,7 +145,35 @@ test.beforeAll(async ({}, testInfo) => {
         },
         workerPrefix,
     );
-    lineupId = id;
+    return id;
+}
+
+/**
+ * Return `lineupId` when that lineup is still in the building phase, else
+ * `undefined` — so `claimBannerOwnership` builds a fresh lineup instead of
+ * re-claiming one that has moved on to voting/decided.
+ */
+async function keepIfStillBuilding(
+    token: string,
+    lineupId: number | undefined,
+): Promise<number | undefined> {
+    if (lineupId === undefined) return undefined;
+    const detail = (await apiGet(token, `/lineups/${lineupId}`)) as { status?: string } | null;
+    return detail?.status === 'building' ? lineupId : undefined;
+}
+
+test.beforeAll(async ({}, testInfo) => {
+    workerPrefix = `smoke-w${testInfo.workerIndex}-${FILE_PREFIX}-`;
+    lineupTitle = `${workerPrefix}Smoke Lineup`;
+
+    adminToken = await getAdminToken();
+
+    // ROK-1147: reset only THIS worker's lineups so sibling workers'
+    // in-flight lineups are untouched.
+    // ROK-1070: switched bare POST /lineups to createLineupOrRetry so a
+    // sibling-worker 409 collision triggers a prefix-scoped reset + retry
+    // rather than silently leaking another worker's lineup into our state.
+    lineupId = await createOwnBuildingLineup();
     createdLineup = true;
 });
 
@@ -486,13 +512,31 @@ test.describe('Community Lineup responsive layout', () => {
 
     test('banner is visible on mobile viewport', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'Mobile-only test -- verifies banner on mobile');
+        // ROK-1533 pattern: `/games` renders the GLOBAL `/lineups/banner`
+        // singleton, and on a shared env a sibling's newer lineup (or one it
+        // advances past building) can own it at any moment. Claim the banner
+        // with a building lineup of our OWN — `lineupId` from `beforeEach` may
+        // be a sibling's, which a claim can never win — and retry the claim
+        // AND the reads together, so one attempt reads the page inside a window
+        // where we own it. The assertions are unchanged; only the window is.
+        test.setTimeout(150_000);
+        let ownLineupId: number | undefined;
+        await expect(async () => {
+            // A sibling can advance our lineup past building between attempts.
+            // Voting/decided lineups still own the banner but render no
+            // Nominate button, so re-claiming the same id would fail every
+            // retry — drop it and claim with a fresh building lineup instead.
+            ownLineupId = await claimBannerOwnership(adminToken, createOwnBuildingLineup, {
+                existing: await keepIfStillBuilding(adminToken, ownLineupId),
+                attempts: 2,
+            });
+            await gotoGames(page);
+            await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        await gotoGames(page);
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
-
-        // Banner should still be visible on mobile
-        await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByRole('button', { name: 'Nominate' })).toBeVisible({ timeout: 5_000 });
+            // Banner should still be visible on mobile
+            await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
+            await expect(page.getByRole('button', { name: 'Nominate' })).toBeVisible({ timeout: 5_000 });
+        }).toPass({ timeout: 120_000, intervals: [1_000] });
     });
 });
 
@@ -646,31 +690,19 @@ test.describe('Voting phase', () => {
 
     test('match threshold slider is present in StartLineupModal', async ({ page }) => {
         // ROK-1167: open StartLineupModal via test query param — works regardless
-        // of whether this worker's voting lineup is still active. Avoids racing
-        // on the empty-banner state.
-        //
-        // Hook timeout bumped to 30s — page-load + admin/role hydration + the
-        // ROK-1167 useEffect that flips `startOpen` chains together; under
-        // mobile parallel-worker CI load the original 15s is too tight (PR
-        // #754 CI run 3 caught a flake here). The dialog opening is otherwise
-        // deterministic on this synthetic test path.
+        // of whether this worker's voting lineup is still active. ROK-1302 put
+        // Match Threshold behind "More options". `revealStartLineupModalField`
+        // (./start-lineup-modal.ts) opens the modal, expands that section and
+        // retries the whole open; its doc comment explains why.
         test.setTimeout(60_000);
-        await page.goto('/games?test=open-lineup-modal');
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
-        const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 30_000 });
-
-        // ROK-1302: Match Threshold moved behind "More options" — expand first.
-        await modal.getByText(/more options/i).click();
-
-        // Match threshold slider should be present with correct labels
-        const thresholdSlider = modal.locator('[data-testid="match-threshold"]');
-        await expect(thresholdSlider).toBeVisible({ timeout: 5_000 });
-
-        // Verify the slider has min/max labels
-        await expect(modal.getByText('More matches')).toBeVisible({ timeout: 3_000 });
-        await expect(modal.getByText('Fewer, larger matches')).toBeVisible({ timeout: 3_000 });
+        // Match threshold slider should be present with correct labels. The
+        // min/max label checks run inside the helper's retried window: they
+        // need "More options" expanded, and a remount collapses it.
+        await revealStartLineupModalField(page, 'match-threshold', async (modal) => {
+            await expect(modal.getByText('More matches')).toBeVisible({ timeout: 3_000 });
+            await expect(modal.getByText('Fewer, larger matches')).toBeVisible({ timeout: 3_000 });
+        });
 
         // Recreate a lineup to restore state for other tests
         const modal2 = page.locator('[role="dialog"]');
