@@ -83,9 +83,10 @@ forced-white rule still applies (`JourneyHero.tsx:173-175`).
 
 **Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
 on the theme surface, so the light family's contrast bumps are wrong there. Put
-`.badge-overlay` on the badge or its container and `:798-810` restores the DARK shades
-under every light scheme. Consumers: `event-card.tsx`, `mobile-event-card.tsx`; guarded
-by `web/src/styles/badge-overlay.test.ts`.
+`.badge-overlay` on the badge or its container and `:801-813` restores the DARK shades
+under every light scheme. Consumer: `event-card.tsx` only — the badges that sit ON the cover art; a
+chip on the themed surface never carries it (ROK-1472). Guarded by `web/src/styles/badge-overlay.test.ts`
+and `web/src/styles/badge-overlay-art-only.guard.test.ts`.
 
 ---
 
