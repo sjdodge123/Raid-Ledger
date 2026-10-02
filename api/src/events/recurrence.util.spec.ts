@@ -9,6 +9,7 @@ import {
   generateRecurringDates,
   MAX_RECURRENCE_INSTANCES,
 } from './recurrence.util';
+import { at } from '../common/testing/narrow';
 
 // Helper: create UTC date from ISO string
 const utc = (iso: string) => new Date(iso);
@@ -286,7 +287,7 @@ function test52ndInstanceInclusiveBoundary() {
   const dates = generateRecurringDates(start, 'weekly', until);
 
   expect(dates).toHaveLength(MAX_RECURRENCE_INSTANCES);
-  expect(dates[51].toISOString()).toBe(fiftySecondDate.toISOString());
+  expect(at(dates, 51).toISOString()).toBe(fiftySecondDate.toISOString());
 }
 
 function testNeverExceeds52() {

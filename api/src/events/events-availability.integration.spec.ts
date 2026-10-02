@@ -52,16 +52,19 @@ async function createCharacter(
   gameId: number,
   overrides: Partial<typeof schema.characters.$inferInsert> = {},
 ) {
-  const [char] = await testApp.db
-    .insert(schema.characters)
-    .values({
-      userId,
-      gameId,
-      name: `Char-${userId}-${Date.now()}`,
-      isMain: true,
-      ...overrides,
-    })
-    .returning();
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId,
+        gameId,
+        name: `Char-${userId}-${Date.now()}`,
+        isMain: true,
+        ...overrides,
+      })
+      .returning(),
+    'character',
+  );
   return char;
 }
 

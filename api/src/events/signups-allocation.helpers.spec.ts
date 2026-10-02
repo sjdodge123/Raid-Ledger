@@ -226,7 +226,7 @@ describe('findOldestTentativeOccupant', () => {
     ]);
     const result = findOldestTentativeOccupant(assignments, 'tank', signupById);
     expect(result).not.toBeNull();
-    expect(result.signupId).toBe(10);
+    expect(result?.signupId).toBe(10);
   });
 
   it('returns the oldest tentative occupant when multiple exist', () => {
@@ -253,7 +253,7 @@ describe('findOldestTentativeOccupant', () => {
       [20, { status: 'tentative', signedUpAt: new Date('2026-01-01') }],
     ]);
     const result = findOldestTentativeOccupant(assignments, 'tank', signupById);
-    expect(result.signupId).toBe(20);
+    expect(result?.signupId).toBe(20);
   });
 
   it('ignores assignments for different roles', () => {

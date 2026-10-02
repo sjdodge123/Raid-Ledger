@@ -482,7 +482,7 @@ async function testRosterUpdateLogsSignupReconfirmed() {
     (e) => e.action === 'signup_reconfirmed',
   );
   expect(reconfirms).toHaveLength(1);
-  expect(reconfirms[0].actor?.id).toBe(memberId);
+  expect(reconfirms[0]?.actor?.id).toBe(memberId);
   expect(reconfirms[0]?.metadata?.reason).toBe('roster-update');
 }
 

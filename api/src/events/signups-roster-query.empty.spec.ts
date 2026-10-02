@@ -279,6 +279,6 @@ describe('partitionAssignments (ROK-914)', () => {
 
     const { pool } = partitionAssignments(rows);
 
-    expect(pool[0].slot).toBeNull();
+    expect(pool[0]?.slot).toBeNull();
   });
 });

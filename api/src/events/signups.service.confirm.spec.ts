@@ -242,7 +242,7 @@ describe('SignupsService — confirm', () => {
 
       const result = await service.getRoster(1);
 
-      expect(result.signups[0].character).toBeNull();
+      expect(result.signups[0]?.character).toBeNull();
       expect(result.signups[0]?.confirmationStatus).toBe('pending');
     });
 

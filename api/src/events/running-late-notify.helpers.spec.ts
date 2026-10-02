@@ -6,6 +6,7 @@ import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import type { MockDb } from '../common/testing/drizzle-mock';
 import * as schema from '../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { at } from '../common/testing/narrow';
 
 const EVENT = {
   id: 239,
@@ -86,7 +87,7 @@ describe('notifyAttendeeRunningLate', () => {
       lateUserId: LATE_USER_ID,
       lateUsername: 'hiphoptobop',
       subtype: `late-${LATE_USER_ID}`,
-      startTime: EVENT.duration[0].toISOString(),
+      startTime: at(EVENT.duration, 0).toISOString(),
       discordUrl: 'https://discord/msg',
       voiceChannelId: 'voice-1',
     });

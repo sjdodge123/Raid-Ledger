@@ -13,6 +13,7 @@
  * No Drizzle internals are tested — only the transformation logic.
  */
 import { buildEmbedEventData } from './event-response-embed.helpers';
+import { at } from '../common/testing/narrow';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
@@ -267,7 +268,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    const mention = result.signupMentions![0];
+    const mention = at(result.signupMentions ?? [], 0);
     expect(mention.role).toBe('healer');
     expect(mention.className).toBe('Paladin');
     expect(mention.preferredRoles).toEqual(['healer']);
@@ -289,7 +290,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(result.signupMentions![0].role).toBeNull();
+    expect(result.signupMentions?.[0]?.role).toBeNull();
   });
 
   // ROK-1460 F2 — the sync path (embed-sync.helpers::toSignupMention) already
@@ -380,7 +381,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(result.signupMentions![0].className).toBeNull();
+    expect(result.signupMentions?.[0]?.className).toBeNull();
   });
 });
 
