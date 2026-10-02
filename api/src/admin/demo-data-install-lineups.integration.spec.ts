@@ -97,7 +97,6 @@ function describeInstall() {
         ),
         'publicLineup',
       );
-      expect(publicLineup).toBeDefined();
       expect(publicLineup.status).toBe('voting');
 
       const entries = await testApp.db

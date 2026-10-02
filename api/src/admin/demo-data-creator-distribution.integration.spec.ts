@@ -73,7 +73,6 @@ function describeCreatorDistribution() {
         .where(eq(schema.users.username, 'SeedAdmin')),
       'SeedAdmin user',
     );
-    expect(seedAdmin).toBeDefined();
 
     // Get original events: the first 6 events inserted (non-ad-hoc,
     // non-cancelled, with a gameId, matching the 6 original titles)
