@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { DrizzleQueryError } from 'drizzle-orm/errors';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
@@ -242,11 +243,13 @@ describe('PluginRegistryService — removeAdaptersForPlugin', () => {
   });
 });
 
-function makeFailDb() {
-  const pgError = new Error('relation "plugins" does not exist') as Error & {
-    code: string;
-  };
-  pgError.code = '42P01';
+function missingPluginsTable(): Error {
+  return Object.assign(new Error('relation "plugins" does not exist'), {
+    code: '42P01',
+  });
+}
+
+function makeFailDb(pgError: Error = missingPluginsTable()) {
   return {
     ...mockDb,
     select: jest.fn().mockImplementation(() => ({
@@ -257,11 +260,11 @@ function makeFailDb() {
   };
 }
 
-async function buildFailService() {
+async function buildFailService(pgError?: Error) {
   const failModule: TestingModule = await Test.createTestingModule({
     providers: [
       PluginRegistryService,
-      { provide: DrizzleAsyncProvider, useValue: makeFailDb() },
+      { provide: DrizzleAsyncProvider, useValue: makeFailDb(pgError) },
       { provide: EventEmitter2, useValue: mockEventEmitter },
     ],
   }).compile();
@@ -291,6 +294,25 @@ describe('PluginRegistryService — refreshActiveCache (ROK-363) table missing',
 
   it('should start with empty activeSlugs when plugins table does not exist', () =>
     testEmptyActiveSlugsOnMissingTable());
+
+  it('treats a Drizzle-wrapped 42P01 as a missing plugins table', async () => {
+    const wrapped = new DrizzleQueryError(
+      'select "slug" from "plugins"',
+      [],
+      missingPluginsTable(),
+    );
+    const failService = await buildFailService(wrapped);
+    const warn = jest
+      .spyOn(failService['logger'], 'warn')
+      .mockImplementation(() => undefined);
+
+    await expect(failService.onModuleInit()).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(
+      'plugins table not found — plugin system disabled until migration is applied',
+    );
+    expect(failService.getActiveSlugsSync().size).toBe(0);
+  });
 
   it('should re-throw non-table-missing database errors', async () => {
     const otherError = new Error('connection refused') as Error & {
