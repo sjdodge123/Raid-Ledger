@@ -6,6 +6,7 @@ import { useRoster } from '../../hooks/use-roster';
 import { isMMOSlotConfig } from '../../utils/game-utils';
 import { getGameColors } from '../../constants/game-colors';
 import { AttendeeAvatars } from './AttendeeAvatars';
+import { toAttendeePreviews } from './WeekEventCard';
 import { SignupConfirmationModal } from '../events/signup-confirmation-modal';
 import { useDayEventSignup } from './use-day-event-signup';
 import { SeriesBadge } from '../events/SeriesBadge';
@@ -89,7 +90,7 @@ function useDayEventData(event: CalendarEvent, eventOverlapsGameTime: (s: Date, 
     const coverUrl = event.resource?.game?.coverUrl;
     const gameName = event.resource?.game?.name || 'Event';
     const signupCount = event.resource?.signupCount ?? 0;
-    const signupsPreview = event.resource?.signupsPreview;
+    const signupsPreview = toAttendeePreviews(event.resource?.signupsPreview);
     const description = event.resource?.description || '';
     const colors = getGameColors(gameSlug);
     const overlaps = eventOverlapsGameTime(event.start, event.end);

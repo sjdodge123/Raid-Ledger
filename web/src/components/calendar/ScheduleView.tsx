@@ -13,6 +13,7 @@ import { getGameColors } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { AttendeeAvatars } from './AttendeeAvatars';
+import { toAttendeePreviews } from './WeekEventCard';
 import type { CalendarEvent } from './CalendarView';
 import { coverSrcSetProps } from '../../lib/igdb-image';
 
@@ -78,7 +79,7 @@ function ScheduleEventInfo({ event, resolved }: { event: CalendarEvent; resolved
 function ScheduleEventCard({ event, onSelect }: { event: CalendarEvent; onSelect: (e: CalendarEvent) => void }) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const colors = getGameColors(event.resource.game?.slug);
-    const signups = event.resource.signupsPreview ?? [];
+    const signups = toAttendeePreviews(event.resource.signupsPreview) ?? [];
     const signupCount = event.resource.signupCount ?? signups.length;
 
     return (

@@ -4,6 +4,17 @@ import { AttendeeAvatars } from './AttendeeAvatars';
 import { SeriesBadge } from '../events/SeriesBadge';
 import type { CalendarEvent } from './CalendarView';
 
+type SignupUser = NonNullable<NonNullable<CalendarEvent['resource']>['signupsPreview']>[number];
+
+/** AttendeeAvatars' input: avatar fields the API left out stay absent instead of explicitly undefined. */
+export function toAttendeePreviews(signups: SignupUser[] | undefined) {
+    return signups?.map(({ customAvatarUrl, characters, ...rest }) => ({
+        ...rest,
+        ...(customAvatarUrl === undefined ? {} : { customAvatarUrl }),
+        ...(characters === undefined ? {} : { characters }),
+    }));
+}
+
 interface WeekEventCardProps {
     event: CalendarEvent;
     eventOverlapsGameTime: (start: Date, end: Date) => boolean;
@@ -64,7 +75,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
     const tier = getTier(durationMins);
     const avatarConfig = getAvatarConfig(tier);
     const signupCount = event.resource?.signupCount ?? 0;
-    const signupsPreview = event.resource?.signupsPreview;
+    const signupsPreview = toAttendeePreviews(event.resource?.signupsPreview);
 
     return (
         <div className={`week-event-block week-event-block--${tier}`} data-tier={tier} style={{
