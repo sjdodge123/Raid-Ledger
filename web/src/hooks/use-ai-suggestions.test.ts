@@ -5,8 +5,8 @@
  * background pre-gen job warms the cache, and the hook must keep polling
  * until a real (non-pending) payload arrives, then stop.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
@@ -80,9 +80,51 @@ function createWrapper(): {
     return { wrapper };
 }
 
+/** Mirrors PENDING_POLL_INTERVAL_MS / PENDING_POLL_MAX_ATTEMPTS in use-ai-suggestions.ts. */
+const POLL_INTERVAL_MS = 3_000;
+const MAX_POLL_ATTEMPTS = 15;
+
+/**
+ * Renders the hook and records each distinct fetch result it rendered
+ * (`dataUpdatedAt`), which is what the hook's per-render poll count sees.
+ */
+function renderTracked(initialId: number) {
+    const rendered = new Set<number>();
+    const { wrapper } = createWrapper();
+    const view = renderHook(
+        ({ id }: { id: number }) => {
+            const hook = useAiSuggestions(id);
+            if (hook.dataUpdatedAt > 0) rendered.add(hook.dataUpdatedAt);
+            return hook;
+        },
+        { wrapper, initialProps: { id: initialId } },
+    );
+    return { ...view, rendered };
+}
+
+/**
+ * Advances ONE poll interval at a time until `attempts` fetch results have
+ * rendered. A single 45s jump could settle several fetches in one render and
+ * under-count the hook's per-render poll budget. A hook that stops polling
+ * early fails the inner assertion instead of looping.
+ */
+async function advancePolls(rendered: Set<number>, attempts: number): Promise<void> {
+    while (rendered.size < attempts) {
+        const before = rendered.size;
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+        });
+        await waitFor(() => expect(rendered.size).toBeGreaterThan(before));
+    }
+}
+
 describe('useAiSuggestions — ROK-1316 pending → poll', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
     });
 
     it('keeps polling while pending, then renders the resolved payload', async () => {
@@ -147,9 +189,11 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
 
     // Rework #3: a permanently-stuck pre-gen (always pending) must not spin
     // forever — once polling exhausts its cap the hook reports `pollExhausted`
-    // so consumers fall back to the empty state. Uses fake timers to advance
-    // through the 15-attempt × 3s poll budget deterministically (and fast).
+    // so consumers fall back to the empty state. Fake timers walk the
+    // 15-attempt × 3s poll budget one interval at a time, so the result no
+    // longer depends on ~45s of wall clock on a loaded host.
     it('reports pollExhausted=true when polling caps out still pending', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
         let calls = 0;
         server.use(
             http.get(`${API_BASE}/lineups/:id/suggestions`, () => {
@@ -159,8 +203,7 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
             }),
         );
 
-        const { wrapper } = createWrapper();
-        const { result } = renderHook(() => useAiSuggestions(99), { wrapper });
+        const { result, rendered } = renderTracked(99);
 
         // First pending payload lands; not yet exhausted.
         await waitFor(() => {
@@ -171,21 +214,22 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
         });
         expect(result.current.pollExhausted).toBe(false);
 
-        // Poll until the cap (15 × 3s ≈ 45s) is hit; polling then stops and
-        // pollExhausted flips true so consumers fall back to empty state.
-        await waitFor(() => expect(result.current.pollExhausted).toBe(true), {
-            timeout: 55_000,
-            interval: 250,
+        // Poll up to the cap; polling then stops and pollExhausted flips true
+        // so consumers fall back to the empty state.
+        await advancePolls(rendered, MAX_POLL_ATTEMPTS);
+        expect(result.current.pollExhausted).toBe(true);
+        expect(calls).toBe(MAX_POLL_ATTEMPTS);
+
+        // Polling stopped at the cap: three more intervals send no request.
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(3 * POLL_INTERVAL_MS);
         });
-        // Polling stopped at the cap — no runaway requests.
-        const callsAtCap = calls;
-        await new Promise((r) => setTimeout(r, 200));
-        expect(calls).toBe(callsAtCap);
+        expect(calls).toBe(MAX_POLL_ATTEMPTS);
         // Still pending (never resolved) but consumers see not-loading.
         if (result.current.data?.kind === 'ok') {
             expect(result.current.data.data.pending).toBe(true);
         }
-    }, 70_000);
+    }, 20_000);
 
     // Rework r2 #2: a `stale` payload must keep polling (revalidate) until the
     // background refresh lands, WITHOUT showing the cold skeleton.
@@ -249,6 +293,7 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
     // (no remount) — a new cold lineup must not inherit the prior lineup's
     // exhausted state and collapse its skeleton early.
     it('resets the poll budget when lineupId changes after exhaustion', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
         server.use(
             // Every lineup stays pending — so exhaustion is reachable and the
             // post-switch lineup is also cold (would inherit pollExhausted).
@@ -257,17 +302,12 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
             ),
         );
 
-        const { wrapper } = createWrapper();
-        const { result, rerender } = renderHook(
-            ({ id }: { id: number }) => useAiSuggestions(id),
-            { wrapper, initialProps: { id: 99 } },
-        );
+        const { result, rendered, rerender } = renderTracked(99);
 
         // Exhaust the first lineup's poll budget.
-        await waitFor(() => expect(result.current.pollExhausted).toBe(true), {
-            timeout: 55_000,
-            interval: 250,
-        });
+        await waitFor(() => expect(rendered.size).toBe(1));
+        await advancePolls(rendered, MAX_POLL_ATTEMPTS);
+        expect(result.current.pollExhausted).toBe(true);
 
         // Switch lineup in-place — budget must reset immediately.
         rerender({ id: 100 });
@@ -282,5 +322,5 @@ describe('useAiSuggestions — ROK-1316 pending → poll', () => {
             }
         });
         expect(result.current.pollExhausted).toBe(false);
-    }, 70_000);
+    }, 20_000);
 });
