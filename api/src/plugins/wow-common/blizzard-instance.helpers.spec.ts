@@ -1,5 +1,6 @@
 import { BadGatewayException } from '@nestjs/common';
 import {
+  fetchExpansionIndex,
   fetchRealmListFromApi,
   filterByVariant,
 } from './blizzard-instance.helpers';
@@ -77,6 +78,44 @@ describe('fetchRealmListFromApi — upstream failures (ROK-1636)', () => {
       fetchRealmListFromApi('us', null, 'tok', logger),
     ).rejects.toThrow(
       'Failed to fetch realm list from Blizzard (503). Please try again later.',
+    );
+  });
+});
+
+/**
+ * TDB:1784: the journal expansion index feeds the instance list. A failed call
+ * must surface as a 502 with a readable message, like the realm path above,
+ * not a raw Error that Nest turns into a bare 500.
+ */
+describe('fetchExpansionIndex — upstream failures', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  function mockStatus(status: number) {
+    jest
+      .spyOn(global, 'fetch')
+      .mockImplementation(() =>
+        Promise.resolve(new Response('upstream', { status })),
+      );
+  }
+
+  it('maps a 403 to a 502 saying instances are not served', async () => {
+    mockStatus(403);
+    await expect(fetchExpansionIndex('us', 'tok')).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
+    await expect(fetchExpansionIndex('us', 'tok')).rejects.toHaveProperty(
+      'message',
+      "Blizzard's API doesn't serve instances for this game version yet (403).",
+    );
+  });
+
+  it('maps a 5xx to a 502 try-again error', async () => {
+    mockStatus(503);
+    await expect(fetchExpansionIndex('us', 'tok')).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
+    await expect(fetchExpansionIndex('us', 'tok')).rejects.toThrow(
+      'Failed to fetch expansion index from Blizzard (503). Please try again later.',
     );
   });
 });
