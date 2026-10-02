@@ -11,6 +11,7 @@ import * as path from 'node:path';
 import { gunzipSync, gzipSync } from 'node:zlib';
 import type { Readable } from 'node:stream';
 import { LogsService } from './logs.service';
+import { logLines } from './log-lines.spec-helpers';
 import { at } from '../common/testing/narrow';
 
 const SECRET_LINE = 'boot DATABASE_URL=postgresql://u:p@h/db\nhello\n';
@@ -22,16 +23,6 @@ const SCRUBBED_LINE = 'boot DATABASE_URL=[REDACTED]\nhello\n';
  */
 const secretGen = (gen: string) => `gen-${gen}\n${SECRET_LINE}`;
 const scrubbedGen = (gen: string) => `gen-${gen}\n${SCRUBBED_LINE}`;
-
-/** `n` timestamped log lines (~80 bytes each), the same for every caller. */
-function logLines(n: number): string {
-  let out = '';
-  for (let i = 1; i <= n; i++) {
-    const ts = new Date(Date.UTC(2026, 8, 23, 9, 2, i)).toISOString();
-    out += `${ts} INFO [Http] GET /api/events/${i} 200 - request handled\n`;
-  }
-  return out;
-}
 
 async function collect(stream: Readable): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -206,9 +197,9 @@ function describeOverlap() {
   it('leaves out an older generation that repeats the start of a newer one (overlapping rotation)', async () => {
     const write = (name: string, body: Buffer | string) =>
       fs.writeFileSync(path.join(ctx.tmpDir, name), body);
-    const older = logLines(100); // a byte-prefix of the newer generation
+    const older = logLines(1, 100); // a byte-prefix of the newer generation
     write('api.log', 'gen-0 live line\n');
-    write('api.log.3.gz', gzipSync(logLines(200)));
+    write('api.log.3.gz', gzipSync(logLines(1, 200)));
     write('api.log.4.gz', gzipSync(older));
 
     const tar = gunzipSync(
