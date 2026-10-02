@@ -52,7 +52,7 @@ function useBannerCollapse(event: EventResponseDto | undefined) {
     useEffect(() => {
         const el = bannerRef.current;
         if (!el) return;
-        const observer = new IntersectionObserver(([entry]) => setIsBannerCollapsed(!entry.isIntersecting), { threshold: 0, rootMargin: '-64px 0px 0px 0px' });
+        const observer = new IntersectionObserver(([entry]) => { if (entry) setIsBannerCollapsed(!entry.isIntersecting); }, { threshold: 0, rootMargin: '-64px 0px 0px 0px' });
         observer.observe(el);
         return () => observer.disconnect();
     }, [event]);

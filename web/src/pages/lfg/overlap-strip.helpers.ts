@@ -87,8 +87,9 @@ export function buildDayStrip(
     for (const window of windows) {
         const status = statusFor(window, memberCount);
         for (const index of touchedWeekdays(window)) {
-            if (STATUS_RANK[status] > STATUS_RANK[strip[index].status]) {
-                strip[index].status = status;
+            const day = strip[index];
+            if (day && STATUS_RANK[status] > STATUS_RANK[day.status]) {
+                day.status = status;
             }
         }
     }

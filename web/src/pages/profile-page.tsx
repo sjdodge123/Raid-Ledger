@@ -32,7 +32,8 @@ function useCharacterModal(games: { id: number }[]): {
 
     const handleAdd = (): void => {
         setEditingCharacter(null);
-        if (games.length === 1) setSelectedGameId(games[0].id);
+        const [onlyGame] = games;
+        if (games.length === 1 && onlyGame) setSelectedGameId(onlyGame.id);
         setShowAddModal(true);
     };
 

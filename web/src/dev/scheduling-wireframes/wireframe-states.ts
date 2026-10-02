@@ -193,12 +193,12 @@ export function statusLine(p: WfPoll): string {
  */
 export function leader(p: WfPoll): WfSlot | null {
   if (p.slots.length === 0) return null;
-  return [...p.slots].sort((a, b) => b.votes - a.votes || a.id - b.id)[0];
+  return [...p.slots].sort((a, b) => b.votes - a.votes || a.id - b.id)[0] ?? null;
 }
 
 /** True when the top two slots are level on votes. */
 export function isTied(p: WfPoll): boolean {
-  if (p.slots.length < 2) return false;
-  const sorted = [...p.slots].sort((a, b) => b.votes - a.votes);
-  return sorted[0].votes === sorted[1].votes;
+  const [first, second] = [...p.slots].sort((a, b) => b.votes - a.votes);
+  if (!first || !second) return false;
+  return first.votes === second.votes;
 }

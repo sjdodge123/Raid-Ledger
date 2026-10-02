@@ -15,7 +15,7 @@ export type { ThemeModePreference } from './theme-helpers';
 import type { ThemeModePreference } from './theme-helpers';
 import type { ThemeDefinition } from './theme-registry';
 import {
-    MODE_CYCLE,
+    nextThemeMode,
     resolveTheme,
     applyTheme,
     persistToLocalStorage,
@@ -123,7 +123,7 @@ function buildThemeActions(get: () => ThemeState, set: (partial: Partial<ThemeSt
         setLightTheme: (id: string) => { apply(get().themeMode, id, get().darkTheme); syncToServer('lightTheme', id); },
         setDarkTheme: (id: string) => { apply(get().themeMode, get().lightTheme, id); syncToServer('darkTheme', id); },
         setTheme: (id: string) => { resolveLegacyTheme(id, get(), apply); },
-        cycleTheme: () => { const s = get(); const next = MODE_CYCLE[(MODE_CYCLE.indexOf(s.themeMode) + 1) % MODE_CYCLE.length]; apply(next, s.lightTheme, s.darkTheme); syncToServer('themeMode', next); },
+        cycleTheme: () => { const s = get(); const next = nextThemeMode(s.themeMode); apply(next, s.lightTheme, s.darkTheme); syncToServer('themeMode', next); },
     };
 }
 

@@ -97,7 +97,7 @@ function VetoTile({ g, isVetoed }: { g: typeof GAMES[number]; isVetoed: boolean 
 
 function VetoView({ persona }: { persona: Persona }): JSX.Element {
   const games = GAMES.slice(0, 4);
-  const vetoed = persona === 'invitee-acted' ? games[2].id : null;
+  const vetoed = persona === 'invitee-acted' ? games[2]?.id ?? null : null;
   return (
     <section>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

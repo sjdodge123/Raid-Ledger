@@ -31,8 +31,9 @@ function decodeBase64Url(segment: string): string | null {
 /** Parse the `exp` (seconds since epoch) out of a JWT, or null if undecodable. */
 function readExp(token: string): number | null {
   const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const json = decodeBase64Url(parts[1]);
+  const body = parts[1];
+  if (parts.length !== 3 || body === undefined) return null;
+  const json = decodeBase64Url(body);
   if (json === null) return null;
   try {
     const payload = JSON.parse(json) as JwtPayload;
