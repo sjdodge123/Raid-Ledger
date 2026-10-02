@@ -103,7 +103,6 @@ function SuggestionRow({
     invite: InviteToGroup;
 }): JSX.Element {
     const name = suggestion.displayName ?? suggestion.username;
-    const firstReason = suggestion.reasons[0];
     return (
         <li className="flex items-center gap-3 rounded-lg bg-overlay px-3 py-2">
             <AvatarWithFallback
@@ -119,7 +118,7 @@ function SuggestionRow({
                     <ReasonChips reasons={suggestion.reasons} />
                 </div>
                 <p className="text-xs text-muted">
-                    {firstReason && REASON_SUBTITLE[firstReason]}
+                    {suggestion.reasons[0] && REASON_SUBTITLE[suggestion.reasons[0]]}
                 </p>
             </div>
             <InviteButton suggestion={suggestion} invite={invite} />
