@@ -40,15 +40,14 @@ function PageLikeHarness({ onUpdate, trackPending = false }: { onUpdate: UpdateF
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const handleUpdate: UpdateFn = (id, dto) => {
-    if (!trackPending) return onUpdate(id, dto).catch((err: Error) => { setUpdateError(err.message); throw err; });
-    setPending(true);
+    if (trackPending) setPending(true);
     return onUpdate(id, dto)
       .catch((err: Error) => { setUpdateError(err.message); throw err; })
       .finally(() => setPending(false));
   };
   return (
     <ChannelBindingList bindings={[lobby('a', 'lobby-a'), lobby('b', 'lobby-b')]}
-      onUpdate={handleUpdate} onDelete={vi.fn()} isUpdating={trackPending ? pending : false} isDeleting={false}
+      onUpdate={handleUpdate} onDelete={vi.fn()} isUpdating={pending} isDeleting={false}
       updateError={updateError} onEditingChange={() => setUpdateError(null)} />
   );
 }
