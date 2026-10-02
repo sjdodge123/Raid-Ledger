@@ -8,6 +8,7 @@ const createMockPlayer = (overrides: Partial<UserPreviewDto> = {}): UserPreviewD
     id: 42,
     username: 'TestPlayer',
     avatar: null,
+    steamLinked: false,
     ...overrides,
 });
 
