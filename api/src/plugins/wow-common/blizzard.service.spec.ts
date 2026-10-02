@@ -1,4 +1,5 @@
 import { BadGatewayException } from '@nestjs/common';
+import { checkOrSetAlreadyCaught } from '@sentry/core';
 import { BlizzardService } from './blizzard.service';
 import * as instH from './blizzard-instance.helpers';
 import {
@@ -54,7 +55,7 @@ function useRealmClock() {
 describe('BlizzardService.fetchRealmList — namespace refusal cache', () => {
   useRealmClock();
 
-  it('answers a repeat 403 locally, with a fresh exception each time', async () => {
+  it('answers a repeat 403 locally by rethrowing the same exception', async () => {
     const { service, getAccessToken } = setup();
     fetchRealms.mockImplementation(() => Promise.reject(refused()));
 
@@ -68,9 +69,21 @@ describe('BlizzardService.fetchRealmList — namespace refusal cache', () => {
     expect(first).toBeInstanceOf(BadGatewayException);
     expect(second).toBeInstanceOf(BadGatewayException);
     expect(isNamespaceRefusal(second)).toBe(true);
-    expect(second).not.toBe(first);
+    expect(second).toBe(first);
     expect(fetchRealms).toHaveBeenCalledTimes(1);
     expect(getAccessToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('a repeat 403 is one Sentry event: the SDK skips the rethrown instance', async () => {
+    const { service } = setup();
+    fetchRealms.mockImplementation(() => Promise.reject(refused()));
+
+    const first = await rejectionOf(service.fetchRealmList('us', 'anniv'));
+    // The check Sentry's client.captureException runs before sending an event.
+    expect(checkOrSetAlreadyCaught(first)).toBe(false);
+    const second = await rejectionOf(service.fetchRealmList('us', 'anniv'));
+
+    expect(checkOrSetAlreadyCaught(second)).toBe(true);
   });
 
   it('asks Blizzard again once the 10-minute refusal expires', async () => {
@@ -141,7 +154,7 @@ describe('BlizzardService.fetchRealmList — stale and recovery paths', () => {
     );
 
     const { realmRefusals } = service as unknown as {
-      realmRefusals: Map<string, number>;
+      realmRefusals: Map<string, unknown>;
     };
     expect([...realmRefusals.keys()]).toEqual([]);
   });
