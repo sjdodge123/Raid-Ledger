@@ -646,10 +646,15 @@ run_typecheck() {
   # web/tsconfig.json is a solution-style config (`files: []` + references):
   # `tsc -p` on it compiles an empty file list and exits 0 without following
   # the references, so the web half of this step checked nothing. Point at the
-  # two leaf projects instead (app source, then vite.config.ts).
+  # two leaf projects instead (app source, then vite.config.ts), then at
+  # tsconfig.test.json for the vitest specs and src/test/** that
+  # tsconfig.app.json excludes: vitest transpiles without typechecking, so
+  # without it a spec type error or a drifted fixture failed no gate.
+  # Mirrors the CI lint job's "Typecheck (web specs)" step.
   if [ "$effective_scope" != "api" ]; then
     npx tsc --noEmit -p web/tsconfig.app.json || return $?
     npx tsc --noEmit -p web/tsconfig.node.json || return $?
+    npx tsc --noEmit -p web/tsconfig.test.json || return $?
   fi
   # Playwright transpiles the smoke specs without typechecking them, so a type
   # error in scripts/smoke/**, scripts/*.ts or playwright.config.ts used to

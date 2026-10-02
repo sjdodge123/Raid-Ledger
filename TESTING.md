@@ -21,6 +21,7 @@ npm run test:integration -w api        # Uses Testcontainers (auto-manages Postg
 # Frontend
 npm run test -w web                    # Run all
 cd web && npx vitest run --coverage    # With coverage enforcement
+npx tsc --noEmit -p web/tsconfig.test.json  # Typecheck the specs (vitest does not)
 
 # Contract schemas (Zod)
 npm test -w @raid-ledger/contract      # Run all
@@ -206,6 +207,8 @@ import { renderWithProviders } from '../../test/render-helpers';
 
 renderWithProviders(<MyPage />);
 ```
+
+When a `vi.mocked(useX).mockReturnValue(...)` needs only some of the hook's fields, use `partialResult<ReturnType<typeof useX>>({ ... })` from `web/src/test/partial-result.ts` instead of an inline `as` cast, so the fields you do give are still typechecked. Specs are typechecked by `web/tsconfig.test.json` in `validate-ci.sh` and the CI lint job.
 
 ## Integration Tests (Backend)
 
