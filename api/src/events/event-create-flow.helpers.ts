@@ -19,6 +19,7 @@ import {
 } from './event-create.helpers';
 import { buildLifecyclePayload } from './event-response.helpers';
 import { warnWithStack } from '../common/error-format.helpers';
+import { defined } from '../common/defined.helpers';
 
 interface CreateFlowDeps {
   db: PostgresJsDatabase<typeof schema>;
@@ -87,15 +88,18 @@ export async function createRecurringFlow(
     `Recurring event: ${events.length} instances by user ${creatorId}`,
   );
   const allResponses = await deps.findByIds(events.map((e) => e.id));
+  const primaryId = defined(events[0], 'first recurring event row').id;
   // ROK-1371: only the first/primary instance is the follow-up target the
   // attendees were DM'd about (its signup button points at events[0].id).
   for (const r of allResponses) {
     const followup =
-      r.id === events[0].id ? (dto.followupForEventId ?? null) : null;
+      r.id === primaryId ? (dto.followupForEventId ?? null) : null;
     emitLifecycle(deps.eventEmitter, APP_EVENT_EVENTS.CREATED, r, followup);
   }
-  const first =
-    allResponses.find((r) => r.id === events[0].id) ?? allResponses[0];
+  const first = defined(
+    allResponses.find((r) => r.id === primaryId) ?? allResponses[0],
+    'primary recurring event response',
+  );
   return { ...first, allEventIds: events.map((e) => e.id) };
 }
 

@@ -17,8 +17,8 @@ const INVITE_CODE_LENGTH = 8;
 export function generateInviteCode(): string {
   const bytes = randomBytes(INVITE_CODE_LENGTH);
   let code = '';
-  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
-    code += INVITE_CODE_CHARS[bytes[i] % INVITE_CODE_CHARS.length];
+  for (const byte of bytes) {
+    code += INVITE_CODE_CHARS[byte % INVITE_CODE_CHARS.length];
   }
   return code;
 }

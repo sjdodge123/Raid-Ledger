@@ -27,6 +27,7 @@ import {
   demoteExistingMain,
 } from './characters-mapping.helpers';
 import { checkDuplicateClaim } from './characters-import.helpers';
+import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -72,10 +73,11 @@ export async function executeCreateTx(
     );
     if (shouldBeMain && charCount > 0)
       await demoteExistingMain(tx, userId, dto.gameId);
-    const [character] = await tx
+    const [inserted] = await tx
       .insert(schema.characters)
       .values(buildCreateValues(userId, dto, shouldBeMain))
       .returning();
+    const character = defined(inserted, 'created character row');
     logger.log(
       `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
     );
@@ -100,8 +102,8 @@ export async function autoPromoteAfterDelete(
       ),
     )
     .orderBy(asc(schema.characters.displayOrder));
-  if (remaining.length > 0 && !remaining.some((c) => c.isMain)) {
-    const promote = remaining[0];
+  const [promote] = remaining;
+  if (promote !== undefined && !remaining.some((c) => c.isMain)) {
     await db
       .update(schema.characters)
       .set({ isMain: true, updatedAt: new Date() })
@@ -165,7 +167,7 @@ export async function applyRefreshUpdate(
   logger.log(
     `User ${userId} refreshed character ${characterId} from external source`,
   );
-  return mapCharacterToDto(updated);
+  return mapCharacterToDto(defined(updated, 'refreshed character row'));
 }
 
 /** Find a single character by ID with ownership check. */
