@@ -235,8 +235,11 @@ describe('LFG-born roster join converts the joiner (integration)', () => {
 
   it('re-running the handler for an already-converted joiner is a safe no-op (AC4)', async () => {
     // MUTATION: swap the listener's `convertHolderIntent(...)` for
-    // `convertGroup(...)` and this second pass sweeps C's still-active week
-    // hand into E, so the snapshot below no longer matches.
+    // `convertGroup(...)` and C's week hand moves into E (the closing
+    // `expectStillActive`). No one-line listener revert makes the SECOND pass
+    // itself move a row today (an unscoped re-convert writes identical
+    // values), so the whole-set snapshot is the guard against a future re-join
+    // path that re-points, revives or re-inserts a hand.
     const s = await startLfgBornSession('rc_again');
     await joinRoster(s.eventId, s.b);
     const before = await intentRows(s.gameId);
