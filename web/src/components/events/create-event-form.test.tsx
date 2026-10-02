@@ -6,6 +6,7 @@ import { CreateEventForm } from './create-event-form';
 import { useEventTypes } from '../../hooks/use-game-registry';
 import { useEventTemplates, useCreateTemplate, useDeleteTemplate } from '../../hooks/use-event-templates';
 import type { FormState } from './create-event-form.types';
+import { defined } from '../../test/defined';
 
 // ─── jsdom does not implement scrollIntoView — suppress unhandled errors ─────
 window.HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -433,7 +434,7 @@ describe('buildSubmitDto — gameId unset semantics (ROK-1350)', () => {
 
 // ─── Post-event follow-up prefill ─────────────────────────────────────────────
 describe('CreateEventForm copyFromEvent prefill', () => {
-    const endedEvent = {
+    const endedEvent = defined({
         id: 501,
         title: 'Thursday Deep Rock',
         description: 'Bring your own beer',
@@ -444,7 +445,7 @@ describe('CreateEventForm copyFromEvent prefill', () => {
         signupCount: 4,
         slotConfig: { type: 'generic', player: 6 },
         maxAttendees: 6,
-    } as unknown as NonNullable<Parameters<typeof CreateEventForm>[0]>['copyFromEvent'];
+    } as unknown as NonNullable<Parameters<typeof CreateEventForm>[0]>['copyFromEvent'], 'endedEvent');
 
     it('renders the source event title in the form', () => {
         renderForm({ copyFromEvent: endedEvent });

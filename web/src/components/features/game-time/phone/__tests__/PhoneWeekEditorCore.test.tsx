@@ -275,7 +275,7 @@ describe('PhoneWeekEditorCore — group mode slot marks', () => {
         render(
             <PhoneWeekEditorCore
                 slots={[]} hours={HOURS} initialDay={6} dims={DIMS}
-                group={{ cells: CELLS, slotMarks }}
+                group={{ cells: CELLS, ...(slotMarks === undefined ? {} : { slotMarks }) }}
             />,
         );
     it('draws the poll slots on the day and counts them in the strip', () => {
