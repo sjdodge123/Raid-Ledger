@@ -39,6 +39,9 @@ async function insertTestJob(
   return job.id;
 }
 
+/** A schedule frequent enough that completed runs defer (ROK-1380). */
+const FIVE_MINUTE = { cronExpression: '*/5 * * * *' };
+
 /** Read one cron job row by id. */
 async function readJob(testApp: TestApp, jobId: number) {
   const [job] = await testApp.db
@@ -78,7 +81,11 @@ function describeCronJob() {
 
   function describeExecuteWithTracking() {
     it('should record completed execution with timing', async () => {
-      const jobId = await insertTestJob(testApp, 'test:completed-job');
+      const jobId = await insertTestJob(
+        testApp,
+        'test:completed-job',
+        FIVE_MINUTE,
+      );
 
       const cronJobService = testApp.app.get(CronJobService);
 
@@ -220,7 +227,7 @@ function describeCronJob() {
         .limit(1);
 
       // last_run_at should not have been written directly to DB
-      // (it may be queued in pendingLastRunUpdates for liveness)
+      // (it may be queued by LastRunBuffer.queueLiveness for liveness)
       expect(job.lastRunAt).toBeNull();
     });
 
@@ -339,7 +346,11 @@ function describeCronJob() {
 
   function describeLastRunDeferral() {
     it('degraded run defers last_run_at until flush', async () => {
-      const jobId = await insertTestJob(testApp, 'test:degraded-deferred');
+      const jobId = await insertTestJob(
+        testApp,
+        'test:degraded-deferred',
+        FIVE_MINUTE,
+      );
       const cronJobService = testApp.app.get(CronJobService);
 
       await cronJobService.executeWithTracking('test:degraded-deferred', () =>
@@ -379,10 +390,53 @@ function describeCronJob() {
   }
   describe('last_run_at deferral (ROK-1380)', () => describeLastRunDeferral());
 
+  function describeLastRunScheduleAndOrder() {
+    it('hourly job writes a completed run immediately', async () => {
+      const jobId = await insertTestJob(testApp, 'test:hourly-immediate');
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking('test:hourly-immediate', () =>
+        Promise.resolve(),
+      );
+
+      const [execution] = await readExecutions(testApp, jobId);
+      expect(execution.status).toBe('completed');
+      // No flush: only schedules of 15 minutes or less defer.
+      const job = await readJob(testApp, jobId);
+      expect(job.lastRunAt?.getTime()).toBe(execution.finishedAt!.getTime());
+    });
+
+    it('flush keeps a newer failed run over an older deferred completed run', async () => {
+      const name = 'test:completed-then-failed';
+      const jobId = await insertTestJob(testApp, name, FIVE_MINUTE);
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking(name, () => Promise.resolve());
+      await cronJobService.executeWithTracking(name, () =>
+        Promise.reject(new Error('Later failure')),
+      );
+      const executions = await readExecutions(testApp, jobId);
+      const failed = executions.find((e) => e.status === 'failed')!;
+      const completed = executions.find((e) => e.status === 'completed')!;
+      expect(failed.finishedAt!.getTime()).toBeGreaterThan(
+        completed.finishedAt!.getTime(),
+      );
+
+      await cronJobService.flushLastRunUpdates();
+
+      // The queued completed run must not roll the failure's write back.
+      const job = await readJob(testApp, jobId);
+      expect(job.lastRunAt?.getTime()).toBe(failed.finishedAt!.getTime());
+    });
+  }
+  describe('last_run_at schedule gate and ordering (ROK-1380)', () =>
+    describeLastRunScheduleAndOrder());
+
   function describeTriggerLastRun() {
     it('manual trigger of a core job writes last_run_at immediately', async () => {
       const name = 'test:trigger-immediate';
-      const jobId = await insertTestJob(testApp, name);
+      // High-frequency, so only the trigger's mark forces the write.
+      const jobId = await insertTestJob(testApp, name, FIVE_MINUTE);
       const cronJobService = testApp.app.get(CronJobService);
       const scheduler = testApp.app.get(SchedulerRegistry, { strict: false });
       let tickFinished = false;
