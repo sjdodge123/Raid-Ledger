@@ -15,6 +15,7 @@ import {
 import { checkAdultContent } from './steam-content-filter.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
+import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('SteamItadDiscovery');
 
@@ -340,7 +341,7 @@ export async function discoverGameViaItad(
 
   const [result] = await upsertGame(deps.db, { ...row, hidden });
 
-  return { gameId: result.id, source, hidden };
+  return { gameId: defined(result, 'upserted game row').id, source, hidden };
 }
 
 /** Check if a game slug is already banned. */

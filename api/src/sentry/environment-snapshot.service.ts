@@ -204,8 +204,10 @@ export class EnvironmentSnapshotService implements OnModuleInit {
     return {
       demoMode: demoMode === 'true',
       onboardingCompleted: onboarding === 'true',
-      defaultTimezone: tz,
-      communityName: name,
+      // settingsService.get never yields undefined (it maps a miss to null)
+      // and Promise.all returns one value per key, so `?? null` is a no-op.
+      defaultTimezone: tz ?? null,
+      communityName: name ?? null,
       relayEnabled: relay === 'true',
       igdbFilterAdult: igdb === 'true',
       discordBotEnabled: botEnabled === 'true',

@@ -16,6 +16,7 @@ import {
   assertNotBanned,
   assertKickCooldownOrClear,
 } from './auth-status.helpers';
+import { defined } from '../common/defined.helpers';
 
 const SALT_ROUNDS = 12;
 
@@ -99,17 +100,19 @@ export class LocalAuthService {
     // Use transaction to ensure atomicity
     return await this.db.transaction(async (tx) => {
       // Create user record first (with a placeholder discordId for local-only users)
-      const [user] = await tx
+      const [userRow] = await tx
         .insert(users)
         .values({
           discordId: `local:${email}`, // Unique placeholder for local-only users
-          username: username || email.split('@')[0],
+          username:
+            username || defined(email.split('@')[0], 'email local part'),
           role: 'admin',
         })
         .returning();
+      const user = defined(userRow, 'inserted local admin user row');
 
       // Create local credential linked to user
-      const [localAdmin] = await tx
+      const [localAdminRow] = await tx
         .insert(localCredentials)
         .values({
           email: email.toLowerCase(),
@@ -117,6 +120,10 @@ export class LocalAuthService {
           userId: user.id,
         })
         .returning();
+      const localAdmin = defined(
+        localAdminRow,
+        'inserted local credential row',
+      );
 
       return { localAdmin, user };
     });

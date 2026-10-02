@@ -15,6 +15,7 @@ import {
   fetchGameActivity,
   fetchHeartedGames,
   findAdminUser,
+  countAllUsers,
 } from './users-query.helpers';
 import { deleteUserTransaction } from './users-delete.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
@@ -23,6 +24,7 @@ import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { reactivateUserById } from './users-reactivate.helpers';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
+import { defined } from '../common/defined.helpers';
 
 export const RECENT_MEMBER_DAYS = 30;
 export const RECENT_MEMBER_LIMIT = 10;
@@ -206,10 +208,7 @@ export class UsersService {
       Date.now() - this.userCountCachedAt < USER_COUNT_CACHE_TTL_MS
     )
       return this.cachedUserCount;
-    const result = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.users);
-    this.cachedUserCount = Number(result[0].count);
+    this.cachedUserCount = await countAllUsers(this.db);
     this.userCountCachedAt = Date.now();
     return this.cachedUserCount;
   }
@@ -275,7 +274,7 @@ export class UsersService {
       .select({ count: sql<number>`count(*)` })
       .from(schema.users)
       .where(conditions);
-    return Number(result.count) === 0;
+    return Number(defined(result, 'display name count row').count) === 0;
   }
 
   /** Set a user's display name (ROK-219). */
