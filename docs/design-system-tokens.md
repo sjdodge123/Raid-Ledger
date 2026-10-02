@@ -37,8 +37,8 @@ shared light block (`:114-124`) only; contrast on `#ffffff` is recomputed by
 `bg-X/N` on a token compiles to `color-mix(in oklab, var(--color-X) N%, transparent)`, so
 it is correct at any alpha in both families.
 
-**Raw hues.** You write ONE class. `:701-718` (text; `/60-/80` alphas `:722-728`, hovers
-`:731-736`), `:739-762` (fills; hovers `:765-774`), `:777-789` (borders) rewrite it under
+**Raw hues.** You write ONE class. `:702-721` (text; `/60-/80` alphas `:725-731`, hovers
+`:734-739`), `:742-770` (fills; hovers `:773-783`), `:786-801` (borders) rewrite it under
 `:is([data-scheme="light"], [data-scheme="quest-log"], [data-scheme="sky"],
 [data-scheme="dawn"], [data-scheme="holy"], [data-scheme="celestial"])`. Contrast figures
 are the ones `index.css` records beside each rule; "worst" is the lowest across all six light
@@ -46,31 +46,38 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 
 | You write | Dark paints | Light paints | Anchor |
 |---|---|---|---|
-| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#065f46` emerald-800, worst 5.27:1 (celestial tint) | `:709-710` |
-| `text-emerald-500` | `#10b981` | `#065f46` emerald-800 (`#047857` is 3.76:1 on the celestial tint) | `:711` |
-| `text-red-400` / `-300` | `#f87171` / `#fca5a5` | `#991b1b` red-800, worst 5.52:1 | `:701-702` |
-| `text-amber-400` / `-300` | `#fbbf24` / `#fcd34d` | `#92400e` amber-800 = warning, worst 5.0:1 | `:703-704` |
-| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#854d0e` yellow-800, worst 4.89:1 | `:705-706` |
-| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#166534` green-800, worst 4.97:1 | `:707-708` |
-| `text-purple-400` | `#c084fc` | `#6d28d9` violet-700, worst 4.73:1 | `:712` |
-| `text-indigo-400` / `-300` | `#818cf8` / `#a5b4fc` | `#4338ca` indigo-700, worst 5.25:1 | `:713-714` |
-| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:715-716` |
-| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:717-718` |
-| `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:739-762` |
-| `bg-amber-500/15` / `bg-amber-500/20` fill (role badge, DemoDataCard badge, LFG "now" chip) | the raw 15% / 20% hue | `amber-100` at 0.6 / 0.7 alpha | `:745-746` |
-| `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:770-771` |
+| `text-emerald-400` / `-300` | `#34d399` / `#6ee7b7` | `#065f46` emerald-800, worst 5.27:1 (celestial tint) | `:710-711` |
+| `text-emerald-500` | `#10b981` | `#065f46` emerald-800 (`#047857` is 3.76:1 on the celestial tint) | `:712` |
+| `text-red-400` / `-300` | `#f87171` / `#fca5a5` | `#991b1b` red-800, worst 5.52:1 | `:702-703` |
+| `text-amber-400` / `-300` | `#fbbf24` / `#fcd34d` | `#92400e` amber-800 = warning, worst 5.0:1 | `:704-705` |
+| `text-yellow-400` / `-500` | `#facc15` / `#eab308` | `#854d0e` yellow-800, worst 4.89:1 | `:706-707` |
+| `text-green-400` / `-500` | `#4ade80` / `#22c55e` | `#166534` green-800, worst 4.97:1 | `:708-709` |
+| `text-purple-400` | `#c084fc` | `#6d28d9` violet-700, worst 4.73:1 | `:713` |
+| `text-indigo-400` / `-300` | `#818cf8` / `#a5b4fc` | `#4338ca` indigo-700, worst 5.25:1 | `:714-715` |
+| `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:716-717` |
+| `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:720-721` |
+| `text-teal-400` | `#2dd4bf` | `#115e59` teal-800, worst 5.04:1 (celestial; teal-700 is 3.64) | `:718` |
+| `text-gray-400` | `#9ca3af` | `#374151` gray-700, worst 6.51:1 — inside a fixed `bg-gray-900` panel `:831` keeps `#9ca3af` (6.99:1 on `#111827`) | `:719` |
+| `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:742-766` |
+| `bg-indigo-500/15` / `bg-green-500/15` / `bg-teal-500/15` / `bg-purple-500/15` (cron category chips) | the raw 15% hue | `<hue>-100` at 0.6 alpha | `:767-770` |
+| `bg-amber-500/5` | the raw 5% hue | `amber-100` at 0.35 alpha (a wash — its border carries the edge) | `:748` |
+| `bg-amber-500/15` / `bg-amber-500/20` fill (role badge, DemoDataCard badge, LFG "now" chip) | the raw 15% / 20% hue | `amber-100` at 0.6 / 0.7 alpha | `:749-750` |
+| `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:778-779` |
+| `hover:bg-amber-500/10` | the raw 10% hue | `amber-300` at 0.5 — a ≥1.04 step over every light panel and surface (`amber-100`/`-200` are 1.01 on light, holy, quest-log) | `:780` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
-| `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:777-789` |
+| `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha (indigo / teal / purple `/30` at `:797-799`) | `:786-801` |
+| `bg-gray-500/15` / `border-gray-500/30` (the "Other" cron chip) | the raw hue | **same, by design** — a `gray-100` wash is a 1.01 step on light and holy; raw gray-500 at 15% keeps 1.17–1.20 | — |
 | `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:837-851`, design-system.md §6.10 |
 
 `web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
-`bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`
-and `hover:bg-amber-500/10` are its two listed known gaps. The same spec fails if a quest-log `!important`
+`bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule — there are no listed
+exemptions — and pins `hover:bg-amber-500/10` as a ≥1.03 step over every light panel and surface. The same spec fails if a quest-log `!important`
 border rule reaches an `input`, `select` or `textarea`, which would hide the `aria-invalid` danger border.
 
-Only the hues listed at `:739-762` get the tint treatment — `red`, `amber`, `emerald`,
-`green`, `yellow`, `indigo`, `cyan`. A `bg-blue-500/10` or `bg-purple-500/10` surface has
-**no** light-family mapping.
+Only the hues listed at `:742-770` get the tint treatment — `red`, `amber`, `emerald`,
+`green`, `yellow`, `indigo`, `cyan`, plus `/15` for `indigo`, `green`, `teal` and `purple`
+(pinned by `web/src/pages/cron-jobs/cron-utils.test.ts`). A `bg-blue-500/10` or
+`bg-purple-500/10` surface has **no** light-family mapping; gray fills and borders stay raw.
 
 **Text on an accent fill.** Solid accent buttons keep their hue in both families, so the
 label would go near-black on light (`--color-foreground` is `#0f172a` there). `:819-827`
@@ -88,7 +95,7 @@ forced-white rule still applies (`JourneyHero.tsx:173-175`).
 
 **Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
 on the theme surface, so the light family's contrast bumps are wrong there. Put
-`.badge-overlay` on the badge or its container and `:801-813` restores the DARK shades
+`.badge-overlay` on the badge or its container and `:803-824` restores the DARK shades
 under every light scheme. Consumer: `event-card.tsx` only — the badges that sit ON the cover art; a
 chip on the themed surface never carries it (ROK-1472). Guarded by `web/src/styles/badge-overlay.test.ts`
 and `web/src/styles/badge-overlay-art-only.guard.test.ts`.
@@ -102,7 +109,7 @@ and `web/src/styles/badge-overlay-art-only.guard.test.ts`.
   shadow — a shadow on `#020617` is invisible.
 - **Light:** the surface steps are ~4% apart (`#ffffff` → `#f1f5f9`), so the light family
   adds the shadow the dark family does not need: `.bg-panel` / `.bg-panel/50` /
-  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:826-832`), and `.glass-card` becomes
+  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:843-853`), and `.glass-card` becomes
   near-opaque — `color-mix(in srgb, var(--color-surface) 90%, transparent)` plus
   `0 1px 3px rgba(0,0,0,.08)`, rising to 95% / `.1` on hover (`:677-686`).
 - You get this by using `bg-panel` / `.glass-card`. A hand-rolled `shadow-lg` (20 uses in

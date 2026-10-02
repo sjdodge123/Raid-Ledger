@@ -119,7 +119,7 @@ either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
 **Success, warning and danger are tokens** (§2.1, ROK-1586). **Every other accent is still a raw Tailwind
-hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:681`, plus
+hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:690`, plus
 `.badge-overlay` for badges over imagery). As of ROK-1586 only the journey hero, the week strip and the
 week-cell marks use the tokens (FeedbackDialog's inline `var(--color-danger, #ef4444)` fallback is gone —
 its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the app is unmigrated (see
@@ -180,8 +180,9 @@ text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a 
 `bg-cyan-600` / `bg-cyan-500` (white is 3.62 / 2.37:1 on them), whose `text-foreground` label is forced to `#0f172a` (4.93 / 7.55:1; dawn's own
 foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
-that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
-the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity
+that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple, indigo and teal repaint one step past
+the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`, teal-800 `#115e59`);
+`text-gray-400` paints gray-700 `#374151`, except inside a fixed `bg-gray-900` panel where `:826-831` keeps gray-400; the opacity
 variants carry the AA alpha floor (red `.9`, amber `.95`). `web/src/styles/raw-hue-light.guard.test.ts` parses each
 light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Still prefer
 `text-success` / `text-warning` / `text-danger` for new semantic text.
@@ -222,10 +223,10 @@ is no `font-light`.
   (192) for chips, pills, avatars and count badges. `rounded-xl` (61) for hero/large surfaces.
   `rounded-md` (57) for small inputs. Avoid `rounded-2xl` (1 use).
 - **Elevation** is border + tint, not shadow. `.glass-card` (`index.css:610`) is the one blurred surface;
-  `.glow-emerald` / `.glow-indigo` (`index.css:778,786`; vars at `:438-439`) glow a primary action. Themes
+  `.glow-emerald` / `.glow-indigo` (`index.css:874,882`; vars at `:438-439`) glow a primary action. Themes
   restyle these — never reimplement them inline.
   - **Light / Dark:** dark separates with border + surface step; light adds the shadow it needs
-    (`:753-757`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
+    (`:843-853`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
     to neither. Detail: `design-system-tokens.md` §2.
 - **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG). The form
   primitives build it in — `form-classes.ts` (fields stay 44px below `lg`), `slider.tsx` (an `h-11` hit
@@ -456,8 +457,8 @@ button" and tests query that name. It is neither the toggle chip above (it has n
 `components/ui/` instead of copying the class string. Rendered: `/dev/design-system` → *Primitives* →
 "Removable chip".
 
-**Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:677`) and border
-(`:713`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
+**Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:747`) and border
+(`:791`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
 `text-amber-400` on a new ON label until that is fixed. The removable chip is tokens only, so it flips with `success` (`#10b981` →
 `#047857`); check both families in the gallery's side-by-side view.
 
@@ -554,7 +555,7 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
 job · 4 different shapes") as the thing Cycle 4 removes.
 
 **Light / Dark** — the `-500/10` + `-500/30` pair is remapped for light, but only for `red`, `amber`,
-`emerald`, `green`, `yellow`, `indigo`, `cyan` (`:713-735`) — a `blue` or `purple` banner gets none, which
+`emerald`, `green`, `yellow`, `indigo`, `cyan` (fills `:742-770`, borders `:786-801`) — a `blue` banner gets none and a `purple` one only its `/30` border, which
 is why instruction callouts use the neutral `bg-overlay/30 border-edge` panel rather than a blue or purple
 tint. The token banners and the neutral panel flip with the theme. Keep body copy in `text-foreground` /
 `text-secondary`.
@@ -980,7 +981,7 @@ them; do not fix them as scope creep.
    `--color-success` / `--color-warning` / `--color-danger` are declared in `@theme` and the shared light
    block (§2.1), guarded by `web/src/styles/semantic-tokens.guard.test.ts`, and used by the journey hero,
    week strip and week-cell marks. **What remains:** every other call site still spells the meaning as a raw
-   `emerald` / `amber` / `red` hue and still leans on the per-hue overrides (`index.css:681-759`) — the
+   `emerald` / `amber` / `red` hue and still leans on the per-hue overrides (`index.css:702-801`) — the
    repo-wide sweep is a report-only backlog item (`TECH-DEBT-BACKLOG.md`, 2026-09-22), not a story. The
    §6.3 `--color-accent` gap is resolved (ROK-1645).
 
@@ -998,7 +999,7 @@ them; do not fix them as scope creep.
 
 9. ~~**Two accent shades have no light-family override**~~ — **fixed (ROK-1586):** `text-amber-300`,
    `text-red-300`, `text-indigo-300` and `text-blue-300`/`-400` are now repainted beside the others at
-   `:688-705`, and every repaint is measured on the surface, panel and its own `/10` tint by
+   `:702-721`, and every repaint is measured on the surface, panel and its own `/10` tint by
    `raw-hue-light.guard.test.ts`.
 
 10. **Solid accent fills keep their hue in both families; the primary fill steps darker on light.**
