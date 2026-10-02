@@ -641,7 +641,14 @@ run_typecheck() {
   # code of the LAST command only. With this missing, api/ TS2741 errors
   # printed to stderr but the step's outer `$?` capture (run_step:195) saw
   # rc=0 from the web/ check and stamped "TypeScript (all): PASS".
-  if [ "$effective_scope" != "web" ]; then npx tsc --noEmit -p api/tsconfig.json || return $?; fi
+  if [ "$effective_scope" != "web" ]; then
+    npx tsc --noEmit -p api/tsconfig.json || return $?
+    # ROK-1161 phase 8 ratchet: api/tsconfig.json keeps noUncheckedIndexedAccess
+    # OFF for specs + test infra until the flip; this typechecks the spec dirs
+    # already clean with it ON (exclude = dirs still to convert). Mirrors the
+    # CI lint job's "Typecheck (api specs, noUncheckedIndexedAccess ratchet)".
+    npx tsc --noEmit -p api/tsconfig.spec-nuia.json || return $?
+  fi
   # web/tsconfig.json is a solution-style config (`files: []` + references):
   # `tsc -p` on it compiles an empty file list and exits 0 without following
   # the references, so the web half of this step checked nothing. Point at the
