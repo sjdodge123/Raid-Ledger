@@ -269,18 +269,16 @@ const rosterReassignmentNotification: SmokeTest = {
  * carry the role, the `pending` status and the invite code that
  * `buildPugInviteEmbed` renders.
  *
- * NOT asserted here, and deliberately so: the DM embed's own chrome (amber
- * `needs_you`, the `◌ FILL NEEDED · starts in …` author line, ≤2 personalized
- * fields, the View Event button with no masked link in the description). The
- * companion bot cannot observe it — `sendEmbedDM` posts straight to Discord
- * (`discord-bot-client.service.ts:130`), a PUG invite writes no `notifications`
- * row, and Discord refuses bot-to-bot DMs (50007), which is why this whole file
- * asserts on API state rather than on DM content. Those four properties are
- * pinned at the unit tier instead (`api/src/discord-bot/services/
- * pug-invite.helpers.spec.ts` — amber + author line + no masked link, and the
- * `MAX_PERSONALIZED_FIELDS` cap). Making them assertable from smoke needs a
- * test-only render endpoint returning `buildPugInviteEmbed(...).toJSON()`;
- * that is api-side work, not a change to this file.
+ * The DM embed's own chrome is NOT asserted here: the companion bot cannot
+ * observe a sent invite DM (`sendEmbedDM` posts straight to Discord, a PUG
+ * invite writes no `notifications` row, and Discord refuses bot-to-bot DMs,
+ * 50007), so this file still asserts only the slot's API state. That chrome —
+ * amber `needs_you`, the `◌ FILL NEEDED · starts in …` author line, ≤2
+ * personalized fields, and the View Event button with no masked link in the
+ * description — is asserted at smoke tier by `render-pug-invite-embed` in
+ * `dm-embed-render.test.ts`, through `POST /admin/test/render-pug-invite-embed`,
+ * and at unit tier in `api/src/discord-bot/services/pug-invite.helpers.spec.ts`
+ * plus that render seam's controller spec.
  */
 const pugInviteNotification: SmokeTest = {
   name: 'PUG invite creates a fill-request slot for the invited user',
