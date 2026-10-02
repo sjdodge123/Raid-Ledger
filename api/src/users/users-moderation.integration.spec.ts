@@ -26,7 +26,7 @@ import {
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
 import { deleteUserTransaction, WIPE_BY_COLUMN } from './users-delete.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -321,7 +321,8 @@ async function seedFullWipeManifest(
     totalSeconds: 100,
   });
 
-  const [lo, hi] = [userId, otherId].sort((a, b) => a - b);
+  const lo = Math.min(userId, otherId);
+  const hi = Math.max(userId, otherId);
   await testApp.db.insert(schema.playerCoPlay).values({
     userIdA: lo,
     userIdB: hi,
@@ -448,7 +449,7 @@ describe('ban with wipeData — true data wipe (§9.6, §9.10 #2)', () => {
       ])
       .returning();
     expect(seeded).toHaveLength(3);
-    const unrelatedId = seeded[2].id;
+    const unrelatedId = at(seeded, 2).id;
 
     await testApp.request
       .post(`/users/${userId}/ban`)

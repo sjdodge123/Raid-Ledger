@@ -10,6 +10,7 @@
  * - Large playtime value does not overflow (large integer)
  */
 import { fetchHeartedGames, findAllUsers } from './users-query.helpers';
+import { at } from '../common/testing/narrow';
 
 // ─── Shared mock builder ──────────────────────────────────────────────────────
 
@@ -102,7 +103,7 @@ describe('fetchHeartedGames — playtimeSeconds edge cases (ROK-805)', () => {
 
     const result = await fetchHeartedGames(db as never, 1, 1, 10);
 
-    expect(result.data[0].playtimeSeconds).toBeNull();
+    expect(at(result.data, 0).playtimeSeconds).toBeNull();
   });
 
   it('returns all expected fields in each data row', async () => {
@@ -121,7 +122,7 @@ describe('fetchHeartedGames — playtimeSeconds edge cases (ROK-805)', () => {
     );
 
     const result = await fetchHeartedGames(db as never, 1, 1, 10);
-    const row = result.data[0];
+    const row = at(result.data, 0);
 
     expect(row).toMatchObject({
       id: expect.any(Number),

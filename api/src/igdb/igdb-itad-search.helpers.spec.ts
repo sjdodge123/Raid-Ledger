@@ -9,6 +9,7 @@ import {
   type ItadSearchDeps,
 } from './igdb-itad-search.helpers';
 import type { ItadSearchGame } from './igdb-itad-merge.helpers';
+import { at } from '../common/testing/narrow';
 
 function makeMockDeps(overrides: Partial<ItadSearchDeps> = {}): ItadSearchDeps {
   return {
@@ -125,7 +126,7 @@ describe('executeItadSearch', () => {
     expect(result.games[0]?.itadBoxartUrl).toBe(
       'https://itad.example.com/a.jpg',
     );
-    expect(result.games[0].igdbId).toBeNull();
+    expect(at(result.games, 0).igdbId).toBeNull();
     expect(result.source).toBe('itad');
   });
 

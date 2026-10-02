@@ -37,7 +37,7 @@ import type { ItadSearchDeps } from '../igdb/igdb-itad-search.helpers';
 import type { ItadSearchGame } from '../igdb/igdb-itad-merge.helpers';
 import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 import type { GameDetailDto } from '@raid-ledger/contract';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 describe('Game Taste Event Triggers (ROK-1082)', () => {
   let testApp: TestApp;
@@ -334,7 +334,7 @@ describe('Game Taste Event Triggers (ROK-1082)', () => {
       .where(eq(schema.games.slug, 'itad-first-upsert-test'))
       .limit(1);
     expect(row).toBeDefined();
-    expect(received).toEqual([row.id]);
+    expect(received).toEqual([defined(row, 'upserted game row').id]);
   });
 
   // ─── AC: refreshExistingGames fires onGameChanged per upserted row ───

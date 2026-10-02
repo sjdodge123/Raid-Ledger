@@ -14,7 +14,7 @@
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 const COMMUNITY_PLAYING_SLUG = 'community-has-been-playing';
 
@@ -200,7 +200,7 @@ describe('Community Has Been Playing discover row (ROK-565, integration)', () =>
 
     const rows = await fetchDiscoverRows(testApp);
     expect(rows.length).toBeGreaterThan(0);
-    expect(rows[0].slug).toBe(COMMUNITY_PLAYING_SLUG);
+    expect(rows[0]?.slug).toBe(COMMUNITY_PLAYING_SLUG);
     expect(rows[0]?.category).toBe('Your Community Has Been Playing');
   });
 
@@ -448,7 +448,8 @@ describe('Community Has Been Playing discover row (ROK-565, integration)', () =>
     expect(row!.metadata![String(longGame)]?.playerCount).toBe(1);
     expect(row!.metadata![String(shortGame)]?.playerCount).toBe(1);
     expect(row!.metadata![String(longGame)]?.totalSeconds).toBeGreaterThan(
-      row!.metadata![String(shortGame)].totalSeconds,
+      defined(row!.metadata![String(shortGame)], 'short game metadata')
+        .totalSeconds,
     );
   });
 

@@ -7,6 +7,7 @@ import { UsersService } from './users.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
+import { at } from '../common/testing/narrow';
 
 function describeUsersServiceGetUserActivity() {
   let service: UsersService;
@@ -231,7 +232,7 @@ function describeUsersServiceGetUserActivity() {
 
       const result = await service.getUserActivity(1, 'all', 1);
 
-      expect(result[0].coverUrl).toBeNull();
+      expect(at(result, 0).coverUrl).toBeNull();
     });
 
     it('should set isMostPlayed=true for only the first entry when there are many', async () => {

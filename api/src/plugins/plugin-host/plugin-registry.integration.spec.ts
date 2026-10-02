@@ -12,7 +12,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { PluginRegistryService } from './plugin-registry.service';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 describe('Plugin Registry (integration)', () => {
   let testApp: TestApp;
@@ -95,7 +95,7 @@ describe('Plugin Registry (integration)', () => {
         .from(schema.plugins)
         .where(eq(schema.plugins.slug, testPluginSlug));
 
-      if (pluginsBefore.length === 0 || !pluginsBefore[0].active) {
+      if (pluginsBefore.length === 0 || !at(pluginsBefore, 0).active) {
         return; // Cannot deactivate if not installed/active
       }
 

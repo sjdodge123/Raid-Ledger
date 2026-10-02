@@ -17,7 +17,7 @@ import {
   utcDateOffset,
   localDateOffset,
 } from './game-time.integration.spec-helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -156,7 +156,7 @@ function describeRok1427() {
     const dayIn = (n: number) => {
       const d = new Date(weekStart);
       d.setUTCDate(d.getUTCDate() + n);
-      return d.toISOString().split('T')[0];
+      return defined(d.toISOString().split('T')[0], 'ISO date part');
     };
     const pastId = await seedAbsence(
       userId,

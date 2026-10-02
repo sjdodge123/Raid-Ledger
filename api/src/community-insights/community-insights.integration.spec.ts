@@ -435,7 +435,9 @@ describe('Community Insights (ROK-1099)', () => {
           .select()
           .from(schema.communityInsightsSnapshots);
         expect(rows).toHaveLength(1);
-        const churnPayload = rows[0].churnPayload as { atRisk: unknown[] };
+        const churnPayload = nonEmpty(rows, 'snapshot row')[0].churnPayload as {
+          atRisk: unknown[];
+        };
         expect(churnPayload.atRisk).toEqual([]);
 
         const churnLogCall = errorSpy.mock.calls.find((call) =>

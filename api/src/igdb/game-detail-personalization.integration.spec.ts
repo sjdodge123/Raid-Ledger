@@ -16,7 +16,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 interface PersonalizedGameDetail {
   id: number;
@@ -79,7 +79,7 @@ function describeGameDetailPersonalization() {
         slug: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
       })
       .returning();
-    return game;
+    return defined(game, 'inserted game');
   }
 
   async function addInterest(

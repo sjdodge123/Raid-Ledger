@@ -12,6 +12,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
+import { defined } from '../common/testing/narrow';
 
 /** Insert a test game directly and return its ID. */
 async function insertTestGame(
@@ -31,7 +32,7 @@ async function insertTestGame(
       ...overrides,
     })
     .returning();
-  return game;
+  return defined(game, 'inserted game');
 }
 
 function describeGamesIGDB() {

@@ -5,7 +5,7 @@
 import type { TestApp } from '../common/testing/test-app';
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 /** Helper to create a member user with local credentials and return their token. */
 export async function createMemberAndLogin(
@@ -44,12 +44,12 @@ export async function createMemberAndLogin(
 export function utcDateOffset(days: number): string {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().split('T')[0];
+  return defined(d.toISOString().split('T')[0], 'ISO date part');
 }
 
 /** YYYY-MM-DD for `days` from "today" as seen at a given tz offset (minutes). */
 export function localDateOffset(tzOffset: number, days: number): string {
   const d = new Date(Date.now() - tzOffset * 60 * 1000);
   d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().split('T')[0];
+  return defined(d.toISOString().split('T')[0], 'ISO date part');
 }

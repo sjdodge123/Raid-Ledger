@@ -68,6 +68,6 @@ describe('buildCommunityPlayingMetadata', () => {
     const rows = [row(99, 1, 2_000_000_000)];
     const metadata = buildCommunityPlayingMetadata(rows, [99]);
     expect(metadata['99']?.totalSeconds).toBe(2_000_000_000);
-    expect(typeof metadata['99'].totalSeconds).toBe('number');
+    expect(typeof metadata['99']?.totalSeconds).toBe('number');
   });
 });

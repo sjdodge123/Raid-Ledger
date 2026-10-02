@@ -16,6 +16,7 @@ import {
   removeInterest,
   HEART_SOURCES,
 } from './igdb-interest.helpers';
+import { at } from '../common/testing/narrow';
 
 // ─── Shared mock builder ────────────────────────────────────────────────────
 
@@ -324,7 +325,7 @@ describe('getInterestedPlayers', () => {
     };
     const db = buildPlayersDb([player]);
     const result = await getInterestedPlayers(db as never, 42);
-    const keys = Object.keys(result[0]);
+    const keys = Object.keys(at(result, 0));
     expect(keys.sort()).toEqual(
       ['id', 'username', 'avatar', 'customAvatarUrl', 'discordId'].sort(),
     );

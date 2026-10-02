@@ -2,6 +2,7 @@ import {
   ChurnDetectionService,
   type ChurnInputRow,
 } from './churn-detection.service';
+import { at } from '../common/testing/narrow';
 
 describe('ChurnDetectionService', () => {
   const service = new ChurnDetectionService();
@@ -46,7 +47,7 @@ describe('ChurnDetectionService', () => {
     const res = service.findAtRiskPlayers([steady], settings);
     expect(res.atRisk).toHaveLength(0);
     expect(res.candidates).toHaveLength(1);
-    expect(res.candidates[0].dropPct).toBeCloseTo(0, 1);
+    expect(at(res.candidates, 0).dropPct).toBeCloseTo(0, 1);
   });
 
   it('returns candidates sorted by dropPct desc', () => {

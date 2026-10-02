@@ -22,6 +22,7 @@ import { enrichSyncedGamesWithItad } from './igdb-sync.helpers';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { GameDetailDto } from '@raid-ledger/contract';
 import type { IgdbApiGame } from './igdb.constants';
+import { at, defined } from '../common/testing/narrow';
 
 // ── helpers ──────────────────────────────────────────────────
 
@@ -48,7 +49,7 @@ async function insertGame(
       ...overrides,
     })
     .returning();
-  return game;
+  return defined(game, 'inserted game');
 }
 
 /** Read the current earlyAccess value for a game by id. */
@@ -58,7 +59,7 @@ async function fetchEarlyAccess(gameId: number): Promise<boolean> {
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
     .limit(1);
-  return rows[0].earlyAccess;
+  return at(rows, 0).earlyAccess;
 }
 
 /** Build a minimal IgdbApiGame for upsert testing. */

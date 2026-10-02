@@ -10,6 +10,7 @@
  * so automatic sync never clobbers manual entries with empty arrays.
  */
 import { fetchCharacterProfessions } from './blizzard-professions.helpers';
+import { at } from '../../common/testing/narrow';
 
 const RETAIL_PAYLOAD = {
   _links: {},
@@ -216,7 +217,9 @@ describe('fetchCharacterProfessions — graceful handling', () => {
     // The output type does not expose a `specializations` key on entries.
     expect(result!.primary[0]).not.toHaveProperty('specializations');
     // And known_recipes must NOT leak through onto tiers.
-    expect(result!.primary[0].tiers[0]).not.toHaveProperty('known_recipes');
+    expect(at(at(result!.primary, 0).tiers, 0)).not.toHaveProperty(
+      'known_recipes',
+    );
   });
 });
 
