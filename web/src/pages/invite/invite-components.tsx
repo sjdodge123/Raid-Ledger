@@ -24,7 +24,7 @@ export function StepIndicator({ current, total, labels }: { current: number; tot
                 const stepNum = i + 1;
                 return (
                     <div key={i} className="flex items-center gap-2">
-                        <StepDot stepNum={stepNum} isActive={stepNum === current} isCompleted={stepNum < current} label={labels[i]} />
+                        <StepDot stepNum={stepNum} isActive={stepNum === current} isCompleted={stepNum < current} label={labels[i] ?? ''} />
                         {i < total - 1 && <div className={`w-8 h-px mb-4 ${stepNum < current ? 'bg-emerald-600/50' : 'bg-edge'}`} />}
                     </div>
                 );

@@ -46,8 +46,8 @@ export function useWeekDates(weekStart?: string): { dayDates: string[] | null; n
 /** Parses a weekStart ISO string into "M/D" labels offset by the given number of days */
 function parseDayDates(weekStart: string | undefined, offsetDays: number): string[] | null {
     if (!weekStart) return null;
-    const dateStr = weekStart.split('T')[0];
-    const [y, m, d] = dateStr.split('-').map(Number);
+    const [dateStr = weekStart] = weekStart.split('T');
+    const [y = NaN, m = NaN, d = NaN] = dateStr.split('-').map(Number);
     if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
     const base = new Date(y, m - 1, d);
     base.setDate(base.getDate() + offsetDays);

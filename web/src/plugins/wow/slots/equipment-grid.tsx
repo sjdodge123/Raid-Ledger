@@ -79,6 +79,7 @@ function SlotSockets({ sockets }: { sockets: EquipmentItemDto['sockets'] }) {
 function SlotItemDetails({ item, qualityClass, gameVariant, isMobile }: {
     item: EquipmentItemDto; qualityClass: string; gameVariant: string | null; isMobile: boolean;
 }) {
+    const firstEnchant = item.enchantments?.[0];
     return (
         <div className="min-w-0 flex-1">
             <a href={getWowheadItemUrl(item.itemId, gameVariant)}
@@ -89,7 +90,7 @@ function SlotItemDetails({ item, qualityClass, gameVariant, isMobile }: {
                 <span>{SLOT_LABELS[item.slot] ?? item.slot}</span>
                 {item.itemSubclass && (<><span>·</span><span>{item.itemSubclass}</span></>)}
             </div>
-            {item.enchantments && item.enchantments.length > 0 && <div className="text-xs text-green-400 truncate">{item.enchantments[0].displayString}</div>}
+            {firstEnchant && <div className="text-xs text-green-400 truncate">{firstEnchant.displayString}</div>}
             <SlotSockets sockets={item.sockets} />
         </div>
     );

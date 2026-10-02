@@ -53,7 +53,9 @@ function handlePresetArrow(e: KeyboardEvent<HTMLDivElement>, value: PresetKey, o
   e.preventDefault();
   const count = PRESET_OPTIONS.length;
   const current = PRESET_OPTIONS.findIndex(([key]) => key === value);
-  const next = PRESET_OPTIONS[(Math.max(current, 0) + step + count) % count][0];
+  const option = PRESET_OPTIONS[(Math.max(current, 0) + step + count) % count];
+  if (!option) return;
+  const next = option[0];
   onChange(next);
   e.currentTarget.querySelector<HTMLElement>(`[data-testid="preset-${next}"]`)?.focus();
 }

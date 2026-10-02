@@ -24,7 +24,7 @@ interface ShootingStar {
     maxLife: number;
 }
 
-const STAR_COLORS = [
+const STAR_COLORS: readonly [string, ...string[]] = [
     'rgba(255, 255, 255, VAR)',     // white
     'rgba(200, 220, 255, VAR)',     // cool blue-white
     'rgba(180, 200, 255, VAR)',     // blue
@@ -48,7 +48,7 @@ function createStar(w: number, h: number): Star {
         size: Math.random() * 1.5 + 0.5, speed: Math.random() * 0.15 + 0.02,
         opacity: Math.random() * 0.6 + 0.3, twinklePhase: Math.random() * Math.PI * 2,
         twinkleSpeed: Math.random() * 0.02 + 0.005,
-        color: STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)],
+        color: STAR_COLORS[Math.floor(Math.random() * STAR_COLORS.length)] ?? STAR_COLORS[0],
     };
 }
 
@@ -81,6 +81,7 @@ function spawnShootingStar(shootingStars: ShootingStar[], w: number, h: number) 
 function drawShootingStars(ctx: CanvasRenderingContext2D, shootingStars: ShootingStar[]) {
     for (let i = shootingStars.length - 1; i >= 0; i--) {
         const ss = shootingStars[i];
+        if (!ss) continue;
         ss.life++; ss.x += Math.cos(ss.angle) * ss.speed; ss.y += Math.sin(ss.angle) * ss.speed;
         ss.opacity = 1 - ss.life / ss.maxLife;
         if (ss.opacity <= 0) { shootingStars.splice(i, 1); continue; }

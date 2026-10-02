@@ -69,7 +69,7 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
         charClass: c?.class ?? props.className, spec: c?.spec ?? props.spec,
         role: c?.effectiveRole ?? props.role, itemLevel: c?.itemLevel ?? props.itemLevel,
         isMain: c?.isMain ?? props.isMain,
-        variantLabel: c?.gameVariant ? VARIANT_LABELS[c.gameVariant] : null,
+        variantLabel: c?.gameVariant ? VARIANT_LABELS[c.gameVariant] ?? null : null,
         professions: c?.professions ?? props.professions ?? null,
     };
 }

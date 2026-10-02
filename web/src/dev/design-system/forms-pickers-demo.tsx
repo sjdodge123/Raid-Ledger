@@ -31,7 +31,9 @@ const picksText = (p: Picks | null): string =>
 
 function FilePickerDemo(): JSX.Element {
     const [picks, setPicks] = useState<Picks | null>(null);
-    const onFiles = (files: File[]): void => setPicks((p) => ({ name: files[0].name, count: (p?.count ?? 0) + 1 }));
+    const onFiles = ([file]: File[]): void => {
+        if (file) setPicks((p) => ({ name: file.name, count: (p?.count ?? 0) + 1 }));
+    };
     return (
         <StateFrame label="FilePicker — idle / loading" note="A secondary Button opens a hidden native input; onFiles gets File[] and the same file can be picked twice — the pick counter moves each time.">
             <FilePicker accept="image/png,image/jpeg" onFiles={onFiles}>Upload logo</FilePicker>

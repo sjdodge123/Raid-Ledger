@@ -128,6 +128,7 @@ function drawBubbles(ctx: CanvasRenderingContext2D, bubbles: Bubble[], canvas: H
 function drawSchools(ctx: CanvasRenderingContext2D, schools: FishSchool[], canvas: HTMLCanvasElement) {
     for (let si = 0; si < schools.length; si++) {
         const school = schools[si];
+        if (!school) continue;
         let allOffscreen = true;
         for (const fish of school.fish) {
             fish.wobblePhase += fish.wobbleSpeed;

@@ -153,10 +153,11 @@ export function LfgSummaryBanner(): JSX.Element | null {
     const { data } = useLfgGroups();
     const groups = data ?? [];
 
-    if (groups.length === 0) return null;
+    const [firstGroup] = groups;
+    if (!firstGroup) return null;
     const nowCount = totalNowPlayers(groups);
     if (groups.length === 1) {
-        return <SingleGroupBanner group={groups[0]} nowCount={nowCount} />;
+        return <SingleGroupBanner group={firstGroup} nowCount={nowCount} />;
     }
 
     return (

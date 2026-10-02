@@ -50,13 +50,14 @@ function Lightbox({ screenshots, index, gameName, onClose, onNav }: {
         return () => document.removeEventListener('keydown', handleKey);
     }, [onClose]);
 
+    const url = screenshots[index];
     return (
         <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={onClose}>
             <button onClick={onClose} className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors" aria-label="Close">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
             {index > 0 && <LightboxNav direction="prev" onClick={(e) => { e.stopPropagation(); onNav(index - 1); }} />}
-            <LightboxImage url={screenshots[index]} alt={`${gameName} screenshot ${index + 1}`} />
+            {url && <LightboxImage url={url} alt={`${gameName} screenshot ${index + 1}`} />}
             {index < screenshots.length - 1 && <LightboxNav direction="next" onClick={(e) => { e.stopPropagation(); onNav(index + 1); }} />}
             <div className="absolute bottom-4 text-white/60 text-sm">{index + 1} / {screenshots.length}</div>
         </div>

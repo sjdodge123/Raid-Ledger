@@ -76,9 +76,9 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
     wtp: ReturnType<typeof useWantToPlay>; gameEvents: EventResponseDto[] | undefined; igdbId: number | null | undefined;
 }): JSX.Element {
     const rating = game.aggregatedRating ?? game.rating;
-    const genres = game.genres.map((id) => GENRE_MAP[id]).filter(Boolean);
-    const platforms = game.platforms.map((id) => PLATFORM_MAP[id]).filter(Boolean);
-    const modes = game.gameModes.map((id) => MODE_MAP[id]).filter(Boolean);
+    const genres = game.genres.flatMap((id) => GENRE_MAP[id] || []);
+    const platforms = game.platforms.flatMap((id) => PLATFORM_MAP[id] || []);
+    const modes = game.gameModes.flatMap((id) => MODE_MAP[id] || []);
     const { data: pricingResponse } = useGamePricing(gameId, !!game.itadGameId);
     const pricing = pricingResponse?.data ?? null;
 

@@ -37,5 +37,5 @@ export const ARMORY_CLASSIC_VARIANTS = ALL_CLASSIC_VARIANTS.filter((v) => isArmo
  * context variant falls back to the first importable one.
  */
 export function defaultArmoryClassicVariant(contextVariant: string | null | undefined): string {
-    return contextVariant && isArmoryImportSupported(contextVariant) ? contextVariant : ARMORY_CLASSIC_VARIANTS[0].value;
+    return contextVariant && isArmoryImportSupported(contextVariant) ? contextVariant : (ARMORY_CLASSIC_VARIANTS[0] ?? ALL_CLASSIC_VARIANTS[0]).value;
 }

@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import { FULL_DAYS, formatHour } from './game-time-grid.utils';
 import type { SlotBlock } from './slot-blocks.utils';
-import { maxEndIndex, minStartIndex } from './slot-blocks.utils';
+import { blockEndHour, maxEndIndex, minStartIndex } from './slot-blocks.utils';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { presetIndices, type BlockPreset } from './block-presets';
 
@@ -18,8 +18,12 @@ interface SelectedBlockInspectorProps {
     onPreset?: (preset: BlockPreset) => void;
 }
 
-const endHourOf = (endIndex: number, hours: number[]): number =>
-    endIndex >= hours.length ? (hours[hours.length - 1] + 1) % 24 : hours[endIndex];
+/** The selection's start and (exclusive) end hour; null when it sits outside `hours`. */
+function selectionHours({ startIndex, endIndex }: SlotBlock, hours: number[]): [number, number] | null {
+    const start = hours[startIndex];
+    const end = blockEndHour(endIndex, hours);
+    return start === undefined || end === undefined ? null : [start, end];
+}
 
 /**
  * Pinned, so selecting a block never puts its own controls out of reach.
@@ -45,25 +49,24 @@ const STICKY = 'sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-20 '
  */
 export function SelectedBlockInspector({
     selection, slots, hours, onAdjust, onRemove, onDone, presets, onPreset,
-}: SelectedBlockInspectorProps): JSX.Element {
+}: SelectedBlockInspectorProps): JSX.Element | null {
     const { dayOfWeek, startIndex, endIndex } = selection;
+    const span = selectionHours(selection, hours);
+    if (!span) return null;
     const floor = minStartIndex(slots, dayOfWeek, endIndex, hours);
     const ceiling = maxEndIndex(slots, dayOfWeek, startIndex, hours);
 
     return (
-        <div
-            className={`mt-2 p-2.5 rounded-lg border border-edge flex flex-col gap-2 ${STICKY}`}
-            data-testid="selected-block-inspector"
-        >
+        <div className={`mt-2 p-2.5 rounded-lg border border-edge flex flex-col gap-2 ${STICKY}`} data-testid="selected-block-inspector">
             <InspectorHeader dayOfWeek={dayOfWeek} onRemove={onRemove} onDone={onDone} />
             <div className="flex gap-2">
                 <Stepper
-                    label="Start" value={formatHour(hours[startIndex])} testId="start"
+                    label="Start" value={formatHour(span[0])} testId="start"
                     onDown={() => onAdjust('start', -1)} onUp={() => onAdjust('start', 1)}
                     downDisabled={startIndex <= floor} upDisabled={startIndex >= endIndex - 1}
                 />
                 <Stepper
-                    label="End" value={formatHour(endHourOf(endIndex, hours))} testId="end"
+                    label="End" value={formatHour(span[1])} testId="end"
                     onDown={() => onAdjust('end', -1)} onUp={() => onAdjust('end', 1)}
                     downDisabled={endIndex <= startIndex + 1} upDisabled={endIndex >= ceiling}
                 />

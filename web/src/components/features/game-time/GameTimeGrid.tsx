@@ -118,6 +118,7 @@ function HoverTooltip({ hoveredCell, isPastCell, nextWeekDayDates, dayDates, get
 }): JSX.Element | null {
     if (!hoveredCell) return null;
     const [d, h] = hoveredCell.split(':').map(Number);
+    if (d === undefined || h === undefined) return null;
     const past = isPastCell(d, h);
     const dateLabel = past && nextWeekDayDates ? nextWeekDayDates[d] : dayDates?.[d];
     const text = formatTooltip(d, h, getSlotStatus(d, h), dateLabel ?? undefined);

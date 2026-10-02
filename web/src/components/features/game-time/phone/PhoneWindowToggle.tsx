@@ -13,7 +13,10 @@ interface PhoneWindowToggleProps {
 
 /** "6 AM – 6 PM" / "1 AM – 6 AM" — the band's span, end exclusive. */
 function bandRange(hours: number[]): string {
-    return `${formatHour(hours[0])} – ${formatHour((hours[hours.length - 1] + 1) % 24)}`;
+    const first = hours[0];
+    const last = hours[hours.length - 1];
+    if (first === undefined || last === undefined) return '';
+    return `${formatHour(first)} – ${formatHour((last + 1) % 24)}`;
 }
 
 /**

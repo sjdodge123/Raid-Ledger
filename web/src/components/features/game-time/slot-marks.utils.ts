@@ -62,7 +62,10 @@ export function slotMarksForWeek(slots: SlotLike[], weekStart: Date): Map<string
 /** Marks per day of the week (index 0 = Sunday), for the phone week strip's "● N". */
 export function slotCountsByDay(marks: Map<string, SlotMark>): number[] {
     const counts = [0, 0, 0, 0, 0, 0, 0];
-    for (const mark of marks.values()) counts[mark.dayOfWeek] += 1;
+    for (const { dayOfWeek } of marks.values()) {
+        const count = counts[dayOfWeek];
+        if (count !== undefined) counts[dayOfWeek] = count + 1;
+    }
     return counts;
 }
 

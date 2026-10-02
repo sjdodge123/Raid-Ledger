@@ -94,7 +94,7 @@ function WizardStepper({ currentStep, goToStep }: { currentStep: number; goToSte
       <div className="max-w-4xl mx-auto px-6 py-4">
         <div className="flex items-center justify-between md:hidden">
           <span className="text-sm text-muted">Step {currentStep + 1} of {STEPS.length}</span>
-          <span className="text-sm font-medium text-foreground">{STEPS[currentStep].label}</span>
+          <span className="text-sm font-medium text-foreground">{STEPS[currentStep]?.label}</span>
         </div>
         <div className="hidden md:flex items-center justify-between">
           {STEPS.map((step, index) => (

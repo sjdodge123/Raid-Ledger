@@ -40,7 +40,7 @@ function getColorFromUsername(username: string): string {
     const hash = username
         .split('')
         .reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+    return AVATAR_COLORS[hash % AVATAR_COLORS.length]!;
 }
 
 function getInitials(username: string): string {

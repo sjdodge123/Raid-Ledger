@@ -31,8 +31,9 @@ function decodeBase64Url(segment: string): string | null {
 /** Parse a JWT's (unverified) payload object, or null if undecodable. */
 function readPayload(token: string): JwtPayload | null {
   const parts = token.split('.');
-  if (parts.length !== 3) return null;
-  const json = decodeBase64Url(parts[1]);
+  const body = parts[1];
+  if (parts.length !== 3 || body === undefined) return null;
+  const json = decodeBase64Url(body);
   if (json === null) return null;
   try {
     const payload: unknown = JSON.parse(json);
