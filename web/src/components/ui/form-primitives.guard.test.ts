@@ -57,6 +57,10 @@ describe('form-primitives guard — mutation tests', () => {
         expect(countRawFormElements(src)).toBe(1);
     });
 
+    it('keeps a block comment\'s newlines, so an offset maps to its source line', () => {
+        expect(stripComments('a/* x\ny */b')).toBe('a\nb');
+    });
+
     it('is string-literal safe: a // inside a string is not a comment', () => {
         expect(stripComments("const u = 'https://x.dev'; // gone")).toBe("const u = 'https://x.dev'; ");
         expect(countRawFormElements('<a href="http://x">x</a><input />')).toBe(1);
