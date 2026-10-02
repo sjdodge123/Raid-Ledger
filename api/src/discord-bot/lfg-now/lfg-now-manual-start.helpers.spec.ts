@@ -17,13 +17,19 @@ import {
   convertStarterIntent,
 } from './lfg-now-manual-start.helpers';
 import { createLfgNowEventRow } from './lfg-now-event.helpers';
-import { convertGroup } from '../../lfg/lfg-write.helpers';
+import {
+  convertGroup,
+  convertHolderIntent,
+} from '../../lfg/lfg-write.helpers';
 import { autoSignupParticipant } from '../services/ad-hoc-event.signup-helpers';
 
 jest.mock('./lfg-now-event.helpers', () => ({
   createLfgNowEventRow: jest.fn(),
 }));
-jest.mock('../../lfg/lfg-write.helpers', () => ({ convertGroup: jest.fn() }));
+jest.mock('../../lfg/lfg-write.helpers', () => ({
+  convertGroup: jest.fn(),
+  convertHolderIntent: jest.fn(),
+}));
 jest.mock('../services/ad-hoc-event.signup-helpers', () => ({
   autoSignupParticipant: jest.fn(),
 }));
@@ -36,6 +42,9 @@ const createRow = createLfgNowEventRow as jest.MockedFunction<
   typeof createLfgNowEventRow
 >;
 const convert = convertGroup as jest.MockedFunction<typeof convertGroup>;
+const convertHolder = convertHolderIntent as jest.MockedFunction<
+  typeof convertHolderIntent
+>;
 const signup = autoSignupParticipant as jest.MockedFunction<
   typeof autoSignupParticipant
 >;
@@ -219,5 +228,34 @@ describe('spawnUnderGroupLock — manual start (ROK-1613)', () => {
     expect(convert).toHaveBeenCalledWith(expect.anything(), GAME_ID, {
       eventId: 900,
     });
+  });
+});
+
+describe('convertStarterIntent (ROK-1625)', () => {
+  it('forwards the decision instant to the one-holder conversion', async () => {
+    // MUTATION: drop `now` from the delegation and convertHolderIntent falls
+    // back to its own `new Date()`; this then sees `undefined` for NOW.
+    const actual = jest.requireActual<{
+      convertStarterIntent: typeof convertStarterIntent;
+    }>('./lfg-now-manual-start.helpers');
+    convertHolder.mockResolvedValue(1);
+    const db = mockDb([], []);
+
+    await expect(
+      actual.convertStarterIntent(
+        asDb(db),
+        GAME_ID,
+        STARTER_ID,
+        { eventId: 900 },
+        NOW,
+      ),
+    ).resolves.toBe(1);
+    expect(convertHolder).toHaveBeenCalledWith(
+      db,
+      GAME_ID,
+      STARTER_ID,
+      { eventId: 900 },
+      NOW,
+    );
   });
 });
