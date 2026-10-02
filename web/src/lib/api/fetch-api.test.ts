@@ -3,6 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { z } from 'zod';
 
 import { server } from '../../test/mocks/server';
+import { at } from '../../test/defined';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
 import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
 
@@ -103,7 +104,7 @@ describe('fetchApi — schema validation boundary (ROK-1237)', () => {
             SchemaValidationError,
         );
         expect(captureExceptionMock).toHaveBeenCalledTimes(1);
-        const [err, ctx] = captureExceptionMock.mock.calls[0];
+        const [err, ctx] = at(captureExceptionMock.mock.calls, 0);
         expect(err).toBeInstanceOf(Error);
         expect((err as Error).message).toBe('Response schema validation failed');
         const extra = (ctx as { extra: { endpoint: string; issues: unknown[] } }).extra;
