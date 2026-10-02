@@ -4,6 +4,7 @@
  * needs (ROK-1390). With the flag off, `handleVoiceJoin` returns before the
  * spawn, so the helper must turn it ON before `fn` and put it back after —
  * including when `fn` throws — and must not touch a flag that is already ON.
+ * A restore that fails after a green `fn` must fail the run, not leak the flag.
  *
  * Pure: the admin client is a fake that records each call against an
  * in-memory setting. No Discord connection, no API, no timers.
@@ -84,8 +85,9 @@ await test('flag already ON: no write at all, stays ON', async () => {
   assert.deepEqual(state.calls, [`GET ${PATH}`], 'no PUT when already ON');
 });
 
-await test('a failed restore does not mask the error fn threw', async () => {
-  const { api } = fakeApi(false);
+/** A fake whose second PUT (the restore) fails. */
+function restoreFails(): { api: AdHocGateApi; state: { enabled: boolean } } {
+  const { api, state } = fakeApi(false);
   let puts = 0;
   const flaky: AdHocGateApi = {
     get: api.get,
@@ -95,10 +97,25 @@ await test('a failed restore does not mask the error fn threw', async () => {
       return api.put<T>(path, body);
     },
   };
+  return { api: flaky, state };
+}
+
+await test('a failed restore does not mask the error fn threw', async () => {
+  const { api } = restoreFails();
   await assert.rejects(
-    withAdHocEventsEnabled(flaky, () => Promise.reject(new Error('fn failed'))),
+    withAdHocEventsEnabled(api, () => Promise.reject(new Error('fn failed'))),
     /fn failed/,
   );
+});
+
+await test('a failed restore after a green fn fails the run', async () => {
+  const { api, state } = restoreFails();
+  await assert.rejects(
+    withAdHocEventsEnabled(api, () => Promise.resolve('ok')),
+    /ad-hoc gate restore failed; the flag stays ON: restore 500/,
+    'a green fn whose restore failed must reject, not leave the flag ON silently',
+  );
+  assert.equal(state.enabled, true, 'the fake must show the flag leaked ON');
 });
 
 console.log(`\n  ${passed} passed, ${failed} failed\n`);

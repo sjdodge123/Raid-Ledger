@@ -73,8 +73,9 @@ export type AdHocGateApi = Pick<ApiClient, "get" | "put">;
  * spawn sets the flag itself through the admin settings API.
  *
  * When the flag is already ON nothing is written, so a run that enabled it on
- * purpose keeps it. A failed restore is logged, never thrown: it must not hide
- * the error `fn` threw.
+ * purpose keeps it. A failed restore fails the run when `fn` succeeded — a
+ * green test must not leave the flag ON for the tests after it — and is only
+ * logged when `fn` threw, so it never hides that error.
  */
 export async function withAdHocEventsEnabled<T>(
   api: AdHocGateApi,
@@ -83,12 +84,28 @@ export async function withAdHocEventsEnabled<T>(
   const prior = await api.get<{ enabled: boolean }>(AD_HOC_PATH);
   if (prior.enabled) return fn();
   await api.put(AD_HOC_PATH, { enabled: true });
+  let result: T;
   try {
-    return await fn();
-  } finally {
-    await api.put(AD_HOC_PATH, { enabled: false }).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`ad-hoc gate restore failed; the flag stays ON: ${msg}`);
+    result = await fn();
+  } catch (err) {
+    await restoreAdHocGate(api).catch((restoreErr: unknown) => {
+      console.warn(errorMessage(restoreErr));
     });
+    throw err;
   }
+  await restoreAdHocGate(api);
+  return result;
+}
+
+/** Put the ad-hoc flag back OFF; rejects with a message naming the leak. */
+async function restoreAdHocGate(api: AdHocGateApi): Promise<void> {
+  try {
+    await api.put(AD_HOC_PATH, { enabled: false });
+  } catch (err) {
+    throw new Error(`ad-hoc gate restore failed; the flag stays ON: ${errorMessage(err)}`);
+  }
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
