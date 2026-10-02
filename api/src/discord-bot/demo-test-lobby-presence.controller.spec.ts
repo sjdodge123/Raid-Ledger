@@ -25,7 +25,6 @@ import { createDrizzleMock, MockDb } from '../common/testing/drizzle-mock';
 const VOICE_CHANNEL = 'voice-123';
 
 type MockPresence = {
-  forgetBinding: jest.Mock;
   setRoomOverride: jest.Mock;
   flushNow: jest.Mock;
 };
@@ -42,9 +41,6 @@ describe('DemoTestLobbyPresenceController (ROK-1446 D12)', () => {
     process.env.DEMO_MODE = 'true';
     calls = [];
     presence = {
-      forgetBinding: jest.fn(() => {
-        calls.push('forgetBinding');
-      }),
       setRoomOverride: jest.fn(() => {
         calls.push('setRoomOverride');
         return Promise.resolve();
@@ -180,21 +176,7 @@ describe('DemoTestLobbyPresenceController (ROK-1446 D12)', () => {
         members: [],
       });
 
-      expect(calls).toEqual(['forgetBinding', 'setRoomOverride', 'flushNow']);
-    });
-
-    it('ROK-1692 — forgets the channel cached binding before every flush', async () => {
-      // The smoke tests re-bind one channel back to back; a flush against the
-      // 60 s-cached, already-deleted binding applies that binding's grace.
-      await controller.setLobbyPresence({
-        voiceChannelId: VOICE_CHANNEL,
-        members: null,
-      });
-
-      expect(presence.forgetBinding).toHaveBeenCalledWith(VOICE_CHANNEL);
-      expect(calls.indexOf('forgetBinding')).toBeLessThan(
-        calls.indexOf('flushNow'),
-      );
+      expect(calls).toEqual(['setRoomOverride', 'flushNow']);
     });
 
     it('returns the open rows text channel and message id', async () => {

@@ -164,40 +164,6 @@ const lobby = (bindingId: string, gracePeriod?: number) => ({
   config: { minPlayers: 2, ...(gracePeriod ? { gracePeriod } : {}) },
 });
 
-describe('forgetBinding — the seam reads the binding that exists now (ROK-1692)', () => {
-  it('a flush after forgetBinding resolves the re-created binding, not the cached one', async () => {
-    const current = { value: [lobby('b-old')] as unknown[] };
-    cachingBindings(current);
-    const service = await started();
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    // The previous test deletes its binding and the next one binds the same
-    // channel with a 1-minute grace — inside the 60 s cache TTL.
-    current.value = [lobby('b-new', 1)];
-    service.forgetBinding(VOICE);
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(flushes).toHaveBeenCalledTimes(2);
-    expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-new', 1));
-  });
-
-  it('without it, the cache keeps serving the deleted binding (why the seam calls it)', async () => {
-    const current = { value: [lobby('b-old')] as unknown[] };
-    cachingBindings(current);
-    const service = await started();
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    current.value = [lobby('b-new', 1)];
-    service.markDirty(VOICE);
-    await service.flushNow();
-
-    expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-old'));
-  });
-});
-
 describe('onBindingChanged — a binding write evicts the cached binding', () => {
   it('a binding-changed event evicts the cached binding the same way', async () => {
     const current = { value: [lobby('b-old')] as unknown[] };
@@ -212,6 +178,20 @@ describe('onBindingChanged — a binding write evicts the cached binding', () =>
     await service.flushNow();
 
     expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-new', 1));
+  });
+
+  it('without a binding-changed event, the cache keeps serving the deleted binding', async () => {
+    const current = { value: [lobby('b-old')] as unknown[] };
+    cachingBindings(current);
+    const service = await started();
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    current.value = [lobby('b-new', 1)];
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-old'));
   });
 
   it('onBindingChanged is subscribed to CHANNEL_BINDING_EVENTS.CHANGED', () => {
