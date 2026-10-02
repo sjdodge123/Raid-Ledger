@@ -46,7 +46,7 @@ import {
 import { isPollOrganiser } from './scheduling-lock-in.helpers';
 import {
   findLeadingFutureSlot,
-  type LeadingSlot,
+  type SlotWithYesCount,
 } from './scheduling-poll-expiry.helpers';
 import {
   countPollMembers,
@@ -139,7 +139,7 @@ export class SchedulingRallyService {
   private async resolveTargetSlot(
     matchId: number,
     slotId?: number,
-  ): Promise<LeadingSlot> {
+  ): Promise<SlotWithYesCount> {
     if (slotId === undefined) {
       const leader = await findLeadingFutureSlot(this.db, matchId);
       // ROK-1617 item D: the message names the CAUSE, because the floor now
@@ -178,7 +178,7 @@ export class SchedulingRallyService {
    */
   private async resolveAudience(
     matchId: number,
-    target: LeadingSlot,
+    target: SlotWithYesCount,
     caller: Caller,
   ): Promise<RallyAudience> {
     try {
@@ -297,7 +297,7 @@ export class SchedulingRallyService {
    */
   private async dispatch(
     audience: RallyAudience,
-    target: LeadingSlot,
+    target: SlotWithYesCount,
   ): Promise<{ nudged: number; skipped: number }> {
     let nudged = 0;
     let skipped = 0;
@@ -319,7 +319,7 @@ export class SchedulingRallyService {
    */
   private async dispatchOne(
     audience: RallyAudience,
-    target: LeadingSlot,
+    target: SlotWithYesCount,
     userId: number,
   ): Promise<boolean> {
     const deps = {
