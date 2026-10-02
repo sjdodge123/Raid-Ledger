@@ -32,6 +32,7 @@ import { buildLfgGroupSummary } from '../../test/factories/lfg';
 import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { createTestQueryClient } from '../../test/render-helpers';
 import { useLfgFilterParam } from './use-lfg-filter-param';
+import { at } from '../../test/defined';
 
 /** Two games are looking; a third id is deliberately absent from the list. */
 const LOOKING_IDS = [11, 22];
@@ -107,8 +108,8 @@ describe('useLfgFilterParam — the predicate', () => {
         await waitFor(() => {
             expect(result.current.matchesLfgFilter(NOT_LOOKING_ID)).toBe(false);
         });
-        expect(result.current.matchesLfgFilter(LOOKING_IDS[0])).toBe(true);
-        expect(result.current.matchesLfgFilter(LOOKING_IDS[1])).toBe(true);
+        expect(result.current.matchesLfgFilter(at(LOOKING_IDS, 0))).toBe(true);
+        expect(result.current.matchesLfgFilter(at(LOOKING_IDS, 1))).toBe(true);
     });
 
     it('keeps every game while inactive', async () => {
@@ -117,7 +118,7 @@ describe('useLfgFilterParam — the predicate', () => {
         await waitFor(() => {
             expect(result.current.matchesLfgFilter(NOT_LOOKING_ID)).toBe(true);
         });
-        expect(result.current.matchesLfgFilter(LOOKING_IDS[0])).toBe(true);
+        expect(result.current.matchesLfgFilter(at(LOOKING_IDS, 0))).toBe(true);
     });
 
     it('keeps every game while GET /lfg is still in flight', () => {
@@ -137,7 +138,7 @@ describe('useLfgFilterParam — the predicate', () => {
         const { result } = renderFilter('/games?lfg=1');
 
         await waitFor(() => {
-            expect(result.current.matchesLfgFilter(LOOKING_IDS[0])).toBe(false);
+            expect(result.current.matchesLfgFilter(at(LOOKING_IDS, 0))).toBe(false);
         });
     });
 });

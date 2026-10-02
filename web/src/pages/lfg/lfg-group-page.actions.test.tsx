@@ -111,7 +111,7 @@ describe('LfgGroupPage — ⋯ Manage', () => {
         await userEvent.click(within(body).getByTestId('lfg-manage-withdraw'));
 
         expect(mocks.withdraw).toHaveBeenCalledTimes(1);
-        expect(mocks.withdraw.mock.calls[0][0]).toBe(7);
+        expect(mocks.withdraw.mock.calls[0]?.[0]).toBe(7);
     });
 
     it('keeps the +1 join entry point for a viewer with no intent', async () => {
@@ -134,7 +134,7 @@ describe('LfgGroupPage — Lock in this event (ROK-1573)', () => {
         await userEvent.click(screen.getByTestId('lfg-lockin-confirm-submit'));
 
         expect(mocks.lockIn).toHaveBeenCalledTimes(1);
-        expect(mocks.lockIn.mock.calls[0][0]).toEqual(window);
+        expect(mocks.lockIn.mock.calls[0]?.[0]).toEqual(window);
     });
 
     it('Cancel on the lock-in confirm creates nothing', async () => {

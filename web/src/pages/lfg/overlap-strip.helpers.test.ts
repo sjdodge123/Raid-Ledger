@@ -60,7 +60,7 @@ describe('buildDayStrip', () => {
         );
 
         expect(strip[2]).toMatchObject({ label: 'Wed', status: 'hit' });
-        expect(strip[3].status).toBe('none');
+        expect(strip[3]?.status).toBe('none');
     });
 
     it('marks a partial window as part, never as a hit', () => {
@@ -69,7 +69,7 @@ describe('buildDayStrip', () => {
             3,
         );
 
-        expect(strip[2].status).toBe('part');
+        expect(strip[2]?.status).toBe('part');
     });
 
     it('buckets a window that crosses local midnight into both days', () => {
@@ -78,8 +78,8 @@ describe('buildDayStrip', () => {
             3,
         );
 
-        expect(strip[2].status).toBe('hit');
-        expect(strip[3].status).toBe('hit');
+        expect(strip[2]?.status).toBe('hit');
+        expect(strip[3]?.status).toBe('hit');
     });
 
     it('keeps the stronger status when two windows share a day', () => {
@@ -91,7 +91,7 @@ describe('buildDayStrip', () => {
             3,
         );
 
-        expect(strip[2].status).toBe('hit');
+        expect(strip[2]?.status).toBe('hit');
     });
 
     it('never reports a hit when the roster size is zero', () => {
@@ -100,7 +100,7 @@ describe('buildDayStrip', () => {
             0,
         );
 
-        expect(strip[2].status).toBe('part');
+        expect(strip[2]?.status).toBe('part');
     });
 });
 

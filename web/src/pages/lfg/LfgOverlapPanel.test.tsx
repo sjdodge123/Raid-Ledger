@@ -13,6 +13,7 @@ import {
     createMockOverlapWindow,
 } from '../../test/lfg-factories';
 import { LfgOverlapPanel } from './LfgOverlapPanel';
+import { at } from '../../test/defined';
 
 const WED_7PM = new Date(2026, 8, 2, 19).toISOString();
 const WED_10PM = new Date(2026, 8, 2, 22).toISOString();
@@ -100,7 +101,7 @@ describe('LfgOverlapPanel — window rows', () => {
         expect(rows).toHaveLength(2);
         expect(rows[0]).toHaveTextContent('Lock in this event');
 
-        await user.click(rows[1]);
+        await user.click(at(rows, 1));
         expect(onLockIn).toHaveBeenCalledWith(second);
     });
 

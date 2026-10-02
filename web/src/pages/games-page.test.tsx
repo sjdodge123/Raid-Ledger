@@ -413,7 +413,7 @@ describe('GamesPage — ROK-565: community-playing discover row', () => {
         const carousels = screen.getAllByTestId('game-carousel');
         // Two render paths (desktop + mobile), each ordered the same.
         expect(carousels.length).toBeGreaterThanOrEqual(1);
-        expect(carousels[0].getAttribute('data-category')).toBe('Your Community Has Been Playing');
+        expect(carousels[0]?.getAttribute('data-category')).toBe('Your Community Has Been Playing');
     });
 
     it('shows "N played" badge for games with metadata', () => {

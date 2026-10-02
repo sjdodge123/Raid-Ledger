@@ -21,6 +21,7 @@ import { createMockSuggestion } from '../../test/lfg-factories';
 import { toast } from '../../lib/toast';
 import { LFG_COPY } from './lfg-copy';
 import { LfgSuggestionsPanel } from './LfgSuggestionsPanel';
+import { at } from '../../test/defined';
 
 const GAME_ID = 7;
 
@@ -195,7 +196,7 @@ describe('LfgSuggestionsPanel — invite button (ROK-1455)', () => {
             }),
         ]);
 
-        await userEvent.click(screen.getAllByTestId('lfg-invite-button')[0]);
+        await userEvent.click(at(screen.getAllByTestId('lfg-invite-button'), 0));
 
         expect(
             await screen.findByText(LFG_INVITE_CAP_FIXTURE_MESSAGE),

@@ -70,6 +70,7 @@ import * as useAuthHook from "../hooks/use-auth";
 import * as useWantToPlayModule from "../hooks/use-want-to-play";
 
 import { partialResult } from "../test/partial-result";
+import { at } from "../test/defined";
 
 vi.mock("../hooks/use-auth", () => ({
   useAuth: vi.fn(),
@@ -186,7 +187,7 @@ describe("GameDetailPage — Owned by section (ROK-745)", () => {
       count: 0,
       source: undefined,
       players: [],
-      owners: [mockOwners[0]],
+      owners: [at(mockOwners, 0)],
       ownerCount: 1,
       isLoading: false,
       toggle: vi.fn(),
