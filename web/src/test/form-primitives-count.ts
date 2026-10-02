@@ -25,6 +25,8 @@ function enter(c: string, n: string): Mode {
  * Strip `//` and block comments, leaving string contents alone (a URL's `//`
  * inside quotes is not a comment). Quote strings end at a newline, so an
  * apostrophe in JSX text ("Don't") can hide at most the rest of its line.
+ * A block comment's newlines are kept, so an offset in the output sits on
+ * the same line number as in the source.
  */
 export function stripComments(src: string): string {
     let out = '';
@@ -40,6 +42,7 @@ export function stripComments(src: string): string {
             if (c === '\n') { mode = 'code'; out += c; }
         } else if (mode === 'block') {
             if (c === '*' && n === '/') { mode = 'code'; i++; }
+            else if (c === '\n') out += c;
         } else {
             out += c;
             if (c === '\\') { out += n; i++; } else if (c === mode || (c === '\n' && mode !== '`')) mode = 'code';

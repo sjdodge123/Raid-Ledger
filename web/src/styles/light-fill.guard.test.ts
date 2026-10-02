@@ -54,19 +54,22 @@ const FILLS = lightAmberFills();
 const SRC = resolve(__dirname, '..');
 const AMBER_FILL = /(?<![\w:-])(hover:)?bg-amber-500\/(\d{1,3})(?![\w-])/g;
 
+/** Every amber tint (NN ≤ 30) in one file's source, each at the line it sits on. */
+function amberFillsIn(file: string, src: string): { where: string; cls: string }[] {
+    const code = stripCodeComments(src); // keeps every newline, so an offset maps to its source line
+    return [...code.matchAll(AMBER_FILL)]
+        .filter(([, , alpha]) => Number(alpha) <= 30)
+        .map((m) => ({
+            where: `${file}:${code.slice(0, m.index).split('\n').length}`,
+            cls: `${m[1] ?? ''}bg-amber-500/${m[2]}`,
+        }));
+}
+
 function amberFillUses(): { where: string; cls: string }[] {
     const files = (readdirSync(SRC, { recursive: true }) as string[])
         .map((f) => f.split(sep).join('/'))
         .filter((f) => /\.tsx?$/.test(f) && !/\.(test|spec)\.tsx?$/.test(f) && !f.startsWith('dev/'));
-    return files.sort().flatMap((f) => {
-        const src = readFileSync(join(SRC, f), 'utf-8');
-        return [...stripCodeComments(src).matchAll(AMBER_FILL)]
-            .filter(([, , alpha]) => Number(alpha) <= 30)
-            .map(([, hover, alpha]) => {
-                const cls = `${hover ?? ''}bg-amber-500/${alpha}`;
-                return { where: `${f}:${src.split('\n').findIndex((l) => l.includes(cls)) + 1}`, cls };
-            });
-    });
+    return files.sort().flatMap((f) => amberFillsIn(f, readFileSync(join(SRC, f), 'utf-8')));
 }
 
 const USES = amberFillUses();
@@ -79,6 +82,14 @@ describe('raw amber fills on the light schemes (TDB:1493)', () => {
         expect([...LIGHT].sort()).toEqual(['celestial', 'dawn', 'holy', 'light', 'quest-log', 'sky']);
         expect(FILLS.has('bg-amber-500/10'), 'no light `bg-amber-500/NN` rule parsed out of index.css').toBe(true);
         expect(USES.some((u) => u.cls === 'bg-amber-500/10'), 'the scanner is not reading web/src').toBe(true);
+    });
+
+    it('reports each tint at its own line, past hover: look-alikes and comments', () => {
+        const src = '<a className="hover:bg-amber-500/20" />\n/* was bg-amber-500/20\n   here */\n<b className="bg-amber-500/20" />';
+        expect(amberFillsIn('x.tsx', src)).toEqual([
+            { where: 'x.tsx:1', cls: 'hover:bg-amber-500/20' },
+            { where: 'x.tsx:4', cls: 'bg-amber-500/20' },
+        ]);
     });
 
     it('every bg-amber-500/NN and hover:bg-amber-500/NN (NN ≤ 30) in shipped markup has a light rule', () => {
