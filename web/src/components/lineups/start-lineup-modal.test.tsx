@@ -39,6 +39,7 @@ vi.mock('react-router-dom', async () => {
 import { useCreateLineup } from '../../hooks/use-lineups';
 import { usePostableDiscordChannels } from '../../hooks/use-postable-discord-channels';
 import { getPlayers } from '../../lib/api-client';
+import { at } from '../../test/defined';
 
 const mutateAsync = vi.fn();
 
@@ -159,7 +160,7 @@ describe('StartLineupModal — submits title + description', () => {
         );
 
         expect(mutateAsync).toHaveBeenCalledTimes(1);
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             title: 'Co-op Night',
             description: 'Casual co-op picks',
         });
@@ -196,7 +197,7 @@ describe('StartLineupModal — channel override picker (ROK-1064)', () => {
         );
         expect(mutateAsync).toHaveBeenCalledTimes(1);
         expect(
-            'channelOverrideId' in mutateAsync.mock.calls[0][0],
+            'channelOverrideId' in at(mutateAsync.mock.calls, 0)[0],
         ).toBe(false);
     });
 
@@ -210,7 +211,7 @@ describe('StartLineupModal — channel override picker (ROK-1064)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             channelOverrideId: '100000000000000002',
         });
     });
@@ -286,7 +287,7 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
             screen.getByRole('button', { name: /create lineup/i }),
         );
         expect(mutateAsync).toHaveBeenCalledTimes(1);
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             visibility: 'private',
             inviteeUserIds: [10],
         });
@@ -300,7 +301,7 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        const body = mutateAsync.mock.calls[0][0];
+        const body = at(mutateAsync.mock.calls, 0)[0];
         // ROK-1440: `inviteeUserIds` is omitted because none were picked —
         // NOT because the lineup is public. A public lineup with no explicit
         // invites must send exactly the payload it always did.
@@ -321,7 +322,7 @@ describe('StartLineupModal — visibility toggle + invitees (ROK-1065)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        const body = mutateAsync.mock.calls[0][0];
+        const body = at(mutateAsync.mock.calls, 0)[0];
         expect(body.inviteeUserIds).toEqual([10]);
         // Seeding invitees must NOT flip the lineup to private.
         expect('visibility' in body).toBe(false);
@@ -409,7 +410,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             includeSchedulingPhase: false,
         });
     });
@@ -426,7 +427,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
             screen.getByRole('button', { name: /create lineup/i }),
         );
         // LAN = 100% threshold / 3 votes / 0.25h building / 0.25h voting.
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             matchThreshold: 100,
             votesPerPlayer: 3,
             buildingDurationHours: 0.25,
@@ -443,7 +444,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             matchThreshold: 100,
             votesPerPlayer: 3,
             buildingDurationHours: 5,
@@ -465,7 +466,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             buildingDurationHours: 5,
         });
     });
@@ -486,7 +487,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             buildingDurationHours: 1.5,
         });
     });
@@ -503,7 +504,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             votingDurationHours: 720,
         });
     });
@@ -517,7 +518,7 @@ describe('StartLineupModal — collapse + preset chooser (ROK-1302)', () => {
         await user.click(
             screen.getByRole('button', { name: /create lineup/i }),
         );
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             matchThreshold: 20,
             votesPerPlayer: 5,
             buildingDurationHours: 96,
@@ -590,7 +591,7 @@ describe('StartLineupModal — share + channel primitives (ROK-1650)', () => {
         await user.click(toggle);
         expect(toggle).toHaveAttribute('aria-checked', 'false');
         await user.click(screen.getByRole('button', { name: /create lineup/i }));
-        expect(mutateAsync.mock.calls[0][0]).toMatchObject({
+        expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({
             publicShareEnabled: false,
         });
     });

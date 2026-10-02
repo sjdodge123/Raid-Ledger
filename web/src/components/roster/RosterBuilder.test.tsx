@@ -9,6 +9,7 @@ import {
     mockPool,
     mockAssignments,
 } from './RosterBuilder.test-helpers';
+import { at } from '../../test/defined';
 
 // Mock sonner toast
 vi.mock('sonner', () => ({
@@ -106,7 +107,7 @@ describe('RosterBuilder', () => {
             <RosterBuilder pool={mockPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
         );
 
-        fireEvent.click(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0]);
+        fireEvent.click(at(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ }), 0));
 
         expect(screen.getByText(/Assign to/)).toBeInTheDocument();
     });

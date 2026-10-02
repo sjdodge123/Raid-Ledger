@@ -128,7 +128,7 @@ describe('setBlockRange', () => {
         const slots: GameTimeSlot[] = [{ dayOfWeek: 1, hour: 20, status: 'committed' }, ...avail(1, [21])];
         const result = setBlockRange(slots, 1, 20, 22, false, FULL);
         expect(hoursOf(result, 1)).toEqual([20]);
-        expect(result[0].status).toBe('committed');
+        expect(result[0]?.status).toBe('committed');
     });
 
     it('clamps a range that runs past the end of the visible hours', () => {

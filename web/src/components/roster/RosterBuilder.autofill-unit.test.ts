@@ -98,12 +98,12 @@ describe('computeAutoFill (unit) — part 2', () => {
         const result = computeAutoFill(pool, [], roleSlots, getSlotCount, true);
 
         expect(result.totalFilled).toBe(3);
-        expect(result.newAssignments[0].username).toBe('Alpha');
-        expect(result.newAssignments[0].position).toBe(1);
-        expect(result.newAssignments[1].username).toBe('Bravo');
-        expect(result.newAssignments[1].position).toBe(2);
-        expect(result.newAssignments[2].username).toBe('Charlie');
-        expect(result.newAssignments[2].position).toBe(3);
+        expect(result.newAssignments[0]?.username).toBe('Alpha');
+        expect(result.newAssignments[0]?.position).toBe(1);
+        expect(result.newAssignments[1]?.username).toBe('Bravo');
+        expect(result.newAssignments[1]?.position).toBe(2);
+        expect(result.newAssignments[2]?.username).toBe('Charlie');
+        expect(result.newAssignments[2]?.position).toBe(3);
     });
 
     it('skips occupied positions', () => {

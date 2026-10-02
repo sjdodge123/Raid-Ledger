@@ -22,39 +22,39 @@ describe('profile-nav-data — section structure (ROK-548)', () => {
         const identity = getSections(TEST_USER_ID).find((s) => s.id === 'identity');
         expect(identity).toBeDefined();
         expect(identity!.children).toHaveLength(2);
-        expect(identity!.children[0].to).toBe(`/users/${TEST_USER_ID}`);
-        expect(identity!.children[0].label).toBe('My Profile');
-        expect(identity!.children[1].to).toBe('/profile/avatar');
-        expect(identity!.children[1].label).toBe('My Avatar');
+        expect(identity!.children[0]?.to).toBe(`/users/${TEST_USER_ID}`);
+        expect(identity!.children[0]?.label).toBe('My Profile');
+        expect(identity!.children[1]?.to).toBe('/profile/avatar');
+        expect(identity!.children[1]?.label).toBe('My Avatar');
     });
 
     it('includes integrations section', () => {
         const integrations = getSections(TEST_USER_ID).find((s) => s.id === 'integrations');
         expect(integrations).toBeDefined();
-        expect(integrations!.children[0].to).toBe('/profile/integrations');
+        expect(integrations!.children[0]?.to).toBe('/profile/integrations');
     });
 
     it('includes preferences section with Preferences and Notifications', () => {
         const preferences = getSections(TEST_USER_ID).find((s) => s.id === 'preferences');
         expect(preferences).toBeDefined();
         expect(preferences!.children).toHaveLength(2);
-        expect(preferences!.children[0].to).toBe('/profile/preferences');
-        expect(preferences!.children[1].to).toBe('/profile/notifications');
+        expect(preferences!.children[0]?.to).toBe('/profile/preferences');
+        expect(preferences!.children[1]?.to).toBe('/profile/notifications');
     });
 
     it('includes gaming section with 3 children', () => {
         const gaming = getSections(TEST_USER_ID).find((s) => s.id === 'gaming');
         expect(gaming).toBeDefined();
         expect(gaming!.children).toHaveLength(3);
-        expect(gaming!.children[0].to).toBe('/profile/gaming/game-time');
-        expect(gaming!.children[1].to).toBe('/profile/gaming/characters');
-        expect(gaming!.children[2].to).toBe('/profile/gaming/watched-games');
+        expect(gaming!.children[0]?.to).toBe('/profile/gaming/game-time');
+        expect(gaming!.children[1]?.to).toBe('/profile/gaming/characters');
+        expect(gaming!.children[2]?.to).toBe('/profile/gaming/watched-games');
     });
 
     it('includes account section with Delete Account', () => {
         const account = getSections(TEST_USER_ID).find((s) => s.id === 'account');
         expect(account).toBeDefined();
-        expect(account!.children[0].to).toBe('/profile/account');
+        expect(account!.children[0]?.to).toBe('/profile/account');
     });
 });
 

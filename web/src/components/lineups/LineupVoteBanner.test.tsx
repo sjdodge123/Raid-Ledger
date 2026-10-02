@@ -43,6 +43,7 @@ import {
 import { useTiebreakerDetail } from '../../hooks/use-tiebreaker';
 import { useTieReadiness } from '../../hooks/use-tie-readiness';
 import { toast } from '../../lib/toast';
+import { at } from '../../test/defined';
 
 const mockUseLineupBanner = vi.mocked(useLineupBanner);
 const mockUseLineupDetail = vi.mocked(useLineupDetail);
@@ -102,7 +103,7 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         await user.click(screen.getByRole('button', { name: /vote/i }));
 
         expect(mockMutate).toHaveBeenCalledTimes(1);
-        const [vars, opts] = mockMutate.mock.calls[0];
+        const [vars, opts] = at(mockMutate.mock.calls, 0);
         expect(vars).toEqual({ lineupId: LINEUP_ID, gameId: GAME_ID });
         expect(opts).toBeDefined();
         expect(typeof opts.onSuccess).toBe('function');
@@ -111,7 +112,7 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         opts.onSuccess?.({ myVotes: [GAME_ID] } as never, vars, undefined);
 
         expect(toast.success).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(
+        expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toMatch(
             /vote recorded/i,
         );
         expect(toast.error).not.toHaveBeenCalled();
@@ -135,7 +136,7 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         opts.onSuccess?.({ myVotes: [] } as never, vars, undefined);
 
         expect(toast.success).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(toast.success).mock.calls[0][0]).toMatch(
+        expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toMatch(
             /vote removed/i,
         );
         expect(toast.error).not.toHaveBeenCalled();
@@ -160,7 +161,7 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         );
 
         expect(toast.error).toHaveBeenCalledTimes(1);
-        expect(vi.mocked(toast.error).mock.calls[0][0]).toBe('Voting closed');
+        expect(vi.mocked(toast.error).mock.calls[0]?.[0]).toBe('Voting closed');
         expect(toast.success).not.toHaveBeenCalled();
     });
 });

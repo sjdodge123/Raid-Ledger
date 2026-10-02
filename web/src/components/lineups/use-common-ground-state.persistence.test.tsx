@@ -10,6 +10,7 @@ import { renderHook, act } from '@testing-library/react';
 import type { CommonGroundResponseDto } from '@raid-ledger/contract';
 import { useCommonGroundState } from './use-common-ground-state';
 import { useCommonGround } from '../../hooks/use-lineups';
+import { at } from '../../test/defined';
 
 vi.mock('../../hooks/use-lineups', () => ({
     useActiveLineups: vi.fn(() => ({ data: [] })),
@@ -37,7 +38,7 @@ const LINEUP = 7;
 /** Params the hook actually asked the API for on its latest render. */
 function lastRequestedParams(): Record<string, unknown> {
     const calls = vi.mocked(useCommonGround).mock.calls;
-    return calls[calls.length - 1][0] as Record<string, unknown>;
+    return at(calls, -1)[0] as Record<string, unknown>;
 }
 
 /** Make the mocked query resolve with a meta carrying `coopDataAvailable`. */

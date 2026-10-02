@@ -170,7 +170,7 @@ describe('PhoneWeekCheckStep — the sticky footer saves the edited week', () =>
 
         fireEvent.click(save);
         expect(saveMutate).toHaveBeenCalledTimes(1);
-        expect(saveMutate.mock.calls[0][0]).toEqual([
+        expect(saveMutate.mock.calls[0]?.[0]).toEqual([
             { dayOfWeek: 0, hour: 19 },
             { dayOfWeek: 0, hour: 20 },
         ]);

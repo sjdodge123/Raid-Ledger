@@ -10,6 +10,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import { InviteeList } from './InviteeList';
+import { at } from '../../test/defined';
 
 const mockRemove = vi.fn();
 
@@ -88,7 +89,7 @@ describe('InviteeList (ROK-1065)', () => {
             />,
             { wrapper: wrap },
         );
-        const [firstBtn] = screen.getAllByRole('button', { name: /remove/i });
+        const firstBtn = at(screen.getAllByRole('button', { name: /remove/i }), 0);
         await user.click(firstBtn);
         expect(mockRemove).toHaveBeenCalledWith(
             { lineupId: 7, userId: 1 },

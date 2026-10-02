@@ -17,6 +17,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimeSlot } from '@raid-ledger/contract';
+import { at } from '../../../test/defined';
 
 describe('GameTimeGrid — day header interactive attributes (ROK-619)', () => {
     it('day headers have role="button" when interactive', () => {
@@ -63,7 +64,7 @@ describe('GameTimeGrid — correct dayIndex passed per header (ROK-619)', () => 
             render(<GameTimeGrid slots={[]} onChange={onChange} />);
             fireEvent.click(screen.getByTestId(`day-header-${dayIndex}`));
             expect(onChange).toHaveBeenCalledTimes(1);
-            const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+            const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
             expect(result).toHaveLength(24);
             expect(result.every((s) => s.dayOfWeek === dayIndex)).toBe(true);
         },
@@ -78,7 +79,7 @@ describe('GameTimeGrid — correct dayIndex passed per header (ROK-619)', () => 
 
         // Click Wednesday (3) — should deselect its 24 slots
         fireEvent.click(screen.getByTestId('day-header-3'));
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result.filter((s) => s.dayOfWeek === 3)).toHaveLength(0);
 
         // Other days unaffected in the result
@@ -95,7 +96,7 @@ describe('GameTimeGrid — keyboard accessibility on day headers (ROK-619)', () 
         header.focus();
         await user.keyboard('{Enter}');
         expect(onChange).toHaveBeenCalledTimes(1);
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result).toHaveLength(24);
     });
 
@@ -107,7 +108,7 @@ describe('GameTimeGrid — keyboard accessibility on day headers (ROK-619)', () 
         header.focus();
         await user.keyboard(' ');
         expect(onChange).toHaveBeenCalledTimes(1);
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result).toHaveLength(24);
         expect(result.every((s) => s.dayOfWeek === 1)).toBe(true);
     });
@@ -140,7 +141,7 @@ describe('GameTimeGrid — whole-day toggle with hourRange (ROK-619 / ROK-1011)'
         const onChange = vi.fn();
         render(<GameTimeGrid slots={[]} onChange={onChange} hourRange={[18, 24]} />);
         fireEvent.click(screen.getByTestId('day-header-0'));
-        const result = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(result).toHaveLength(6);
         const hours = result.map((s) => s.hour).sort((a, b) => a - b);
         expect(hours).toEqual([18, 19, 20, 21, 22, 23]);
@@ -158,7 +159,7 @@ describe('GameTimeGrid — sequential whole-day toggles (ROK-619)', () => {
 
         // First click: fills all 24 hours
         fireEvent.click(screen.getByTestId('day-header-0'));
-        const after1st = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const after1st = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(after1st).toHaveLength(24);
 
         // Simulate the onChange applied (re-render with new slots)
@@ -166,8 +167,8 @@ describe('GameTimeGrid — sequential whole-day toggles (ROK-619)', () => {
         render(<GameTimeGrid slots={after1st} onChange={onChange} />);
 
         // Second click: deselects all 24 hours
-        fireEvent.click(screen.getAllByTestId('day-header-0')[1]);
-        const after2nd = onChange.mock.calls[0][0] as GameTimeSlot[];
+        fireEvent.click(at(screen.getAllByTestId('day-header-0'), 1));
+        const after2nd = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
         expect(after2nd).toHaveLength(0);
     });
 
@@ -176,10 +177,10 @@ describe('GameTimeGrid — sequential whole-day toggles (ROK-619)', () => {
         render(<GameTimeGrid slots={[]} onChange={onChange} />);
 
         fireEvent.click(screen.getByTestId('day-header-0'));
-        const result0 = onChange.mock.calls[0][0] as GameTimeSlot[];
+        const result0 = at(onChange.mock.calls, 0)[0] as GameTimeSlot[];
 
         fireEvent.click(screen.getByTestId('day-header-6'));
-        const result6 = onChange.mock.calls[1][0] as GameTimeSlot[];
+        const result6 = at(onChange.mock.calls, 1)[0] as GameTimeSlot[];
 
         // Each call produced 24 slots for its own day
         expect(result0.every((s) => s.dayOfWeek === 0)).toBe(true);

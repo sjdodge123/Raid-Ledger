@@ -80,7 +80,7 @@ describe('PersonalSuggestionsRow (ROK-931)', () => {
         await waitFor(() => {
             expect(seen.length).toBeGreaterThan(0);
         });
-        expect(seen[0].searchParams.get('personalize')).toBe('me');
+        expect(seen[0]?.searchParams.get('personalize')).toBe('me');
     });
 
     it('renders nothing when suggestions is empty', async () => {

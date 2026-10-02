@@ -186,7 +186,7 @@ describe('SchedulingComposite — finishing an expired poll (ROK-1610)', () => {
     await user.click(screen.getByRole('button', { name: 'Schedule it' }));
 
     await waitFor(() => expect(createEventMutate).toHaveBeenCalledTimes(1));
-    expect(createEventMutate.mock.calls[0][0]).toEqual({
+    expect(createEventMutate.mock.calls[0]?.[0]).toEqual({
       lineupId: 7,
       matchId: 500,
       slotId: LOCK_IN_SLOT_ID,
@@ -219,7 +219,7 @@ describe('SchedulingSlotList — no lock on a time that has passed (ROK-1610)', 
     setDesktop();
     const poll = buildPoll();
     poll.slots[1] = {
-      ...poll.slots[1],
+      ...at(poll.slots, 1),
       proposedTime: '2020-01-02T20:00:00.000Z',
     };
     // 1001 leads and ROK-1635 draws it on the card, so the future half of the

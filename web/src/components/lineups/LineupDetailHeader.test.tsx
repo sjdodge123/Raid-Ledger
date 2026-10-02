@@ -173,7 +173,7 @@ describe('LineupDetailHeader — operator ⋮ menu (ROK-1323)', () => {
         fireEvent.click(screen.getByTestId('lineup-operator-menu-advance'));
         fireEvent.click(screen.getByRole('button', { name: 'Advance to Voting' }));
         expect(mockTransitionMutate).toHaveBeenCalledTimes(1);
-        expect(mockTransitionMutate.mock.calls[0][0]).toEqual({
+        expect(mockTransitionMutate.mock.calls[0]?.[0]).toEqual({
             lineupId: 42,
             body: { status: 'voting' },
         });

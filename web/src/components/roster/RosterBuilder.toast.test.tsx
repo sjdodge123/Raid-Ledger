@@ -11,6 +11,7 @@ vi.mock('sonner', () => ({
 }));
 
 import { toast } from 'sonner';
+import { at } from '../../test/defined';
 
 /** Build a mock generic player (no character) */
 function makeGenericPlayer(id: number, name: string): RosterAssignmentResponse {
@@ -29,7 +30,7 @@ function assignFirstSlot(playerPool: RosterAssignmentResponse[]) {
             canEdit={true}
         />
     );
-    fireEvent.click(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0]);
+    fireEvent.click(at(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ }), 0));
     const modal = document.querySelector('[role="dialog"]');
     const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
     expect(modalAssignBtn).toBeTruthy();
@@ -64,7 +65,7 @@ describe('RosterBuilder — MMO slot toast (ROK-487)', () => {
         renderWithRouter(
             <RosterBuilder pool={[tankPlayer]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
         );
-        fireEvent.click(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0]);
+        fireEvent.click(at(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ }), 0));
         const modal = document.querySelector('[role="dialog"]');
         const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
         expect(modalAssignBtn).toBeTruthy();
