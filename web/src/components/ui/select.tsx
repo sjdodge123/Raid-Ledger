@@ -2,8 +2,9 @@
  * Select — the shared native select (ROK-1646, spike ROK-1644 §4.4).
  *
  * - Stays a native `<select>` (all 26 audited sites are native): the frame is
- *   `FIELD_FRAME_BASE` + `FIELD_PAD[fieldSize]` + `appearance-none pr-9`, with a
- *   decorative chevron in `text-muted` where the browser arrow was.
+ *   `FIELD_FRAME_BASE` + `FIELD_PAD[fieldSize]` + `appearance-none pr-9`
+ *   (`pr-9 lg:pr-9` at `fieldSize="sm"`), with a decorative chevron in
+ *   `text-muted` where the browser arrow was.
  * - `fieldSize`, not `size` — the native `size` attribute turns a select into a
  *   list box.
  * - `placeholder` renders a first `<option value="">`; pair it with
@@ -26,8 +27,15 @@ export interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement
     wrapperClassName?: string;
 }
 
+/**
+ * Room for the chevron, per size. `sm` restates it at `lg:` for the reason
+ * `LEADING_PAD` / `TRAILING_PAD` in input.tsx spell out: FIELD_PAD.sm's
+ * `lg:px-2` otherwise beats a bare `pr-9` from `lg` up.
+ */
+const CHEVRON_PAD: Record<FieldSize, string> = { md: 'pr-9', lg: 'pr-9', sm: 'pr-9 lg:pr-9' };
+
 function selectClass(fieldSize: FieldSize, className?: string): string {
-    return [FIELD_FRAME_BASE, FIELD_PAD[fieldSize], 'appearance-none pr-9 cursor-pointer', className ?? '']
+    return [FIELD_FRAME_BASE, FIELD_PAD[fieldSize], 'appearance-none', CHEVRON_PAD[fieldSize], 'cursor-pointer', className ?? '']
         .filter(Boolean).join(' ');
 }
 

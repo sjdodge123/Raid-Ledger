@@ -17,10 +17,16 @@ type Db = PostgresJsDatabase<typeof schema>;
  *
  * Dates are serialised with `toISOString()` and cast to `timestamp` to match
  * drizzle's own `PgTimestamp.mapToDriverValue`, so stored values are identical
- * to the previous per-row path. Every pending entry is already a genuine
- * change (see `queueLivenessIfStale`, which only queues when the value moves
- * and immediately advances the in-memory `lastRunAt`), so no separate
- * unchanged-row skip is needed.
+ * to the previous per-row path. Entries come from `LastRunBuffer` — liveness
+ * heartbeats (`queueLiveness`, which only queues when the value moves) and
+ * completed/degraded runs (`deferCompleted`, ROK-1380) — so every entry is a
+ * genuine change and no separate unchanged-row skip is needed.
+ *
+ * The write is monotonic (`GREATEST`, which ignores a NULL column): a queued
+ * value never rolls back a newer last_run_at written immediately meanwhile —
+ * a failed run, a manual trigger, or a write that landed while this flush's
+ * UPDATE was in flight. A failed UPDATE re-queues its entries so a transient
+ * DB error delays the timestamps by one cycle instead of losing them.
  */
 export async function flushPendingUpdates(
   db: Db,
@@ -35,7 +41,8 @@ export async function flushPendingUpdates(
   try {
     await db.execute(sql`
       UPDATE ${schema.cronJobs} AS c
-         SET last_run_at = v.last_run_at, next_run_at = v.next_run_at,
+         SET last_run_at = GREATEST(c.last_run_at, v.last_run_at),
+             next_run_at = v.next_run_at,
              updated_at = ${new Date().toISOString()}::timestamp
         FROM (VALUES ${sql.join(rows, sql`, `)}) AS v(id, last_run_at, next_run_at)
        WHERE c.id = v.id
@@ -43,16 +50,31 @@ export async function flushPendingUpdates(
   } catch (err) {
     const ids = Array.from(updates.keys()).join(', ');
     logger.warn(`Failed to flush last_run_at for job(s) ${ids}: ${err}`);
+    requeueFailedFlush(pending, updates);
     return;
   }
   logger.debug(`Flushed last_run_at for ${rows.length} cron job(s)`);
 }
 
 /**
- * Build the `VALUES` tuples for the batched flush, skipping (with a warn) any
- * row that fails to serialise — e.g. an invalid Date whose toISOString()
+ * Put a failed flush's entries back for the next cycle. An entry queued for
+ * the same job while the UPDATE was in flight is newer, so it is kept.
+ */
+function requeueFailedFlush(
+  pending: Map<number, { lastRunAt: Date; cronExpression: string }>,
+  updates: Map<number, { lastRunAt: Date; cronExpression: string }>,
+): void {
+  for (const [id, update] of updates) {
+    if (!pending.has(id)) pending.set(id, update);
+  }
+}
+
+/**
+ * Build the `VALUES` tuples for the batched flush, dropping (with a warn) any
+ * entry that fails to serialise — e.g. an invalid Date whose toISOString()
  * throws. One poisoned entry must cost only its own row, not the whole
- * cycle's updates (the pre-ROK-1414 per-row loop had the same property).
+ * cycle's updates (the pre-ROK-1414 per-row loop had the same property). It
+ * is also deleted from `updates`, so a failed flush never re-queues it.
  */
 function buildFlushRows(
   updates: Map<number, { lastRunAt: Date; cronExpression: string }>,
@@ -65,6 +87,7 @@ function buildFlushRows(
       rows.push(flushValuesRow(id, lastRunAt, cronExpression));
     } catch {
       failed.push(id);
+      updates.delete(id);
     }
   }
   if (failed.length > 0) {

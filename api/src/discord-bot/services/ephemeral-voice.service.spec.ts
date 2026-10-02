@@ -73,6 +73,7 @@ async function build(memberCount: number) {
     .mockResolvedValue(true);
   return {
     service: module.get(EphemeralVoiceService),
+    client,
     deleteSpy: discordOps.deleteVoiceChannel as jest.Mock,
     clearSpy,
     createSpy,
@@ -101,14 +102,14 @@ afterEach(() => jest.restoreAllMocks());
 describe('destroyForEvent — never delete while occupied (AC4)', () => {
   it('skips delete when the channel still has members', async () => {
     const { service, deleteSpy, clearSpy } = await build(2);
-    await service.destroyForEvent({ ...row });
+    expect(await service.destroyForEvent({ ...row })).toBe(false);
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(clearSpy).not.toHaveBeenCalled();
   });
 
   it('flushes attendance then deletes when empty', async () => {
     const { service, deleteSpy, clearSpy, voiceAttendance } = await build(0);
-    await service.destroyForEvent({ ...row });
+    expect(await service.destroyForEvent({ ...row })).toBe(true);
     expect(deleteSpy).toHaveBeenCalledWith(guild, 'ch-1');
     expect(clearSpy).toHaveBeenCalledWith(expect.anything(), 1);
     expect(voiceAttendance.flushToDb).toHaveBeenCalled();
@@ -116,7 +117,9 @@ describe('destroyForEvent — never delete while occupied (AC4)', () => {
 
   it('does nothing when the event has no ephemeral channel', async () => {
     const { service, deleteSpy } = await build(0);
-    await service.destroyForEvent({ ...row, ephemeralVoiceChannelId: null });
+    expect(
+      await service.destroyForEvent({ ...row, ephemeralVoiceChannelId: null }),
+    ).toBe(false);
     expect(deleteSpy).not.toHaveBeenCalled();
   });
 
@@ -124,9 +127,69 @@ describe('destroyForEvent — never delete while occupied (AC4)', () => {
   // channel, or it is orphaned once the event row is gone.
   it('force-deletes even when the channel is occupied', async () => {
     const { service, deleteSpy, clearSpy } = await build(3);
-    await service.destroyForEvent({ ...row }, { force: true });
+    expect(await service.destroyForEvent({ ...row }, { force: true })).toBe(
+      true,
+    );
     expect(deleteSpy).toHaveBeenCalledWith(guild, 'ch-1');
     expect(clearSpy).toHaveBeenCalledWith(expect.anything(), 1);
+  });
+});
+
+// TDB:1917 — the deleted flag is the only way a caller (the DEMO_MODE
+// end-session endpoint) can tell a leaked channel from a destroyed one.
+describe('destroyForEvent — reports whether the channel was deleted', () => {
+  it('is false when the bot is offline (no guild), deleting nothing', async () => {
+    const { service, client, deleteSpy } = await build(0);
+    client.isConnected.mockReturnValue(false);
+    expect(await service.destroyForEvent({ ...row }, { force: true })).toBe(
+      false,
+    );
+    expect(deleteSpy).not.toHaveBeenCalled();
+  });
+
+  it('is false when the channel is already gone from the guild', async () => {
+    const { service, deleteSpy, clearSpy } = await build(0);
+    deleteSpy.mockResolvedValue(false);
+    expect(await service.destroyForEvent({ ...row }, { force: true })).toBe(
+      false,
+    );
+    expect(clearSpy).toHaveBeenCalledWith(expect.anything(), 1);
+  });
+
+  it('is false when the Discord delete throws (error is captured, not thrown)', async () => {
+    const { service, deleteSpy, clearSpy } = await build(0);
+    deleteSpy.mockRejectedValue(new Error('Missing Permissions'));
+    expect(await service.destroyForEvent({ ...row }, { force: true })).toBe(
+      false,
+    );
+    expect(clearSpy).not.toHaveBeenCalled();
+  });
+
+  it('stays true when the repoint after a real delete fails', async () => {
+    const { service } = await build(0);
+    jest
+      .spyOn(dbHelpers, 'buildRepointData')
+      .mockRejectedValue(new Error('db down'));
+    expect(await service.destroyForEvent({ ...row }, { force: true })).toBe(
+      true,
+    );
+  });
+});
+
+describe('destroyById — forwards the deleted flag', () => {
+  it('is true when the reloaded event channel is deleted', async () => {
+    const { service } = await build(0);
+    jest
+      .spyOn(dbHelpers, 'fetchEventForEphemeral')
+      .mockResolvedValue({ ...row });
+    expect(await service.destroyById(1, { force: true })).toBe(true);
+  });
+
+  it('is false when the event row is gone', async () => {
+    const { service, deleteSpy } = await build(0);
+    jest.spyOn(dbHelpers, 'fetchEventForEphemeral').mockResolvedValue(null);
+    expect(await service.destroyById(1, { force: true })).toBe(false);
+    expect(deleteSpy).not.toHaveBeenCalled();
   });
 });
 

@@ -149,8 +149,8 @@ describe('CommonGroundResponseSchema accepts the extended game shape (ROK-1297)'
             },
         };
         const parsed = CommonGroundResponseSchema.parse(response);
-        expect(parsed.data[0].theme).toBe('owned');
-        expect(parsed.data[1].theme).toBe('taste');
+        expect(parsed.data[0]?.theme).toBe('owned');
+        expect(parsed.data[1]?.theme).toBe('taste');
     });
 });
 

@@ -181,19 +181,30 @@ export class DemoTestLfgController {
    * smoke run made would orphan a channel in the shared test guild for good.
    * Same order as the reaper (end, then destroy); `force` because a smoke is
    * the only occupant and must not be able to keep the channel alive.
+   *
+   * `channelDestroyed` is true only when the Discord channel was actually
+   * deleted. False (bot offline, channel already gone, delete failed, or no
+   * ephemeral voice service) lets a smoke flag a leaked channel instead of
+   * trusting `ended` alone.
    */
   @Post('lfg/end-session')
   @HttpCode(HttpStatus.OK)
-  async endLfgSession(
-    @Body() body: unknown,
-  ): Promise<{ ended: boolean; eventId: number | null }> {
+  async endLfgSession(@Body() body: unknown): Promise<{
+    ended: boolean;
+    eventId: number | null;
+    channelDestroyed: boolean;
+  }> {
     await this.assertDemoMode();
     const gameId = parseGameIdBody(body);
     const eventId = await findOpenLfgNowEventId(this.db, gameId);
-    if (eventId === null) return { ended: false, eventId: null };
+    if (eventId === null) {
+      return { ended: false, eventId: null, channelDestroyed: false };
+    }
     await setGracePeriodStatus(this.db, eventId);
     await this.adHocEventService.finalizeEvent(eventId);
-    await this.ephemeralVoice?.destroyById(eventId, { force: true });
-    return { ended: true, eventId };
+    const channelDestroyed =
+      (await this.ephemeralVoice?.destroyById(eventId, { force: true })) ??
+      false;
+    return { ended: true, eventId, channelDestroyed };
   }
 }

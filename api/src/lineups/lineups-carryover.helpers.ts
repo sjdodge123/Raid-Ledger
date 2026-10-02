@@ -89,30 +89,56 @@ async function insertCarriedEntry(
   });
 }
 
+/** Options for {@link carryOverFromLastDecided}. */
+export interface CarryoverOptions {
+  /**
+   * Pin the source lineup instead of picking the newest PUBLIC
+   * decided/archived lineup on the instance. Only the DEMO_MODE test seam
+   * sets this, so a smoke run copies from its own prior lineup even when
+   * other runs decide or archive newer lineups concurrently.
+   */
+  previousLineupId?: number;
+}
+
+/** Explicit source when given, otherwise the newest eligible lineup. */
+async function resolveSourceLineupId(
+  db: Db,
+  newLineupId: number,
+  opts: CarryoverOptions,
+): Promise<number | undefined> {
+  if (opts.previousLineupId !== undefined) return opts.previousLineupId;
+  const [prev] = await findPreviousLineup(db, newLineupId);
+  return prev?.id;
+}
+
 /**
- * Carry over suggested match entries from the most recent
- * decided/archived lineup into a new lineup.
+ * Carry over suggested match entries from a previous lineup into a new one.
+ *
+ * By default the source is the most recent PUBLIC decided/archived lineup
+ * (see `findPreviousLineup`). `opts.previousLineupId` pins the source
+ * explicitly and skips that lookup; production callers omit it.
  */
 export async function carryOverFromLastDecided(
   db: Db,
   newLineupId: number,
+  opts: CarryoverOptions = {},
 ): Promise<void> {
-  const [prev] = await findPreviousLineup(db, newLineupId);
-  if (!prev) return;
+  const prevId = await resolveSourceLineupId(db, newLineupId, opts);
+  if (prevId === undefined) return;
 
-  const suggestedMatches = await findSuggestedMatches(db, prev.id);
+  const suggestedMatches = await findSuggestedMatches(db, prevId);
   if (suggestedMatches.length === 0) return;
 
   let carried = 0;
   for (const match of suggestedMatches) {
-    const [entry] = await findOriginalNominator(db, prev.id, match.gameId);
+    const [entry] = await findOriginalNominator(db, prevId, match.gameId);
     if (!entry?.nominatedBy) continue; // skip if nominator was deleted
     await insertCarriedEntry(
       db,
       newLineupId,
       match.gameId,
       entry.nominatedBy,
-      prev.id,
+      prevId,
     );
     carried++;
   }

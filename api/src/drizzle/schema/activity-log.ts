@@ -34,5 +34,7 @@ export const activityLog = pgTable(
       table.entityId,
       table.createdAt,
     ),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    index('idx_activity_log_actor_id').on(table.actorId),
   ],
 );

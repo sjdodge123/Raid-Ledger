@@ -124,6 +124,7 @@ describe('CommonGroundHero — themed layout (ROK-1297)', () => {
         renderWithProviders(
             <CommonGroundHero
                 canParticipate={true}
+                nominatingId={null}
                 onTileNominate={vi.fn()}
                 onTileOpenDrawer={vi.fn()}
                 mergedData={commonGroundResponse(buildThemedTiles())}
@@ -162,6 +163,7 @@ describe('CommonGroundHero — themed layout (ROK-1297)', () => {
         renderWithProviders(
             <CommonGroundHero
                 canParticipate={true}
+                nominatingId={null}
                 onTileNominate={vi.fn()}
                 onTileOpenDrawer={vi.fn()}
                 mergedData={commonGroundResponse(buildThemedTiles())}
@@ -193,6 +195,7 @@ describe('CommonGroundHero — legacy fallback (ROK-1297)', () => {
         renderWithProviders(
             <CommonGroundHero
                 canParticipate={true}
+                nominatingId={null}
                 onTileNominate={vi.fn()}
                 onTileOpenDrawer={vi.fn()}
                 mergedData={commonGroundResponse(tiles)}
@@ -229,6 +232,7 @@ describe('CommonGroundHero — interactions (ROK-1297)', () => {
         renderWithProviders(
             <CommonGroundHero
                 canParticipate={true}
+                nominatingId={null}
                 onTileNominate={onTileNominate}
                 onTileOpenDrawer={onTileOpenDrawer}
                 mergedData={commonGroundResponse(subnauticaTiles)}
@@ -263,6 +267,7 @@ describe('CommonGroundHero — interactions (ROK-1297)', () => {
         renderWithProviders(
             <CommonGroundHero
                 canParticipate={true}
+                nominatingId={null}
                 onTileNominate={onTileNominate}
                 onTileOpenDrawer={onTileOpenDrawer}
                 mergedData={commonGroundResponse(hadesTiles)}

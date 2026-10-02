@@ -48,13 +48,14 @@ Per-operator direction, this audit works from the noise classes named in the ROK
 
 ### Addendum — filters added after this audit
 
-Three `beforeSend` clauses shipped after this audit and are listed here so the tables above remain a complete filter inventory. ROK-1354 also fixed the dead `=== 'DiscordAPIError'` gate in both Discord clauses (see section 3).
+Three `beforeSend` clauses and one controller-side filter shipped after this audit and are listed here so the tables above remain a complete filter inventory. ROK-1354 also fixed the dead `=== 'DiscordAPIError'` gate in both Discord clauses (see section 3).
 
 | Pattern | Story | File |
 |---|---|---|
 | Synthetic CSP-report probes (`example.*` / curl UA) | ROK-1365 | `api/src/sentry/instrument.ts:25-39` |
 | Steam-sync user-fixable 4xx (`Steam account not linked` / `Steam profile is private`) | ROK-1307 | `api/src/sentry/instrument.ts:61-79` |
 | `cron_job_executions_cron_job_id_fkey` FK violations | ROK-1328 | `api/src/sentry/instrument.ts:80-94` |
+| Cloudflare RUM beacon CSP reports (`static.cloudflareinsights.com`, `cloudflareinsights.com/cdn-cgi/rum`). Filtered in the csp-report controller before `captureMessage`, not in `beforeSend`; still written to the app log | ROK-1501 | `api/src/csp-report/csp-report-noise.helpers.ts` (called from `api/src/csp-report/csp-report.controller.ts`) |
 
 ## Code delivered
 

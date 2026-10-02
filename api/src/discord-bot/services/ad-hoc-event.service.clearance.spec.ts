@@ -56,7 +56,9 @@ describe('AdHocEventService — ensureNotSuppressed / SpawnClearance (ROK-1456)'
     return {
       id: 42,
       extendedUntil: null,
-      scheduledEnd: new Date(Date.now() + 2 * 60 * 60_000),
+      // ROK-1696: ends inside the 60m window, so the suppressed join's write
+      // lands past the scheduled end (an earlier end is skipped, not written).
+      scheduledEnd: new Date(Date.now() + 30 * 60_000),
       matchedBy: 'game',
     } as never;
   }
