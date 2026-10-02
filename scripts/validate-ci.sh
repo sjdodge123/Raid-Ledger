@@ -47,6 +47,8 @@
 #   ./scripts/validate-ci.sh --with-e2e  # Force Playwright + Discord smoke
 #                                        # even if no triggering files changed
 #                                        # (e.g. paranoid pre-push pass).
+#                                        # The only flag that overrides an
+#                                        # ambient E2E_SCOPE=none.
 #   ./scripts/validate-ci.sh --only-e2e  # Skip build/typecheck/lint/tests and
 #                                        # run only the diff-gated e2e steps.
 #                                        # Use in post-deploy gates where the
@@ -75,6 +77,12 @@
 #                                        # (--static, --only-unit --no-coverage,
 #                                        # --only-integration) with one run
 #                                        # whose summary lists every step.
+#                                        # E2E_SCOPE=none skips Playwright
+#                                        # here too; only an explicit
+#                                        # --with-e2e overrides it. A
+#                                        # Playwright FAIL is recorded, the
+#                                        # Discord smoke step still runs, and
+#                                        # the gate then exits 1.
 #                                        # Example:
 #                                        #   BASE_URL=http://rl-env-<slug>-allinone \
 #                                        #     ./scripts/validate-ci.sh --fleet --with-e2e
@@ -174,6 +182,14 @@ discord_smoke_relevant=false
 ci_mode=false
 # e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
 e2e_mode="auto"
+# e2e_explicit: true ONLY when --with-e2e was passed. --fleet also sets
+# e2e_mode=on, but that is implied, so it must not override E2E_SCOPE=none.
+e2e_explicit=false
+# RUN_STEP_DEFER_FAIL: set around the Playwright step only. Its FAIL is recorded
+# and the run continues so the Discord smoke row still reports; the gate then
+# exits 1 via _exit_if_deferred_fail. Every other step stays fail-fast.
+RUN_STEP_DEFER_FAIL=0
+GATE_DEFERRED_FAIL=0
 # ROK-1565 — the Playwright tier's SIZE, independent of whether it runs at all.
 # Set from the environment (rl_validate_ci forwards E2E_SCOPE); resolved once by
 # _prepare_playwright_scope into these two globals.
@@ -353,6 +369,10 @@ print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_co
   else
     echo -e "${RED}$name: FAIL${NC}"
     record_result "$name" "FAIL"
+    if [ "${RUN_STEP_DEFER_FAIL:-0}" = 1 ]; then
+      GATE_DEFERRED_FAIL=1
+      return 0
+    fi
     print_summary
     echo -e "${RED}Stopping on first failure.${NC}"
     exit 1
@@ -1661,10 +1681,15 @@ _prepare_playwright_scope() {
 run_playwright_e2e() {
   _resolve_e2e_scope >/dev/null
   if [ "$E2E_SCOPE_RESOLVED" = "none" ]; then
-    if [ "$e2e_mode" = "on" ]; then
+    if [ "${e2e_explicit:-false}" = true ]; then
       # --with-e2e is an explicit request from the invoking human/agent;
       # E2E_SCOPE is ambient. The flag wins, loudly.
       echo -e "${YELLOW}E2E_SCOPE=none is overridden by --with-e2e — running the full Playwright suite${NC}"
+    elif [ "$e2e_mode" = "on" ]; then
+      # --fleet turns e2e on by implication only; an explicit none still wins.
+      echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright under --fleet (pass --with-e2e to force it; GitHub CI still runs the full suite)${NC}"
+      skip_step
+      return 0
     else
       echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright (GitHub CI still runs the full suite)${NC}"
       skip_step
@@ -1996,8 +2021,21 @@ run_default_gate() {
   # In --static mode they're skipped entirely (deferred to GitHub CI).
   if ! $static_mode; then
     _prepare_playwright_scope
+    RUN_STEP_DEFER_FAIL=1
     run_step "$PLAYWRIGHT_STEP_LABEL" run_playwright_e2e
+    RUN_STEP_DEFER_FAIL=0
     run_step "Discord smoke (companion bot)" run_discord_smoke
+    _exit_if_deferred_fail
+  fi
+}
+
+# A Playwright FAIL is deferred (see RUN_STEP_DEFER_FAIL) so the Discord smoke
+# row still reports. Nothing may print "All checks passed!" after it.
+_exit_if_deferred_fail() {
+  if [ "${GATE_DEFERRED_FAIL:-0}" = 1 ]; then
+    print_summary
+    echo -e "${RED}Playwright FAILED (Discord smoke still ran).${NC}"
+    exit 1
   fi
 }
 
@@ -2012,7 +2050,7 @@ main() {
       --scope=*) scope_mode="${1#--scope=}"; shift ;;
       --ci) ci_mode=true; shift ;;
       --no-e2e) e2e_mode="off"; shift ;;
-      --with-e2e) e2e_mode="on"; shift ;;
+      --with-e2e) e2e_mode="on"; e2e_explicit=true; shift ;;
       --only-e2e) _set_only_mode e2e; shift ;;
       --only-integration) _set_only_mode integration; shift ;;
       --only-unit) _set_only_mode unit; shift ;;
@@ -2135,6 +2173,7 @@ print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2])
     *) run_default_gate ;;
   esac
 
+  _exit_if_deferred_fail
   print_summary
   echo -e "${GREEN}All checks passed!${NC}"
 }
