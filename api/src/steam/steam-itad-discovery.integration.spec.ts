@@ -16,7 +16,7 @@ import {
   type DiscoveryDeps,
 } from './steam-itad-discovery.helpers';
 import type { ItadGame } from '../itad/itad.constants';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 jest.mock('./steam-igdb-enrichment.helpers', () => ({
   enrichFromIgdb: jest.fn().mockResolvedValue(null),
@@ -179,9 +179,10 @@ function describeItadDiscoveryIntegration() {
     const suffixed = sharedRows.filter((r) => r.slug !== 'shared-slug');
     expect(bare).toHaveLength(1);
     expect(suffixed).toHaveLength(1);
-    expect(suffixed[0].slug).toBe(`shared-slug-${suffixed[0].steamAppId}`);
-    expect(suffixed[0].itadGameId).toBeNull();
-    expect(bare[0].itadGameId).not.toBeNull();
+    const loser = at(suffixed, 0);
+    expect(loser.slug).toBe(`shared-slug-${loser.steamAppId}`);
+    expect(loser.itadGameId).toBeNull();
+    expect(at(bare, 0).itadGameId).not.toBeNull();
   });
 
   it('handles slug + itadGameId both colliding with different games', async () => {

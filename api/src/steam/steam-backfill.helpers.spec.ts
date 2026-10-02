@@ -4,6 +4,7 @@ import {
   MAX_BACKFILL_LOOKUPS,
 } from './steam-backfill.helpers';
 import type { IgdbApiGame } from '../igdb/igdb.constants';
+import { at, defined } from '../common/testing/narrow';
 
 describe('backfillUnmatchedSteamGames', () => {
   let mockQueryIgdb: jest.Mock<Promise<IgdbApiGame[]>>;
@@ -98,8 +99,10 @@ describe('backfillUnmatchedSteamGames', () => {
     // Should only query up to MAX_BACKFILL_LOOKUPS, not all
     const totalQueried = (mockQueryIgdb.mock.calls as string[][])
       .map((call) => {
-        const match = call[0].match(/uid = \(([^)]+)\)/);
-        return match ? match[1].split(',').length : 0;
+        const match = at(call, 0).match(/uid = \(([^)]+)\)/);
+        return match
+          ? defined(match[1], 'uid list capture').split(',').length
+          : 0;
       })
       .reduce((sum, n) => sum + n, 0);
     expect(totalQueried).toBeLessThanOrEqual(MAX_BACKFILL_LOOKUPS);

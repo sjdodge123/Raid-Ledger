@@ -12,7 +12,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 interface ActivityEntry {
   id: number;
@@ -141,8 +141,8 @@ function describeActivityLog() {
       const timestamps = timeline(res).data.map((e) =>
         new Date(e.createdAt).getTime(),
       );
-      for (let i = 1; i < timestamps.length; i++) {
-        expect(timestamps[i]).toBeGreaterThanOrEqual(timestamps[i - 1]);
+      for (const [prevIndex, ts] of timestamps.slice(1).entries()) {
+        expect(ts).toBeGreaterThanOrEqual(at(timestamps, prevIndex));
       }
     });
 
@@ -272,9 +272,10 @@ function describeActivityLog() {
       expect(res.status).toBe(200);
       const body = timeline(res);
       expect(body.data).toHaveLength(1);
-      expect(body.data[0].actor).not.toBeNull();
-      expect(body.data[0].actor!.displayName).toBe('alice');
-      expect(body.data[0].actor!.displayName).not.toBe('Unknown');
+      const entry = at(body.data, 0);
+      expect(entry.actor).not.toBeNull();
+      expect(entry.actor!.displayName).toBe('alice');
+      expect(entry.actor!.displayName).not.toBe('Unknown');
     });
 
     it('returns displayName when set', async () => {
@@ -306,7 +307,7 @@ function describeActivityLog() {
       expect(res.status).toBe(200);
       const body = timeline(res);
       expect(body.data).toHaveLength(1);
-      expect(body.data[0].actor!.displayName).toBe('AliceCustom');
+      expect(at(body.data, 0).actor!.displayName).toBe('AliceCustom');
     });
 
     it('returns "Unknown" only when actor row is missing entirely', async () => {
@@ -336,8 +337,9 @@ function describeActivityLog() {
       expect(res.status).toBe(200);
       const body = timeline(res);
       expect(body.data).toHaveLength(1);
-      expect(body.data[0].actor).not.toBeNull();
-      expect(body.data[0].actor!.displayName).toBe('Unknown');
+      const entry = at(body.data, 0);
+      expect(entry.actor).not.toBeNull();
+      expect(entry.actor!.displayName).toBe('Unknown');
     });
   }
   describe('displayName fallback (ROK-1116)', describeUsernameFallback);

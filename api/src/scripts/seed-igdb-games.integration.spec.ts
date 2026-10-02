@@ -71,7 +71,7 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     // AND retains the steam_app_id from upstream discovery.
     expect(survivors).toHaveLength(1);
     expect(rows).toHaveLength(1);
-    expect(rows[0].id).toBe(existing.id);
+    expect(rows[0]?.id).toBe(existing.id);
     expect(rows[0]?.igdbId).toBe(119171);
     expect(rows[0]?.steamAppId).toBe(1086940);
     expect(rows[0]?.name).toBe("Baldur's Gate 3");
@@ -274,10 +274,13 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
 
     await upsertSeedGames(testApp.db, [classic as GameSeed]);
 
-    const [row] = await testApp.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, seeded.id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.games)
+        .where(eq(schema.games.id, seeded.id)),
+      'seeded game row',
+    );
     expect(row.summary).toBe(classic?.summary);
     expect(row.name).toBe('World of Warcraft Classic Era');
     expect(row.slug).toBe('world-of-warcraft-classic');

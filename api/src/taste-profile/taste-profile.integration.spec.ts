@@ -26,7 +26,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { TIER_DESCRIPTIONS } from './archetype-copy';
 import { TasteProfileService } from './taste-profile.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 describe('Taste Profile (ROK-948)', () => {
   let testApp: TestApp;
@@ -194,10 +194,13 @@ describe('Taste Profile (ROK-948)', () => {
 
       await service.aggregateVectors();
 
-      const [row] = await testApp.db
-        .select()
-        .from(schema.playerTasteVectors)
-        .where(sql`user_id = ${userId}`);
+      const [row] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.playerTasteVectors)
+          .where(sql`user_id = ${userId}`),
+        'taste vector row',
+      );
       expect(row).toBeDefined();
       expect(row.dimensions).toEqual(
         expect.objectContaining({
@@ -275,10 +278,13 @@ describe('Taste Profile (ROK-948)', () => {
 
       await service.weeklyIntensityRollup();
 
-      const [snap] = await testApp.db
-        .select()
-        .from(schema.playerIntensitySnapshots)
-        .where(sql`user_id = ${userId}`);
+      const [snap] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.playerIntensitySnapshots)
+          .where(sql`user_id = ${userId}`),
+        'intensity snapshot',
+      );
       expect(snap).toBeDefined();
       expect(Number(snap.totalHours)).toBeCloseTo(11.67, 1);
       expect(snap.uniqueGames).toBe(2);
@@ -323,8 +329,8 @@ describe('Taste Profile (ROK-948)', () => {
       const rows = await testApp.db.select().from(schema.playerCoPlay);
       expect(rows).toHaveLength(1);
       const [lo, hi] = [aliceId, bobId].sort((a, b) => a - b);
-      expect(rows[0].userIdA).toBe(lo);
-      expect(rows[0].userIdB).toBe(hi);
+      expect(rows[0]?.userIdA).toBe(lo);
+      expect(rows[0]?.userIdB).toBe(hi);
       expect(rows[0]?.gamesPlayed).toContain(game);
     });
 
@@ -701,7 +707,9 @@ describe('Taste Profile (ROK-948)', () => {
         .from(schema.playerTasteVectors)
         .where(sql`user_id = ${userId}`);
       expect(
-        Object.keys(onDisk[0].dimensions as unknown as Record<string, number>),
+        Object.keys(
+          at(onDisk, 0).dimensions as unknown as Record<string, number>,
+        ),
       ).toHaveLength(24);
     });
   });
