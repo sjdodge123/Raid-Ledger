@@ -77,6 +77,7 @@ import {
   buildPoll,
   type PollOverrides,
 } from './scheduling-poll-fixtures';
+import { at } from '../../../../test/defined';
 
 /** A never-leading future time, so the ladder lists a row of its own. */
 const LISTED_SLOT_ID = 1003;

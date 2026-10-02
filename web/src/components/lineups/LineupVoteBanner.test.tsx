@@ -128,7 +128,7 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         await user.click(screen.getByRole('button', { name: /voted/i }));
 
         expect(mockMutate).toHaveBeenCalledTimes(1);
-        const [vars, opts] = mockMutate.mock.calls[0];
+        const [vars, opts] = at(mockMutate.mock.calls, 0);
         expect(vars).toEqual({ lineupId: LINEUP_ID, gameId: GAME_ID });
         expect(typeof opts.onSuccess).toBe('function');
 
@@ -151,7 +151,7 @@ describe('LineupVoteBanner — VotingBanner vote feedback (ROK-1119)', () => {
         await user.click(screen.getByRole('button', { name: /vote/i }));
 
         expect(mockMutate).toHaveBeenCalledTimes(1);
-        const [, opts] = mockMutate.mock.calls[0];
+        const [, opts] = at(mockMutate.mock.calls, 0);
         expect(typeof opts.onError).toBe('function');
 
         opts.onError?.(

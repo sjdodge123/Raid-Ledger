@@ -212,7 +212,7 @@ it('calls onRosterChange with filled assignments on confirm', () => {
             fireEvent.click(screen.getByText('Continue'));
 
             expect(mockOnRosterChange).toHaveBeenCalledTimes(1);
-            const [newPool, newAssignments] = mockOnRosterChange.mock.calls[0];
+            const [newPool, newAssignments] = at(mockOnRosterChange.mock.calls, 0);
             expect(newAssignments.length).toBe(6);
             expect(newPool.length).toBe(0);
         });
@@ -229,7 +229,7 @@ it('does not move already-assigned players', () => {
             fireEvent.click(screen.getByText('Auto-Fill'));
             fireEvent.click(screen.getByText('Continue'));
 
-            const [, newAssignments] = mockOnRosterChange.mock.calls[0];
+            const [, newAssignments] = at(mockOnRosterChange.mock.calls, 0);
             expect(newAssignments.find((a: RosterAssignmentResponse) => a.signupId === 99)).toBeTruthy();
             const tankA = newAssignments.find((a: RosterAssignmentResponse) => a.username === 'TankA');
             expect(tankA?.slot).toBe('tank');
@@ -287,7 +287,7 @@ it('shows confirmation text on first click, clears on second click', () => {
 
             fireEvent.click(screen.getByText('Click again to clear'));
             expect(mockOnRosterChange).toHaveBeenCalledTimes(1);
-            const [newPool, newAssignments] = mockOnRosterChange.mock.calls[0];
+            const [newPool, newAssignments] = at(mockOnRosterChange.mock.calls, 0);
             expect(newAssignments).toEqual([]);
             expect(newPool.length).toBe(2);
         });
