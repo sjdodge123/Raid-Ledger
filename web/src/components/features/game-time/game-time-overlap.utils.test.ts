@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { checkGameTimeOverlap, walkEventHours } from './game-time-overlap.utils';
+import { at } from '../../../test/defined';
 
 /**
  * ROK-1039 — `checkGameTimeOverlap` must use Sunday-first dayOfWeek convention
@@ -253,9 +254,9 @@ describe('checkGameTimeOverlap — DST boundary consistency (ROK-1056)', () => {
         }
         // A slot at an hour the walker did not visit must not produce overlap.
         const visitedKeys = new Set(visits.map(([d, h]) => `${d}:${h}`));
-        const unvisitedHour = [0, 1, 2, 3, 4, 5].find((h) => !visitedKeys.has(`${visits[0][0]}:${h}`));
+        const unvisitedHour = [0, 1, 2, 3, 4, 5].find((h) => !visitedKeys.has(`${at(visits, 0)[0]}:${h}`));
         if (unvisitedHour !== undefined) {
-            const slots: Slot[] = [{ dayOfWeek: visits[0][0], hour: unvisitedHour, status: 'available' }];
+            const slots: Slot[] = [{ dayOfWeek: at(visits, 0)[0], hour: unvisitedHour, status: 'available' }];
             expect(checkGameTimeOverlap(slots, start, end)).toBe(false);
         }
     });

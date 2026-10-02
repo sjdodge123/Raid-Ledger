@@ -7,6 +7,7 @@
  * AC-14, AC-15, AC-16.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { at } from '../test/defined';
 import { renderHook } from '@testing-library/react';
 import { act } from 'react';
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
@@ -185,7 +186,7 @@ describe('useLineupHero — CTA wiring (AC-16)', () => {
     });
     // Route shape lives in the spec — must reference the lineup id and a route segment.
     expect(mockNavigate).toHaveBeenCalledTimes(1);
-    const target = mockNavigate.mock.calls[0][0] as string;
+    const target = at(mockNavigate.mock.calls, 0)[0] as string;
     expect(target).toMatch(/community-lineup\/50/);
     expect(target).toMatch(/schedule/);
   });

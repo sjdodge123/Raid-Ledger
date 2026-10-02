@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { stripComments } from './wcag-contrast';
@@ -23,7 +24,7 @@ interface CssRule { file: string; selector: string; body: string }
 function rulesOf(file: string): CssRule[] {
     const css = stripComments(readFileSync(join(SRC_ROOT, file), 'utf-8'));
     return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(([, selector, body]) => ({
-        file, selector: selector.trim(), body,
+        file, selector: defined(selector, 'rule selector').trim(), body: defined(body, 'rule body'),
     }));
 }
 

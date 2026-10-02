@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { RosterBuilder } from './RosterBuilder';
 import { renderWithRouter, mockPool } from './RosterBuilder.test-helpers';
+import { at } from '../../test/defined';
 
 // Mock sonner toast
 vi.mock('sonner', () => ({
@@ -30,7 +31,7 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
             />
         );
 
-        fireEvent.click(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[0]);
+        fireEvent.click(at(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ }), 0));
 
         expect(mockSlotClick).toHaveBeenCalledTimes(1);
         expect(mockSlotClick).toHaveBeenCalledWith('tank', 1);
@@ -48,7 +49,7 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
             />
         );
 
-        fireEvent.click(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[0]);
+        fireEvent.click(at(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ }), 0));
 
         expect(screen.queryByText('Join?')).not.toBeInTheDocument();
     });
@@ -67,12 +68,12 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
 
         expect(screen.getAllByText('Join').length).toBeGreaterThan(1);
 
-        const firstSlot = screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[0];
+        const firstSlot = at(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ }), 0);
         fireEvent.click(firstSlot);
         expect(mockSlotClick).toHaveBeenCalledTimes(1);
         expect(mockSlotClick).toHaveBeenCalledWith('tank', 1);
 
-        const secondSlot = screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ })[1];
+        const secondSlot = at(screen.getAllByRole('button', { name: /^Join \S+ slot \d+$/ }), 1);
         fireEvent.click(secondSlot);
         expect(mockSlotClick).toHaveBeenCalledTimes(2);
         expect(mockSlotClick).toHaveBeenCalledWith('tank', 2);
@@ -109,7 +110,7 @@ describe('RosterBuilder — single-click join flow (ROK-734)', () => {
         expect(assignLabels.length).toBeGreaterThan(0);
         expect(screen.queryByText('Join')).not.toBeInTheDocument();
 
-        const firstSlot = screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ })[0];
+        const firstSlot = at(screen.getAllByRole('button', { name: /^Assign \S+ slot \d+$/ }), 0);
         fireEvent.click(firstSlot);
 
         expect(screen.getByText(/Assign to/)).toBeInTheDocument();

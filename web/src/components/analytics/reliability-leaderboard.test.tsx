@@ -143,7 +143,7 @@ describe('ReliabilityLeaderboard — part 2', () => {
         // Alice (90%) should appear first in the table
         const rows = screen.getAllByRole('row');
         // rows[0] = thead, rows[1] = first data row
-        expect(rows[1].textContent).toContain('Alice');
+        expect(rows[1]?.textContent).toContain('Alice');
     });
 
     it('clicking Attendance % header re-sorts to ascending', async () => {
@@ -157,7 +157,7 @@ describe('ReliabilityLeaderboard — part 2', () => {
         await waitFor(() => {
             const rows = screen.getAllByRole('row');
             // Carol (40%) should now be first ascending
-            expect(rows[1].textContent).toContain('Carol');
+            expect(rows[1]?.textContent).toContain('Carol');
         });
     });
 
@@ -172,7 +172,7 @@ describe('ReliabilityLeaderboard — part 2', () => {
         await waitFor(() => {
             const rows = screen.getAllByRole('row');
             // Desc by username: Carol > Bob > Alice
-            expect(rows[1].textContent).toContain('Carol');
+            expect(rows[1]?.textContent).toContain('Carol');
         });
     });
 
@@ -196,14 +196,14 @@ describe('ReliabilityLeaderboard — part 3', () => {
         await user.click(screen.getByText('No-Shows'));
         await waitFor(() => {
             const rows = screen.getAllByRole('row');
-            expect(rows[1].textContent).toContain('Bob');
+            expect(rows[1]?.textContent).toContain('Bob');
         });
 
         // Second click: asc (Alice=1 first)
         await user.click(screen.getByText('No-Shows'));
         await waitFor(() => {
             const rows = screen.getAllByRole('row');
-            expect(rows[1].textContent).toContain('Alice');
+            expect(rows[1]?.textContent).toContain('Alice');
         });
     });
 

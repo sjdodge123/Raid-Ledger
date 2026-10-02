@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { ChannelBindingList } from './ChannelBindingList';
 import type { ChannelBindingDto } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
 
 // BindingConfigForm is rendered inline — mock it to keep unit tests focused
 vi.mock('./BindingConfigForm', () => ({
@@ -431,7 +432,7 @@ it('does not disable Remove button for other bindings when one is deleting', () 
 
     // Delete the first binding
     const removeButtons = screen.getAllByRole('button', { name: 'Remove' });
-    fireEvent.click(removeButtons[0]);
+    fireEvent.click(at(removeButtons, 0));
 
     rerender(
       <ChannelBindingList
@@ -493,7 +494,7 @@ it('only opens one form at a time (closing previous when another Edit is clicked
     );
 
     const editButtons = screen.getAllByRole('button', { name: 'Edit' });
-    fireEvent.click(editButtons[0]);
+    fireEvent.click(at(editButtons, 0));
     expect(screen.getAllByTestId('binding-config-form')).toHaveLength(1);
 
     // Clicking Edit on the second binding
@@ -575,7 +576,7 @@ function channelbindinglistFixOpensForm() {
     ]);
     const fixButtons = screen.getAllByRole('button', { name: /fix/i });
     expect(fixButtons).toHaveLength(1);
-    fireEvent.click(fixButtons[0]);
+    fireEvent.click(at(fixButtons, 0));
     const form = screen.getByTestId('binding-config-form');
     expect(within(form).getByText('inert')).toBeInTheDocument();
   });

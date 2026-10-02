@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sortGamesWithLikedFirst } from './game-filter-helpers';
 import type { GameInfo } from '../../stores/game-filter-store';
+import { at } from '../../test/defined';
 
 function makeGame(slug: string, name: string): GameInfo {
     return { slug, name, coverUrl: null };
@@ -18,28 +19,28 @@ describe('sortGamesWithLikedFirst — edge cases', () => {
         const games = [makeGame('wow', 'World of Warcraft')];
         const result = sortGamesWithLikedFirst(games, new Set(['nonexistent', 'also-missing']));
         expect(result).toHaveLength(1);
-        expect(result[0].liked).toBe(false);
-        expect(result[0].slug).toBe('wow');
+        expect(result[0]?.liked).toBe(false);
+        expect(result[0]?.slug).toBe('wow');
     });
 
     it('handles a single game that is liked', () => {
         const games = [makeGame('wow', 'World of Warcraft')];
         const result = sortGamesWithLikedFirst(games, new Set(['wow']));
         expect(result).toHaveLength(1);
-        expect(result[0].liked).toBe(true);
+        expect(result[0]?.liked).toBe(true);
     });
 
     it('handles a single game that is not liked', () => {
         const games = [makeGame('wow', 'World of Warcraft')];
         const result = sortGamesWithLikedFirst(games, new Set());
         expect(result).toHaveLength(1);
-        expect(result[0].liked).toBe(false);
+        expect(result[0]?.liked).toBe(false);
     });
 
     it('slug matching is case-sensitive', () => {
         const games = [makeGame('WoW', 'World of Warcraft')];
         const result = sortGamesWithLikedFirst(games, new Set(['wow']));
-        expect(result[0].liked).toBe(false);
+        expect(result[0]?.liked).toBe(false);
     });
 
     it('handles games with identical names in different sections', () => {
@@ -48,10 +49,10 @@ describe('sortGamesWithLikedFirst — edge cases', () => {
             makeGame('official-dnd', 'D&D'),
         ];
         const result = sortGamesWithLikedFirst(games, new Set(['custom-dnd']));
-        expect(result[0].liked).toBe(true);
-        expect(result[0].slug).toBe('custom-dnd');
-        expect(result[1].liked).toBe(false);
-        expect(result[1].slug).toBe('official-dnd');
+        expect(result[0]?.liked).toBe(true);
+        expect(result[0]?.slug).toBe('custom-dnd');
+        expect(result[1]?.liked).toBe(false);
+        expect(result[1]?.slug).toBe('official-dnd');
     });
 
     it('preserves coverUrl in output', () => {
@@ -60,8 +61,8 @@ describe('sortGamesWithLikedFirst — edge cases', () => {
             { slug: 'eso', name: 'ESO', coverUrl: null },
         ];
         const result = sortGamesWithLikedFirst(games, new Set(['eso']));
-        expect(result[0].coverUrl).toBeNull(); // eso (liked, first)
-        expect(result[1].coverUrl).toBe('https://example.com/wow.jpg');
+        expect(at(result, 0).coverUrl).toBeNull(); // eso (liked, first)
+        expect(result[1]?.coverUrl).toBe('https://example.com/wow.jpg');
     });
 
     it('handles large number of games with mixed liked status', () => {

@@ -32,7 +32,7 @@ const CHIP_CLS =
     'px-2 py-0.5 text-xs font-bold rounded transition-opacity hover:opacity-90';
 
 const STATE_CLS: Record<'lfg' | 'lfm', string> = {
-    lfm: 'bg-emerald-500/90 text-white',
+    lfm: 'bg-emerald-700 text-white',
     lfg: 'bg-amber-300/95 text-amber-950',
 };
 

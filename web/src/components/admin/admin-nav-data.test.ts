@@ -11,6 +11,7 @@ import {
     buildNavSections,
 } from './admin-nav-data';
 import type { PluginInfoDto } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
 
 const allOfflineStatuses = {
     igdb: { configured: false, loading: false },
@@ -134,11 +135,11 @@ describe('buildPluginIntegrationItems — part 1', () => {
         ];
         const items = buildPluginIntegrationItems(plugins);
         expect(items).toHaveLength(1);
-        expect(items[0].label).toBe('Battle.net');
-        expect(items[0].to).toBe('/admin/settings/integrations/plugin/wow/bnet');
-        expect(items[0].status).toBe('online');
-        expect(items[0].pluginSource).toBe('World of Warcraft');
-        expect(items[0].pluginSlug).toBe('wow');
+        expect(items[0]?.label).toBe('Battle.net');
+        expect(items[0]?.to).toBe('/admin/settings/integrations/plugin/wow/bnet');
+        expect(items[0]?.status).toBe('online');
+        expect(items[0]?.pluginSource).toBe('World of Warcraft');
+        expect(items[0]?.pluginSlug).toBe('wow');
     });
 
     it('excludes Discord plugin from integration items (ROK-430: Discord has its own section)', () => {
@@ -164,7 +165,7 @@ describe('buildPluginIntegrationItems — part 1', () => {
             }),
         ];
         const items = buildPluginIntegrationItems(plugins);
-        expect(items[0].newBadgeKey).toBe('integration-nav-seen:wow:bnet');
+        expect(items[0]?.newBadgeKey).toBe('integration-nav-seen:wow:bnet');
     });
 
 });
@@ -180,7 +181,7 @@ describe('buildPluginIntegrationItems — part 2', () => {
             }),
         ];
         const items = buildPluginIntegrationItems(plugins);
-        expect(items[0].status).toBe('offline');
+        expect(items[0]?.status).toBe('offline');
     });
 
     it('handles plugin with multiple integrations', () => {
@@ -283,8 +284,8 @@ describe('buildNavSections — part 1', () => {
     it('returns exactly 2 sections when no Discord items: General and Integrations', () => {
         const sections = buildNavSections([], []);
         expect(sections).toHaveLength(2);
-        expect(sections[0].id).toBe('general');
-        expect(sections[1].id).toBe('integrations');
+        expect(sections[0]?.id).toBe('general');
+        expect(sections[1]?.id).toBe('integrations');
     });
 
     it('returns 3 sections when Discord items provided', () => {
@@ -294,9 +295,9 @@ describe('buildNavSections — part 1', () => {
         );
         const sections = buildNavSections([], [], discordItems);
         expect(sections).toHaveLength(3);
-        expect(sections[0].id).toBe('general');
-        expect(sections[1].id).toBe('discord');
-        expect(sections[2].id).toBe('integrations');
+        expect(sections[0]?.id).toBe('general');
+        expect(sections[1]?.id).toBe('discord');
+        expect(sections[2]?.id).toBe('integrations');
     });
 
     it('General section has 6 items (including Demo Data and Logs)', () => {
@@ -308,8 +309,8 @@ describe('buildNavSections — part 1', () => {
     it('Demo Data item is at index 2 (after Site Settings, User Management)', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
-        expect(general.children[2].label).toBe('Demo Data');
-        expect(general.children[2].to).toBe('/admin/settings/general/data');
+        expect(general.children[2]?.label).toBe('Demo Data');
+        expect(general.children[2]?.to).toBe('/admin/settings/general/data');
     });
 
     it('General section includes Site Settings, User Management, Scheduled Jobs, Backups, Logs', () => {
@@ -326,7 +327,7 @@ describe('buildNavSections — part 1', () => {
     it('Integrations section includes Manage Plugins at the end', () => {
         const sections = buildNavSections([], []);
         const integrations = sections.find((s) => s.id === 'integrations')!;
-        const last = integrations.children[integrations.children.length - 1];
+        const last = at(integrations.children, -1);
         expect(last.label).toBe('Manage Plugins');
         expect(last.to).toBe('/admin/settings/plugins');
     });

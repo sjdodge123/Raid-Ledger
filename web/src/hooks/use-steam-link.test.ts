@@ -11,6 +11,7 @@
  *         refetch instead of stranding stale cache.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { at } from '../test/defined';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -87,7 +88,7 @@ describe('useUnlinkSteam (ROK-1307 AC-2b)', () => {
             ([opts]) => JSON.stringify(opts?.queryKey) === JSON.stringify(STATUS_KEY),
         );
         expect(firstInvalIdx).toBeGreaterThanOrEqual(0);
-        const invalOrder = invalSpy.mock.invocationCallOrder[firstInvalIdx];
+        const invalOrder = at(invalSpy.mock.invocationCallOrder, firstInvalIdx);
         expect(setOrder).toBeLessThan(invalOrder);
 
         // And the cache currently holds { linked: false } so the next render

@@ -11,6 +11,7 @@ import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { CooptimusForm } from '../CooptimusForm';
+import { at } from '../../../test/defined';
 
 const updateAsync = vi.fn();
 const testAsync = vi.fn();
@@ -154,7 +155,7 @@ describe('CooptimusForm — Test and Clear', () => {
         });
         const user = userEvent.setup();
         renderWithProviders(<CooptimusForm />);
-        await user.click(screen.getAllByRole('button', { name: 'Test Connection' })[0]);
+        await user.click(at(screen.getAllByRole('button', { name: 'Test Connection' }), 0));
 
         await waitFor(() => expect(screen.getByText(/HTTP 403/)).toBeInTheDocument());
         expect(toastError).toHaveBeenCalled();

@@ -118,7 +118,7 @@ describe('CreatePollModal — duration picker (ROK-1192)', () => {
     await pickFakeGame(user);
     await user.click(screen.getByRole('button', { name: /create poll/i }));
     expect(mutateAsync).toHaveBeenCalledTimes(1);
-    expect(mutateAsync.mock.calls[0][0]).toMatchObject({ gameId: fakeGame.id, durationHours: 72 });
+    expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({ gameId: fakeGame.id, durationHours: 72 });
   });
 
   it('sends durationHours: 168 when the user picks "7 days"', async () => {
@@ -129,7 +129,7 @@ describe('CreatePollModal — duration picker (ROK-1192)', () => {
     expect(screen.getByRole('radio', { name: '7 days' })).toBeChecked();
     await user.click(screen.getByRole('button', { name: /create poll/i }));
     expect(mutateAsync).toHaveBeenCalledTimes(1);
-    expect(mutateAsync.mock.calls[0][0]).toMatchObject({ gameId: fakeGame.id, durationHours: 168 });
+    expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({ gameId: fakeGame.id, durationHours: 168 });
   });
 });
 
@@ -189,7 +189,7 @@ describe('CreatePollModal — Minimum Votes Slider (ROK-1650)', () => {
     await pickTwoMembers(user);
     fireEvent.change(screen.getByRole('slider', { name: 'Minimum Votes' }), { target: { value: '1' } });
     await user.click(screen.getByRole('button', { name: /create poll/i }));
-    expect(mutateAsync.mock.calls[0][0]).toMatchObject({ memberUserIds: [10, 11], minVoteThreshold: 1 });
+    expect(mutateAsync.mock.calls[0]?.[0]).toMatchObject({ memberUserIds: [10, 11], minVoteThreshold: 1 });
   });
 });
 

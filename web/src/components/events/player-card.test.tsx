@@ -4,6 +4,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { PlayerCard } from './player-card';
 import { formatRole } from '../../lib/role-colors';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
+import { at } from '../../test/defined';
 
 /** Create a minimal RosterAssignmentResponse for testing. */
 function createMockPlayer(
@@ -205,7 +206,7 @@ function followNameLink(player: RosterAssignmentResponse, href: string) {
     );
     const links = container.querySelectorAll(`a[href="${href}"]`);
     expect(links, `the player name must link to ${href}`).toHaveLength(1);
-    fireEvent.click(links[0]);
+    fireEvent.click(at(links, 0));
     return {
         path: screen.getByTestId('probe-path').textContent,
         state: JSON.parse(screen.getByTestId('probe-state').textContent ?? 'null') as unknown,

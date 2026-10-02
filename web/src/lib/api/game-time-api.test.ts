@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { at } from '../../test/defined';
+
 const mockFetchApi = vi.fn();
 
 vi.mock('./fetch-api', () => ({
@@ -18,21 +20,21 @@ describe('getMyGameTime', () => {
         await getMyGameTime();
 
         expect(mockFetchApi).toHaveBeenCalledTimes(1);
-        const [, options] = mockFetchApi.mock.calls[0];
+        const [, options] = at(mockFetchApi.mock.calls, 0);
         expect(options).toEqual(expect.objectContaining({ cache: 'no-cache' }));
     });
 
     it('includes week param when provided', async () => {
         await getMyGameTime('2026-03-09');
 
-        const [endpoint] = mockFetchApi.mock.calls[0];
+        const [endpoint] = at(mockFetchApi.mock.calls, 0);
         expect(endpoint).toContain('week=2026-03-09');
     });
 
     it('includes tzOffset in the query string', async () => {
         await getMyGameTime(undefined, 300);
 
-        const [endpoint] = mockFetchApi.mock.calls[0];
+        const [endpoint] = at(mockFetchApi.mock.calls, 0);
         expect(endpoint).toContain('tzOffset=300');
     });
 });
@@ -46,7 +48,7 @@ describe('Regression: ROK-1427 — getGameTimeAbsences', () => {
     it('sends the browser tzOffset so expiry is judged in the local day', async () => {
         await getGameTimeAbsences();
 
-        const [endpoint] = mockFetchApi.mock.calls[0];
+        const [endpoint] = at(mockFetchApi.mock.calls, 0);
         expect(endpoint).toContain(`tzOffset=${new Date().getTimezoneOffset()}`);
     });
 });

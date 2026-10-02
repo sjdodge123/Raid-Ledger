@@ -20,6 +20,7 @@ import type {
     GameRegistryDto,
 } from '@raid-ledger/contract';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { at } from '../../../test/defined';
 
 vi.mock('../../../hooks/use-character-mutations', () => ({
     useUpdateCharacter: vi.fn(),
@@ -152,7 +153,7 @@ describe('EditProfessionsModal — Save calls useUpdateCharacter().mutate', () =
         );
         await user.click(screen.getByRole('button', { name: /^save$/i }));
         expect(mutate).toHaveBeenCalledTimes(1);
-        const [payload] = mutate.mock.calls[0];
+        const [payload] = at(mutate.mock.calls, 0);
         expect(payload).toEqual({
             id: 'char-1',
             dto: { professions: null },
@@ -173,7 +174,7 @@ describe('EditProfessionsModal — Save calls useUpdateCharacter().mutate', () =
         await user.click(screen.getByRole('button', { name: /^save$/i }));
 
         expect(mutate).toHaveBeenCalledTimes(1);
-        const [payload] = mutate.mock.calls[0];
+        const [payload] = at(mutate.mock.calls, 0);
         expect(payload.id).toBe('char-1');
         expect(payload.dto.professions).not.toBeNull();
         expect(payload.dto.professions.primary).toHaveLength(1);

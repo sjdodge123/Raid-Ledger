@@ -124,7 +124,7 @@ describe('LfgBridgePrompt — entries (T-9)', () => {
         expect(entries).toHaveLength(2);
         expect(entries[0]).toHaveAttribute('aria-label', "I'm up for Lost Game 1");
         expect(entries[1]).toHaveAttribute('aria-label', "I'm up for Lost Game 2");
-        expect(entries[0].tagName).toBe('BUTTON');
+        expect(entries[0]?.tagName).toBe('BUTTON');
         expect(
             screen.getByText(/Didn.t make the cut\? Say you.re still up for it/),
         ).toBeInTheDocument();

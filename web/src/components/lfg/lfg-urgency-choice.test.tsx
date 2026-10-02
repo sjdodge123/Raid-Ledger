@@ -23,6 +23,7 @@ import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { LFG_COPY } from '../../pages/lfg/lfg-copy';
 import { LfgUrgencyChoice } from './lfg-urgency-choice';
+import { at } from '../../test/defined';
 
 function renderChoice(onPick = vi.fn()) {
     const view = render(
@@ -67,7 +68,7 @@ describe('LfgUrgencyChoice — what it emits', () => {
         await user.click(screen.getByRole('button', { name: LFG_COPY.urgencyWeek }));
 
         expect(onPick).toHaveBeenCalledTimes(1);
-        const pick = onPick.mock.calls[0][0];
+        const pick = at(onPick.mock.calls, 0)[0];
         expect(pick).toEqual({ urgency: 'week' });
         expect(Object.keys(pick)).not.toContain('ttlMinutes');
     });
@@ -89,7 +90,7 @@ describe('LfgUrgencyChoice — what it emits', () => {
         ]);
         // `tonight` computes its own 04:00 expiry server-side; a TTL key on it
         // would be the same client bug A2 rejects for `week`.
-        expect(Object.keys(onPick.mock.calls[1][0])).not.toContain(
+        expect(Object.keys(at(onPick.mock.calls, 1)[0])).not.toContain(
             'ttlMinutes',
         );
     });

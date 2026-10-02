@@ -10,6 +10,7 @@
  * selector gone.
  */
 import { describe, it, expect } from 'vitest';
+import { defined } from '../test/defined';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
@@ -26,9 +27,9 @@ interface ForcedWhiteRule { schemes: string; fills: string[] }
 function forcedWhiteRules(css: string): ForcedWhiteRule[] {
     const rules: ForcedWhiteRule[] = [];
     for (const [, selector, body] of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const shape = SELECTOR.exec(selector.trim());
-        if (!shape || !FORCED_WHITE.test(body)) continue;
-        rules.push({ schemes: shape[1], fills: shape[2].split(',').map((s) => s.trim()) });
+        const shape = SELECTOR.exec(defined(selector, 'rule selector').trim());
+        if (!shape || !FORCED_WHITE.test(defined(body, 'rule body'))) continue;
+        rules.push({ schemes: defined(shape[1], 'scheme group'), fills: defined(shape[2], 'fill group').split(',').map((s) => s.trim()) });
     }
     return rules;
 }

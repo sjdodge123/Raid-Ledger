@@ -9,6 +9,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { FeedbackDialog } from './FeedbackDialog';
+import { at } from '../../test/defined';
 
 type Props = Parameters<typeof FeedbackDialog>[0];
 
@@ -58,7 +59,7 @@ function categoryLayout(): { hiddenRadios: boolean[]; stacked: boolean } {
     const radios = within(screen.getByRole('radiogroup', { name: 'Category' })).getAllByRole('radio');
     return {
         hiddenRadios: radios.map((r) => r.classList.contains('sr-only')),
-        stacked: !!radios[0].closest('label')?.parentElement?.classList.contains('flex-col'),
+        stacked: !!at(radios, 0).closest('label')?.parentElement?.classList.contains('flex-col'),
     };
 }
 

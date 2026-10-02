@@ -140,7 +140,7 @@ describe('useGameActivity (ROK-443) — part 1', () => {
         });
 
         expect(result.current.data?.topPlayers).toHaveLength(1);
-        expect(result.current.data?.topPlayers[0].username).toBe('PlayerOne');
+        expect(result.current.data?.topPlayers[0]?.username).toBe('PlayerOne');
     });
 
 });
@@ -242,7 +242,7 @@ describe('useGameNowPlaying (ROK-443) — part 1', () => {
         });
 
         expect(result.current.data?.players).toHaveLength(1);
-        expect(result.current.data?.players[0].username).toBe('ActivePlayer');
+        expect(result.current.data?.players[0]?.username).toBe('ActivePlayer');
     });
 
     it('should return count from response', async () => {

@@ -7,6 +7,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Header } from './Header';
+import { at } from '../../test/defined';
 
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({
@@ -54,7 +55,7 @@ describe('Header — authenticated member', () => {
         expect(insights).toHaveLength(2);
         for (const link of insights) expect(link).toHaveAttribute('href', '/insights');
         const nav = screen.getByRole('navigation', { name: 'Main navigation' });
-        expect(nav).toContainElement(insights[0]);
+        expect(nav).toContainElement(at(insights, 0));
     });
 
     it('has no "Event Metrics" link', () => {

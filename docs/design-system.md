@@ -62,10 +62,11 @@ Declared in `web/src/index.css` (`@theme` block, line 32) as `--color-*`. Tailwi
 utility from the variable name: `--color-panel` → `bg-panel`, `text-panel`, `border-panel`. Borders have
 their own roles.
 
-**Contrast guards.** `web/src/styles/semantic-tokens.guard.test.ts` (on main) checks semantic token
-contrast; `raw-hue-light.guard.test.ts` (landing with PR #1318 — not yet on main) checks raw Tailwind
-hue contrast on the light families. Any colour token change MUST keep both green — a token edit that
-turns one red is not done, not "acceptable regression."
+**Contrast guards.** `web/src/styles/semantic-tokens.guard.test.ts` checks semantic token
+contrast; `raw-hue-light.guard.test.ts` checks raw Tailwind hue contrast on the light families;
+`faint-decorative.guard.test.ts` holds light `--color-dim` at AA on surface, panel and overlay and
+fails on any `text-faint` / `placeholder-faint` that is not `aria-hidden`. Any colour token change
+MUST keep all three green — a token edit that turns one red is not done, not "acceptable regression."
 
 | Token | Tailwind | Dark (default) | Light | Role |
 |---|---|---|---|---|
@@ -73,8 +74,8 @@ turns one red is not done, not "acceptable regression."
 | `--color-surface` | `bg-surface` | `#0f172a` | `#ffffff` | Cards, headers, sheets |
 | `--color-panel` | `bg-panel` | `#1e293b` | `#f1f5f9` | Inset panels, inputs, chips (off) |
 | `--color-overlay` | `bg-overlay` | `#334155` | `#e2e8f0` | Hover fill on panel-level surfaces |
-| `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Lowest-contrast text/lines |
-| `--color-dim` | `text-dim` | `#64748b` | `#64748b` | Placeholders, disabled text |
+| `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Decorative only (separators, icons), always `aria-hidden`. Never readable text (1.2–1.9:1 on every light scheme) |
+| `--color-dim` | `text-dim` | `#64748b` | `#5a697f` | Placeholders, disabled text, the quietest readable text (light: 5.58 surface / 5.10 panel / 4.53 overlay) |
 | `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common) |
 | `--color-secondary` | `text-secondary` | `#cbd5e1` | `#334155` | Body text |
 | `--color-foreground` | `text-foreground` | `#ffffff` | `#0f172a` | Primary text, headings |
@@ -157,7 +158,7 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
 text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
 (`:759-773`); solid fills are identical in both with the label forced white on light (`:796-803`), and
-`.badge-overlay` (`:774-794`) opts cover-art badges out. Every text repaint — and its `/60`–`/80` opacity variants
+`.badge-overlay` (`:801-813`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity

@@ -32,7 +32,7 @@ export function stripComments(src: string): string {
     let out = '';
     let mode: Mode = 'code';
     for (let i = 0; i < src.length; i++) {
-        const c = src[i];
+        const c = src.charAt(i);
         const n = src[i + 1] ?? '';
         if (mode === 'code') {
             mode = enter(c, n);

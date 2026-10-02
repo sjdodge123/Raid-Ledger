@@ -109,7 +109,8 @@ html {
     --color-panel: #f1f5f9;
     --color-overlay: #e2e8f0;
     --color-faint: #cbd5e1;
-    --color-dim: #64748b;
+    --color-dim: #5a697f;
+    /* slate, 35% toward muted: 5.58 surface, 5.10 panel, 4.53 overlay (#64748b was 4.76 / 4.34 / 3.86) — faint-decorative.guard.test.ts */
     --color-muted: #475569;
     --color-busy: #7c3aed;
     --color-slot: #0e7490;
@@ -791,8 +792,10 @@ body {
 /* --- Badge overlay: preserve dark-theme colors for badges on cover images (ROK-493) ---
    Badges overlaid on dark game-cover images must keep light text/bg regardless
    of the active color scheme. The .badge-overlay class can be placed on a
-   parent container (desktop cards) or directly on the badge element (mobile
-   cards). The :is(.badge-overlay, .badge-overlay *) pattern matches both
+   parent container (the desktop card's cover) or directly on a badge that sits
+   on the art. Never on a badge over the themed surface — the mobile card's
+   chips are not on art (ROK-1472; badge-overlay-art-only.guard.test.ts).
+   The :is(.badge-overlay, .badge-overlay *) pattern matches both
    cases with enough specificity to beat the light-mode overrides above,
    so no !important is needed. */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }

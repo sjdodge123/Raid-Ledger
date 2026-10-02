@@ -33,6 +33,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { LFG_COPY } from '../../pages/lfg/lfg-copy';
 import { LFG_HEARTED_QUERY_KEY } from '../../hooks/use-lfg-hearted';
 import { LfgHeartedPrompt } from './lfg-hearted-prompt';
+import { at } from '../../test/defined';
 
 const DISMISS_KEY = 'lfg-hearted-prompt-dismissed';
 
@@ -396,7 +397,7 @@ describe('LfgHeartedPrompt — the urgency choice (ROK-1479 AC5)', () => {
 
         await waitFor(() => expect(posted).toHaveLength(1));
         expect(posted[0]).toEqual({ gameId: 1, urgency: 'tonight' });
-        expect(Object.keys(posted[0])).not.toContain('ttlMinutes');
+        expect(Object.keys(at(posted, 0))).not.toContain('ttlMinutes');
     });
 
     it('posts a weekly intent with NO ttlMinutes key when "This week" is picked', async () => {
@@ -413,7 +414,7 @@ describe('LfgHeartedPrompt — the urgency choice (ROK-1479 AC5)', () => {
 
         await waitFor(() => expect(posted).toHaveLength(1));
         expect(posted[0]).toEqual({ gameId: 1, urgency: 'week' });
-        expect(Object.keys(posted[0])).not.toContain('ttlMinutes');
+        expect(Object.keys(at(posted, 0))).not.toContain('ttlMinutes');
     });
 
     it('closes the choice once a horizon is picked', async () => {
@@ -528,7 +529,7 @@ describe('LfgHeartedPrompt — expanding the rest of the hearts', () => {
         // The cap belongs to the container, and only while expanded.
         const user = await renderExpandable(24);
         const rowOf = (): HTMLElement =>
-            screen.getAllByTestId('lfg-hearted-prompt-game')[0]
+            at(screen.getAllByTestId('lfg-hearted-prompt-game'), 0)
                 .parentElement as HTMLElement;
 
         expect(rowOf().className).not.toContain('overflow-y-auto');

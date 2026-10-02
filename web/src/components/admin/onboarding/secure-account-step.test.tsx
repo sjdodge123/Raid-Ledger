@@ -249,7 +249,7 @@ it('each field sits in a sm:max-w-md wrapper that also holds its reveal toggle (
             fillValidForm();
             fireEvent.click(screen.getByRole('button', { name: /change password/i }));
             expect(changePassword.mutate).toHaveBeenCalledOnce();
-            expect(changePassword.mutate.mock.calls[0][0]).toEqual({ currentPassword: 'old-secret', newPassword: 'Password123!' });
+            expect(changePassword.mutate.mock.calls[0]?.[0]).toEqual({ currentPassword: 'old-secret', newPassword: 'Password123!' });
         });
 
         it('while pending the button is busy, named "Changing...", and swallows clicks (ruling 7)', () => {

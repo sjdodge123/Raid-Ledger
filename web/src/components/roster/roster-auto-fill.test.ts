@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { computeAutoFill } from './roster-auto-fill';
+import { at } from '../../test/defined';
 
 /** Minimal pool player factory */
 function makePoolPlayer(
@@ -49,7 +50,7 @@ describe('computeAutoFill — part 1', () => {
             const result = computeAutoFill(pool, [], mmoRoleSlots, mmoSlotCount, false);
 
             expect(result.totalFilled).toBe(1);
-            const assignment = result.newAssignments[0];
+            const assignment = at(result.newAssignments, 0);
             expect(assignment.slot).toBe('healer');
             expect(assignment.position).toBe(1);
         });
@@ -96,7 +97,7 @@ describe('computeAutoFill — part 1', () => {
             const result = computeAutoFill(pool, [], mmoRoleSlots, mmoSlotCount, false);
 
             expect(result.totalFilled).toBe(1);
-            const assignment = result.newAssignments[0];
+            const assignment = at(result.newAssignments, 0);
             expect(assignment.slot).toBe('tank');
         });
 
@@ -118,7 +119,7 @@ describe('computeAutoFill — part 2', () => {
             const result = computeAutoFill(pool, [], mmoRoleSlots, mmoSlotCount, false);
 
             expect(result.totalFilled).toBe(1);
-            const assignment = result.newAssignments[0];
+            const assignment = at(result.newAssignments, 0);
             expect(assignment.slot).toBe('tank');
         });
 
@@ -134,7 +135,7 @@ describe('computeAutoFill — part 2', () => {
             const result = computeAutoFill(pool, [], mmoRoleSlots, mmoSlotCount, false);
 
             expect(result.totalFilled).toBe(1);
-            const assignment = result.newAssignments[0];
+            const assignment = at(result.newAssignments, 0);
             expect(assignment.slot).toBe('dps');
         });
 

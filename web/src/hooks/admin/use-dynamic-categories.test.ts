@@ -71,7 +71,7 @@ describe('useListDynamicCategories', () => {
         );
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(result.current.data?.suggestions).toHaveLength(1);
-        expect(result.current.data?.suggestions[0].name).toBe('Autumn Co-op');
+        expect(result.current.data?.suggestions[0]?.name).toBe('Autumn Co-op');
     });
 });
 

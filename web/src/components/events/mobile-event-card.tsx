@@ -35,7 +35,7 @@ function GameCoverThumb({ event, showPlaceholder, gameCoverUrl, onError }: {
 
 function GameTimeBadgeMobile() {
     return (
-        <span className="badge-overlay flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+        <span className="flex items-center gap-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
@@ -70,7 +70,7 @@ function MobileCardHeader({ title, status, isSeries }: { title: string; status: 
             <div className="flex items-center gap-1 flex-shrink-0">
                 {isSeries && <SeriesBadge />}
                 <span data-testid="mobile-event-status"
-                    className={`badge-overlay px-1.5 py-0.5 text-[10px] font-medium rounded-full border ${STATUS_STYLES[status]}`}>
+                    className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full border ${STATUS_STYLES[status]}`}>
                     {STATUS_LABELS[status]}
                 </span>
             </div>

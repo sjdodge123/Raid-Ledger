@@ -30,6 +30,7 @@ import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import type { ScheduleVoteStance } from '@raid-ledger/contract';
 import { createTestQueryClient } from '../../../../test/render-helpers';
 import { buildPoll, ME } from './scheduling-poll-fixtures';
+import { at } from '../../../../test/defined';
 
 type VoteResult = { voted: boolean; stance: ScheduleVoteStance | null };
 
@@ -134,7 +135,7 @@ describe('useSchedulingLadder — a second press must reach the network (ROK-161
     it('T1: press NO, let it settle, press NO again — the request goes out twice', async () => {
         const qc = createTestQueryClient();
         const { result } = renderLadder(qc);
-        const slotId = result.current.slots[0].id;
+        const slotId = at(result.current.slots, 0).id;
 
         act(() => result.current.onToggleNo(slotId));
         await waitFor(() => expect(inFlight).toHaveLength(1));
@@ -154,7 +155,7 @@ describe('useSchedulingLadder — a second press must reach the network (ROK-161
     it('T2: unmount + remount between the press and its settle — the next press still goes out', async () => {
         const qc = createTestQueryClient();
         const first = renderLadder(qc);
-        const slotId = first.result.current.slots[0].id;
+        const slotId = at(first.result.current.slots, 0).id;
 
         act(() => first.result.current.onToggleNo(slotId));
         await waitFor(() => expect(inFlight).toHaveLength(1));
@@ -180,8 +181,8 @@ describe('useSchedulingLadder — a second press must reach the network (ROK-161
     it('T2b: a press on another slot mid-flight must not strand the first slot as pending', async () => {
         const qc = createTestQueryClient();
         const { result } = renderLadder(qc);
-        const slotA = result.current.slots[0].id;
-        const slotB = result.current.slots[1].id;
+        const slotA = at(result.current.slots, 0).id;
+        const slotB = at(result.current.slots, 1).id;
 
         act(() => result.current.onToggleNo(slotA));
         await waitFor(() => expect(inFlight).toHaveLength(1));
@@ -203,8 +204,8 @@ describe('useSchedulingLadder — a second press must reach the network (ROK-161
     it('T2c: two overlapping presses both release — a later press on each slot goes out', async () => {
         const qc = createTestQueryClient();
         const { result } = renderLadder(qc);
-        const slotA = result.current.slots[0].id;
-        const slotB = result.current.slots[1].id;
+        const slotA = at(result.current.slots, 0).id;
+        const slotB = at(result.current.slots, 1).id;
 
         act(() => result.current.onToggleNo(slotA));
         await waitFor(() => expect(inFlight).toHaveLength(1));
@@ -228,7 +229,7 @@ describe('useSchedulingLadder — a second press must reach the network (ROK-161
     ])('T3: canVote survives a settled %s vote', async (stance, settled) => {
         const qc = createTestQueryClient();
         const { result } = renderLadder(qc);
-        const slotId = result.current.slots[0].id;
+        const slotId = at(result.current.slots, 0).id;
 
         act(() =>
             stance === 'yes'
