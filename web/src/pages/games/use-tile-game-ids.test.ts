@@ -20,8 +20,10 @@ import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { createTestQueryClient } from '../../test/render-helpers';
 import { useTileGameIds } from './use-tile-game-ids';
 
+/** A Discover id that ALSO has a live intent: it must not be batched twice. */
+const OVERLAP_ID = 1;
 /** Ids that came from the Discover rows / search results. */
-const DISCOVER_IDS = [1, 2];
+const DISCOVER_IDS = [OVERLAP_ID, 2];
 /** A game with a live intent that is in no carousel — the whole problem. */
 const LFG_ONLY_ID = 909;
 
@@ -40,7 +42,7 @@ beforeEach(() => {
     server.use(
         lfgGroupsHandler([
             buildLfgGroupSummary({ gameId: LFG_ONLY_ID }),
-            buildLfgGroupSummary({ gameId: DISCOVER_IDS[0] }),
+            buildLfgGroupSummary({ gameId: OVERLAP_ID }),
         ]),
     );
 });
@@ -59,7 +61,7 @@ describe('useTileGameIds', () => {
             expect.arrayContaining(DISCOVER_IDS),
         );
         expect(
-            result.current.filter((id) => id === DISCOVER_IDS[0]),
+            result.current.filter((id) => id === OVERLAP_ID),
         ).toHaveLength(1);
     });
 
