@@ -27,6 +27,7 @@ import {
   type ActiveScheduledEvent,
 } from './ad-hoc-event.helpers';
 import type { SuppressionWindowExtendedPayload } from './suppression-window-events';
+import { pruneExpiredWarnings } from './warn-throttle.helpers';
 
 /**
  * ROK-1696 — optional observer told when a suppressed join moves a scheduled
@@ -324,20 +325,6 @@ function notifyWindowExtended(
     logger.warn(
       `[voice-spawn] suppression-window hook failed event=${scheduled.id}: ${err instanceof Error ? err.message : String(err)}`,
     );
-  }
-}
-
-/**
- * Drop throttle entries whose TTL has lapsed (`nowMs - at >= ttlMs`) so a
- * hot-path warn Map stays bounded instead of accreting one key per event.
- */
-export function pruneExpiredWarnings(
-  map: Map<number, number>,
-  nowMs: number,
-  ttlMs: number,
-): void {
-  for (const [key, at] of map) {
-    if (nowMs - at >= ttlMs) map.delete(key);
   }
 }
 
