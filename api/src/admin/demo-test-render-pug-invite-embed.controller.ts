@@ -4,8 +4,8 @@
  *
  * The companion bot cannot read a DM another bot sends (Discord 50007), so the
  * PUG invite's chrome (amber `needs_you` colour, `FILL NEEDED` author line,
- * role footer, Accept / Decline / View Event row, the personalized-field cap)
- * was assertable at unit tier only. This endpoint composes the invite the way
+ * role footer, Accept / Decline / View Event row) was assertable at unit tier
+ * only. This endpoint composes the invite the way
  * `PugInviteService.sendPugInviteDm` does (`pug-invite.service.ts:278-309`,
  * composition at :285-306): `loadInviteContext` for branding,
  * `loadPugInviteData` for the personalized fields, cover and roster count,
@@ -15,8 +15,16 @@
  * Two deliberate divergences from the send path:
  * - `voiceChannelId` is always null. Resolving it needs the Discord bot
  *   module's `ChannelResolverService`, and importing that here would add a
- *   forwardRef cycle. With no voice field every embed field is a personalized
- *   one, so `fields.length <= 2` is an exact check of `MAX_PERSONALIZED_FIELDS`.
+ *   forwardRef cycle. So the seam never renders a Voice Channel field, and the
+ *   smoke cannot prove anything about one.
+ *
+ * The personalized-field cap is NOT provable through this seam at smoke tier:
+ * `loadPugInviteData` already trims to two (`toFields`,
+ * `pug-invite-personalization.helpers.ts`), and the smoke seeds no library
+ * rows, so the invitee usually gets none. `buildPugInviteEmbed`'s own cap
+ * (`MAX_PERSONALIZED_FIELDS`) is pinned at unit tier only — by
+ * `pug-invite.helpers.spec.ts` and this seam's controller spec ("caps three
+ * personalized fields at two"), which mocks the loader with three fields.
  * - Pure render: no `pug_slots` row, no DM send, no DB write. The slot id is a
  *   fixed placeholder, so the Accept / Decline custom ids match no real slot.
  *

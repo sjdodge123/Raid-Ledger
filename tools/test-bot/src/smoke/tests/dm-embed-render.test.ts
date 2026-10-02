@@ -22,6 +22,12 @@
  * which runs the REAL `buildPugInviteEmbed` against a seeded event. An invite
  * DM's author is the `◌ FILL NEEDED · starts in …` line, not the community, so
  * it has its own chrome checks (`assertPugChrome`) rather than `assertChrome`.
+ * It proves the amber colour, the FILL NEEDED author line, the role footer
+ * (against /system/branding), no masked link and the Accept / Decline /
+ * View Event row and URL. It does NOT prove the ≤2 personalized-field cap or
+ * the absent Voice Channel field: the seam never resolves a voice channel, the
+ * loader trims fields upstream and this suite seeds no library rows. Those are
+ * pinned at unit tier (`pug-invite.helpers.spec.ts`, the seam's controller spec).
  */
 import {
   assertEmbedColor,
@@ -74,7 +80,10 @@ interface RenderedPugInvite {
 const PUG_TAG = 'render-pug-invite-embed';
 /** The slot role the seam renders; it becomes the footer label. */
 const PUG_ROLE = 'tank';
-/** `MAX_PERSONALIZED_FIELDS` in api/src/discord-bot/services/pug-invite.helpers.ts. */
+/**
+ * `MAX_PERSONALIZED_FIELDS` in api/src/discord-bot/services/pug-invite.helpers.ts.
+ * Here only a sanity bound on the field count, not cap coverage (see header).
+ */
 const MAX_PERSONALIZED_FIELDS = 2;
 /** `pugActionButtons` then `viewEventButton`, as `buildInviteRow` adds them. */
 const PUG_ROW_LABELS = ['Accept', 'Decline', 'View Event'];
@@ -208,17 +217,17 @@ function assertPugChrome(embed: SimpleEmbed, community: string) {
   assertEmbedRenderRules(embed);
 }
 
-/** No masked link (View Event is the only route), ≤2 personalized fields. */
+/**
+ * No masked link (View Event is the only route). The field-count bound is a
+ * sanity guard-rail against an unexpected extra field, not cap coverage.
+ */
 function assertPugBody(embed: SimpleEmbed) {
   if ((embed.description ?? '').includes('](')) {
     fail(`${PUG_TAG}: expected no masked link in the description, got "${embed.description}"`);
   }
   const names = embed.fields.map((f) => f.name);
   if (names.length > MAX_PERSONALIZED_FIELDS) {
-    fail(`${PUG_TAG}: expected at most ${MAX_PERSONALIZED_FIELDS} fields, got ${names.length}: ${JSON.stringify(names)}`);
-  }
-  if (names.includes('Voice Channel')) {
-    fail(`${PUG_TAG}: expected no "Voice Channel" field, got ${JSON.stringify(names)}`);
+    fail(`${PUG_TAG}: expected at most ${MAX_PERSONALIZED_FIELDS} fields (sanity bound), got ${names.length}: ${JSON.stringify(names)}`);
   }
 }
 
@@ -243,11 +252,15 @@ const pugInviteRenderTest: SmokeTest = {
   name: 'render-pug-invite-embed: PUG invite DM chrome (needs_you amber)',
   category: 'dm',
   async run(ctx: TestContext) {
+    const community = await expectedCommunityName(ctx.api);
     const ev = await createEvent(ctx.api, 'render-pug', pugOverrides(ctx));
     try {
       const res = await renderPugInvite(ctx, ev.id);
+      if (res.communityName !== community) {
+        fail(`${PUG_TAG}: seam resolved community "${res.communityName}", branding says "${community}"`);
+      }
       const embed = toSimpleEmbed(res.embed);
-      assertPugChrome(embed, res.communityName);
+      assertPugChrome(embed, community);
       assertPugBody(embed);
       assertPugButtons(res, ev.id);
     } finally {

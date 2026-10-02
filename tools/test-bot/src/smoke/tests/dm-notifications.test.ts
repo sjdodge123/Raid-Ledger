@@ -272,13 +272,18 @@ const rosterReassignmentNotification: SmokeTest = {
  * The DM embed's own chrome is NOT asserted here: the companion bot cannot
  * observe a sent invite DM (`sendEmbedDM` posts straight to Discord, a PUG
  * invite writes no `notifications` row, and Discord refuses bot-to-bot DMs,
- * 50007), so this file still asserts only the slot's API state. That chrome —
- * amber `needs_you`, the `◌ FILL NEEDED · starts in …` author line, ≤2
- * personalized fields, and the View Event button with no masked link in the
- * description — is asserted at smoke tier by `render-pug-invite-embed` in
- * `dm-embed-render.test.ts`, through `POST /admin/test/render-pug-invite-embed`,
- * and at unit tier in `api/src/discord-bot/services/pug-invite.helpers.spec.ts`
- * plus that render seam's controller spec.
+ * 50007), so this file still asserts only the slot's API state.
+ *
+ * Smoke tier (`render-pug-invite-embed` in `dm-embed-render.test.ts`, through
+ * `POST /admin/test/render-pug-invite-embed`) proves the amber `needs_you`
+ * colour, the `◌ FILL NEEDED · starts in …` author line, the role footer, no
+ * masked link in the description, and the Accept / Decline / View Event row
+ * with its event URL. The ≤2 personalized-field cap and the absent Voice
+ * Channel field are pinned at unit tier only
+ * (`api/src/discord-bot/services/pug-invite.helpers.spec.ts` and the render
+ * seam's controller spec, "caps three personalized fields at two"): the seam
+ * never resolves a voice channel, the loader trims fields upstream, and the
+ * smoke seeds no library rows for the test bot.
  */
 const pugInviteNotification: SmokeTest = {
   name: 'PUG invite creates a fill-request slot for the invited user',
