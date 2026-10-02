@@ -40,7 +40,7 @@ const ROUTES: LightRoute[] = [
             // Phone cards and the md+ grid are both in the DOM; one is hidden.
             const card = page
                 .getByTestId('mobile-event-card')
-                .or(page.locator('.hidden.md\\:grid [role="button"]'))
+                .or(page.getByTestId('event-card'))
                 .filter({ visible: true });
             await expect(card.first()).toBeVisible({ timeout: 10_000 });
         },

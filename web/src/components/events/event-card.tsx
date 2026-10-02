@@ -147,7 +147,7 @@ export const EventCard = React.memo(function EventCard({ event, signupCount = 0,
     const showPlaceholder = !gameCoverUrl || imageError;
 
     return (
-        <div onClick={onClick}
+        <div onClick={onClick} data-testid="event-card"
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
             role="button" tabIndex={0}
             className={`group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl focus:outline-none transition-all duration-200 ${isCancelled ? 'opacity-60 hover:shadow-red-500/10 focus:border-red-500' : 'hover:shadow-emerald-500/10 focus:border-emerald-500'}`}>
