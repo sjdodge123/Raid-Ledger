@@ -17,7 +17,8 @@ const onCreate = vi.fn();
 function renderOpen(props: { isCreating?: boolean; createError?: string | null } = {}) {
   const view = render(
     <BindingCreateForm channels={CHANNELS} onCreate={onCreate}
-      isCreating={props.isCreating ?? false} createError={props.createError} />,
+      isCreating={props.isCreating ?? false}
+      {...(props.createError === undefined ? {} : { createError: props.createError })} />,
   );
   fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
   return view;

@@ -102,7 +102,8 @@ describe('GameDetailLfgBanner', () => {
         ['null', null],
         ['undefined', undefined],
     ])('renders nothing when the active count is %s', (_label, activeCount) => {
-        renderBanner({ activeCount });
+        // `undefined` means the count is absent, so the key is left off.
+        renderBanner(activeCount === undefined ? {} : { activeCount });
 
         expect(screen.queryByTestId('game-detail-lfg-banner')).toBeNull();
     });

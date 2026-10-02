@@ -42,7 +42,11 @@ describe('LfgJoinControl — ROK-1619 spawn indicator', () => {
     });
 
     it.each([false, undefined])('shows no indicator when spawnsNow is %s', (spawnsNow) => {
-        const now = renderControl({ spawnsNow, spawnEmoji: '🎉' });
+        // `undefined` means the read omitted the flag, so the key is left off.
+        const now = renderControl({
+            ...(spawnsNow === undefined ? {} : { spawnsNow }),
+            spawnEmoji: '🎉',
+        });
         expect(now).toHaveTextContent('Right now');
         expect(now).not.toHaveTextContent('starts the group');
         expect(screen.queryByTestId('lfg-spawn-indicator')).toBeNull();
