@@ -2138,3 +2138,8 @@ same day (#1278, #1279, #1280).
   Suggested: in the next change that already touches `scripts/smoke/**`, reword the header as history: "was v1.60.0 vs 1.62.1 at ROK-1466; scripts/test/runner-playwright-pin.test.sh now guards the pin".
 - **[nit — unverified]** `rl-infra/runner/Dockerfile:16` vs `.github/workflows/ci.yml:140` (and the other `node-version: 22` steps): the runner takes whatever Node the Playwright jammy image ships, while every CI job pins Node 22. The old Dockerfile comment claimed "Node 22", and the bump branch's draft claimed "Node 24 in v1.60-v1.63"; neither was checked, so the comment now names no version. If the image's Node major differs from 22, fleet runs and GitHub CI run different Node majors.
   Suggested: run `docker run --rm mcr.microsoft.com/playwright:v1.63.0-jammy node -v` on the VM; if it is not 22.x, either pin Node in the runner image or note the intended difference in `rl-infra/README.md`.
+
+### 2026-10-02 — fix/b62-web-admin-binding-nits-1003 (review nits left open)
+
+- **[nit]** `web/src/components/admin/BindingConfigForm.tsx:67` (`BindingConfigForm`): 64 lines against the 30-line `max-lines-per-function` budget (ESLint warning, not an error). It was about 80 on main and 87 once the cross-row save lock added the `saveLocked` default and the multi-line `InertHealBanner` block. Moving the purpose-specific fields into `PurposeConfigSections` on this branch brought it to 64. The remainder is the JSX for the title, the inert-heal banner, `PurposeSelect`, `GameField`, the save error and `FormActions`.
+  Suggested: split the remainder into a header child (title + `InertHealBanner`) and a footer child (save error + `FormActions`), keeping `handleSubmit` / `handleConvert` in the parent.
