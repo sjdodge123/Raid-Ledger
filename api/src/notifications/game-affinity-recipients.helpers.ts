@@ -56,7 +56,9 @@ function affinityPredicate(gameId: number, interestsOnly: boolean): SQL {
       SELECT es.user_id FROM event_signups es
       INNER JOIN events e ON e.id = es.event_id
       WHERE e.game_id = ${gameId}
-        AND upper(e.duration) < NOW()::timestamp
+        -- duration is zone-less UTC; NOW()::timestamp is the session zone's
+        -- wall clock, so compare against the UTC wall clock instead.
+        AND upper(e.duration) < (NOW() AT TIME ZONE 'UTC')
         AND es.status = 'signed_up'
         AND e.cancelled_at IS NULL
         AND es.user_id IS NOT NULL
