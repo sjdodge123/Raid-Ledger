@@ -52,7 +52,7 @@ async function insightsFetch<T>(path: string, opts: FetchOptions = {}): Promise<
         if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
     }
     const qs = params.toString();
-    const res = await fetchWithAuth(`${path}${qs ? `?${qs}` : ''}`, { signal: opts.signal });
+    const res = await fetchWithAuth(`${path}${qs ? `?${qs}` : ''}`, opts.signal ? { signal: opts.signal } : {});
     if (res.status === 503) throw new NoSnapshotYetError();
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return (await res.json()) as T;

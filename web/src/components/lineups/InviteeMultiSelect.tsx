@@ -49,7 +49,7 @@ function useGuildMembers(search: string) {
     queryKey: ['players', 'invitee-picker', search],
     queryFn: () =>
       getPlayers({
-        search: search || undefined,
+        ...(search ? { search } : {}),
         page: 1,
         pageSize: 200,
       }),

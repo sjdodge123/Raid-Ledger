@@ -54,7 +54,7 @@ export function useStartNow(gameId: number) {
      */
     const startNow = useCallback(
         (options?: StartNowOptions): void =>
-            mutate(undefined, { onSettled: options?.onSettled }),
+            mutate(undefined, options),
         [mutate],
     );
     return { startNow, isPending: mutation.isPending };
