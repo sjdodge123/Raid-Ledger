@@ -40,7 +40,7 @@ import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { LfgGroupsProvider } from '../../hooks/lfg-groups-provider';
 import { UnifiedGameCard } from '../games/unified-game-card';
 import { renderWithProviders } from '../../test/render-helpers';
-import { LfgChip } from './lfg-chip';
+import { LfgChip, type LfgChipProps } from './lfg-chip';
 import { nowLine } from './lfg-chip-copy';
 
 /** The one game the real-card cases use. */
@@ -87,14 +87,19 @@ function LocationProbe() {
     return <span data-testid="location-probe">{location.pathname}</span>;
 }
 
+const CHIP_DEFAULTS = {
+    activeCount: 2,
+    viabilityThreshold: null,
+    state: 'lfm' as const,
+    gameSlug: 'deep-rock-galactic',
+};
+
 function renderChip(props: ChipProps = {}) {
-    const merged = {
-        activeCount: 2,
-        viabilityThreshold: null,
-        state: 'lfm' as const,
-        gameSlug: 'deep-rock-galactic',
-        ...props,
-    };
+    return renderMergedChip({ ...CHIP_DEFAULTS, ...props });
+}
+
+/** Renders the chip with `merged` exactly as given (no defaults applied). */
+function renderMergedChip(merged: LfgChipProps) {
     return renderWithProviders(
         <>
             <LfgChip {...merged} />
@@ -123,8 +128,12 @@ describe('LfgChip — absence (AC4)', () => {
     });
 
     it('renders nothing when the game is absent from GET /lfg', () => {
-        // The provider returns `undefined` for a game with no group.
-        renderChip({ activeCount: undefined, state: undefined });
+        // The provider returns `undefined` for a game with no group, so the
+        // chip gets no count and no state at all.
+        const absent: LfgChipProps = { ...CHIP_DEFAULTS };
+        delete absent.activeCount;
+        delete absent.state;
+        renderMergedChip(absent);
 
         expect(screen.queryByTestId('lfg-chip')).not.toBeInTheDocument();
     });

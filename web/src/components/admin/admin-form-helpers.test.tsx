@@ -69,7 +69,8 @@ function ControlledPassword({ fieldLabel }: { fieldLabel?: string }) {
         <>
             <label htmlFor="pw">Secret</label>
             <PasswordInput id="pw" value={value} onChange={setValue} placeholder="Secret"
-                showPassword={shown} onToggleShow={() => setShown(!shown)} fieldLabel={fieldLabel} />
+                showPassword={shown} onToggleShow={() => setShown(!shown)}
+                {...(fieldLabel === undefined ? {} : { fieldLabel })} />
         </>
     );
 }

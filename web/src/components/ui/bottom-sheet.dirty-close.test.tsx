@@ -25,7 +25,8 @@ function Harness({ dirty, onClose, initiallyExpanded }: HarnessProps) {
     return (
         <BottomSheet
             isOpen onClose={onClose} title={TITLE} closeGuard={guard}
-            discardMessage={MESSAGE} initiallyExpanded={initiallyExpanded}
+            discardMessage={MESSAGE}
+            {...(initiallyExpanded === undefined ? {} : { initiallyExpanded })}
         >
             <p>Sheet body</p>
         </BottomSheet>

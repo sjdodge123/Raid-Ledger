@@ -40,8 +40,8 @@ function renderDrawer(props: {
                 <GameResearchDrawer
                     isOpen={props.isOpen}
                     onClose={onClose}
-                    gameId={props.gameId}
-                    name={props.name}
+                    {...(props.gameId === undefined ? {} : { gameId: props.gameId })}
+                    {...(props.name === undefined ? {} : { name: props.name })}
                 />
             </MemoryRouter>
         </QueryClientProvider>,
