@@ -14,6 +14,7 @@ import {
   type GameRow,
 } from './games-dedup-audit.helpers';
 import { pickNameGroupWinner } from '../igdb/igdb-name-dedup.helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 // ROK-1277: union-find grouping helper. The file
 // `./games-dedup-union-find.helpers` DOES NOT YET EXIST — the dev agent
@@ -82,7 +83,7 @@ describe('bucketRowsByDedupKey', () => {
     ];
     const buckets = bucketRowsByDedupKey(rows);
     expect(buckets.size).toBe(1);
-    const [[, group]] = [...buckets.entries()];
+    const [[, group]] = nonEmpty([...buckets.entries()], 'name bucket');
     expect(group).toHaveLength(2);
   });
 
@@ -336,7 +337,7 @@ describe('GamesDedupAuditService.runAudit', () => {
     );
     const result = await svc.runAudit();
     expect(result.blastRadius).toHaveLength(1);
-    const br = result.blastRadius[0];
+    const br = at(result.blastRadius, 0);
     expect(br.gameId).toBe(2);
     expect(br.events).toBe(3);
     expect(br.eventPlans).toBe(1);
