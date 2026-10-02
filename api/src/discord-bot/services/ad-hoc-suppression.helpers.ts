@@ -22,7 +22,20 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { Logger } from '@nestjs/common';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
-import { findActiveScheduledEvent } from './ad-hoc-event.helpers';
+import {
+  findActiveScheduledEvent,
+  type ActiveScheduledEvent,
+} from './ad-hoc-event.helpers';
+import type { SuppressionWindowExtendedPayload } from './suppression-window-events';
+
+/**
+ * ROK-1696 — optional observer told when a suppressed join moves a scheduled
+ * event's effective end forward, so the caller can fan the new end out (cache,
+ * web clients, Discord). These helpers hold no service references.
+ */
+export type SuppressionWindowHook = (
+  payload: SuppressionWindowExtendedPayload,
+) => void;
 
 export const SUPPRESSION_WINDOW_MS = 60 * 60 * 1000;
 export const SUPPRESSION_REFRESH_THRESHOLD_MS = 15 * 60 * 1000;
@@ -208,13 +221,15 @@ let totalSkipped = 0;
  * Orchestrate scheduled-event suppression for a Quick Play voice join: find a
  * live scheduled event and, when found, bound-extend its suppression window per
  * `planSuppressionExtension`. Returns true whenever a scheduled event suppresses
- * the spawn, whether or not the window was rewritten.
+ * the spawn, whether or not the window was rewritten. `onExtended` fires only
+ * after a real write that ends past the scheduled end (ROK-1696).
  */
 export async function suppressScheduled(
   db: PostgresJsDatabase<typeof schema>,
   bindingId: string,
   effectiveGameId: number | null | undefined,
   channelId?: string,
+  onExtended?: SuppressionWindowHook,
 ): Promise<boolean> {
   const now = new Date();
   const scheduled = await findActiveScheduledEvent(
@@ -233,17 +248,19 @@ export async function suppressScheduled(
   logger.debug(
     `[voice-spawn] suppressed binding=${bindingId} channel=${channelId ?? '-'} game=${effectiveGameId ?? '-'} event=${scheduled.id} match=${scheduled.matchedBy} window=${scheduled.extendedUntil?.toISOString() ?? 'none'}`,
   );
-  await applySuppressionPlan(db, scheduled.id, plan, now);
+  await applySuppressionPlan(db, scheduled, plan, now, onExtended);
   return true;
 }
 
 /** Apply a resolved suppression plan: monotonic write + counter logging. */
 async function applySuppressionPlan(
   db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
+  scheduled: ActiveScheduledEvent,
   plan: SuppressionPlan,
   now: Date,
+  onExtended?: SuppressionWindowHook,
 ): Promise<void> {
+  const eventId = scheduled.id;
   if (plan.action === 'extend') {
     const wrote = await extendScheduledEventWindow(
       db,
@@ -256,11 +273,36 @@ async function applySuppressionPlan(
       logger.log(
         `[voice-spawn] extended event=${eventId} until=${plan.newEnd.toISOString()} writes=${totalWrites} skipped=${totalSkipped} window=60m`,
       );
+      notifyWindowExtended(scheduled, plan.newEnd, onExtended);
       return;
     }
   }
   totalSkipped += 1;
   if (plan.action === 'skip-capped') warnSkipCapped(eventId, plan.ceiling);
+}
+
+/**
+ * Tell the hook about a written window that ends past the scheduled end. A
+ * throwing hook is logged and swallowed: it must never break the guard.
+ */
+function notifyWindowExtended(
+  scheduled: ActiveScheduledEvent,
+  newEnd: Date,
+  onExtended?: SuppressionWindowHook,
+): void {
+  if (!onExtended) return;
+  if (newEnd.getTime() <= scheduled.scheduledEnd.getTime()) return;
+  try {
+    onExtended({
+      eventId: scheduled.id,
+      newEnd,
+      discordScheduledEventId: scheduled.discordScheduledEventId ?? null,
+    });
+  } catch (err) {
+    logger.warn(
+      `[voice-spawn] suppression-window hook failed event=${scheduled.id}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 /**
