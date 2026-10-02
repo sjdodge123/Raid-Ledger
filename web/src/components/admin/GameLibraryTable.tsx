@@ -5,6 +5,7 @@ import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
 import { SearchInput } from '../ui/search-input';
 import { GameActionButtons } from './GameLibraryActions';
+import { coverSrcSetProps } from '../../lib/igdb-image';
 
 interface GameLibraryTableProps {
     showHidden?: 'only' | undefined;
@@ -21,9 +22,15 @@ function GameStatusBadge({ game }: { game: GameItem }) {
     return null;
 }
 
+/** Paint size per variant: the `w-8 h-10` / `w-12 h-16` classes, in CSS px. */
+const COVER_BOX = { sm: { cls: 'w-8 h-10', width: 32, height: 40 }, md: { cls: 'w-12 h-16', width: 48, height: 64 } } as const;
+
 function GameCover({ url, size }: { url: string | null; size: 'sm' | 'md' }) {
-    const cls = size === 'sm' ? 'w-8 h-10' : 'w-12 h-16';
-    if (url) return <img src={url} alt="" className={`${cls} rounded object-cover flex-shrink-0`} />;
+    const { cls, width, height } = COVER_BOX[size];
+    if (url) {
+        return <img src={url} alt="" className={`${cls} rounded object-cover flex-shrink-0`} width={width} height={height}
+            loading="lazy" decoding="async" {...coverSrcSetProps(url, `${width}px`)} />;
+    }
     return <div className={`${cls} rounded bg-overlay flex-shrink-0`} />;
 }
 

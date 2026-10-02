@@ -5,6 +5,7 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { OtherPollsResponseDto } from '@raid-ledger/contract';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface OtherPollsSectionProps {
   lineupId: number;
@@ -26,6 +27,8 @@ function PollLinkCard({ lineupId, poll }: {
         <img
           src={poll.gameCoverUrl}
           alt={poll.gameName}
+          {...COVER_INTRINSIC} loading="lazy" decoding="async"
+          {...coverSrcSetProps(poll.gameCoverUrl, '40px')}
           className="w-10 h-10 rounded object-cover flex-shrink-0"
         />
       )}

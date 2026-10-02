@@ -10,14 +10,50 @@
  *   - Header nav shows "Insights" (not "Event Metrics")
  *   - Social Graph exposes a "Show as table" accessible fallback toggle
  *   - Key Insights panel renders a list
+ *   - 503 `no_snapshot_yet` renders each panel's empty state, not an error
+ *   - "Show as table" renders one row per graph node; Cliques and Taste
+ *     Leaders list what the API returned
  *
  * Runs at both desktop and mobile viewports via Playwright projects.
  * Written TDD-first — must fail until Phases A–D ship the implementation.
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken } from './api-helpers';
+import type { Locator } from '@playwright/test';
+import { API_BASE, apiGet, apiPost, getAdminToken, pollForCondition } from './api-helpers';
 
 interface EventSummary { id: number }
+
+interface SocialGraphBody { nodes: unknown[]; cliques: unknown[]; tasteLeaders: unknown[] }
+
+/** The same read the Social Graph panel makes (SocialGraph.tsx asks for limit=60). */
+const SOCIAL_GRAPH_API = '/insights/community/social-graph?limit=60';
+
+/** Snapshot-backed reads; cohort-game-frequency is live and never answers 503. */
+const SNAPSHOT_API = /\/insights\/community\/(radar|engagement|churn|social-graph|temporal|key-insights)$/;
+
+/**
+ * The graph the panel will render. A freshly reset DB may not have today's
+ * snapshot yet, so build it when the read answers 503 (`apiGet` → null).
+ */
+async function readSocialGraph(): Promise<SocialGraphBody> {
+    const token = await getAdminToken();
+    const existing = (await apiGet(token, SOCIAL_GRAPH_API)) as SocialGraphBody | null;
+    if (existing) return existing;
+    await apiPost(token, '/insights/community/refresh');
+    return pollForCondition(
+        async () => (await apiGet(token, SOCIAL_GRAPH_API)) as SocialGraphBody | null,
+        { timeoutMs: 30_000, description: `GET ${SOCIAL_GRAPH_API} after a refresh` },
+    );
+}
+
+/** A side panel's items mirror the API (capped like the UI), or it shows its empty hint. */
+async function expectListMirrorsApi(panel: Locator, apiCount: number, uiCap: number, emptyHint: string) {
+    if (apiCount === 0) {
+        await expect(panel.getByText(emptyHint)).toBeVisible();
+        return;
+    }
+    await expect(panel.getByRole('listitem')).toHaveCount(Math.min(apiCount, uiCap));
+}
 
 async function findAnyEventId(token: string): Promise<number | null> {
     const res = await fetch(`${API_BASE}/events?limit=1`, {
@@ -131,5 +167,55 @@ test.describe('Community Insights dashboard', () => {
 
         // Bulleted list (<ul>/<ol> or role="list") with at least one item
         await expect(keyInsights.getByRole('list').first()).toBeVisible();
+    });
+
+    test('no snapshot yet (503 no_snapshot_yet) shows each panel\'s empty state, not an error', async ({ page }) => {
+        // Keep the real response's headers (CORS) and swap in the API's 503 body.
+        await page.route((url) => SNAPSHOT_API.test(url.pathname), async (route) => {
+            const response = await route.fetch();
+            await route.fulfill({ response, status: 503, json: { error: 'no_snapshot_yet' } });
+        });
+        await page.goto('/insights');
+
+        const socialGraph = page.getByTestId('community-insights-social-graph');
+        await expect(
+            socialGraph.getByText('No social graph yet — run a refresh to compute.'),
+        ).toBeVisible({ timeout: 15_000 });
+        await expect(
+            page.getByTestId('community-insights-key-insights').getByText('No insights to highlight yet.'),
+        ).toBeVisible();
+        await expect(
+            page.getByTestId('community-insights-temporal')
+                .getByText('No temporal snapshot yet — run a refresh to compute.'),
+        ).toBeVisible();
+        await expect(socialGraph.getByRole('table')).toHaveCount(0);
+        await expect(page.getByText(/^Failed to load/)).toHaveCount(0);
+    });
+
+    test('"Show as table" renders the graph as a table with one row per node', async ({ page }) => {
+        const graph = await readSocialGraph();
+        await page.goto('/insights');
+
+        const socialGraph = page.getByTestId('community-insights-social-graph');
+        await socialGraph.getByRole('button', { name: /show as table/i }).click({ timeout: 15_000 });
+
+        const table = socialGraph.locator('table');
+        await expect(table).toBeVisible();
+        await expect(table.locator('tbody tr')).toHaveCount(graph.nodes.length);
+        await expect(socialGraph.getByRole('button', { name: /show as graph/i })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    test('Cliques and Taste Leaders list what the social-graph API returned', async ({ page }) => {
+        const graph = await readSocialGraph();
+        await page.goto('/insights');
+
+        const socialGraph = page.getByTestId('community-insights-social-graph');
+        const cliques = socialGraph.getByRole('heading', { name: /^cliques$/i }).locator('..');
+        const leaders = socialGraph.getByRole('heading', { name: /^taste leaders$/i }).locator('..');
+        await expect(cliques).toBeVisible({ timeout: 15_000 });
+
+        // CliquesPanel shows up to 6 cliques; TasteLeadersPanel the top 5.
+        await expectListMirrorsApi(cliques, graph.cliques.length, 6, 'No cliques detected yet.');
+        await expectListMirrorsApi(leaders, graph.tasteLeaders.length, 5, 'No taste leaders identified yet.');
     });
 });

@@ -87,3 +87,20 @@ describe('StandalonePollBanner (ROK-1609)', () => {
     expect(screen.getByText('6 slots')).toBeInTheDocument();
   });
 });
+
+describe('StandalonePollBanner — cover thumb (ROK-1159)', () => {
+  it('the 20px cover reserves its box, loads lazily and offers a 20px srcset', () => {
+    activePolls.mockReturnValue([
+      buildPoll({ gameCoverUrl: 'https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg' }),
+    ]);
+    renderWithProviders(<StandalonePollBanner />);
+
+    const cover = screen.getByRole('img', { name: 'Valheim' });
+    expect(cover).toHaveAttribute('loading', 'lazy');
+    expect(cover).toHaveAttribute('decoding', 'async');
+    expect(cover).toHaveAttribute('width', '20');
+    expect(cover).toHaveAttribute('height', '20');
+    expect(cover).toHaveAttribute('sizes', '20px');
+    expect(cover.getAttribute('srcset')).toContain('t_cover_small/co4jni.jpg 90w');
+  });
+});

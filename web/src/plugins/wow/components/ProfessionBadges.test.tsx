@@ -104,3 +104,14 @@ describe('ProfessionBadges — populated', () => {
         expect(document.querySelector('[title="Mystery Craft 25/100"]')).not.toBeNull();
     });
 });
+
+describe('ProfessionBadges — icon loading (ROK-1159)', () => {
+    it('reserves a 16x16 box and lazy-loads each profession icon', () => {
+        render(<ProfessionBadges professions={POPULATED} />);
+        const icon = screen.getByRole('img', { name: 'Tailoring' });
+        expect(icon).toHaveAttribute('width', '16');
+        expect(icon).toHaveAttribute('height', '16');
+        expect(icon).toHaveAttribute('loading', 'lazy');
+        expect(icon).toHaveAttribute('decoding', 'async');
+    });
+});

@@ -100,7 +100,7 @@ function ItemModalNav({ currentIndex, total, onNavigate, onClose }: { currentInd
 function ItemHeader({ item, qualityClass, normalizedQuality }: { item: EquipmentItemDto; qualityClass: string; normalizedQuality: string }) {
     return (
         <div className="flex items-start gap-3">
-            {item.iconUrl && <img src={item.iconUrl} alt={item.name} className={`w-10 h-10 rounded border-2 flex-shrink-0 ${QUALITY_BORDER[normalizedQuality]?.replace('/40', '') ?? 'border-edge'}`} />}
+            {item.iconUrl && <img src={item.iconUrl} alt={item.name} width={40} height={40} loading="lazy" decoding="async" className={`w-10 h-10 rounded border-2 flex-shrink-0 ${QUALITY_BORDER[normalizedQuality]?.replace('/40', '') ?? 'border-edge'}`} />}
             <div>
                 <h3 className={`text-lg font-bold ${qualityClass}`}>{item.name}</h3>
                 {item.itemLevel > 0 && <div className="text-sm text-yellow-400">Item Level {item.itemLevel}</div>}

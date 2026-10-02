@@ -87,6 +87,7 @@ function CharacterAvatar({ preview }: { preview: BlizzardCharacterPreviewDto }) 
         return (
             <img
                 src={preview.avatarUrl} alt={preview.name}
+                width={64} height={64} loading="lazy" decoding="async"
                 className="w-16 h-16 rounded-lg object-cover border border-edge/50"
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
