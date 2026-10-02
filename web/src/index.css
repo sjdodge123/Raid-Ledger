@@ -1374,9 +1374,14 @@ body {
         4px 4px 0 1px rgba(201, 168, 76, 0.6);
 }
 
-/* Cards with bg-panel (IntegrationCard, admin cards) get the same parchment treatment */
-[data-variant="quest-log"] .bg-panel\/50,
-[data-variant="quest-log"] [class*="bg-panel"] {
+/* Cards with bg-panel (IntegrationCard, admin cards) get the same parchment treatment.
+   Form controls carry bg-panel too (form-classes.ts) but are not cards: they keep the
+   quest-log input/select/textarea rules further down (fill, edge border, gold focus,
+   danger border when aria-invalid), which this rule's !important border would
+   otherwise override. The exclusion sits in :where() so it adds no specificity, and
+   later equal-weight rules such as .rounded-xl still win by source order. */
+[data-variant="quest-log"] .bg-panel\/50:where(:not(input, select, textarea)),
+[data-variant="quest-log"] [class*="bg-panel"]:where(:not(input, select, textarea)) {
     background:
         radial-gradient(ellipse at 40% 30%, rgba(200, 170, 110, 0.10) 0%, transparent 55%),
         repeating-linear-gradient(0deg,

@@ -4,6 +4,7 @@ import { join, resolve, sep } from 'node:path';
 import { composite, contrastRatio, stripComments } from './wcag-contrast';
 import { lightSchemes, parseSchemeGroup } from './light-scheme-css';
 import { stripComments as stripCodeComments } from '../test/form-primitives-count';
+import { FIELD_FRAME_BASE } from '../components/ui/form-classes';
 
 /**
  * Light-family amber fill guard (TDB:1493) and the quest-log invalid-border guard (TDB:1888).
@@ -119,19 +120,93 @@ describe('raw amber fills on the light schemes (TDB:1493)', () => {
     });
 });
 
+/** Split a selector list on its top-level commas (`:where(:not(a, b))` stays whole). */
+function splitSelectors(list: string): string[] {
+    const out: string[] = [];
+    let depth = 0;
+    let cur = '';
+    for (const ch of list) {
+        if (ch === ',' && depth === 0) {
+            out.push(cur.trim());
+            cur = '';
+            continue;
+        }
+        if (ch === '(') depth++;
+        else if (ch === ')') depth--;
+        cur += ch;
+    }
+    return [...out, cur.trim()];
+}
+
+/** A declaration that sets a border colour with `!important` (shorthand or longhand, any side). */
+const IMPORTANT_BORDER =
+    /\bborder(?:-(?:top|right|bottom|left|block|inline)(?:-(?:start|end))?)?(?:-color)?\s*:[^;]*!important/;
+
+/** Every quest-log selector whose rule forces a border colour with `!important`. */
+const QL_IMPORTANT_BORDERS = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
+    .filter(([, sel, body]) => sel.includes('[data-variant="quest-log"]') && IMPORTANT_BORDER.test(body))
+    .flatMap(([, sel, body]) => splitSelectors(sel.split(';').pop() ?? '').map((s) => ({ sel: s, body })));
+
+/** A form control rendered the way the primitives render it, inside the quest-log variant. */
+function questLogControl(tag: 'input' | 'select' | 'textarea'): Element {
+    const root = document.createElement('div');
+    root.setAttribute('data-variant', 'quest-log');
+    const el = document.createElement(tag);
+    el.className = FIELD_FRAME_BASE;
+    el.setAttribute('aria-invalid', 'true');
+    root.append(el);
+    return el;
+}
+
+function questLogCard(cls: string): Element {
+    const root = document.createElement('div');
+    root.setAttribute('data-variant', 'quest-log');
+    const el = document.createElement('div');
+    el.className = `${cls} rounded-xl p-4`;
+    root.append(el);
+    return el;
+}
+
+const CONTROLS = ['input', 'select', 'textarea'] as const;
+
 describe('quest-log invalid form controls (TDB:1888)', () => {
     const FOCUS = /\[data-variant="quest-log"\]\s+input:focus/.exec(css);
     const INVALID = [...css.matchAll(/(\[data-variant="quest-log"\][^{}]*\[aria-invalid="true"\][^{}]*)\{([^}]*)\}/g)];
+    const DANGER = INVALID.find(([, , body]) => /border-color:\s*var\(--color-danger\)/.test(body));
 
     it('an aria-invalid rule paints input, select and textarea with the danger border', () => {
-        const rule = INVALID.find(([, , body]) => /border-color:\s*var\(--color-danger\)/.test(body));
-        expect(rule?.[1], 'no [data-variant="quest-log"] [aria-invalid="true"] rule sets border-color: var(--color-danger)').toBeDefined();
-        for (const el of ['input', 'select', 'textarea']) expect(rule?.[1]).toMatch(new RegExp(`\\b${el}\\b`));
+        expect(DANGER?.[1], 'no [data-variant="quest-log"] [aria-invalid="true"] rule sets border-color: var(--color-danger)').toBeDefined();
+        for (const tag of CONTROLS) {
+            const hit = splitSelectors(DANGER?.[1] ?? '').some((sel) => questLogControl(tag).matches(sel));
+            expect(hit, `the danger rule does not match an invalid quest-log <${tag}>`).toBe(true);
+        }
     });
 
     it('it comes after the quest-log :focus rule, so it also wins while focused', () => {
-        const rule = INVALID.find(([, , body]) => /border-color:\s*var\(--color-danger\)/.test(body));
         expect(FOCUS, 'the quest-log input:focus rule was not found').not.toBeNull();
-        expect(rule?.index ?? -1, 'the aria-invalid rule is missing or precedes the :focus rule').toBeGreaterThan(FOCUS?.index ?? Infinity);
+        expect(DANGER?.index ?? -1, 'the aria-invalid rule is missing or precedes the :focus rule').toBeGreaterThan(FOCUS?.index ?? Infinity);
+    });
+
+    it.each(CONTROLS)('no quest-log !important border rule reaches a <%s> form control', (tag) => {
+        expect(QL_IMPORTANT_BORDERS.length, 'no quest-log !important border rule parsed out of index.css').toBeGreaterThan(0);
+        const el = questLogControl(tag);
+        expect(
+            QL_IMPORTANT_BORDERS.filter(({ sel }) => el.matches(sel)).map(({ sel }) => sel),
+            `these !important border rules override the invalid <${tag}>'s danger border (form controls carry bg-panel)`,
+        ).toEqual([]);
+    });
+
+    it.each(['bg-panel', 'bg-panel/50'])('a quest-log %s card still gets the parchment border', (cls) => {
+        const el = questLogCard(cls);
+        const hits = QL_IMPORTANT_BORDERS.filter(({ sel, body }) => el.matches(sel) && body.includes('--ql-parchment-edge'));
+        expect(hits.length, `no parchment-edge border rule matches a quest-log .${cls} card`).toBeGreaterThan(0);
+    });
+
+    it('the card rule excludes controls inside :where(), adding no specificity over later card rules', () => {
+        const cards = QL_IMPORTANT_BORDERS.filter(({ sel }) => sel.includes('bg-panel'));
+        // drop each `:where(...)` group (one paren level deep, e.g. `:where(:not(a, b))`)
+        const bare = cards.map(({ sel }) => sel.replace(/:where\([^()]*(?:\([^()]*\)[^()]*)*\)/g, ''));
+        expect(cards.length, 'the bg-panel card rule was not found').toBeGreaterThan(0);
+        expect(bare.filter((sel) => sel.includes(':not(')), 'a bare :not() raises the card rule over .rounded-xl').toEqual([]);
     });
 });
