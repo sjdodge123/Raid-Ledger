@@ -28,9 +28,9 @@ function isInputFocused(): boolean {
 
 /** Extract a numeric Steam App ID from pasted text, or null. */
 export function extractSteamAppId(text: string): number | null {
-  const match = STEAM_URL_RE.exec(text);
-  if (!match) return null;
-  const id = parseInt(match[1], 10);
+  const digits = STEAM_URL_RE.exec(text)?.[1];
+  if (!digits) return null;
+  const id = parseInt(digits, 10);
   return Number.isFinite(id) ? id : null;
 }
 

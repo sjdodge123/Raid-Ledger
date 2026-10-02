@@ -77,7 +77,7 @@ function hourRange(from: number, to: number): number[] {
  * and the midnight after it are both `dayOfWeek` 2, the same convention the
  * editor's wrapping visible-hours range already uses.
  */
-export const STRIP_BANDS: readonly StripBand[] = [
+export const STRIP_BANDS: readonly [StripBand, StripBand, StripBand] = [
     { id: 'day', hours: hourRange(9, 17) },
     { id: 'evening', hours: hourRange(17, 21) },
     { id: 'late', hours: hourRange(21, 26) },

@@ -47,11 +47,13 @@ export function pickBestVariant(
         });
         if (exact) return exact;
     }
-    return variants.find((q) => {
+    const best = variants.find((q) => {
         const rr = q.raceRestriction as string[] | null;
         const cr = q.classRestriction as string[] | null;
         return (!rr || rr.length === 0) && (!cr || cr.length === 0);
     }) ?? variants[0];
+    if (!best) throw new Error('pickBestVariant needs at least one variant');
+    return best;
 }
 
 /**
@@ -70,8 +72,6 @@ export function deduplicateByName(
         if (list) list.push(q);
         else groups.set(key, [q]);
     }
-    return [...groups.values()].map((variants) => {
-        if (variants.length === 1) return variants[0];
-        return pickBestVariant(variants, charClass, charRace);
-    });
+    // Every group holds at least one quest, and a lone variant is its own best pick.
+    return [...groups.values()].map((variants) => pickBestVariant(variants, charClass, charRace));
 }

@@ -146,7 +146,7 @@ function StripColumn({ dayOfWeek, active, away, label, bars, votes, onPick }: {
                 />
             ))}
             <span className={`pt-0.5 text-center text-[10px] ${active ? 'text-foreground' : 'text-dim'}`}>
-                {FULL_DAYS[dayOfWeek][0]}
+                {FULL_DAYS[dayOfWeek]?.[0]}
             </span>
             {votes !== undefined && <VotesMarker votes={votes} />}
         </button>

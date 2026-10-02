@@ -109,7 +109,7 @@ export function AvatarUploadZone({ onFileSelected, isUploading, uploadProgress, 
                 <AvatarPreview displayUrl={displayUrl} isUploading={isUploading} uploadProgress={uploadProgress} />
                 <DropZoneContent dragOver={dragOver} />
             </div>
-            <FilePicker ref={inputRef} accept={ACCEPT_ATTR} onFiles={(files) => validateAndSelect(files[0])}
+            <FilePicker ref={inputRef} accept={ACCEPT_ATTR} onFiles={([file]) => { if (file) validateAndSelect(file); }}
                 loading={isUploading} loadingLabel="Uploading…" fullWidth>
                 Upload Custom Avatar
             </FilePicker>

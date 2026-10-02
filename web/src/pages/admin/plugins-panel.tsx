@@ -12,8 +12,10 @@ import { UninstallConfirmModal } from '../admin-settings/UninstallConfirmModal';
  * No collapsible sections — all info visible: author, capabilities, game slugs, integrations.
  */
 async function executePluginMutation(mutations: Record<string, { mutateAsync: (s: string) => Promise<void> }>, action: string, slug: string): Promise<void> {
+    const mutation = mutations[action];
+    if (!mutation) return;
     try {
-        await mutations[action].mutateAsync(slug);
+        await mutation.mutateAsync(slug);
         toast.success(`Plugin ${action}d`);
     } catch (err) {
         toast.error(err instanceof Error ? err.message : `Failed to ${action} plugin`);

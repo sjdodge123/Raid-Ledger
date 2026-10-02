@@ -64,14 +64,16 @@ function buildPreviewBlocks(
     for (const [dayOfWeek, hours] of dayHours) {
         hours.sort((a, b) => a - b);
         let blockStart = hours[0];
-        let prev = hours[0];
-        for (let i = 1; i <= hours.length; i++) {
-            if (i === hours.length || hours[i] !== prev + 1) {
+        if (blockStart === undefined) continue;
+        let prev = blockStart;
+        for (const hour of hours.slice(1)) {
+            if (hour !== prev + 1) {
                 blocks.push({ dayOfWeek, startHour: blockStart, endHour: prev + 1, ...meta });
-                if (i < hours.length) blockStart = hours[i];
+                blockStart = hour;
             }
-            if (i < hours.length) prev = hours[i];
+            prev = hour;
         }
+        blocks.push({ dayOfWeek, startHour: blockStart, endHour: prev + 1, ...meta });
     }
     return blocks;
 }

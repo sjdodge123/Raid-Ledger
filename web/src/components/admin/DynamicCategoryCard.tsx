@@ -74,7 +74,7 @@ function ThemeStrip({ vector }: { vector: number[] }) {
                 {vector.slice(0, 7).map((raw, i) => (
                     <ThemeBar
                         key={AXIS_LABELS[i]}
-                        label={AXIS_LABELS[i]}
+                        label={AXIS_LABELS[i] ?? ''}
                         raw={raw}
                     />
                 ))}

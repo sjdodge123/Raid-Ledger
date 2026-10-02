@@ -7,6 +7,7 @@ import {
     endOfWeek,
     isSameWeek,
     isSameMonth,
+    parse,
 } from 'date-fns';
 import { getGameColors } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
@@ -147,14 +148,18 @@ function useSwipeNavigation(currentDate: Date, onDateChange: (d: Date) => void) 
     const touchStartTarget = useRef<EventTarget | null>(null);
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        touchStartX.current = e.touches[0].clientX;
-        touchStartY.current = e.touches[0].clientY;
+        const touch = e.touches[0];
+        if (!touch) return;
+        touchStartX.current = touch.clientX;
+        touchStartY.current = touch.clientY;
         touchStartTarget.current = e.target;
     }, []);
 
     const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-        const dx = e.changedTouches[0].clientX - touchStartX.current;
-        const dy = e.changedTouches[0].clientY - touchStartY.current;
+        const touch = e.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.clientX - touchStartX.current;
+        const dy = touch.clientY - touchStartY.current;
         const startedOnButton = touchStartTarget.current instanceof HTMLElement && touchStartTarget.current.closest('button');
         const threshold = startedOnButton ? 100 : 50;
         if (Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy)) {
@@ -185,7 +190,7 @@ function useScheduleData(events: CalendarEvent[]) {
         const todayKey = format(startOfDay(new Date()), 'yyyy-MM-dd');
         const keys = new Set(eventsByDate.keys());
         keys.add(todayKey);
-        return [...keys].sort().map((k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); });
+        return [...keys].sort().map((k) => parse(k, 'yyyy-MM-dd', new Date()));
     }, [eventsByDate]);
 
     return { eventsByDate, daysWithEvents };

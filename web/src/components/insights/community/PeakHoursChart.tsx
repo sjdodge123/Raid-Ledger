@@ -49,12 +49,13 @@ function buildRows(peakHours: CommunityTemporalResponseDto['peakHours']) {
         byDay.set(p.weekday, list);
     }
     const rows: Array<Record<string, string | number>> = [];
-    for (let wd = 1; wd <= 7; wd += 1) {
+    for (const [i, day] of WEEKDAY_LABELS.entries()) {
+        const wd = i + 1;
         const top = (byDay.get(wd) ?? [])
             .sort((a, b) => b.activity - a.activity)
             .slice(0, 3);
         rows.push({
-            day: WEEKDAY_LABELS[wd - 1],
+            day,
             h1: top[0]?.activity ?? 0,
             h2: top[1]?.activity ?? 0,
             h3: top[2]?.activity ?? 0,

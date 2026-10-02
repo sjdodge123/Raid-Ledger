@@ -11,8 +11,10 @@ import { RoleIcon } from '../shared/RoleIcon';
 import { copyWithToast } from '../../lib/clipboard';
 
 /** Status indicator colors */
-const STATUS_COLORS: Record<string, { dot: string; label: string }> = {
-    pending: { dot: 'bg-gray-400', label: 'Pending' },
+type StatusColor = { dot: string; label: string };
+const PENDING_STATUS: StatusColor = { dot: 'bg-gray-400', label: 'Pending' };
+const STATUS_COLORS: Record<string, StatusColor> = {
+    pending: PENDING_STATUS,
     invited: { dot: 'bg-blue-400', label: 'Invited' },
     accepted: { dot: 'bg-emerald-400', label: 'Accepted' },
     claimed: { dot: 'bg-green-400', label: 'Claimed' },
@@ -122,7 +124,7 @@ function PugCardMenu({ pug, inviteUrl, onEdit, onRemove, onRegenerateLink, onCop
 }
 
 export function PugCard({ pug, canManage = false, onEdit, onRemove, onRegenerateLink, showRole = false }: PugCardProps) {
-    const statusInfo = STATUS_COLORS[pug.status] ?? STATUS_COLORS.pending;
+    const statusInfo = STATUS_COLORS[pug.status] ?? PENDING_STATUS;
     const inviteUrl = pug.inviteCode ? `${window.location.origin}/i/${pug.inviteCode}` : null;
     const handleCopyInviteUrl = (e: React.MouseEvent) => {
         e.stopPropagation();

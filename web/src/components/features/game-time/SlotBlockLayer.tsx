@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import type { GridDims } from './game-time-grid.types';
 import type { SlotBlock } from './slot-blocks.utils';
+import { blockEndHour } from './slot-blocks.utils';
 import type { BlockEditorApi } from './use-block-editor';
 import { DAYS, formatHour } from './game-time-grid.utils';
 
@@ -24,10 +25,10 @@ function selectedGeometry(dims: GridDims, col: number, colCount: number): { left
 }
 
 function blockLabel(block: SlotBlock, hours: number[]): string {
-    const endHour = block.endIndex >= hours.length
-        ? (hours[hours.length - 1] + 1) % 24
-        : hours[block.endIndex];
-    return `${DAYS[block.dayOfWeek]} ${formatHour(hours[block.startIndex])} to ${formatHour(endHour)}`;
+    const startHour = hours[block.startIndex];
+    const endHour = blockEndHour(block.endIndex, hours);
+    if (startHour === undefined || endHour === undefined) return `${DAYS[block.dayOfWeek]}`;
+    return `${DAYS[block.dayOfWeek]} ${formatHour(startHour)} to ${formatHour(endHour)}`;
 }
 
 interface SlotBlockLayerProps {
@@ -62,8 +63,10 @@ function cellUnderPointer(
     if (x < 0 || y < 0 || !dims.rowHeight || !dims.colWidth) return null;
     const col = Math.floor(x / (dims.colWidth + 1));
     const index = Math.floor(y / dims.rowHeight);
-    if (col < 0 || col >= days.length || index < 0 || index >= hours.length) return null;
-    return { dayOfWeek: days[col], hour: hours[index] };
+    const dayOfWeek = days[col];
+    const hour = hours[index];
+    if (dayOfWeek === undefined || hour === undefined) return null;
+    return { dayOfWeek, hour };
 }
 
 /**

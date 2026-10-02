@@ -16,15 +16,19 @@ export function toRgb(hex: string): [number, number, number] {
 
 /** Relative luminance of an sRGB hex colour, in `[0, 1]`. */
 export function luminance(hex: string): number {
-    const channels = toRgb(hex)
-        .map((c) => c / 255)
-        .map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+    const linear = (channel: number): number => {
+        const c = channel / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    };
+    const [r, g, b] = toRgb(hex);
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
 }
 
 /** WCAG contrast ratio between two hex colours, in `[1, 21]`, rounded to two decimals. */
 export function contrastRatio(a: string, b: string): number {
-    const [lighter, darker] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+    const [la, lb] = [luminance(a), luminance(b)];
+    const lighter = Math.max(la, lb);
+    const darker = Math.min(la, lb);
     return Math.round(((lighter + 0.05) / (darker + 0.05)) * 100) / 100;
 }
 
@@ -36,7 +40,7 @@ export function contrastRatio(a: string, b: string): number {
  */
 export function composite(fg: string, bg: string, alpha: number): string {
     const [f, b] = [toRgb(fg), toRgb(bg)];
-    const mixed = f.map((c, i) => Math.round(c * alpha + b[i] * (1 - alpha)));
+    const mixed = ([0, 1, 2] as const).map((i) => Math.round(f[i] * alpha + b[i] * (1 - alpha)));
     return `#${mixed.map((c) => c.toString(16).padStart(2, '0')).join('')}`;
 }
 

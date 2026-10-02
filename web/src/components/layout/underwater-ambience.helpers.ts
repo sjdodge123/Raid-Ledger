@@ -17,8 +17,15 @@ export function randInt(min: number, max: number): number {
     return Math.floor(rand(min, max + 1));
 }
 
+/** A random value inside a config `[min, max]` pair. */
+function randIn([min, max]: readonly number[]): number {
+    if (min === undefined || max === undefined) throw new RangeError('expected a [min, max] pair');
+    return rand(min, max);
+}
+
 export function createSchool(canvasW: number, canvasH: number, depth: number, direction: 1 | -1): FishSchool {
     const cfg = DEPTH_CONFIG[depth];
+    if (!cfg) throw new RangeError(`depth ${depth} is outside DEPTH_CONFIG`);
     const count = randInt(FISH_PER_SCHOOL_MIN, FISH_PER_SCHOOL_MAX);
     const baseX = direction === 1 ? rand(-200, -50) : rand(canvasW + 50, canvasW + 200);
     const baseY = rand(canvasH * 0.1, canvasH * 0.9);
@@ -28,9 +35,9 @@ export function createSchool(canvasW: number, canvasH: number, depth: number, di
         return {
             x: baseX + rand(-40, 40),
             y,
-            size: rand(cfg.sizeRange[0], cfg.sizeRange[1]),
-            speed: rand(cfg.speedRange[0], cfg.speedRange[1]),
-            opacity: rand(cfg.opacityRange[0], cfg.opacityRange[1]),
+            size: randIn(cfg.sizeRange),
+            speed: randIn(cfg.speedRange),
+            opacity: randIn(cfg.opacityRange),
             wobblePhase: Math.random() * Math.PI * 2,
             wobbleSpeed: rand(0.01, 0.03),
             wobbleAmp: rand(3, 5),

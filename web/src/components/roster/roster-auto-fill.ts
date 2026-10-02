@@ -42,15 +42,23 @@ function addToSummary(ctx: FillContext, role: RosterRole | string, filled: numbe
     else ctx.summary.push({ role: label, count: filled });
 }
 
+/** Seat the head of the queue in each empty `role` slot in turn; returns how many were seated. */
+function fillFromQueue(ctx: FillContext, role: RosterRole, isOverride: boolean): number {
+    let filled = 0;
+    let pos = findNextEmpty(ctx, role);
+    let player = ctx.remaining[0];
+    while (pos !== null && player) {
+        assignPlayer(ctx, player, role, pos, isOverride);
+        filled++;
+        pos = findNextEmpty(ctx, role);
+        player = ctx.remaining[0];
+    }
+    return filled;
+}
+
 function fillGeneric(ctx: FillContext) {
     for (const { role } of ctx.roleSlots) {
-        let filled = 0;
-        let pos = findNextEmpty(ctx, role);
-        while (pos !== null && ctx.remaining.length > 0) {
-            assignPlayer(ctx, ctx.remaining[0], role, pos, false);
-            filled++;
-            pos = findNextEmpty(ctx, role);
-        }
+        const filled = fillFromQueue(ctx, role, false);
         if (filled > 0) addToSummary(ctx, role, filled);
     }
 }
@@ -92,25 +100,13 @@ function fillRoleMatch(ctx: FillContext, roles: RosterRole[]) {
 
 function fillOverflow(ctx: FillContext, role: RosterRole, label: string) {
     if (ctx.getSlotCount(role) === 0) return;
-    let filled = 0;
-    let pos = findNextEmpty(ctx, role);
-    while (pos !== null && ctx.remaining.length > 0) {
-        assignPlayer(ctx, ctx.remaining[0], role, pos, true);
-        filled++;
-        pos = findNextEmpty(ctx, role);
-    }
+    const filled = fillFromQueue(ctx, role, true);
     if (filled > 0) ctx.summary.push({ role: label, count: filled });
 }
 
 function fillBackfill(ctx: FillContext, roles: RosterRole[]) {
     for (const role of roles) {
-        let filled = 0;
-        let pos = findNextEmpty(ctx, role);
-        while (pos !== null && ctx.remaining.length > 0) {
-            assignPlayer(ctx, ctx.remaining[0], role, pos, true);
-            filled++;
-            pos = findNextEmpty(ctx, role);
-        }
+        const filled = fillFromQueue(ctx, role, true);
         if (filled > 0) addToSummary(ctx, role, filled);
     }
 }

@@ -40,10 +40,10 @@ function handleNavKey(
     onEscape?: () => void,
 ): void {
     switch (e.key) {
-        case nextKey: { e.preventDefault(); items[(currentIndex + 1) % items.length].focus(); break; }
-        case prevKey: { e.preventDefault(); items[currentIndex > 0 ? currentIndex - 1 : items.length - 1].focus(); break; }
-        case 'Home': { e.preventDefault(); items[0].focus(); break; }
-        case 'End': { e.preventDefault(); items[items.length - 1].focus(); break; }
+        case nextKey: { e.preventDefault(); items[(currentIndex + 1) % items.length]?.focus(); break; }
+        case prevKey: { e.preventDefault(); items[currentIndex > 0 ? currentIndex - 1 : items.length - 1]?.focus(); break; }
+        case 'Home': { e.preventDefault(); items[0]?.focus(); break; }
+        case 'End': { e.preventDefault(); items[items.length - 1]?.focus(); break; }
         case 'Enter': case ' ': { if (currentIndex >= 0) { e.preventDefault(); onSelect?.(currentIndex); } break; }
         case 'Escape': { e.preventDefault(); onEscape?.(); break; }
     }
