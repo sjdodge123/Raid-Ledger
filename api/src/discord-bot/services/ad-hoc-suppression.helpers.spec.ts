@@ -56,21 +56,51 @@ describe('planSuppressionExtension (ROK-1418)', () => {
     expect(SUPPRESSION_MAX_EXTENSION_MS).toBe(6 * 60 * 60 * 1000);
   });
 
-  it('extends to now+1h when there is no current window (currentExtended null)', () => {
-    // scheduledEnd 2h out ⇒ ceiling now+8h ⇒ target = min(now+1h, ceiling) = now+1h.
+  it('does not write a window that ends before the scheduled end → skip-within-schedule (ROK-1696)', () => {
+    // scheduledEnd 2h out ⇒ target = now+1h, which is BEFORE the scheduled end.
+    // Writing it would pull COALESCE(extended_until, upper(duration)) forward
+    // by an hour, so the planner must skip instead of extending.
     const result = planSuppressionExtension(at(120), null, now);
+    expect(result).toEqual({ action: 'skip-within-schedule' });
+  });
+
+  it('skips a target exactly at the scheduled end → skip-within-schedule (ROK-1696)', () => {
+    // target now+1h == scheduledEnd ⇒ the write would not move the end forward.
+    const result = planSuppressionExtension(at(60), null, now);
+    expect(result).toEqual({ action: 'skip-within-schedule' });
+  });
+
+  it('extends to now+1h when the scheduled end is sooner (no current window)', () => {
+    // scheduledEnd 50m out ⇒ ceiling now+6h50m ⇒ target = now+1h, past the end.
+    const result = planSuppressionExtension(at(50), null, now);
     expect(result).toEqual({ action: 'extend', newEnd: at(60) });
   });
 
   it('skips a fresh window (currentExtended >= now+15m) → skip-fresh', () => {
-    const result = planSuppressionExtension(at(120), at(40), now);
+    // The window (now+40m) already ends past the scheduled end (now+30m).
+    const result = planSuppressionExtension(at(30), at(40), now);
     expect(result).toEqual({ action: 'skip-fresh' });
+  });
+
+  it('lifts a fresh window stored before the scheduled end up to the scheduled end (ROK-1696)', () => {
+    // A pre-floor write left now+40m on an event that ends at now+2h, so the
+    // effective end reads now+40m. The 60m target (now+1h) is still inside the
+    // schedule, so the repair writes the scheduled end itself.
+    const result = planSuppressionExtension(at(120), at(40), now);
+    expect(result).toEqual({ action: 'extend', newEnd: at(120) });
+  });
+
+  it('lifts a fresh window stored before the scheduled end to the 60m target when that is later (ROK-1696)', () => {
+    // Stored now+20m (fresh) before a now+30m end; target now+1h wins.
+    const result = planSuppressionExtension(at(30), at(20), now);
+    expect(result).toEqual({ action: 'extend', newEnd: at(60) });
   });
 
   it('extends when the current window is stale-ish (currentExtended < now+15m)', () => {
     // currentExtended now+5m is inside the 15m threshold ⇒ not fresh; target
-    // now+1h is beyond it and below the ceiling ⇒ extend to now+1h.
-    const result = planSuppressionExtension(at(120), at(5), now);
+    // now+1h is beyond it, past the 30m scheduled end and below the ceiling ⇒
+    // extend to now+1h.
+    const result = planSuppressionExtension(at(30), at(5), now);
     expect(result).toEqual({ action: 'extend', newEnd: at(60) });
   });
 
