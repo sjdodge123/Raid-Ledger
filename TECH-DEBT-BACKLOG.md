@@ -2129,5 +2129,5 @@ same day (#1278, #1279, #1280).
 
 ### 2026-10-02 — fix/rok-1625-1002 (ROK-1625 review nits left open)
 
-- **[nit]** `api/src/lfg/lfg-quickplay.listener.ts:31` (`LfgQuickPlayListener`): since ROK-1625 the class also converts the joiner's hand on the game's LFG-born session and emits `GROUP_CHANGED` (`playing`), so "Quick Play" no longer names everything it does. The log text and both docblocks were updated on the branch. The rename was left out because it touches the provider list in `lfg.module.ts`, the unit spec and the integration spec's spy target for no behaviour change.
+- **[nit]** `api/src/lfg/lfg-quickplay.listener.ts:31` (`LfgQuickPlayListener`): since ROK-1625 the class also converts the joiner's hand on the game's LFG-born session and emits `GROUP_CHANGED` (`playing`), so "Quick Play" no longer names everything it does. The log text and both docblocks were updated on the branch. The rename was left out because it touches eight files for no behaviour change: `lfg.module.ts` (the provider), the listener and its unit spec, the integration spec's spy target, and doc references in `discord-bot.constants.ts`, `ad-hoc-participant.service.ts` (plus its spec) and `lfg-now-manual-start.helpers.ts`.
   Suggested: rename to `LfgRosterJoinListener` (file `lfg-roster-join.listener.ts`) in one mechanical commit.
