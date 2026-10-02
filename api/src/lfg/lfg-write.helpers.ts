@@ -297,6 +297,44 @@ export async function convertGroup(
 }
 
 /**
+ * The same conversion {@link convertGroup} performs, scoped to ONE holder:
+ * flip that player's live hand on the game to `converted` and record the
+ * event it converted into. Every other row on the game is left alone.
+ *
+ * Idempotent: a converted row no longer matches `status = 'active'`, so a
+ * second call converts 0 rows. Shared by the manual start (ROK-1613, the
+ * starter) and the roster-join conversion (ROK-1625, a joiner landing on the
+ * game's LFG-born session).
+ *
+ * @param db - Drizzle handle.
+ * @param gameId - Game whose hand converts.
+ * @param userId - The one holder whose hand converts.
+ * @param target - The event the hand converted into.
+ * @param now - Instant the liveness check is measured against.
+ * @returns How many rows converted (0 or 1).
+ */
+export async function convertHolderIntent(
+  db: LfgDb,
+  gameId: number,
+  userId: number,
+  target: { eventId: number },
+  now: Date = new Date(),
+): Promise<number> {
+  const rows = await db
+    .update(schema.lfgIntents)
+    .set({
+      status: 'converted',
+      convertedToPollId: null,
+      convertedToEventId: target.eventId,
+    })
+    .where(
+      and(liveGroupRow(db, gameId, now), eq(schema.lfgIntents.userId, userId)),
+    )
+    .returning({ id: schema.lfgIntents.id });
+  return rows.length;
+}
+
+/**
  * True when the caller may convert this game's group RIGHT NOW.
  *
  * Two ways to qualify:
