@@ -14,7 +14,6 @@ import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { ActiveEventCacheService } from '../../events/active-event-cache.service';
 import * as fanOut from './event-end-time-fanout.helpers';
 import type { SuppressionWindowExtendedPayload } from './suppression-window-events';
 
@@ -74,12 +73,16 @@ async function buildModule(): Promise<SyncCtx> {
             ),
         },
       },
-      { provide: ActiveEventCacheService, useValue: eventCache },
     ],
   }).compile();
 
+  const service = module.get(EventAutoExtendService);
+  // `@Optional() eventCache: ActiveEventCacheService | null` emits `Object`
+  // as its design type, so DI cannot resolve it by class token. Set the
+  // field directly, as scheduled-event.service.spec-helpers.ts does.
+  (service as unknown as { eventCache: unknown }).eventCache = eventCache;
   return {
-    service: module.get(EventAutoExtendService),
+    service,
     settingsService: module.get(SettingsService),
     scheduledEventService: module.get(ScheduledEventService),
     adHocNotificationService: module.get(AdHocNotificationService),
