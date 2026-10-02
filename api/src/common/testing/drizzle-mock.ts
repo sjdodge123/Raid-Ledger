@@ -34,7 +34,15 @@ const CHAIN_METHODS = [
   '$dynamic',
   'execute',
   'as',
-];
+] as const;
+
+/**
+ * Every key specs read off a MockDb: the chain methods plus `transaction`.
+ * Typed as explicit properties so they stay `jest.Mock` (not `| undefined`)
+ * under noUncheckedIndexedAccess; ad-hoc keys still go through the index
+ * signature.
+ */
+type MockDbMethod = (typeof CHAIN_METHODS)[number] | 'transaction';
 
 /**
  * `query` mirrors Drizzle's relational-query namespace. Tests may overwrite
@@ -44,9 +52,10 @@ const CHAIN_METHODS = [
 
 type DrizzleQueryNamespace = Record<string, any>;
 
-export type MockDb = Record<string, jest.Mock> & {
-  query: DrizzleQueryNamespace;
-};
+export type MockDb = Record<MockDbMethod, jest.Mock> &
+  Record<string, jest.Mock> & {
+    query: DrizzleQueryNamespace;
+  };
 
 export function createDrizzleMock(): MockDb {
   const mock = {} as MockDb;
