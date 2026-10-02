@@ -17,6 +17,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { defined } from '../common/defined.helpers';
 import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
@@ -96,7 +97,7 @@ export class DemoTestDiscoveryCategoriesController {
         candidateGameIds,
       })
       .returning({ id: schema.discoveryCategorySuggestions.id });
-    return { id: row.id };
+    return { id: defined(row, 'inserted suggestion').id };
   }
 
   /**
