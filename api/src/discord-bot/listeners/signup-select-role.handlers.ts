@@ -10,7 +10,8 @@ type SlotRole = 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench';
 
 export interface RoleSelectInfo {
   selectedRoles: ('tank' | 'healer' | 'dps')[];
-  primaryRole: string;
+  /** First selected role; absent only when nothing was selected. */
+  primaryRole: string | undefined;
   rolesLabel: string;
 }
 
@@ -29,9 +30,9 @@ export function parseRoleValues(
 /** Build the signup options object from selected roles. */
 export function buildRoleSignupOptions(
   selectedRoles: ('tank' | 'healer' | 'dps')[],
-  primaryRole: string,
+  primaryRole: string | undefined,
 ): { slotRole?: SlotRole; preferredRoles: ('tank' | 'healer' | 'dps')[] } {
-  if (selectedRoles.length === 1) {
+  if (selectedRoles.length === 1 && primaryRole !== undefined) {
     return { slotRole: primaryRole as SlotRole, preferredRoles: selectedRoles };
   }
   return { preferredRoles: selectedRoles };
@@ -186,7 +187,8 @@ async function signupAnonymousWithRoles(
     discordAvatarHash: interaction.user.avatar,
     role:
       roleCtx.selectedRoles.length === 1
-        ? (roleCtx.primaryRole as 'tank' | 'healer' | 'dps' | 'flex' | 'player')
+        ? (roleCtx.primaryRole as
+            'tank' | 'healer' | 'dps' | 'flex' | 'player' | undefined)
         : undefined,
     preferredRoles: roleCtx.selectedRoles,
     status: signupStatus ?? undefined,
