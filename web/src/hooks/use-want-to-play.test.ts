@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -38,7 +38,7 @@ function createTestHarness() {
 }
 
 function findCallWithExactKey(
-    invalidateSpy: ReturnType<typeof vi.spyOn>,
+    invalidateSpy: MockInstance<QueryClient['invalidateQueries']>,
     expectedKey: unknown[],
 ) {
     return invalidateSpy.mock.calls.find(

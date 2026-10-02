@@ -5,7 +5,7 @@
  * `useSchedulePollRealtime`, the fallback `refetchInterval` rule, and the
  * vote mutation's `mutationKey` the handler's in-flight guard depends on.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -25,7 +25,7 @@ const mockDisconnect = vi.fn();
 const mockSocket = {
     emit: mockEmit, on: mockOn, off: mockOff, disconnect: mockDisconnect, connected: false,
 };
-const mockIo = vi.fn(() => mockSocket);
+const mockIo = vi.fn<(...args: unknown[]) => typeof mockSocket>(() => mockSocket);
 vi.mock('socket.io-client', () => ({
     io: (...args: unknown[]) => mockIo(...args),
     Socket: class {},
@@ -59,7 +59,7 @@ function harness() {
     return { qc, spy, wrapper };
 }
 
-function keys(spy: ReturnType<typeof vi.spyOn>): string[] {
+function keys(spy: MockInstance<QueryClient['invalidateQueries']>): string[] {
     return spy.mock.calls.map(([opts]) => JSON.stringify((opts as { queryKey: unknown }).queryKey));
 }
 
