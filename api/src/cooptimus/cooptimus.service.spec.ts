@@ -8,6 +8,7 @@
 import { CooptimusService } from './cooptimus.service';
 import type { SettingsService } from '../settings/settings.service';
 import { COOPTIMUS_RATE_LIMIT_MS } from './cooptimus.constants';
+import { at } from '../common/testing/narrow';
 
 const PALWORLD_XML =
   '<games><game><id>9814</id><title>Palworld</title><system>PC</system><online>32</online></game></games>';
@@ -52,7 +53,7 @@ describe('CooptimusService (ROK-1397)', () => {
     expect(result).not.toBeNull();
     expect(result!.entries).toHaveLength(1);
     expect(result!.empty).toBe(false);
-    const [rawUrl, init] = fetchSpy.mock.calls[0];
+    const [rawUrl, init] = at(fetchSpy.mock.calls, 0);
     const url = rawUrl as string; // fetchApi always passes a string URL
     expect(url).toContain('api.co-optimus.com/games.php?search=true');
     expect(url).toContain('name=Palworld');
@@ -103,7 +104,7 @@ describe('CooptimusService (ROK-1397)', () => {
       await both;
 
       expect(callTimes).toHaveLength(2);
-      expect(callTimes[1] - callTimes[0]).toBeGreaterThanOrEqual(
+      expect(at(callTimes, 1) - at(callTimes, 0)).toBeGreaterThanOrEqual(
         COOPTIMUS_RATE_LIMIT_MS,
       );
     } finally {
@@ -136,7 +137,7 @@ describe('CooptimusService.fetchGamePageFacts (game-page source)', () => {
       comboLabel: 'Up to 4 Local or Online',
       downloadableOnly: true,
     });
-    const [, init] = spy.mock.calls[0];
+    const [, init] = at(spy.mock.calls, 0);
     expect((init?.headers as Record<string, string>)['User-Agent']).toBe(
       'UA/1.0',
     );

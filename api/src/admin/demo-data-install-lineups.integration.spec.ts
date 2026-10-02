@@ -91,8 +91,11 @@ function describeInstall() {
 
     it('public voting lineup carries entries + votes', async () => {
       await freshInstall();
-      const [publicLineup] = await demoLineups(testApp).then((rows) =>
-        rows.filter((l) => l.title === DEMO_LINEUP_TITLES[0]),
+      const [publicLineup] = nonEmpty(
+        await demoLineups(testApp).then((rows) =>
+          rows.filter((l) => l.title === DEMO_LINEUP_TITLES[0]),
+        ),
+        'publicLineup',
       );
       expect(publicLineup).toBeDefined();
       expect(publicLineup.status).toBe('voting');

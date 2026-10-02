@@ -18,7 +18,7 @@ import {
 import { AD_HOC_EVENTS } from '../discord-bot/discord-bot.constants';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 /** The LFG-born event's temp channel — a snowflake, as the body schema requires. */
@@ -142,7 +142,7 @@ describe('POST /admin/test/lfg-now/voice-join|voice-leave', () => {
     const closed = await rosterRows(eventId);
     // The SAME row closed — not a second row, not a delete.
     expect(closed).toHaveLength(1);
-    expect(closed[0].id).toBe(open[0].id);
+    expect(at(closed, 0).id).toBe(at(open, 0).id);
     expect(closed[0]?.leftAt).toBeInstanceOf(Date);
   });
 
