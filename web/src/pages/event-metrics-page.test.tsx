@@ -173,7 +173,7 @@ describe('EventMetricsPage — part 3', () => {
                 noShow: 0,
                 sessions: [
                     {
-                        id: 1,
+                        id: '00000000-0000-4000-8000-000000000001',
                         eventId: 10,
                         userId: 1,
                         discordUserId: 'discord-1',
@@ -327,7 +327,7 @@ describe('EventMetricsPage — part 6', () => {
                 noShow: 0,
                 sessions: [
                     {
-                        id: 1,
+                        id: '00000000-0000-4000-8000-000000000001',
                         eventId: 10,
                         userId: 1,
                         discordUserId: 'discord-1',
