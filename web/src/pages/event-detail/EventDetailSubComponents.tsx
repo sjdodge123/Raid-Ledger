@@ -14,8 +14,9 @@ import { toast } from '../../lib/toast';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
 
 /** Omits an absent character name instead of carrying the key as `undefined`. */
-function toAttendeeCharacter({ gameId, name, avatarUrl }: { gameId: number | string; name?: string | undefined; avatarUrl: string | null }) {
-    return name === undefined ? { gameId, avatarUrl } : { gameId, name, avatarUrl };
+type AttendeeCharacter = { gameId: number | string; name?: string; avatarUrl: string | null };
+function toAttendeeCharacter({ gameId, name, avatarUrl }: { gameId: number | string; name?: string | undefined; avatarUrl: string | null }): AttendeeCharacter {
+    return { gameId, avatarUrl, ...(name === undefined ? {} : { name }) };
 }
 
 function mapGameTimeAttendees(roster: EventRosterDto | undefined) {

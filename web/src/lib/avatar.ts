@@ -56,10 +56,10 @@ export interface AvatarUser {
 
 interface CurrentUserAvatarData {
     id: number;
-    avatarPreference?: AvatarPreference | null;
+    avatarPreference?: AvatarPreference | null | undefined;
     /** Server-resolved avatar URL for character preference (ROK-414) */
-    resolvedAvatarUrl?: string | null;
-    customAvatarUrl?: string | null;
+    resolvedAvatarUrl?: string | null | undefined;
+    customAvatarUrl?: string | null | undefined;
 }
 
 let _currentUserAvatarData: CurrentUserAvatarData | null = null;

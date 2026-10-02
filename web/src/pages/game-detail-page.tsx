@@ -229,7 +229,7 @@ function UpcomingEventsSection({ events, igdbId, navigate }: {
 }
 
 /** Trailers / YouTube embeds section */
-function TrailersSection({ videos }: { videos: { videoId: string; name?: string }[] }): JSX.Element {
+function TrailersSection({ videos }: { videos: { videoId: string; name?: string | undefined }[] }): JSX.Element {
     return (
         <section className="mb-8">
             <h2 className="text-lg font-semibold text-foreground mb-3">Trailers</h2>

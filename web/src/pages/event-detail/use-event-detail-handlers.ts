@@ -54,7 +54,7 @@ function useSignupHandlers(eventId: number, options: { shouldShowCharacterModal:
         doSignup();
     }, [options.shouldShowCharacterModal, doSignup]);
 
-    const handleSelectionConfirm = useCallback(async (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => {
+    const handleSelectionConfirm = useCallback(async (selection: { characterId: string; role?: CharacterRole | undefined; preferredRoles?: CharacterRole[] | undefined }) => {
         try { const result = await signup.mutateAsync(buildConfirmOpts(selection, pendingSlot)); resetModal(); const t = getSignupToast(result.assignedSlot); toast.success(t.title, { description: t.description }); }
         catch (err) { toast.error('Failed to sign up', { description: err instanceof Error ? err.message : 'Please try again.' }); }
     }, [pendingSlot, signup, resetModal]);
