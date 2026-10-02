@@ -9,6 +9,7 @@ import {
   buildRosterBreakdown,
   buildAttendanceSummary,
 } from './analytics-metrics.helpers';
+import { at } from '../common/testing/narrow';
 
 // ─── Factories ──────────────────────────────────────────────────────────────
 
@@ -168,7 +169,7 @@ function testVoiceOnlyWithNoSignupsAppearsAsEntry() {
 
   // ROK-985: voice-only participants now appear even with zero signups
   expect(result).toHaveLength(1);
-  expect(result[0].signupStatus).toBeNull();
+  expect(at(result, 0).signupStatus).toBeNull();
   expect(result[0]?.voiceClassification).toBe('full');
 }
 
@@ -226,7 +227,7 @@ function testVoiceSessionWithNullClassification() {
 
   expect(result).toHaveLength(1);
   // voiceClassification should be null — not a missing session, just unclassified
-  expect(result[0].voiceClassification).toBeNull();
+  expect(at(result, 0).voiceClassification).toBeNull();
   // Duration is still populated — the session matched
   expect(result[0]?.voiceDurationSec).toBe(500);
 }

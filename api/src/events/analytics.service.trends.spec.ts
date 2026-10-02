@@ -1,12 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsService } from './analytics.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { at } from '../common/testing/narrow';
 
 let service: AnalyticsService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'execute', jest.Mock> & Record<string, jest.Mock>;
 
 async function setupEach() {
-  mockDb = {};
+  mockDb = {
+    execute: jest.fn().mockReturnThis(),
+  };
   const chainMethods = [
     'select',
     'from',
@@ -23,7 +26,6 @@ async function setupEach() {
     'set',
     'delete',
     'groupBy',
-    'execute',
   ];
   for (const m of chainMethods) {
     mockDb[m] = jest.fn().mockReturnThis();
@@ -240,7 +242,7 @@ async function testReliabilityNullAvatar() {
     ])
     .mockResolvedValueOnce([{ count: '1' }]);
   const result = await service.getUserReliability(20, 0);
-  expect(result.users[0].avatar).toBeNull();
+  expect(at(result.users, 0).avatar).toBeNull();
 }
 
 async function testReliabilityMissingCountRow() {
@@ -335,7 +337,7 @@ async function testGameNullCover() {
     },
   ]);
   const result = await service.getGameAttendance();
-  expect(result.games[0].coverUrl).toBeNull();
+  expect(at(result.games, 0).coverUrl).toBeNull();
 }
 
 async function testGameMultiple() {
