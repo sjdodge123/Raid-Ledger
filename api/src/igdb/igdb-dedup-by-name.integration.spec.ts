@@ -19,7 +19,7 @@ import { upsertItadGame } from './igdb-itad-upsert.helpers';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
 import type { GameDetailDto } from '@raid-ledger/contract';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -50,10 +50,13 @@ async function insertGame(
   const slug =
     overrides.slug ??
     `dedup-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({ name: 'Test Game', slug, ...overrides })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'Test Game', slug, ...overrides })
+      .returning(),
+    'inserted game',
+  );
   return game;
 }
 
@@ -128,7 +131,7 @@ describe('Regression: ROK-1113 — ingest dedup by normalized name', () => {
     const allRows = await testApp.db
       .select()
       .from(schema.games)
-      .where(eq(schema.games.id, all[0].id));
+      .where(eq(schema.games.id, at(all, 0).id));
     expect(allRows).toHaveLength(1);
   });
 
@@ -264,7 +267,7 @@ describe('POST /admin/games/dedup-cleanup-by-name (integration)', () => {
       .select()
       .from(schema.communityLineupEntries)
       .where(eq(schema.communityLineupEntries.lineupId, lineup.id));
-    expect(entries[0].gameId).toBe(winner.id);
+    expect(entries[0]?.gameId).toBe(winner.id);
   });
 
   it('is idempotent — second commit reports zero merges', async () => {
@@ -380,7 +383,7 @@ describe('Regression: dedup merge vs games_dedup_audit FK', () => {
       .from(schema.games)
       .where(eq(schema.games.name, "Baldur's Gate 3"));
     expect(survivors).toHaveLength(1);
-    expect(survivors[0].id).toBe(winner.id);
+    expect(survivors[0]?.id).toBe(winner.id);
   });
 
   it('carries the loser steam/itad/cover identity onto the winner', async () => {

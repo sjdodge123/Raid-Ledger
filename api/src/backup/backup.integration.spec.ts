@@ -30,7 +30,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as schema from '../drizzle/schema';
 import { BackupService } from './backup.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 const execFileAsync = promisify(execFile);
 
@@ -315,7 +315,7 @@ async function getDataSegmentTables(dumpFile: string): Promise<string[]> {
   const tables: string[] = [];
   for (const line of stdout.split('\n')) {
     const match = line.match(/^\s*\d+;\s+\d+\s+\d+\s+TABLE DATA\s+\S+\s+(\S+)/);
-    if (match) tables.push(match[1]);
+    if (match) tables.push(defined(match[1], 'TABLE DATA name group'));
   }
   return tables;
 }
@@ -331,7 +331,7 @@ function parseSchemaTableLine(line: string): string | null {
   const match = line.match(
     /^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+(?!DATA\s)\S+\s+(\S+)/,
   );
-  return match ? match[1] : null;
+  return match ? defined(match[1], 'TABLE name group') : null;
 }
 
 /**

@@ -53,10 +53,13 @@ async function insertMatchOmittingDefaults(): Promise<
         'lineup',
       );
       try {
-        const [match] = await tx
-          .insert(schema.communityLineupMatches)
-          .values({ lineupId: lineup.id, gameId: testApp.seed.game.id })
-          .returning();
+        const [match] = nonEmpty(
+          await tx
+            .insert(schema.communityLineupMatches)
+            .values({ lineupId: lineup.id, gameId: testApp.seed.game.id })
+            .returning(),
+          'community_lineup_matches row',
+        );
         const { status, thresholdMet, voteCount } = match;
         result = { status, thresholdMet, voteCount };
       } catch (err) {

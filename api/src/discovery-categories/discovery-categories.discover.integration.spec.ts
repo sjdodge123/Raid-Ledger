@@ -95,8 +95,8 @@ describe('loadApprovedDynamicRows (ROK-567)', () => {
     const rows = await loadApprovedDynamicRows(testApp.db);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.category).toBe('Near Theme');
-    expect(rows[0].slug).toBe(`dynamic-${id}`);
-    expect(rows[0].suggestionId).toBe(id);
+    expect(rows[0]?.slug).toBe(`dynamic-${id}`);
+    expect(rows[0]?.suggestionId).toBe(id);
     expect(rows[0]?.isDynamic).toBe(true);
     expect(rows[0]?.games.map((g) => g.id)).toEqual([near]);
   });

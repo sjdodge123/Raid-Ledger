@@ -10,6 +10,7 @@ import {
   type ItadSearchDeps,
 } from './igdb-itad-search.helpers';
 import type { ItadSearchGame } from './igdb-itad-merge.helpers';
+import { at } from '../common/testing/narrow';
 
 function makeMockDeps(overrides: Partial<ItadSearchDeps> = {}): ItadSearchDeps {
   return {
@@ -348,7 +349,7 @@ describe('executeItadSearch — enrichment paths', () => {
     const result = await executeItadSearch(deps, 'test');
 
     expect(enrichFromIgdb).not.toHaveBeenCalled();
-    expect(result.games[0].igdbId).toBeNull();
+    expect(at(result.games, 0).igdbId).toBeNull();
   });
 
   it('falls back to ITAD-only when enrichFromIgdb returns null', async () => {
@@ -367,7 +368,7 @@ describe('executeItadSearch — enrichment paths', () => {
 
     const result = await executeItadSearch(deps, 'test');
 
-    expect(result.games[0].igdbId).toBeNull();
+    expect(at(result.games, 0).igdbId).toBeNull();
     expect(result.games[0]?.coverUrl).toBe('https://itad.example.com/box.jpg');
   });
 
@@ -406,7 +407,7 @@ describe('executeItadSearch — enrichment paths', () => {
     // Game A enriched, Game B ITAD-only
     expect(result.games[0]?.igdbId).toBe(10);
     expect(result.games[0]?.coverUrl).toBe('https://igdb.com/a.jpg');
-    expect(result.games[1].igdbId).toBeNull();
+    expect(at(result.games, 1).igdbId).toBeNull();
   });
 
   it('result always has source="itad" and cached=false', async () => {

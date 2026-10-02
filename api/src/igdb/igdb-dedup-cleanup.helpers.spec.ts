@@ -94,7 +94,7 @@ describe('findDuplicateGames', () => {
 
     // 31 is the only row present in both source systems; 30 is ITAD-only.
     expect(result[0]?.winnerId).toBe(31);
-    expect(result[0].loserIds).toEqual(expect.arrayContaining([30, 32]));
+    expect(result[0]?.loserIds).toEqual(expect.arrayContaining([30, 32]));
   });
 
   it('prefers an igdb-only row over an itad-only row', async () => {
@@ -133,7 +133,7 @@ describe('findDuplicateGames', () => {
 
     expect(result).toHaveLength(1);
     expect(result[0]?.winnerId).toBe(10);
-    expect(result[0].loserIds).toEqual(expect.arrayContaining([11, 12]));
+    expect(result[0]?.loserIds).toEqual(expect.arrayContaining([11, 12]));
     expect(result[0]?.loserIds).toHaveLength(2);
   });
 
@@ -154,7 +154,7 @@ describe('findDuplicateGames', () => {
     // Should merge into a single group with winner=20
     expect(result).toHaveLength(1);
     expect(result[0]?.winnerId).toBe(20);
-    expect(result[0].loserIds).toEqual(expect.arrayContaining([21, 22]));
+    expect(result[0]?.loserIds).toEqual(expect.arrayContaining([21, 22]));
     expect(result[0]?.loserIds).toHaveLength(2);
   });
 });
