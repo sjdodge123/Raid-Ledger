@@ -21,11 +21,13 @@ import { readLastMessages } from '../../helpers/messages.js';
 import { withChannelDump } from '../channel-dump.js';
 import { assertBindSucceeded, type BindReply } from '../bind-reply.js';
 import { deleteSeriesBindings } from '../series-binding-cleanup.js';
-import { joinVoice, leaveVoice } from '../../helpers/voice.js';
+import { SmokeAssertionError } from '../assert.js';
+import { quickPlayVoiceJoin } from '../fixtures-quick-play.js';
 import {
   createEvent,
   deleteEvent,
   awaitProcessing,
+  seedFixtureUser,
 } from '../fixtures.js';
 import type { ApiClient } from '../api.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -263,30 +265,8 @@ async function firstGame(
 }
 
 /**
- * Set (or clear, when gameName is undefined) the test bot's /playing override.
- * The bot has no Discord Rich Presence, so the override is what gives it a
- * positive game confirmation for the game-voice-monitor spawn guard (ROK-1390).
- */
-async function setPlayingOverride(
-  ctx: TestContext,
-  gameName?: string,
-): Promise<void> {
-  await ctx.api
-    .post('/admin/test/slash-command', {
-      commandName: 'playing',
-      options: gameName ? { game: gameName } : {},
-      discordUserId: ctx.testBotDiscordId,
-      guildId: ctx.config.guildId,
-      channelId: ctx.textChannels[0]?.id,
-    })
-    .catch(() => {
-      /* clear is best-effort during cleanup */
-    });
-}
-
-/**
- * Bind text + series-linked game-voice-monitor voice slots. The caller sweeps
- * them with deleteSeriesBindings.
+ * Bind text + series-linked game-voice-monitor voice slots and return the
+ * voice binding's id. The caller sweeps both with deleteSeriesBindings.
  */
 async function bindSeriesRoutingSlots(
   ctx: TestContext,
@@ -294,7 +274,7 @@ async function bindSeriesRoutingSlots(
   textChId: string,
   voiceChId: string,
   gameName: string,
-): Promise<void> {
+): Promise<string> {
   await bindSeriesChannel(ctx, recurrenceGroupId, textChId, GUILD_TEXT);
   await bindSeriesChannel(
     ctx,
@@ -313,79 +293,115 @@ async function bindSeriesRoutingSlots(
       `Expected a series-linked voice binding on #${voiceChId}; got ${JSON.stringify(rows)}`,
     );
   }
-  // minPlayers=1 so a single voice member trips the immediate-unanimous spawn
-  // (no 15-minute delay). The series link + game survive a config-only PATCH.
+  // minPlayers=1: the one-member immediate spawn (no 15-minute delay) that the
+  // quick-play seam stands in for. The series link + game survive a
+  // config-only PATCH.
   await ctx.api.patch(`/admin/discord/bindings/${voiceRow.id}`, {
     config: { minPlayers: 1 },
   });
+  return voiceRow.id;
+}
+
+/**
+ * The series TEXT channel for the routing test: any text channel that is NOT
+ * the default bot channel. On slot envs `textChannels[0]` IS the default
+ * channel, and then an embed that fell through to the default channel would
+ * pass the routing assertion too.
+ */
+function seriesTextChannel(ctx: TestContext): { id: string; name: string } {
+  const textCh = ctx.textChannels.find((c) => c.id !== ctx.defaultChannelId);
+  if (!textCh) {
+    const ids = ctx.textChannels.map((c) => c.id).join(', ');
+    throw new SmokeAssertionError(
+      `ROK-1390 needs a text channel other than the default channel ` +
+        `${ctx.defaultChannelId} to tell the series-announce tier from the ` +
+        `default fall-through; textChannels=[${ids}]`,
+    );
+  }
+  return textCh;
+}
+
+/**
+ * Wait for the quick-play LIVE embed in the series TEXT announce channel.
+ * Without the ROK-1390 series-announce tier it would fall through to the
+ * default bot channel (the series text slot has gameId=null, so the
+ * game-announce tier can't match it).
+ *
+ * ROK-1447: the title is now the bare game name — "Quick Play" moved to the
+ * author line, which SimpleEmbed carries since ROK-1459.
+ *
+ * On a timeout the failure lists the last messages of the series text channel
+ * and the default channel, so an embed the predicate rejected reads
+ * differently from no embed at all.
+ */
+async function expectLiveEmbedInSeriesChannel(
+  ctx: TestContext,
+  textCh: { id: string; name: string },
+): Promise<void> {
+  await withChannelDump(
+    () =>
+      pollForEmbed(
+        textCh.id,
+        (m) => m.embeds.some((e) => /quick play/i.test(e.author ?? '')),
+        ctx.config.timeoutMs,
+      ),
+    `Expected quick-play LIVE embed in series announce channel #${textCh.name}; ` +
+      'series-announce routing tier (ROK-1390) did not fire',
+    [
+      { label: `series text #${textCh.name}`, channelId: textCh.id },
+      { label: 'default notification', channelId: ctx.defaultChannelId },
+    ],
+    (id, count) => readLastMessages(id, count, { allAuthors: true }),
+  );
 }
 
 const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
   name: 'ROK-1390: series-linked quick-play announces to series text channel, not #general',
   category: 'voice',
   async run(ctx) {
-    const textCh = ctx.textChannels[0];
+    const textCh = seriesTextChannel(ctx);
     const voiceCh = ctx.voiceChannels[0];
-    if (!textCh) throw new Error('No text channel available');
     if (!voiceCh) throw new Error('No voice channel available');
 
     const game = await firstGame(ctx);
+    // Slot 7 is shared with the lfg-board joiner phase, which runs in the
+    // parallel pool; voice tests run after it, and seeding re-links the slot.
+    const fixture = await seedFixtureUser(ctx.api, 3, 7);
     const series = await createSeries(ctx, 'rok1390-route');
+    let mintedEventId: number | null = null;
     try {
-      await bindSeriesRoutingSlots(
+      const bindingId = await bindSeriesRoutingSlots(
         ctx,
         series.recurrenceGroupId,
         textCh.id,
         voiceCh.id,
         game.name,
       );
-
-      // Presence-less bot + /playing = one positive confirmation → the series
-      // spawn guard allows the mint and the embed routes via getChannelForSeries.
-      await setPlayingOverride(ctx, game.name);
-      await joinVoice(voiceCh.id);
-
-      // The quick-play LIVE embed must land in the series TEXT announce
-      // channel. Without the ROK-1390 series-announce tier it would fall
-      // through to the default bot channel (the series text slot has
-      // gameId=null, so the game-announce tier can't match it).
-      //
-      // ROK-1447: the title is now the bare game name — "Quick Play" moved to
-      // the author line, which SimpleEmbed carries since ROK-1459.
-      //
-      // On a timeout the failure lists the last messages of the series text
-      // channel and the default channel, so an embed the predicate rejected
-      // reads differently from no embed at all.
-      await withChannelDump(
-        () =>
-          pollForEmbed(
-            textCh.id,
-            (m) => m.embeds.some((e) => /quick play/i.test(e.author ?? '')),
-            ctx.config.timeoutMs,
-          ),
-        `Expected quick-play LIVE embed in series announce channel #${textCh.name}; ` +
-          'series-announce routing tier (ROK-1390) did not fire',
-        [
-          { label: `series text #${textCh.name}`, channelId: textCh.id },
-          { label: 'default notification', channelId: ctx.defaultChannelId },
-        ],
-        (id, count) => readLastMessages(id, count, { allAuthors: true }),
-      );
+      // A seeded, linked human joins through the DEMO_MODE seam: the companion
+      // bot is never rostered (ROK-1445 AC9), so its own join mints nothing.
+      const joined = await quickPlayVoiceJoin(ctx.api, {
+        userId: fixture.userId,
+        bindingId,
+        channelId: voiceCh.id,
+      });
+      mintedEventId = joined.eventId;
+      if (!joined.spawned) {
+        throw new Error(
+          `quick-play/voice-join did not spawn (reason=${joined.reason ?? 'none'}, eventId=${String(joined.eventId)})`,
+        );
+      }
+      await expectLiveEmbedInSeriesChannel(ctx, textCh);
     } finally {
-      leaveVoice();
-      await setPlayingOverride(ctx); // clear override
+      if (mintedEventId !== null) await deleteEvent(ctx.api, mintedEventId);
       await deleteSeriesBindings(ctx.api, series.recurrenceGroupId);
       await deleteEvent(ctx.api, series.id);
     }
   },
 };
 
-// Voice-join tests need real UDP connectivity to Discord voice servers; CI
-// runners can't establish those, so gate on SMOKE_SKIP_VOICE_JOIN (ROK-969).
-const canJoinVoice = process.env.SMOKE_SKIP_VOICE_JOIN !== '1';
-
+// The quick-play seam needs no UDP voice connection, so CI runs this test too.
 export const seriesDualBindingTests: SmokeTest[] = [
   dualBindingPersists,
   announceRoutesToTextHostsInVoice,
-  ...(canJoinVoice ? [quickPlayRoutesToSeriesAnnounce] : []),
+  quickPlayRoutesToSeriesAnnounce,
 ];

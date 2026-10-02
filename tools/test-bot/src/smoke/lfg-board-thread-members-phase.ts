@@ -26,7 +26,11 @@ import {
 } from './fixtures.js';
 import type { Run } from './lfg-board-shared.js';
 
-/** Unused by every other smoke (lfg-board 3/4, lfm-playing 5/6, invite 5). */
+/**
+ * Unused by every other parallel-pool smoke (lfg-board 3/4, lfm-playing 5/6,
+ * invite 5). The ROK-1390 series quick-play smoke reuses it from the
+ * sequential voice pass, which only starts once this phase has finished.
+ */
 const JOINER_SLOT = 7;
 /** The name `setup()` links the companion snowflake under. */
 const DM_RECIPIENT_NAME = 'SmokeTestBot';
