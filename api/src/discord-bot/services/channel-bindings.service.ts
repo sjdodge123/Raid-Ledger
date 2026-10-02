@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -17,6 +18,11 @@ import {
   resolvePatchedGameId,
   type BindingUpdatePatch,
 } from './channel-bindings-invariant.helpers';
+import { announceBindingChange } from './channel-binding-events';
+import {
+  selectBindingsWithGameNames,
+  type BindingWithGameName,
+} from './channel-bindings.queries';
 import type {
   BindingPurpose,
   ChannelType,
@@ -53,6 +59,9 @@ export class ChannelBindingsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    // Every write announces the touched channels so the voice binding caches
+    // evict their entry instead of serving it for up to 60 s.
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -91,7 +100,8 @@ export class ChannelBindingsService {
       `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
         (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
     );
-    return { binding, replacedChannelIds };
+    const result = { binding, replacedChannelIds };
+    return this.announced([channelId, ...replacedChannelIds], result);
   }
 
   /**
@@ -193,6 +203,7 @@ export class ChannelBindingsService {
         `Unbound channel ${channelId} in guild ${guildId}` +
           (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
       );
+      this.announced([channelId], undefined);
     }
 
     return result.map((row) => row.bindingPurpose as BindingPurpose);
@@ -208,7 +219,8 @@ export class ChannelBindingsService {
       .delete(schema.channelBindings)
       .where(eq(schema.channelBindings.id, id))
       .returning();
-    return result.length > 0;
+    const channelIds = result.map((row) => row.channelId);
+    return this.announced(channelIds, result.length > 0);
   }
 
   /**
@@ -228,26 +240,8 @@ export class ChannelBindingsService {
    */
   async getBindingsWithGameNames(
     guildId: string,
-  ): Promise<(BindingRecord & { gameName: string | null })[]> {
-    const b = schema.channelBindings;
-    const rows = await this.db
-      .select({
-        id: b.id,
-        guildId: b.guildId,
-        channelId: b.channelId,
-        channelType: b.channelType,
-        bindingPurpose: b.bindingPurpose,
-        gameId: b.gameId,
-        recurrenceGroupId: b.recurrenceGroupId,
-        config: b.config,
-        createdAt: b.createdAt,
-        updatedAt: b.updatedAt,
-        gameName: schema.games.name,
-      })
-      .from(b)
-      .leftJoin(schema.games, eq(b.gameId, schema.games.id))
-      .where(eq(b.guildId, guildId));
-    return rows;
+  ): Promise<BindingWithGameName[]> {
+    return selectBindingsWithGameNames(this.db, guildId);
   }
 
   /**
@@ -367,7 +361,13 @@ export class ChannelBindingsService {
         .where(eq(schema.channelBindings.id, id))
         .returning(),
     );
-    return result ?? null;
+    return this.announced(result ? [existing.channelId] : [], result ?? null);
+  }
+
+  /** Tell the binding caches these channels changed, then pass `value` on. */
+  private announced<T>(channelIds: readonly string[], value: T): T {
+    announceBindingChange(this.eventEmitter, channelIds);
+    return value;
   }
 
   /**

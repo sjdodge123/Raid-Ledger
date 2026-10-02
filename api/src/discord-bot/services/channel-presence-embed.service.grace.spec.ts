@@ -38,6 +38,7 @@ import { flushChannel } from './channel-presence-flush';
 import { listOpenRows } from './channel-presence-store.helpers';
 import { fetchMessageOrNull } from '../discord-bot-client.messages.helpers';
 import { resolveAllBindings } from '../listeners/voice-state.helpers';
+import { CHANNEL_BINDING_EVENTS } from './channel-binding-events';
 
 const VOICE = 'vc-1';
 const NOW = Date.parse('2026-09-26T19:15:00Z');
@@ -142,28 +143,28 @@ describe('an emptied room is re-flushed when its grace runs out (ROK-1692)', () 
   });
 });
 
-describe('forgetBinding — the seam reads the binding that exists now (ROK-1692)', () => {
-  /** A caching stand-in for `resolveAllBindings`, keyed like the real one. */
-  function cachingBindings(current: { value: unknown[] }) {
-    jest
-      .mocked(resolveAllBindings)
-      .mockImplementation((_deps, channelId, cache) => {
-        const hit = cache.get(channelId);
-        if (hit) return Promise.resolve(hit.value);
-        cache.set(channelId, {
-          cachedAt: Date.now(),
-          value: current.value as never,
-        });
-        return Promise.resolve(current.value as never);
+/** A caching stand-in for `resolveAllBindings`, keyed like the real one. */
+function cachingBindings(current: { value: unknown[] }) {
+  jest
+    .mocked(resolveAllBindings)
+    .mockImplementation((_deps, channelId, cache) => {
+      const hit = cache.get(channelId);
+      if (hit) return Promise.resolve(hit.value);
+      cache.set(channelId, {
+        cachedAt: Date.now(),
+        value: current.value as never,
       });
-  }
+      return Promise.resolve(current.value as never);
+    });
+}
 
-  const lobby = (bindingId: string, gracePeriod?: number) => ({
-    bindingPurpose: 'general-lobby',
-    bindingId,
-    config: { minPlayers: 2, ...(gracePeriod ? { gracePeriod } : {}) },
-  });
+const lobby = (bindingId: string, gracePeriod?: number) => ({
+  bindingPurpose: 'general-lobby',
+  bindingId,
+  config: { minPlayers: 2, ...(gracePeriod ? { gracePeriod } : {}) },
+});
 
+describe('forgetBinding — the seam reads the binding that exists now (ROK-1692)', () => {
   it('a flush after forgetBinding resolves the re-created binding, not the cached one', async () => {
     const current = { value: [lobby('b-old')] as unknown[] };
     cachingBindings(current);
@@ -194,5 +195,32 @@ describe('forgetBinding — the seam reads the binding that exists now (ROK-1692
     await service.flushNow();
 
     expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-old'));
+  });
+});
+
+describe('onBindingChanged — a binding write evicts the cached binding', () => {
+  it('a binding-changed event evicts the cached binding the same way', async () => {
+    const current = { value: [lobby('b-old')] as unknown[] };
+    cachingBindings(current);
+    const service = await started();
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    current.value = [lobby('b-new', 1)];
+    service.onBindingChanged({ channelId: VOICE });
+    service.markDirty(VOICE);
+    await service.flushNow();
+
+    expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-new', 1));
+  });
+
+  it('onBindingChanged is subscribed to CHANNEL_BINDING_EVENTS.CHANGED', () => {
+    const events = Reflect.getMetadata(
+      'EVENT_LISTENER_METADATA',
+      ChannelPresenceEmbedService.prototype.onBindingChanged,
+    ) as { event: unknown }[] | undefined;
+    expect((events ?? []).map((e) => e.event)).toEqual([
+      CHANNEL_BINDING_EVENTS.CHANGED,
+    ]);
   });
 });
