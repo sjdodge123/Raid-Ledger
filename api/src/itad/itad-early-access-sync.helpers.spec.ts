@@ -11,6 +11,7 @@
  * for >10s, and the helper must surface per-chunk telemetry the caller can
  * aggregate into a degraded-status signal (AC #5).
  */
+import { Logger } from '@nestjs/common';
 import {
   EARLY_ACCESS_BREAKER_THRESHOLD,
   EARLY_ACCESS_CALL_TIMEOUT_MS,
@@ -334,6 +335,55 @@ describe('enrichEarlyAccessPhase — consecutive-exhaustion breaker trips', () =
       tripped: true,
     });
     expect(db.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('enrichEarlyAccessPhase — breaker trip warning', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+  });
+  afterEach(() => warn.mockRestore());
+
+  const run = (itadService: ItadServiceLike, games: number) =>
+    enrichEarlyAccessPhase(
+      createDrizzleMock() as never,
+      itadService as never,
+      [buildChunk(games)],
+      () => undefined,
+    );
+
+  it('says the tail pass was skipped when the first pass trips', async () => {
+    const itadService = buildItadService();
+    itadService.getGameInfo.mockImplementation(exhausted);
+
+    await run(itadService, 10);
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('10 games skipped or failed (tail pass skipped)'),
+    );
+  });
+
+  it('says it tripped during the tail pass when the retries exhaust', async () => {
+    const itadService = buildItadService();
+    const seen = new Set<string>();
+    // First pass: a plain error (no streak). Tail pass: exhausted every time.
+    itadService.getGameInfo.mockImplementation((id: string) => {
+      if (seen.has(id)) return exhausted();
+      seen.add(id);
+      return Promise.reject(new Error('boom'));
+    });
+
+    const result = await run(itadService, 10);
+
+    expect(result).toMatchObject({ retried: 10, failed: 10, tripped: true });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '10 games skipped or failed (during the tail pass)',
+      ),
+    );
   });
 });
 

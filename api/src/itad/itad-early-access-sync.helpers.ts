@@ -221,10 +221,13 @@ export async function enrichChunkEarlyAccess(
   };
 }
 
+/** Where the breaker tripped, as worded in the warning. */
+type TripPoint = 'tail pass skipped' | 'during the tail pass';
+
 /** Warn that the breaker stopped the phase, with how many games it left. */
-function logTrip(unenriched: number): void {
+function logTrip(unenriched: number, where: TripPoint): void {
   logger.warn(
-    `ITAD earlyAccess phase stopped after ${EARLY_ACCESS_BREAKER_THRESHOLD} consecutive exhausted calls; ${unenriched} games skipped or failed (no tail pass)`,
+    `ITAD earlyAccess phase stopped after ${EARLY_ACCESS_BREAKER_THRESHOLD} consecutive exhausted calls; ${unenriched} games skipped or failed (${where})`,
   );
 }
 
@@ -235,7 +238,7 @@ function trippedPhase(
   remaining: EarlyAccessGame[][],
 ): EarlyAccessPhaseResult {
   const failed = remaining.reduce((n, c) => n + c.length, failedSoFar);
-  logTrip(failed);
+  logTrip(failed, 'tail pass skipped');
   return { updated, failed, retried: 0, tripped: true };
 }
 
@@ -271,7 +274,7 @@ export async function enrichEarlyAccessPhase(
   }
   const tail = await enrichChunkEarlyAccess(db, itadService, retry, breaker);
   onChunk(retry.length, tail);
-  if (tail.tripped) logTrip(tail.failed);
+  if (tail.tripped) logTrip(tail.failed, 'during the tail pass');
   return {
     updated: updated + tail.updated,
     failed: tail.failed,
