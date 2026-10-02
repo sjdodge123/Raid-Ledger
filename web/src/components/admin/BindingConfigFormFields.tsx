@@ -209,7 +209,7 @@ export function GameField({
   value: IgdbGameDto | null;
   onChange: (g: IgdbGameDto | null) => void;
   autoFocus: boolean;
-  violationMessage?: string;
+  violationMessage?: string | undefined;
 }) {
   return (
     <div>

@@ -46,7 +46,7 @@ export function LfgSheetOrModal({ isOpen, onClose, title, children }: LfgSheetOr
 
 /** One member row — the `LineupParticipantsModal` row idiom, LFG member shape. */
 export function LfgMemberRow({ member, trailing, testId }: {
-    member: LfgMemberDto; trailing?: ReactNode; testId?: string;
+    member: LfgMemberDto; trailing?: ReactNode | undefined; testId?: string | undefined;
 }): JSX.Element {
     const name = member.displayName ?? member.username;
     return (

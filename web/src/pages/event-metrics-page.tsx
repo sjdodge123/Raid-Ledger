@@ -56,7 +56,7 @@ function MetricsError({ eventId, message }: { eventId: number; message: string }
     );
 }
 
-function MetricsHeader({ eventId, title, startTime, gameName }: { eventId: number; title: string; startTime: string; gameName?: string }) {
+function MetricsHeader({ eventId, title, startTime, gameName }: { eventId: number; title: string; startTime: string; gameName?: string | undefined }) {
     const eventDate = new Date(startTime).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     return (
         <div className="mb-6">

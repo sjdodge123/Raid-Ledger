@@ -19,7 +19,7 @@ function ActivityEntryCard({
   pricing,
 }: {
   entry: GameActivityEntryDto;
-  pricing?: ItadGamePricingDto | null;
+  pricing?: ItadGamePricingDto | null | undefined;
 }): JSX.Element {
   return (
     <GameRowPill

@@ -50,7 +50,7 @@ function GameQueryInput({ value, onChange }: { value: string; onChange: (v: stri
 function SearchResultItem({ game, onSelect, participantCount }: {
     game: SearchResultGame;
     onSelect: (g: SelectedGame) => void;
-    participantCount?: number;
+    participantCount?: number | undefined;
 }): JSX.Element {
     return (
         <button
@@ -183,7 +183,7 @@ function SearchPane({ query, onQueryChange, isOpen, lineupId, participantCount, 
     onQueryChange: (v: string) => void;
     isOpen: boolean;
     lineupId: number;
-    participantCount?: number;
+    participantCount?: number | undefined;
     onSelect: (g: SelectedGame) => void;
 }): JSX.Element {
     // When a Steam URL is in the input we don't want to run the name

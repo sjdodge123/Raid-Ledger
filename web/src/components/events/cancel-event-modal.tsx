@@ -15,9 +15,9 @@ interface CancelEventModalProps {
     eventId: number;
     eventTitle: string;
     signupCount: number;
-    gameId?: number;
+    gameId?: number | undefined;
     /** ROK-536: Pre-populate reason from deep-link query param. */
-    initialReason?: string;
+    initialReason?: string | undefined;
 }
 
 type HandlerArgs = Pick<CancelEventModalProps, 'eventId' | 'eventTitle' | 'gameId' | 'onClose' | 'initialReason'>;

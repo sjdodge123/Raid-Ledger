@@ -61,7 +61,7 @@ export interface GameBadgeActivation {
  */
 function BadgePill({ cls, activate, children }: {
     cls: string;
-    activate?: BadgeActivation;
+    activate?: BadgeActivation | undefined;
     children: ReactNode;
 }): JSX.Element {
     if (!activate) return <span className={cls}>{children}</span>;
@@ -84,7 +84,7 @@ function BadgePill({ cls, activate, children }: {
 /** Emerald badge for the community library owner count. */
 export function OwnerBadge({ count, activate }: {
     count: number;
-    activate?: BadgeActivation;
+    activate?: BadgeActivation | undefined;
 }): JSX.Element {
     return (
         <BadgePill cls={`${BADGE_CLS} bg-emerald-500/90 text-white`} activate={activate}>
@@ -164,7 +164,7 @@ export function CarriedOverBadge(): JSX.Element {
  */
 export function PlayerBadge({ playerCount, activate }: {
     playerCount: { min: number; max: number } | null;
-    activate?: BadgeActivation;
+    activate?: BadgeActivation | undefined;
 }): JSX.Element | null {
     if (!playerCount) return null;
     const { min, max } = playerCount;
@@ -247,7 +247,7 @@ function RowPrice({ game, mode }: {
 function OwnershipPills({ game, full, owners }: {
     game: GameBadgeData;
     full: boolean;
-    owners?: BadgeActivation;
+    owners?: BadgeActivation | undefined;
 }): JSX.Element {
     return (
         <>
@@ -271,7 +271,7 @@ export type GameBadgeRowPrice = 'full' | 'label' | 'none';
 /** The `full`-variant tail: player count, early access, co-op. Compact drops it. */
 function FullRowTail({ game, players }: {
     game: GameBadgeData;
-    players?: BadgeActivation;
+    players?: BadgeActivation | undefined;
 }): JSX.Element {
     return (
         <>

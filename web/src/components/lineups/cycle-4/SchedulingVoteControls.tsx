@@ -41,7 +41,7 @@ export interface SchedulingVoteControlsProps {
    * control must SAY so — `aria-disabled` plus a dimmed face — instead of
    * looking pressable and silently doing nothing.
    */
-  pending?: boolean;
+  pending?: boolean | undefined;
   /** `data-testid` for the YES control; omitted in the ladder row. */
   voteTestId?: string;
   /** `data-testid` for the NO control (row: `slot-no-toggle`). */

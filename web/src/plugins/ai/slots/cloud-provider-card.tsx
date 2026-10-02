@@ -143,7 +143,7 @@ function ProviderBadge({ provider }: { provider: AiProviderInfoDto }) {
     return <span className={`${PILL} bg-dim/20 text-muted`}>Not Configured</span>;
 }
 
-function ProviderError({ error }: { error?: string }) {
+function ProviderError({ error }: { error?: string | undefined }) {
     if (!error) return null;
     return <p className="text-xs text-warning bg-warning/10 border border-warning/30 rounded px-2 py-1">{error}</p>;
 }

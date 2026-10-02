@@ -43,9 +43,9 @@ export interface FormErrors {
 export interface EventFormProps {
     event?: EventResponseDto;
     /** Series scope for bulk edit operations (ROK-429). */
-    seriesScope?: SeriesScope;
+    seriesScope?: SeriesScope | undefined;
     /** Pre-select a game when creating from lineup decided view (ROK-989). */
-    initialGame?: { id: number; name: string; slug: string; coverUrl: string | null; playerCount?: { min: number; max: number } | null } | null;
+    initialGame?: { id: number; name: string; slug: string; coverUrl: string | null; playerCount?: { min: number; max: number } | null | undefined } | null | undefined;
     /** Pre-fill start time from scheduling poll slot (ROK-977). ISO datetime string. */
     initialStartTime?: string | null;
     /** Scheduling poll match to complete after event creation (ROK-977). */

@@ -7,7 +7,7 @@ import { membersClause } from './week-label';
 
 export interface GroupWeekLegendProps {
     /** Undefined (aggregates without freshness data) → no right-hand clause. */
-    memberCounts?: MemberCounts;
+    memberCounts?: MemberCounts | undefined;
 }
 
 const SWATCH = 'relative inline-block h-3.5 w-3.5 shrink-0 overflow-hidden rounded';

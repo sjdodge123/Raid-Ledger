@@ -8,18 +8,18 @@ import { weekCellClass } from './group-marks.classes';
 export interface GroupWeekCellProps {
     dayOfWeek: number;
     hour: number;
-    cell?: HeatmapCellData;
+    cell?: HeatmapCellData | undefined;
     /** Summed votes of the poll slot(s) starting here; undefined = no slot. */
-    votes?: number;
+    votes?: number | undefined;
     picked: boolean;
     current: boolean;
     disabled: boolean;
     /** Absent = read-only: a labelled `role="img"` tile, not a tab stop. */
-    onPick?: (dayOfWeek: number, hour: number) => void;
+    onPick?: ((dayOfWeek: number, hour: number) => void) | undefined;
 }
 
 /** "5 free · 1 stale" top-right, the busy clause in purple. */
-function CellCount({ cell }: { cell?: HeatmapCellData }): JSX.Element {
+function CellCount({ cell }: { cell?: HeatmapCellData | undefined }): JSX.Element {
     const busyLabel = groupCellBusyLabel(cell);
     return (
         <span className="absolute right-[5px] top-1 text-[11px] leading-none text-foreground/85">

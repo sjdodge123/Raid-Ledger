@@ -26,7 +26,7 @@ export function CoopFitHints({
     participantCount,
 }: {
     game: CoopCapacityFields;
-    participantCount?: number;
+    participantCount?: number | undefined;
 }): JSX.Element | null {
     const coop = coopLabel({
         online: game.cooptimusOnlineMax,

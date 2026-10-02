@@ -102,7 +102,7 @@ function FilterPills({ filter, setFilter, allBackups, dailyCount, migrationCount
     filter: FilterType; setFilter: (f: FilterType) => void; allBackups: BackupFileDto[]; dailyCount: number; migrationCount: number;
 }): JSX.Element | null {
     if (allBackups.length === 0) return null;
-    const pills: { key: FilterType; label: string; count: number; badge?: string }[] = [
+    const pills: { key: FilterType; label: string; count: number; badge?: string | undefined }[] = [
         { key: 'all', label: 'All', count: allBackups.length },
         { key: 'daily', label: 'Daily', count: dailyCount, badge: TYPE_BADGE.daily },
         { key: 'migration', label: 'Migration', count: migrationCount, badge: TYPE_BADGE.migration },

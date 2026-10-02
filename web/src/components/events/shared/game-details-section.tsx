@@ -18,7 +18,7 @@ export interface GameDetailsSectionProps {
     selectedInstances: Record<string, unknown>[];
     titleIsAutoSuggested: boolean;
     descriptionIsAutoSuggested: boolean;
-    titleError?: string;
+    titleError?: string | undefined;
     titleInputId?: string;
     eventTypeSelectId?: string;
     showEventType?: boolean;
@@ -103,7 +103,7 @@ function useAutoFill(props: {
     }, [props.computeSuggestion, props.computeDescSuggestion]);
 }
 
-function InterestStat({ game, interestCount, interestLoading }: { game: IgdbGameDto | null; interestCount?: number; interestLoading?: boolean }) {
+function InterestStat({ game, interestCount, interestLoading }: { game: IgdbGameDto | null; interestCount?: number | undefined; interestLoading?: boolean | undefined }) {
     if (!game || interestLoading || interestCount == null || interestCount <= 0) return null;
     return (
         <p className="text-xs text-muted -mt-2">
@@ -134,7 +134,7 @@ function EventTypeDropdown({ eventTypeSelectId, eventTypeId, eventTypes, onEvent
 
 /** Title: the form's first native `required` control — the <form>s are `noValidate` so the inline error wins. */
 function TitleField({ titleInputId, title, titleError, titleIsAutoSuggested, placeholder, onTitleChange }: {
-    titleInputId: string; title: string; titleError?: string; titleIsAutoSuggested: boolean;
+    titleInputId: string; title: string; titleError?: string | undefined; titleIsAutoSuggested: boolean;
     placeholder: string; onTitleChange: (v: string, auto: boolean) => void;
 }) {
     return (

@@ -22,7 +22,7 @@ interface NominationCardProps {
      * past a nominated game's co-op capacity the card is flagged, so they can
      * see which existing picks no longer fit before voting opens.
      */
-    participantCount?: number;
+    participantCount?: number | undefined;
 }
 
 /** Cover image with gradient, badges, title overlay. */

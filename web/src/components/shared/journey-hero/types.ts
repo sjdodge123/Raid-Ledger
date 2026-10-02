@@ -70,14 +70,14 @@ export interface JourneyHeroProps {
    * making the hero the sole top-of-page surface.
    */
   sub?: import('react').ReactNode;
-  cta?: string;
+  cta?: string | undefined;
   /** Real button handler — wired by consumers. When omitted with `cta` set, button renders disabled. */
-  onCtaClick?: () => void;
-  hint?: string;
+  onCtaClick?: (() => void) | undefined;
+  hint?: string | undefined;
   tone?: HeroTone;
-  exitCondition?: string;
-  cue?: string;
-  donePillLabel?: string;
+  exitCondition?: string | undefined;
+  cue?: string | undefined;
+  donePillLabel?: string | undefined;
   noRibbon?: boolean;
   /**
    * ROK-1302: drop the trailing "Schedule" step from the phase ribbon for

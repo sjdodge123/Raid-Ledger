@@ -28,7 +28,7 @@ export interface LfgManageDialogProps {
      */
     spawnsNow?: boolean;
     /** The server-resolved indicator glyph (`spawnIndicatorEmoji`). */
-    spawnEmoji?: string;
+    spawnEmoji?: string | undefined;
 }
 
 /**

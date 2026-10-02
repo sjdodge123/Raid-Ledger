@@ -16,7 +16,7 @@ import { Input } from '../../ui/input';
 import { Button } from '../../ui/button';
 
 export interface SchedulingSuggestFormProps {
-  prefillTime?: string;
+  prefillTime?: string | undefined;
   isSuggesting: boolean;
   onSuggest: (proposedTime: string) => void;
 }

@@ -57,7 +57,7 @@ export interface PhoneGroupAvailabilityProps {
     /** What the subtitle calls the group after its size — default "in poll" ("4 in poll"). */
     sizeNoun?: string;
     /** Reschedule: the event being moved is not drawn as one of the viewer's events. */
-    excludeEventId?: number;
+    excludeEventId?: number | undefined;
 }
 
 /** The phone's group module — see file-level docstring. */

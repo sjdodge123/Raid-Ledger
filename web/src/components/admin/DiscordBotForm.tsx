@@ -40,20 +40,20 @@ function EnableToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () =>
     );
 }
 
-function botStatusLabel(data: { connecting?: boolean; connected?: boolean }) {
+function botStatusLabel(data: { connecting?: boolean | undefined; connected?: boolean | undefined }) {
     if (data.connecting) return 'Starting...';
     if (data.connected) return 'Online';
     return 'Offline';
 }
 
-function botStatusDotClass(data: { connecting?: boolean; connected?: boolean }) {
+function botStatusDotClass(data: { connecting?: boolean | undefined; connected?: boolean | undefined }) {
     if (data.connecting) return 'bg-warning animate-pulse';
     if (data.connected) return 'bg-success';
     return 'bg-danger';
 }
 
 function BotStatusBar({ data, onCheckPermissions, isChecking }: {
-    data: { connecting?: boolean; connected?: boolean; guildName?: string; memberCount?: number | null };
+    data: { connecting?: boolean | undefined; connected?: boolean | undefined; guildName?: string | undefined; memberCount?: number | null | undefined };
     onCheckPermissions: () => void; isChecking: boolean;
 }) {
     return (

@@ -7,7 +7,7 @@ import { Field } from '../../ui/field';
 import { Input } from '../../ui/input';
 
 interface PlaytimeMinInputProps {
-    value?: number;
+    value?: number | undefined;
     onChange: (value: number | undefined) => void;
     disabled?: boolean;
 }

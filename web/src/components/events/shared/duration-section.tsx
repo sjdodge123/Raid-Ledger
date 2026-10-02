@@ -6,7 +6,7 @@ import { DurationPresetGroup, type DurationChoice } from './duration-preset-grou
 export interface DurationSectionProps {
     durationMinutes: number;
     customDuration: boolean;
-    durationError?: string;
+    durationError?: string | undefined;
     onDurationMinutesChange: (v: number) => void;
     onCustomDurationChange: (v: boolean) => void;
     onDurationErrorClear?: () => void;

@@ -9,7 +9,7 @@ interface SeriesScopeModalProps {
     onClose: () => void;
     onConfirm: (scope: SeriesScope) => void;
     action: 'edit' | 'delete' | 'cancel';
-    isPending?: boolean;
+    isPending?: boolean | undefined;
 }
 
 const SCOPE_OPTIONS: readonly RadioOption<SeriesScope>[] = [

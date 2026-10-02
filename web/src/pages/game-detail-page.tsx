@@ -118,7 +118,7 @@ function CoopSupportAndActivity({ game, gameId }: {
 }
 
 function GameMediaSections({ game, streamsData }: {
-    game: { screenshots: string[]; videos: { videoId: string; name?: string }[]; name: string };
+    game: { screenshots: string[]; videos: { videoId: string; name?: string | undefined }[]; name: string };
     streamsData: ReturnType<typeof useGameStreams>['data'];
 }): JSX.Element {
     return (

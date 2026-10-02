@@ -18,17 +18,17 @@ interface RosterBuilderProps {
     canEdit: boolean;
     onSlotClick?: (role: RosterRole, position: number) => void;
     canJoin?: boolean;
-    currentUserId?: number;
-    onSelfRemove?: () => void;
+    currentUserId?: number | undefined;
+    onSelfRemove?: (() => void) | undefined;
     stickyExtra?: React.ReactNode;
-    onGenerateInviteLink?: (role: RosterRole) => void;
+    onGenerateInviteLink?: ((role: RosterRole) => void) | undefined;
     pugs?: PugSlotResponseDto[];
-    onRemovePug?: (pugId: string) => void;
+    onRemovePug?: ((pugId: string) => void) | undefined;
     onEditPug?: (pug: PugSlotResponseDto) => void;
-    onRegeneratePugLink?: (pugId: string) => void;
+    onRegeneratePugLink?: ((pugId: string) => void) | undefined;
     eventId?: number;
-    onRemoveFromEvent?: (signupId: number, username: string) => void;
-    gameId?: number;
+    onRemoveFromEvent?: ((signupId: number, username: string) => void) | undefined;
+    gameId?: number | undefined;
     isMMOEvent?: boolean;
 }
 
@@ -102,9 +102,9 @@ function useAllSlotsFilled(roleSlots: { role: RosterRole }[], assignments: Roste
 
 function RosterAssignmentPopup({ actions, pool, assignments, eventId, canSelfAssign, onSlotClick, availableSlots, onGenerateInviteLink, onRemoveFromEvent, gameId, isMMOEvent, currentUserId }: {
     actions: ReturnType<typeof useRosterActions>; pool: RosterAssignmentResponse[]; assignments: RosterAssignmentResponse[];
-    eventId?: number; canSelfAssign: boolean; onSlotClick?: (role: RosterRole, position: number) => void;
-    availableSlots: AvailableSlot[]; onGenerateInviteLink?: (role: RosterRole) => void;
-    onRemoveFromEvent?: (signupId: number, username: string) => void; gameId?: number; isMMOEvent?: boolean; currentUserId?: number;
+    eventId?: number | undefined; canSelfAssign: boolean; onSlotClick?: ((role: RosterRole, position: number) => void) | undefined;
+    availableSlots: AvailableSlot[]; onGenerateInviteLink?: ((role: RosterRole) => void) | undefined;
+    onRemoveFromEvent?: ((signupId: number, username: string) => void) | undefined; gameId?: number | undefined; isMMOEvent?: boolean | undefined; currentUserId?: number | undefined;
 }) {
     const handleSelfAssign = () => {
         if (!actions.assignmentTarget || !onSlotClick) return;
@@ -189,7 +189,7 @@ function AutoFillModal({ preview, onClose, onConfirm }: { preview: import('./ros
     );
 }
 
-function PugInvitesBar({ pugs, onRemovePug, onEditPug, onRegeneratePugLink }: { pugs: PugSlotResponseDto[]; onRemovePug?: (id: string) => void; onEditPug?: (pug: PugSlotResponseDto) => void; onRegeneratePugLink?: (id: string) => void }) {
+function PugInvitesBar({ pugs, onRemovePug, onEditPug, onRegeneratePugLink }: { pugs: PugSlotResponseDto[]; onRemovePug?: ((id: string) => void) | undefined; onEditPug?: ((pug: PugSlotResponseDto) => void) | undefined; onRegeneratePugLink?: ((id: string) => void) | undefined }) {
     return (
         <div className="rounded-lg border border-dashed border-amber-500/40 bg-amber-900/10 p-3">
             <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-400"><span className="inline-block h-2.5 w-2.5 rounded bg-amber-500" />Guest Invites ({pugs.length})</h4>
@@ -204,8 +204,8 @@ interface RoleSlotGridProps {
     roleSlots: { role: RosterRole; count: number; label: string; color: string }[];
     assignments: RosterAssignmentResponse[]; getSlotCount: (role: RosterRole) => number;
     isGenericGame: boolean; canEdit: boolean; canJoin: boolean;
-    currentUserId?: number; onSlotClick?: (role: RosterRole, position: number) => void;
-    onSelfRemove?: () => void; onAdminClick: (role: RosterRole, position: number) => void;
+    currentUserId?: number | undefined; onSlotClick?: ((role: RosterRole, position: number) => void) | undefined;
+    onSelfRemove?: (() => void) | undefined; onAdminClick: (role: RosterRole, position: number) => void;
     onRemove: (signupId: number) => void;
 }
 

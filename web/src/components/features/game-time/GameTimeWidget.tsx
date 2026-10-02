@@ -22,14 +22,14 @@ interface GameTimeWidgetProps {
     eventStartTime: string;
     eventEndTime: string;
     eventTitle?: string;
-    gameName?: string;
-    gameSlug?: string;
+    gameName?: string | undefined;
+    gameSlug?: string | undefined;
     gameId?: number | null;
-    coverUrl?: string | null;
+    coverUrl?: string | null | undefined;
     description?: string | null;
     creatorUsername?: string | null;
-    attendees?: AttendeePreview[];
-    attendeeCount?: number;
+    attendees?: AttendeePreview[] | undefined;
+    attendeeCount?: number | undefined;
 }
 
 interface PreviewBlockMeta {
@@ -111,7 +111,7 @@ function OverlapBadge({ hasOverlap }: { hasOverlap: boolean }) {
 }
 
 function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUsername }: {
-    title: string; coverUrl?: string | null; gameName?: string; timeLabel: string; creatorUsername?: string | null;
+    title: string; coverUrl?: string | null | undefined; gameName?: string | undefined; timeLabel: string; creatorUsername?: string | null | undefined;
 }) {
     return (
         <>
@@ -131,8 +131,8 @@ function EventDetailHeader({ title, coverUrl, gameName, timeLabel, creatorUserna
 }
 
 function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creatorUsername, attendees }: {
-    title: string; coverUrl?: string | null; gameName?: string; timeLabel: string; creatorUsername?: string | null;
-    gameId?: number | null; attendees?: AttendeePreview[];
+    title: string; coverUrl?: string | null | undefined; gameName?: string | undefined; timeLabel: string; creatorUsername?: string | null | undefined;
+    gameId?: number | null | undefined; attendees?: AttendeePreview[] | undefined;
 }) {
     return (
         <div className="rounded-lg border border-edge bg-panel/50 overflow-hidden">
@@ -208,8 +208,8 @@ function GameTimeWidgetModalHeader({ onClose }: { onClose: () => void }) {
 
 function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, gameName, gameId, eventTimeLabel, creatorUsername, attendees, onClose }: {
     editor: ReturnType<typeof useGameTimeEditor>; previewBlocks: GameTimePreviewBlock[];
-    eventTitle?: string; coverUrl?: string | null; gameName?: string; gameId?: number | null; eventTimeLabel: string; creatorUsername?: string | null;
-    attendees?: AttendeePreview[];
+    eventTitle?: string | undefined; coverUrl?: string | null | undefined; gameName?: string | undefined; gameId?: number | null | undefined; eventTimeLabel: string; creatorUsername?: string | null | undefined;
+    attendees?: AttendeePreview[] | undefined;
     onClose: () => void;
 }) {
     const isMobile = useMediaQuery(PHONE_MQ);

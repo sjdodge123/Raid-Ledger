@@ -25,11 +25,11 @@ interface PugCardProps {
     /** Whether the current user can edit/remove this PUG */
     canManage?: boolean;
     /** Called when edit is clicked */
-    onEdit?: (pug: PugSlotResponseDto) => void;
+    onEdit?: ((pug: PugSlotResponseDto) => void) | undefined;
     /** Called when remove is clicked */
-    onRemove?: (pugId: string) => void;
+    onRemove?: ((pugId: string) => void) | undefined;
     /** Called when regenerate invite link is clicked (ROK-263) */
-    onRegenerateLink?: (pugId: string) => void;
+    onRegenerateLink?: ((pugId: string) => void) | undefined;
     /** Whether to display the role badge (only for MMO games) */
     showRole?: boolean;
 }
@@ -96,8 +96,8 @@ function PugCardInfo({ pug, statusInfo, canManage, inviteUrl, showRole, onCopy }
 
 function PugCardMenu({ pug, inviteUrl, onEdit, onRemove, onRegenerateLink, onCopy }: {
     pug: PugSlotResponseDto; inviteUrl: string | null;
-    onEdit?: (pug: PugSlotResponseDto) => void; onRemove?: (id: string) => void;
-    onRegenerateLink?: (id: string) => void; onCopy: (e: React.MouseEvent) => void;
+    onEdit?: ((pug: PugSlotResponseDto) => void) | undefined; onRemove?: ((id: string) => void) | undefined;
+    onRegenerateLink?: ((id: string) => void) | undefined; onCopy: (e: React.MouseEvent) => void;
 }) {
     const [showMenu, setShowMenu] = useState(false);
     const menuAction = (e: React.MouseEvent, action: () => void) => { e.stopPropagation(); setShowMenu(false); action(); };

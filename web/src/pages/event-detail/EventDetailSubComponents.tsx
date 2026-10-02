@@ -122,7 +122,7 @@ function useTopbarActions(isSeries: boolean, eventId: number, onCancel: () => vo
 export function EventDetailTopbar({ fromCalendar, navState, hasHistory, isAuthenticated, canManageRoster, isCancelled, isEnded, eventId, recurrenceGroupId, onInvite, onReschedule, onCancel, onDelete, onSeriesAction }: {
     fromCalendar: boolean; navState: { calendarDate?: string; calendarView?: string } | null;
     hasHistory: boolean; isAuthenticated: boolean; canManageRoster: boolean; isCancelled: boolean;
-    isEnded: boolean; eventId: number; recurrenceGroupId?: string | null;
+    isEnded: boolean; eventId: number; recurrenceGroupId?: string | null | undefined;
     onInvite: () => void; onReschedule: () => void; onCancel: () => void;
     onDelete?: () => void; onSeriesAction?: (action: 'edit' | 'delete' | 'cancel') => void;
 }): JSX.Element {
@@ -194,7 +194,7 @@ function TopbarManagerButtons({ onInvite, onReschedule, onEdit, onCancel, onDele
 
 /** Cancelled event banner */
 export function CancelledBanner({ event, isCancelled }: {
-    event: { cancelledAt?: string | null; cancellationReason?: string | null };
+    event: { cancelledAt?: string | null | undefined; cancellationReason?: string | null | undefined };
     isCancelled: boolean;
 }): JSX.Element | null {
     if (!isCancelled || !event.cancelledAt) return null;
@@ -244,7 +244,7 @@ export function PostEventSections({ event, eventId, isCancelled, isAdHoc, canMan
 /** Mobile quick info bar */
 export function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortFn }: {
     event: { startTime: string; game?: { id?: number } | null };
-    roster: { count: number; signups: Array<{ id: number; user: { id: number; username: string; avatar?: string | null; discordId?: string | null; customAvatarUrl?: string | null; characters?: unknown[] } }> } | undefined;
+    roster: { count: number; signups: Array<{ id: number; user: { id: number; username: string; avatar?: string | null | undefined; discordId?: string | null | undefined; customAvatarUrl?: string | null | undefined; characters?: unknown[] | undefined } }> } | undefined;
     isSignedUp: boolean;
     alphabetical: (a: { user: { username: string } }, b: { user: { username: string } }) => number;
 }): JSX.Element {

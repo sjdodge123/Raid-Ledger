@@ -62,8 +62,8 @@ interface CancelModalProps {
     eventId: number;
     eventTitle: string;
     signupCount: number;
-    gameId?: number;
-    initialReason?: string;
+    gameId?: number | undefined;
+    initialReason?: string | undefined;
 }
 
 /** Cancel event modal wrapper */
@@ -91,14 +91,14 @@ interface RescheduleModalProps {
     currentStartTime: string;
     currentEndTime: string;
     eventTitle: string;
-    gameId?: number;
-    gameSlug?: string;
-    gameName?: string;
-    coverUrl?: string | null;
+    gameId?: number | undefined;
+    gameSlug?: string | undefined;
+    gameName?: string | undefined;
+    coverUrl?: string | null | undefined;
     description?: string | null;
     creatorUsername?: string;
     signupCount: number;
-    initialReason?: string;
+    initialReason?: string | undefined;
 }
 
 /** Reschedule event modal wrapper */

@@ -13,7 +13,7 @@ interface EventCardProps {
     signupCount?: number;
     onClick?: () => void;
     /** Show a "Fits your schedule" badge when event overlaps with game time */
-    matchesGameTime?: boolean;
+    matchesGameTime?: boolean | undefined;
 }
 
 function StatusBadge({ status }: { status: EventDisplayStatus }) {
@@ -77,7 +77,7 @@ function CoverArt({ event, showPlaceholder, gameCoverUrl, placeholderPath, onIma
 
 function GameCoverSection({ event, showPlaceholder, gameCoverUrl, placeholderPath, matchesGameTime, status, onImageError }: {
     event: EventResponseDto; showPlaceholder: boolean; gameCoverUrl: string | null;
-    placeholderPath: string; matchesGameTime?: boolean; status: EventDisplayStatus; onImageError: () => void;
+    placeholderPath: string; matchesGameTime?: boolean | undefined; status: EventDisplayStatus; onImageError: () => void;
 }) {
     return (
         <div className="aspect-[3/4] relative overflow-hidden bg-panel badge-overlay">

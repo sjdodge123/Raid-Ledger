@@ -43,7 +43,7 @@ export interface SchedulingRallyActionProps {
    * wrong one. `0` is AC8's empty state: present, disabled, "Everyone has
    * answered this time".
    */
-  pendingVoterCount?: number;
+  pendingVoterCount?: number | undefined;
   /** Hours left on the menu-owned session cooldown, or `null` when idle. */
   cooldownHours: number | null;
   /** Arm that cooldown from the server's `cooldownUntil`. */

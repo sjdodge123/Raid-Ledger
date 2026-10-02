@@ -52,7 +52,7 @@ function formatWeekRange(date: Date): string {
  * Rich event card for the schedule view.
  * Shows game cover, title, game name, time range, and avatar stack.
  */
-function ScheduleEventCover({ coverUrl, icon }: { coverUrl?: string | null; icon: string }) {
+function ScheduleEventCover({ coverUrl, icon }: { coverUrl?: string | null | undefined; icon: string }) {
     return (
         <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-panel">
             {coverUrl ? <img src={coverUrl} alt="" className="w-full h-full object-cover"

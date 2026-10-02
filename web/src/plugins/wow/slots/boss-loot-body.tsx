@@ -15,7 +15,7 @@ export interface BossLootBodyProps {
     isLoading: boolean;
     wowheadVariant: string;
     equippedBySlot: Map<string, EquipmentItemDto>;
-    characterClass?: string | null;
+    characterClass?: string | null | undefined;
     hasCharacter: boolean;
 }
 
@@ -72,7 +72,7 @@ function LootItemMeta({ item }: { item: BossLootDto }) {
 function LootItemRow({ item, usable, filterUsable, wowheadVariant, equippedBySlot, characterClass, hasCharacter }: {
     item: BossLootDto; usable: boolean; filterUsable: boolean;
     wowheadVariant: string; equippedBySlot: Map<string, EquipmentItemDto>;
-    characterClass?: string | null; hasCharacter: boolean;
+    characterClass?: string | null | undefined; hasCharacter: boolean;
 }) {
     const equipSlot = item.slot ? LOOT_TO_EQUIP_SLOT[item.slot] ?? item.slot : null;
     const equippedItem = equipSlot ? equippedBySlot.get(equipSlot) : undefined;

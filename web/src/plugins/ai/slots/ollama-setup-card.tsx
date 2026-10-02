@@ -88,7 +88,7 @@ export function OllamaSetupCard({ provider, onSettingChange }: OllamaSetupCardPr
     );
 }
 
-function SetupProgress({ step }: { step?: string }) {
+function SetupProgress({ step }: { step?: string | undefined }) {
     const info = (step && STEP_LABELS[step]) || DEFAULT_STEP;
     return (
         <div className="space-y-2">

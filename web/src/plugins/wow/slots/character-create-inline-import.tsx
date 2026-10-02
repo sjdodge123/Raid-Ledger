@@ -19,7 +19,7 @@ interface CharacterCreateInlineImportProps {
 
 /** ROK-1636: `noteId` set = Armory unavailable for this variant — tab is aria-disabled and described by the note. */
 function InlineModeToggle({ mode, onModeChange, noteId }: {
-    mode: 'manual' | 'import'; onModeChange: (m: 'manual' | 'import') => void; noteId?: string;
+    mode: 'manual' | 'import'; onModeChange: (m: 'manual' | 'import') => void; noteId?: string | undefined;
 }) {
     return (
         <div role="group" aria-label="Add character by" className={ARMORY_TAB_TRACK_CLS}>

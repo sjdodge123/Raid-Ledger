@@ -42,7 +42,7 @@ interface EventDetailRosterProps {
 }
 
 /** Inline role preference icons for a signup (ROK-847). */
-function RolePreferenceBadges({ roles }: { roles?: string[] | null }) {
+function RolePreferenceBadges({ roles }: { roles?: string[] | null | undefined }) {
     if (!roles || roles.length === 0) return null;
     return (
         <span className="flex shrink-0 items-center gap-0.5">

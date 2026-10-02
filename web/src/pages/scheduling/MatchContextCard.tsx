@@ -11,7 +11,7 @@ import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 interface MatchContextCardProps {
   match: MatchDetailResponseDto;
   /** Count of distinct users who have voted on any slot (ROK-1015). */
-  uniqueVoterCount?: number;
+  uniqueVoterCount?: number | undefined;
 }
 
 /** Convert a match member to an AvatarUser for the shared component. */

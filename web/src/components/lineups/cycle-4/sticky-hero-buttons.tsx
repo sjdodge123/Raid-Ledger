@@ -62,7 +62,7 @@ export function StickyHeroSubmitButton({
   used: number;
   max: number;
   disabled: boolean;
-  disabledReason?: string;
+  disabledReason?: string | undefined;
   onClick: () => void;
 }): JSX.Element {
   const label = submitted

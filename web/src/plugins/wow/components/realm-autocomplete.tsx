@@ -10,7 +10,7 @@ interface RealmAutocompleteProps {
     value: string;
     onChange: (realm: string) => void;
     /** WoW game variant for Blizzard API namespace (retail, classic_era, classic) */
-    gameVariant?: string;
+    gameVariant?: string | undefined;
     /** Accessible name. Omit inside a `Field` — the Combobox takes the Field's label. */
     label?: string;
 }

@@ -17,7 +17,7 @@ const SignupConfirmationModal = lazy(() =>
 interface EventInviteActionsProps {
     eventId: number;
     notificationId: string;
-    onComplete?: () => void;
+    onComplete?: (() => void) | undefined;
 }
 
 async function performSignup(

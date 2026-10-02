@@ -62,7 +62,7 @@ export interface SchedulingTimeMenuProps {
   /** The poll no longer accepts votes — no organiser menu at all. */
   readOnly: boolean;
   /** Poll members with no stance on THIS slot (AC8's empty state at `0`). */
-  pendingVoterCount?: number;
+  pendingVoterCount?: number | undefined;
   /** The ONE per-poll rally cooldown, hoisted into the composite (§3.4). */
   cooldown: RallyCooldown;
   testIdPrefix: SchedulingTimeMenuTestIds;

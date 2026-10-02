@@ -118,7 +118,7 @@ interface TileWrapperProps {
   onNominate: (gameId: number) => void;
   onOpenDrawer: (gameId: number) => void;
   aiSuggested?: boolean;
-  aiReasoning?: string;
+  aiReasoning?: string | undefined;
 }
 
 export function CommonGroundTileWrapper(props: TileWrapperProps): JSX.Element {

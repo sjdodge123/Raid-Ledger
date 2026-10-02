@@ -29,7 +29,7 @@ export function HeartedGameCard({
   pricing,
 }: {
   game: UserHeartedGameDto;
-  pricing?: ItadGamePricingDto | null;
+  pricing?: ItadGamePricingDto | null | undefined;
 }): JSX.Element {
   return (
     <GameRowPill

@@ -26,9 +26,9 @@ export interface CoopPillProps {
     /** RAW `cooptimusOnlineMax` from the row / suggestion DTO. */
     cooptimusOnlineMax: number | null | undefined;
     /** RAW `cooptimusCouchMax` — promotes a couch-only game to `local`. */
-    cooptimusCouchMax?: number | null;
+    cooptimusCouchMax?: number | null | undefined;
     /** RAW `cooptimusComboCoop` — Co-Optimus's Local + Online flag. */
-    cooptimusComboCoop?: boolean | null;
+    cooptimusComboCoop?: boolean | null | undefined;
     /** Extra positioning classes for the host pill row. */
     className?: string;
 }

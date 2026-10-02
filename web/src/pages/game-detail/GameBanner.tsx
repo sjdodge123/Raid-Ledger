@@ -22,12 +22,12 @@ export interface GameBannerGame {
     slug: string;
     name: string;
     coverUrl: string | null;
-    itadBoxartUrl?: string | null;
+    itadBoxartUrl?: string | null | undefined;
     summary: string | null;
     playerCount: { min: number; max: number } | null;
     crossplay: boolean | null;
     firstReleaseDate: string | null;
-    steamAppId?: number | null;
+    steamAppId?: number | null | undefined;
 }
 
 /** Everything `GameBanner` renders, shared with its content column. */

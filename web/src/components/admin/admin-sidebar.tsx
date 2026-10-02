@@ -72,7 +72,7 @@ function SectionHeader({ section, hasNewChild }: { section: NavSection; hasNewCh
 }
 
 /** Section group with parent badge indicator when any child has unseen "New" badge. */
-function SidebarSection({ section, currentPath, onNavigate }: { section: NavSection; currentPath: string; onNavigate?: () => void }) {
+function SidebarSection({ section, currentPath, onNavigate }: { section: NavSection; currentPath: string; onNavigate?: (() => void) | undefined }) {
     const { isNew } = useSeenAdminSections();
     const hasNewChild = section.children.some((child) => child.newBadgeKey && isNew(child.newBadgeKey));
 
@@ -111,7 +111,7 @@ function navItemClass(isActive: boolean) {
 }
 
 /** Individual nav link. Renders status pills for integrations and "New" badges for plugin items. */
-export function SidebarNavItem({ item, isActive, onNavigate }: { item: NavItem; isActive: boolean; onNavigate?: () => void }) {
+export function SidebarNavItem({ item, isActive, onNavigate }: { item: NavItem; isActive: boolean; onNavigate?: (() => void) | undefined }) {
     const { isNew } = useNewBadge(item.newBadgeKey ?? '', isActive);
     const badge = item.pluginSlug ? getPluginBadge(item.pluginSlug) : undefined;
 

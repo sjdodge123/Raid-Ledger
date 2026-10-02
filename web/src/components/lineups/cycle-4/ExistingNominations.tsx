@@ -17,7 +17,7 @@ export function ExistingNominations({
   entries: LineupEntryResponseDto[];
   lineupId: number;
   /** ROK-1444: group size used to flag picks the roster has outgrown. */
-  participantCount?: number;
+  participantCount?: number | undefined;
 }): JSX.Element {
   const removeMutation = useRemoveNomination();
   const handleRemove = (gameId: number): void => {
