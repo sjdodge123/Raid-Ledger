@@ -23,7 +23,13 @@ export function blendVectors(
   const clamped = Math.max(0, Math.min(1, alpha));
   const out = new Array<number>(theme.length);
   for (let i = 0; i < theme.length; i += 1) {
-    out[i] = clamped * theme[i] + (1 - clamped) * centroid[i];
+    const t = theme[i];
+    const c = centroid[i];
+    // Lengths match, so only an array hole is undefined; it stays NaN as before.
+    out[i] =
+      t === undefined || c === undefined
+        ? Number.NaN
+        : clamped * t + (1 - clamped) * c;
   }
   return out;
 }

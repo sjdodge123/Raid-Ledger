@@ -11,6 +11,7 @@
  * Every statement uses the `tx` handle. Work issued against the outer `db`
  * would run on another connection and fall outside the lock.
  */
+import { defined } from '../../common/defined.helpers';
 import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -176,7 +177,7 @@ export function spawnUnderGroupLock(
     const eventId = await createLfgNowEventRow(
       tx,
       gameId,
-      hands[0].userId,
+      defined(hands[0], 'earliest live now-hand').userId,
       now,
     );
     await signupNowHands(tx, eventId, hands);

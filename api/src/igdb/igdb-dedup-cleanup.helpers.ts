@@ -22,6 +22,7 @@ import {
   pickNameGroupWinner,
   type NameDuplicateGroup,
 } from './igdb-name-dedup.helpers';
+import { defined } from '../common/defined.helpers';
 
 const nameDedupLogger = new Logger('IgdbNameDedupCleanup');
 
@@ -124,7 +125,7 @@ function buildGroupFromRow(row: DupRow): DuplicateGroup {
     ids.find((id) => igdbIds.has(id) && itadIds.has(id)) ??
     ids.find((id) => igdbIds.has(id)) ??
     ids.find((id) => itadIds.has(id)) ??
-    ids[0];
+    defined(ids[0], 'duplicate group first id');
   const loserIds = ids.filter((id) => id !== winnerId);
   return { winnerId, loserIds };
 }

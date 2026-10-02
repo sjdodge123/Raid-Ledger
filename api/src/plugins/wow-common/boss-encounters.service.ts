@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { defined } from '../../common/defined.helpers';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, and } from 'drizzle-orm';
 import type { BossEncounterDto, BossLootDto } from '@raid-ledger/contract';
@@ -78,7 +79,10 @@ export class BossEncountersService {
    * Get the expansion set for a given WoW game variant.
    */
   getExpansionsForVariant(variant: string): string[] {
-    return VARIANT_EXPANSIONS[variant] ?? VARIANT_EXPANSIONS['classic_era'];
+    return (
+      VARIANT_EXPANSIONS[variant] ??
+      defined(VARIANT_EXPANSIONS['classic_era'], 'classic_era expansions')
+    );
   }
 
   /**

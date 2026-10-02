@@ -13,6 +13,7 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/defined.helpers';
 import { countStarsPerGame } from '../lineups-voting.helpers';
 // Type-only: erased at compile time, so this does NOT create a require cycle
 // with `tiebreaker-detect.helpers`, which imports this module at runtime.
@@ -66,13 +67,15 @@ export function resolveTieFromStarCounts(
     return { kind: 'unresolved', starCounts, reason: 'no-stars' };
   }
   const sorted = [...tallies].sort((a, b) => b.stars - a.stars);
+  // Non-empty here: an empty tally already returned at the all-zero guard.
+  const top = defined(sorted[0], 'top star tally');
   const runnerUp = sorted[1]?.stars ?? -1;
-  if (sorted[0].stars === runnerUp) {
+  if (top.stars === runnerUp) {
     return { kind: 'unresolved', starCounts, reason: 'star-tie' };
   }
   return {
     kind: 'winner',
-    gameId: sorted[0].gameId,
+    gameId: top.gameId,
     starCounts,
     reasoning: buildReasoning(tie, sorted),
   };

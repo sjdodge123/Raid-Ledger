@@ -50,6 +50,7 @@ export function isDeferrableSchedule(cronExpression: string): boolean {
 function scheduleGapMs(cronExpression: string): number {
   try {
     const [first, second] = new CronTime(cronExpression).sendAt(2);
+    if (first === undefined || second === undefined) return Infinity;
     const gapMs = second.toMillis() - first.toMillis();
     return gapMs > 0 ? gapMs : Infinity;
   } catch {

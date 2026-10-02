@@ -6,6 +6,7 @@ import {
   buildBindingClause,
   buildTimeConditions,
 } from './ad-hoc-suppression.helpers';
+import { defined } from '../../common/defined.helpers';
 
 // Re-export from extracted files for backward compatibility.
 export { autoSignupParticipant } from './ad-hoc-event.signup-helpers';
@@ -108,7 +109,7 @@ export async function createAdHocEventRow(
       buildAdHocEventValues(title, binding.gameId, creatorId, bindingId, now),
     )
     .returning();
-  return event.id;
+  return defined(event, 'inserted ad-hoc event').id;
 }
 
 /** Build the title for an ad-hoc event. */

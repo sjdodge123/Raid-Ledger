@@ -24,6 +24,7 @@ import type {
   AttendanceSummaryDto,
   SignupResponseDto,
 } from '@raid-ledger/contract';
+import { defined } from '../common/defined.helpers';
 
 @Injectable()
 export class AttendanceService {
@@ -61,7 +62,7 @@ export class AttendanceService {
     this.logger.log(
       `Attendance recorded for signup ${dto.signupId} on event ${eventId}: ${dto.attendanceStatus}`,
     );
-    return this.buildResponseForUpdated(updated);
+    return this.buildResponseForUpdated(defined(updated, 'updated signup row'));
   }
 
   async getAttendanceSummary(
@@ -148,13 +149,13 @@ export class AttendanceService {
       .where(eq(schema.users.id, updated.userId))
       .limit(1);
     const character = updated.characterId
-      ? (
+      ? ((
           await this.db
             .select()
             .from(schema.characters)
             .where(eq(schema.characters.id, updated.characterId))
             .limit(1)
-        )[0]
+        )[0] ?? null)
       : null;
     return buildSignupResponse(updated, user, character);
   }

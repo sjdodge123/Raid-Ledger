@@ -12,6 +12,7 @@
  * fail-closed dedup claim BEFORE dispatch, claims released for any user whose
  * notification create rejected.
  */
+import { defined } from '../common/defined.helpers';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
@@ -138,7 +139,9 @@ export class LineupLfgBridgeService {
         }),
       ),
     );
-    const failed = batches.filter((_, i) => results[i].status === 'rejected');
+    const failed = batches.filter(
+      (_, i) => defined(results[i], 'offer result').status === 'rejected',
+    );
     this.logger.log(
       `LFG bridge offers for lineup ${lineupId}: ${
         results.length - failed.length

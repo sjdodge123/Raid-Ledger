@@ -2,6 +2,7 @@
  * Live no-show detection query helpers.
  * Extracted from live-noshow.service.ts for file size compliance (ROK-711).
  */
+import { defined } from '../common/defined.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and, sql, inArray, notInArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
@@ -105,7 +106,7 @@ export async function isRosterAtCapacity(
 ): Promise<boolean> {
   const capacity = resolveEventCapacity(event);
   if (capacity === null) return false;
-  const [{ count }] = await db
+  const [row] = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.eventSignups)
     .where(
@@ -119,7 +120,7 @@ export async function isRosterAtCapacity(
       ),
     )
     .limit(1);
-  return Number(count) >= capacity;
+  return Number(defined(row, 'signup count row').count) >= capacity;
 }
 
 type AbsentPlayer = {

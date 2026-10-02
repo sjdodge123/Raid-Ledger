@@ -89,25 +89,40 @@ const COUNT_TABLES = [
 /** Capture current counts of every table the wipe touches. */
 export async function snapshotCounts(db: Db): Promise<WipeCounts> {
   const counts = await Promise.all(COUNT_TABLES.map((t) => countAll(db, t)));
+  assertCountTuple(counts);
   return countsFromArray(counts);
 }
 
+/** One `number` per entry of a readonly tuple, in the same order. */
+type CountsFor<T extends readonly unknown[]> = {
+  -readonly [K in keyof T]: number;
+};
+type CountTuple = CountsFor<typeof COUNT_TABLES>;
+
+/** Every COUNT_TABLES entry has its count (always true for the map above). */
+function assertCountTuple(counts: number[]): asserts counts is CountTuple {
+  if (counts.length !== COUNT_TABLES.length) {
+    throw new Error(
+      `Expected ${COUNT_TABLES.length} table counts, got ${counts.length}`,
+    );
+  }
+}
+
 /** Map ordered count results to the named WipeCounts shape. */
-function countsFromArray(counts: number[]): WipeCounts {
-  const [
-    events,
-    signups,
-    lineups,
-    lineupEntries,
-    lineupVotes,
-    characters,
-    voiceSessions,
-    rosterAssignments,
-    availability,
-    eventPlans,
-    lineupAiSuggestions,
-    questProgress,
-  ] = counts;
+function countsFromArray([
+  events,
+  signups,
+  lineups,
+  lineupEntries,
+  lineupVotes,
+  characters,
+  voiceSessions,
+  rosterAssignments,
+  availability,
+  eventPlans,
+  lineupAiSuggestions,
+  questProgress,
+]: CountTuple): WipeCounts {
   return {
     events,
     signups,

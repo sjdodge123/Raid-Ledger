@@ -123,12 +123,13 @@ async function tryTentativeCharPath(
     );
     return true;
   }
-  if (ctx.characters.length === 1)
+  const [single] = ctx.characters;
+  if (ctx.characters.length === 1 && single !== undefined)
     return tentativeSingleCharacter(
       interaction,
       eventId,
       args.userId,
-      ctx.characters[0],
+      single,
       event,
       deps,
     );

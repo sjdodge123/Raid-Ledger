@@ -15,6 +15,7 @@ import type {
   LfgUrgency,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import type { LfgDb } from './lfg-query.helpers';
 import { convertedToTarget } from './lfg-provenance.helpers';
 import { tonightExpiresAt } from './lfg-tonight.helpers';
@@ -235,7 +236,7 @@ export async function reviveIntent(
     .set(resolveIntentHorizon(opts))
     .where(eq(schema.lfgIntents.id, intentId))
     .returning();
-  return row;
+  return defined(row, 'revived intent row');
 }
 
 /**

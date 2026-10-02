@@ -20,6 +20,7 @@ import type {
   PugSlotResponseDto,
   PugSlotListResponseDto,
 } from '@raid-ledger/contract';
+import { defined } from '../common/defined.helpers';
 
 export interface PugSlotCreatedPayload {
   pugSlotId: string;
@@ -66,7 +67,7 @@ export class PugsService {
     dto: CreatePugSlotDto,
     inviteCode: string,
   ) {
-    const [inserted] = await this.db
+    const [row] = await this.db
       .insert(schema.pugSlots)
       .values({
         eventId,
@@ -80,6 +81,7 @@ export class PugsService {
         createdBy: userId,
       })
       .returning();
+    const inserted = defined(row, 'inserted pug slot row');
     const label = inserted.discordUsername ?? `anonymous (${inviteCode})`;
     this.logger.log(
       `PUG slot created: ${label} as ${dto.role} for event ${eventId}`,
@@ -161,7 +163,7 @@ export class PugsService {
     this.logger.log(
       `Regenerated invite code for PUG slot ${pugId}: ${newCode}`,
     );
-    return toPugSlotResponse(updated);
+    return toPugSlotResponse(defined(updated, 'updated pug slot row'));
   }
 
   async findByInviteCode(
@@ -207,7 +209,7 @@ export class PugsService {
         .where(eq(schema.pugSlots.id, pugId))
         .returning();
       this.logger.log(`PUG slot ${pugId} updated for event ${eventId}`);
-      return toPugSlotResponse(updated);
+      return toPugSlotResponse(defined(updated, 'updated pug slot row'));
     } catch (error: unknown) {
       handleUniqueConstraint(error, dto.discordUsername);
     }

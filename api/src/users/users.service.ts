@@ -15,6 +15,7 @@ import {
   fetchGameActivity,
   fetchHeartedGames,
   findAdminUser,
+  countAllUsers,
 } from './users-query.helpers';
 import { deleteUserTransaction } from './users-delete.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
@@ -23,6 +24,7 @@ import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { reactivateUserById } from './users-reactivate.helpers';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
 import { findRecentUsers } from './users-recent.helpers';
+import { defined } from '../common/defined.helpers';
 
 export const RECENT_MEMBER_DAYS = 30;
 export const RECENT_MEMBER_LIMIT = 10;
@@ -61,7 +63,7 @@ export class UsersService {
         })
         .where(eq(schema.users.discordId, profile.discordId))
         .returning();
-      return updated;
+      return defined(updated, 'updated discord user row');
     }
     const [created] = await this.db
       .insert(schema.users)
@@ -72,7 +74,7 @@ export class UsersService {
       })
       .returning();
     this.invalidateCountCache();
-    return created;
+    return defined(created, 'created discord user row');
   }
 
   async findById(id: number) {
@@ -94,7 +96,7 @@ export class UsersService {
       .returning();
     invalidateAuthUser(userId);
     await this.tokenBlocklist.blockUser(userId);
-    return updated;
+    return defined(updated, `role-updated user ${userId}`);
   }
 
   /** List all users with role information for admin management panel. */
@@ -206,10 +208,7 @@ export class UsersService {
       Date.now() - this.userCountCachedAt < USER_COUNT_CACHE_TTL_MS
     )
       return this.cachedUserCount;
-    const result = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.users);
-    this.cachedUserCount = Number(result[0].count);
+    this.cachedUserCount = await countAllUsers(this.db);
     this.userCountCachedAt = Date.now();
     return this.cachedUserCount;
   }
@@ -275,7 +274,7 @@ export class UsersService {
       .select({ count: sql<number>`count(*)` })
       .from(schema.users)
       .where(conditions);
-    return Number(result.count) === 0;
+    return Number(defined(result, 'display name count row').count) === 0;
   }
 
   /** Set a user's display name (ROK-219). */
@@ -285,7 +284,7 @@ export class UsersService {
       .set({ displayName, updatedAt: new Date() })
       .where(eq(schema.users.id, userId))
       .returning();
-    return updated;
+    return defined(updated, `renamed user ${userId}`);
   }
 
   /** Mark onboarding as completed (ROK-219). */
@@ -296,7 +295,7 @@ export class UsersService {
       .set({ onboardingCompletedAt: now, updatedAt: now })
       .where(eq(schema.users.id, userId))
       .returning();
-    return updated;
+    return defined(updated, `onboarded user ${userId}`);
   }
 
   /** Reset onboarding (ROK-219). */

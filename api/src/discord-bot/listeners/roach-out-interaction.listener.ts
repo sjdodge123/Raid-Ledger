@@ -27,6 +27,7 @@ import {
   type RoachOutDeps,
 } from './roach-out-interaction.handlers';
 import { errorMessage, errorStack } from '../../common/error-format.helpers';
+import { defined } from '../../common/defined.helpers';
 
 /**
  * Handles "Roach Out" button interactions on event reminder DMs (ROK-378).
@@ -148,7 +149,7 @@ export class RoachOutInteractionListener {
     );
     if (!event) return;
     const warning =
-      event.duration[0].getTime() <= Date.now()
+      defined(event.duration[0], 'event start').getTime() <= Date.now()
         ? '\n\n**Warning:** This event has already started.'
         : '';
     await interaction.editReply({
@@ -264,6 +265,7 @@ function parseRoachOutButton(customId: string): RoachOutButtonParsed | null {
   const parts = customId.split(':');
   if (parts.length !== 2) return null;
   const [action, eventIdStr] = parts;
+  if (action === undefined || eventIdStr === undefined) return null;
   const eventId = parseInt(eventIdStr, 10);
   if (isNaN(eventId)) return null;
   if (!isRoachOutAction(action)) return null;

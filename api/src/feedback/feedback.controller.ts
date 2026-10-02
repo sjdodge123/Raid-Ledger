@@ -27,6 +27,7 @@ import { eq, desc, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { SlowQueriesService } from '../slow-queries/slow-queries.service';
+import { defined } from '../common/defined.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -65,7 +66,7 @@ export class FeedbackController {
     const userId = req.user.id;
     const { category, message, pageUrl, clientLogs } = parsed.data;
     const truncatedClientLogs = clientLogs ? clientLogs.slice(0, 50_000) : null;
-    const [inserted] = await this.db
+    const [row] = await this.db
       .insert(schema.feedback)
       .values({
         userId,
@@ -75,6 +76,7 @@ export class FeedbackController {
         clientLogs: truncatedClientLogs,
       })
       .returning();
+    const inserted = defined(row, 'inserted feedback row');
     this.logger.log(
       `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
     );

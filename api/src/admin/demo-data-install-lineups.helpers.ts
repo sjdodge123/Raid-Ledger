@@ -17,6 +17,7 @@
 import { Logger } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { defined } from '../common/defined.helpers';
 import * as schema from '../drizzle/schema';
 import { generatePublicSlug } from '../lineups/public-lineup-slug.helpers';
 import { nominateGameForTest } from './demo-test-lineup.helpers';
@@ -28,6 +29,16 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 type User = typeof schema.users.$inferSelect;
 type Game = typeof schema.games.$inferSelect;
+
+/** Id of the demo user at `i` — the caller's length guard keeps it in range. */
+function userIdAt(users: User[], i: number): number {
+  return defined(users[i], `demo user #${i}`).id;
+}
+
+/** Id of the demo game at `i` — the caller's length guard keeps it in range. */
+function gameIdAt(games: Game[], i: number): number {
+  return defined(games[i], `demo game #${i}`).id;
+}
 
 const logger = new Logger('DemoCommunityLineups');
 
@@ -54,7 +65,7 @@ async function createDemoLineup(
       publicSlug: generatePublicSlug(),
     })
     .returning({ id: schema.communityLineups.id });
-  return row.id;
+  return defined(row, 'inserted demo lineup row').id;
 }
 
 /** Insert invitees for a private lineup. Idempotent. */
@@ -84,16 +95,21 @@ async function seedPublicVotingLineup(
   games: Game[],
 ): Promise<void> {
   const lineupId = await createDemoLineup(db, DEMO_LINEUP_TITLES[0], creator);
-  const nominators = [users[1], users[2], users[3], users[4]];
-  for (let i = 0; i < nominators.length; i++) {
-    await nominateGameForTest(db, lineupId, games[i].id, nominators[i].id);
+  const nominators = [1, 2, 3, 4];
+  for (const [i, nominator] of nominators.entries()) {
+    await nominateGameForTest(
+      db,
+      lineupId,
+      gameIdAt(games, i),
+      userIdAt(users, nominator),
+    );
   }
   await advanceLineupToVotingForTest(db, lineupId);
   // users[1] voted (already nominated → dedup to voted); users[3] votes;
   // users[5] votes without nominating; users[2] deliberately never votes.
-  await castVoteForTest(db, lineupId, games[0].id, users[1].id);
-  await castVoteForTest(db, lineupId, games[1].id, users[3].id);
-  await castVoteForTest(db, lineupId, games[0].id, users[5].id);
+  await castVoteForTest(db, lineupId, gameIdAt(games, 0), userIdAt(users, 1));
+  await castVoteForTest(db, lineupId, gameIdAt(games, 1), userIdAt(users, 3));
+  await castVoteForTest(db, lineupId, gameIdAt(games, 0), userIdAt(users, 5));
 }
 
 /**
@@ -112,15 +128,16 @@ async function seedPrivateBuildingLineup(
     .update(schema.communityLineups)
     .set({ visibility: 'private', updatedAt: new Date() })
     .where(eq(schema.communityLineups.id, lineupId));
-  const invitees = [users[6], users[7], users[8]];
-  await inviteUsers(
-    db,
-    lineupId,
-    invitees.map((u) => u.id),
-  );
+  const firstInvitee = userIdAt(users, 6);
+  const secondInvitee = userIdAt(users, 7);
+  await inviteUsers(db, lineupId, [
+    firstInvitee,
+    secondInvitee,
+    userIdAt(users, 8),
+  ]);
   // Two invitees nominate; the third stays `waiting`.
-  await nominateGameForTest(db, lineupId, games[4].id, invitees[0].id);
-  await nominateGameForTest(db, lineupId, games[5].id, invitees[1].id);
+  await nominateGameForTest(db, lineupId, gameIdAt(games, 4), firstInvitee);
+  await nominateGameForTest(db, lineupId, gameIdAt(games, 5), secondInvitee);
 }
 
 /**
@@ -135,16 +152,22 @@ async function seedDecidedLineup(
   games: Game[],
 ): Promise<void> {
   const lineupId = await createDemoLineup(db, DEMO_LINEUP_TITLES[2], creator);
-  await nominateGameForTest(db, lineupId, games[6].id, users[9].id);
-  await nominateGameForTest(db, lineupId, games[7].id, users[10].id);
+  const decidedGameId = gameIdAt(games, 6);
+  await nominateGameForTest(db, lineupId, decidedGameId, userIdAt(users, 9));
+  await nominateGameForTest(
+    db,
+    lineupId,
+    gameIdAt(games, 7),
+    userIdAt(users, 10),
+  );
   await advanceLineupToVotingForTest(db, lineupId);
-  await castVoteForTest(db, lineupId, games[6].id, users[9].id);
-  await castVoteForTest(db, lineupId, games[6].id, users[11].id);
+  await castVoteForTest(db, lineupId, decidedGameId, userIdAt(users, 9));
+  await castVoteForTest(db, lineupId, decidedGameId, userIdAt(users, 11));
   await db
     .update(schema.communityLineups)
     .set({
       status: 'decided',
-      decidedGameId: games[6].id,
+      decidedGameId,
       updatedAt: new Date(),
     })
     .where(eq(schema.communityLineups.id, lineupId));
@@ -162,7 +185,12 @@ async function seedArchivedLineup(
   games: Game[],
 ): Promise<void> {
   const lineupId = await createDemoLineup(db, DEMO_LINEUP_TITLES[3], creator);
-  await nominateGameForTest(db, lineupId, games[8].id, users[12].id);
+  await nominateGameForTest(
+    db,
+    lineupId,
+    gameIdAt(games, 8),
+    userIdAt(users, 12),
+  );
   await db
     .update(schema.communityLineups)
     .set({ status: 'archived', updatedAt: new Date() })
@@ -205,7 +233,7 @@ export async function installCommunityLineups(
     return { lineups: 0 };
   }
 
-  const creator = allUsers[0].id;
+  const creator = userIdAt(allUsers, 0);
   await seedPublicVotingLineup(db, creator, allUsers, allGames);
   await seedPrivateBuildingLineup(db, creator, allUsers, allGames);
   await seedDecidedLineup(db, creator, allUsers, allGames);

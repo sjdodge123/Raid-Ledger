@@ -3,6 +3,7 @@
  * Extracted from DemoDataService to keep file size within ESLint limits.
  */
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { createRng } from './demo-data-generator';
 import type { GeneratedCharacter } from './demo-data-generator';
 
@@ -90,6 +91,17 @@ export function buildGeneratedCharValues(
   return values;
 }
 
+/**
+ * Swap two slots of `items` in place — one Fisher–Yates step. Both indexes
+ * must already be in range (the shuffle loops guarantee it).
+ */
+export function swapAt<T>(items: T[], i: number, j: number): void {
+  const atI = defined(items[i], `shuffle slot ${i}`);
+  const atJ = defined(items[j], `shuffle slot ${j}`);
+  items[i] = atJ;
+  items[j] = atI;
+}
+
 /** Build original event signup values using seeded PRNG. */
 export function buildOriginalSignupValues(
   origEvents: (typeof schema.events.$inferSelect)[],
@@ -104,7 +116,7 @@ export function buildOriginalSignupValues(
     const shuffled = [...gamers];
     for (let i = shuffled.length - 1; i > 0; i--) {
       const j = Math.floor(eventRng() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      swapAt(shuffled, i, j);
     }
     for (const user of shuffled.slice(0, numSignups)) {
       const charKey = event.gameId ? `${user.id}:${event.gameId}` : null;

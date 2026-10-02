@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { defined } from '../../common/defined.helpers';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, and } from 'drizzle-orm';
 import type Redis from 'ioredis';
@@ -51,7 +52,10 @@ export class DungeonQuestsService {
 
   /** Get the expansion set for a given WoW game variant. */
   getExpansionsForVariant(variant: string): string[] {
-    return VARIANT_EXPANSIONS[variant] ?? VARIANT_EXPANSIONS['classic_era'];
+    return (
+      VARIANT_EXPANSIONS[variant] ??
+      defined(VARIANT_EXPANSIONS['classic_era'], 'classic_era expansions')
+    );
   }
 
   /** Get all quests for a dungeon instance, filtered by variant. */

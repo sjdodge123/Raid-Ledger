@@ -3,6 +3,7 @@ import type {
   EventPlanResponseDto,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 
 export interface PollAnswerResult {
   totalVotes: number;
@@ -22,7 +23,7 @@ export function determineWinner(
   for (const [idx, result] of results.entries()) {
     if (idx === noneIndex || idx >= options.length) continue;
     const votes = result.registeredVotes;
-    const d = new Date(options[idx].date).getTime();
+    const d = new Date(defined(options[idx], 'poll option').date).getTime();
     if (votes > bestVotes || (votes === bestVotes && d < bestDate)) {
       bestIndex = idx;
       bestVotes = votes;
@@ -88,7 +89,8 @@ export function mapToConcreteDates(
   const suggestions: TimeSuggestion[] = [];
   const endDate = new Date(after.getTime() + daysAhead * 24 * 3600 * 1000);
   for (const [key, count] of ranked) {
-    const [dow, hour] = key.split(':').map(Number);
+    // A missing part is NaN, exactly what Number(undefined) arithmetic gives.
+    const [dow = NaN, hour = NaN] = key.split(':').map(Number);
     const cursor = findNextOccurrence((dow + 1) % 7, hour, after);
     while (cursor < endDate) {
       suggestions.push({

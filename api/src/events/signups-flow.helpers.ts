@@ -23,6 +23,7 @@ import { buildSignupResponseDto } from './signups-roster.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
 import { reconfirmPendingWithSlot } from './signups-reconfirm.helpers';
+import { defined } from '../common/defined.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 
@@ -69,7 +70,7 @@ export async function signupTxBody(deps: FlowDeps, p: SignupTxParams) {
     eventRow,
     eventId,
     userId,
-    inserted: rows[0],
+    inserted: defined(rows[0], 'inserted signup row'),
     dto,
     autoBench,
   });
@@ -77,7 +78,8 @@ export async function signupTxBody(deps: FlowDeps, p: SignupTxParams) {
 
 async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
   const { tx, eventRow, eventId, userId, dto, user } = p;
-  const existing = await signupH.fetchExistingSignup(tx, eventId, userId);
+  const row = await signupH.fetchExistingSignup(tx, eventId, userId);
+  const existing = defined(row, 'existing signup');
   // reactivateIfCancelled mutates `existing` in-place (including characterId).
   // updateCharacterIfNeeded's equality guard relies on this — it's a no-op for
   // the reactivation path because existing.characterId is already synced.
@@ -288,17 +290,16 @@ export async function discordSignupTxBody(
 ) {
   const rows = await discordH.insertDiscordSignupRow(tx, eventId, dto);
   if (rows.length === 0) {
-    const existing = await discordH.fetchExistingDiscordSignup(
-      tx,
-      eventId,
-      dto.discordUserId,
+    const existing = defined(
+      await discordH.fetchExistingDiscordSignup(tx, eventId, dto.discordUserId),
+      'existing Discord signup',
     );
     return {
       signup: existing,
       assignedSlot: await rosterQH.getAssignedSlotRole(tx, existing.id),
     };
   }
-  const [inserted] = rows;
+  const inserted = defined(rows[0], 'inserted Discord signup row');
   const autoBench = await signupH.checkAutoBench(tx, event, eventId);
   if (autoBench) {
     await assignBenchFallback(

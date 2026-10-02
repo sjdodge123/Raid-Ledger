@@ -23,6 +23,7 @@ import {
   mapConflicts,
   buildUpdateData,
 } from './availability.helpers';
+import { defined } from '../common/defined.helpers';
 
 /**
  * Service for managing user availability windows (ROK-112).
@@ -102,7 +103,7 @@ export class AvailabilityService {
       dto.endTime,
       dto.gameId,
     );
-    const [created] = await this.db
+    const [createdRow] = await this.db
       .insert(schema.availability)
       .values({
         userId,
@@ -111,6 +112,7 @@ export class AvailabilityService {
         gameId: dto.gameId ?? null,
       })
       .returning();
+    const created = defined(createdRow, 'created availability row');
     this.logger.log(`User ${userId} created availability window ${created.id}`);
     return {
       ...mapAvailabilityToDto(created),
@@ -145,7 +147,7 @@ export class AvailabilityService {
       `User ${userId} updated availability window ${availabilityId}`,
     );
     return {
-      ...mapAvailabilityToDto(updated),
+      ...mapAvailabilityToDto(defined(updated, 'updated availability row')),
       conflicts: conflicts.length > 0 ? conflicts : undefined,
     };
   }

@@ -11,6 +11,7 @@ import {
 } from './departure-grace.embed.helpers';
 import { resolveEventCapacity } from '../../events/signups-signup.helpers';
 import { isSlotVacatedRelevant } from '../../notifications/slot-vacated-relevance.helpers';
+import { defined } from '../../common/defined.helpers';
 
 /** Bundled dependencies passed from the processor. */
 export interface DepartureGraceDeps {
@@ -107,7 +108,7 @@ export async function wasEventFullBeforeDeparture(
 ): Promise<boolean> {
   const capacity = resolveEventCapacity(event);
   if (capacity === null) return false;
-  const [{ count }] = await db
+  const [row] = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.eventSignups)
     .where(
@@ -121,6 +122,7 @@ export async function wasEventFullBeforeDeparture(
       ),
     )
     .limit(1);
+  const { count } = defined(row, 'active signup count row');
   return Number(count) + 1 >= capacity;
 }
 

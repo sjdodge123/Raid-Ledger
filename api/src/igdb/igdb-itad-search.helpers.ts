@@ -13,6 +13,7 @@ import {
   type ItadSearchGame,
   type IgdbEnrichedData,
 } from './igdb-itad-merge.helpers';
+import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('ItadSearchPipeline');
 
@@ -137,7 +138,8 @@ async function enrichAll(
           result.reason instanceof Error
             ? result.reason.message
             : String(result.reason);
-        logger.debug(`Enrichment failed for "${batch[idx].slug}": ${reason}`);
+        const { slug } = defined(batch[idx], 'enrichment batch game');
+        logger.debug(`Enrichment failed for "${slug}": ${reason}`);
       }
     });
   }

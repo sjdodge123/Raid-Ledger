@@ -102,8 +102,7 @@ export function deduplicateGames(games: GameDetailDto[]): GameDetailDto[] {
   const dedupIndex = new Map<string, number>();
   const result: (GameDetailDto | null)[] = [];
 
-  for (let i = 0; i < games.length; i++) {
-    const game = games[i];
+  for (const game of games) {
     const matchIdx = findMatchInIndex(dedupIndex, game);
 
     if (matchIdx !== null) {

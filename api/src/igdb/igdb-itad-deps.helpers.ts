@@ -105,8 +105,9 @@ async function enrichViaExternalGames(
   try {
     const query = buildExternalGamesQuery(steamAppId);
     const games = await queryIgdb(query);
-    if (games.length === 0) return null;
-    return parseIgdbEnrichment(games[0]);
+    const first = games[0];
+    if (first === undefined) return null;
+    return parseIgdbEnrichment(first);
   } catch (err) {
     logger.warn(
       `IGDB enrichment via external_games failed for steamAppId=${steamAppId}: ${String(err)}`,

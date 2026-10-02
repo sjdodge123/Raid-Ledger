@@ -73,13 +73,15 @@ export class QueueHealthService {
         'failed',
         'delayed',
       );
+      // BullMQ sets every requested type to `res || 0`, so a count is never
+      // absent; `?? 0` mirrors that default rather than inventing one.
       results.push({
         name,
-        waiting: counts.waiting,
-        active: counts.active,
-        completed: counts.completed,
-        failed: counts.failed,
-        delayed: counts.delayed,
+        waiting: counts.waiting ?? 0,
+        active: counts.active ?? 0,
+        completed: counts.completed ?? 0,
+        failed: counts.failed ?? 0,
+        delayed: counts.delayed ?? 0,
       });
     }
 

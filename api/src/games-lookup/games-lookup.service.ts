@@ -12,6 +12,7 @@ import { mapDbRowToDetail } from '../igdb/igdb.mappers';
 import { steamSourceOnChange } from '../igdb/igdb-upsert-sets.helpers';
 import { ITAD_INTERACTIVE_FETCH, type ItadGame } from '../itad/itad.constants';
 import { keepSeedOwned } from './seed-owned-games.helpers';
+import { defined } from '../common/defined.helpers';
 
 /**
  * ROK-1295 — resolve a free-text game name to a hydrated GameDetailDto.
@@ -124,7 +125,7 @@ export class GamesLookupService {
           coverUrl: itadGame.assets?.boxart ?? null,
         })
         .returning({ id: schema.games.id });
-      return row.id;
+      return defined(row, 'inserted game').id;
     });
   }
 
@@ -180,7 +181,7 @@ export class GamesLookupService {
       .insert(schema.games)
       .values(buildIgdbRowValues(hit))
       .returning({ id: schema.games.id });
-    return row.id;
+    return defined(row, 'inserted game').id;
   }
 
   private async applyIgdbMerge(
@@ -215,7 +216,7 @@ export class GamesLookupService {
 function pickFirstIgdbHit(result: {
   games: GameDetailDto[];
 }): GameDetailDto | null {
-  return result.games.length > 0 ? result.games[0] : null;
+  return result.games[0] ?? null;
 }
 
 /**

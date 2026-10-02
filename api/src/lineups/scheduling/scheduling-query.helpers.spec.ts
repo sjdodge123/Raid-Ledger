@@ -121,7 +121,7 @@ describe('scheduling-query.helpers', () => {
 
       expect(mockDb.insert).toHaveBeenCalled();
       expect(mockDb.values).toHaveBeenCalled();
-      expect(result).toEqual([{ id: 42 }]);
+      expect(result).toEqual({ id: 42 });
     });
   });
 

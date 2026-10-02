@@ -2,6 +2,7 @@
  * Batch helpers for NotificationService.createMany (ROK-1043).
  * Extracted from notification.service.ts to keep it within file size limits.
  */
+import { defined } from '../common/defined.helpers';
 import { Logger } from '@nestjs/common';
 import { inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -132,7 +133,7 @@ function dispatchDiscordBatch(
     .map((input, idx) => ({ input, notification: created[idx] }))
     .filter(({ input }) => !input.skipDiscord)
     .map(({ input, notification }) => ({
-      notificationId: notification.id,
+      notificationId: defined(notification, 'created notification').id,
       userId: input.userId,
       type: input.type,
       title: input.title,

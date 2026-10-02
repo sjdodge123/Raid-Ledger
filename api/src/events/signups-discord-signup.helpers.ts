@@ -4,6 +4,7 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import type {
   SignupResponseDto,
   CreateDiscordSignupDto,
@@ -28,12 +29,13 @@ export async function anonymousDiscordSignup(
   const result = await db.transaction((tx) =>
     flowH.discordSignupTxBody(flowDeps, tx, event, eventId, dto),
   );
+  const signup = defined(result.signup, 'discord signup row');
   return {
     response: rosterH.buildAnonymousSignupResponseDto(
-      result.signup,
+      signup,
       result.assignedSlot ?? undefined,
     ),
-    signupId: result.signup.id,
+    signupId: signup.id,
   };
 }
 

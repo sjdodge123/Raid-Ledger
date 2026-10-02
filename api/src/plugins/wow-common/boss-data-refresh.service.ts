@@ -119,8 +119,7 @@ export class BossDataRefreshService {
 
     let bossCount = 0,
       lootCount = 0;
-    for (let i = 0; i < journal.encounters.length; i++) {
-      const enc = journal.encounters[i];
+    for (const [i, enc] of journal.encounters.entries()) {
       const bossId = await upsertBoss(
         this.db,
         instanceId,

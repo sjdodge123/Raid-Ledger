@@ -33,8 +33,13 @@ export const tsrange = customType<{
     if (!matches) return [new Date(0), new Date(0)];
     // tsrange stores timestamps without timezone — toDriver sends UTC via toISOString(),
     // so we must interpret them as UTC on read (append Z) to avoid local-timezone drift.
-    const raw1 = matches[1].replace(/"/g, '').trim();
-    const raw2 = matches[2].replace(/"/g, '').trim();
+    const [, lower, upper] = matches;
+    // Both groups are mandatory in the pattern, so a match always has them.
+    if (lower === undefined || upper === undefined) {
+      throw new Error(`Malformed tsrange value: ${value}`);
+    }
+    const raw1 = lower.replace(/"/g, '').trim();
+    const raw2 = upper.replace(/"/g, '').trim();
     return [
       new Date(raw1.endsWith('Z') ? raw1 : raw1 + 'Z'),
       new Date(raw2.endsWith('Z') ? raw2 : raw2 + 'Z'),
