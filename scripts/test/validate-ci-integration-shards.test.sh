@@ -87,6 +87,11 @@ EOF
 if [[ -n "${STUB_NPX_ARGV_FILE:-}" ]]; then
     echo "NODE_OPTIONS=${NODE_OPTIONS:-} $*" >>"$STUB_NPX_ARGV_FILE"
 fi
+# TDB:330: replay jest-style result lines (opt-in) so the unrun-spec report has
+# something to diff against.
+if [[ -n "${STUB_NPX_EMIT_PASS_FILE:-}" ]]; then
+    cat "$STUB_NPX_EMIT_PASS_FILE"
+fi
 # Fast-fail simulation: if STUB_NPX_FAIL_SHARD matches the --shard prefix.
 if [[ -n "${STUB_NPX_FAIL_SHARD:-}" ]]; then
     for arg in "$@"; do
@@ -309,6 +314,55 @@ else
         fail "local mode must not spawn the M9 Redis sidecar, got $local_sidecar_count (docker argv: $(tr '\n' '|' <"$docker_argv_file"))"
     fi
     fi
+
+    # ----- TDB:330: a failed run names the specs that never reported a result -----
+    # Three real spec paths "ran" (one with ANSI codes INSIDE the path, the way
+    # jest colours it), so the report must count total-3 and list the rest.
+    emit_file=$(mktemp -t rl-shard-emit.XXXXXX)
+    all_specs=$( (cd "$REPO_ROOT/api" && find src -name '*.integration.spec.ts') | LC_ALL=C sort -u)
+    total_specs=$(printf '%s\n' "$all_specs" | grep -c .)
+    spec1=$(printf '%s\n' "$all_specs" | sed -n 1p)
+    spec2=$(printf '%s\n' "$all_specs" | sed -n 2p)
+    spec3=$(printf '%s\n' "$all_specs" | sed -n 3p)
+    never_ran=$(printf '%s\n' "$all_specs" | sed -n 4p)
+    {
+        printf ' PASS %s (1.0 s, 100 MB heap size)\n' "$spec1"
+        printf '  FAIL %s (2.0 s, 120 MB heap size)\n' "$spec2"
+        printf ' \033[42;1m PASS \033[0m \033[2m%s/\033[22m\033[1m%s\033[22m (1.0 s, 100 MB heap size)\n' \
+            "$(dirname "$spec3")" "$(basename "$spec3")"
+    } >"$emit_file"
+    expected_missing=$((total_specs - 3))
+
+    CURRENT_TEST_NAME="TDB:330 behavioral: a failed shard lists the specs that never ran"
+    : >"$docker_argv_file"; : >"$npx_argv_file"; : >"$npm_argv_file"
+    out=$(
+        PATH="$stub_bin:$PATH" REPO_ROOT="$REPO_ROOT" RL_TARGET="remote" RL_SLOT="1" \
+        STUB_DOCKER_ARGV_FILE="$docker_argv_file" STUB_NPX_ARGV_FILE="$npx_argv_file" \
+        STUB_NPM_ARGV_FILE="$npm_argv_file" STUB_NPX_FAIL_SHARD="2" \
+        STUB_NPX_EMIT_PASS_FILE="$emit_file" \
+        bash -c "RL_VALIDATE_CI_DRY=1 source '$VALIDATE_CI_PATH'; run_integration_tests" 2>&1
+    )
+    if grep -E -q -e "^${expected_missing} spec\(s\) never ran or did not finish:" <<<"$out"; then pass; else
+        fail "expected '${expected_missing} spec(s) never ran' (total ${total_specs} minus 3 reported), got: $(grep -E 'never ran' <<<"$out" || echo '<no never-ran line>')"
+    fi
+    if grep -F -x -q -e "  ${never_ran}" <<<"$out"; then pass; else
+        fail "a spec that never reported a result must be listed: ${never_ran}"
+    fi
+    if grep -F -x -q -e "  ${spec3}" <<<"$out"; then
+        fail "the ANSI-coloured PASS line for ${spec3} must count as ran, but it was listed as never ran"
+    else pass; fi
+
+    CURRENT_TEST_NAME="TDB:330 behavioral: an all-PASS run prints no never-ran report"
+    out=$(
+        PATH="$stub_bin:$PATH" REPO_ROOT="$REPO_ROOT" RL_TARGET="remote" RL_SLOT="1" \
+        STUB_DOCKER_ARGV_FILE="$docker_argv_file" STUB_NPX_ARGV_FILE="$npx_argv_file" \
+        STUB_NPM_ARGV_FILE="$npm_argv_file" STUB_NPX_EMIT_PASS_FILE="$emit_file" \
+        bash -c "RL_VALIDATE_CI_DRY=1 source '$VALIDATE_CI_PATH'; run_integration_tests" 2>&1
+    )
+    if grep -E -q -e 'never ran' <<<"$out"; then
+        fail "an all-PASS run must not print a never-ran report, got: $(grep -E 'never ran' <<<"$out")"
+    else pass; fi
+    rm -f "$emit_file"
 
     rm -rf "$stub_bin" "$docker_argv_file" "$npx_argv_file" "$npm_argv_file"
 fi

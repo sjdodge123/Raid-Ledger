@@ -1057,6 +1057,12 @@ run_integration_tests() {
   # deploy_dev.sh already manages Redis on localhost:6379.
   _spawn_redis_sidecar_if_remote || return $?
 
+  # TDB:330 — every shard's output is teed here so a failed run can name the
+  # specs that never reported a result. Outside the worktree; removed on both
+  # return paths below (no trap: validate-ci keeps exactly one EXIT trap).
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/rl-integration-out.XXXXXX") || return $?
+
   # ROK-1331 M5b — when validate-ci runs inside the fleet runner, surface
   # per-test progress via jest --verbose. Otherwise a 12-min silent
   # window during the integration suite looks like the run is hung
@@ -1105,7 +1111,8 @@ run_integration_tests() {
       if (cd api && NODE_OPTIONS="--max-old-space-size=4096" \
          JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
          npx jest --config ./jest.integration.config.js \
-                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}"); then
+                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}" \
+                  2>&1 | tee -a "$tmp"); then
         shard_results+=("PASS")
       else
         shard_results+=("FAIL")
@@ -1116,9 +1123,38 @@ run_integration_tests() {
     echo "=== Shard results: ${shard_results[*]} ==="
     local r
     for r in "${shard_results[@]}"; do
-      if [ "$r" = "FAIL" ]; then return 1; fi
+      if [ "$r" = "FAIL" ]; then
+        _report_unrun_integration_specs "$tmp"
+        rm -f "$tmp"
+        return 1
+      fi
     done
+    rm -f "$tmp"
   }
+}
+
+# TDB:330 — after a failed shard, list the integration specs that never printed
+# a PASS/FAIL line: killed mid-run (OOM), or in a shard the fast-fail break
+# skipped. Expected set mirrors jest.integration.config.js (rootDir src,
+# *.integration.spec.ts). ANSI is stripped first: jest colours the path itself.
+_report_unrun_integration_specs() {
+  local out_file="$1" expected ran missing n_missing
+  expected=$( (cd api && find src -name '*.integration.spec.ts') | LC_ALL=C sort -u)
+  ran=$(sed $'s/\033\\[[0-9;]*m//g' "$out_file" \
+    | grep -E '^[[:space:]]*(PASS|FAIL)[[:space:]]+src/[^ ]+\.integration\.spec\.ts' \
+    | sed -E 's/^[[:space:]]*(PASS|FAIL)[[:space:]]+//; s/[[:space:]].*$//' \
+    | LC_ALL=C sort -u || true)
+  missing=$(LC_ALL=C comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$ran") | grep . || true)
+  n_missing=$(printf '%s\n' "$missing" | grep -c . || true)
+  echo "${n_missing} spec(s) never ran or did not finish:"
+  if [ -z "$ran" ]; then
+    echo "  no spec reported a result: setup failure?"
+    return 0
+  fi
+  printf '%s\n' "$missing" | sed -n '1,40s/^/  /p'
+  if [ "$n_missing" -gt 40 ]; then
+    echo "  ... and $((n_missing - 40)) more"
+  fi
 }
 
 # A3 fleet-gaps (2026-09-03) — per-RUN sidecar bookkeeping.
