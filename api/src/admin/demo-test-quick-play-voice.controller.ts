@@ -39,13 +39,17 @@ import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service'
 import { ChannelBindingsService } from '../discord-bot/services/channel-bindings.service';
 import type { VoiceMemberInfo } from '../discord-bot/services/ad-hoc-participant.service';
 import type { ResolvedBinding } from '../discord-bot/listeners/voice-state.helpers';
-import { parseDemoBody } from './demo-test.utils';
+import {
+  loadLinkedDemoMember,
+  parseDemoBody,
+  snowflakeSchema,
+} from './demo-test.utils';
 
 /** `{ userId, bindingId, channelId }` — a seeded user, the bind, its voice channel. */
 const QuickPlayVoiceSchema = z.object({
   userId: z.number().int().positive(),
   bindingId: z.string().uuid(),
-  channelId: z.string().regex(/^\d{1,20}$/, 'must be a Discord snowflake'),
+  channelId: snowflakeSchema,
 });
 
 /** `eventId` is the minted (or joined) event; null when nothing was recorded. */
@@ -54,9 +58,6 @@ export interface QuickPlayVoiceResult {
   eventId: number | null;
   reason?: 'suppressed';
 }
-
-/** Discord ids a real voice state can never carry (unlinked / local-only). */
-const UNLINKED_PREFIXES = ['local:', 'unlinked:'];
 
 @Controller('admin/test')
 @SkipThrottle()
@@ -87,8 +88,8 @@ export class DemoTestQuickPlayVoiceController {
       QuickPlayVoiceSchema,
       body,
     );
-    const binding = await this.loadMonitorBinding(bindingId);
-    const member = await this.loadLinkedMember(userId);
+    const binding = await this.loadMonitorBinding(bindingId, channelId);
+    const member = await this.loadMember(userId);
     const svc = this.adHocEventService;
     const clearance = await svc.ensureNotSuppressed(
       binding.bindingId,
@@ -110,13 +111,25 @@ export class DemoTestQuickPlayVoiceController {
     return { spawned, eventId: spawned ? (state?.eventId ?? null) : null };
   }
 
-  /** The bind as the listener resolves it (`mapToResolvedBinding`). */
-  private async loadMonitorBinding(id: string): Promise<ResolvedBinding> {
+  /**
+   * The bind as the listener resolves it (`mapToResolvedBinding`). A real join
+   * reaches a binding only through its own channel, and suppression is
+   * channel-scoped, so a `channelId` other than the bind's is refused.
+   */
+  private async loadMonitorBinding(
+    id: string,
+    channelId: string,
+  ): Promise<ResolvedBinding> {
     const row = await this.channelBindingsService.getBindingById(id);
     if (!row) throw new NotFoundException(`Binding ${id} not found`);
     if (row.bindingPurpose !== 'game-voice-monitor') {
       throw new BadRequestException(
         `Binding ${id} is not a game-voice-monitor`,
+      );
+    }
+    if (row.channelId !== channelId) {
+      throw new BadRequestException(
+        `Binding ${id} monitors channel ${row.channelId}, not ${channelId}`,
       );
     }
     return {
@@ -129,19 +142,9 @@ export class DemoTestQuickPlayVoiceController {
     };
   }
 
-  /** The Discord member a real voice state would carry for this user. */
-  private async loadLinkedMember(userId: number): Promise<VoiceMemberInfo> {
-    const user = await this.usersService.findById(userId);
-    if (!user) throw new NotFoundException(`User ${userId} not found`);
-    const discordId = user.discordId;
-    if (!discordId || UNLINKED_PREFIXES.some((p) => discordId.startsWith(p))) {
-      throw new BadRequestException(`User ${userId} is not Discord-linked`);
-    }
-    return {
-      discordUserId: discordId,
-      discordUsername: user.username,
-      discordAvatarHash: user.avatar ?? null,
-      userId: user.id,
-    };
+  /** The Discord member a real voice state would carry, rostered as `userId`. */
+  private async loadMember(userId: number): Promise<VoiceMemberInfo> {
+    const linked = await loadLinkedDemoMember(this.usersService, userId);
+    return { ...linked, userId };
   }
 }

@@ -3,8 +3,9 @@
  *
  * Pinned: the endpoint is genuinely gated (it mints an event and posts a live
  * Discord embed), the ROK-959 suppression guard runs first and its clearance
- * rides into `handleVoiceJoin` (as on the listener's immediate spawn), and a
- * suppressed bind mints nothing.
+ * rides into `handleVoiceJoin` (as on the listener's immediate spawn), a
+ * suppressed bind mints nothing, and a join is only recorded in the bind's own
+ * voice channel.
  */
 import {
   BadRequestException,
@@ -14,6 +15,7 @@ import {
 import { DemoTestQuickPlayVoiceController } from './demo-test-quick-play-voice.controller';
 
 const CHANNEL = '123456789012345678';
+const OTHER_CHANNEL = '876543210987654321';
 const BINDING_ID = '6f1c2a5e-3b7d-4c1e-9a2b-0d4e5f6a7b8c';
 const CLEARANCE = { tag: 'clearance' };
 const settings = { getDemoMode: jest.fn() };
@@ -49,6 +51,7 @@ beforeEach(() => {
   });
   bindings.getBindingById.mockResolvedValue({
     id: BINDING_ID,
+    channelId: CHANNEL,
     gameId: 3,
     bindingPurpose: 'game-voice-monitor',
     recurrenceGroupId: 'rg-1',
@@ -60,7 +63,8 @@ beforeEach(() => {
 });
 
 afterAll(() => {
-  process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
+  if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 });
 
 describe('DemoTestQuickPlayVoiceController.voiceJoin', () => {
@@ -144,6 +148,7 @@ describe('DemoTestQuickPlayVoiceController.voiceJoin', () => {
     bindings.getBindingById.mockResolvedValue({
       id: BINDING_ID,
       gameId: null,
+      channelId: CHANNEL,
       bindingPurpose: 'general-lobby',
       recurrenceGroupId: null,
       config: null,
@@ -152,6 +157,22 @@ describe('DemoTestQuickPlayVoiceController.voiceJoin', () => {
     await expect(controller().voiceJoin(body)).rejects.toThrow(
       BadRequestException,
     );
+  });
+
+  it('rejects a channel the binding does not monitor', async () => {
+    const join = controller().voiceJoin({ ...body, channelId: OTHER_CHANNEL });
+
+    await expect(join).rejects.toThrow(
+      `Binding ${BINDING_ID} monitors channel ${CHANNEL}, not ${OTHER_CHANNEL}`,
+    );
+    expect(adHoc.ensureNotSuppressed).not.toHaveBeenCalled();
+    expect(adHoc.handleVoiceJoin).not.toHaveBeenCalled();
+  });
+
+  it('rejects a channel id too short to be a snowflake', async () => {
+    await expect(
+      controller().voiceJoin({ ...body, channelId: '42' }),
+    ).rejects.toThrow('channelId: must be a Discord snowflake');
   });
 
   it('rejects a user who is not Discord-linked', async () => {
