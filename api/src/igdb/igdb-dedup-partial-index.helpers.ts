@@ -79,17 +79,18 @@ export async function dropCollidingChannelBindings(
  * reassignment so the caller can tell the per-channel binding caches which
  * entries the merge rewrote (repointed or dropped as colliding).
  *
- * Raw `execute`, not the select builder — the result is a plain row list.
+ * Typed `execute`, no cast and no fallback: postgres.js resolves a row list,
+ * and a result that is not one throws here, rolling the merge back and
+ * reporting the group, rather than quietly announcing no channels.
  */
 export async function selectBindingChannelIdsForGame(
   tx: Tx,
   gameId: number,
 ): Promise<string[]> {
-  const rows: unknown = await tx.execute(
+  const rows = await tx.execute<{ channel_id: string }>(
     sql`SELECT DISTINCT channel_id FROM channel_bindings WHERE game_id = ${gameId}`,
   );
-  const list = Array.isArray(rows) ? (rows as { channel_id: unknown }[]) : [];
-  return list.map((r) => String(r.channel_id));
+  return rows.map((r) => r.channel_id);
 }
 
 /** Append `gameId`'s bound channels to `sink`; no read when there is no sink. */

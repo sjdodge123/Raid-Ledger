@@ -445,7 +445,31 @@ describe('mergeAndDeleteDuplicates — binding-change listener', () => {
     );
 
     expect(result).toEqual({ merged: 1, errors: [] });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Binding-change listener failed'),
+    );
     warn.mockRestore();
+  });
+});
+
+describe('mergeAndDeleteDuplicates — a binding read with no row list', () => {
+  it('fails the group loudly instead of announcing nothing', async () => {
+    const mockDb = createDrizzleMock();
+    const listener = jest.fn();
+    // A node-postgres-style envelope, not the row list postgres.js resolves.
+    mockDb.execute.mockResolvedValueOnce({ rows: [{ channel_id: 'ch-1' }] });
+
+    const result = await mergeAndDeleteDuplicates(
+      mockDb as never,
+      [makeGroup(1, [2])],
+      listener,
+    );
+
+    expect(result).toEqual({
+      merged: 0,
+      errors: [expect.stringContaining('winner=1')],
+    });
+    expect(listener).not.toHaveBeenCalled();
   });
 });
 

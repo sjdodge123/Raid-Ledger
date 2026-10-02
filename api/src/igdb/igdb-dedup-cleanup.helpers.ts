@@ -26,6 +26,7 @@ import {
 import { defined } from '../common/defined.helpers';
 
 const nameDedupLogger = new Logger('IgdbNameDedupCleanup');
+const dedupLogger = new Logger('IgdbDedupCleanup');
 
 /** A group of duplicate games with a designated winner and losers. */
 export interface DuplicateGroup {
@@ -182,7 +183,7 @@ function notifyBindingsChanged(
   try {
     listener([...new Set(channelIds)]);
   } catch (err) {
-    nameDedupLogger.warn(`Binding-change listener failed: ${err}`);
+    dedupLogger.warn(`Binding-change listener failed: ${err}`);
   }
 }
 
