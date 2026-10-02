@@ -743,6 +743,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-900\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/15 { background-color: rgba(254, 243, 199, 0.6); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/20 { background-color: rgba(254, 243, 199, 0.7); }     /* amber-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-900\/20 { background-color: rgba(209, 250, 229, 0.5); }   /* emerald-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-500\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
@@ -767,6 +768,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/30:hover { background-color: rgba(254, 202, 202, 0.5); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/30:hover { background-color: rgba(253, 230, 138, 0.6); }  /* amber-200: a visible step over the /20 amber-100 base */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
@@ -1372,9 +1374,14 @@ body {
         4px 4px 0 1px rgba(201, 168, 76, 0.6);
 }
 
-/* Cards with bg-panel (IntegrationCard, admin cards) get the same parchment treatment */
-[data-variant="quest-log"] .bg-panel\/50,
-[data-variant="quest-log"] [class*="bg-panel"] {
+/* Cards with bg-panel (IntegrationCard, admin cards) get the same parchment treatment.
+   Form controls carry bg-panel too (form-classes.ts) but are not cards: they keep the
+   quest-log input/select/textarea rules further down (fill, edge border, gold focus,
+   danger border when aria-invalid), which this rule's !important border would
+   otherwise override. The exclusion sits in :where() so it adds no specificity, and
+   later equal-weight rules such as .rounded-xl still win by source order. */
+[data-variant="quest-log"] .bg-panel\/50:where(:not(input, select, textarea)),
+[data-variant="quest-log"] [class*="bg-panel"]:where(:not(input, select, textarea)) {
     background:
         radial-gradient(ellipse at 40% 30%, rgba(200, 170, 110, 0.10) 0%, transparent 55%),
         repeating-linear-gradient(0deg,
@@ -1525,6 +1532,14 @@ body {
 [data-variant="quest-log"] textarea:focus {
     box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.25), 0 0 8px rgba(201, 168, 76, 0.1);
     border-color: var(--ql-gold);
+}
+
+/* The two rules above are unlayered, so they beat Tailwind's layered
+   `aria-[invalid=true]:border-danger` (form-classes.ts). This one has the same
+   specificity as the :focus rule and comes after it, so an invalid control keeps
+   the danger border while focused too. */
+[data-variant="quest-log"] :is(input, select, textarea)[aria-invalid="true"] {
+    border-color: var(--color-danger);
 }
 
 /* --- Sidebar navigation: book table of contents --- */

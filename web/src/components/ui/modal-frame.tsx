@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import { OVERLAY_FOOTER_CLASS } from './overlay-footer';
+import { FOCUS_RING } from './form-classes';
 
 export interface ModalFrameProps {
     isOpen: boolean;
@@ -61,7 +62,7 @@ function ModalHeader({ titleId, title, onClose }: { titleId: string; title: stri
             <button
                 type="button"
                 onClick={onClose}
-                className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
+                className={`flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel ${FOCUS_RING}`}
                 aria-label="Close modal"
             >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
