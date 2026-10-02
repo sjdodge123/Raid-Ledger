@@ -34,6 +34,7 @@ import type {
     MatchDetailResponseDto,
     GroupedMatchesResponseDto,
 } from '@raid-ledger/contract';
+import type { ToggleScheduleVoteVars } from '../../../../hooks/use-scheduling';
 import { renderWithProviders } from '../../../../test/render-helpers';
 
 /** Renders the current MemoryRouter path so nav targets can be asserted. */
@@ -49,7 +50,9 @@ function LocationProbe(): JSX.Element {
 // ROK-1617 follow-up: the ladder presses through `mutateAsync`, so the mock
 // hands back a promise. The default NEVER settles — the in-flight-guard cases
 // below depend on the guard still being held after the press.
-const toggleVoteMutate = vi.fn(() => new Promise<never>(() => {}));
+const toggleVoteMutate = vi.fn<(vars: ToggleScheduleVoteVars) => Promise<never>>(
+    () => new Promise<never>(() => {}),
+);
 const suggestSlotMutate = vi.fn();
 const cancelPollMutate = vi.fn();
 
@@ -930,7 +933,8 @@ describe('SchedulingComposite — terminal states (ROK-1545)', () => {
             pollStatus: 'cancelled',
             cancelReason: 'Half the roster is out.',
         });
-        poll.match.status = 'cancelled';
+        // A cancelled poll archives its match (scheduling-cancel.helpers.ts).
+        poll.match.status = 'archived';
         renderWithProviders(
             <SchedulingComposite poll={poll} lineupId={7} matchId={500} />,
         );

@@ -26,7 +26,7 @@ function slot(
     matchId: 10,
     proposedTime,
     overlapScore: null,
-    suggestedBy: { userId: 1, displayName: 'Ana', avatar: null, discordId: null, customAvatarUrl: null },
+    suggestedBy: 'user',
     createdAt: '2026-04-01T00:00:00.000Z',
     votes: Array.from({ length: voteCount }, (_, i) => ({
       userId: 100 + i,
@@ -35,7 +35,8 @@ function slot(
       discordId: null,
       customAvatarUrl: null,
     })),
-  } as ScheduleSlotWithVotesDto;
+    noVotes: [],
+  };
 }
 
 const TIE_SLOTS = [slot(9, LATE, 3), slot(4, EARLY, 3), slot(1, LATE, 3), slot(8, TOP, 5)];
