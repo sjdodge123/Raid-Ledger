@@ -32,7 +32,7 @@ function setup() {
       start: jest.fn(),
     })),
   };
-  const service = new CronJobService(db as any, registry as any);
+  const service = new CronJobService(db as never, registry as never);
   const deps = (service as unknown as { recordDeps: RecordDeps }).recordDeps;
   return { db, service, deps };
 }

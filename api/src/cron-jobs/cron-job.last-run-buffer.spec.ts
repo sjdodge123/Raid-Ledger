@@ -169,7 +169,7 @@ describe('LastRunBuffer.reschedule', () => {
     buffer.deferCompleted(mockJob({ cron: OLD }), finishedAt);
 
     buffer.reschedule(42, NEW);
-    await buffer.flush(mockDb as any, logger);
+    await buffer.flush(mockDb as never, logger as never);
 
     expect(flushedRow(mockDb.execute)).toEqual([
       42,
