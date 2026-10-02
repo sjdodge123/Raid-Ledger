@@ -121,7 +121,7 @@ function EventInfoSection({ event, signupCount, resolved }: {
             </h3>
             <div className="flex items-center gap-2 mb-3">
                 <p className="text-muted text-sm">{formatEventTime(event.startTime, resolved)}</p>
-                <span className="text-faint">&#8226;</span>
+                <span className="text-faint" aria-hidden="true">&#8226;</span>
                 <p data-testid="relative-time" className="text-sm text-dim">{relativeTime}</p>
             </div>
             <div className="flex items-center justify-between">
@@ -149,7 +149,7 @@ export const EventCard = React.memo(function EventCard({ event, signupCount = 0,
     const showPlaceholder = !gameCoverUrl || imageError;
 
     return (
-        <div onClick={onClick}
+        <div onClick={onClick} data-testid="event-card"
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); } }}
             role="button" tabIndex={0}
             className={`group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl focus:outline-none transition-all duration-200 ${isCancelled ? 'opacity-60 hover:shadow-red-500/10 focus:border-red-500' : 'hover:shadow-emerald-500/10 focus:border-emerald-500'}`}>

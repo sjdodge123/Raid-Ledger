@@ -83,9 +83,10 @@ forced-white rule still applies (`JourneyHero.tsx:173-175`).
 
 **Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
 on the theme surface, so the light family's contrast bumps are wrong there. Put
-`.badge-overlay` on the badge or its container and `:798-810` restores the DARK shades
-under every light scheme. Consumers: `event-card.tsx`, `mobile-event-card.tsx`; guarded
-by `web/src/styles/badge-overlay.test.ts`.
+`.badge-overlay` on the badge or its container and `:801-813` restores the DARK shades
+under every light scheme. Consumer: `event-card.tsx` only — the badges that sit ON the cover art; a
+chip on the themed surface never carries it (ROK-1472). Guarded by `web/src/styles/badge-overlay.test.ts`
+and `web/src/styles/badge-overlay-art-only.guard.test.ts`.
 
 ---
 
@@ -131,8 +132,9 @@ does not: `GradientOverlay`'s `from-black/80 to-transparent`
 (`components/games/game-card-parts.tsx:66`) stays dark in both families because it exists
 to make white title text legible over the *image*, not over the theme surface. Anything
 layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
-`text-dim` — `#64748b`, the one token whose value is identical in both families — so an
-image-less tile reads the same either way.
+`text-dim` — `#64748b` dark, `#5a697f` light (the same slate, a step darker so it clears AA on
+the light panel and overlay) — so an image-less tile reads as the same quiet slate in
+either family.
 
 ### Chips (§4.3)
 
