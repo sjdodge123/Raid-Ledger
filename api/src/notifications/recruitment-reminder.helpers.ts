@@ -2,10 +2,15 @@
  * Recruitment reminder query helpers.
  * Extracted from recruitment-reminder.service.ts for file size compliance (ROK-711).
  */
-import { sql, type SQL } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../drizzle/schema';
+import {
+  NOW_UTC,
+  utcIsoText,
+  utcWallClock,
+} from '../drizzle/timestamp-utils';
 import type { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import {
   createChannelEmbed,
@@ -73,26 +78,6 @@ function mapEligibleRow(r: EligibleEventRow): EligibleEvent {
   };
 }
 
-/**
- * Render a zone-less column as an ISO-8601 "Z" string. `events.duration` and
- * `events.created_at` hold the UTC wall clock, so the label is exact; a bare
- * `::text` drops the zone and `new Date()` then reads it as host-local time.
- * Both columns go through this together because the lead-time math subtracts
- * one from the other.
- */
-function isoUtc(column: SQL): SQL {
-  return sql`to_char(${column}, 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
-}
-
-/**
- * An instant as the zone-less UTC wall clock `duration` holds. Comparing the
- * range to a `timestamptz` makes Postgres re-read it in the session TimeZone,
- * which shifts the window by that zone's offset.
- */
-function utcWallClock(at: Date): SQL {
-  return sql`(${at.toISOString()}::timestamptz AT TIME ZONE 'UTC')`;
-}
-
 /** Find future, non-cancelled events starting within [now, now + 48h] that have a Discord embed, are NOT full, and have a game. */
 export async function findEligibleEvents(
   db: PostgresJsDatabase<typeof schema>,
@@ -102,7 +87,7 @@ export async function findEligibleEvents(
 
   const rows = await db.execute<EligibleEventRow>(sql`
     SELECT e.id, e.title, e.game_id, g.name AS game_name, e.creator_id, e.max_attendees,
-      ${isoUtc(sql`lower(e.duration)`)} AS start_time, ${isoUtc(sql`e.created_at`)} AS created_at,
+      ${utcIsoText(sql`lower(e.duration)`)} AS start_time, ${utcIsoText(sql`e.created_at`)} AS created_at,
       e.recurrence_group_id::text AS recurrence_group_id,
       e.notification_channel_override,
       (SELECT count(*) FROM event_signups es WHERE es.event_id = e.id AND es.status NOT IN ('roached_out', 'departed', 'declined'))::text AS signup_count,
@@ -142,7 +127,7 @@ export async function findRecipients(
     WHERE u.id != ${creatorId}
       AND (u.id IN (SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId})
         OR u.id IN (SELECT es.user_id FROM event_signups es INNER JOIN events e ON e.id = es.event_id
-          WHERE e.game_id = ${gameId} AND upper(e.duration) < (NOW() AT TIME ZONE 'UTC') AND es.status = 'signed_up' AND e.cancelled_at IS NULL AND es.user_id IS NOT NULL))
+          WHERE e.game_id = ${gameId} AND upper(e.duration) < ${NOW_UTC} AND es.status = 'signed_up' AND e.cancelled_at IS NULL AND es.user_id IS NOT NULL))
       AND u.id NOT IN (SELECT es.user_id FROM event_signups es WHERE es.event_id = ${eventId} AND es.user_id IS NOT NULL)
   `);
   return rows.map((r) => r.id);
