@@ -222,10 +222,11 @@ export class LfgNowSpawnService {
 
   /**
    * An LFG-born event is inserted with start = now and emits no CREATED, so
-   * nothing else puts it in the active-event cache before the voice-attendance
-   * start-snapshot window closes. CREATED is deliberately NOT emitted here: its
-   * listener posts announcements. Runs post-COMMIT, so the refresh can see the
-   * row; a failure can cost the start snapshot, never the session.
+   * until the next 5-minute safety-net refresh the cache-gated crons (live
+   * ad-hoc auto-extend among them) would treat a lone session as absent.
+   * CREATED is deliberately NOT emitted here: its listener posts
+   * announcements. Runs post-COMMIT, so the refresh can see the row; a failure
+   * only delays that visibility, never the session.
    */
   private async refreshEventCache(eventId: number): Promise<void> {
     if (!this.eventCache) return;

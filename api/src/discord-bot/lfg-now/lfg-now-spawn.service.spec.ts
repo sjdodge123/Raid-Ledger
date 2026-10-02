@@ -256,7 +256,7 @@ describe('LfgNowSpawnService — never throws into the emitter', () => {
 /**
  * An LFG-born event starts NOW and emits no CREATED, so the post-COMMIT
  * refresh is the only thing that puts it in the active-event cache before the
- * voice-attendance start-snapshot window closes.
+ * next 5-minute safety-net refresh.
  */
 describe('LfgNowSpawnService — the post-commit event-cache refresh', () => {
   type Run = (service: LfgNowSpawnService) => Promise<unknown>;
