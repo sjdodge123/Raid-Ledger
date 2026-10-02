@@ -333,6 +333,9 @@ describe('gcStaleRLScheduledEvents — per-orphan failure logging (ROK-1347 inva
   });
 });
 
+// `new Date()` reads a naive string in the HOST zone, so these cases only
+// discriminate on a non-UTC host (CI runs UTC, where the old parse passes too).
+// The CI-visible proof is scheduled-event.db-helpers.tz.integration.spec.ts.
 describe('naive pg start text is read as UTC (create pre-check + gc dedup)', () => {
   const START = Date.UTC(2026, 6, 2, 22);
   const NAIVE = '2026-07-02 22:00:00';

@@ -181,6 +181,9 @@ describe('tryEditFullEvent — SE name reflects the game (ROK-1350 AC1/AC2)', ()
   });
 });
 
+// `new Date()` reads a naive string in the HOST zone, so these cases only
+// discriminate on a non-UTC host (CI runs UTC, where the old parse passes too).
+// The CI-visible proof is scheduled-event.db-helpers.tz.integration.spec.ts.
 describe('tryCreateNewEvent / tryEditFullEvent — naive pg text is UTC', () => {
   it('sends the UTC instant of a naive start/end to create and edit', async () => {
     const create = jest.fn().mockResolvedValue({ id: 'se-1' });
