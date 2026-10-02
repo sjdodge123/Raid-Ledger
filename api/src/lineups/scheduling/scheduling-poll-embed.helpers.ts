@@ -2,6 +2,7 @@
  * Pure helpers for scheduling poll embed data (ROK-1014).
  */
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
+import { isYesStance } from './scheduling-stance.helpers';
 import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 
 interface SlotRow {
@@ -123,7 +124,7 @@ export function buildPollUrl(
 export function buildEmbedSlots(slots: SlotRow[], votes: ScheduleVoteRow[]) {
   return slots.map((slot) => {
     const onSlot = votes.filter((v) => v.slotId === slot.id);
-    const yes = onSlot.filter((v) => (v.stance ?? 'yes') === 'yes');
+    const yes = onSlot.filter((v) => isYesStance(v.stance));
     return {
       id: slot.id,
       proposedTime: slot.proposedTime.toISOString(),

@@ -215,6 +215,7 @@ export async function findSlotInMatch(
            (
              SELECT count(*)::int
              FROM community_lineup_schedule_votes v
+             -- Literal kept on purpose; TS twin: isYesStance (scheduling-stance.helpers).
              WHERE v.slot_id = s.id AND v.stance = 'yes'
            ) AS "voteCount"
     FROM community_lineup_schedule_slots s
