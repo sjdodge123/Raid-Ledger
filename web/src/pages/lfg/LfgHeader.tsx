@@ -12,6 +12,7 @@ import type { GameDetailDto } from '@raid-ledger/contract';
 import { GameBadgeRow } from '../../components/games/game-badges';
 import { fromGameDetail } from '../../components/games/game-badges.helpers';
 import { LFG_COPY } from './lfg-copy';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 export interface LfgHeaderProps {
     gameId: number;
@@ -21,7 +22,7 @@ export interface LfgHeaderProps {
     fallbackName: string;
 }
 
-/** Box art, when the DTO carries any. */
+/** Box art, when the DTO carries any. Above the fold, so not lazy-loaded. */
 function Cover({
     url,
 }: {
@@ -32,6 +33,10 @@ function Cover({
         <img
             src={url}
             alt=""
+            width={COVER_INTRINSIC.width}
+            height={COVER_INTRINSIC.height}
+            decoding="async"
+            {...coverSrcSetProps(url, '80px')}
             className="h-28 w-20 flex-shrink-0 rounded-lg object-cover"
         />
     );

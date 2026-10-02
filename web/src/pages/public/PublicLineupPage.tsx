@@ -15,6 +15,7 @@ import type { JSX } from 'react';
 import { useParams } from 'react-router-dom';
 import { usePublicLineup } from '../../hooks/use-lineups';
 import { MarkdownText } from '../../components/ui/markdown-text';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 const STATUS_LABELS = {
     building: 'Building',
@@ -73,8 +74,12 @@ function DecisionBlock({ gameName, coverUrl }: DecisionBlockProps) {
                     <img
                         src={coverUrl}
                         alt={`${gameName} cover art`}
+                        width={COVER_INTRINSIC.width}
+                        height={COVER_INTRINSIC.height}
                         className="w-16 h-auto rounded shadow"
                         loading="lazy"
+                        decoding="async"
+                        {...coverSrcSetProps(coverUrl, '64px')}
                     />
                 )}
                 <span className="text-lg font-display font-bold">

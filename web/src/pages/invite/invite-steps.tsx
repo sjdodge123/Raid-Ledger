@@ -5,6 +5,7 @@ import { DISCORD_ICON, CHECK_ICON } from './invite-constants';
 
 export { CharacterStep } from './invite-character-step';
 export type { CharacterStepProps } from './invite-character-step';
+import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface EventHeaderProps {
     event: InviteCodeResolveResponseDto['event'];
@@ -18,6 +19,11 @@ export function EventHeader({ event }: EventHeaderProps): JSX.Element {
                 <img
                     src={event.game.coverUrl}
                     alt={event.game.name}
+                    width={COVER_INTRINSIC.width}
+                    height={COVER_INTRINSIC.height}
+                    loading="lazy"
+                    decoding="async"
+                    {...coverSrcSetProps(event.game.coverUrl, '64px')}
                     className="mx-auto mb-3 h-16 w-16 rounded-lg object-cover"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                 />
