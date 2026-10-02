@@ -79,10 +79,7 @@
 #                                        # whose summary lists every step.
 #                                        # E2E_SCOPE=none skips Playwright
 #                                        # here too; only an explicit
-#                                        # --with-e2e overrides it. A
-#                                        # Playwright FAIL is recorded, the
-#                                        # Discord smoke step still runs, and
-#                                        # the gate then exits 1.
+#                                        # --with-e2e overrides it.
 #                                        # Example:
 #                                        #   BASE_URL=http://rl-env-<slug>-allinone \
 #                                        #     ./scripts/validate-ci.sh --fleet --with-e2e
@@ -115,6 +112,10 @@
 #   * Either step SKIPS with a clear message if scope is empty or env is down.
 #     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
 #     you need that coverage.
+#   * A Playwright FAIL does not stop the gate on the spot: it is recorded,
+#     the Discord smoke step still runs and reports its row, and the gate then
+#     exits 1. This holds wherever the e2e steps run: the default/--full
+#     gate, --fleet and --only-e2e.
 # =============================================================================
 
 set -euo pipefail
@@ -1148,6 +1149,10 @@ _report_unrun_integration_specs() {
     | LC_ALL=C sort -u || true)
   missing=$(LC_ALL=C comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$ran") | grep . || true)
   n_missing=$(printf '%s\n' "$missing" | grep -c . || true)
+  if [ "$n_missing" -eq 0 ]; then
+    echo "all $(printf '%s\n' "$expected" | grep -c . || true) spec(s) reported a result"
+    return 0
+  fi
   echo "${n_missing} spec(s) never ran or did not finish:"
   if [ -z "$ran" ]; then
     echo "  no spec reported a result: setup failure?"
@@ -2072,9 +2077,22 @@ run_default_gate() {
 _exit_if_deferred_fail() {
   if [ "${GATE_DEFERRED_FAIL:-0}" = 1 ]; then
     print_summary
-    echo -e "${RED}Playwright FAILED (Discord smoke still ran).${NC}"
+    echo -e "${RED}Playwright FAILED (Discord smoke row: $(_recorded_result "Discord smoke (companion bot)")).${NC}"
     exit 1
   fi
+}
+
+# _recorded_result <step name>: the last result record_result stored for that
+# step, or "not reported" when the step never recorded one.
+_recorded_result() {
+  local i
+  for ((i = ${#CHECK_NAMES[@]} - 1; i >= 0; i--)); do
+    if [ "${CHECK_NAMES[$i]}" = "$1" ]; then
+      echo "${CHECK_RESULTS[$i]}"
+      return 0
+    fi
+  done
+  echo "not reported"
 }
 
 main() {
@@ -2087,7 +2105,7 @@ main() {
       --static) static_mode=true; shift ;;
       --scope=*) scope_mode="${1#--scope=}"; shift ;;
       --ci) ci_mode=true; shift ;;
-      --no-e2e) e2e_mode="off"; shift ;;
+      --no-e2e) e2e_mode="off"; e2e_explicit=false; shift ;;
       --with-e2e) e2e_mode="on"; e2e_explicit=true; shift ;;
       --only-e2e) _set_only_mode e2e; shift ;;
       --only-integration) _set_only_mode integration; shift ;;

@@ -23,10 +23,11 @@
 # branch that changes package-lock.json would otherwise build against the old
 # tree ("Rolldown failed to resolve import", TS2307 on a new plugin). So the
 # runner also re-installs whenever the lockfile's sha256 differs from the
-# marker written after the last successful install. A SUBDIR is ready only when
-# its node_modules/.package-lock.json exists AND its marker matches. The marker records the
-# lockfile sha taken under the lock BEFORE npm starts, so a lockfile that
-# changes mid-install leaves the old sha behind and the next run re-installs.
+# marker written after the last successful install. A SUBDIR is ready only
+# when its node_modules/.package-lock.json exists AND its marker matches. The
+# marker records the lockfile sha taken under the lock BEFORE npm starts, so a
+# lockfile that changes mid-install leaves the old sha behind and the next run
+# re-installs.
 #
 # RL_DEPS_RUNNER_ROOT and RL_NPM_CI_LOCK are test seams; production uses the
 # real /workspace and a lock in container /tmp (never under /workspace: the

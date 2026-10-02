@@ -351,6 +351,31 @@ else
     if grep -F -x -q -e "  ${spec3}" <<<"$out"; then
         fail "the ANSI-coloured PASS line for ${spec3} must count as ran, but it was listed as never ran"
     else pass; fi
+    # The list stops at 40 names; the rest collapse into one count line.
+    if (( expected_missing > 40 )); then
+        cap_line="  ... and $((expected_missing - 40)) more"
+        if grep -F -x -q -e "$cap_line" <<<"$out"; then pass; else
+            fail "expected the cap line '${cap_line}', got: $(grep -E 'and [0-9]+ more' <<<"$out" || echo '<no cap line>')"
+        fi
+    fi
+
+    CURRENT_TEST_NAME="TDB:330 behavioral: a failed shard where every spec reported prints one all-reported line"
+    all_emit_file=$(mktemp -t rl-shard-emit-all.XXXXXX)
+    printf '%s\n' "$all_specs" | sed 's/^/ PASS /; s/$/ (1.0 s, 100 MB heap size)/' >"$all_emit_file"
+    out=$(
+        PATH="$stub_bin:$PATH" REPO_ROOT="$REPO_ROOT" RL_TARGET="remote" RL_SLOT="1" \
+        STUB_DOCKER_ARGV_FILE="$docker_argv_file" STUB_NPX_ARGV_FILE="$npx_argv_file" \
+        STUB_NPM_ARGV_FILE="$npm_argv_file" STUB_NPX_FAIL_SHARD="1" \
+        STUB_NPX_EMIT_PASS_FILE="$all_emit_file" \
+        bash -c "RL_VALIDATE_CI_DRY=1 source '$VALIDATE_CI_PATH'; run_integration_tests" 2>&1
+    )
+    rm -f "$all_emit_file"
+    if grep -E -q -e "^all ${total_specs} spec\(s\) reported a result$" <<<"$out"; then pass; else
+        fail "expected 'all ${total_specs} spec(s) reported a result', got: $(grep -E 'never ran|reported a result' <<<"$out" || echo '<no report line>')"
+    fi
+    if grep -E -q -e 'never ran' <<<"$out"; then
+        fail "no spec is missing, so no never-ran header may print, got: $(grep -E 'never ran' <<<"$out")"
+    else pass; fi
 
     CURRENT_TEST_NAME="TDB:330 behavioral: an all-PASS run prints no never-ran report"
     out=$(

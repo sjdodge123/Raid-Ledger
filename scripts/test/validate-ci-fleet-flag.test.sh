@@ -388,7 +388,8 @@ assert_out_matches 'Discord smoke \(companion bot\)' "Discord row"
 
 # TDB:1455 — E2E_SCOPE=none was overridden by --fleet's IMPLIED e2e_mode=on, and
 # a Playwright FAIL aborted the gate before the Discord smoke row could report.
-# In this harness the Discord row reads SKIPPED (no creds): assert it EXISTS.
+# The Discord row reads SKIPPED without companion-bot creds and PASS (stubbed
+# npx) with them, so these cases assert that it EXISTS, not its value.
 CURRENT_TEST_NAME="TDB:1455: --fleet honours E2E_SCOPE=none"
 export E2E_SCOPE=none
 invoke remote "$ENV_URL" --fleet
@@ -407,6 +408,14 @@ assert_rc 0 "--fleet --with-e2e with E2E_SCOPE=none"
 assert_grep 'playwright test' "$npx_argv_file" "--with-e2e must override E2E_SCOPE=none"
 assert_out_matches 'overridden by --with-e2e' "the override must be announced"
 
+CURRENT_TEST_NAME="TDB:1455: a later --no-e2e cancels an earlier --with-e2e's E2E_SCOPE override"
+export E2E_SCOPE=none
+invoke remote "$ENV_URL" --fleet --with-e2e --no-e2e
+unset E2E_SCOPE
+assert_rc 0 "--fleet --with-e2e --no-e2e with E2E_SCOPE=none"
+assert_absent 'playwright test' "$npx_argv_file" "the later --no-e2e must win"
+assert_out_absent 'overridden by --with-e2e' "a cancelled --with-e2e must not announce an override"
+
 CURRENT_TEST_NAME="TDB:1455: a Playwright FAIL still lets the Discord smoke row report, and fails the gate"
 export STUB_NPX_PLAYWRIGHT_RC=1
 invoke remote "$ENV_URL" --fleet
@@ -415,7 +424,12 @@ assert_rc 1 "--fleet with a failing Playwright run"
 assert_grep 'playwright test' "$npx_argv_file" "Playwright must have run"
 assert_out_matches 'Playwright \(desktop \+ mobile.*FAIL' "the Playwright row must read FAIL"
 assert_out_matches 'Discord smoke \(companion bot\)' "the Discord row must still be present after a Playwright FAIL"
-assert_out_matches 'Playwright FAILED \(Discord smoke still ran\)' "the deferred failure must be announced"
+# The closing line must repeat the Discord row's RECORDED result: the old
+# "(Discord smoke still ran)" read as a Discord PASS even when it was SKIPPED.
+discord_row=$(printf '%s' "$INVOKE_OUT" | sed $'s/\033\\[[0-9;]*m//g' \
+    | grep -E '^Discord smoke \(companion bot\) +(PASS|FAIL|SKIPPED)$' | awk '{print $NF}' | tail -1)
+assert_out_matches "Playwright FAILED \\(Discord smoke row: ${discord_row:-<no summary row>}\\)" \
+    "the deferred failure must name the Discord row's recorded result"
 assert_out_absent 'All checks passed' "a FAIL row must never end in 'All checks passed!'"
 
 CURRENT_TEST_NAME="TDB:1455: --only-e2e honours E2E_SCOPE=none and still reports Discord smoke"
