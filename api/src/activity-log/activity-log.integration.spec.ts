@@ -12,6 +12,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 interface ActivityEntry {
   id: number;
@@ -230,7 +231,7 @@ function describeActivityLog() {
         action: 'event_created',
         actorId: testApp.seed.adminUser.id,
       });
-      expect(rows[0].metadata).toMatchObject({
+      expect(rows[0]?.metadata).toMatchObject({
         title: 'Direct insert test',
       });
     });
@@ -243,14 +244,17 @@ function describeActivityLog() {
     const ENTITY_TYPE = 'event' as const;
 
     it('returns username when actor displayName is null', async () => {
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'rok-1116:null-display',
-          username: 'alice',
-          displayName: null,
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'rok-1116:null-display',
+            username: 'alice',
+            displayName: null,
+          })
+          .returning(),
+        'user',
+      );
 
       const entityId = 90001;
       await testApp.db.insert(schema.activityLog).values({
@@ -274,14 +278,17 @@ function describeActivityLog() {
     });
 
     it('returns displayName when set', async () => {
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'rok-1116:has-display',
-          username: 'alice',
-          displayName: 'AliceCustom',
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'rok-1116:has-display',
+            username: 'alice',
+            displayName: 'AliceCustom',
+          })
+          .returning(),
+        'user',
+      );
 
       const entityId = 90002;
       await testApp.db.insert(schema.activityLog).values({

@@ -44,11 +44,11 @@ function describeEncryptionUtil() {
 
       expect(parts.length).toBe(3);
       // IV should be 32 hex chars (16 bytes)
-      expect(parts[0].length).toBe(32);
+      expect(parts[0]?.length).toBe(32);
       // Auth tag should be 32 hex chars (16 bytes)
-      expect(parts[1].length).toBe(32);
+      expect(parts[1]?.length).toBe(32);
       // Encrypted data should exist
-      expect(parts[2].length).toBeGreaterThan(0);
+      expect(parts[2]?.length).toBeGreaterThan(0);
     });
   });
 

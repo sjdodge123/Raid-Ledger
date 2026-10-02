@@ -122,7 +122,7 @@ describe('dumpFailureSnapshot — filesystem + buckets', () => {
     >;
     expect(prefixes['bull']).toBeDefined();
     expect(prefixes['jwt_block']).toBeDefined();
-    expect(prefixes['jwt_block'].count).toBe(3);
+    expect(prefixes['jwt_block']?.count).toBe(3);
     fs.unlinkSync(filePath);
   });
 

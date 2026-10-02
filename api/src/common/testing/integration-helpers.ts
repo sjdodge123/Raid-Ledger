@@ -21,6 +21,7 @@ import { _resetCooldowns } from '../../discord-bot/listeners/signup-interaction.
 import { _resetRecentlyProcessed } from '../../discord-bot/listeners/event-link.dedup';
 import { _resetInFlightRefreshes } from '../swr-cache';
 import { INSTANCE_KEY, type TestApp } from './test-app';
+import { nonEmpty } from './narrow';
 
 const obliterateLogger = new Logger('truncateAllTables.obliterate');
 
@@ -43,14 +44,17 @@ export async function seedBaseline(
   const passwordHash = await bcrypt.hash(adminPassword, 4); // Low rounds for speed
 
   // Create admin user
-  const [adminUser] = await db
-    .insert(schema.users)
-    .values({
-      discordId: 'local:admin@test.local',
-      username: 'admin',
-      role: 'admin',
-    })
-    .returning();
+  const [adminUser] = nonEmpty(
+    await db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:admin@test.local',
+        username: 'admin',
+        role: 'admin',
+      })
+      .returning(),
+    'adminUser',
+  );
 
   // Create local credentials for admin
   await db.insert(schema.localCredentials).values({

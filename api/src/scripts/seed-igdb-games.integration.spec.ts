@@ -18,6 +18,7 @@ import * as schema from '../drizzle/schema';
 import { upsertSeedGames, type GameSeed } from '../../scripts/seed-igdb-games';
 import { findGameIdsByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const FIXTURE_GAME_SLUG = 'test-game';
 
@@ -41,15 +42,18 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
 
   it('merges seed into existing row when igdb_id is NULL but name matches (BG3 prod reproduction)', async () => {
     // Pre-existing row: discovered via steam, never enriched by IGDB.
-    const [existing] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: "Baldur's Gate 3",
-        slug: 'baldurs-gate-3',
-        steamAppId: 1086940,
-        igdbId: null,
-      })
-      .returning();
+    const [existing] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: "Baldur's Gate 3",
+          slug: 'baldurs-gate-3',
+          steamAppId: 1086940,
+          igdbId: null,
+        })
+        .returning(),
+      'existing',
+    );
 
     const touched = await upsertSeedGames(testApp.db, [BG3_SEED]);
     expect(touched).toBe(1);
@@ -68,9 +72,9 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     expect(survivors).toHaveLength(1);
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(existing.id);
-    expect(rows[0].igdbId).toBe(119171);
-    expect(rows[0].steamAppId).toBe(1086940);
-    expect(rows[0].name).toBe("Baldur's Gate 3");
+    expect(rows[0]?.igdbId).toBe(119171);
+    expect(rows[0]?.steamAppId).toBe(1086940);
+    expect(rows[0]?.name).toBe("Baldur's Gate 3");
   });
 
   it('falls through to INSERT when no name match exists', async () => {
@@ -82,8 +86,8 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
       .from(schema.games)
       .where(ne(schema.games.slug, FIXTURE_GAME_SLUG));
     expect(rows).toHaveLength(1);
-    expect(rows[0].igdbId).toBe(119171);
-    expect(rows[0].slug).toBe('baldurs-gate-iii');
+    expect(rows[0]?.igdbId).toBe(119171);
+    expect(rows[0]?.slug).toBe('baldurs-gate-iii');
   });
 
   it('is idempotent: re-running the seed against its own output does not duplicate', async () => {
@@ -94,7 +98,7 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
       .from(schema.games)
       .where(ne(schema.games.slug, FIXTURE_GAME_SLUG));
     expect(rows).toHaveLength(1);
-    expect(rows[0].igdbId).toBe(119171);
+    expect(rows[0]?.igdbId).toBe(119171);
   });
 
   // Codex P1 (2026-05-14): when BOTH a canonical row (igdb_id=X) AND a leftover
@@ -104,25 +108,31 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
   // and fall through to ON CONFLICT (igdb_id) so the canonical row is updated.
   it('does NOT crash when a canonical row already owns the seed igdb_id alongside a null-igdb_id orphan', async () => {
     // Canonical row: already enriched by IGDB.
-    const [canonical] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: "Baldur's Gate 3",
-        slug: 'baldurs-gate-iii-canonical',
-        igdbId: 119171,
-        steamAppId: null,
-      })
-      .returning();
+    const [canonical] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: "Baldur's Gate 3",
+          slug: 'baldurs-gate-iii-canonical',
+          igdbId: 119171,
+          steamAppId: null,
+        })
+        .returning(),
+      'canonical',
+    );
     // Leftover orphan: same name, null igdb_id, different slug.
-    const [orphan] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: "Baldur's Gate 3",
-        slug: 'baldurs-gate-3-orphan',
-        igdbId: null,
-        steamAppId: 1086940,
-      })
-      .returning();
+    const [orphan] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: "Baldur's Gate 3",
+          slug: 'baldurs-gate-3-orphan',
+          igdbId: null,
+          steamAppId: 1086940,
+        })
+        .returning(),
+      'orphan',
+    );
 
     // Must not throw — would crash the entire deploy at container boot.
     const touched = await upsertSeedGames(testApp.db, [BG3_SEED]);
@@ -146,15 +156,18 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
   // cases assert the batch handles a mixed insert/merge call in one shot.
   it('batches a mixed call: inserts new rows and merges a null-igdb_id orphan in one pass', async () => {
     // One pre-existing orphan that should MERGE; two fresh names that INSERT.
-    const [orphan] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Hades',
-        slug: 'hades-orphan',
-        steamAppId: 1145360,
-        igdbId: null,
-      })
-      .returning();
+    const [orphan] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Hades',
+          slug: 'hades-orphan',
+          steamAppId: 1145360,
+          igdbId: null,
+        })
+        .returning(),
+      'orphan',
+    );
 
     const seeds: GameSeed[] = [
       { igdbId: 113112, name: 'Hades', slug: 'hades', coverUrl: null },
@@ -217,14 +230,17 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
   // selectCandidatesByTokenSet fixes it — this asserts a name with an
   // apostrophe round-trips through the batch matcher.
   it('matches a name containing an apostrophe via findGameIdsByNormalizedName', async () => {
-    const [existing] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: "Assassin's Creed",
-        slug: 'assassins-creed',
-        igdbId: 500001,
-      })
-      .returning();
+    const [existing] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: "Assassin's Creed",
+          slug: 'assassins-creed',
+          igdbId: 500001,
+        })
+        .returning(),
+      'existing',
+    );
 
     const map = await findGameIdsByNormalizedName(testApp.db, [
       "Assassin's Creed",
@@ -244,14 +260,17 @@ describe('Regression: ROK-1283 — seed-igdb-games name-dedup', () => {
     ) as { games: GameSeed[] };
     const classic = seedFile.games.find((g) => g.igdbId === 75379);
     expect(classic?.name).toBe('World of Warcraft Classic');
-    const [seeded] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'World of Warcraft Classic Era',
-        slug: 'world-of-warcraft-classic',
-        igdbId: 75379,
-      })
-      .returning();
+    const [seeded] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'World of Warcraft Classic Era',
+          slug: 'world-of-warcraft-classic',
+          igdbId: 75379,
+        })
+        .returning(),
+      'seeded',
+    );
 
     await upsertSeedGames(testApp.db, [classic as GameSeed]);
 

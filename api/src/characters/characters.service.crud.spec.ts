@@ -35,7 +35,10 @@ function mockTxSelectDualCall(claimRows: unknown[], countRows: unknown[]) {
 
 describe('CharactersService — crud', () => {
   let service: CharactersService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  >;
   let mockPluginRegistry: {
     getAdaptersForExtensionPoint: jest.Mock;
   };

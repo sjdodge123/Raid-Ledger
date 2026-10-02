@@ -11,6 +11,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeFeedback() {
   let testApp: TestApp;
@@ -254,14 +255,17 @@ function describeFeedback() {
       const bcrypt = await import('bcrypt');
       const passwordHash = await bcrypt.hash('TestPassword123!', 4);
 
-      const [user] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'local:member-feedback@test.local',
-          username: 'member-feedback',
-          role: 'member',
-        })
-        .returning();
+      const [user] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'local:member-feedback@test.local',
+            username: 'member-feedback',
+            role: 'member',
+          })
+          .returning(),
+        'user',
+      );
 
       await testApp.db.insert(schema.localCredentials).values({
         email: 'member-feedback@test.local',
