@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Header } from './Header';
 
@@ -105,27 +105,6 @@ describe('Header — community name', () => {
 describe('Header — authenticated user nav links', () => {
     it('does not show Insights when user is null', () => {
         renderHeader();
-        expect(screen.queryByText('Insights')).not.toBeInTheDocument();
-    });
-});
-
-describe('Header — authenticated user', () => {
-    beforeEach(() => {
-        vi.mocked(vi.importActual('../../hooks/use-auth')).catch(() => null);
-    });
-
-    it('shows Insights nav link when user is authenticated', () => {
-        vi.doMock('../../hooks/use-auth', () => ({
-            useAuth: () => ({
-                user: { id: 1, username: 'TestUser', role: 'member' },
-                isAuthenticated: true,
-            }),
-        }));
-
-        // Re-import after mock update is too complex for this test runner;
-        // we verify the conditional logic is present by checking the non-auth case
-        renderHeader();
-        // This test verifies that the logged-out path doesn't show Insights
         expect(screen.queryByText('Insights')).not.toBeInTheDocument();
     });
 });
