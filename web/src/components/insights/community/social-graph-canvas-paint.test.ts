@@ -42,7 +42,9 @@ describe('social-graph-canvas-paint', () => {
     });
 
     it('labels every positioned node when nothing is active', () => {
-        const nodes = [node(1), node(2), { ...node(3), x: undefined }];
+        const unpositioned = node(3);
+        delete unpositioned.x;
+        const nodes = [node(1), node(2), unpositioned];
         const order = labelDrawOrder({ activeId: null, activeNeighbors: new Set() }, nodes);
         expect(order.map((n) => n.id)).toEqual([1, 2]);
     });

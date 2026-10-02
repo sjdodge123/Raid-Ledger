@@ -352,7 +352,7 @@ describe('DayEventCard — part 4', () => {
         mockSignupMutateAsync.mockResolvedValueOnce({ id: 42 });
 
         const event = createMockEvent({
-            game: undefined,
+            game: null,
         });
 
         renderCard(event);

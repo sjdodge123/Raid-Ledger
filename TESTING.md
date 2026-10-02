@@ -41,8 +41,11 @@ leaf configs `scripts/validate-ci.sh` runs:
 `npx tsc --noEmit -p web/tsconfig.node.json`. Neither covers web test files —
 `web/tsconfig.app.json` excludes `src/**/*.test.ts(x)` and `src/test/**`.
 To typecheck web specs, run `npx tsc --noEmit -p web/tsconfig.test.json`. It is
-ungated and carries known pre-existing spec errors (see `TECH-DEBT-BACKLOG.md`),
-so filter its output to the files you touched.
+gated at 0 errors in `scripts/validate-ci.sh` and the CI lint job, so any spec
+type error fails the PR. Specs inherit `noUncheckedIndexedAccess` and
+`exactOptionalPropertyTypes` from `web/tsconfig.app.json`: narrow index access
+with the helpers in `web/src/test/defined.ts`, and instead of writing an explicit
+`undefined` into an optional key, omit the key or use a conditional spread.
 
 Contract schema specs live in `packages/contract/src/__tests__/*.spec.ts` and run
 under their own node-environment Vitest config (`packages/contract/vitest.config.ts`,

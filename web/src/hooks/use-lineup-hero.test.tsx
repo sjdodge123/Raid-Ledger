@@ -101,7 +101,9 @@ function renderHero(
       lineup,
       tiebreaker: options.tiebreaker ?? null,
       scrollTargets: emptyTargets(),
-      onOpenNominate: options.onOpenNominate,
+      ...(options.onOpenNominate === undefined
+        ? {}
+        : { onOpenNominate: options.onOpenNominate }),
     }),
   );
 }

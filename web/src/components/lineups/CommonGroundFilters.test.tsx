@@ -8,11 +8,14 @@ import { render, screen } from '@testing-library/react';
 import type { CommonGroundParams } from '../../lib/api-client';
 import { CommonGroundFilters } from './CommonGroundFilters';
 
-const defaultFilters: CommonGroundParams = {
-    minOwners: 2,
-    genre: undefined,
-    maxPlayers: undefined,
-};
+const defaultFilters: CommonGroundParams = { minOwners: 2 };
+
+/** `defaultFilters` with the optional `minOwners` key absent. */
+function withoutMinOwners(): CommonGroundParams {
+    const filters: CommonGroundParams = { ...defaultFilters };
+    delete filters.minOwners;
+    return filters;
+}
 
 describe('CommonGroundFilters — min owners slider', () => {
     it('renders the "Min owners" label', () => {
@@ -39,7 +42,7 @@ describe('CommonGroundFilters — min owners slider', () => {
     it('defaults to 2 when minOwners is undefined', () => {
         render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, minOwners: undefined }}
+                filters={withoutMinOwners()}
                 onChange={vi.fn()}
             />,
         );
@@ -100,7 +103,7 @@ describe('CommonGroundFilters — players slider', () => {
     it('shows "Any" when maxPlayers is undefined (slider at 0)', () => {
         render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={vi.fn()}
             />,
         );
@@ -124,7 +127,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         const onChange = vi.fn();
         render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
                 participantCount={3}
             />,
@@ -139,7 +142,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         const onChange = vi.fn();
         const { rerender } = render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
                 participantCount={3}
             />,
@@ -177,7 +180,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         const onChange = vi.fn();
         render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
                 participantCount={0}
             />,
@@ -190,7 +193,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         const onChange = vi.fn();
         render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
             />,
         );
@@ -204,7 +207,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         const onChange = vi.fn();
         render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
                 participantCount={2}
             />,
@@ -222,7 +225,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         const onChange = vi.fn();
         render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
                 participantCount={1}
             />,
@@ -247,7 +250,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         const onChange = vi.fn();
         const { rerender } = render(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
                 participantCount={0}
             />,
@@ -257,7 +260,7 @@ describe('CommonGroundFilters — participantCount auto-set (ROK-1255)', () => {
         // Data loads — participantCount now 4. Effect should fire exactly once.
         rerender(
             <CommonGroundFilters
-                filters={{ ...defaultFilters, maxPlayers: undefined }}
+                filters={{ ...defaultFilters }}
                 onChange={onChange}
                 participantCount={4}
             />,

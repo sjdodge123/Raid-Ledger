@@ -105,10 +105,7 @@ describe('useCommonGroundState — filter persistence (ROK-1400)', () => {
     it('restores a cleared co-op toggle as cleared (not re-seeded)', () => {
         const first = renderState();
         act(() =>
-            first.result.current.setFilters({
-                minOwners: 0,
-                minOnlineCoop: undefined,
-            }),
+            first.result.current.setFilters({ minOwners: 0 }),
         );
         first.unmount();
 
