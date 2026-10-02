@@ -3,10 +3,17 @@
 # Built once on the VM (docker compose build runner-1). Mutagen syncs the
 # worktree from the laptop into /workspace; node_modules + cache live in
 # named volumes that survive rebuilds.
-# Pin matches the repo's playwright devDependency. When package.json bumps
-# Playwright, bump this base image in lockstep and rebuild the runner image,
-# or globalSetup fails fleet-wide with a missing chromium binary.
-FROM mcr.microsoft.com/playwright:v1.60.0-jammy
+# Pin matches the repo's playwright devDependency. When package-lock.json
+# moves @playwright/test / playwright-core, bump this base image in lockstep
+# and rebuild the runner image, or globalSetup fails fleet-wide with a missing
+# chromium binary.
+# scripts/test/runner-playwright-pin.test.sh enforces EXACT equality between
+# this tag's X.Y.Z and package-lock.json's playwright-core version. Its regex
+# accepts only a plain `vX.Y.Z-jammy` tag, so a digest pin (@sha256:...) or a
+# move off jammy needs that guard's regex edited in the same change. After the
+# bump merges, the operator rebuilds the runners per rl-infra/README.md
+# ("After changing rl-infra/runner/Dockerfile ...").
+FROM mcr.microsoft.com/playwright:v1.63.0-jammy
 
 # ROK-1568 — the disk-pressure ladder's rung 2 spares images matching
 # `--filter label!=rl.role=runner`. That filter reads IMAGE labels, while
@@ -22,8 +29,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     NPM_CONFIG_FUND=false \
     NPM_CONFIG_AUDIT=false
 
-# Node 22 is already present in the playwright image; we add system tooling
-# the dev/CI scripts expect plus debugging niceties.
+# Node is already present in the Playwright jammy image; we add system
+# tooling the dev/CI scripts expect plus debugging niceties.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl gnupg jq tmux htop tcpdump strace lsof \
         redis-tools rsync git unzip make build-essential \
