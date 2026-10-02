@@ -55,7 +55,7 @@ function paintAnHour(): void {
 
 const sheetDialog = (): HTMLElement => screen.getByRole('dialog', { name: 'Game time check' });
 /** Let the guard's one-macrotask Escape settle pass. */
-const settle = (): Promise<void> => act(() => new Promise((r) => { setTimeout(r, 0); }));
+const settle = (): Promise<void> => act(() => new Promise<void>((r) => { setTimeout(r, 0); }));
 
 beforeEach(() => {
   vi.clearAllMocks();

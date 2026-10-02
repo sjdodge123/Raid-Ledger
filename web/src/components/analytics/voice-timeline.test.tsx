@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { VoiceTimeline } from './voice-timeline';
-import type { EventMetricsResponseDto } from '@raid-ledger/contract';
+import type { EventMetricsResponseDto, EventVoiceSessionDto } from '@raid-ledger/contract';
 
-function makeSession(overrides: Partial<EventMetricsResponseDto['voiceSummary'] extends null | infer T ? (T extends null ? never : NonNullable<T>['sessions'][number]) : never> = {}) {
+function makeSession(overrides: Partial<EventVoiceSessionDto> = {}): EventVoiceSessionDto {
     return {
-        id: 1,
+        id: 'session-1',
         eventId: 10,
         userId: 1,
         discordUserId: 'discord-1',
@@ -127,8 +127,8 @@ describe('VoiceTimeline — part 2', () => {
     });
 
     it('filters out no_show sessions from timeline bars', () => {
-        const noShowSession = makeSession({ id: 2, discordUsername: 'Ghost#0000', classification: 'no_show' as const });
-        const fullSession = makeSession({ id: 1, discordUsername: 'Alice#1234', classification: 'full' as const });
+        const noShowSession = makeSession({ id: 'session-2', discordUsername: 'Ghost#0000', classification: 'no_show' as const });
+        const fullSession = makeSession({ id: 'session-1', discordUsername: 'Alice#1234', classification: 'full' as const });
         const metrics = makeMetrics({
             voiceSummary: {
                 totalTracked: 2,
@@ -187,7 +187,7 @@ describe('VoiceTimeline — part 2', () => {
 
 describe('VoiceTimeline — part 3', () => {
     it('renders multiple session bars for multiple users', () => {
-        const session2 = makeSession({ id: 2, discordUsername: 'Bob#5678' });
+        const session2 = makeSession({ id: 'session-2', discordUsername: 'Bob#5678' });
         const metrics = makeMetrics({
             voiceSummary: {
                 totalTracked: 2,

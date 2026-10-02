@@ -7,9 +7,9 @@
  * auto-votes since ROK-1543) has to invalidate it, or the "Voted / Waiting"
  * chips keep showing the state from page load.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
-import { QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { createTestQueryClient } from '../../test/render-helpers';
 import { PARTICIPANTS_KEY } from '../use-lineups';
@@ -57,7 +57,7 @@ function setup<T>(hook: () => T) {
  * invalidated the whole prefix).
  */
 function invalidatedParticipants(
-    spy: ReturnType<typeof vi.spyOn>,
+    spy: MockInstance<QueryClient['invalidateQueries']>,
     lineupId = 1,
     matchId = 2,
 ): boolean {

@@ -14,7 +14,7 @@ function makeLineup(overrides: Partial<LineupSubset>): LineupSubset {
   return {
     visibility: 'public',
     totalMembers: 179,
-    createdBy: { id: 1, displayName: 'Admin', avatar: null },
+    createdBy: { id: 1, displayName: 'Admin' },
     invitees: [],
     entries: [],
     ...overrides,
@@ -29,7 +29,7 @@ describe('getExpectedVoterCount', () => {
   it('returns invitees + creator deduped for private lineups', () => {
     const lineup = makeLineup({
       visibility: 'private',
-      createdBy: { id: 1, displayName: 'Admin', avatar: null },
+      createdBy: { id: 1, displayName: 'Admin' },
       invitees: [
         { id: 2, displayName: 'Voter Two', steamLinked: false },
         { id: 3, displayName: 'Voter Three', steamLinked: false },
@@ -41,7 +41,7 @@ describe('getExpectedVoterCount', () => {
   it('dedupes when creator is also in the invitee list', () => {
     const lineup = makeLineup({
       visibility: 'private',
-      createdBy: { id: 1, displayName: 'Admin', avatar: null },
+      createdBy: { id: 1, displayName: 'Admin' },
       invitees: [
         { id: 1, displayName: 'Admin', steamLinked: false },
         { id: 2, displayName: 'Voter Two', steamLinked: false },
