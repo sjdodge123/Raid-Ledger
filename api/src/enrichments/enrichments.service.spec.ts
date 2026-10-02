@@ -5,6 +5,7 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 import { EnrichmentsService } from './enrichments.service';
 import { ENRICHMENT_QUEUE } from './enrichments.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { at } from '../common/testing/narrow';
 
 function describeEnrichmentsService() {
   let service: EnrichmentsService;
@@ -524,17 +525,14 @@ function describeEnrichmentsService() {
       ]);
 
       const result = await service.getEnrichmentsForEntity('event', 'event-99');
+      const entry = at(result, 0);
 
-      expect(result[0]).not.toHaveProperty('id');
-      expect(result[0]).not.toHaveProperty('createdAt');
-      expect(result[0]).not.toHaveProperty('updatedAt');
-      expect(result[0]).not.toHaveProperty('entityType');
-      expect(result[0]).not.toHaveProperty('entityId');
-      expect(Object.keys(result[0])).toEqual([
-        'enricherKey',
-        'data',
-        'fetchedAt',
-      ]);
+      expect(entry).not.toHaveProperty('id');
+      expect(entry).not.toHaveProperty('createdAt');
+      expect(entry).not.toHaveProperty('updatedAt');
+      expect(entry).not.toHaveProperty('entityType');
+      expect(entry).not.toHaveProperty('entityId');
+      expect(Object.keys(entry)).toEqual(['enricherKey', 'data', 'fetchedAt']);
     });
   }
   describe('getEnrichmentsForEntity() — adversarial', () =>

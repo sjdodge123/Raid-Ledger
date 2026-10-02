@@ -11,6 +11,7 @@ import { SettingsService } from './settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { encrypt } from './encryption.util';
+import { at } from '../common/testing/narrow';
 
 /** Build a DB row as returned by drizzle select().from(appSettings). */
 function makeRow(key: string, value: string) {
@@ -35,6 +36,12 @@ function describeSettingsServiceROK349SetupWizardMethods() {
     _insertValuesChain: { onConflictDoUpdate: jest.Mock };
   };
   let mockEventEmitter: Partial<EventEmitter2>;
+
+  /** The row handed to the first insert(...).values(...) call. */
+  function firstInsertedRow(): { key: string } {
+    const calls = mockDb._insertChain.values.mock.calls as { key: string }[][];
+    return at(at(calls, 0), 0);
+  }
 
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-jwt-secret-for-rok349-settings-tests';
@@ -127,9 +134,7 @@ function describeSettingsServiceROK349SetupWizardMethods() {
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
       // Verify it calls set() with the correct key via the DB insert
-      const valuesCall = (
-        mockDb._insertChain.values.mock.calls as { key: string }[][]
-      )[0][0];
+      const valuesCall = firstInsertedRow();
       expect(valuesCall.key).toBe(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED);
     });
 
@@ -193,9 +198,7 @@ function describeSettingsServiceROK349SetupWizardMethods() {
       await service.setDiscordBotCommunityName('My Raid Community');
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      const valuesCall = (
-        mockDb._insertChain.values.mock.calls as { key: string }[][]
-      )[0][0];
+      const valuesCall = firstInsertedRow();
       expect(valuesCall.key).toBe(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME);
     });
 
@@ -270,9 +273,7 @@ function describeSettingsServiceROK349SetupWizardMethods() {
       await service.setDiscordBotTimezone('Asia/Tokyo');
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      const valuesCall = (
-        mockDb._insertChain.values.mock.calls as { key: string }[][]
-      )[0][0];
+      const valuesCall = firstInsertedRow();
       expect(valuesCall.key).toBe(SETTING_KEYS.DISCORD_BOT_TIMEZONE);
     });
 
