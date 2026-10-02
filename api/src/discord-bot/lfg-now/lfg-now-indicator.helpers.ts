@@ -28,6 +28,7 @@
  * `viewerHoldsNowHand` and get the strict per-viewer answer AC1 describes. One
  * predicate, one optional refinement — not two implementations.
  */
+import { defined } from '../../common/defined.helpers';
 import { isLfgNowIndicatorEmoji } from '@raid-ledger/contract';
 import { LFG_NOW_SPAWN_THRESHOLD } from './lfg-now.constants';
 
@@ -150,7 +151,8 @@ export function resolveNowIndicatorEmoji(
       name: isLfgNowIndicatorEmoji(value) ? value : LFG_NOW_INDICATOR_UNICODE,
     };
   }
-  const found = findCustomEmoji(cache, custom[2], custom[1] ?? custom[3]);
+  const name = defined(custom[1] ?? custom[3], 'custom emoji name');
+  const found = findCustomEmoji(cache, custom[2], name);
   if (found && found.name && found.available !== false) {
     return { id: found.id, name: found.name };
   }

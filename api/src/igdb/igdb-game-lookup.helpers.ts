@@ -22,13 +22,14 @@ export async function lookupGameById(
     .from(schema.games)
     .where(eq(schema.games.id, id))
     .limit(1);
-  if (r.length === 0) return null;
+  const row = r[0];
+  if (row === undefined) return null;
   return {
-    id: r[0].id,
-    igdbId: r[0].igdbId,
-    name: r[0].name,
-    slug: r[0].slug,
-    coverUrl: r[0].coverUrl,
+    id: row.id,
+    igdbId: row.igdbId,
+    name: row.name,
+    slug: row.slug,
+    coverUrl: row.coverUrl,
   };
 }
 
@@ -51,11 +52,12 @@ export async function lookupGameDetailById(
     .from(schema.games)
     .where(eq(schema.games.id, id))
     .limit(1);
-  if (r.length === 0) return null;
+  const row = r[0];
+  if (row === undefined) return null;
   // Detail endpoint carries the Co-Optimus editorial extras; list builders
   // use bare mapDbRowToDetail and never ship the blob (ROK-1397). The prose
   // inside that blob is stripped unless the operator opted in (ROK-1398).
-  const detail = { ...mapDbRowToDetail(r[0]), ...mapCooptimusExtras(r[0]) };
+  const detail = { ...mapDbRowToDetail(row), ...mapCooptimusExtras(row) };
   return stripCooptimusProse(detail, cooptimusProseEnabled);
 }
 
@@ -81,13 +83,14 @@ export async function lookupGameBySteamAppId(
       ),
     )
     .limit(1);
-  if (r.length === 0) return null;
+  const row = r[0];
+  if (row === undefined) return null;
   return {
-    id: r[0].id,
-    igdbId: r[0].igdbId,
-    name: r[0].name,
-    slug: r[0].slug,
-    coverUrl: r[0].coverUrl,
+    id: row.id,
+    igdbId: row.igdbId,
+    name: row.name,
+    slug: row.slug,
+    coverUrl: row.coverUrl,
   };
 }
 

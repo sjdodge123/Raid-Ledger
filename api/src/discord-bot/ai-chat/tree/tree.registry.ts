@@ -11,58 +11,49 @@ import { handleStats } from './stats.tree';
  * Each entry defines the handler, whether it's a leaf,
  * and access control flags.
  */
-const TREE_REGISTRY: TreeNodeEntry[] = [
-  {
+const PATH_MAP: Record<string, TreeNodeEntry> = {
+  events: {
     handler: handleEvents,
     isLeaf: false,
     requiresAuth: false,
     operatorOnly: false,
   },
-  {
+  'my-signups': {
     handler: handleSignups,
     isLeaf: true,
     requiresAuth: false,
     operatorOnly: false,
   },
-  {
+  'game-library': {
     handler: handleGames,
     isLeaf: false,
     requiresAuth: false,
     operatorOnly: false,
   },
-  {
+  lineup: {
     handler: handleLineup,
     isLeaf: false,
     requiresAuth: false,
     operatorOnly: false,
   },
-  {
+  polls: {
     handler: handlePolls,
     isLeaf: false,
     requiresAuth: false,
     operatorOnly: false,
   },
-  {
+  stats: {
     handler: handleStats,
     isLeaf: false,
     requiresAuth: false,
     operatorOnly: true,
   },
-];
-
-/** Path prefix to handler mapping. */
-const PATH_MAP: Record<string, TreeNodeEntry> = {
-  events: TREE_REGISTRY[0],
-  'my-signups': TREE_REGISTRY[1],
-  'game-library': TREE_REGISTRY[2],
-  lineup: TREE_REGISTRY[3],
-  polls: TREE_REGISTRY[4],
-  stats: TREE_REGISTRY[5],
 };
 
 /** Resolve a tree path to its handler entry. */
 export function resolveTreeNode(path: string): TreeNodeEntry | null {
   const prefix = path.split(':')[0];
+  if (prefix === undefined) return null;
   return PATH_MAP[prefix] ?? null;
 }
 

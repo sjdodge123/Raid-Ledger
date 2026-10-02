@@ -3,6 +3,7 @@ import * as readline from 'node:readline';
 import { createGunzip } from 'node:zlib';
 import { PassThrough, Transform, type Readable } from 'node:stream';
 import { isGzipped } from './log-files.helpers';
+import { defined } from '../common/defined.helpers';
 
 /**
  * Passes at most `max` bytes, then ends its readable side and calls
@@ -92,7 +93,7 @@ export function createBoundedScrubbedStream(
   const sources = openSources(filepath);
   const stopSources = () => sources.forEach((s) => s.destroy());
   const limiter = new ByteLimit(maxBytes, stopSources);
-  sources[sources.length - 1].pipe(limiter);
+  defined(sources[sources.length - 1], 'log source stream').pipe(limiter);
   const out = new PassThrough();
   const rl = readline.createInterface({ input: limiter, crlfDelay: Infinity });
   pumpLines(rl, out, scrub, () => {

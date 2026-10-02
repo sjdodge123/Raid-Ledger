@@ -9,6 +9,8 @@
  * ROK-275 probe exercised across 179 live responses.
  */
 
+import { defined } from '../common/defined.helpers';
+
 export interface CooptimusEntry {
   id: number;
   title: string;
@@ -66,7 +68,8 @@ export function sliceEnvelope(text: string): string {
 export function parseCooptimusResponse(text: string): CooptimusEntry[] {
   const xml = sliceEnvelope(text);
   const entries: CooptimusEntry[] = [];
-  for (const [, block] of xml.matchAll(/<game>([\s\S]*?)<\/game>/g)) {
+  for (const match of xml.matchAll(/<game>([\s\S]*?)<\/game>/g)) {
+    const block = defined(match[1], 'Co-Optimus <game> block');
     const id = intTag(block, 'id');
     const title = tag(block, 'title');
     const system = tag(block, 'system');

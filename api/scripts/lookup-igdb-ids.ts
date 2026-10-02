@@ -8,6 +8,7 @@
  */
 
 import * as fs from 'fs';
+import { defined } from '../src/common/defined.helpers';
 import * as path from 'path';
 
 interface IgdbApiGame {
@@ -94,6 +95,11 @@ const GAMES_TO_FIX = [
     'Minecraft',
 ];
 
+/** First piece of `text` split on `sep` — `split` always yields at least one. */
+function firstPiece(text: string, sep: string): string {
+    return defined(text.split(sep)[0], `first piece of "${text}"`);
+}
+
 async function main() {
     console.log('=== IGDB ID Lookup ===\n');
 
@@ -127,11 +133,11 @@ async function main() {
 
         console.log('   Results:');
         for (const r of results) {
-            const marker = r.slug.includes(gameName.toLowerCase().split(' ')[0].split(':')[0]) ? '✓' : ' ';
+            const marker = r.slug.includes(firstPiece(firstPiece(gameName.toLowerCase(), ' '), ':')) ? '✓' : ' ';
             console.log(`   ${marker} ID: ${r.id} | slug: ${r.slug} | name: ${r.name}`);
 
             // Auto-suggest the best match
-            if (r.id !== seedGame.igdbId && r.slug.toLowerCase().includes(gameName.toLowerCase().split(':')[0].split(' ')[0])) {
+            if (r.id !== seedGame.igdbId && r.slug.toLowerCase().includes(firstPiece(firstPiece(gameName.toLowerCase(), ':'), ' '))) {
                 corrections.push({
                     name: gameName,
                     currentId: seedGame.igdbId,

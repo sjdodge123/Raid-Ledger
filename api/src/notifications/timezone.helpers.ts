@@ -1,3 +1,4 @@
+import { defined } from '../common/defined.helpers';
 import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -32,7 +33,7 @@ export async function resolveUserTimezone(
     );
 
   if (rows.length === 0) return defaultTimezone;
-  const tz = rows[0].value as string;
+  const tz = defined(rows[0], 'timezone preference row').value as string;
   return tz && tz !== 'auto' ? tz : defaultTimezone;
 }
 

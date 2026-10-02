@@ -8,6 +8,7 @@ import {
   TASTE_PROFILE_AXIS_POOL,
   type TasteProfilePoolAxis,
 } from '@raid-ledger/contract';
+import { defined } from '../common/defined.helpers';
 import { AXIS_MAPPINGS } from '../taste-profile/axis-mapping.constants';
 
 /**
@@ -19,10 +20,11 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   let dot = 0;
   let magA = 0;
   let magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
+  for (const [i, x] of a.entries()) {
+    const y = defined(b[i], 'vector component');
+    dot += x * y;
+    magA += x * x;
+    magB += y * y;
   }
   if (magA === 0 || magB === 0) return 0;
   return dot / (Math.sqrt(magA) * Math.sqrt(magB));
@@ -36,14 +38,14 @@ export function computeCombinedVoterVector(
   vectors: number[][],
 ): number[] | null {
   if (vectors.length === 0) return null;
-  if (vectors.length === 1) return [...vectors[0]];
-  const len = vectors[0].length;
-  const result = new Array<number>(len).fill(0);
+  const first = defined(vectors[0], 'first voter vector');
+  if (vectors.length === 1) return [...first];
+  const result = new Array<number>(first.length).fill(0);
   for (const v of vectors) {
-    for (let i = 0; i < len; i++) result[i] += v[i];
+    // A component missing from a shorter vector stays NaN, as `+= undefined` was.
+    for (const [i, sum] of result.entries()) result[i] = sum + (v[i] ?? NaN);
   }
-  for (let i = 0; i < len; i++) result[i] /= vectors.length;
-  return result;
+  return result.map((sum) => sum / vectors.length);
 }
 
 /**
@@ -68,8 +70,7 @@ const AXIS_TAG_SETS: Record<TasteProfilePoolAxis, Set<string>> = (() => {
 export function gameToTasteVector(itadTags: string[]): number[] {
   const lowered = new Set(itadTags.map((t) => t.toLowerCase()));
   const vec = new Array<number>(TASTE_PROFILE_AXIS_POOL.length).fill(0);
-  for (let i = 0; i < TASTE_PROFILE_AXIS_POOL.length; i++) {
-    const axis = TASTE_PROFILE_AXIS_POOL[i];
+  for (const [i, axis] of TASTE_PROFILE_AXIS_POOL.entries()) {
     for (const tag of AXIS_TAG_SETS[axis]) {
       if (lowered.has(tag)) {
         vec[i] = 1;

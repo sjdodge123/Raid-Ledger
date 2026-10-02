@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import { findRearrangementChain } from './signup-chain.helpers';
 import { executeChainMoves } from './signup-chain-exec.helpers';
@@ -57,8 +58,9 @@ function tallyAssignments(
 ): void {
   for (const a of assignments) {
     if (a.role && a.role in filledPerRole) {
-      filledPerRole[a.role]++;
-      occupied[a.role].add(a.position);
+      const filled = defined(filledPerRole[a.role], `${a.role} fill count`);
+      filledPerRole[a.role] = filled + 1;
+      defined(occupied[a.role], `${a.role} slots`).add(a.position);
     }
   }
 }
@@ -156,7 +158,9 @@ async function tryDirectSlot(
   const status = ctx.allSignups.find((s) => s.id === signupId)?.status;
   for (const role of ctx.newPrefs) {
     if (!(role in ctx.roleCapacity)) continue;
-    if (ctx.filledPerRole[role] >= ctx.roleCapacity[role]) {
+    const filled = ctx.filledPerRole[role];
+    const cap = ctx.roleCapacity[role];
+    if (filled !== undefined && cap !== undefined && filled >= cap) {
       if (status !== 'tentative' && hasTentativeOccupant(role, ctx))
         return false;
       continue;

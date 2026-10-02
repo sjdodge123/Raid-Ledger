@@ -365,6 +365,15 @@ describe('ChannelBindingsService — binding writes announce the channel (cache 
     expect(announcedVia(emitter)).toEqual([{ channelId: CHANNEL }]);
   });
 
+  it('bind announces nothing when the upsert returns no row', async () => {
+    mocks.mockSelectLimit.mockResolvedValue([]);
+    mocks.mockInsertReturning.mockResolvedValue([]);
+    await expect(
+      service.bind(GUILD, CHANNEL, 'voice', 'general-lobby', null),
+    ).rejects.toThrow(/^Expected .+ to be defined$/);
+    expect(announcedVia(emitter)).toEqual([]);
+  });
+
   it('a series re-bind also announces the channel it moved off', async () => {
     seedExistingBinding(mocks, STORED);
     const removed = [{ channelId: 'old-ch' }, { channelId: CHANNEL }];

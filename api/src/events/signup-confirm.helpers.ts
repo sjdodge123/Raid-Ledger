@@ -2,6 +2,7 @@ import { Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { BenchPromotionService } from './bench-promotion.service';
 import {
   buildSignupResponse,
@@ -91,7 +92,11 @@ async function applyConfirmation(
   logger.log(
     `User ${userId} confirmed signup ${signupId} with character ${characterId}`,
   );
-  return buildSignupResponse(updated, user, character);
+  return buildSignupResponse(
+    defined(updated, 'confirmed signup row'),
+    user,
+    character,
+  );
 }
 
 export async function buildStatusResponse(
@@ -132,8 +137,9 @@ export async function updateSignupStatus(
     `Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`,
   );
   fireTentativeCheck(db, eventId, signup.id, dto.status, benchPromo);
-  const response = await buildStatusResponse(db, updated);
-  return { updated, response };
+  const row = defined(updated, 'updated signup row');
+  const response = await buildStatusResponse(db, row);
+  return { updated: row, response };
 }
 
 function fireTentativeCheck(

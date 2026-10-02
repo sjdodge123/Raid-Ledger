@@ -1,11 +1,19 @@
 /**
- * Turns a Quick Play participant join into an LFG signal (ROK-1451 AC7d).
+ * Turns a roster join into an LFG signal (ROK-1451 AC7d) or, on the game's
+ * LFG-born session, into a conversion of the joiner's own hand (ROK-1625).
  *
- * Emits `LFG_EVENTS.QUICK_PLAY_MATCH` when the joining player already holds an
- * active intent on the session's game. That is ALL it does — it never clears,
- * revives or otherwise mutates an intent (AC7c: a Quick Play session must never
- * clear an intent on its own). The rendered offer belongs to the DM/embed
- * sibling story, which subscribes to this event.
+ * Quick Play: emits `LFG_EVENTS.QUICK_PLAY_MATCH` when the joining player
+ * already holds an active intent on the session's game, and NEVER mutates an
+ * intent (AC7c: a Quick Play session must never clear an intent on its own).
+ * The rendered offer belongs to the DM/embed sibling story.
+ *
+ * The one scoped exception (ROK-1625): when the session IS the game's open
+ * LFG-born event (`findOpenLfgNowEventId`, the single provenance definition),
+ * the joiner's own live hand converts into it and nothing else moves. It is
+ * keyed on `AD_HOC_EVENTS.PARTICIPANT_JOINED` (the roster seam, which fires
+ * only on a newly inserted participant) and never on voiceStateUpdate. A
+ * conversion then emits `GROUP_CHANGED` (`playing`), AFTER the write, like
+ * every other conversion path.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
@@ -17,7 +25,9 @@ import {
   AD_HOC_EVENTS,
   type AdHocParticipantJoinedPayload,
 } from '../discord-bot/discord-bot.constants';
-import { LFG_EVENTS } from './lfg.constants';
+import { LFG_EVENTS, type LfgGroupChangedPayload } from './lfg.constants';
+import { findOpenLfgNowEventId } from './lfg-playing.helpers';
+import { convertHolderIntent } from './lfg-write.helpers';
 
 @Injectable()
 export class LfgQuickPlayListener {
@@ -30,10 +40,14 @@ export class LfgQuickPlayListener {
   ) {}
 
   /**
-   * Signal a match between a Quick Play session and a live intent.
+   * Convert the joiner's hand on an LFG-born session, otherwise signal a match
+   * between a Quick Play session and a live intent.
    *
    * No-ops for unlinked Discord participants (`userId` null), sessions with no
-   * game, and players holding no live intent. NEVER throws into the emitter.
+   * game, and players holding no live intent. The cheap live-intent read runs
+   * before the LFG-born read, so a joiner with no hand costs no join. NEVER
+   * throws into the emitter: a failed conversion is logged as a warning naming
+   * the event.
    *
    * @param payload - The `ad-hoc.participant.joined` payload.
    */
@@ -47,6 +61,7 @@ export class LfgQuickPlayListener {
       const gameId = await this.resolveGameId(payload.eventId);
       if (!gameId) return;
       if (!(await this.holdsLiveIntent(userId, gameId))) return;
+      if (await this.convertIfLfgBorn(userId, gameId, payload.eventId)) return;
       this.eventEmitter.emit(LFG_EVENTS.QUICK_PLAY_MATCH, {
         userId,
         gameId,
@@ -55,9 +70,54 @@ export class LfgQuickPlayListener {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `Failed to evaluate LFG Quick Play match for event ${payload?.eventId}: ${msg}`,
+        `LFG roster-join handling failed for event ${payload?.eventId}: ${msg}`,
       );
     }
+  }
+
+  /**
+   * When `eventId` is the game's open LFG-born event, convert the joiner's own
+   * live hand into it (ROK-1625) and report true so no Quick Play signal fires.
+   *
+   * A Quick Play session for the same game is NOT LFG-born even while one is
+   * open, so the comparison is on the exact event id (AC2).
+   *
+   * A row that moved is announced as `GROUP_CHANGED` (`playing`) only after
+   * the UPDATE, so any surface that repaints on it reads the joiner as
+   * converted. `LfgNowSpawnService` also emits `playing` off the same
+   * PARTICIPANT_JOINED, but in no fixed order relative to this write.
+   *
+   * @returns True when the session is LFG-born (whether or not a row moved).
+   */
+  private async convertIfLfgBorn(
+    userId: number,
+    gameId: number,
+    eventId: number,
+  ): Promise<boolean> {
+    if ((await findOpenLfgNowEventId(this.db, gameId)) !== eventId) {
+      return false;
+    }
+    const converted = await convertHolderIntent(this.db, gameId, userId, {
+      eventId,
+    });
+    if (converted > 0) this.announceConversion(userId, gameId, eventId);
+    return true;
+  }
+
+  /** Log the conversion, then repaint the group's surfaces off the new state. */
+  private announceConversion(
+    userId: number,
+    gameId: number,
+    eventId: number,
+  ): void {
+    this.logger.log(
+      `Converted user ${userId}'s LFG hand on game ${gameId} into event ${eventId}`,
+    );
+    this.eventEmitter.emit(LFG_EVENTS.GROUP_CHANGED, {
+      gameId,
+      reason: 'playing',
+      eventId,
+    } satisfies LfgGroupChangedPayload);
   }
 
   /** The session's game, or null when it has none. */

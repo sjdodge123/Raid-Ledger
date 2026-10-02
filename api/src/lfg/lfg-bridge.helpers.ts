@@ -8,6 +8,7 @@
  */
 import { and, asc, eq, isNotNull, ne, notExists, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
 import { eligibleUser, liveIntent, type LfgDb } from './lfg-query.helpers';
 
@@ -194,7 +195,7 @@ function toBatch(
   games: BridgeCandidate[],
   cap: number,
 ): BridgeBatch {
-  const { lineupId, lineupTitle } = games[0];
+  const { lineupId, lineupTitle } = defined(games[0], 'first bridge game');
   const names = games.map((g) => g.gameName);
   return {
     userId,

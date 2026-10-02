@@ -34,6 +34,7 @@
  */
 
 import * as fs from 'fs';
+import { defined } from '../src/common/defined.helpers';
 import * as path from 'path';
 
 /** IGDB API game response structure */
@@ -246,7 +247,10 @@ async function refreshGameCovers(): Promise<RefreshResult> {
 
     if (!DRY_RUN && result.updated > 0) {
         // Update metadata
-        seedData.generatedAt = new Date().toISOString().split('T')[0];
+        seedData.generatedAt = defined(
+            new Date().toISOString().split('T')[0],
+            'ISO date part',
+        );
 
         // Write updated file
         fs.writeFileSync(seedPath, JSON.stringify(seedData, null, 4) + '\n');

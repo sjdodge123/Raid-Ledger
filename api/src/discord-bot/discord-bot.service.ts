@@ -1,3 +1,4 @@
+import { defined } from '../common/defined.helpers';
 import {
   Injectable,
   Logger,
@@ -246,7 +247,7 @@ function buildSetupSteps(completions: boolean[]): SetupStep[] {
   return SETUP_STEP_DEFS.map(([key, label, path], i) => ({
     key,
     label,
-    completed: completions[i],
+    completed: defined(completions[i], `setup step ${key}`),
     settingsPath: path,
   }));
 }

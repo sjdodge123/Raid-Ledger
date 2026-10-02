@@ -10,6 +10,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { alias } from 'drizzle-orm/pg-core';
 import { desc, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import type {
   AdminActionDto,
   AdminActionsListResponseDto,
@@ -114,7 +115,7 @@ export async function getAdminActionsForUser(
     .from(schema.adminActions)
     .where(eq(schema.adminActions.targetId, targetId));
   const rows = await queryAdminActionRows(db, targetId, limit, offset);
-  const total = Number(countRow.count);
+  const total = Number(defined(countRow, 'admin action count row').count);
   return {
     data: rows.map(mapAdminActionRow),
     meta: { total, page, limit, hasMore: offset + rows.length < total },

@@ -5,6 +5,8 @@
  * Only matches canonical store.steampowered.com/app/:id URLs.
  */
 
+import { defined } from '../../common/defined.helpers';
+
 /** Maximum number of Steam app IDs to extract per message. */
 const MAX_STEAM_URLS = 3;
 
@@ -38,7 +40,7 @@ export function parseSteamAppIds(content: string): number[] {
   const regex = new RegExp(STEAM_STORE_APP_REGEX.source, 'g');
 
   while ((match = regex.exec(content)) !== null) {
-    const appId = parseInt(match[1], 10);
+    const appId = parseInt(defined(match[1], 'Steam app id'), 10);
     if (!seen.has(appId)) {
       seen.add(appId);
       results.push(appId);

@@ -6,6 +6,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import {
   FAKE_GAMERS,
   ORIGINAL_GAMER_COUNT,
@@ -279,12 +280,15 @@ async function reassignOrigEventsToRaidLeader(
 ): Promise<void> {
   const raidLeaders = ROLE_ACCOUNTS.filter((a) => a.role === 'Raid Leader');
   const byLeader = new Map<number, number[]>();
-  for (let i = 0; i < origEvents.length; i++) {
-    const leader = raidLeaders[i % raidLeaders.length];
+  for (const [i, event] of origEvents.entries()) {
+    const leader = defined(
+      raidLeaders[i % raidLeaders.length],
+      'raid leader account',
+    );
     const user = userByName.get(leader.username);
     if (!user) continue;
     const ids = byLeader.get(user.id) ?? [];
-    ids.push(origEvents[i].id);
+    ids.push(event.id);
     byLeader.set(user.id, ids);
   }
   for (const [creatorId, eventIds] of byLeader) {
@@ -304,10 +308,13 @@ async function reassignGenEventsRandomly(
   const nonAdminUsers = allUsers.filter((u) => u.role !== 'admin');
   if (nonAdminUsers.length === 0) return;
   const reassignByCreator = new Map<number, number[]>();
-  for (let i = 0; i < genEvents.length; i++) {
-    const creator = nonAdminUsers[i % nonAdminUsers.length];
+  for (const [i, event] of genEvents.entries()) {
+    const creator = defined(
+      nonAdminUsers[i % nonAdminUsers.length],
+      'non-admin creator',
+    );
     const ids = reassignByCreator.get(creator.id) ?? [];
-    ids.push(genEvents[i].id);
+    ids.push(event.id);
     reassignByCreator.set(creator.id, ids);
   }
   for (const [creatorId, eventIds] of reassignByCreator) {

@@ -12,6 +12,7 @@ import {
   generateRawToken,
   hashToken,
 } from './refresh-token.helpers';
+import { defined } from '../../common/defined.helpers';
 
 /** Result of issuing/rotating: the raw token (for the cookie) + lifetime. */
 export interface IssuedRefreshToken {
@@ -150,7 +151,9 @@ export class RefreshTokenService {
       .returning({ id: schema.refreshTokens.id });
     await this.db
       .update(schema.refreshTokens)
-      .set({ replacedBy: child.id })
+      .set({
+        replacedBy: defined(child, 'inserted child refresh token row').id,
+      })
       .where(eq(schema.refreshTokens.id, parent.id));
     return { rawToken, maxAgeMs, userId: parent.userId };
   }

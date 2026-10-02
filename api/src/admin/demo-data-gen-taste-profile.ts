@@ -8,6 +8,7 @@
  * demo users have zero playtime signal and everyone resolves to Casual.
  */
 import type { Rng } from './demo-data-rng';
+import { defined } from '../common/defined.helpers';
 import { pickN, randInt, weightedPick } from './demo-data-rng';
 import { IGDB_GAME_WEIGHTS } from './demo-data-generator-templates';
 
@@ -145,20 +146,22 @@ export function pickWeightedUnique(
     const total = prefixSumTotal(tree);
     if (total <= 0) break;
     const idx = findByPrefixSum(tree, rng() * total);
-    picked.push(pool[idx]);
+    picked.push(defined(pool[idx], `weighted pool entry ${idx}`));
     taken[idx] = true;
-    addToPrefixSum(tree, idx, -live[idx]);
+    // Past the end of `live` the old `-undefined` delta was an empty loop.
+    const weight = live[idx];
+    if (weight !== undefined) addToPrefixSum(tree, idx, -weight);
     live[idx] = 0;
   }
   // Only zero-weight entries remain (count >= positive pool): fill in pool
   // order, matching the previous implementation's exhaustion behavior —
   // including its one rng() draw per pick, so the shared seeded stream
   // stays in sync for every generator downstream of this call.
-  for (let i = 0; i < pool.length && picked.length < want; i++) {
-    if (!taken[i]) {
-      rng();
-      picked.push(pool[i]);
-    }
+  for (const [i, value] of pool.entries()) {
+    if (picked.length >= want) break;
+    if (taken[i]) continue;
+    rng();
+    picked.push(value);
   }
   return picked;
 }
@@ -166,23 +169,33 @@ export function pickWeightedUnique(
 /** Build a 1-indexed Fenwick tree of partial sums over `weights`. */
 function buildPrefixSumTree(weights: number[]): number[] {
   const tree = new Array<number>(weights.length + 1).fill(0);
-  for (let i = 1; i <= weights.length; i++) {
-    tree[i] += weights[i - 1];
+  for (const [k, weight] of weights.entries()) {
+    const i = k + 1;
+    tree[i] = nodeAt(tree, i) + weight;
     const parent = i + (i & -i);
-    if (parent < tree.length) tree[parent] += tree[i];
+    if (parent < tree.length) {
+      tree[parent] = nodeAt(tree, parent) + nodeAt(tree, i);
+    }
   }
   return tree;
 }
 
+/** Fenwick node `i`; every caller has already bounded `0 < i < length`. */
+function nodeAt(tree: number[], i: number): number {
+  return defined(tree[i], `prefix-sum node ${i}`);
+}
+
 /** Add `delta` to the weight at 0-based index `idx`. */
 function addToPrefixSum(tree: number[], idx: number, delta: number): void {
-  for (let i = idx + 1; i < tree.length; i += i & -i) tree[i] += delta;
+  for (let i = idx + 1; i < tree.length; i += i & -i) {
+    tree[i] = nodeAt(tree, i) + delta;
+  }
 }
 
 /** Sum of all weights currently in the tree. */
 function prefixSumTotal(tree: number[]): number {
   let total = 0;
-  for (let i = tree.length - 1; i > 0; i -= i & -i) total += tree[i];
+  for (let i = tree.length - 1; i > 0; i -= i & -i) total += nodeAt(tree, i);
   return total;
 }
 
@@ -199,9 +212,11 @@ function findByPrefixSum(tree: number[], target: number): number {
   while (step * 2 < tree.length) step *= 2;
   for (; step > 0; step = Math.floor(step / 2)) {
     const next = pos + step;
-    if (next < tree.length && tree[next] <= remaining) {
+    if (next >= tree.length) continue;
+    const weight = nodeAt(tree, next);
+    if (weight <= remaining) {
       pos = next;
-      remaining -= tree[next];
+      remaining -= weight;
     }
   }
   return pos;
@@ -241,7 +256,7 @@ export function generateGameActivityRollups(
       p.favouriteIgdbIds.length,
     );
     p.favouriteIgdbIds.forEach((igdbId, idx) => {
-      const weeklySeconds = perGameSeconds[idx];
+      const weeklySeconds = defined(perGameSeconds[idx], `game ${idx} seconds`);
       if (weeklySeconds <= 0) return;
       rows.push({
         username: p.username,

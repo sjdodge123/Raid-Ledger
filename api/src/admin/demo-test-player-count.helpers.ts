@@ -32,6 +32,7 @@
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 
@@ -121,7 +122,7 @@ async function upsertFixtureGameLocked(
     })
     .onConflictDoUpdate({ target: schema.games.slug, set: values })
     .returning({ id: schema.games.id });
-  return created.id;
+  return defined(created, 'player-count fixture game row').id;
 }
 
 /**
@@ -171,7 +172,7 @@ async function insertFixtureCategory(
       ...values,
     } as typeof schema.discoveryCategorySuggestions.$inferInsert)
     .returning({ id: schema.discoveryCategorySuggestions.id });
-  return created.id;
+  return defined(created, 'player-count discover category row').id;
 }
 
 /** Seed the two player-count fixtures + their discover row (ROK-1525 smoke). */

@@ -20,6 +20,7 @@
  * subscriber from running, and every failure is logged individually with the
  * position needed to identify it in a prod export.
  */
+import { defined } from '../common/defined.helpers';
 import type { Logger } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 
@@ -80,7 +81,7 @@ export async function emitIsolated(
     failed += 1;
     const reason: unknown = result.reason;
     logger.error(
-      `${event}: subscriber ${describeListener(listeners[index], index)} failed — ${
+      `${event}: subscriber ${describeListener(defined(listeners[index], 'subscriber'), index)} failed — ${
         reason instanceof Error ? reason.message : String(reason)
       }`,
       reason instanceof Error ? reason.stack : undefined,

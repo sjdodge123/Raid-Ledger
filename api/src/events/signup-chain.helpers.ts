@@ -3,6 +3,8 @@
  * Finds the shortest sequence of moves that frees a slot for a new player.
  */
 
+import { defined } from '../common/defined.helpers';
+
 interface ChainMove {
   assignmentId: number;
   signupId: number;
@@ -128,9 +130,9 @@ function tryOccupantMoves(
     const move = buildMove(occupant, entry, alt);
     const newMoves = [...entry.moves, move];
     const net = computeNetFilled(alt, newMoves, filledPerRole);
-    if (net <= roleCapacity[alt]) {
-      const freedRole =
-        entry.moves.length === 0 ? entry.roleToFree : entry.moves[0].fromRole;
+    const cap = roleCapacity[alt];
+    if (cap !== undefined && net <= cap) {
+      const freedRole = entry.moves[0]?.fromRole ?? entry.roleToFree;
       return { freedRole, moves: newMoves };
     }
     const newUsed = new Set(entry.usedSignupIds);
@@ -148,5 +150,5 @@ function computeNetFilled(
 ): number {
   const into = moves.filter((m) => m.toRole === role).length;
   const outOf = moves.filter((m) => m.fromRole === role).length;
-  return filledPerRole[role] + into - outOf;
+  return defined(filledPerRole[role], `${role} fill count`) + into - outOf;
 }

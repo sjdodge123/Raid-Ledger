@@ -15,6 +15,7 @@ import {
   showMemberRoleSelect,
 } from './pug-invite-member.handlers';
 import { errorStack } from '../../common/error-format.helpers';
+import { defined } from '../../common/defined.helpers';
 
 /** Context for member select menu operations. */
 interface MemberSelectCtx {
@@ -74,7 +75,6 @@ async function doMemberCharacterSelect(
   interaction: StringSelectMenuInteraction,
   eventIdStr: string,
 ): Promise<void> {
-  const characterId = interaction.values[0];
   const eventId = parseInt(eventIdStr, 10);
   const linkedUser = await findLinkedUser(deps, interaction.user.id);
   if (!linkedUser) {
@@ -84,6 +84,7 @@ async function doMemberCharacterSelect(
     });
     return;
   }
+  const characterId = defined(interaction.values[0], 'selected character');
   const character = await deps.charactersService.findOne(
     linkedUser.id,
     characterId,
@@ -112,7 +113,7 @@ async function routeCharResult(
     .where(eq(schema.events.id, ctx.eventId))
     .limit(1);
   const sc = event?.slotConfig as Record<string, unknown> | null;
-  if (sc?.type === 'mmo') {
+  if (event && sc?.type === 'mmo') {
     await showMemberRoleSelect(ctx.interaction, ctx.eventId, event.title, {
       id: characterId,
       name: character.name,

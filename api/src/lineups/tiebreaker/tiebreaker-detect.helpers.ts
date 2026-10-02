@@ -32,8 +32,9 @@ export async function detectTies(
   if (voteCounts.length < 2) return null;
 
   const sorted = [...voteCounts].sort((a, b) => b.voteCount - a.voteCount);
-  const topCount = sorted[0].voteCount;
-  if (topCount === 0) return null;
+  const [top] = sorted;
+  if (top === undefined || top.voteCount === 0) return null;
+  const topCount = top.voteCount;
 
   const tied = sorted.filter((v) => v.voteCount === topCount);
   if (tied.length < 2) return null;

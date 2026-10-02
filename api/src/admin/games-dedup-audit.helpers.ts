@@ -13,6 +13,7 @@ import * as schema from '../drizzle/schema';
 import { normalizeForDedup } from '../igdb/igdb-search-dedup.helpers';
 import { pickNameGroupWinner } from '../igdb/igdb-name-dedup.helpers';
 import { buildExtraCountQueries } from './games-dedup-extra-counts.helpers';
+import { defined } from '../common/defined.helpers';
 
 /** Minimal game-row projection used by the audit pipeline. */
 export interface GameRow {
@@ -144,6 +145,24 @@ function countDirect(
     .then(takeCount);
 }
 
+/**
+ * The 6 ROK-1270 counts, pinned to a fixed-length tuple so each slot of the
+ * lockstep destructure below stays typed. `buildExtraCountQueries` always
+ * returns exactly these 6, in this order.
+ */
+function extraCountQueries(db: Db, id: number) {
+  const [gameA, gameB, winner, votes, vetoes, intensity] =
+    buildExtraCountQueries(db, id);
+  return [
+    defined(gameA, 'tiebreaker bracket game A count query'),
+    defined(gameB, 'tiebreaker bracket game B count query'),
+    defined(winner, 'tiebreaker bracket winner count query'),
+    defined(votes, 'tiebreaker bracket votes count query'),
+    defined(vetoes, 'tiebreaker vetoes count query'),
+    defined(intensity, 'player intensity snapshots count query'),
+  ] as const;
+}
+
 /** 22 of the 23 FK tables (ROK-1271's 16 + ROK-1270's 6) expose a direct
  * `gameId` (or `decidedGameId` / `winnerGameId` / `gameAId` / `gameBId` /
  * `longestSessionGameId`) column — these all share a single SELECT shape.
@@ -153,7 +172,7 @@ function countDirect(
  * The 16 ROK-1271 direct counts are emitted here; the 6 ROK-1270 direct
  * counts are spread in from `buildExtraCountQueries` (same lockstep order
  * contract — destructure below must match). */
-function buildDirectCountQueries(db: Db, id: number): Promise<number>[] {
+function buildDirectCountQueries(db: Db, id: number) {
   return [
     countDirect(db, schema.events, schema.events.gameId, id),
     countDirect(db, schema.eventPlans, schema.eventPlans.gameId, id),
@@ -216,8 +235,8 @@ function buildDirectCountQueries(db: Db, id: number): Promise<number>[] {
       schema.gameInterestSuppressions.gameId,
       id,
     ),
-    ...buildExtraCountQueries(db, id),
-  ];
+    ...extraCountQueries(db, id),
+  ] as const satisfies readonly Promise<number>[];
 }
 
 async function countLineupMatchMembers(db: Db, id: number): Promise<number> {

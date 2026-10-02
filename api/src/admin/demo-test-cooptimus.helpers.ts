@@ -17,6 +17,7 @@
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
 
@@ -132,7 +133,7 @@ async function upsertFixtureGameLocked(
       set: { ...values, hidden: false, banned: false },
     })
     .returning({ id: schema.games.id });
-  return created.id;
+  return defined(created, 'co-op fixture game row').id;
 }
 
 /** Seed the three co-op UI-state fixtures (ROK-1398 smoke). */

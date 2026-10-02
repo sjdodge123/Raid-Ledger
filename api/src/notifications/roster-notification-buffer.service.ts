@@ -1,3 +1,4 @@
+import { defined } from '../common/defined.helpers';
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { eq, and, sql, notInArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -136,7 +137,8 @@ export class RosterNotificationBufferService implements OnModuleDestroy {
       await this.flushPlayerLeft(action);
     } else {
       const payload = await this.buildFlushPayload(action);
-      await this.handleRoleChange(action, currentAssignment[0].role, payload);
+      const { role } = defined(currentAssignment[0], 'current assignment');
+      await this.handleRoleChange(action, role, payload);
     }
   }
 

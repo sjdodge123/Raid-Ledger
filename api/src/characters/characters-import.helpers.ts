@@ -22,6 +22,7 @@ import {
   resolveMainStatus,
   demoteExistingMain,
 } from './characters-mapping.helpers';
+import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = { log: (msg: string) => void };
@@ -141,10 +142,11 @@ async function insertImportedCharacter(
   shouldBeMain: boolean,
   logger: Logger,
 ): Promise<CharacterDto> {
-  const [character] = await tx
+  const [inserted] = await tx
     .insert(schema.characters)
     .values(values)
     .returning();
+  const character = defined(inserted, 'imported character row');
   logger.log(
     `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
   );
@@ -276,7 +278,7 @@ export async function mergeIntoExisting(
   logger.log(
     `User ${userId} merged import into existing character ${existing.id} (${profile.name}-${profile.realm})`,
   );
-  return mapCharacterToDto(merged);
+  return mapCharacterToDto(defined(merged, 'merged character row'));
 }
 
 /** Insert an imported character, merging on conflict. */
