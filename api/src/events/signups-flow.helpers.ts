@@ -78,10 +78,8 @@ export async function signupTxBody(deps: FlowDeps, p: SignupTxParams) {
 
 async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
   const { tx, eventRow, eventId, userId, dto, user } = p;
-  const existing = defined(
-    await signupH.fetchExistingSignup(tx, eventId, userId),
-    'existing signup',
-  );
+  const row = await signupH.fetchExistingSignup(tx, eventId, userId);
+  const existing = defined(row, 'existing signup');
   // reactivateIfCancelled mutates `existing` in-place (including characterId).
   // updateCharacterIfNeeded's equality guard relies on this — it's a no-op for
   // the reactivation path because existing.characterId is already synced.
