@@ -146,8 +146,9 @@ git worktree add -b "$BRANCH" "$WORKTREE" origin/main
 
 # Install deps, reset the lockfile, build the shared contract (Step 2's wave tsc needs packages/contract/dist)
 cd "$WORKTREE" && npm install && git checkout -- package-lock.json && npm run build -w packages/contract
-# only if the batch touches tools/test-bot/** (not an npm workspace; fleet-orchestrator/SKILL.md:111); cwd is $WORKTREE here
-(cd tools/test-bot && npm ci)
+# Only if the batch touches tools/test-bot/** (not an npm workspace; fleet-orchestrator/SKILL.md:111),
+# uncomment and run. The explicit path resolves from either checkout and fails safe if it is missing:
+# (cd "$WORKTREE/tools/test-bot" && npm ci)
 ```
 
 **Create the team:**
