@@ -47,6 +47,7 @@ export function createMockEntry(
         note: null,
         carriedOver: false,
         voteCount: 3,
+        starCount: null,
         createdAt: '2026-03-20T00:00:00Z',
         ownerCount: 6,
         totalMembers: 10,
@@ -56,6 +57,7 @@ export function createMockEntry(
         itadCurrentCut: 25,
         itadCurrentShop: 'Steam',
         itadCurrentUrl: 'https://store.steampowered.com/app/892970',
+        playerCount: null,
         ...overrides,
     };
 }

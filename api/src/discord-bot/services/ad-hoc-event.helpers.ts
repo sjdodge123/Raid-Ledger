@@ -24,14 +24,17 @@ export {
 /**
  * Projection returned by findActiveScheduledEvent (ROK-1418 restored the
  * shape ROK-968 narrowed): the matched event's id, its current suppression
- * window (nullable), its scheduled end (`upper(duration)`), and which term
- * matched. `matchedBy` is informational for the `[voice-spawn]` debug log.
+ * window (nullable), its scheduled end (`upper(duration)`), which term
+ * matched, and its Discord scheduled-event id (ROK-1696: the end-time fan-out
+ * only pushes to Discord when one exists). `matchedBy` is informational for the
+ * `[voice-spawn]` debug log.
  */
 export interface ActiveScheduledEvent {
   id: number;
   extendedUntil: Date | null;
   scheduledEnd: Date;
   matchedBy: 'binding' | 'game' | 'sibling';
+  discordScheduledEventId: string | null;
 }
 
 /**
@@ -64,6 +67,7 @@ export async function findActiveScheduledEvent(
       matchedBy: sql<
         'binding' | 'game' | 'sibling'
       >`CASE WHEN ${tables.events.channelBindingId} = ${bindingId} THEN 'binding' WHEN ${tables.events.gameId} = ${effectiveGameId ?? null} THEN 'game' ELSE 'sibling' END`,
+      discordScheduledEventId: tables.events.discordScheduledEventId,
     })
     .from(tables.events)
     .where(and(bindingClause, ...buildTimeConditions(now)))

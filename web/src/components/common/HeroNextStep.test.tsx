@@ -26,10 +26,9 @@ let observers: FakeObserverHandle[] = [];
 class FakeIntersectionObserver implements IntersectionObserver {
   readonly root = null;
   readonly rootMargin = '';
+  readonly scrollMargin = '';
   readonly thresholds: ReadonlyArray<number> = [];
-  private cb: ObserverCallback;
   constructor(cb: ObserverCallback) {
-    this.cb = cb;
     const handle: FakeObserverHandle = {
       callback: cb,
       disconnect: () => {},

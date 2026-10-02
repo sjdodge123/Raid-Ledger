@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { DrizzleQueryError } from 'drizzle-orm/errors';
 import * as Sentry from '@sentry/nestjs';
 import { EnvironmentSnapshotService } from './environment-snapshot.service';
 import { SettingsService } from '../settings/settings.service';
@@ -272,6 +273,26 @@ function describeEnvironmentSnapshotService() {
       const snapshot2 = await service.collectSnapshot();
       expect(snapshot2.migrations).toEqual([]);
       expect(mockDb.execute).not.toHaveBeenCalled();
+    });
+
+    it('treats a Drizzle-wrapped 42P01 as a missing migrations table', async () => {
+      const pgError = Object.assign(
+        new Error('relation "__drizzle_migrations" does not exist'),
+        { code: '42P01' },
+      );
+      mockDb.execute.mockRejectedValue(
+        new DrizzleQueryError('SELECT hash ...', [], pgError),
+      );
+      const loggerDebugSpy = jest.spyOn(service['logger'], 'debug');
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn');
+
+      const snapshot = await service.collectSnapshot();
+
+      expect(snapshot.migrations).toEqual([]);
+      expect(loggerWarnSpy).not.toHaveBeenCalled();
+      expect(loggerDebugSpy).toHaveBeenCalledWith(
+        '__drizzle_migrations table not found — skipping migration snapshot',
+      );
     });
 
     it('still warns on non-42P01 database errors', async () => {

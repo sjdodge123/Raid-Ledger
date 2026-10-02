@@ -33,11 +33,7 @@ import { getMyPreferences, updatePreference } from '../../lib/api-client';
 
 const mockGetMyPreferences = getMyPreferences as ReturnType<typeof vi.fn>;
 const mockUpdatePreference = updatePreference as ReturnType<typeof vi.fn>;
-const mockToast = toast as {
-    success: ReturnType<typeof vi.fn>;
-    error: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
-};
+const mockToast = vi.mocked(toast, true);
 
 function createWrapper() {
     const queryClient = new QueryClient({

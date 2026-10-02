@@ -13,6 +13,7 @@ import {
     apiGet,
     createLineupOrRetry,
 } from './api-helpers';
+import { revealStartLineupModalField } from './start-lineup-modal';
 
 // ROK-1147: tests assert the Start Lineup button is visible (only true
 // when no active lineup exists globally). Per-worker isolation lets
@@ -114,30 +115,19 @@ test.describe('Votes-per-player slider on create modal', () => {
     test('create modal contains a votes-per-player slider with data-testid', async ({ page }) => {
         test.setTimeout(60_000);
 
-        await page.goto('/games?test=open-lineup-modal');
-        const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 15_000 });
-
-        // ROK-1302: votes-per-player moved behind "More options" — expand it.
-        await modal.getByText(/more options/i).click();
+        // ROK-1302: votes-per-player sits behind "More options" — the helper
+        // opens the modal, expands that section and retries the whole open.
+        const { field: votesSlider } = await revealStartLineupModalField(page, 'votes-per-player');
 
         // AC: slider with data-testid="votes-per-player" must exist
-        const votesSlider = modal.locator('[data-testid="votes-per-player"]');
-        await expect(votesSlider).toBeVisible({ timeout: 5_000 });
+        await expect(votesSlider).toBeVisible();
     });
 
     test('votes-per-player slider has range 1-10, default 3, and step 1', async ({ page }) => {
         test.setTimeout(60_000);
 
-        await page.goto('/games?test=open-lineup-modal');
-        const modal = page.locator('[role="dialog"]');
-        await expect(modal).toBeVisible({ timeout: 15_000 });
-
-        // ROK-1302: votes-per-player moved behind "More options" — expand it.
-        await modal.getByText(/more options/i).click();
-
-        const votesSlider = modal.locator('[data-testid="votes-per-player"]');
-        await expect(votesSlider).toBeVisible({ timeout: 5_000 });
+        // ROK-1302: votes-per-player sits behind "More options" — expand it.
+        const { field: votesSlider } = await revealStartLineupModalField(page, 'votes-per-player');
 
         // Verify attributes: min=1, max=10, step=1, value=3
         await expect(votesSlider).toHaveAttribute('min', '1');

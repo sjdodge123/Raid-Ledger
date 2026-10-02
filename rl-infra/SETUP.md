@@ -909,8 +909,14 @@ they are what makes concurrent Discord smoke on two slots possible at all.
 guild → Copy Server ID) — the same guild as the CI `TEST_GUILD_ID` secret in
 `.github/workflows/discord-smoke.yml`. `env-destroy` uses it to delete the
 leftover `⏰ <game> — Playing now` voice channels that now-sessions create via
-the slot bot (ROK-1508). When it is unset the sweep is silently skipped and
-those channels accumulate until the next Discord smoke run breaks on them.
+the slot bot (ROK-1508). When it is unset the sweep is skipped loudly
+(ROK-1611): `env-destroy` prints
+`discord sweep: SKIPPED — RL_DISCORD_TEST_GUILD_ID unset in /srv/rl-infra/.env`
+on stderr and writes a `discord-ephemeral-skipped` line to `state/audit.log`
+carrying the reason. It is still a skip, though, so those channels accumulate
+until the next Discord smoke run breaks on them. To clear a backlog that built
+up meanwhile, run `orchestrator/bin/discord-sweep --slot N`: it is a dry run by
+default, `--delete` acts, and `--older-than-hours` defaults to 6 (minimum 1).
 
 **The gc-sweeper sweeps too (ROK-1515).** An env that the sweeper reaps —
 orphan, unhealthy, TTL-expired, or cascaded from a dead/hoarded claim — never

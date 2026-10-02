@@ -16,6 +16,8 @@ import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queu
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { VoiceAttendanceService } from './voice-attendance.service';
 import { APP_EVENT_EVENTS } from '../discord-bot.constants';
+import { SUPPRESSION_WINDOW_EVENTS } from './suppression-window-events';
+import type { SuppressionWindowHook } from './ad-hoc-suppression.helpers';
 import type { AdHocRosterResponseDto } from '@raid-ledger/contract';
 import {
   autoSignupParticipant,
@@ -49,6 +51,9 @@ import {
 export class AdHocEventService implements OnModuleInit {
   private readonly logger = new Logger(AdHocEventService.name);
   private activeEvents = new Map<string, ActiveAdHocState>();
+  /** ROK-1696: a suppressed join moved a scheduled event's end forward. */
+  private readonly onWindowExtended: SuppressionWindowHook = (p) =>
+    this.eventEmitter.emit(SUPPRESSION_WINDOW_EVENTS.EXTENDED, p);
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -130,6 +135,7 @@ export class AdHocEventService implements OnModuleInit {
       effectiveGameId,
       channelId,
       clearance,
+      this.onWindowExtended,
     );
     if (!cleared) return false;
 
@@ -158,7 +164,13 @@ export class AdHocEventService implements OnModuleInit {
     effectiveGameId: number | null | undefined,
     channelId?: string,
   ): Promise<SpawnClearance | null> {
-    return checkSuppression(this.db, bindingId, effectiveGameId, channelId);
+    return checkSuppression(
+      this.db,
+      bindingId,
+      effectiveGameId,
+      channelId,
+      this.onWindowExtended,
+    );
   }
 
   /** Handle a member leaving a bound voice channel. */

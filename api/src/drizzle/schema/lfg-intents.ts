@@ -114,5 +114,7 @@ export const lfgIntents = pgTable(
     index('idx_lfg_intents_expires_at')
       .on(table.expiresAt)
       .where(sql`${table.status} = 'active'`),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    index('idx_lfg_intents_converted_to_event_id').on(table.convertedToEventId),
   ],
 );

@@ -47,5 +47,9 @@ export const playerIntensitySnapshots = pgTable(
     weekStartIdx: index('player_intensity_snapshots_week_start_idx').on(
       table.weekStart,
     ),
+    // ROK-1157: FK backing index (parent delete / RI scan)
+    longestSessionGameIdIdx: index(
+      'idx_player_intensity_snapshots_longest_session_game_id',
+    ).on(table.longestSessionGameId),
   }),
 );
