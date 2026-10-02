@@ -135,6 +135,7 @@ const KNOWN_SPEC_HELPER_FIXTURES = [
   'events/signups.spec-helpers.ts',
   'lfg/lfg-reads.integration.spec-helpers.ts',
   'lfg/lfg.integration.spec-helpers.ts',
+  'logs/log-lines.spec-helpers.ts',
   'notifications/recruitment-reminder.service.spec-helpers.ts',
   'users/game-time.integration.spec-helpers.ts',
 ];

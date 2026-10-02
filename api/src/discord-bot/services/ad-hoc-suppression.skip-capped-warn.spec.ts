@@ -15,6 +15,7 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import * as helpers from './ad-hoc-event.helpers';
+import type { ActiveScheduledEvent } from './ad-hoc-event.helpers';
 import { suppressScheduled } from './ad-hoc-suppression.helpers';
 import * as throttle from './warn-throttle.helpers';
 
@@ -29,7 +30,7 @@ function scheduledEvent(
   id: number,
   endInMin: number,
   extendedInMin: number | null,
-) {
+): ActiveScheduledEvent {
   return {
     id,
     extendedUntil:
@@ -44,7 +45,7 @@ function scheduledEvent(
 
 describe('suppressScheduled — skip-capped warn throttle prune (TDB:2005)', () => {
   let db: MockDb;
-  let findSpy: jest.SpyInstance;
+  let findSpy: jest.SpiedFunction<typeof helpers.findActiveScheduledEvent>;
   let pruneSpy: jest.SpyInstance<
     void,
     Parameters<typeof throttle.pruneExpiredWarnings>
