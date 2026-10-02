@@ -11,6 +11,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LfgNowHand } from './lfg-now-spawn.types';
 import { holdsLiveIntent } from '../../lfg/lfg-invite.helpers';
+import { convertHolderIntent } from '../../lfg/lfg-write.helpers';
 import { findOpenLfgNowEvent } from './lfg-now-spawn.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -73,6 +74,9 @@ export async function listLiveGroupHands(
  * path. Flipping this to `convertGroup(tx, gameId, target)` is the whole change
  * if the operator rules the other way.
  *
+ * Since ROK-1625 an invitee ALSO converts on landing on the session's voice
+ * roster (`LfgQuickPlayListener`); the accept path stays as it is.
+ *
  * @param db - The spawn transaction handle.
  * @param gameId - Game whose group is starting.
  * @param userId - The starter.
@@ -85,22 +89,7 @@ export async function convertStarterIntent(
   userId: number,
   target: { eventId: number },
 ): Promise<number> {
-  const rows = await db
-    .update(schema.lfgIntents)
-    .set({
-      status: 'converted',
-      convertedToPollId: null,
-      convertedToEventId: target.eventId,
-    })
-    .where(
-      and(
-        eq(schema.lfgIntents.gameId, gameId),
-        eq(schema.lfgIntents.userId, userId),
-        eq(schema.lfgIntents.status, 'active'),
-      ),
-    )
-    .returning({ id: schema.lfgIntents.id });
-  return rows.length;
+  return convertHolderIntent(db, gameId, userId, target);
 }
 
 /**
