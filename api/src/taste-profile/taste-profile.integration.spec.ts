@@ -26,6 +26,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { TIER_DESCRIPTIONS } from './archetype-copy';
 import { TasteProfileService } from './taste-profile.service';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 describe('Taste Profile (ROK-948)', () => {
   let testApp: TestApp;
@@ -49,10 +50,13 @@ describe('Taste Profile (ROK-948)', () => {
     discordId: string,
     username: string,
   ): Promise<number> {
-    const [u] = await testApp.db
-      .insert(schema.users)
-      .values({ discordId, username, role: 'member' })
-      .returning();
+    const [u] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({ discordId, username, role: 'member' })
+        .returning(),
+      'u',
+    );
     return u.id;
   }
 
@@ -62,16 +66,19 @@ describe('Taste Profile (ROK-948)', () => {
     igdbGameModes: number[],
     igdbThemes: number[] = [],
   ): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        genres: igdbGenres,
-        gameModes: igdbGameModes,
-        themes: igdbThemes,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          genres: igdbGenres,
+          gameModes: igdbGameModes,
+          themes: igdbThemes,
+        })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -187,11 +194,13 @@ describe('Taste Profile (ROK-948)', () => {
 
       await service.aggregateVectors();
 
-      const [row] = await testApp.db
-        .select()
-        .from(schema.playerTasteVectors)
-        .where(sql`user_id = ${userId}`);
-      expect(row).toBeDefined();
+      const [row] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.playerTasteVectors)
+          .where(sql`user_id = ${userId}`),
+        'taste vector row',
+      );
       expect(row.dimensions).toEqual(
         expect.objectContaining({
           co_op: expect.any(Number),
@@ -210,16 +219,22 @@ describe('Taste Profile (ROK-948)', () => {
       await seedInterest(userId, game, 'steam_library', 5000);
 
       await service.aggregateVectors();
-      const [first] = await testApp.db
-        .select()
-        .from(schema.playerTasteVectors)
-        .where(sql`user_id = ${userId}`);
+      const [first] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.playerTasteVectors)
+          .where(sql`user_id = ${userId}`),
+        'first',
+      );
 
       await service.aggregateVectors(); // second run — no new signals
-      const [second] = await testApp.db
-        .select()
-        .from(schema.playerTasteVectors)
-        .where(sql`user_id = ${userId}`);
+      const [second] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.playerTasteVectors)
+          .where(sql`user_id = ${userId}`),
+        'second',
+      );
 
       expect(second.computedAt.getTime()).toBe(first.computedAt.getTime());
       expect(second.signalHash).toBe(first.signalHash);
@@ -262,11 +277,13 @@ describe('Taste Profile (ROK-948)', () => {
 
       await service.weeklyIntensityRollup();
 
-      const [snap] = await testApp.db
-        .select()
-        .from(schema.playerIntensitySnapshots)
-        .where(sql`user_id = ${userId}`);
-      expect(snap).toBeDefined();
+      const [snap] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.playerIntensitySnapshots)
+          .where(sql`user_id = ${userId}`),
+        'intensity snapshot',
+      );
       expect(Number(snap.totalHours)).toBeCloseTo(11.67, 1);
       expect(snap.uniqueGames).toBe(2);
       expect(Number(snap.longestSessionHours)).toBeCloseTo(8.33, 1);
@@ -284,18 +301,21 @@ describe('Taste Profile (ROK-948)', () => {
       const bobId = await seedUser('d:sign-bob', 'sign-bob');
       const game = await seedGame('Scheduled Raid', [12], [3]);
 
-      const [event] = await testApp.db
-        .insert(schema.events)
-        .values({
-          title: 'Planned Raid',
-          gameId: game,
-          duration: [
-            new Date('2026-05-01T18:00:00Z'),
-            new Date('2026-05-01T21:00:00Z'),
-          ] as unknown as [Date, Date],
-          creatorId: aliceId,
-        })
-        .returning();
+      const [event] = nonEmpty(
+        await testApp.db
+          .insert(schema.events)
+          .values({
+            title: 'Planned Raid',
+            gameId: game,
+            duration: [
+              new Date('2026-05-01T18:00:00Z'),
+              new Date('2026-05-01T21:00:00Z'),
+            ] as unknown as [Date, Date],
+            creatorId: aliceId,
+          })
+          .returning(),
+        'event',
+      );
 
       await testApp.db.insert(schema.eventSignups).values([
         { eventId: event.id, userId: aliceId, status: 'confirmed' },
@@ -307,9 +327,9 @@ describe('Taste Profile (ROK-948)', () => {
       const rows = await testApp.db.select().from(schema.playerCoPlay);
       expect(rows).toHaveLength(1);
       const [lo, hi] = [aliceId, bobId].sort((a, b) => a - b);
-      expect(rows[0].userIdA).toBe(lo);
-      expect(rows[0].userIdB).toBe(hi);
-      expect(rows[0].gamesPlayed).toContain(game);
+      expect(rows[0]?.userIdA).toBe(lo);
+      expect(rows[0]?.userIdB).toBe(hi);
+      expect(rows[0]?.gamesPlayed).toContain(game);
     });
 
     it('creates a pair from overlapping voice sessions with canonical ordering', async () => {
@@ -317,18 +337,21 @@ describe('Taste Profile (ROK-948)', () => {
       const bobId = await seedUser('d:bob', 'bob');
       const game = await seedGame('Raid Night', [12], [3]);
 
-      const [event] = await testApp.db
-        .insert(schema.events)
-        .values({
-          title: 'Raid',
-          gameId: game,
-          duration: [
-            new Date('2026-04-10T18:00:00Z'),
-            new Date('2026-04-10T21:00:00Z'),
-          ] as unknown as [Date, Date],
-          creatorId: aliceId,
-        })
-        .returning();
+      const [event] = nonEmpty(
+        await testApp.db
+          .insert(schema.events)
+          .values({
+            title: 'Raid',
+            gameId: game,
+            duration: [
+              new Date('2026-04-10T18:00:00Z'),
+              new Date('2026-04-10T21:00:00Z'),
+            ] as unknown as [Date, Date],
+            creatorId: aliceId,
+          })
+          .returning(),
+        'event',
+      );
 
       await testApp.db.insert(schema.eventVoiceSessions).values([
         {
@@ -369,7 +392,7 @@ describe('Taste Profile (ROK-948)', () => {
 
       const rows = await testApp.db.select().from(schema.playerCoPlay);
       expect(rows).toHaveLength(1);
-      const [pair] = rows;
+      const [pair] = nonEmpty(rows, 'pair');
       const [lo, hi] = [aliceId, bobId].sort((a, b) => a - b);
       expect(pair.userIdA).toBe(lo);
       expect(pair.userIdB).toBe(hi);
@@ -646,10 +669,13 @@ describe('Taste Profile (ROK-948)', () => {
 
       await service.aggregateVectors();
 
-      const [row] = await testApp.db
-        .select()
-        .from(schema.playerTasteVectors)
-        .where(sql`user_id = ${userId}`);
+      const [row] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.playerTasteVectors)
+          .where(sql`user_id = ${userId}`),
+        'row',
+      );
       expect(row.signalHash).not.toBe(`stale-${userId}`);
       const dims = row.dimensions as unknown as Record<string, number>;
       expect(Object.keys(dims)).toHaveLength(TASTE_PROFILE_AXIS_POOL.length);
@@ -679,7 +705,9 @@ describe('Taste Profile (ROK-948)', () => {
         .from(schema.playerTasteVectors)
         .where(sql`user_id = ${userId}`);
       expect(
-        Object.keys(onDisk[0].dimensions as unknown as Record<string, number>),
+        Object.keys(
+          at(onDisk, 0).dimensions as unknown as Record<string, number>,
+        ),
       ).toHaveLength(24);
     });
   });

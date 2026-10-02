@@ -2,6 +2,7 @@
  * Tests for Sentry instrumentation configuration (ROK-366).
  * Verifies that pg_catalog spans are filtered out to suppress false-positive N+1 noise.
  */
+import { at, defined } from '../common/testing/narrow';
 
 async function loadInstrument(
   env: Record<string, string | undefined> = {},
@@ -52,6 +53,13 @@ async function loadInstrument(
   return { sentryInitMock: sentry.init };
 }
 
+/** The options object handed to the first Sentry.init call. */
+function initConfig(
+  mock: jest.MockedFunction<(options?: Record<string, unknown>) => void>,
+): Record<string, unknown> {
+  return defined(at(mock.mock.calls, 0)[0], 'Sentry.init options');
+}
+
 function describeSentryInstrumentTs() {
   afterEach(() => {
     jest.resetModules();
@@ -90,12 +98,12 @@ function describeSentryInstrumentTs() {
     });
 
     it('sets tracesSampleRate to 0.1 in production', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
+      const config = initConfig(sentryInitMock);
       expect(config['tracesSampleRate']).toBe(0.1);
     });
 
     it('sets environment tag to production', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
+      const config = initConfig(sentryInitMock);
       expect(config['environment']).toBe('production');
     });
 
@@ -111,7 +119,7 @@ function describeSentryInstrumentTs() {
           DISABLE_TELEMETRY: undefined,
           SENTRY_ENVIRONMENT: undefined,
         });
-        const config = mock.mock.calls[0][0] as Record<string, unknown>;
+        const config = initConfig(mock);
         expect(config['environment']).toBe('production');
       });
 
@@ -121,17 +129,17 @@ function describeSentryInstrumentTs() {
           DISABLE_TELEMETRY: undefined,
           SENTRY_ENVIRONMENT: 'fleet-slot-2',
         });
-        const config = mock.mock.calls[0][0] as Record<string, unknown>;
+        const config = initConfig(mock);
         expect(config['environment']).toBe('fleet-slot-2');
       });
     });
 
     it('includes ignoreSpans with pg_catalog filter', () => {
-      const config = sentryInitMock.mock.calls[0][0] as Record<string, unknown>;
+      const config = initConfig(sentryInitMock);
       const ignoreSpans = config['ignoreSpans'] as RegExp[];
 
       expect(Array.isArray(ignoreSpans)).toBe(true);
-      const regex = ignoreSpans[0];
+      const regex = at(ignoreSpans, 0);
       expect(regex.test('pg_catalog.pg_type')).toBe(true);
     });
 
@@ -145,10 +153,7 @@ function describeSentryInstrumentTs() {
       type BeforeSend = (event: SentryEvent) => SentryEvent | null;
 
       function getBeforeSend(): BeforeSend {
-        const config = sentryInitMock.mock.calls[0][0] as Record<
-          string,
-          unknown
-        >;
+        const config = initConfig(sentryInitMock);
         return config['beforeSend'] as BeforeSend;
       }
 

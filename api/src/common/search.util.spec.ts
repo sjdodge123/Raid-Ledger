@@ -7,6 +7,7 @@ import {
   isAcronymQuery,
 } from './search.util';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from './testing/narrow';
 
 describe('stripSearchPunctuation', () => {
   it('removes colons, dashes, em-dashes, apostrophes, periods, and commas', () => {
@@ -116,7 +117,10 @@ function describeBuildWordMatchFilters() {
     // `Baldur's Gate 3` column never matched. The rendered SQL must strip
     // punctuation from the column with the same regexp_replace.
     const dialect = new PgDialect();
-    const [filter] = buildWordMatchFilters(schema.games.name, "Baldur's");
+    const [filter] = nonEmpty(
+      buildWordMatchFilters(schema.games.name, "Baldur's"),
+      'filter',
+    );
     const { sql } = dialect.sqlToQuery(filter);
     expect(sql).toContain('regexp_replace');
     expect(sql.toLowerCase()).toContain('ilike');

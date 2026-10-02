@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ALL_QUEUE_NAMES } from './queue-registry';
+import { defined } from '../common/testing/narrow';
 
 const API_SRC_DIR = path.resolve(__dirname, '..');
 const REGISTRY_FILE = path.resolve(__dirname, 'queue-registry.ts');
@@ -34,7 +35,7 @@ function collectCallsiteIdentifiers(): Set<string> {
     let match: RegExpExecArray | null;
     REGISTER_QUEUE_REGEX.lastIndex = 0;
     while ((match = REGISTER_QUEUE_REGEX.exec(contents)) !== null) {
-      identifiers.add(match[1]);
+      identifiers.add(defined(match[1], 'registerQueue name capture'));
     }
   }
   return identifiers;
@@ -53,7 +54,7 @@ function collectRegistryImportedIdentifiers(): Set<string> {
     /import\s*\{\s*([A-Z_][A-Z0-9_]*)\s*\}\s*from\s*['"][^'"]+['"]/g;
   let match: RegExpExecArray | null;
   while ((match = importRegex.exec(contents)) !== null) {
-    identifiers.add(match[1]);
+    identifiers.add(defined(match[1], 'registry import capture'));
   }
   return identifiers;
 }
