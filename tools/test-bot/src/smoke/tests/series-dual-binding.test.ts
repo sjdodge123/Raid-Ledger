@@ -16,7 +16,7 @@
  *
  * Deterministic polling only — no fixed-delay waits.
  */
-import { pollForEmbed } from '../../helpers/polling.js';
+import { pollForEmbed, snapshotMessageIds } from '../../helpers/polling.js';
 import { readLastMessages } from '../../helpers/messages.js';
 import { withChannelDump } from '../channel-dump.js';
 import { assertBindSucceeded, type BindReply } from '../bind-reply.js';
@@ -344,6 +344,12 @@ function seriesTextChannel(
  * ROK-1447: the title is now the bare game name — "Quick Play" moved to the
  * author line, which SimpleEmbed carries since ROK-1459.
  *
+ * Fenced to THIS spawn: `before` is the channel's message ids taken before the
+ * seam call, and the predicate wants a LIVE card for this game. The channel is
+ * another game's pool channel that persists across runs, so an unfenced poll
+ * would settle on a Quick Play card a previous run or voice-activity left
+ * there (polling.ts `excludeIds`) and pass with the routing tier broken.
+ *
  * On a timeout the failure lists the last messages of the series text channel
  * and the default channel, so an embed the predicate rejected reads
  * differently from no embed at all.
@@ -351,15 +357,21 @@ function seriesTextChannel(
 async function expectLiveEmbedInSeriesChannel(
   ctx: TestContext,
   textCh: { id: string; name: string },
+  gameName: string,
+  before: ReadonlySet<string>,
 ): Promise<void> {
+  const isThisLiveCard = (e: { title: string | null; author: string | null }) =>
+    /LIVE · .*Quick Play/.test(e.author ?? '') &&
+    (e.title ?? '').includes(gameName);
   await withChannelDump(
     () =>
       pollForEmbed(
         textCh.id,
-        (m) => m.embeds.some((e) => /quick play/i.test(e.author ?? '')),
+        (m) => m.embeds.some(isThisLiveCard),
         ctx.config.timeoutMs,
+        { excludeIds: before },
       ),
-    `Expected quick-play LIVE embed in series announce channel #${textCh.name}; ` +
+    `Expected a new quick-play LIVE embed for ${gameName} in series announce channel #${textCh.name}; ` +
       'series-announce routing tier (ROK-1390) did not fire',
     [
       { label: `series text #${textCh.name}`, channelId: textCh.id },
@@ -394,6 +406,7 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
       // Quick Play spawns only with the ROK-293 ad-hoc gate ON, and no seed or
       // workflow sets it; the helper turns it on and restores the prior value.
       await withAdHocEventsEnabled(ctx.api, async () => {
+        const before = await snapshotMessageIds(textCh.id);
         // A seeded, linked human joins through the DEMO_MODE seam: the companion
         // bot is never rostered (ROK-1445 AC9), so its own join mints nothing.
         const joined = await quickPlayVoiceJoin(ctx.api, {
@@ -407,7 +420,7 @@ const quickPlayRoutesToSeriesAnnounce: SmokeTest = {
             `quick-play/voice-join did not spawn with ad-hoc events ON (reason=${joined.reason ?? 'none'}, eventId=${String(joined.eventId)})`,
           );
         }
-        await expectLiveEmbedInSeriesChannel(ctx, textCh);
+        await expectLiveEmbedInSeriesChannel(ctx, textCh, game.name, before);
       });
     } finally {
       if (mintedEventId !== null) await deleteEvent(ctx.api, mintedEventId);
