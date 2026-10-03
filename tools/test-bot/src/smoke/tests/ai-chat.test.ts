@@ -518,6 +518,12 @@ const searchByGameMultiVariant: SmokeTest = {
   },
 };
 
+/**
+ * Every AI Chat test shares one DM session and the global ai_chat_enabled
+ * setting (featureGateDisabled flips it), so they run serially, after the
+ * parallel pool, in this order: enableAiChat first (TDB:966). Category stays
+ * 'dm' so SMOKE_CATEGORY=dm still selects them.
+ */
 export const aiChatTests: SmokeTest[] = [
   enableAiChat,
   welcomeMenuMember,
@@ -531,4 +537,4 @@ export const aiChatTests: SmokeTest[] = [
   featureGateDisabled,
   backAndHomeNavigation,
   searchByGameMultiVariant,
-];
+].map((t) => ({ ...t, serial: true as const }));
