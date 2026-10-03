@@ -497,8 +497,15 @@ export async function waitForLineupStatus(
 // Banner scoping — pin the global lineup banner to one lineup (DEMO_MODE)
 // ---------------------------------------------------------------------------
 
-/** sessionStorage key the web reads to scope `GET /lineups/banner` (DEMO_MODE only). */
+/**
+ * sessionStorage key the web reads to scope `GET /lineups/banner` (DEMO_MODE
+ * only). Must equal `SMOKE_BANNER_SCOPE_KEY` in web/src/hooks/use-lineups.ts —
+ * no import links the two; use-lineups.test.ts pins that they match.
+ */
 const BANNER_SCOPE_KEY = 'rl:smoke-banner-lineup';
+
+/** The lineup each page/context was scoped to — a target is scoped once. */
+const scopedTargets = new WeakMap<Page | BrowserContext, number>();
 
 /** The banner fields a smoke spec reads back from `GET /lineups/banner`. */
 export interface ScopedBanner {
@@ -522,8 +529,10 @@ export interface ScopedBanner {
  * create. Outside DEMO_MODE the API ignores the param.
  *
  * Call it BEFORE `page.goto`: it registers an init script that runs ahead of
- * the app on every navigation. Init scripts run in registration order, so a
- * later call with a new id wins.
+ * the app on every navigation. Scope each page or context ONCE: Playwright
+ * does not define the order multiple init scripts run in, so a second script
+ * with a different id could lose to the first. A repeat call with the same id
+ * is a no-op; a different id throws (use a fresh page instead).
  *
  * @param target - The page (or whole context) to scope.
  * @param lineupId - The lineup the banner should resolve to.
@@ -532,6 +541,16 @@ export async function scopeBannerTo(
     target: Page | BrowserContext,
     lineupId: number,
 ): Promise<void> {
+    const existing = scopedTargets.get(target);
+    if (existing === lineupId) return;
+    if (existing !== undefined) {
+        throw new Error(
+            `scopeBannerTo: target is already scoped to lineup ${existing}; ` +
+                `re-scoping it to ${lineupId} is unsafe (Playwright does not order ` +
+                `init scripts) — scope a fresh page instead`,
+        );
+    }
+    scopedTargets.set(target, lineupId);
     const script = ({ key, id }: { key: string; id: number }): void => {
         try {
             sessionStorage.setItem(key, String(id));

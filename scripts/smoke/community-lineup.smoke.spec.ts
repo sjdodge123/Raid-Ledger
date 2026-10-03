@@ -45,7 +45,6 @@ let lineupTitle: string;
 
 let adminToken: string;
 let lineupId: number;
-let createdLineup = false;
 
 /**
  * Navigate to /games with the banner scoped to `lineupId` (this worker's own
@@ -126,7 +125,6 @@ test.beforeAll(async ({}, testInfo) => {
     // sibling-worker 409 collision triggers a prefix-scoped reset + retry
     // rather than silently leaking another worker's lineup into our state.
     lineupId = await createOwnBuildingLineup();
-    createdLineup = true;
 });
 
 // NOTE: No afterAll cleanup — archiving the lineup while the other project
@@ -462,22 +460,23 @@ test.describe('Community Lineup responsive layout', () => {
 
     test('banner is visible on mobile viewport', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'Mobile-only test -- verifies banner on mobile');
-        // `gotoGames` scopes the banner to this worker's own lineup, so a
-        // sibling's newer lineup can no longer take the banner over. The
-        // toPass only absorbs UI eventual consistency (banner query refetch,
-        // mobile render). Re-ensuring inside it is safe: if our lineup left
-        // building, a fresh one is created and the later scope registration
-        // wins. The assertions are unchanged.
-        test.setTimeout(150_000);
+        // beforeEach already ensured this worker's own building lineup, and
+        // siblings no longer adopt or advance it (TDB:928), so the page is
+        // scoped ONCE, to that id: `gotoGames` repeats with the same id are
+        // no-ops. Re-scoping a page to a new id is unsafe because Playwright
+        // does not order init scripts. The toPass only absorbs UI eventual
+        // consistency (banner query refetch, mobile render). The assertions
+        // are unchanged.
+        test.setTimeout(120_000);
+        const ownLineupId = lineupId;
         await expect(async () => {
-            lineupId = await ensureActiveLineupInBuildingPhase(adminToken);
-            await gotoGames(page, lineupId);
+            await gotoGames(page, ownLineupId);
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
             // Banner should still be visible on mobile
             await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
             await expect(page.getByRole('button', { name: 'Nominate' })).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 120_000, intervals: [1_000] });
+        }).toPass({ timeout: 60_000, intervals: [1_000] });
     });
 });
 

@@ -18,7 +18,7 @@ import {
     apiPatch,
     createLineupOrRetry,
     awaitProcessing,
-    getScopedBanner,
+    apiGet,
 } from './api-helpers';
 import { isPhoneLayout } from './helpers';
 
@@ -35,32 +35,19 @@ const FILE_PREFIX = 'paste-nominate';
 let workerPrefix: string;
 let lineupTitle: string;
 
-/**
- * Archive lineups owned by THIS worker (ROK-1147).
- *
- * `id` is ignored (kept for call-site compatibility) — the reset is scoped
- * per-worker via prefix, not by lineup id.
- */
-async function archiveLineup(token: string, _id: number): Promise<void> {
-    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
-}
-
 /** The building lineup this worker created and is driving (ROK-1147). */
 let ownLineupId: number | undefined;
 
 async function ensureBuildingLineup(token: string): Promise<number> {
     // ROK-1167: keep the fast-path reuse so beforeEach doesn't churn the DB,
-    // but only reuse this worker's own tracked lineup, read through the banner
-    // scoped to its id, while it is still building under our title prefix.
-    // Anything else falls through to reset + recreate.
+    // but only reuse this worker's own tracked lineup, read by id, while it is
+    // still building under our title prefix. Anything else falls through to
+    // reset + recreate.
     if (ownLineupId !== undefined) {
-        const b = await getScopedBanner(token, ownLineupId);
-        if (
-            b?.id === ownLineupId &&
-            b.status === 'building' &&
-            typeof b.title === 'string' &&
-            b.title.startsWith(workerPrefix)
-        ) {
+        const d = (await apiGet(token, `/lineups/${ownLineupId}`)) as
+            | { status?: string; title?: string }
+            | null;
+        if (d?.status === 'building' && d.title?.startsWith(workerPrefix)) {
             return ownLineupId;
         }
     }
