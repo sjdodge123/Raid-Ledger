@@ -111,15 +111,18 @@ function describeDeadlineVoteRace() {
   }
 
   async function createGame(label: string) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `${label} ${Date.now()}`,
-        slug: `${label.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `${label} ${Date.now()}`,
+          slug: `${label.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     return game;
   }
 

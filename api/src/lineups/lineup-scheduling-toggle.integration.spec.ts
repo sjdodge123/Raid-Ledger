@@ -69,10 +69,13 @@ function describeSchedulingToggle() {
   }
 
   async function createGame(tag: string) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name: `Game ${tag}`, slug: `game-${tag}-${Date.now()}` })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: `Game ${tag}`, slug: `game-${tag}-${Date.now()}` })
+        .returning(),
+      'game',
+    );
     return game;
   }
 
