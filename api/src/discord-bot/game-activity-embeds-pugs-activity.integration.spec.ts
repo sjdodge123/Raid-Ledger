@@ -13,7 +13,7 @@ import { eq, and, isNull, lt } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 function formatDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -46,15 +46,18 @@ describe('game activity sessions — persist and close', () => {
     const db = testApp.db;
     const startedAt = new Date();
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Test Game',
-        startedAt,
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Test Game',
+          startedAt,
+        })
+        .returning(),
+      'session',
+    );
 
     expect(session.userId).toBe(testApp.seed.adminUser.id);
     expect(session.gameId).toBe(testApp.seed.game.id);
@@ -69,7 +72,7 @@ describe('game activity sessions — persist and close', () => {
       .limit(1);
 
     expect(readBack).toBeDefined();
-    expect(readBack.userId).toBe(testApp.seed.adminUser.id);
+    expect(readBack?.userId).toBe(testApp.seed.adminUser.id);
   });
 
   it('should close a session with correct duration calculation', async () => {
@@ -99,11 +102,14 @@ describe('game activity sessions — persist and close', () => {
       .set({ endedAt, durationSeconds })
       .where(eq(schema.gameActivitySessions.id, session.id));
 
-    const [closed] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, session.id))
-      .limit(1);
+    const [closed] = nonEmpty(
+      await db
+        .select()
+        .from(schema.gameActivitySessions)
+        .where(eq(schema.gameActivitySessions.id, session.id))
+        .limit(1),
+      'closed session',
+    );
 
     expect(closed.endedAt).not.toBeNull();
     expect(closed.durationSeconds).toBeGreaterThanOrEqual(3590);
@@ -129,14 +135,14 @@ describe('game activity sessions — game ID resolution', () => {
       .limit(1);
 
     expect(mapping).toBeDefined();
-    expect(mapping.gameId).toBe(testApp.seed.game.id);
+    expect(mapping?.gameId).toBe(testApp.seed.game.id);
 
     const [session] = nonEmpty(
       await db
         .insert(schema.gameActivitySessions)
         .values({
           userId: testApp.seed.adminUser.id,
-          gameId: mapping.gameId,
+          gameId: defined(mapping, 'mapping').gameId,
           discordActivityName: 'FINAL FANTASY XIV',
           startedAt: new Date(),
         })
@@ -157,21 +163,24 @@ describe('game activity sessions — game ID resolution', () => {
       .limit(1);
 
     expect(game).toBeDefined();
-    expect(game.id).toBe(testApp.seed.game.id);
+    expect(game?.id).toBe(testApp.seed.game.id);
   });
 
   it('should store session with null gameId for unmatched activity names', async () => {
     const db = testApp.db;
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: null,
-        discordActivityName: 'Some Unknown Game',
-        startedAt: new Date(),
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: null,
+          discordActivityName: 'Some Unknown Game',
+          startedAt: new Date(),
+        })
+        .returning(),
+      'session',
+    );
 
     expect(session.gameId).toBeNull();
     expect(session.discordActivityName).toBe('Some Unknown Game');
@@ -206,7 +215,7 @@ describe('game activity sessions — open session matching', () => {
       .limit(1);
 
     expect(openSession).toBeDefined();
-    expect(openSession.id).toBeDefined();
+    expect(defined(openSession, 'openSession').id).toBeDefined();
   });
 });
 
@@ -243,11 +252,14 @@ describe('stale session sweep', () => {
         ),
       );
 
-    const [swept] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, staleSession.id))
-      .limit(1);
+    const [swept] = nonEmpty(
+      await db
+        .select()
+        .from(schema.gameActivitySessions)
+        .where(eq(schema.gameActivitySessions.id, staleSession.id))
+        .limit(1),
+      'swept session',
+    );
 
     expect(swept.endedAt).not.toBeNull();
     expect(swept.durationSeconds).toBe(MAX_DURATION);
@@ -286,11 +298,14 @@ describe('stale session sweep', () => {
     const sweptIds = swept.map((r) => r.id);
     expect(sweptIds).not.toContain(recentSession.id);
 
-    const [session] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, recentSession.id))
-      .limit(1);
+    const [session] = nonEmpty(
+      await db
+        .select()
+        .from(schema.gameActivitySessions)
+        .where(eq(schema.gameActivitySessions.id, recentSession.id))
+        .limit(1),
+      'recent session',
+    );
 
     expect(session.endedAt).toBeNull();
     expect(session.durationSeconds).toBeNull();
@@ -334,11 +349,14 @@ describe('orphaned session cleanup — stale orphans', () => {
 
     expect(staleResult.length).toBe(1);
 
-    const [closed] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, stale.id))
-      .limit(1);
+    const [closed] = nonEmpty(
+      await db
+        .select()
+        .from(schema.gameActivitySessions)
+        .where(eq(schema.gameActivitySessions.id, stale.id))
+        .limit(1),
+      'closed stale orphan',
+    );
 
     expect(closed.durationSeconds).toBe(MAX_DURATION);
     expect(closed.endedAt).not.toBeNull();
@@ -372,11 +390,14 @@ describe('orphaned session cleanup — recent orphans', () => {
       .set({ endedAt: now, durationSeconds: expectedDuration })
       .where(eq(schema.gameActivitySessions.id, recent.id));
 
-    const [closed] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, recent.id))
-      .limit(1);
+    const [closed] = nonEmpty(
+      await db
+        .select()
+        .from(schema.gameActivitySessions)
+        .where(eq(schema.gameActivitySessions.id, recent.id))
+        .limit(1),
+      'closed recent orphan',
+    );
 
     expect(closed.endedAt).not.toBeNull();
     expect(closed.durationSeconds).toBeGreaterThanOrEqual(7190);
