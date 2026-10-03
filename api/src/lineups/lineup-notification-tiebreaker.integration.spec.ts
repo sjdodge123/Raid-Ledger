@@ -42,7 +42,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { SettingsService } from '../settings/settings.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { LineupReminderService } from './lineup-reminder.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 interface PublicLineupSetup {
   lineupId: number;
@@ -277,7 +277,7 @@ function describeTiebreakerNotifications() {
 
     // ROK-1117 rework: the open-DM body lists tied games as deep links
     // and ends with a CTA pointing at the lineup detail page.
-    const openDmRow = await findTiebreakerOpenDM(participantIds[0]);
+    const openDmRow = await findTiebreakerOpenDM(at(participantIds, 0));
     expect(openDmRow).toBeTruthy();
     const message = openDmRow!.message;
     for (const gameId of tiedGameIds) {
@@ -453,7 +453,7 @@ function describeTiebreakerReminders() {
         return payload?.subtype === 'lineup_tiebreaker_reminder';
       });
       expect(reminderRows.length).toBeGreaterThan(0);
-      const message = reminderRows[0].message;
+      const message = at(reminderRows, 0).message;
       expect(message).toMatch(/🎮 \[\*\*.+\*\*\]\(.+\/games\/\d+\)/);
       expect(message).toMatch(
         new RegExp(

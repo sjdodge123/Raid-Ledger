@@ -20,6 +20,7 @@ import {
   notifyTieDetected,
   notifyTieExpired,
 } from './lineup-notification-tie.helpers';
+import { at } from '../common/testing/narrow';
 
 jest.mock('./quorum/quorum-voters.helpers', () => ({
   loadExpectedVoters: jest.fn(),
@@ -140,7 +141,7 @@ describe('lineup tie notifications', () => {
 
   it('EDITS the existing message when the tie is decided — never posts', async () => {
     const { deps } = makeDeps(db);
-    await notifyTieDecided(deps, LINEUP, TIED[0], 'Roknua', {
+    await notifyTieDecided(deps, LINEUP, at(TIED, 0), 'Roknua', {
       count: 2,
       rosterSize: 3,
     });
@@ -150,7 +151,7 @@ describe('lineup tie notifications', () => {
 
   it('names the picked game in the decided DM', async () => {
     const { deps, notificationService } = makeDeps(db);
-    await notifyTieDecided(deps, LINEUP, TIED[0], 'Roknua', {
+    await notifyTieDecided(deps, LINEUP, at(TIED, 0), 'Roknua', {
       count: 2,
       rosterSize: 3,
     });
@@ -164,7 +165,7 @@ describe('lineup tie notifications', () => {
     await notifyTieDecided(
       deps,
       LINEUP,
-      TIED[0],
+      at(TIED, 0),
       'Ana',
       { count: 2, rosterSize: 3 },
       1,
