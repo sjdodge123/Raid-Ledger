@@ -11,6 +11,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
@@ -35,6 +36,7 @@ import {
   recoverOrphanScheduledEvents,
   type RecoveryResult,
 } from '../discord-bot/services/scheduled-event.recovery';
+import { announceBindingChange } from '../discord-bot/services/channel-binding-events';
 
 @RateLimit('admin')
 @Controller('admin')
@@ -48,6 +50,7 @@ export class AdminController {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly discordClient: DiscordBotClientService,
     private readonly settingsService: SettingsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   @Get('check')
@@ -75,7 +78,9 @@ export class AdminController {
     const groups = await findDuplicateGames(this.db);
     this.logger.log(`Dedup cleanup: ${groups.length} duplicate group(s) found`);
 
-    const result = await mergeAndDeleteDuplicates(this.db, groups);
+    const result = await mergeAndDeleteDuplicates(this.db, groups, (ids) =>
+      announceBindingChange(this.eventEmitter, ids),
+    );
     this.logger.log(
       `Dedup cleanup: merged ${result.merged} row(s), ${result.errors.length} error(s)`,
     );
@@ -95,7 +100,9 @@ export class AdminController {
   ): Promise<NameDedupDryRunResult | NameDedupCommitResult> {
     const dryRun = dryRunParam !== 'false';
     if (dryRun) return dryRunNameDedup(this.db);
-    return mergeNameDuplicates(this.db);
+    return mergeNameDuplicates(this.db, (ids) =>
+      announceBindingChange(this.eventEmitter, ids),
+    );
   }
 
   /**

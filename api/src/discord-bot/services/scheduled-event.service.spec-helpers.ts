@@ -177,10 +177,11 @@ function buildScheduledEventProviders(
 /**
  * Optional mocks to inject into the service after module creation.
  *
- * NestJS @Optional() with union types (e.g. `ActiveEventCacheService | null`)
- * causes TypeScript to emit `Object` as the design type, preventing automatic
- * token resolution. We work around this by setting the private field directly
- * after module creation -- matching how production DI wires it.
+ * The test module provides neither ActiveEventCacheService nor
+ * EmbedSyncQueueService, so their `@Optional() @Inject(...)` params resolve
+ * empty and the specs set the private fields directly after module creation.
+ * Production injects both by explicit token; that wiring is pinned by
+ * active-event-cache.wiring.integration.spec.ts, not here.
  */
 export interface OptionalMocks {
   eventCache?: { getRecentlyEndedEvents: jest.Mock };
