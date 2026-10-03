@@ -182,7 +182,7 @@ foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple, indigo and teal repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`, teal-800 `#115e59`);
-`text-gray-400` paints gray-700 `#374151`, except inside a fixed `bg-gray-900` panel where `:826-831` keeps gray-400; the opacity
+`text-gray-400` paints gray-700 `#374151`, except inside a fixed `bg-gray-900` panel where `:830-840` keeps gray-400 (and the raw green / blue / purple / yellow-400); the opacity
 variants carry the AA alpha floor (red `.9`, amber `.95`). `web/src/styles/raw-hue-light.guard.test.ts` parses each
 light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Still prefer
 `text-success` / `text-warning` / `text-danger` for new semantic text.
@@ -223,10 +223,10 @@ is no `font-light`.
   (192) for chips, pills, avatars and count badges. `rounded-xl` (61) for hero/large surfaces.
   `rounded-md` (57) for small inputs. Avoid `rounded-2xl` (1 use).
 - **Elevation** is border + tint, not shadow. `.glass-card` (`index.css:610`) is the one blurred surface;
-  `.glow-emerald` / `.glow-indigo` (`index.css:874,882`; vars at `:438-439`) glow a primary action. Themes
+  `.glow-emerald` / `.glow-indigo` (`index.css:883,891`; vars at `:438-439`) glow a primary action. Themes
   restyle these — never reimplement them inline.
   - **Light / Dark:** dark separates with border + surface step; light adds the shadow it needs
-    (`:843-853`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
+    (`:852-862`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
     to neither. Detail: `design-system-tokens.md` §2.
 - **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG). The form
   primitives build it in — `form-classes.ts` (fields stay 44px below `lg`), `slider.tsx` (an `h-11` hit

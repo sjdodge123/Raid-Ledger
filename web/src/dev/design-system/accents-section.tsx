@@ -42,7 +42,7 @@ const TEXT_ACCENTS: AccentRow[] = [
     { cls: 'text-indigo-300', dark: '#a5b4fc', light: '#4338ca', note: 'indigo-700 · :714' },
     { cls: 'text-cyan-400', dark: '#22d3ee', light: '#155e75', note: 'cyan-800 · 7.3 / 6.6 / 6.1 · worst 5.0 · :717' },
     { cls: 'text-teal-400', dark: '#2dd4bf', light: '#115e59', note: 'teal-800 · worst 5.0 · :718' },
-    { cls: 'text-gray-400', dark: '#9ca3af', light: '#374151', note: 'gray-700 · worst 6.5 · kept gray-400 inside bg-gray-900 (:831) · :719' },
+    { cls: 'text-gray-400', dark: '#9ca3af', light: '#374151', note: 'gray-700 · worst 6.2 · kept gray-400 inside bg-gray-900 (:836) · :719' },
     { cls: 'text-blue-400', dark: '#60a5fa', light: '#1d4ed8', note: 'blue-700 · 6.7 / 6.1 / 5.5 · worst 4.5 · :721' },
 ];
 

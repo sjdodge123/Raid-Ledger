@@ -57,13 +57,13 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:716-717` |
 | `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:720-721` |
 | `text-teal-400` | `#2dd4bf` | `#115e59` teal-800, worst 5.04:1 (celestial; teal-700 is 3.64) | `:718` |
-| `text-gray-400` | `#9ca3af` | `#374151` gray-700, worst 6.51:1 — inside a fixed `bg-gray-900` panel `:831` keeps `#9ca3af` (6.99:1 on `#111827`) | `:719` |
+| `text-gray-400` | `#9ca3af` | `#374151` gray-700, worst 6.18:1 (celestial, raw `/20` chip) — inside a fixed `bg-gray-900` panel `:836` keeps `#9ca3af` (6.99:1 on `#111827`; `:837-840` keep green / blue / purple / yellow-400 the same way) | `:719` |
 | `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:742-766` |
 | `bg-indigo-500/15` / `bg-green-500/15` / `bg-teal-500/15` / `bg-purple-500/15` (cron category chips) | the raw 15% hue | `<hue>-100` at 0.6 alpha | `:767-770` |
 | `bg-amber-500/5` | the raw 5% hue | `amber-100` at 0.35 alpha (a wash — its border carries the edge) | `:748` |
 | `bg-amber-500/15` / `bg-amber-500/20` fill (role badge, DemoDataCard badge, LFG "now" chip) | the raw 15% / 20% hue | `amber-100` at 0.6 / 0.7 alpha | `:749-750` |
 | `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:778-779` |
-| `hover:bg-amber-500/10` | the raw 10% hue | `amber-300` at 0.5 — a ≥1.04 step over every light panel and surface (`amber-100`/`-200` are 1.01 on light, holy, quest-log) | `:780` |
+| `hover:bg-amber-500/10` | the raw 10% hue | `amber-300` at 0.5 — a ≥1.04 step over every light panel and surface (`amber-100` is ~1.01 on light and holy, 1.00 on the quest-log and dawn surfaces; `amber-200` is 1.01 on the quest-log panel and celestial surface) | `:780` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha (indigo / teal / purple `/30` at `:797-799`) | `:786-801` |
 | `bg-gray-500/15` / `border-gray-500/30` (the "Other" cron chip) | the raw hue | **same, by design** — a `gray-100` wash is a 1.01 step on light and holy; raw gray-500 at 15% keeps 1.17–1.20 | — |
@@ -95,10 +95,11 @@ forced-white rule still applies (`JourneyHero.tsx:173-175`).
 
 **Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
 on the theme surface, so the light family's contrast bumps are wrong there. Put
-`.badge-overlay` on the badge or its container and `:803-824` restores the DARK shades
+`.badge-overlay` on the badge or its container and `:803-828` restores the DARK shades
 under every light scheme. Consumer: `event-card.tsx` only — the badges that sit ON the cover art; a
 chip on the themed surface never carries it (ROK-1472). Guarded by `web/src/styles/badge-overlay.test.ts`
-and `web/src/styles/badge-overlay-art-only.guard.test.ts`.
+and `web/src/styles/badge-overlay-art-only.guard.test.ts`; the first also fails when a cover badge paints a light-repainted
+class with no restore here (the `SeriesBadge` indigo, the status badge's emerald / yellow `-500`).
 
 ---
 
@@ -109,7 +110,7 @@ and `web/src/styles/badge-overlay-art-only.guard.test.ts`.
   shadow — a shadow on `#020617` is invisible.
 - **Light:** the surface steps are ~4% apart (`#ffffff` → `#f1f5f9`), so the light family
   adds the shadow the dark family does not need: `.bg-panel` / `.bg-panel/50` /
-  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:843-853`), and `.glass-card` becomes
+  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:852-862`), and `.glass-card` becomes
   near-opaque — `color-mix(in srgb, var(--color-surface) 90%, transparent)` plus
   `0 1px 3px rgba(0,0,0,.08)`, rising to 95% / `.1` on hover (`:677-686`).
 - You get this by using `bg-panel` / `.glass-card`. A hand-rolled `shadow-lg` (20 uses in

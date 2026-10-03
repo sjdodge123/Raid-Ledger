@@ -706,7 +706,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 (cyan-700 is 4.50 on the tint — no margin) */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-400 { color: #155e75; }  /* cyan-800: 7.27 / 6.63 / 6.11 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-teal-400 { color: #115e59; }  /* teal-800: worst 5.04 (celestial raw /15) — teal-700 is 3.64 there */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-gray-400 { color: #374151; }  /* gray-700: worst 6.51 (celestial) — gray-600 is 4.78 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-gray-400 { color: #374151; }  /* gray-700: worst 6.18 (celestial, raw /20 chip) — gray-600 is 4.78 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-300 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-blue-400 { color: #1d4ed8; }  /* blue-700: 6.70 / 6.12 / 5.51 */
 
@@ -767,7 +767,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/30:hover { background-color: rgba(253, 230, 138, 0.6); }  /* amber-200: a visible step over the /20 amber-100 base */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/10:hover { background-color: rgba(252, 211, 77, 0.5); }  /* amber-300: ≥1.04 step over every light panel AND surface; amber-100/-200 are 1.01 on light/holy/quest-log */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/10:hover { background-color: rgba(252, 211, 77, 0.5); }  /* amber-300: ≥1.04 step over every light panel AND surface; amber-100 is ~1.01 on light/holy (1.00 on the quest-log/dawn surfaces); amber-200 is 1.01 on the quest-log panel and celestial surface */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
@@ -804,6 +804,9 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-emerald-500 { color: #10b981; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-yellow-500 { color: #eab308; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-indigo-300 { color: #a5b4fc; }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
@@ -812,13 +815,19 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-indigo-500\/30 { border-color: rgba(99, 102, 241, 0.3); }
 
 /* --- Keep-dark: raw text on a fixed dark panel ---
    The WoW item fallback tooltip (plugins/wow/components/item-fallback-tooltip.tsx) sits on a
-   fixed bg-gray-900 (#111827) in every scheme. gray-400 is 6.99:1 there; the gray-700 light
-   repaint above would be 1.72:1. Scoped by the dark ancestor, not .badge-overlay (that class
-   is for badges on cover art only — badge-overlay-art-only.guard.test.ts). */
+   fixed bg-gray-900 (#111827) in every scheme, so its raw hues keep their dark shades there:
+   the light repaints above would be 1.72 (gray-700) / 2.49 (green-800) / 2.65 (blue-700) /
+   2.50 (violet-700) / 2.59 (yellow-800):1. Scoped by the dark ancestor, not .badge-overlay
+   (that class is for badges on cover art only — badge-overlay-art-only.guard.test.ts). */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-gray-400 { color: #9ca3af; }  /* gray-400: 6.99 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-green-400 { color: #4ade80; }  /* green-400: 10.18 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-blue-400 { color: #60a5fa; }  /* blue-400: 6.98 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-purple-400 { color: #c084fc; }  /* purple-400: 6.71 on #111827 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-gray-900 .text-yellow-400 { color: #facc15; }  /* yellow-400: 11.58 on #111827 */
 
 /* --- Solid-color button text: force white on colored backgrounds ---
    Button brandColor is NOT listed: its label is picked by contrast below. */

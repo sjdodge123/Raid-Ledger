@@ -113,7 +113,8 @@ describe('raw amber fills on the light schemes (TDB:1493)', () => {
     });
 
     // hover:bg-amber-500/10 sits on a bare panel or surface (no amber base), so the hover fill
-    // itself must step off both. amber-100 and amber-200 are ~1.01 on light / holy / quest-log.
+    // itself must step off both. amber-100 is ~1.01 on light / holy (1.00 on the quest-log /
+    // dawn surfaces); amber-200 is 1.01 on the quest-log panel and celestial surface.
     it.each(SCHEMES)('hover:bg-amber-500/10 is a visible step over the panel and surface on $name', ({ panel, surface }) => {
         const hover = FILLS.get('hover:bg-amber-500/10');
         expect(hover, 'hover:bg-amber-500/10 has no light rule in index.css').toBeDefined();
