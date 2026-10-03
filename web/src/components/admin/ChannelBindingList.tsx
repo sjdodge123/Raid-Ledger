@@ -108,10 +108,11 @@ function BindingActions({ binding, isEditing, isInert, onToggleEdit, onFix, onDe
     );
 }
 
-function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpdating, isDeleting, deletingId, hasMultiMonitor, updateError }: {
+function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isSaving, saveLocked, isDeleting, deletingId, hasMultiMonitor, updateError }: {
     binding: ChannelBindingDto; editingId: string | null; setEditingId: (id: string | null) => void;
     onSave: (id: string, dto: UpdateChannelBindingDto) => void; onDelete: (id: string) => void;
-    isUpdating: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean; updateError?: string | null | undefined;
+    isSaving: boolean; saveLocked: boolean; isDeleting: boolean; deletingId: string | null; hasMultiMonitor: boolean;
+    updateError?: string | null | undefined;
 }) {
     const isEditing = editingId === binding.id;
     const isInert = isBindingInert(binding);
@@ -129,7 +130,7 @@ function BindingRow({ binding, editingId, setEditingId, onSave, onDelete, isUpda
             {isEditing && (
                 <div className="mt-2">
                     <BindingConfigForm binding={binding} onSave={onSave} onCancel={() => setEditingId(null)}
-                        isSaving={isUpdating} saveError={updateError} />
+                        isSaving={isSaving} saveLocked={saveLocked} saveError={updateError} />
                 </div>
             )}
         </div>
@@ -189,7 +190,9 @@ export function ChannelBindingList({ bindings, onUpdate, onDelete, isUpdating, i
         <div className="space-y-3">
             {bindings.map((binding) => (
                 <BindingRow key={binding.id} binding={binding} editingId={editingId} setEditingId={changeEditing}
-                    onSave={handleSave} onDelete={handleDelete} isUpdating={isUpdating} isDeleting={isDeleting} deletingId={deletingId}
+                    onSave={handleSave} onDelete={handleDelete} isDeleting={isDeleting} deletingId={deletingId}
+                    // One PATCH at a time: the row that saved shows loading; every other open row is locked.
+                    isSaving={isUpdating && savedId === binding.id} saveLocked={isUpdating && savedId !== binding.id}
                     updateError={savedId === binding.id ? updateError : null}
                     hasMultiMonitor={binding.bindingPurpose === 'game-voice-monitor' && multiMonitorChannels.has(binding.channelId)} />
             ))}

@@ -167,7 +167,7 @@ test.describe('Create event form', () => {
 
         // Set date to tomorrow (type="date" inputs need YYYY-MM-DD format)
         const tomorrow = new Date(Date.now() + 86_400_000);
-        const dateStr = tomorrow.toISOString().split('T')[0];
+        const dateStr = tomorrow.toISOString().slice(0, 10);
         await page.getByRole('textbox', { name: 'Date' }).fill(dateStr);
 
         // Set start time (type="time" inputs need HH:MM 24-hr format)

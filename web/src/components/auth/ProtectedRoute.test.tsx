@@ -3,7 +3,12 @@ import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProtectedRoute } from './ProtectedRoute';
-import { saveAuthRedirect, consumeAuthRedirect } from '../../lib/auth-redirect';
+import {
+    saveAuthRedirect,
+    consumeAuthRedirect,
+    AUTH_REDIRECT_TTL_MS,
+    AUTH_REDIRECT_CLOCK_SKEW_MS,
+} from '../../lib/auth-redirect';
 
 // Mock useAuth hook
 vi.mock('../../hooks/use-auth', () => ({
@@ -128,14 +133,22 @@ afterEach(() => {
     protectedrouteGroup4();
 });
 
-describe('saveAuthRedirect / consumeAuthRedirect', () => {
+const SAVED_AT = new Date('2026-10-02T12:00:00Z').getTime();
+
+function withFakeClockAndCleanStorage() {
     beforeEach(() => {
         sessionStorage.clear();
+        vi.useFakeTimers();
     });
 
     afterEach(() => {
+        vi.useRealTimers();
         sessionStorage.clear();
     });
+}
+
+describe('saveAuthRedirect / consumeAuthRedirect', () => {
+    withFakeClockAndCleanStorage();
 
     it('saves and retrieves redirect path', () => {
         saveAuthRedirect('/some/path');
@@ -150,5 +163,56 @@ describe('saveAuthRedirect / consumeAuthRedirect', () => {
 
     it('returns null when no redirect saved', () => {
         expect(consumeAuthRedirect()).toBeNull();
+    });
+
+    it('drops a redirect saved longer ago than the TTL and clears both keys', () => {
+        vi.setSystemTime(SAVED_AT);
+        saveAuthRedirect('/events/1');
+        vi.setSystemTime(SAVED_AT + AUTH_REDIRECT_TTL_MS + 1);
+        expect(consumeAuthRedirect()).toBeNull();
+        const path: string | null = sessionStorage.getItem('authRedirect');
+        const savedAt: string | null = sessionStorage.getItem('authRedirectSavedAt');
+        expect(path).toBeNull();
+        expect(savedAt).toBeNull();
+    });
+
+    it('returns a redirect saved just inside the TTL', () => {
+        vi.setSystemTime(SAVED_AT);
+        saveAuthRedirect('/events/1');
+        vi.setSystemTime(SAVED_AT + AUTH_REDIRECT_TTL_MS - 1000);
+        expect(consumeAuthRedirect()).toBe('/events/1');
+    });
+
+    it('treats a raw entry with no saved-at timestamp as expired and removes it', () => {
+        vi.setSystemTime(SAVED_AT);
+        sessionStorage.setItem('authRedirect', '/events/1');
+        expect(consumeAuthRedirect()).toBeNull();
+        const path: string | null = sessionStorage.getItem('authRedirect');
+        expect(path).toBeNull();
+    });
+});
+
+describe('consumeAuthRedirect — malformed and future-dated save times', () => {
+    withFakeClockAndCleanStorage();
+
+    it('treats an unparseable saved-at timestamp as expired', () => {
+        vi.setSystemTime(SAVED_AT);
+        sessionStorage.setItem('authRedirect', '/events/1');
+        sessionStorage.setItem('authRedirectSavedAt', 'abc');
+        expect(consumeAuthRedirect()).toBeNull();
+    });
+
+    it('drops a redirect saved further in the future than the clock-skew allowance', () => {
+        vi.setSystemTime(SAVED_AT + AUTH_REDIRECT_CLOCK_SKEW_MS + 1);
+        saveAuthRedirect('/events/1');
+        vi.setSystemTime(SAVED_AT);
+        expect(consumeAuthRedirect()).toBeNull();
+    });
+
+    it('keeps a redirect when the clock stepped back within the skew allowance', () => {
+        vi.setSystemTime(SAVED_AT + AUTH_REDIRECT_CLOCK_SKEW_MS);
+        saveAuthRedirect('/events/1');
+        vi.setSystemTime(SAVED_AT);
+        expect(consumeAuthRedirect()).toBe('/events/1');
     });
 });

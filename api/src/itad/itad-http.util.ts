@@ -68,6 +68,11 @@ export interface ItadFetchOptions {
    * an HTTP request passes `ITAD_BACKGROUND_FETCH` to wait the pause out.
    */
   maxPauseWaitMs?: number;
+  /**
+   * Cancels the call: the in-flight fetch is aborted and no further attempt
+   * starts, so it resolves null (or rejects, with `throwOnExhausted`).
+   */
+  signal?: AbortSignal;
 }
 
 /** Generic ITAD fetch with rate limiting + 429 backoff */
@@ -77,6 +82,7 @@ export async function itadFetch<T>(
   opts: ItadFetchOptions = {},
 ): Promise<T | null> {
   const init: RequestInit = { headers: { 'User-Agent': USER_AGENT } };
+  if (opts.signal) init.signal = opts.signal;
   const url = buildUrl(path, params);
   const data = await requestWithRetry<T>(path, url, init, 'ITAD', opts);
   if (data === EXHAUSTED && opts.throwOnExhausted) {
@@ -128,23 +134,27 @@ const EXHAUSTED = Symbol('itad-retries-exhausted');
 
 /**
  * Paced attempt loop shared by GET and POST; EXHAUSTED after the last retry,
- * or as soon as a 429 pause exceeds the caller's `maxPauseWaitMs`.
+ * as soon as a 429 pause exceeds the caller's `maxPauseWaitMs`, or once the
+ * caller's `signal` aborts (checked before and after every attempt).
  */
 async function requestWithRetry<T>(
   path: string,
   url: string,
   init: RequestInit,
   label: string,
-  opts: Pick<ItadFetchOptions, 'maxPauseWaitMs'>,
+  opts: Pick<ItadFetchOptions, 'maxPauseWaitMs' | 'signal'>,
 ): Promise<T | null | typeof EXHAUSTED> {
   for (let attempt = 0; attempt <= ITAD_MAX_RETRIES; attempt++) {
+    if (opts.signal?.aborted) return EXHAUSTED;
     const maxWait = opts.maxPauseWaitMs ?? ITAD_DEFAULT_MAX_PAUSE_WAIT_MS;
     if (!(await acquireItadSlot(maxWait))) {
       logger.warn(`${label} rate-limit pause too long, giving up: ${path}`);
       return EXHAUSTED;
     }
+    if (opts.signal?.aborted) return EXHAUSTED;
     const result = await attemptRequest<T>(url, init, attempt, label);
     if (!result.retry) return result.data;
+    if (opts.signal?.aborted) return EXHAUSTED;
   }
   logger.warn(
     `${label} request failed after ${ITAD_MAX_RETRIES + 1} attempts: ${path}`,
@@ -180,6 +190,12 @@ async function delayRetry(
   else if (!isFinalAttempt(attempt)) await sleep(waitMs);
 }
 
+/** The caller aborted: no network-error warn and no backoff sleep. */
+function abortedResult<T>(url: string, label: string): FetchResult<T> {
+  logger.debug(`${label} request aborted: ${redactUrl(url)}`);
+  return { data: null, retry: true };
+}
+
 /** Attempt a single request; retriable statuses and network errors retry. */
 async function attemptRequest<T>(
   url: string,
@@ -199,6 +215,7 @@ async function attemptRequest<T>(
     }
     return { data: (await response.json()) as T, retry: false };
   } catch (error) {
+    if (init.signal?.aborted) return abortedResult<T>(url, label);
     logger.warn(
       `${label} network error: ${redactUrl(url)} — retrying in ${backoffMs(attempt)}ms (attempt ${attempt + 1})`,
       error,

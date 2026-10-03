@@ -10,6 +10,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import { API_BASE, getAdminToken, apiGet, createLineupOrRetry } from './api-helpers';
+import { defined } from './defined';
 import { isMobile } from './helpers';
 
 // ROK-1147: this whole file asserts global state ("Start Lineup button visible
@@ -448,7 +449,7 @@ test.describe('Operator ⋮ menu — phase transitions', () => {
         const cols = grid.tracks.split(' ').length;
         const spans = grid.cells.map((c) => columnSpan(c.start, c.end));
         const { rows, emptyCells } = replayGridPlacement(cols, spans);
-        const seriesRow = rows[3];
+        const seriesRow = defined(rows[3], 'series preset row');
         const customRow = rows[4];
 
         // Every row is full: no option wraps early and none is left alone in

@@ -72,6 +72,7 @@ import {
     apiDelete,
     pollForCondition,
 } from './api-helpers';
+import { at } from './defined';
 import { closeGamesFilters, lfgSwitch, openGamesFilters } from './games-filters';
 
 const HOOK_TIMEOUT_MS = 90_000;
@@ -217,7 +218,7 @@ test.beforeAll(async () => {
             `for project "${project}" so this spec owns a game no other LFG ` +
             `spec touches`,
     ).toBeGreaterThan(index);
-    const game = games[index];
+    const game = at(games, index);
     // Claimed here, before the first assertion, so `afterAll` can always
     // withdraw the hand this spec raised even if a test throws.
     gameId = game.id;

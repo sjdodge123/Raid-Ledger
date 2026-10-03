@@ -22,9 +22,11 @@ export function browserSetupHint(err: unknown): string | null {
     const message = err instanceof Error ? err.message : String(err);
     const match = MISSING_EXECUTABLE.exec(message);
     if (!match) return null;
+    const expectedAt = match[1];
+    if (expectedAt === undefined) return null;
     return [
         'Playwright browsers are missing or are the wrong build for this',
-        `version of @playwright/test (expected at: ${match[1].trim()}).`,
+        `version of @playwright/test (expected at: ${expectedAt.trim()}).`,
         '',
         'On an rl-infra runner this means image drift: the base image bakes',
         'the browsers for its own Playwright minor, and the repo has since',
