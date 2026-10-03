@@ -106,6 +106,8 @@ for the full list and exact body shapes.
    `/games/:id` `LineupVoteBanner`) render the GLOBAL `GET /lineups/banner`
    singleton, so call `scopeBannerTo(page, ownLineupId)` before `page.goto`
    and check `getScopedBanner(token, ownLineupId)` for the precondition.
+   Scope a page once: Playwright does not order init scripts, so re-scoping
+   the same page to another id throws — use a fresh page instead.
 4. Add the spec to the table above with its category, reset endpoint, and any
    notes future maintainers need.
 5. If the spec exposes a new state requirement that no existing reset endpoint
