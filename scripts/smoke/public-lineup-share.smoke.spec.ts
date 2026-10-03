@@ -109,7 +109,7 @@ test.describe('Public lineup share — un-authed access', () => {
         const { publicSlug } = await createSharedLineup();
 
         // Fresh context — no storageState, no cookies, no admin JWT.
-        const ctx = await browser.newContext({ storageState: undefined });
+        const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await ctx.newPage();
 
         const response = await page.goto(`/p/lineup/${publicSlug}`);
@@ -174,7 +174,7 @@ test.describe('Public lineup share — disabled lineup', () => {
         expect(patchRes.status).toBeGreaterThanOrEqual(200);
         expect(patchRes.status).toBeLessThan(300);
 
-        const ctx = await browser.newContext({ storageState: undefined });
+        const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await ctx.newPage();
 
         await page.goto(`/p/lineup/${publicSlug}`);
@@ -207,7 +207,7 @@ test.describe('Public lineup share — accessibility landmarks', () => {
         browser,
     }) => {
         const { publicSlug } = await createSharedLineup();
-        const ctx = await browser.newContext({ storageState: undefined });
+        const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await ctx.newPage();
         await page.goto(`/p/lineup/${publicSlug}`);
 
@@ -251,7 +251,7 @@ test.describe('Public lineup share — decision block conditional', () => {
         const { publicSlug, status } = await createSharedLineup();
         expect(status).toBe('building');
 
-        const ctx = await browser.newContext({ storageState: undefined });
+        const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await ctx.newPage();
         await page.goto(`/p/lineup/${publicSlug}`);
 
@@ -277,7 +277,7 @@ test.describe('Public lineup share — decision block conditional', () => {
         const detail = await apiGet(adminToken, `/lineups/${id}`);
         expect(detail?.status).toBe('decided');
 
-        const ctx = await browser.newContext({ storageState: undefined });
+        const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await ctx.newPage();
         await page.goto(`/p/lineup/${publicSlug}`);
 

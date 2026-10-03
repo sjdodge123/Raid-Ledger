@@ -28,7 +28,7 @@ test.describe('Join page (/join)', () => {
     });
 
     test('is accessible without authentication', async ({ browser }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await page.goto('/join');
@@ -48,7 +48,7 @@ test.describe('Invite page (/i/:code)', () => {
     test('renders error state for an invalid invite code', async ({ browser }) => {
         // Use unauthenticated context so the page stays on /i/:code
         // instead of auto-advancing through the invite wizard steps
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await page.goto('/i/invalid-test-code');
@@ -60,7 +60,7 @@ test.describe('Invite page (/i/:code)', () => {
     });
 
     test('does not trigger the error boundary', async ({ browser }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await page.goto('/i/invalid-test-code');
@@ -70,7 +70,7 @@ test.describe('Invite page (/i/:code)', () => {
     });
 
     test('is accessible without authentication', async ({ browser }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await page.goto('/i/some-code-123');
@@ -107,7 +107,7 @@ test.describe('Community branding on public pages', () => {
     });
 
     test('header shows community name on invite page', async ({ browser }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await page.goto('/i/branding-test');

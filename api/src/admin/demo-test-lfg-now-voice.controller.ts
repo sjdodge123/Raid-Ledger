@@ -20,7 +20,6 @@
  * wiring by `demo-test-lfg-now-voice.integration.spec.ts`.
  */
 import {
-  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -28,7 +27,6 @@ import {
   HttpStatus,
   Inject,
   Logger,
-  NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -47,14 +45,17 @@ import {
   recordLfgNowVoiceJoin,
   recordLfgNowVoiceLeave,
   type LfgNowVoiceDeps,
-  type LfgNowVoiceMember,
 } from '../discord-bot/lfg-now/lfg-now-voice.helpers';
-import { parseDemoBody } from './demo-test.utils';
+import {
+  loadLinkedDemoMember,
+  parseDemoBody,
+  snowflakeSchema,
+} from './demo-test.utils';
 
 /** `{ userId, channelId }` — a seeded user and the event's voice channel. */
 const LfgNowVoiceSchema = z.object({
   userId: z.number().int().positive(),
-  channelId: z.string().regex(/^\d{1,20}$/, 'must be a Discord snowflake'),
+  channelId: snowflakeSchema,
 });
 
 /** Response for both endpoints: `eventId` is null when no open event matched. */
@@ -62,9 +63,6 @@ export interface LfgNowVoiceResult {
   recorded: boolean;
   eventId: number | null;
 }
-
-/** Discord ids a real voice state can never carry (unlinked / local-only). */
-const UNLINKED_PREFIXES = ['local:', 'unlinked:'];
 
 @Controller('admin/test')
 @SkipThrottle()
@@ -95,7 +93,7 @@ export class DemoTestLfgNowVoiceController {
   async voiceJoin(@Body() body: unknown): Promise<LfgNowVoiceResult> {
     await this.assertDemoMode();
     const { userId, channelId } = parseDemoBody(LfgNowVoiceSchema, body);
-    const member = await this.loadLinkedMember(userId);
+    const member = await loadLinkedDemoMember(this.usersService, userId);
     const eventId = await recordLfgNowVoiceJoin(this.deps(), channelId, member);
     return { recorded: eventId !== null, eventId };
   }
@@ -106,7 +104,10 @@ export class DemoTestLfgNowVoiceController {
   async voiceLeave(@Body() body: unknown): Promise<LfgNowVoiceResult> {
     await this.assertDemoMode();
     const { userId, channelId } = parseDemoBody(LfgNowVoiceSchema, body);
-    const { discordUserId } = await this.loadLinkedMember(userId);
+    const { discordUserId } = await loadLinkedDemoMember(
+      this.usersService,
+      userId,
+    );
     const eventId = await recordLfgNowVoiceLeave(
       this.deps(),
       channelId,
@@ -123,20 +124,5 @@ export class DemoTestLfgNowVoiceController {
       usersService: this.usersService,
       logger: this.logger,
     });
-  }
-
-  /** The Discord member a real voice state would carry for this user. */
-  private async loadLinkedMember(userId: number): Promise<LfgNowVoiceMember> {
-    const user = await this.usersService.findById(userId);
-    if (!user) throw new NotFoundException(`User ${userId} not found`);
-    const discordId = user.discordId;
-    if (!discordId || UNLINKED_PREFIXES.some((p) => discordId.startsWith(p))) {
-      throw new BadRequestException(`User ${userId} is not Discord-linked`);
-    }
-    return {
-      discordUserId: discordId,
-      discordUsername: user.username,
-      discordAvatarHash: user.avatar ?? null,
-    };
   }
 }

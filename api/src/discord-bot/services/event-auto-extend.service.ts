@@ -54,7 +54,9 @@ export class EventAutoExtendService {
     private readonly adHocNotificationService: AdHocNotificationService,
     private readonly adHocGateway: AdHocEventsGateway,
     private readonly cronJobService: CronJobService,
-    @Optional() private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   @Cron('0 */1 * * * *', {

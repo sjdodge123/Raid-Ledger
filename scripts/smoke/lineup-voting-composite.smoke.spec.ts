@@ -30,6 +30,7 @@ import {
     getInviteeFixture,
     API_BASE,
 } from './api-helpers';
+import { at } from './defined';
 import { isPhoneLayout } from './helpers';
 
 test.describe.configure({ mode: 'serial' });
@@ -106,6 +107,7 @@ async function setupVotingLineup(token: string): Promise<{
     });
 
     const games = await fetchGames(token, 4);
+    const firstGame = at(games, 0);
 
     const { id: lineupId } = await createLineupOrRetry(
         token,
@@ -134,7 +136,7 @@ async function setupVotingLineup(token: string): Promise<{
     // Cast exactly ONE vote (admin) on the first game. Bar for that row
     // must be `1 / votingEligibleCount`, never 100% (legacy bug).
     await apiPost(token, `/lineups/${lineupId}/vote`, {
-        gameId: games[0].id,
+        gameId: firstGame.id,
     });
 
     // Read back the lineup to pin the actual denominator for assertions.
@@ -151,7 +153,7 @@ async function setupVotingLineup(token: string): Promise<{
 
     return {
         lineupId,
-        firstGameName: games[0].name,
+        firstGameName: firstGame.name,
         votingEligibleCount: denominator,
     };
 }
