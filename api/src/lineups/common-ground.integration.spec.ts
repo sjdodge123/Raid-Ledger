@@ -79,16 +79,19 @@ function describeCommonGround() {
     overrides: Partial<typeof schema.games.$inferInsert> = {},
   ): Promise<typeof schema.games.$inferSelect> {
     const slug = overrides.slug ?? `game-${Date.now()}-${Math.random()}`;
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Some Game',
-        slug,
-        steamAppId:
-          overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
-        ...overrides,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Some Game',
+          slug,
+          steamAppId:
+            overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
+          ...overrides,
+        })
+        .returning(),
+      'game',
+    );
     return game;
   }
 

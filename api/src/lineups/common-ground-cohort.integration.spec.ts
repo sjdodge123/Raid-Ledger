@@ -23,7 +23,7 @@ import {
 import * as schema from '../drizzle/schema';
 import type { CommonGroundResponseDto } from '@raid-ledger/contract';
 import { loadCohortSignature } from './cohort-memory-signature.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 function describeCohortRow() {
   let testApp: TestApp;
@@ -150,7 +150,7 @@ function describeCohortRow() {
     expect(tile?.itadTags).toEqual([]);
     expect(tile?.currentUserOwns).toBe(false);
     // And it leads the payload — the cohort row renders FIRST.
-    expect(body.data[0].gameId).toBe(rememberedGame);
+    expect(at(body.data, 0).gameId).toBe(rememberedGame);
   });
 
   it('re-themes a remembered game that IS in the pool instead of duplicating it', async () => {
@@ -229,7 +229,7 @@ function describeCohortRow() {
     const tile = body.data.find((g) => g.gameId === rememberedGame);
     expect(tile).toBeDefined();
     expect(tile?.theme).toBe('cohort');
-    expect(body.data[0].gameId).toBe(rememberedGame);
+    expect(at(body.data, 0).gameId).toBe(rememberedGame);
     // The pool game does not match the search and is gone.
     expect(body.data.find((g) => g.gameId === poolGame)).toBeUndefined();
   });
