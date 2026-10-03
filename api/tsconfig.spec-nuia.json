@@ -11,7 +11,7 @@
   "include": ["src/**/*.spec*.ts", "src/**/*.test-fixtures.ts", "src/common/testing/**/*.ts", "test/**/*.ts"],
   "exclude": [
     "src/discord-bot/services/**",
-    "src/lineups/*/*", "src/lineups/lineups-*", // WF6
+    "src/lineups/*/*", "src/lineups/lineups-*",
     "src/lfg/**", "src/notifications/**"
   ]
 }

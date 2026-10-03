@@ -536,7 +536,6 @@ function describeCohortMemoryBackfill() {
       const [maybeOriginal] = (await memoryRows()).filter(
         (r) => r.sourceLineupId === decidedLineup && r.resolution === 'decided',
       );
-      expect(maybeOriginal).toBeDefined();
       const original = defined(maybeOriginal, 'original decided row');
 
       // The second decide: same row, different engaged set => different hash.
