@@ -96,7 +96,7 @@ function makeService(
   created = true,
   activeCount = 3,
   intent: Record<string, unknown> = {},
-): Record<string, jest.Mock> {
+): Record<'createIntent', jest.Mock> {
   return {
     createIntent: jest.fn().mockResolvedValue({
       created,

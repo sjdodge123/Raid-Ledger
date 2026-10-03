@@ -14,6 +14,7 @@ import type {
 } from 'discord.js';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import { ThreadMirrorListener } from './thread-mirror.listener';
+import { defined } from '../../common/testing/narrow';
 import type { ThreadMirrorService } from './thread-mirror.service';
 import type { ThreadSurfaceRegistry } from './thread-surface.registry';
 
@@ -139,9 +140,16 @@ describe('ThreadMirrorListener', () => {
       );
       const reacted = { id: '4000000000000000050', guildId: GUILD };
 
-      handlers.messageReactionAdd({ message: reacted }, { id: 'reactor' }, {});
-      handlers.messageReactionRemoveEmoji({ message: reacted });
-      handlers.messageReactionRemoveAll(reacted, new Map());
+      const handler = (event: string) =>
+        defined(handlers[event], `${event} handler`);
+
+      handler('messageReactionAdd')(
+        { message: reacted },
+        { id: 'reactor' },
+        {},
+      );
+      handler('messageReactionRemoveEmoji')({ message: reacted });
+      handler('messageReactionRemoveAll')(reacted, new Map());
 
       expect(mirror.onReactionChange).toHaveBeenNthCalledWith(1, reacted, {
         cleared: false,
