@@ -78,23 +78,26 @@ assert_absent() {
     else pass; fi
 }
 
+# The output helpers feed grep from a here-string, never `printf | grep -q`:
+# grep -q exits on its first match, so on a large output printf hits EPIPE and
+# pipefail turns a MATCH into a miss. A here-string cannot EPIPE.
 assert_out_matches() {
     local pattern="$1" label="$2"
-    if printf '%s' "$INVOKE_OUT" | grep -E -q -e "$pattern"; then pass; else
+    if grep -E -q -e "$pattern" <<<"$INVOKE_OUT"; then pass; else
         fail "$label: output did not match '$pattern'"
     fi
 }
 
 assert_out_absent() {
     local pattern="$1" label="$2"
-    if printf '%s' "$INVOKE_OUT" | grep -E -q -e "$pattern"; then
+    if grep -E -q -e "$pattern" <<<"$INVOKE_OUT"; then
         fail "$label: output must NOT match '$pattern'"
     else pass; fi
 }
 
 assert_err_matches() {
     local pattern="$1" label="$2"
-    if printf '%s' "$INVOKE_ERR" | grep -E -q -e "$pattern"; then pass; else
+    if grep -E -q -e "$pattern" <<<"$INVOKE_ERR"; then pass; else
         fail "$label: expected '$pattern' on STDERR, got: $(printf '%s' "$INVOKE_ERR" | tr '\n' '|')"
     fi
 }
@@ -238,6 +241,25 @@ invoke() {
     INVOKE_OUT="${INVOKE_OUT}
 ${INVOKE_ERR}"
 }
+
+# ===== Harness self-check =====
+# The output helpers must give the same verdict whatever the output size. A
+# `printf | grep -q` pipe under pipefail once turned a match into a miss: grep
+# exits on its first match, printf gets EPIPE, and the pipeline reports
+# failure. Each helper runs in a subshell that echoes its pass count back, so
+# its verdict is read without touching this file's own counts.
+CURRENT_TEST_NAME="harness: an early match in a 1 MiB output is still a match"
+INVOKE_OUT="needle-line"$'\n'"$(head -c 1048576 /dev/zero | tr '\0' x)"
+INVOKE_ERR="$INVOKE_OUT"
+for check in assert_out_matches:pass assert_out_absent:fail assert_err_matches:pass; do
+    after=$("${check%%:*}" '^needle-line$' self-check >/dev/null; echo "$TEST_PASS_COUNT")
+    if [ "$after" -gt "$TEST_PASS_COUNT" ]; then verdict=pass; else verdict=fail; fi
+    if [ "$verdict" = "${check#*:}" ]; then pass; else
+        fail "${check%%:*} on a 1 MiB output: expected ${check#*:}, got $verdict"
+    fi
+done
+INVOKE_OUT=""
+INVOKE_ERR=""
 
 # ===== Structural =====
 
