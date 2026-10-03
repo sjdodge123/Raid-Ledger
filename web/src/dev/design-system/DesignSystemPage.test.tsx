@@ -77,7 +77,7 @@ describe('DesignSystemPage — Forms section', () => {
         const invalid = within(forms).getByRole('textbox', { name: 'Event name' });
         expect(invalid).toHaveAttribute('aria-invalid', 'true');
         expect(invalid).toHaveAccessibleDescription('Give the event a name.');
-        expect(within(forms).getByRole('button', { name: 'Saving…' })).toHaveAttribute('aria-busy', 'true');
+        expect(within(forms).getByRole('button', { name: 'Save #lobby-a' })).toHaveAttribute('aria-busy', 'true');
     });
 
     it('the Forms section mounts the slice-B controls (select, counter, checkbox, radios, slider)', () => {
@@ -128,6 +128,24 @@ describe('DesignSystemPage — Forms section', () => {
         for (const token of ['--color-backdrop', '--color-surface', '--color-panel', '--color-foreground', '--color-edge']) {
             expect(screen.getByTestId(`swatch-live-${token}`)).toBeInTheDocument();
         }
+    });
+});
+
+describe('DesignSystemPage — Forms section: cross-row save lock', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+    });
+
+    it('the Forms section renders the one-save-at-a-time row lock: loading on the saving row, disabled on its sibling', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const rowsGroup = within(screen.getByTestId('ds-forms')).getByRole('group', { name: 'Rows sharing one save' });
+        const saving = within(rowsGroup).getByRole('button', { name: 'Save #lobby-a' });
+        expect(saving).toHaveAttribute('aria-busy', 'true');
+        expect(saving).toBeEnabled();
+        const locked = within(rowsGroup).getByRole('button', { name: 'Save #lobby-b' });
+        expect(locked).toBeDisabled();
+        expect(locked).not.toHaveAttribute('aria-busy');
     });
 });
 
