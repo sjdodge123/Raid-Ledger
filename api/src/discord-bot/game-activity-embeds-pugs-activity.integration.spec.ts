@@ -37,6 +37,22 @@ afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
+/** Reads one session row by id; throws, naming `what`, when it is missing. */
+async function readSession(
+  id: string,
+  what: string,
+): Promise<typeof schema.gameActivitySessions.$inferSelect> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.gameActivitySessions)
+      .where(eq(schema.gameActivitySessions.id, id))
+      .limit(1),
+    what,
+  );
+  return row;
+}
+
 // ===================================================================
 // Game Activity Sessions — Flush & Close
 // ===================================================================
@@ -102,14 +118,7 @@ describe('game activity sessions — persist and close', () => {
       .set({ endedAt, durationSeconds })
       .where(eq(schema.gameActivitySessions.id, session.id));
 
-    const [closed] = nonEmpty(
-      await db
-        .select()
-        .from(schema.gameActivitySessions)
-        .where(eq(schema.gameActivitySessions.id, session.id))
-        .limit(1),
-      'closed session',
-    );
+    const closed = await readSession(session.id, 'closed session');
 
     expect(closed.endedAt).not.toBeNull();
     expect(closed.durationSeconds).toBeGreaterThanOrEqual(3590);
@@ -252,14 +261,7 @@ describe('stale session sweep', () => {
         ),
       );
 
-    const [swept] = nonEmpty(
-      await db
-        .select()
-        .from(schema.gameActivitySessions)
-        .where(eq(schema.gameActivitySessions.id, staleSession.id))
-        .limit(1),
-      'swept session',
-    );
+    const swept = await readSession(staleSession.id, 'swept session');
 
     expect(swept.endedAt).not.toBeNull();
     expect(swept.durationSeconds).toBe(MAX_DURATION);
@@ -298,14 +300,7 @@ describe('stale session sweep', () => {
     const sweptIds = swept.map((r) => r.id);
     expect(sweptIds).not.toContain(recentSession.id);
 
-    const [session] = nonEmpty(
-      await db
-        .select()
-        .from(schema.gameActivitySessions)
-        .where(eq(schema.gameActivitySessions.id, recentSession.id))
-        .limit(1),
-      'recent session',
-    );
+    const session = await readSession(recentSession.id, 'recent session');
 
     expect(session.endedAt).toBeNull();
     expect(session.durationSeconds).toBeNull();
@@ -349,14 +344,7 @@ describe('orphaned session cleanup — stale orphans', () => {
 
     expect(staleResult.length).toBe(1);
 
-    const [closed] = nonEmpty(
-      await db
-        .select()
-        .from(schema.gameActivitySessions)
-        .where(eq(schema.gameActivitySessions.id, stale.id))
-        .limit(1),
-      'closed stale orphan',
-    );
+    const closed = await readSession(stale.id, 'closed stale orphan');
 
     expect(closed.durationSeconds).toBe(MAX_DURATION);
     expect(closed.endedAt).not.toBeNull();
@@ -390,14 +378,7 @@ describe('orphaned session cleanup — recent orphans', () => {
       .set({ endedAt: now, durationSeconds: expectedDuration })
       .where(eq(schema.gameActivitySessions.id, recent.id));
 
-    const [closed] = nonEmpty(
-      await db
-        .select()
-        .from(schema.gameActivitySessions)
-        .where(eq(schema.gameActivitySessions.id, recent.id))
-        .limit(1),
-      'closed recent orphan',
-    );
+    const closed = await readSession(recent.id, 'closed recent orphan');
 
     expect(closed.endedAt).not.toBeNull();
     expect(closed.durationSeconds).toBeGreaterThanOrEqual(7190);
