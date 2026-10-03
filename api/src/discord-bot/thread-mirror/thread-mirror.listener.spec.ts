@@ -50,6 +50,21 @@ function message(over: Partial<FakeMessage> = {}): FakeMessage {
   };
 }
 
+/** The handler the listener bound for `event` on its first attach. */
+function boundHandler(
+  attachToClient: jest.Mock,
+  event: string,
+): (...args: unknown[]) => void {
+  const bindings = attachToClient.mock.calls[0][1] as {
+    event: string;
+    handler: (...args: unknown[]) => void;
+  }[];
+  return defined(
+    bindings.find((b) => b.event === event)?.handler,
+    `${event} handler`,
+  );
+}
+
 describe('ThreadMirrorListener', () => {
   let listener: ThreadMirrorListener;
   let registry: { resolveSurface: jest.Mock };
@@ -130,18 +145,8 @@ describe('ThreadMirrorListener', () => {
 
     it('routes a reaction event to the service through reaction.message, dropping the user', () => {
       listener.handleBotConnected();
-      const handlers = Object.fromEntries(
-        (
-          attachToClient.mock.calls[0][1] as {
-            event: string;
-            handler: (...args: unknown[]) => void;
-          }[]
-        ).map((b) => [b.event, b.handler]),
-      );
       const reacted = { id: '4000000000000000050', guildId: GUILD };
-
-      const handler = (event: string) =>
-        defined(handlers[event], `${event} handler`);
+      const handler = (event: string) => boundHandler(attachToClient, event);
 
       handler('messageReactionAdd')(
         { message: reacted },

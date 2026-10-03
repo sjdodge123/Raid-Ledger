@@ -53,6 +53,28 @@ async function readSession(
   return row;
 }
 
+/** Inserts one closed admin session ending at `endedAt`; throws if none returns. */
+async function insertClosedSession(
+  endedAt: Date,
+  durationSeconds: number,
+): Promise<typeof schema.gameActivitySessions.$inferSelect> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.gameActivitySessions)
+      .values({
+        userId: testApp.seed.adminUser.id,
+        gameId: testApp.seed.game.id,
+        discordActivityName: 'Test Game',
+        startedAt: new Date(endedAt.getTime() - durationSeconds * 1000),
+        endedAt,
+        durationSeconds,
+      })
+      .returning(),
+    'closed session',
+  );
+  return row;
+}
+
 // ===================================================================
 // Game Activity Sessions — Flush & Close
 // ===================================================================
@@ -394,21 +416,7 @@ describe('daily rollup — upsert all periods', () => {
   it('should upsert day/week/month rollup rows from closed sessions', async () => {
     const db = testApp.db;
 
-    const sessionDate = new Date();
-    const [session] = nonEmpty(
-      await db
-        .insert(schema.gameActivitySessions)
-        .values({
-          userId: testApp.seed.adminUser.id,
-          gameId: testApp.seed.game.id,
-          discordActivityName: 'Test Game',
-          startedAt: new Date(sessionDate.getTime() - 3600_000),
-          endedAt: sessionDate,
-          durationSeconds: 3600,
-        })
-        .returning(),
-      'session',
-    );
+    const session = await insertClosedSession(new Date(), 3600);
 
     expect(session.durationSeconds).toBe(3600);
 

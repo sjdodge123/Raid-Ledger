@@ -580,7 +580,7 @@ describe('GROUP_CHANGED playing — the live session (ROK-1494 AC4)', () => {
     await playing();
 
     // Named BEFORE `edited(1)` indexes into the calls: a closed row makes the
-    // second edit never happen, and an index-out-of-range TypeError proves
+    // second edit never happen, and a missing-call throw from at() proves
     // nothing about the bug.
     expect(client.editEmbed).toHaveBeenCalledTimes(2);
     expect(edited(1).author?.name).toBe('▸ PLAYING NOW · 4 in voice');

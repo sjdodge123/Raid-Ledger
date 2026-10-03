@@ -418,7 +418,6 @@ describe('ROK-1419 (B2-3) restore path — rebuild loser + re-link the moved eve
         .where(eq(schema.channelBindings.id, loser.id)),
       'loserBack',
     );
-    expect(loserBack).toBeDefined();
     expect(loserBack.config).toMatchObject({ minPlayers: 3 });
     expect(
       Math.abs(loserBack.createdAt.getTime() - loser.createdAt.getTime()),

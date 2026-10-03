@@ -41,7 +41,6 @@ describe('Channel Bindings CRUD — create and read', () => {
       .returning();
     const [result] = nonEmpty(inserted, 'binding');
 
-    expect(result).toBeDefined();
     expect(result.id).toBeDefined();
     expect(result.guildId).toBe('111222333444');
     expect(result.channelId).toBe('555666777888');
@@ -54,7 +53,6 @@ describe('Channel Bindings CRUD — create and read', () => {
       .limit(1);
     const [readBack] = nonEmpty(readRows, 'readBack');
 
-    expect(readBack).toBeDefined();
     expect(readBack.guildId).toBe('111222333444');
     expect(readBack.bindingPurpose).toBe('game-announcements');
     expect(readBack.gameId).toBe(testApp.seed.game.id);
@@ -413,7 +411,6 @@ describe('Channel Bindings CRUD — FK cascade', () => {
       'updated binding',
     );
 
-    expect(updated).toBeDefined();
     expect(updated.gameId).toBeNull();
   });
 });
