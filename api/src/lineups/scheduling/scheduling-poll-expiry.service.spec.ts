@@ -34,7 +34,7 @@ function candidate(matchId: number, hours = 11): helpers.ExpiryWarnCandidate {
   };
 }
 
-const LEADER: helpers.LeadingSlot = {
+const LEADER: helpers.SlotWithYesCount = {
   slotId: 77,
   proposedTime: new Date(Date.now() + 20 * HOUR_MS).toISOString(),
   voteCount: 2,

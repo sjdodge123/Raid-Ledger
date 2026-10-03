@@ -4,7 +4,7 @@
  * `Checkbox`, `RadioGroup`, `Slider`, `SearchInput`, `Combobox`, plus ROK-1655's
  * `PasswordInput` here and `FilePicker` / `ColorInput` / `Button brandColor` in
  * forms-pickers-demo.tsx, and ROK-1653's segmented "All" filter and row-menu
- * recipes in forms-recipes-demo.tsx. Every example mounts the REAL component, so this page
+ * recipes plus the one-save-at-a-time row lock in forms-recipes-demo.tsx. Every example mounts the REAL component, so this page
  * is the early warning if one drifts.
  *
  * Check both families: the side-by-side toggle renders this twice, and the

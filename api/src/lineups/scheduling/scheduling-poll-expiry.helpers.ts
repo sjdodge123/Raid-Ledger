@@ -37,8 +37,11 @@ export interface ExpiryWarnCandidate {
   phaseDeadline: Date;
 }
 
-/** The future slot a creator would lock in, per the shared slot order. */
-export interface LeadingSlot {
+/**
+ * A slot with its YES tally. Poll expiry uses it for the leading future slot a
+ * creator would lock in; the rally uses it for whichever slot is rallied.
+ */
+export interface SlotWithYesCount {
   slotId: number;
   /** ISO-8601 UTC. */
   proposedTime: string;
@@ -185,7 +188,7 @@ export function pickLeadingFutureSlot(
   slots: ReadonlyArray<{ id: number; proposedTime: Date }>,
   votes: readonly StanceVoteRef[],
   now: Date,
-): LeadingSlot | null {
+): SlotWithYesCount | null {
   const tallies = tallyStancesBySlot(votes);
   const voted = slots
     .filter((s) => s.proposedTime.getTime() > now.getTime())
@@ -237,7 +240,7 @@ export function hasFutureAnswer(
  * a poll nobody opened, which stays silent (ruling D-Q2).
  */
 export interface PollLeaderOutcome {
-  leader: LeadingSlot | null;
+  leader: SlotWithYesCount | null;
   /** At least one vote row of either stance exists on a FUTURE slot. */
   answered: boolean;
 }
@@ -278,7 +281,7 @@ export async function findLeadingFutureSlot(
   db: Db,
   matchId: number,
   now: Date = new Date(),
-): Promise<LeadingSlot | null> {
+): Promise<SlotWithYesCount | null> {
   return (await findPollLeaderOutcome(db, matchId, now)).leader;
 }
 

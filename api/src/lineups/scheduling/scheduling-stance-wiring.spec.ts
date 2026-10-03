@@ -168,17 +168,18 @@ describe('buildEmbedSlots — the card counts yes only', () => {
     createdAt: new Date(),
   });
 
+  const slots = [
+    {
+      id: 1,
+      matchId: 5,
+      proposedTime: inDays(2),
+      overlapScore: null,
+      suggestedBy: 'user',
+      createdAt: new Date(),
+    },
+  ] as unknown as Parameters<typeof buildEmbedSlots>[0];
+
   it('splits counts and keeps anti-voters out of the voter names', () => {
-    const slots = [
-      {
-        id: 1,
-        matchId: 5,
-        proposedTime: inDays(2),
-        overlapScore: null,
-        suggestedBy: 'user',
-        createdAt: new Date(),
-      },
-    ] as unknown as Parameters<typeof buildEmbedSlots>[0];
     const [slot] = buildEmbedSlots(slots, [
       row(1, 10, 'yes'),
       row(1, 11, 'no'),
@@ -186,6 +187,22 @@ describe('buildEmbedSlots — the card counts yes only', () => {
     ]);
     expect(slot.voteCount).toBe(1);
     expect(slot.noCount).toBe(2);
+    expect(slot.voterNames).toEqual(['U10']);
+  });
+
+  it('counts an out-of-schema stance as neither a yes nor a no', () => {
+    // Same rule as tallyStancesBySlot: only an explicit 'no' is an anti-vote.
+    const unknown = {
+      ...row(1, 13, 'yes'),
+      stance: 'maybe',
+    } as unknown as ScheduleVoteRow;
+    const [slot] = buildEmbedSlots(slots, [
+      row(1, 10, 'yes'),
+      row(1, 11, 'no'),
+      unknown,
+    ]);
+    expect(slot.voteCount).toBe(1);
+    expect(slot.noCount).toBe(1);
     expect(slot.voterNames).toEqual(['U10']);
   });
 });

@@ -120,7 +120,7 @@ async function setupLineupInPhase(
         }
     }
 
-    const walk: Record<string, string[]> = {
+    const walk: Record<'building' | 'voting' | 'decided', string[]> = {
         building: [],
         voting: ['voting'],
         decided: ['voting', 'decided'],
@@ -420,7 +420,7 @@ test.describe('Public lineup page — no operator chrome (AC 7)', () => {
         }
 
         // Fresh, un-authed context — no admin JWT.
-        const ctx = await browser.newContext({ storageState: undefined });
+        const ctx = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await ctx.newPage();
         await page.goto(`/p/lineup/${created.publicSlug}`);
 

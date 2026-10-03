@@ -665,3 +665,63 @@ describe("BindingConfigForm — ROK-1652 shared form primitives", () => {
     expect(raw).toEqual([]);
   });
 });
+
+/**
+ * TDB:1970 — while another row's PATCH is in flight the form is locked: Save
+ * and the inert banner's Convert are native-disabled, never loading. Button
+ * `loading` stays reserved for the row whose own save is pending.
+ */
+describe("BindingConfigForm — TDB:1970 cross-row save lock", () => {
+  beforeEach(() => {
+    resetGameSearchMock();
+    onSave.mockClear();
+  });
+
+  const LOBBY = { channelType: "voice", bindingPurpose: "general-lobby" } as const;
+  const INERT = {
+    id: "inert-9",
+    channelType: "voice",
+    bindingPurpose: "game-voice-monitor",
+    gameId: null,
+    gameName: null,
+  } as const;
+
+  function renderLockable(
+    overrides: Partial<ChannelBindingDto>,
+    state: { isSaving?: boolean; saveLocked?: boolean },
+  ) {
+    return render(
+      <BindingConfigForm
+        binding={makeBinding(overrides)}
+        onSave={onSave}
+        onCancel={onCancel}
+        isSaving={state.isSaving ?? false}
+        saveLocked={state.saveLocked}
+      />,
+    );
+  }
+
+  it("saveLocked native-disables Save without the loading state", () => {
+    renderLockable(LOBBY, { saveLocked: true });
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    expect(save).not.toHaveAttribute("aria-busy");
+  });
+
+  it("saveLocked native-disables the inert banner's Convert button", () => {
+    renderLockable(INERT, { saveLocked: true });
+    const convert = screen.getByRole("button", { name: "Convert to General Lobby" });
+    expect(convert).toBeDisabled();
+    expect(convert).not.toHaveAttribute("aria-busy");
+  });
+
+  it("this row's pending save puts Convert in loading, which swallows the click", async () => {
+    const user = userEvent.setup();
+    renderLockable(INERT, { isSaving: true });
+    const convert = screen.getByRole("button", { name: "Convert to General Lobby" });
+    expect(convert).toHaveAttribute("aria-busy", "true");
+    expect(convert).not.toBeDisabled();
+    await user.click(convert);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+});

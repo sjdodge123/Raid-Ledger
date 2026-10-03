@@ -28,16 +28,26 @@ const CONFLICT = 'That channel already has a General Lobby binding.';
 type UpdateFn = (id: string, dto: UpdateChannelBindingDto) => Promise<unknown>;
 
 /**
- * Mirrors discord-channels-page: ONE update error shared by every row, set by
- * a rejected PATCH and cleared (`updateBinding.reset()`) on `onEditingChange`.
+ * Models discord-channels-page's ONE update error shared by every row, set by
+ * a rejected PATCH. Unlike the page, it clears that error unconditionally on
+ * `onEditingChange`; the page skips the reset while a PATCH is pending, and
+ * that behaviour is pinned in web/src/pages/admin/discord-channels-page.test.tsx.
+ * `trackPending` (opt-in) drives `isUpdating` from the PATCH itself: true just
+ * before `onUpdate` is called, false once its chain settles. Without it
+ * `isUpdating` stays `false`, so the TDB:259/260 cases are unaffected.
  */
-function PageLikeHarness({ onUpdate }: { onUpdate: UpdateFn }) {
+function PageLikeHarness({ onUpdate, trackPending = false }: { onUpdate: UpdateFn; trackPending?: boolean | undefined }) {
   const [updateError, setUpdateError] = useState<string | null>(null);
-  const handleUpdate: UpdateFn = (id, dto) =>
-    onUpdate(id, dto).catch((err: Error) => { setUpdateError(err.message); throw err; });
+  const [pending, setPending] = useState(false);
+  const handleUpdate: UpdateFn = (id, dto) => {
+    if (trackPending) setPending(true);
+    return onUpdate(id, dto)
+      .catch((err: Error) => { setUpdateError(err.message); throw err; })
+      .finally(() => setPending(false));
+  };
   return (
     <ChannelBindingList bindings={[lobby('a', 'lobby-a'), lobby('b', 'lobby-b')]}
-      onUpdate={handleUpdate} onDelete={vi.fn()} isUpdating={false} isDeleting={false}
+      onUpdate={handleUpdate} onDelete={vi.fn()} isUpdating={pending} isDeleting={false}
       updateError={updateError} onEditingChange={() => setUpdateError(null)} />
   );
 }
@@ -117,9 +127,11 @@ describe('ChannelBindingList — a failed save does not follow the admin to anot
 
 describe('ChannelBindingList — a save settling after the admin moved rows stays with its own row', () => {
   /** Row A saved (PATCH in flight), then row B's editor opened. */
-  async function saveRowAThenOpenRowB(user: ReturnType<typeof userEvent.setup>) {
+  async function saveRowAThenOpenRowB(
+    user: ReturnType<typeof userEvent.setup>, { trackPending }: { trackPending?: boolean } = {},
+  ) {
     const save = deferred();
-    render(<PageLikeHarness onUpdate={() => save.promise} />);
+    render(<PageLikeHarness onUpdate={() => save.promise} trackPending={trackPending} />);
     await openAndSaveRowA(user);
     await user.click(within(rows().rowB).getByRole('button', { name: 'Edit' }));
     expect(screen.getByText('Edit Config: #lobby-b')).toBeInTheDocument();
@@ -132,8 +144,24 @@ describe('ChannelBindingList — a save settling after the admin moved rows stay
 
     await act(async () => { save.resolve({ data: lobby('a', 'lobby-a') }); await save.promise; });
 
-    expect(within(rows().rowB).getAllByRole('button')[0]).toHaveTextContent('Close');
-    expect(screen.queryByText('Edit Config: #lobby-b')).toBeInTheDocument();
+    expect(within(rows().rowB).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(screen.getByText('Edit Config: #lobby-b')).toBeInTheDocument();
+  });
+
+  it('row A save pending while row B is open: row B Save is locked, not loading (TDB:1970)', async () => {
+    const user = userEvent.setup();
+    const save = await saveRowAThenOpenRowB(user, { trackPending: true });
+
+    expect(screen.queryByRole('button', { name: 'Saving...' })).toBeNull();
+    const rowBSave = screen.getByRole('button', { name: 'Save' });
+    expect(rowBSave).toBeDisabled();
+    expect(rowBSave).not.toHaveAttribute('aria-busy');
+
+    await act(async () => { save.resolve({ data: lobby('a', 'lobby-a') }); await save.promise; });
+
+    expect(within(rows().rowB).getByRole('button', { name: 'Close' })).toBeInTheDocument();
+    expect(screen.getByText('Edit Config: #lobby-b')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled());
   });
 
   it('row A save rejects while row B is open: row B does not show row A\'s error', async () => {
