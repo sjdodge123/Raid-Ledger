@@ -73,7 +73,7 @@ If your milestone is in a story that touches MCP/CLI surface used by `/push` or 
 
 You're NOT responsible for the full `validate-ci.sh --full` — Lead does that in Step 3 against the combined branch. You ARE responsible for:
 
-- `npx tsc --noEmit -p <touched-workspace>/tsconfig.json` — must pass.
+- `npx tsc --noEmit -p <touched-workspace>/tsconfig.json` — must pass. (For web, use the leaf configs `web/tsconfig.app.json`, `web/tsconfig.node.json` and `web/tsconfig.test.json` — the web root tsconfig.json is solution-style and checks 0 files.)
 - `npm run lint -w <touched-workspace>` — must pass (or document pre-existing failures per CLAUDE.md).
 - `npm run test -w <touched-workspace> -- <YOUR test file paths>` — your milestone's tests pass.
 

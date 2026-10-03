@@ -63,7 +63,7 @@ For each critical issue found:
 After ALL critical fixes are applied:
 ```bash
 npx tsc --noEmit -p api/tsconfig.json
-npx tsc --noEmit -p web/tsconfig.json
+npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json
 npm run lint -w api
 npm run lint -w web
 npm run test -w api -- --passWithNoTests
