@@ -67,14 +67,11 @@ test.describe('Events list', () => {
         const searchInput = desktopFilterBar.locator('input[aria-label="Search events"]');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state. The filter bar
-        // can remount its input while the page settles (ROK-1647 diag: the node
-        // changed identity in 6/8 runs, the lifted value survived); a fill() that
-        // lands mid-remount types into a detached node, so retry until it sticks.
-        await expect(async () => {
-            await searchInput.fill('xyznonexistent');
-            await expect(searchInput).toHaveValue('xyznonexistent', { timeout: 1_000 });
-        }).toPass({ timeout: 10_000 });
+        // Search for a nonsense term — should show empty state. A plain fill is
+        // enough: the ~300ms StartupGate remount that once detached this input
+        // was fixed by #1342 (TDB:1817).
+        await searchInput.fill('xyznonexistent');
+        await expect(searchInput).toHaveValue('xyznonexistent');
         // Wait for the event cards to disappear (filtered out)
         await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
 
@@ -148,13 +145,11 @@ test.describe('Events list — mobile', () => {
         const searchInput = page.getByRole('searchbox', { name: 'Search events' });
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state. Retry the fill:
-        // the toolbar input can remount while the page settles (pre-existing,
-        // TECH-DEBT-BACKLOG 2026-09-23), and a fill() on the old node is lost.
-        await expect(async () => {
-            await searchInput.fill('xyznonexistent');
-            await expect(searchInput).toHaveValue('xyznonexistent', { timeout: 1_000 });
-        }).toPass({ timeout: 10_000 });
+        // Search for a nonsense term — should show empty state. A plain fill is
+        // enough: the ~300ms StartupGate remount that once detached this toolbar
+        // input was fixed by #1342 (TDB:1817).
+        await searchInput.fill('xyznonexistent');
+        await expect(searchInput).toHaveValue('xyznonexistent');
         // Wait for the mobile event cards to disappear (filtered out)
         await expect(page.locator('[data-testid="mobile-event-card"]').first()).not.toBeVisible({ timeout: 10_000 });
 
