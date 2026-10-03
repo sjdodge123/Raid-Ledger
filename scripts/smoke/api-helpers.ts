@@ -12,6 +12,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import type { BrowserContext, Page } from '@playwright/test';
 import { TOKEN_FILE_PATH } from '../auth-paths';
 import { resolveApiUrl } from './target';
 import { MAX_LOGIN_ATTEMPTS, MAX_TOTAL_WAIT_MS, nextDelayMs } from './login-retry';
@@ -490,6 +491,75 @@ export async function waitForLineupStatus(
         `waitForLineupStatus: lineup ${lineupId} did not reach status='${target}' ` +
             `within ${timeoutMs}ms; last observed status=${String(last?.status ?? '(none)')}`,
     );
+}
+
+// ---------------------------------------------------------------------------
+// Banner scoping — pin the global lineup banner to one lineup (DEMO_MODE)
+// ---------------------------------------------------------------------------
+
+/** sessionStorage key the web reads to scope `GET /lineups/banner` (DEMO_MODE only). */
+const BANNER_SCOPE_KEY = 'rl:smoke-banner-lineup';
+
+/** The banner fields a smoke spec reads back from `GET /lineups/banner`. */
+export interface ScopedBanner {
+    id?: number;
+    status?: string;
+    title?: string;
+}
+
+/**
+ * Scope every banner-backed surface the page renders to `lineupId`.
+ *
+ * `GET /lineups/banner` is a GLOBAL singleton — the single most recently
+ * created eligible lineup for the whole instance. It feeds `LineupBanner` on
+ * the Games page (which renders `TiebreakerBadge`) and `LineupVoteBanner` on
+ * game detail. On a shared fleet env (desktop + mobile projects plus every
+ * other lane on ONE deployment) a sibling spec's newer lineup owns it, so an
+ * unscoped page says nothing about the lineup under test.
+ *
+ * Under DEMO_MODE the web reads this session key and passes `?lineupId=` on
+ * its banner request, so the page renders OUR lineup no matter what siblings
+ * create. Outside DEMO_MODE the API ignores the param.
+ *
+ * Call it BEFORE `page.goto`: it registers an init script that runs ahead of
+ * the app on every navigation. Init scripts run in registration order, so a
+ * later call with a new id wins.
+ *
+ * @param target - The page (or whole context) to scope.
+ * @param lineupId - The lineup the banner should resolve to.
+ */
+export async function scopeBannerTo(
+    target: Page | BrowserContext,
+    lineupId: number,
+): Promise<void> {
+    const script = ({ key, id }: { key: string; id: number }): void => {
+        try {
+            sessionStorage.setItem(key, String(id));
+        } catch {
+            /* about:blank frames throw */
+        }
+    };
+    const arg = { key: BANNER_SCOPE_KEY, id: lineupId };
+    await target.addInitScript(script, arg);
+}
+
+/**
+ * Read `GET /lineups/banner` scoped to `lineupId` — what a page scoped with
+ * `scopeBannerTo` will render.
+ *
+ * The banner is a global singleton; the API honours `?lineupId=` only under
+ * DEMO_MODE, which smoke always runs with. Returns `null` when the lineup is
+ * not banner-eligible (wrong phase, archived), so `?.id === lineupId` is the
+ * precondition a banner assertion needs.
+ *
+ * @param token - Admin token.
+ * @param lineupId - The lineup to scope the read to.
+ */
+export async function getScopedBanner(
+    token: string,
+    lineupId: number,
+): Promise<ScopedBanner | null> {
+    return (await apiGet(token, `/lineups/banner?lineupId=${lineupId}`)) as ScopedBanner | null;
 }
 
 // ---------------------------------------------------------------------------
