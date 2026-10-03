@@ -420,10 +420,8 @@ describe('EventsListCommand — dropdown: max & single', () => {
   }
 
   function getSelectMenu(interaction: { editReply: jest.Mock }) {
-    const call = at(
-      at(interaction.editReply.mock.calls as unknown[][], 0),
-      0,
-    ) as {
+    const calls = interaction.editReply.mock.calls as unknown[][];
+    const call = at(at(calls, 0), 0) as {
       components: {
         components: {
           options: {
@@ -489,10 +487,8 @@ describe('EventsListCommand — dropdown: value & desc', () => {
   }
 
   function getSelectMenu(interaction: { editReply: jest.Mock }) {
-    const call = at(
-      at(interaction.editReply.mock.calls as unknown[][], 0),
-      0,
-    ) as {
+    const calls = interaction.editReply.mock.calls as unknown[][];
+    const call = at(at(calls, 0), 0) as {
       components: {
         components: {
           options: {
@@ -571,10 +567,8 @@ describe('EventsListCommand — dropdown: truncation', () => {
       makeFindAllResult([makeEvent({ id: 1, title: longTitle })]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = at(
-      at(interaction.editReply.mock.calls as unknown[][], 0),
-      0,
-    ) as {
+    const calls = interaction.editReply.mock.calls as unknown[][];
+    const call = at(at(calls, 0), 0) as {
       components: {
         components: {
           options: { data: { label: string } }[];
@@ -619,10 +613,8 @@ describe('EventsListCommand — View All button', () => {
     };
     eventsService.findAll.mockResolvedValue(makeFindAllResult([makeEvent()]));
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = at(
-      at(interaction.editReply.mock.calls as unknown[][], 0),
-      0,
-    ) as {
+    const calls = interaction.editReply.mock.calls as unknown[][];
+    const call = at(at(calls, 0), 0) as {
       components: {
         components: { data: { url?: string; label?: string } }[];
       }[];

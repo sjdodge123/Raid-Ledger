@@ -28,20 +28,18 @@ describe('Channel Bindings CRUD — create and read', () => {
   it('should create a channel binding and persist to DB', async () => {
     const db = testApp.db;
 
-    const [result] = nonEmpty(
-      await db
-        .insert(schema.channelBindings)
-        .values({
-          guildId: '111222333444',
-          channelId: '555666777888',
-          channelType: 'text',
-          bindingPurpose: 'game-announcements',
-          gameId: testApp.seed.game.id,
-          config: {},
-        })
-        .returning(),
-      'binding',
-    );
+    const inserted = await db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: '111222333444',
+        channelId: '555666777888',
+        channelType: 'text',
+        bindingPurpose: 'game-announcements',
+        gameId: testApp.seed.game.id,
+        config: {},
+      })
+      .returning();
+    const [result] = nonEmpty(inserted, 'binding');
 
     expect(result).toBeDefined();
     expect(result.id).toBeDefined();
@@ -49,14 +47,12 @@ describe('Channel Bindings CRUD — create and read', () => {
     expect(result.channelId).toBe('555666777888');
     expect(result.gameId).toBe(testApp.seed.game.id);
 
-    const [readBack] = nonEmpty(
-      await db
-        .select()
-        .from(schema.channelBindings)
-        .where(eq(schema.channelBindings.id, result.id))
-        .limit(1),
-      'readBack',
-    );
+    const readRows = await db
+      .select()
+      .from(schema.channelBindings)
+      .where(eq(schema.channelBindings.id, result.id))
+      .limit(1);
+    const [readBack] = nonEmpty(readRows, 'readBack');
 
     expect(readBack).toBeDefined();
     expect(readBack.guildId).toBe('111222333444');
