@@ -9,6 +9,7 @@ import { eq, and, isNull } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -108,16 +109,19 @@ describe('embed scheduler — events with embeds', () => {
     const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
     const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
 
-    const [event] = await db
-      .insert(schema.events)
-      .values({
-        title: 'Cancelled Event',
-        creatorId: testApp.seed.adminUser.id,
-        duration: [futureStart, futureEnd],
-        cancelledAt: new Date(),
-        cancellationReason: 'Testing cancellation',
-      })
-      .returning();
+    const [event] = nonEmpty(
+      await db
+        .insert(schema.events)
+        .values({
+          title: 'Cancelled Event',
+          creatorId: testApp.seed.adminUser.id,
+          duration: [futureStart, futureEnd],
+          cancelledAt: new Date(),
+          cancellationReason: 'Testing cancellation',
+        })
+        .returning(),
+      'event',
+    );
 
     const eventsWithoutEmbeds = await db
       .select({
@@ -153,46 +157,58 @@ describe('embed poster roster enrichment — multi-JOIN', () => {
       testApp.seed.game.id,
     );
 
-    const [signup1] = await db
-      .insert(schema.eventSignups)
-      .values({
-        eventId: event.id,
-        userId: testApp.seed.adminUser.id,
-        status: 'signed_up',
-        confirmationStatus: 'pending',
-      })
-      .returning();
+    const [signup1] = nonEmpty(
+      await db
+        .insert(schema.eventSignups)
+        .values({
+          eventId: event.id,
+          userId: testApp.seed.adminUser.id,
+          status: 'signed_up',
+          confirmationStatus: 'pending',
+        })
+        .returning(),
+      'signup1',
+    );
 
-    const [user2] = await db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:player2@test.local',
-        username: 'player2',
-        role: 'member',
-      })
-      .returning();
+    const [user2] = nonEmpty(
+      await db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:player2@test.local',
+          username: 'player2',
+          role: 'member',
+        })
+        .returning(),
+      'user2',
+    );
 
-    const [char2] = await db
-      .insert(schema.characters)
-      .values({
-        userId: user2.id,
-        gameId: testApp.seed.game.id,
-        name: 'TestTank',
-        class: 'Warrior',
-        role: 'tank',
-      })
-      .returning();
+    const [char2] = nonEmpty(
+      await db
+        .insert(schema.characters)
+        .values({
+          userId: user2.id,
+          gameId: testApp.seed.game.id,
+          name: 'TestTank',
+          class: 'Warrior',
+          role: 'tank',
+        })
+        .returning(),
+      'char2',
+    );
 
-    const [signup2] = await db
-      .insert(schema.eventSignups)
-      .values({
-        eventId: event.id,
-        userId: user2.id,
-        characterId: char2.id,
-        status: 'signed_up',
-        confirmationStatus: 'confirmed',
-      })
-      .returning();
+    const [signup2] = nonEmpty(
+      await db
+        .insert(schema.eventSignups)
+        .values({
+          eventId: event.id,
+          userId: user2.id,
+          characterId: char2.id,
+          status: 'signed_up',
+          confirmationStatus: 'confirmed',
+        })
+        .returning(),
+      'signup2',
+    );
 
     await db.insert(schema.rosterAssignments).values([
       { eventId: event.id, signupId: signup1.id, role: 'dps', position: 1 },
@@ -259,14 +275,17 @@ describe('embed poster roster enrichment — declined filter', () => {
       confirmationStatus: 'pending',
     });
 
-    const [user2] = await db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:declined@test.local',
-        username: 'declined',
-        role: 'member',
-      })
-      .returning();
+    const [user2] = nonEmpty(
+      await db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:declined@test.local',
+          username: 'declined',
+          role: 'member',
+        })
+        .returning(),
+      'user2',
+    );
 
     await db.insert(schema.eventSignups).values({
       eventId: event.id,
@@ -300,14 +319,17 @@ describe('embed poster roster enrichment — declined filter', () => {
 async function createPugEvent(title = 'PUG Test Event') {
   const now = new Date();
   const futureEnd = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId: testApp.seed.adminUser.id,
-      duration: [now, futureEnd],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId: testApp.seed.adminUser.id,
+        duration: [now, futureEnd],
+      })
+      .returning(),
+    'event',
+  );
   return event.id;
 }
 
@@ -480,14 +502,17 @@ describe('pug slot lifecycle — claim by ID or invite code', () => {
     const db = testApp.db;
     const testEventId = await createPugEvent();
 
-    const [claimUser] = await db
-      .insert(schema.users)
-      .values({
-        discordId: 'discord:claimuser',
-        username: 'claimuser',
-        role: 'member',
-      })
-      .returning();
+    const [claimUser] = nonEmpty(
+      await db
+        .insert(schema.users)
+        .values({
+          discordId: 'discord:claimuser',
+          username: 'claimuser',
+          role: 'member',
+        })
+        .returning(),
+      'claimUser',
+    );
 
     await db.insert(schema.pugSlots).values({
       eventId: testEventId,
@@ -525,7 +550,7 @@ describe('pug slot lifecycle — claim by ID or invite code', () => {
 
     expect(byIdResult.length).toBe(1);
     expect(byIdResult[0].claimedByUserId).toBe(claimUser.id);
-    expect(byIdResult[0].status).toBe('claimed');
+    expect(byIdResult[0]?.status).toBe('claimed');
 
     const byCodeResult = await db
       .update(schema.pugSlots)
@@ -556,16 +581,19 @@ describe('discord event messages — insert and query', () => {
     const db = testApp.db;
     const event = await createFutureEvent('Embed Tracking Test');
 
-    const [msg] = await db
-      .insert(schema.discordEventMessages)
-      .values({
-        eventId: event.id,
-        guildId: '111222333444',
-        channelId: '555666777888',
-        messageId: 'msg-123',
-        embedState: 'posted',
-      })
-      .returning();
+    const [msg] = nonEmpty(
+      await db
+        .insert(schema.discordEventMessages)
+        .values({
+          eventId: event.id,
+          guildId: '111222333444',
+          channelId: '555666777888',
+          messageId: 'msg-123',
+          embedState: 'posted',
+        })
+        .returning(),
+      'msg',
+    );
 
     expect(msg.eventId).toBe(event.id);
     expect(msg.embedState).toBe('posted');

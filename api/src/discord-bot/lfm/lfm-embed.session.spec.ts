@@ -159,7 +159,7 @@ describe('LFM_REACHED on a game whose session is already live (AC7)', () => {
     await service.onLfmReached(NOW_REACHED);
 
     expect(client.editEmbed).toHaveBeenCalledTimes(1);
-    expect(client.editEmbed.mock.calls[0][2].data.author?.name).toBe(
+    expect(client.editEmbed.mock.calls[0]?.[2].data.author?.name).toBe(
       '▸ PLAYING NOW · 2 in voice',
     );
     // The head-count that gets stamped is the SESSION's, not zero: a `0` here

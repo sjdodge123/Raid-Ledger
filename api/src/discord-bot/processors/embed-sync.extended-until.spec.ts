@@ -82,7 +82,7 @@ function makeEvent(overrides: {
 }
 
 let processor: EmbedSyncProcessor;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'select' | 'update', jest.Mock>;
 let scheduledEventService: jest.Mocked<ScheduledEventService>;
 
 /**

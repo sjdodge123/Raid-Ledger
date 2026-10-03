@@ -391,8 +391,8 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
     const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
       embeds: { data: { footer?: { text: string } } }[];
     };
-    expect(call.embeds[0].data.footer?.text).toContain('2 total signups');
-    expect(call.embeds[0].data.footer?.text).toContain('25');
+    expect(call.embeds[0]?.data.footer?.text).toContain('2 total signups');
+    expect(call.embeds[0]?.data.footer?.text).toContain('25');
   });
 
   /**
@@ -432,7 +432,7 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
     const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
       embeds: { data: { footer?: { text: string } } }[];
     };
-    expect(call.embeds[0].data.footer?.text).toBe(
+    expect(call.embeds[0]?.data.footer?.text).toBe(
       'Raid Ledger · 2 total signups / 25 slots',
     );
   });
@@ -611,6 +611,6 @@ describe('RosterViewCommand — autocomplete: upcoming & format', () => {
       value: string;
     }[];
     expect(typeof callArgs[0].value).toBe('string');
-    expect(callArgs[0].value).toBe('42');
+    expect(callArgs[0]?.value).toBe('42');
   });
 });

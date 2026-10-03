@@ -28,6 +28,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { normalizeAndDeleteGames } from './services/channel-bindings-invariant.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const GUILD = 'rok1415-guild';
 const CHANNEL = 'rok1415-voice-channel';
@@ -143,7 +144,10 @@ describe('Channel binding invariant guard (Regression: ROK-1415)', () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('BINDING_MONITOR_REQUIRES_GAME');
 
-    const [after] = await testApp.db.select().from(cb).where(eq(cb.id, b.id));
+    const [after] = nonEmpty(
+      await testApp.db.select().from(cb).where(eq(cb.id, b.id)),
+      'after',
+    );
     expect(after.bindingPurpose).toBe('general-lobby');
   });
 
@@ -160,7 +164,10 @@ describe('Channel binding invariant guard (Regression: ROK-1415)', () => {
       .send({ bindingPurpose: 'general-lobby' });
 
     expect(res.status).toBe(200);
-    const [after] = await testApp.db.select().from(cb).where(eq(cb.id, b.id));
+    const [after] = nonEmpty(
+      await testApp.db.select().from(cb).where(eq(cb.id, b.id)),
+      'after',
+    );
     expect(after.bindingPurpose).toBe('general-lobby');
   });
 });
@@ -215,7 +222,7 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
 
     const rows = await bindingsOnChannel();
     expect(rows).toHaveLength(1);
-    expect(rows[0].bindingPurpose).toBe('general-lobby');
+    expect(rows[0]?.bindingPurpose).toBe('general-lobby');
     expect(rows[0].gameId).toBeNull();
   });
 
@@ -250,7 +257,7 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
       .from(cb)
       .where(eq(cb.channelId, TEXT_CH));
     expect(rows).toHaveLength(1);
-    expect(rows[0].bindingPurpose).toBe('game-announcements');
+    expect(rows[0]?.bindingPurpose).toBe('game-announcements');
     expect(rows[0].gameId).toBeNull();
   });
 
@@ -308,7 +315,7 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
 
     const rows = await bindingsOnChannel();
     expect(rows).toHaveLength(1); // one survivor, one dropped as redundant
-    expect(rows[0].bindingPurpose).toBe('general-lobby');
+    expect(rows[0]?.bindingPurpose).toBe('general-lobby');
     expect(rows[0].gameId).toBeNull();
 
     const health = await getHealth();

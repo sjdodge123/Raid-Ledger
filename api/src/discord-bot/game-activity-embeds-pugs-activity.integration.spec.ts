@@ -13,6 +13,7 @@ import { eq, and, isNull, lt } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function formatDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -75,15 +76,18 @@ describe('game activity sessions — persist and close', () => {
     const db = testApp.db;
     const startedAt = new Date(Date.now() - 3600 * 1000);
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Test Game',
-        startedAt,
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Test Game',
+          startedAt,
+        })
+        .returning(),
+      'session',
+    );
 
     const endedAt = new Date();
     const durationSeconds = Math.floor(
@@ -127,15 +131,18 @@ describe('game activity sessions — game ID resolution', () => {
     expect(mapping).toBeDefined();
     expect(mapping.gameId).toBe(testApp.seed.game.id);
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: mapping.gameId,
-        discordActivityName: 'FINAL FANTASY XIV',
-        startedAt: new Date(),
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: mapping.gameId,
+          discordActivityName: 'FINAL FANTASY XIV',
+          startedAt: new Date(),
+        })
+        .returning(),
+      'session',
+    );
 
     expect(session.gameId).toBe(testApp.seed.game.id);
   });
@@ -213,15 +220,18 @@ describe('stale session sweep', () => {
     const MAX_DURATION = 24 * 60 * 60;
     const staleStart = new Date(Date.now() - 25 * 60 * 60 * 1000);
 
-    const [staleSession] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Stale Game',
-        startedAt: staleStart,
-      })
-      .returning();
+    const [staleSession] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Stale Game',
+          startedAt: staleStart,
+        })
+        .returning(),
+      'staleSession',
+    );
 
     await db
       .update(schema.gameActivitySessions)
@@ -248,15 +258,18 @@ describe('stale session sweep', () => {
     const MAX_DURATION = 24 * 60 * 60;
     const recentStart = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
-    const [recentSession] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Recent Game',
-        startedAt: recentStart,
-      })
-      .returning();
+    const [recentSession] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Recent Game',
+          startedAt: recentStart,
+        })
+        .returning(),
+      'recentSession',
+    );
 
     const cutoff = new Date(Date.now() - MAX_DURATION * 1000);
     const swept = await db
@@ -295,15 +308,18 @@ describe('orphaned session cleanup — stale orphans', () => {
     const now = new Date();
 
     const staleStart = new Date(now.getTime() - 30 * 60 * 60 * 1000);
-    const [stale] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: null,
-        discordActivityName: 'Orphan Stale',
-        startedAt: staleStart,
-      })
-      .returning();
+    const [stale] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: null,
+          discordActivityName: 'Orphan Stale',
+          startedAt: staleStart,
+        })
+        .returning(),
+      'stale',
+    );
 
     const staleResult = await db
       .update(schema.gameActivitySessions)
@@ -335,15 +351,18 @@ describe('orphaned session cleanup — recent orphans', () => {
     const now = new Date();
 
     const recentStart = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-    const [recent] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Orphan Recent',
-        startedAt: recentStart,
-      })
-      .returning();
+    const [recent] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Orphan Recent',
+          startedAt: recentStart,
+        })
+        .returning(),
+      'recent',
+    );
 
     const expectedDuration = Math.floor(
       (now.getTime() - recentStart.getTime()) / 1000,
@@ -374,17 +393,20 @@ describe('daily rollup — upsert all periods', () => {
     const db = testApp.db;
 
     const sessionDate = new Date();
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Test Game',
-        startedAt: new Date(sessionDate.getTime() - 3600_000),
-        endedAt: sessionDate,
-        durationSeconds: 3600,
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Test Game',
+          startedAt: new Date(sessionDate.getTime() - 3600_000),
+          endedAt: sessionDate,
+          durationSeconds: 3600,
+        })
+        .returning(),
+      'session',
+    );
 
     expect(session.durationSeconds).toBe(3600);
 
@@ -481,7 +503,7 @@ describe('daily rollup — idempotent upsert', () => {
       );
 
     expect(rollups.length).toBe(1);
-    expect(rollups[0].totalSeconds).toBe(5400);
+    expect(rollups[0]?.totalSeconds).toBe(5400);
   });
 });
 
@@ -529,17 +551,20 @@ describe('daily rollup — multi-session aggregation', () => {
         set: { totalSeconds },
       });
 
-    const [rollup] = await db
-      .select()
-      .from(schema.gameActivityRollups)
-      .where(
-        and(
-          eq(schema.gameActivityRollups.userId, testApp.seed.adminUser.id),
-          eq(schema.gameActivityRollups.gameId, testApp.seed.game.id),
-          eq(schema.gameActivityRollups.period, 'day'),
-        ),
-      )
-      .limit(1);
+    const [rollup] = nonEmpty(
+      await db
+        .select()
+        .from(schema.gameActivityRollups)
+        .where(
+          and(
+            eq(schema.gameActivityRollups.userId, testApp.seed.adminUser.id),
+            eq(schema.gameActivityRollups.gameId, testApp.seed.game.id),
+            eq(schema.gameActivityRollups.period, 'day'),
+          ),
+        )
+        .limit(1),
+      'rollup',
+    );
 
     expect(rollup.totalSeconds).toBe(5400);
   });

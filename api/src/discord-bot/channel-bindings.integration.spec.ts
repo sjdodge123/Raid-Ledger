@@ -12,6 +12,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { ChannelBindingsService } from './services/channel-bindings.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -83,7 +84,7 @@ describe('Channel Bindings CRUD — create and read', () => {
       );
 
     expect(rows.length).toBe(1);
-    expect(rows[0].gameName).toBe('Test Game');
+    expect(rows[0]?.gameName).toBe('Test Game');
     expect(rows[0].gameId).toBe(testApp.seed.game.id);
   });
 });
@@ -103,30 +104,33 @@ describe('Channel Bindings CRUD — upsert', () => {
       config: {},
     });
 
-    const [upserted] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: '111222333444',
-        channelId: '555666777888',
-        channelType: 'text',
-        bindingPurpose: 'game-voice-monitor',
-        gameId: testApp.seed.game.id,
-        recurrenceGroupId: seriesId,
-        config: { minPlayers: 3 },
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.channelBindings.guildId,
-          schema.channelBindings.channelId,
-          schema.channelBindings.recurrenceGroupId,
-        ],
-        set: {
+    const [upserted] = nonEmpty(
+      await db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: '111222333444',
+          channelId: '555666777888',
+          channelType: 'text',
           bindingPurpose: 'game-voice-monitor',
+          gameId: testApp.seed.game.id,
+          recurrenceGroupId: seriesId,
           config: { minPlayers: 3 },
-          updatedAt: new Date(),
-        },
-      })
-      .returning();
+        })
+        .onConflictDoUpdate({
+          target: [
+            schema.channelBindings.guildId,
+            schema.channelBindings.channelId,
+            schema.channelBindings.recurrenceGroupId,
+          ],
+          set: {
+            bindingPurpose: 'game-voice-monitor',
+            config: { minPlayers: 3 },
+            updatedAt: new Date(),
+          },
+        })
+        .returning(),
+      'upserted',
+    );
 
     expect(upserted.bindingPurpose).toBe('game-voice-monitor');
     expect(upserted.config).toMatchObject({ minPlayers: 3 });
@@ -144,17 +148,20 @@ describe('Channel Bindings CRUD — delete', () => {
   it('should delete a channel binding', async () => {
     const db = testApp.db;
 
-    const [created] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: '111222333444',
-        channelId: '999000111222',
-        channelType: 'voice',
-        bindingPurpose: 'game-voice-monitor',
-        gameId: null,
-        config: {},
-      })
-      .returning();
+    const [created] = nonEmpty(
+      await db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: '111222333444',
+          channelId: '999000111222',
+          channelType: 'voice',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: null,
+          config: {},
+        })
+        .returning(),
+      'created',
+    );
 
     const deleted = await db
       .delete(schema.channelBindings)
@@ -367,26 +374,32 @@ describe('Channel Bindings CRUD — FK cascade', () => {
   it('should cascade set null when referenced game is deleted', async () => {
     const db = testApp.db;
 
-    const [tempGame] = await db
-      .insert(schema.games)
-      .values({
-        name: 'Temp Game',
-        slug: 'temp-game',
-        igdbId: null,
-      })
-      .returning();
+    const [tempGame] = nonEmpty(
+      await db
+        .insert(schema.games)
+        .values({
+          name: 'Temp Game',
+          slug: 'temp-game',
+          igdbId: null,
+        })
+        .returning(),
+      'tempGame',
+    );
 
-    const [binding] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: '111222333444',
-        channelId: '333444555666',
-        channelType: 'text',
-        bindingPurpose: 'game-announcements',
-        gameId: tempGame.id,
-        config: {},
-      })
-      .returning();
+    const [binding] = nonEmpty(
+      await db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: '111222333444',
+          channelId: '333444555666',
+          channelType: 'text',
+          bindingPurpose: 'game-announcements',
+          gameId: tempGame.id,
+          config: {},
+        })
+        .returning(),
+      'binding',
+    );
 
     await db.delete(schema.games).where(eq(schema.games.id, tempGame.id));
 

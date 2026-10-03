@@ -312,9 +312,9 @@ describe('BindCommand ROK-599 misc — autocomplete: format & empty', () => {
     const respondArg = (
       interaction.respond.mock.calls as unknown[][]
     )[0][0] as Array<{ name: string; value: string }>;
-    expect(respondArg[0].name).toMatch(/Summer Raid/);
-    expect(respondArg[0].name).toMatch(/Jun.*15|June.*15/i);
-    expect(respondArg[0].value).toBe('42');
+    expect(respondArg[0]?.name).toMatch(/Summer Raid/);
+    expect(respondArg[0]?.name).toMatch(/Jun.*15|June.*15/i);
+    expect(respondArg[0]?.value).toBe('42');
   });
 
   it('responds with empty array when no accessible events', async () => {

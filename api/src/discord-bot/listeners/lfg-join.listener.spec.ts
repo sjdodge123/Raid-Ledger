@@ -194,7 +194,7 @@ describe('LfgJoinListener (ROK-1471 D6 / AC4)', () => {
       components: { toJSON(): { components: unknown[] } }[];
     };
     expect(payload.components).toHaveLength(1);
-    expect(payload.components[0].toJSON().components).toEqual([
+    expect(payload.components[0]?.toJSON().components).toEqual([
       expect.objectContaining({
         style: ButtonStyle.Link,
         label: LFG_INVITE_VIEW_LABEL,

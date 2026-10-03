@@ -287,7 +287,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     const payload = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { description?: string } }>;
     };
-    expect(payload.embeds[0].toJSON().description).toContain("That's 2 now");
+    expect(payload.embeds[0]?.toJSON().description).toContain("That's 2 now");
   });
 
   it('is IDEMPOTENT: a repeat /lfg makes exactly one write call and says already in', async () => {
@@ -309,7 +309,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     const payload = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { description?: string } }>;
     };
-    expect(payload.embeds[0].toJSON().description).toContain(
+    expect(payload.embeds[0]?.toJSON().description).toContain(
       "You're already in — 2 looking",
     );
   });
@@ -348,7 +348,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     const payload = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { description?: string } }>;
     };
-    expect(payload.embeds[0].toJSON().description).toContain("I don't know");
+    expect(payload.embeds[0]?.toJSON().description).toContain("I don't know");
   });
 
   it('an all-digit TITLE wins over the game whose id happens to match', async () => {
@@ -392,7 +392,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     const payload = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { description?: string } }>;
     };
-    expect(payload.embeds[0].toJSON().description).toContain("I don't know");
+    expect(payload.embeds[0]?.toJSON().description).toContain("I don't know");
   });
 
   it.each([
@@ -415,7 +415,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       embeds: Array<{ toJSON: () => { author?: { name: string } } }>;
       components: unknown[];
     };
-    expect(payload.embeds[0].toJSON().author?.name).toBe('📋 YOUR GROUPS · 1');
+    expect(payload.embeds[0]?.toJSON().author?.name).toBe('📋 YOUR GROUPS · 1');
     expect(payload.components).toHaveLength(1);
   });
 

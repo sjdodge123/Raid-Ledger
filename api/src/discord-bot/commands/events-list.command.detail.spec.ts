@@ -163,7 +163,7 @@ describe('EventsListCommand — detail: title', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.title).toBe(
+    expect(getUpdateEmbedData(updateMock).embeds[0]?.data.title).toBe(
       'Dragon Boss Kill',
     );
   });
@@ -203,9 +203,9 @@ describe('EventsListCommand — detail: game name', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'Final Fantasy XIV',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('Final Fantasy XIV');
   });
 
   it('should show "No game" when game is null', async () => {
@@ -219,9 +219,9 @@ describe('EventsListCommand — detail: game name', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'No game',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('No game');
   });
 });
 
@@ -259,7 +259,7 @@ describe('EventsListCommand — detail: thumbnail present', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.thumbnail?.url).toBe(
+    expect(getUpdateEmbedData(updateMock).embeds[0]?.data.thumbnail?.url).toBe(
       'https://cdn.example.com/wow.jpg',
     );
   });
@@ -367,9 +367,9 @@ describe('EventsListCommand — detail: signups with max', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '7/25',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('7/25');
   });
 
   it('should show "4 signed up" when maxAttendees is null', async () => {
@@ -383,9 +383,9 @@ describe('EventsListCommand — detail: signups with max', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '4 signed up',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('4 signed up');
   });
 });
 
@@ -445,9 +445,9 @@ describe('EventsListCommand — detail: duration format', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '2 hours',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('2 hours');
   });
 
   it('should format fractional duration', async () => {
@@ -465,9 +465,9 @@ describe('EventsListCommand — detail: duration format', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '1.5 hours',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('1.5 hours');
   });
 });
 
@@ -502,9 +502,9 @@ describe('EventsListCommand — detail: creator & back button', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'RaidLeader',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('RaidLeader');
   });
 
   it('should show "Unknown" when creator is null', async () => {
@@ -518,9 +518,9 @@ describe('EventsListCommand — detail: creator & back button', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'Unknown',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('Unknown');
   });
 
   it('should include Back to list button', async () => {

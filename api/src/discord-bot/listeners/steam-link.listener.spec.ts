@@ -17,7 +17,7 @@ import { ChannelType, Events } from 'discord.js';
 import { ITAD_INTERACTIVE_FETCH } from '../../itad/itad.constants';
 
 let listener: SteamLinkListener;
-let mockClientService: Record<string, jest.Mock>;
+let mockClientService: Record<'getClient', jest.Mock>;
 let mockDb: Record<string, jest.Mock>;
 let mockDmSend: jest.Mock;
 

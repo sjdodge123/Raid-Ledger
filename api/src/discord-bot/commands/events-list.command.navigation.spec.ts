@@ -449,8 +449,8 @@ describe('EventsListCommand — dropdown: max & single', () => {
     await command.handleInteraction(interaction as unknown as HandleParam);
     const menu = getSelectMenu(interaction);
     expect(menu.options).toHaveLength(1);
-    expect(menu.options[0].data.value).toBe('5');
-    expect(menu.options[0].data.label).toBe('Solo Event');
+    expect(menu.options[0]?.data.value).toBe('5');
+    expect(menu.options[0]?.data.label).toBe('Solo Event');
   });
 });
 
@@ -503,7 +503,7 @@ describe('EventsListCommand — dropdown: value & desc', () => {
       makeFindAllResult([makeEvent({ id: 999 })]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getSelectMenu(interaction).options[0].data.value).toBe('999');
+    expect(getSelectMenu(interaction).options[0]?.data.value).toBe('999');
   });
 
   it('should include game name in description', async () => {
@@ -514,7 +514,7 @@ describe('EventsListCommand — dropdown: value & desc', () => {
       ]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getSelectMenu(interaction).options[0].data.description).toContain(
+    expect(getSelectMenu(interaction).options[0]?.data.description).toContain(
       'EverQuest',
     );
   });
@@ -525,7 +525,7 @@ describe('EventsListCommand — dropdown: value & desc', () => {
       makeFindAllResult([makeEvent({ id: 1, game: null })]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getSelectMenu(interaction).options[0].data.description).toContain(
+    expect(getSelectMenu(interaction).options[0]?.data.description).toContain(
       'No game',
     );
   });

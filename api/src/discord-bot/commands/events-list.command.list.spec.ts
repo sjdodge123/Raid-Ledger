@@ -248,7 +248,7 @@ describe('EventsListCommand — embed content: color & game', () => {
       makeFindAllResult([makeEvent({ game: null })]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getEmbedData(interaction).embeds[0].data.description).toContain(
+    expect(getEmbedData(interaction).embeds[0]?.data.description).toContain(
       'No game',
     );
   });
@@ -278,7 +278,7 @@ describe('EventsListCommand — embed content: roster & footer', () => {
       makeFindAllResult([makeEvent({ signupCount: 5, maxAttendees: 20 })]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getEmbedData(interaction).embeds[0].data.description).toContain(
+    expect(getEmbedData(interaction).embeds[0]?.data.description).toContain(
       '5/20',
     );
   });
@@ -289,7 +289,7 @@ describe('EventsListCommand — embed content: roster & footer', () => {
       makeFindAllResult([makeEvent({ signupCount: 3, maxAttendees: null })]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getEmbedData(interaction).embeds[0].data.description).toContain(
+    expect(getEmbedData(interaction).embeds[0]?.data.description).toContain(
       '3 signed up',
     );
   });
@@ -303,7 +303,7 @@ describe('EventsListCommand — embed content: roster & footer', () => {
       ),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getEmbedData(interaction).embeds[0].data.footer?.text).toContain(
+    expect(getEmbedData(interaction).embeds[0]?.data.footer?.text).toContain(
       '10',
     );
   });

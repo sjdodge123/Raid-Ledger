@@ -61,8 +61,8 @@ describe('LFM_REACHED — the first post (D8a)', () => {
     });
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);
-    expect(client.sendEmbed.mock.calls[0][0]).toBe('chan-default');
-    expect(client.sendEmbed.mock.calls[0][3]).toBe(
+    expect(client.sendEmbed.mock.calls[0]?.[0]).toBe('chan-default');
+    expect(client.sendEmbed.mock.calls[0]?.[3]).toBe(
       '🔎 Deep Rock Galactic · 2 looking for a group',
     );
     expect(sent().author?.name).toBe(
@@ -159,7 +159,7 @@ describe('GROUP_CHANGED — the in-place edits (D8b)', () => {
 
     await service.onGroupChanged({ gameId: GAME_ID, reason: 'joined' });
 
-    expect(client.editEmbed.mock.calls[0][1]).toBe('msg-1');
+    expect(client.editEmbed.mock.calls[0]?.[1]).toBe('msg-1');
     expect(edited().author?.name).toBe(
       '◌ NEEDS PLAYERS · 3 looking · needs 1 more',
     );

@@ -395,7 +395,7 @@ describe('UnbindCommand ROK-599 — clearing the override', () => {
     )[0][0] as {
       embeds: { data: { title?: string } }[];
     };
-    expect(replyArg.embeds[0].data.title).toBe('Raid Night');
+    expect(replyArg.embeds[0]?.data.title).toBe('Raid Night');
   });
 
   it('mentions fallback to default channel', async () => {

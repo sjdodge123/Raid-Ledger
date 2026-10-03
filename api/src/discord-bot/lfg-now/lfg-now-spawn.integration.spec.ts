@@ -51,6 +51,7 @@ import { insertLfmMessage } from '../lfm/lfm-embed.db-helpers';
 import { LfmEmbedService } from '../lfm/lfm-embed.service';
 import { LfgNowSpawnService } from './lfg-now-spawn.service';
 import { recordLfgNowVoiceJoin } from './lfg-now-voice.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -238,7 +239,7 @@ describe('AC1 — two now-hands spawn exactly one session', () => {
   // is never converted at all.
   it('attaches a third hand to the open session instead of minting a second', async () => {
     const { game, event } = await spawnPair('Left 4 Dead');
-    const [c] = await members('gamma');
+    const [c] = nonEmpty(await members('gamma'), 'c');
 
     await postNow(c.token, game.id).expect(201);
 
@@ -301,7 +302,7 @@ describe('AC5 — 1 week + 1 now', () => {
     // ROK-1479 is unchanged: the pair still announces itself as an LFM group.
     expect(seen).toHaveLength(1);
     expect(seen[0].gameId).toBe(game.id);
-    expect(seen[0].activeCount).toBe(2);
+    expect(seen[0]?.activeCount).toBe(2);
     // Feed the REAL payload back through the subscriber, awaited, so the
     // absence below is a decision rather than a race.
     await spawnService().onLfmReached(seen[0]);
@@ -327,7 +328,7 @@ describe('AC5 — 1 week + 1 now', () => {
     await waitFor(async () => {
       expect(await countAdHocEvents(game.id)).toBe(1);
     });
-    const [event] = await adHocEvents(game.id);
+    const [event] = nonEmpty(await adHocEvents(game.id), 'event');
     // The week hand is not on the roster it never asked to join.
     expect(await rosterDiscordIds(event.id)).toEqual(
       [b.discordId, c.discordId].sort(),
@@ -378,7 +379,7 @@ describe('ROK-1614 — the board +1 inherits the horizon and the spawn follows',
     await waitFor(async () => {
       expect(await countAdHocEvents(game.id)).toBe(1);
     });
-    const [event] = await adHocEvents(game.id);
+    const [event] = nonEmpty(await adHocEvents(game.id), 'event');
     expect(await rosterDiscordIds(event.id)).toEqual(
       [a.discordId, b.discordId].sort(),
     );
@@ -432,7 +433,7 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
     await waitFor(async () => {
       expect(await countAdHocEvents(game.id)).toBe(1);
     });
-    const [event] = await adHocEvents(game.id);
+    const [event] = nonEmpty(await adHocEvents(game.id), 'event');
     expect(await rosterDiscordIds(event.id)).toEqual(
       [a.discordId, b.discordId].sort(),
     );
@@ -449,7 +450,7 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
   });
 
   it('raises tonight when the only hand on the game has lapsed', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Valheim');
     const started = (await postWeek(a.token, game.id).expect(201))
       .body as LfgIntentResponseDto;
@@ -460,7 +461,7 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
   });
 
   it('joins a live WEEK group on week rather than the tonight default', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Valheim');
     await postWeek(a.token, game.id).expect(201);
     await expect(
@@ -469,7 +470,7 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
   });
 
   it('an explicit urgency ignores the open group (AC3)', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'PEAK');
     await postNow(a.token, game.id).expect(201);
     await expect(
@@ -483,7 +484,7 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
   // fails on `toEqual` — received `{ urgency: 'tonight' }`.
   it('raises NOW, on the default bucket, while a spawned session is playing', async () => {
     const { game } = await spawnPair('Helldivers');
-    const [c] = await members('gamma');
+    const [c] = nonEmpty(await members('gamma'), 'c');
     const request = await resolveLfgCommandUrgency(testApp.db, game.id, null);
     expect(request).toEqual({ urgency: 'now', ttlMinutes: 30 });
     const res = await postIntent(c.token, game.id, request).expect(201);
@@ -492,7 +493,7 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
 
   // The caller's OWN lone hand is the open group: a re-run re-asserts it.
   it('counts the caller own lone now hand, and re-running keeps it now', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'PEAK');
     await postNow(a.token, game.id).expect(201);
     const request = await resolveLfgCommandUrgency(testApp.db, game.id, null);
@@ -506,7 +507,7 @@ describe('ROK-1656 — a bare /lfg resolves its urgency from the open group', ()
   it.each(['bannedAt', 'deactivatedAt'] as const)(
     'ignores a hand whose holder has %s set',
     async (column) => {
-      const [a] = await members('alpha');
+      const [a] = nonEmpty(await members('alpha'), 'a');
       const game = await createGame(testApp, 'Valheim');
       await postWeek(a.token, game.id).expect(201);
       await testApp.db
@@ -542,7 +543,7 @@ describe('AC6 — expiry', () => {
   // `expires_at <= now()` predicate with a 14-day literal and the status
   // assertion fails on `expect(received).toBe('expired')`, received 'active'.
   it('never spawns for one hand, and still nothing after the sweep expires it', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Subnautica');
     const res = await postNow(a.token, game.id).expect(201);
     const intent = res.body as LfgIntentResponseDto;
@@ -599,7 +600,7 @@ describe('AC4 — a voice join creates no lfg_intents row', () => {
     expect(roster).toHaveLength(1);
     // Q3: an unlinked joiner counts by Discord name, never as an app user.
     expect(roster[0].userId).toBeNull();
-    expect(roster[0].discordUserId).toBe('discord-guest-1494');
+    expect(roster[0]?.discordUserId).toBe('discord-guest-1494');
     expect(await countIntents(game.id)).toBe(before);
   });
 });
@@ -623,7 +624,7 @@ describe('AC9 — two week-hands', () => {
     });
 
     expect(seen).toHaveLength(1);
-    expect(seen[0].urgency).toBe('week');
+    expect(seen[0]?.urgency).toBe('week');
     await spawnService().onLfmReached(seen[0]);
     await forceDecision(game.id);
     expect(await countAdHocEvents(game.id)).toBe(0);
@@ -692,7 +693,7 @@ describe('AC3 — playingNow on the group detail', () => {
   // present but its `openLfgNowEventWhere` predicate loosened (drop
   // `eq(events.isAdHoc, true)`) an ordinary event would leak in here.
   it('is null for a group that has not spawned', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Terraria');
     await postNow(a.token, game.id).expect(201);
     await forceDecision(game.id);
@@ -788,7 +789,7 @@ describe('review §3 — reaping an LFG-born event closes its group message', ()
     await testApp.app.get(AdHocReaperService).reapOrphanedEvents();
 
     // Assert the reaper's own half first, so a failure names which half broke.
-    const [ended] = await adHocEvents(game.id);
+    const [ended] = nonEmpty(await adHocEvents(game.id), 'ended');
     expect(ended.adHocStatus).toBe('ended');
     // The emit is fire-and-forget out of the emitter, so the consumer's write
     // lands after `reapOrphanedEvents` resolves.
@@ -844,7 +845,7 @@ describe("AC10 — finalizeEvent closes the session's group message", () => {
     await testApp.app.get(AdHocEventService).finalizeEvent(event.id);
 
     // The finalize's own half first, so a failure names which half broke.
-    const [ended] = await adHocEvents(game.id);
+    const [ended] = nonEmpty(await adHocEvents(game.id), 'ended');
     expect(ended.adHocStatus).toBe('ended');
     // The emit is fire-and-forget out of the emitter, so the consumer's write
     // lands after `finalizeEvent` resolves.

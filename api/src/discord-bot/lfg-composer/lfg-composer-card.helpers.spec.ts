@@ -156,7 +156,7 @@ describe('the pinned card never carries a link or a token (ROK-1685 AC3)', () =>
     'omits View games when no client URL is configured (%p)',
     (clientUrl) => {
       const card = buildComposerCard(clientUrl);
-      expect(card.components[0].toJSON().components).toHaveLength(1);
+      expect(card.components[0]?.toJSON().components).toHaveLength(1);
       expect(JSON.stringify(card.components)).not.toContain('lfgc:view');
     },
   );

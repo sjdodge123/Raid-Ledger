@@ -40,6 +40,7 @@ import {
   ThreadMirrorService,
   type MirrorReactedMessage,
 } from './thread-mirror.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const GUILD = 'guild-int-1';
 const THREAD = '1000000000000000001';
@@ -593,14 +594,14 @@ describe('ROK-1506 — reactions', () => {
     // MUTATION: drop `reactions` from `toThreadMessageDto` — this names the
     // missing field; drop the write in `onReactionChange` — this sees `[]`.
     const added = await getThread(token, THREAD, query);
-    expect(added.body.messages[0].reactions).toEqual([FIRE]);
+    expect(added.body.messages[0]?.reactions).toEqual([FIRE]);
 
     await mirror.onReactionChange(reacted('1000000000000000050', false), {
       cleared: false,
     });
 
     const removed = await getThread(token, THREAD, query);
-    expect(removed.body.messages[0].reactions).toEqual([]);
+    expect(removed.body.messages[0]?.reactions).toEqual([]);
   });
 
   it('ignores a reaction on a message the mirror never stored', async () => {
@@ -614,7 +615,7 @@ describe('ROK-1506 — reactions', () => {
 
     const rows = await rowsFor(THREAD);
     expect(rows.map((r) => r.messageId)).toEqual(['1000000000000000060']);
-    expect(rows[0].reactions).toEqual([]);
+    expect(rows[0]?.reactions).toEqual([]);
   });
 
   it('A5.11 a reaction on a soft-deleted row writes nothing (D9)', async () => {
@@ -625,7 +626,7 @@ describe('ROK-1506 — reactions', () => {
       .update(schema.discordThreadMessages)
       .set({ deletedAt: new Date() })
       .where(eq(schema.discordThreadMessages.messageId, '1000000000000000070'));
-    const [before] = await rowsFor(THREAD);
+    const [before] = nonEmpty(await rowsFor(THREAD), 'before');
 
     await mirror.onReactionChange(reacted('1000000000000000070', true), {
       cleared: false,
@@ -634,7 +635,7 @@ describe('ROK-1506 — reactions', () => {
     // MUTATION: drop the `isNull(deletedAt)` clause in
     // `updateMirroredReactions` — the tombstone gains a 🔥 and a new
     // mirror_updated_at.
-    const [after] = await rowsFor(THREAD);
+    const [after] = nonEmpty(await rowsFor(THREAD), 'after');
     expect(after.reactions).toEqual([]);
     expect(after.mirrorUpdatedAt.toISOString()).toBe(
       before.mirrorUpdatedAt.toISOString(),

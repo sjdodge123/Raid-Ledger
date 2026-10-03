@@ -46,6 +46,7 @@ import { setLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { LfmEmbedService } from '../lfm/lfm-embed.service';
 import { LfgBoardService } from './lfg-board.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 let lfmEmbed: LfmEmbedService;
@@ -211,7 +212,7 @@ describe('LFG board ⇄ web chips parity (ROK-1505 AC4)', () => {
     // 1 — the first hand posts (AC1). The story's whole point.
     await raiseHand(a.token, game1.id);
     await expectParity([game1.id]);
-    const [firstRow] = await boardRows(game1.id);
+    const [firstRow] = nonEmpty(await boardRows(game1.id), 'firstRow');
     expect(firstRow).toMatchObject({
       state: 'open',
       postKind: 'forum',

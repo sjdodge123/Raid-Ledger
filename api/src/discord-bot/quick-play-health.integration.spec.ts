@@ -23,6 +23,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq, desc } from 'drizzle-orm';
 import { QuickPlayHealthService } from './services/quick-play-health.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 const JOB_NAME = 'QuickPlayHealthService_checkQuickPlayHealth';
 const INERT_CHANNEL_ID = 'inert-voice-chan-int';
@@ -41,15 +42,18 @@ async function ensureCleanJob(testApp: TestApp): Promise<number> {
       .where(eq(schema.cronJobExecutions.cronJobId, existing.id));
     return existing.id;
   }
-  const [row] = await testApp.db
-    .insert(schema.cronJobs)
-    .values({
-      name: JOB_NAME,
-      source: 'core',
-      cronExpression: '0 15 5 * * *',
-      paused: false,
-    })
-    .returning();
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.cronJobs)
+      .values({
+        name: JOB_NAME,
+        source: 'core',
+        cronExpression: '0 15 5 * * *',
+        paused: false,
+      })
+      .returning(),
+    'row',
+  );
   return row.id;
 }
 

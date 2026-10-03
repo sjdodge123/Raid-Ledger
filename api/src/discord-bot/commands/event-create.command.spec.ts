@@ -642,7 +642,7 @@ describe('EventCreateCommand — autocomplete: non-game & format', () => {
       name: string;
       value: string;
     }[];
-    expect(callArgs[0].name).toBe('Final Fantasy XIV');
-    expect(callArgs[0].value).toBe('Final Fantasy XIV');
+    expect(callArgs[0]?.name).toBe('Final Fantasy XIV');
+    expect(callArgs[0]?.value).toBe('Final Fantasy XIV');
   });
 });

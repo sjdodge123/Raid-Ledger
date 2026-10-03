@@ -91,7 +91,7 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
       'posted-pinned',
     );
     expect(ownComposers(channel)).toHaveLength(1);
-    expect(ownComposers(channel)[0].pinned).toBe(true);
+    expect(ownComposers(channel)[0]?.pinned).toBe(true);
   });
 
   it('second boot edits the same pinned message and never posts again', async () => {
@@ -154,7 +154,7 @@ describe('ensurePinnedComposer — permission fallback (AC7)', () => {
     const shared = deps(channel, warn);
     await expect(ensurePinnedComposer(shared)).resolves.toBe('posted-unpinned');
     expect(ownComposers(channel)).toHaveLength(1);
-    expect(ownComposers(channel)[0].pinned).toBe(false);
+    expect(ownComposers(channel)[0]?.pinned).toBe(false);
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0][0]).toContain('Manage Messages');
 

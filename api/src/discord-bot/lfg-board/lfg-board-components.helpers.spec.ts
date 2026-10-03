@@ -48,7 +48,7 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
     const rows = render();
     expect(rows).toHaveLength(1);
     expect(rows[0].type).toBe(ComponentType.ActionRow);
-    expect(rows[0].components).toHaveLength(2);
+    expect(rows[0]?.components).toHaveLength(2);
   });
 
   it('carries a join id the REAL listener parser recovers the game id from', () => {
@@ -76,8 +76,8 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
   it('drops the link button — but keeps the +1 — with no client URL', () => {
     const rows = render({ clientUrl: '' });
     expect(rows).toHaveLength(1);
-    expect(rows[0].components).toHaveLength(1);
-    expect(rows[0].components[0]).toMatchObject({
+    expect(rows[0]?.components).toHaveLength(1);
+    expect(rows[0]?.components[0]).toMatchObject({
       style: ButtonStyle.Primary,
       custom_id: `${LFG_BUTTON_IDS.JOIN}:${String(GAME_ID)}`,
     });

@@ -111,7 +111,7 @@ describe('ChannelBindingsController — listBindings: enrichment', () => {
     const result = await controller.listBindings();
 
     expect(result.data).toHaveLength(1);
-    expect(result.data[0].channelName).toBe('general');
+    expect(result.data[0]?.channelName).toBe('general');
   });
 
   it('should return undefined channelName when channel not found in Discord cache', async () => {
@@ -140,7 +140,7 @@ describe('ChannelBindingsController — listBindings: enrichment', () => {
 
     const result = await controller.listBindings();
 
-    expect(result.data[0].channelName).toBe('raid-voice');
+    expect(result.data[0]?.channelName).toBe('raid-voice');
   });
 
   it('should return multiple bindings', async () => {

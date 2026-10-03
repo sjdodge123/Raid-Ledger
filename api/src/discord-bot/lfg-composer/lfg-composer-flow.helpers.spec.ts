@@ -144,7 +144,7 @@ describe('openComposerModal (AC5 before the modal)', () => {
     const modal = built.toJSON() as {
       components: { components: { value?: string }[] }[];
     };
-    expect(modal.components[0].components[0].value).toBe('deep rok');
+    expect(modal.components[0]?.components[0]?.value).toBe('deep rok');
   });
 });
 

@@ -102,7 +102,7 @@ describe('POST /lfg/:gameId/start-now (integration)', () => {
     const events = await liveAdHocEvents(gameId);
     expect(events).toHaveLength(1);
     expect(events[0].creatorId).toBe(starter.userId);
-    expect(events[0].adHocStatus).toBe('live');
+    expect(events[0]?.adHocStatus).toBe('live');
     // AC4: the starter is IN, the other is only asked.
     expect(await rosterDiscordIds(events[0].id)).toEqual([starter.discordId]);
     expect(await intentStatus(starter.userId, gameId)).toBe('converted');

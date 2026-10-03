@@ -248,7 +248,7 @@ describe('buildListReply (ROK-1454 D11 / AC7)', () => {
 
   it('uses every one of the 25 fields when nothing overflows', () => {
     const { embeds, components } = buildListReply(own(25), CTX);
-    expect(embeds[0].toJSON().fields).toHaveLength(25);
+    expect(embeds[0]?.toJSON().fields).toHaveLength(25);
     const buttonCount = components.reduce(
       (n, row) => n + row.toJSON().components.length,
       0,
@@ -258,7 +258,7 @@ describe('buildListReply (ROK-1454 D11 / AC7)', () => {
 
   it('tells an empty list how to start one, with no buttons', () => {
     const { embeds, components } = buildListReply([], CTX);
-    expect(embeds[0].toJSON().description).toContain(
+    expect(embeds[0]?.toJSON().description).toContain(
       "You're not looking for anything right now",
     );
     expect(components).toHaveLength(0);
@@ -351,10 +351,10 @@ describe('the forum post link (ROK-1471 D8 / AC9)', () => {
     );
 
     const fields = embeds[0].toJSON().fields ?? [];
-    expect(fields[0].value).toBe(
+    expect(fields[0]?.value).toBe(
       '2 looking · expires 17 Sep\n[Open the post ↗](https://discord.com/channels/guild-1/thread-9)',
     );
-    expect(fields[1].value).toBe('2 looking · expires 17 Sep');
+    expect(fields[1]?.value).toBe('2 looking · expires 17 Sep');
   });
 
   it('renders the 1454 rows unchanged when no post links are passed at all', () => {
@@ -363,7 +363,7 @@ describe('the forum post link (ROK-1471 D8 / AC9)', () => {
       CTX,
     );
 
-    expect((embeds[0].toJSON().fields ?? [])[0].value).toBe(
+    expect((embeds[0].toJSON().fields ?? [])[0]?.value).toBe(
       '2 looking · expires 17 Sep',
     );
   });
@@ -504,7 +504,7 @@ describe('buildListReply — ROK-1479 urgency (D9)', () => {
 
   it('leaves a weekly row on the plain dated label', () => {
     const { embeds } = buildListReply([group()], CTX);
-    expect(embeds[0].toJSON().fields?.[0].value).toBe(
+    expect(embeds[0]?.toJSON().fields?.[0]?.value).toBe(
       '2 looking · expires 17 Sep',
     );
   });

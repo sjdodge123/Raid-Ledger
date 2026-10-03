@@ -81,7 +81,7 @@ function setupDbForSuccessfulSync(mockDb: Record<string, jest.Mock>) {
 let processor: EmbedSyncProcessor;
 let embedFactory: jest.Mocked<DiscordEmbedFactory>;
 let channelResolver: jest.Mocked<ChannelResolverService>;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'select' | 'update', jest.Mock>;
 
 beforeEach(async () => {
   mockDb = {

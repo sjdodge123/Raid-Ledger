@@ -36,6 +36,7 @@ import { LfmEmbedService } from '../lfm/lfm-embed.service';
 import { isTerminalRender, type LfmGroupView } from '../lfm/lfm-embed.helpers';
 import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import { LfgBoardService } from './lfg-board.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -145,7 +146,7 @@ async function freshGroupOnPostAged(
   ]);
   const game = await createGame(testApp, `Post Age ${label}`);
   await raiseHand(a.token, game.id);
-  const [row] = await boardRows(game.id);
+  const [row] = nonEmpty(await boardRows(game.id), 'row');
   expect(row).toMatchObject({ state: 'open', postKind: 'forum' });
   await backdatePost(row.id, ageDays);
   await raiseHand(b.token, game.id);
