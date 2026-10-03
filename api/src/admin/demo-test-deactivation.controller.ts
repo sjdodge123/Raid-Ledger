@@ -83,17 +83,22 @@ export class DemoTestDeactivationController {
     // projects seed in the same millisecond — two members then share a name
     // and the moderation smoke's `.first()` row can be the OTHER project's
     // (already kicked) member. Reuse the snowflake: it carries a random tail.
-    const [inserted] = await this.db
-      .insert(schema.users)
-      .values({
-        discordId: snowflake,
-        username: `non-guild-${snowflake}`,
-        role: 'member',
-      })
-      .returning({ id: schema.users.id });
-    const user = defined(inserted, 'non-guild user row');
-    if (quietDms) await muteDiscordDms(this.db, user.id);
-    return { userId: user.id, discordId: snowflake, quietDms };
+    // TDB:1960: the user and its Discord-off prefs commit together, so a
+    // live-bot fan-out can never DM the member in between.
+    const userId = await this.db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(schema.users)
+        .values({
+          discordId: snowflake,
+          username: `non-guild-${snowflake}`,
+          role: 'member',
+        })
+        .returning({ id: schema.users.id });
+      const user = defined(inserted, 'non-guild user row');
+      if (quietDms) await muteDiscordDms(tx, user.id);
+      return user.id;
+    });
+    return { userId, discordId: snowflake, quietDms };
   }
 
   /**

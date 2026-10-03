@@ -7,7 +7,7 @@ import { expandLocalLogin } from './helpers';
 test.describe('Auth', () => {
     test('login page renders form fields', async ({ browser }) => {
         // Use a fresh context without storageState to test unauthenticated view
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await page.goto('/');
@@ -21,7 +21,7 @@ test.describe('Auth', () => {
     });
 
     test('local login with admin@local credentials works', async ({ browser }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await page.goto('/');
@@ -39,7 +39,7 @@ test.describe('Auth', () => {
     });
 
     test('unauthenticated user is redirected to login', async ({ browser }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         // Try to access a protected route

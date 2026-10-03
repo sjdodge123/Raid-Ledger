@@ -15,7 +15,10 @@ import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
 import { deactivateUserViaModuleRef } from './discord-notification-deactivate.helpers';
 import { resolveUserTimezone } from './timezone.helpers';
-import { discordDisabledTypes } from './notification-mapping.helpers';
+import {
+  buildDiscordDisabledPrefs,
+  discordDisabledTypes,
+} from './notification-mapping.helpers';
 import {
   DISCORD_NOTIFICATION_QUEUE,
   RATE_LIMIT_WINDOW_MS,
@@ -325,27 +328,7 @@ export class DiscordNotificationService {
    * Auto-disable Discord notifications for a user and send in-app notification (AC-6).
    */
   private async autoDisableDiscord(userId: number): Promise<void> {
-    // Disable Discord for all notification types
-    const [prefs] = await this.db
-      .select()
-      .from(schema.userNotificationPreferences)
-      .where(eq(schema.userNotificationPreferences.userId, userId))
-      .limit(1);
-
-    if (prefs) {
-      const currentPrefs = prefs.channelPrefs;
-      const updatedPrefs = { ...currentPrefs };
-      for (const type of Object.keys(updatedPrefs) as NotificationType[]) {
-        if (updatedPrefs[type]) {
-          updatedPrefs[type] = { ...updatedPrefs[type], discord: false };
-        }
-      }
-
-      await this.db
-        .update(schema.userNotificationPreferences)
-        .set({ channelPrefs: updatedPrefs })
-        .where(eq(schema.userNotificationPreferences.userId, userId));
-    }
+    await this.disableDiscordForAllTypes(userId);
 
     // Create in-app notification about the issue
     const { title, message } =
@@ -359,5 +342,31 @@ export class DiscordNotificationService {
     });
 
     this.logger.log(`Auto-disabled Discord notifications for user ${userId}`);
+  }
+
+  /**
+   * Store Discord OFF for every notification type (TDB:1956), keeping the
+   * user's inApp/push. With no row yet, upsert: getPreferences' lazy insert
+   * can race this write.
+   */
+  private async disableDiscordForAllTypes(userId: number): Promise<void> {
+    const table = schema.userNotificationPreferences;
+    const [prefs] = await this.db
+      .select()
+      .from(table)
+      .where(eq(table.userId, userId))
+      .limit(1);
+    const channelPrefs = buildDiscordDisabledPrefs(prefs?.channelPrefs);
+    if (prefs) {
+      await this.db
+        .update(table)
+        .set({ channelPrefs })
+        .where(eq(table.userId, userId));
+      return;
+    }
+    await this.db
+      .insert(table)
+      .values({ userId, channelPrefs })
+      .onConflictDoUpdate({ target: table.userId, set: { channelPrefs } });
   }
 }

@@ -496,7 +496,7 @@ const lfmEmbedPlayingNow: SmokeTest = {
  * NOT gated on `SMOKE_SKIP_VOICE_JOIN`. The head-count is driven through the
  * DEMO_MODE voice-join/leave endpoints, not a UDP voice connection, so the
  * test needs nothing a GitHub runner lacks and runs in CI like every other
- * embed test. `voice-activity.test.ts` and `series-dual-binding.test.ts` still
- * gate their REAL voice joins — only this test's gate is gone.
+ * embed test. `voice-activity.test.ts` still gates its REAL voice joins;
+ * `series-dual-binding.test.ts` moved to the quick-play seam (ROK-1390).
  */
 export const lfmPlayingTests: SmokeTest[] = [lfmEmbedPlayingNow];

@@ -94,7 +94,7 @@ async function setupLineupInPhase(
         }
     }
 
-    const walk: Record<string, string[]> = {
+    const walk: Record<'building' | 'voting' | 'decided', string[]> = {
         building: [],
         voting: ['voting'],
         decided: ['voting', 'decided'],

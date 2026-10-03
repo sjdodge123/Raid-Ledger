@@ -40,8 +40,9 @@ export async function getFirstGameId(token: string): Promise<number> {
     });
     if (!res.ok) throw new Error(`Failed to fetch games: ${res.status}`);
     const body = (await res.json()) as { data: { id: number }[] };
-    if (!body.data?.length) throw new Error('No configured games');
-    return body.data[0].id;
+    const first = body.data?.[0];
+    if (!first) throw new Error('No configured games');
+    return first.id;
 }
 
 /** Suggest one more time on an existing poll; returns the new slot's id. */

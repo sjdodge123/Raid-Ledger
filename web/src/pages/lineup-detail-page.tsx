@@ -196,19 +196,11 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
   const leaderboardRef = useRef<HTMLElement | null>(null);
   const bracketRef = useRef<HTMLElement | null>(null);
 
-  // `hasTiebreaker` still needed here for the operator-only "show tiebreaker
-  // prompt" branch below; the body switch derives its own copy in
-  // LineupDetailBody (ROK-1117 / ROK-1253).
-  const hasTiebreaker =
-    !!tiebreaker &&
-    lineup.status === 'voting' &&
-    ['active', 'pending', 'resolved'].includes(tiebreaker.status);
   const isOperator = isOperatorOrAdmin(user);
 
-  // Tiebreaker prompt: server-created pending tiebreaker OR operator tried to advance with ties
-  const showPrompt = isOperator && !promptDismissed && (
-    (hasTiebreaker && tiebreaker?.status === 'pending') || tiebreakerPromptOpen
-  );
+  // Tiebreaker prompt: opens only when the operator's advance is intercepted
+  // because of ties (onTiebreakerIntercept below).
+  const showPrompt = isOperator && !promptDismissed && tiebreakerPromptOpen;
 
   // ROK-1297 (Cycle 4 STRICT) — per-tile + Nominate is the ONLY nominate CTA
   // during the building phase. The page-header inline Nominate button is

@@ -465,11 +465,11 @@ test.describe('Regression: ROK-868 — character info on duplicate signup', () =
 
         // Find admin's first character
         const chars = (await apiGet(token, '/users/me/characters')) as { data: Array<{ id: string; name: string; gameId: number }> };
-        if (!chars.data?.length) {
+        const char = chars.data?.[0];
+        if (!char) {
             test.skip(true, 'Admin has no characters — cannot test duplicate signup with character');
             return;
         }
-        const char = chars.data[0];
 
         // Create event with the character's game — admin auto-signs up WITHOUT character
         const futureStart = new Date(Date.now() + 86_400_000).toISOString();

@@ -62,7 +62,7 @@ test.describe('Auth refresh (ROK-1353)', () => {
     test('AC1: expired access token transparently refreshes (no login screen)', async ({
         browser,
     }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await loginViaForm(page);
@@ -98,7 +98,7 @@ test.describe('Auth refresh (ROK-1353)', () => {
     test('AC3: logout revokes refresh — a subsequent refresh is rejected', async ({
         browser,
     }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         await loginViaForm(page);
@@ -137,7 +137,7 @@ test.describe('Auth refresh (ROK-1353)', () => {
     test('AC7: ?silent_failed=1 routes to login exactly once (no loop)', async ({
         browser,
     }) => {
-        const context = await browser.newContext({ storageState: undefined });
+        const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
         const page = await context.newPage();
 
         // The silent Discord re-auth fall-through lands here. The page must
