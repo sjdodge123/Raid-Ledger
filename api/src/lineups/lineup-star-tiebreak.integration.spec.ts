@@ -23,7 +23,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 type Response = { status: number; body: unknown };
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -127,7 +127,9 @@ async function arrangeLevelTie(count: number) {
     });
   expectOk(created, 'create lineup');
   const lineupId = (created.body as { id: number }).id;
-  const [a, b] = await createGames(2);
+  const games = await createGames(2);
+  const a = at(games, 0);
+  const b = at(games, 1);
   for (const g of [a, b]) {
     expectOk(
       await testApp.request
@@ -154,9 +156,9 @@ async function arrangeLevelTie(count: number) {
 describe('an approval tie that the top picks can break', () => {
   it('decides the starred game and states its own reasoning (AC3)', async () => {
     const { lineupId, gameA, gameB, voters } = await arrangeLevelTie(3);
-    expectOk(await star(voters[0].token, lineupId, gameA), 'v0 stars A');
-    expectOk(await star(voters[1].token, lineupId, gameA), 'v1 stars A');
-    expectOk(await star(voters[2].token, lineupId, gameB), 'v2 stars B');
+    expectOk(await star(at(voters, 0).token, lineupId, gameA), 'v0 stars A');
+    expectOk(await star(at(voters, 1).token, lineupId, gameA), 'v1 stars A');
+    expectOk(await star(at(voters, 2).token, lineupId, gameB), 'v2 stars B');
 
     const res = await decide(lineupId);
 
@@ -169,8 +171,8 @@ describe('an approval tie that the top picks can break', () => {
 
   it('publishes the reasoning on the decided detail response (AC3/D10)', async () => {
     const { lineupId, gameA, voters } = await arrangeLevelTie(3);
-    expectOk(await star(voters[0].token, lineupId, gameA), 'v0 stars A');
-    expectOk(await star(voters[1].token, lineupId, gameA), 'v1 stars A');
+    expectOk(await star(at(voters, 0).token, lineupId, gameA), 'v0 stars A');
+    expectOk(await star(at(voters, 1).token, lineupId, gameA), 'v1 stars A');
     expectOk(await decide(lineupId), 'transition to decided');
 
     const res = await testApp.request
@@ -192,8 +194,8 @@ describe('an approval tie that the top picks can break', () => {
     // tally must stay 4–4 (a mixed ballot is not a partial ballot) while the
     // star tally reads 2–0.
     const { lineupId, gameA, voters } = await arrangeLevelTie(4);
-    expectOk(await star(voters[0].token, lineupId, gameA), 'v0 stars A');
-    expectOk(await star(voters[1].token, lineupId, gameA), 'v1 stars A');
+    expectOk(await star(at(voters, 0).token, lineupId, gameA), 'v0 stars A');
+    expectOk(await star(at(voters, 1).token, lineupId, gameA), 'v1 stars A');
 
     expectOk(await decide(lineupId), 'transition to decided');
 
@@ -212,8 +214,8 @@ describe('an approval tie that the top picks can break', () => {
 describe('an approval tie the top picks cannot break falls through (AC4/AC6)', () => {
   it('level stars leave ROK-1374s payload byte-identical', async () => {
     const { lineupId, gameA, gameB, voters } = await arrangeLevelTie(2);
-    expectOk(await star(voters[0].token, lineupId, gameA), 'v0 stars A');
-    expectOk(await star(voters[1].token, lineupId, gameB), 'v1 stars B');
+    expectOk(await star(at(voters, 0).token, lineupId, gameA), 'v0 stars A');
+    expectOk(await star(at(voters, 1).token, lineupId, gameB), 'v1 stars B');
 
     const res = await decide(lineupId);
 
@@ -257,8 +259,8 @@ describe('an approval tie the top picks cannot break falls through (AC4/AC6)', (
 describe('the readiness card reports the stars the group already cast (D11)', () => {
   it("marks a star-tied hold and names each game's count", async () => {
     const { lineupId, gameA, gameB, voters } = await arrangeLevelTie(2);
-    expectOk(await star(voters[0].token, lineupId, gameA), 'v0 stars A');
-    expectOk(await star(voters[1].token, lineupId, gameB), 'v1 stars B');
+    expectOk(await star(at(voters, 0).token, lineupId, gameA), 'v0 stars A');
+    expectOk(await star(at(voters, 1).token, lineupId, gameB), 'v1 stars B');
     // The transition refuses (stars are level), which is what opens the hold
     // in production. The hold row is written directly here so the card can be
     // read without driving the phase processor — this file is about the star

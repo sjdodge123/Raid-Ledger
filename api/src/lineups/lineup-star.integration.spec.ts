@@ -19,7 +19,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 type Response = { status: number; body: unknown };
 type Detail = {
@@ -143,7 +143,9 @@ async function arrangeVotingLineup(votesPerPlayer = 2) {
     });
   expectOk(created, 'create lineup');
   const lineupId = (created.body as { id: number }).id;
-  const [a, b] = await createGames(2);
+  const games = await createGames(2);
+  const a = at(games, 0);
+  const b = at(games, 1);
   for (const g of [a, b]) {
     expectOk(
       await testApp.request

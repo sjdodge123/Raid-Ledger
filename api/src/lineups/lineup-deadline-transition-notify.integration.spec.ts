@@ -46,7 +46,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupsGateway } from './lineups.gateway';
 import { LineupNotificationService } from './lineup-notification.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, defined, nonEmpty } from '../common/testing/narrow';
 
 interface Spies {
   notifyVotingOpen: jest.SpyInstance;
@@ -199,7 +199,7 @@ function describeDeadlineNotify() {
       .select()
       .from(schema.communityLineups)
       .where(eq(schema.communityLineups.id, lineupId));
-    return row;
+    return defined(row, `lineup ${lineupId}`);
   }
 
   /** Drive the deadline phase-transition job through the processor. */
@@ -280,8 +280,8 @@ function describeDeadlineNotify() {
     const lineupId = createRes.body.id as number;
 
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
 
     // Lineup is in 'building'; quorum NOT met (no submits). The deadline job
     // must still flip it to 'voting' and fire the full transition.
@@ -336,15 +336,15 @@ function describeDeadlineNotify() {
     const lineupId = createRes.body.id as number;
 
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId);
     expect((await readLineup(lineupId)).status).toBe('voting');
 
     // All three voters back games[0] — unique top, no tie.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
 
     const spies = installSpies();
     await fireDeadlineJob(lineupId, 'decided');
@@ -352,7 +352,7 @@ function describeDeadlineNotify() {
     // Row flipped to decided WITH the auto-picked winner (matching ran).
     const decided = await readLineup(lineupId);
     expect(decided.status).toBe('decided');
-    expect(decided.decidedGameId).toBe(games[0].id);
+    expect(decided.decidedGameId).toBe(at(games, 0).id);
 
     // Matching produced a match row for the winning game.
     const matchRow = await pollFor(async () => {
@@ -402,8 +402,8 @@ function describeDeadlineNotify() {
     const lineupId = createRes.body.id as number;
 
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
 
     const buildingDeadline = (await readLineup(lineupId)).phaseDeadline;
 
@@ -447,8 +447,8 @@ function describeDeadlineNotify() {
     const createRes = await createPrivateLineup([v1.userId]);
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId);
     expect((await readLineup(lineupId)).status).toBe('voting');
 
@@ -489,8 +489,8 @@ function describeDeadlineNotify() {
     const createRes = await createPrivateLineup([v1.userId]);
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
 
     // Stamp a pending grace window so processGraceAdvance proceeds, and mark
     // the lineup quorum-ready via submit-nominations.
