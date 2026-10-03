@@ -35,7 +35,7 @@ const noGameManifest: PluginManifest = {
 };
 
 let service: PluginRegistryService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'delete' | 'insert' | 'select' | 'update', jest.Mock>;
 let mockEventEmitter: { emit: jest.Mock };
 
 let selectResults: unknown[];
@@ -457,7 +457,7 @@ describe('PluginRegistryService — multiAdapter & noGameSlugs', () => {
       }));
 
       const result = await service.listPlugins();
-      expect(result[0].gameSlugs).toEqual([]);
+      expect(result[0]?.gameSlugs).toEqual([]);
     });
   });
 });

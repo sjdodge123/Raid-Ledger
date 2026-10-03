@@ -16,6 +16,7 @@ const passport = require('passport') as {
 import { Strategy as DiscordPassportStrategy } from 'passport-discord';
 import { DiscordAuthStrategy } from './discord-auth.strategy';
 import * as lifecycleUtil from '../../common/lifecycle.util';
+import { at } from '../../common/testing/narrow';
 
 /**
  * Unit tests for DiscordAuthStrategy — focused on onModuleInit callback
@@ -125,7 +126,7 @@ describe('DiscordAuthStrategy', () => {
       await strategy.onModuleInit();
 
       expect(bestEffortSpy).toHaveBeenCalledTimes(1);
-      const [label, , callback] = bestEffortSpy.mock.calls[0];
+      const [label, , callback] = at(bestEffortSpy.mock.calls, 0);
       expect(label).toBe('DiscordAuthStrategy');
 
       // TD-1: callback should NOT be an async wrapper — it should be a
@@ -149,7 +150,7 @@ describe('DiscordAuthStrategy', () => {
       await strategy.onModuleInit();
 
       expect(bestEffortSpy).toHaveBeenCalledTimes(1);
-      const callback = bestEffortSpy.mock.calls[0][2];
+      const callback = at(bestEffortSpy.mock.calls, 0)[2];
       await callback();
 
       expect(reloadSpy).toHaveBeenCalledTimes(1);

@@ -67,7 +67,7 @@ describe('CliqueDetectionService', () => {
     }));
     const cliques = service.detectCliques(nodes, edges);
     expect(cliques.length).toBeGreaterThanOrEqual(2);
-    expect(cliques[0].memberUserIds.length).toBeGreaterThanOrEqual(
+    expect(cliques[0]?.memberUserIds.length).toBeGreaterThanOrEqual(
       cliques[1]?.memberUserIds.length ?? 0,
     );
   });

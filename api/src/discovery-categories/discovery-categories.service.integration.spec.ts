@@ -16,6 +16,7 @@ import type { LlmService } from '../ai/llm.service';
 import type { SettingsService } from '../settings/settings.service';
 import type { CronJobService } from '../cron-jobs/cron-job.service';
 import { DiscoveryCategoriesService } from './discovery-categories.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 const PROPOSAL: LlmCategoryProposalDto = {
   name: 'Weekly Co-op',
@@ -81,18 +82,21 @@ describe('DiscoveryCategoriesService.weeklyGenerate (ROK-1127 A6)', () => {
   }
 
   async function seedApproved(name: string, expiresAt: Date): Promise<string> {
-    const [row] = await testApp.db
-      .insert(schema.discoveryCategorySuggestions)
-      .values({
-        name,
-        description: 'x',
-        categoryType: 'trend',
-        themeVector: [0, 0, 0, 0, 0, 0, 0],
-        status: 'approved',
-        populationStrategy: 'vector',
-        expiresAt,
-      })
-      .returning({ id: schema.discoveryCategorySuggestions.id });
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.discoveryCategorySuggestions)
+        .values({
+          name,
+          description: 'x',
+          categoryType: 'trend',
+          themeVector: [0, 0, 0, 0, 0, 0, 0],
+          status: 'approved',
+          populationStrategy: 'vector',
+          expiresAt,
+        })
+        .returning({ id: schema.discoveryCategorySuggestions.id }),
+      'row',
+    );
     return row.id;
   }
 

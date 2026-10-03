@@ -20,6 +20,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import { SettingsService } from '../settings/settings.service';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 /**
  * SettingsService surface this story adds. Typed structurally (rather than by
@@ -60,25 +61,28 @@ async function insertEnrichedGame(
   overrides: Partial<typeof schema.games.$inferInsert> = {},
 ): Promise<number> {
   const slug = `coop-prose-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name: 'Deep Rock Galactic',
-      slug,
-      cooptimusId: 4471,
-      cooptimusOnlineMax: 4,
-      cooptimusCouchMax: 2,
-      cooptimusLanMax: 4,
-      cooptimusSplitscreen: true,
-      cooptimusDropIn: true,
-      cooptimusCampaignCoop: true,
-      cooptimusComboCoop: true,
-      cooptimusUrl: 'https://www.co-optimus.com/game/4471/pc/example.html',
-      cooptimusExtras: EXTRAS,
-      cooptimusSyncedAt: new Date(),
-      ...overrides,
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Deep Rock Galactic',
+        slug,
+        cooptimusId: 4471,
+        cooptimusOnlineMax: 4,
+        cooptimusCouchMax: 2,
+        cooptimusLanMax: 4,
+        cooptimusSplitscreen: true,
+        cooptimusDropIn: true,
+        cooptimusCampaignCoop: true,
+        cooptimusComboCoop: true,
+        cooptimusUrl: 'https://www.co-optimus.com/game/4471/pc/example.html',
+        cooptimusExtras: EXTRAS,
+        cooptimusSyncedAt: new Date(),
+        ...overrides,
+      })
+      .returning(),
+    'game',
+  );
   return game.id;
 }
 

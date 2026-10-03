@@ -10,8 +10,6 @@
   "compilerOptions": { "noUncheckedIndexedAccess": true, "noEmit": true, "incremental": false },
   "include": ["src/**/*.spec*.ts", "src/**/*.test-fixtures.ts", "src/common/testing/**/*.ts", "test/**/*.ts"],
   "exclude": [
-    "src/discovery-categories/**", "src/drizzle/**", "src/backup/**", "src/game-taste/**", "src/plugins/**",
-    "src/auth/**", "src/ai/**", "src/users/**", "src/community-insights/**", "src/cron-jobs/**", "src/igdb/**",
     "src/events/**", "src/cooptimus/**", "src/admin/**",
     "src/discord-bot/**",
     "src/lineups/**",

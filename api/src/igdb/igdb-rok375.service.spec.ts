@@ -14,6 +14,7 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 import { ItadService } from '../itad/itad.service';
 import { GameTasteService } from '../game-taste/game-taste.service';
 import { withMockTransaction } from '../common/testing/drizzle-mock';
+import { at } from '../common/testing/narrow';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -71,8 +72,11 @@ const fullGameRow = {
 describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query', () => {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
-  let mockRedis: Record<string, jest.Mock>;
-  let mockSettingsService: Record<string, jest.Mock>;
+  let mockRedis: Record<'del' | 'get' | 'keys' | 'setex', jest.Mock>;
+  let mockSettingsService: Record<
+    'get' | 'getIgdbConfig' | 'isIgdbConfigured',
+    jest.Mock
+  >;
 
   function createMockDb() {
     // ROK-1438: find-then-insert paths run inside withGameNameLock, which
@@ -190,7 +194,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(result.source).toBe('database');
       expect(result.games.length).toBe(20);
 
-      const game = result.games[0];
+      const game = at(result.games, 0);
       // Verify full GameDetailDto fields are present (not just the 5 basic IgdbGameDto fields)
       expect(game).toHaveProperty('genres');
       expect(game).toHaveProperty('platforms');
@@ -240,7 +244,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(result.source).toBe('redis');
       expect(result.games.length).toBe(1);
 
-      const game = result.games[0];
+      const game = at(result.games, 0);
       expect(game).toHaveProperty('genres');
       expect(game).toHaveProperty('platforms');
       expect(game).toHaveProperty('rating');
@@ -253,7 +257,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(result.source).toBe('local');
       expect(result.games.length).toBe(1);
 
-      const game = result.games[0];
+      const game = at(result.games, 0);
       expect(game).toHaveProperty('genres');
       expect(game).toHaveProperty('platforms');
       expect(game).toHaveProperty('rating');

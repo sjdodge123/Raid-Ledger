@@ -13,6 +13,7 @@ import { SETTING_KEYS } from '../../drizzle/schema';
 import type { LlmService } from '../../ai/llm.service';
 import type { SettingsService } from '../../settings/settings.service';
 import { runGenerateSuggestions } from './generate-suggestions';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const VALID_PROPOSAL: LlmCategoryProposalDto = {
   name: 'Co-op Chill',
@@ -83,10 +84,13 @@ describe('runGenerateSuggestions (ROK-567)', () => {
     name: string,
     vector: number[],
   ): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
+        .returning(),
+      'game',
+    );
     await testApp.db.execute(sql`
       INSERT INTO game_taste_vectors (game_id, vector, dimensions, confidence, signal_hash)
       VALUES (
@@ -164,9 +168,9 @@ describe('runGenerateSuggestions (ROK-567)', () => {
       .select()
       .from(schema.discoveryCategorySuggestions);
     expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('pending');
-    expect(rows[0].name).toBe('Co-op Chill');
-    expect(rows[0].candidateGameIds).toEqual([near]);
+    expect(rows[0]?.status).toBe('pending');
+    expect(rows[0]?.name).toBe('Co-op Chill');
+    expect(rows[0]?.candidateGameIds).toEqual([near]);
   });
 
   it('still inserts the row with empty candidates when no game vectors exist', async () => {
@@ -181,36 +185,43 @@ describe('runGenerateSuggestions (ROK-567)', () => {
       logger: new Logger(),
     });
     expect(inserted).toBe(1);
-    const [row] = await testApp.db
-      .select()
-      .from(schema.discoveryCategorySuggestions);
+    const [row] = nonEmpty(
+      await testApp.db.select().from(schema.discoveryCategorySuggestions),
+      'row',
+    );
     expect(row.candidateGameIds).toEqual([]);
   });
 
   it('leaves approved rows untouched when the LLM is unreachable', async () => {
     const fakes = makeFakes();
     fakes.chat.mockRejectedValue(new Error('upstream 503'));
-    const [keep] = await testApp.db
-      .insert(schema.discoveryCategorySuggestions)
-      .values({
-        name: 'Keep Me',
-        description: 'x',
-        categoryType: 'trend',
-        themeVector: [0, 0, 0, 0, 0, 0, 0],
-        status: 'approved',
-        populationStrategy: 'vector',
-      })
-      .returning({ id: schema.discoveryCategorySuggestions.id });
+    const [keep] = nonEmpty(
+      await testApp.db
+        .insert(schema.discoveryCategorySuggestions)
+        .values({
+          name: 'Keep Me',
+          description: 'x',
+          categoryType: 'trend',
+          themeVector: [0, 0, 0, 0, 0, 0, 0],
+          status: 'approved',
+          populationStrategy: 'vector',
+        })
+        .returning({ id: schema.discoveryCategorySuggestions.id }),
+      'keep',
+    );
     const inserted = await runGenerateSuggestions(testApp.db, {
       llmService: fakes.llmService,
       settingsService: fakes.settings,
       logger: new Logger(),
     });
     expect(inserted).toBe(0);
-    const [row] = await testApp.db
-      .select({ status: schema.discoveryCategorySuggestions.status })
-      .from(schema.discoveryCategorySuggestions)
-      .where(eq(schema.discoveryCategorySuggestions.id, keep.id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.discoveryCategorySuggestions.status })
+        .from(schema.discoveryCategorySuggestions)
+        .where(eq(schema.discoveryCategorySuggestions.id, keep.id)),
+      'row',
+    );
     expect(row.status).toBe('approved');
   });
 });

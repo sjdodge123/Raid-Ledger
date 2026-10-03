@@ -8,6 +8,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { resolveCandidates } from './candidate-resolver';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('resolveCandidates (ROK-567)', () => {
   let testApp: TestApp;
@@ -29,15 +30,18 @@ describe('resolveCandidates (ROK-567)', () => {
       playerCount?: { min: number; max: number } | null;
     } = {},
   ): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        genres: opts.genres ?? [],
-        playerCount: opts.playerCount ?? null,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          genres: opts.genres ?? [],
+          playerCount: opts.playerCount ?? null,
+        })
+        .returning(),
+      'game',
+    );
     await testApp.db.execute(sql`
       INSERT INTO game_taste_vectors (game_id, vector, dimensions, confidence, signal_hash)
       VALUES (

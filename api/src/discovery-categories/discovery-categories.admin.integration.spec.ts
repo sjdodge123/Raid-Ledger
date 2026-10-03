@@ -11,6 +11,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('DiscoveryCategoriesAdminController (ROK-567)', () => {
   let testApp: TestApp;
@@ -31,18 +32,21 @@ describe('DiscoveryCategoriesAdminController (ROK-567)', () => {
     status?: 'pending' | 'approved' | 'rejected' | 'expired';
     sortOrder?: number;
   }): Promise<string> {
-    const [row] = await testApp.db
-      .insert(schema.discoveryCategorySuggestions)
-      .values({
-        name: opts.name,
-        description: 'd',
-        categoryType: 'trend',
-        themeVector: [0, 0, 0, 0, 0, 0, 0],
-        status: opts.status ?? 'pending',
-        populationStrategy: 'vector',
-        sortOrder: opts.sortOrder ?? 1000,
-      })
-      .returning({ id: schema.discoveryCategorySuggestions.id });
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.discoveryCategorySuggestions)
+        .values({
+          name: opts.name,
+          description: 'd',
+          categoryType: 'trend',
+          themeVector: [0, 0, 0, 0, 0, 0, 0],
+          status: opts.status ?? 'pending',
+          populationStrategy: 'vector',
+          sortOrder: opts.sortOrder ?? 1000,
+        })
+        .returning({ id: schema.discoveryCategorySuggestions.id }),
+      'row',
+    );
     return row.id;
   }
 

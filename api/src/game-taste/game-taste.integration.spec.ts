@@ -44,6 +44,7 @@ import {
   SIGNAL_HASH_VERSION,
   type GameSignalSummary,
 } from './signal-hash.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 /**
  * Replica of `computeGameSignalHash`'s digest at an ARBITRARY version salt
@@ -123,14 +124,17 @@ describe('Game Taste Vectors (ROK-1082)', () => {
 
   async function createMemberAndLogin(): Promise<string> {
     const passwordHash = await bcrypt.hash('TestPassword123!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:gt-member@test.local',
-        username: 'gt-member',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:gt-member@test.local',
+          username: 'gt-member',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'gt-member@test.local',
       passwordHash,
@@ -146,10 +150,13 @@ describe('Game Taste Vectors (ROK-1082)', () => {
     discordId: string,
     username: string,
   ): Promise<number> {
-    const [u] = await testApp.db
-      .insert(schema.users)
-      .values({ discordId, username, role: 'member' })
-      .returning();
+    const [u] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({ discordId, username, role: 'member' })
+        .returning(),
+      'u',
+    );
     return u.id;
   }
 
@@ -164,19 +171,22 @@ describe('Game Taste Vectors (ROK-1082)', () => {
       hidden?: boolean;
     } = {},
   ): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: name.toLowerCase().replace(/\s+/g, '-'),
-        genres: opts.genres ?? [],
-        gameModes: opts.gameModes ?? [],
-        themes: opts.themes ?? [],
-        itadTags: opts.tags ?? [],
-        banned: opts.banned ?? false,
-        hidden: opts.hidden ?? false,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: name.toLowerCase().replace(/\s+/g, '-'),
+          genres: opts.genres ?? [],
+          gameModes: opts.gameModes ?? [],
+          themes: opts.themes ?? [],
+          itadTags: opts.tags ?? [],
+          banned: opts.banned ?? false,
+          hidden: opts.hidden ?? false,
+        })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -251,10 +261,11 @@ describe('Game Taste Vectors (ROK-1082)', () => {
         sql`SELECT game_id, dimensions FROM game_taste_vectors WHERE game_id = ${ids.survival}`,
       );
       expect(rows.length).toBe(1);
+      const [{ dimensions }] = nonEmpty(rows, 'survival vector row');
       const dims =
-        typeof rows[0].dimensions === 'string'
-          ? (JSON.parse(rows[0].dimensions) as Record<string, number>)
-          : rows[0].dimensions;
+        typeof dimensions === 'string'
+          ? (JSON.parse(dimensions) as Record<string, number>)
+          : dimensions;
       expect(dims.survival).toBeGreaterThan(0);
     });
   });
@@ -658,10 +669,13 @@ describe('Game Taste Vectors (ROK-1082)', () => {
     }
 
     async function readVectorRow(gameId: number) {
-      const [row] = await testApp.db
-        .select()
-        .from(schema.gameTasteVectors)
-        .where(sql`game_id = ${gameId}`);
+      const [row] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.gameTasteVectors)
+          .where(sql`game_id = ${gameId}`),
+        `game_taste_vectors row for game ${gameId}`,
+      );
       return row;
     }
 
@@ -761,10 +775,11 @@ describe('Game Taste Vectors (ROK-1082)', () => {
       const rows = await testApp.db.execute<{ vector: unknown }>(
         sql`SELECT vector FROM game_taste_vectors WHERE game_id = ${gameId}`,
       );
+      const [{ vector }] = nonEmpty(rows, 'backfilled vector row');
       const arr =
-        typeof rows[0].vector === 'string'
-          ? (JSON.parse(rows[0].vector) as number[])
-          : (rows[0].vector as number[]);
+        typeof vector === 'string'
+          ? (JSON.parse(vector) as number[])
+          : (vector as number[]);
       // The pool grew to 25; the pgvector projection is keyed by the
       // unchanged 7-entry TASTE_PROFILE_AXES and must NOT have moved (D2).
       expect(arr).toHaveLength(7);
