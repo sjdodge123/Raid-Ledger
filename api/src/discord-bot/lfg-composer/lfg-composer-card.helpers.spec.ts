@@ -17,6 +17,7 @@ import {
   buildViewGamesLinkButton,
   fitGamesLink,
 } from './lfg-composer-card.helpers';
+import { at } from '../../common/testing/narrow';
 
 const CLIENT_URL = 'https://raid.gamernight.net';
 const GAMES = `${CLIENT_URL}/games`;
@@ -56,7 +57,7 @@ function expectFitted(url: string, term: string, fragment: string): void {
   expect(kept.length).toBeGreaterThan(0);
   expect(kept).toEqual(all.slice(0, kept.length));
   if (kept.length < all.length) {
-    const next = encodedLength(all[kept.length]);
+    const next = encodedLength(at(all, kept.length));
     expect(url.length + next).toBeGreaterThan(DISCORD_LINK_URL_MAX);
   }
 }
@@ -143,7 +144,7 @@ describe('the pinned card never carries a link or a token (ROK-1685 AC3)', () =>
   });
 
   it('styles it as a secondary button beside Post an LFG', () => {
-    const row = buildComposerCard(CLIENT_URL).components[0].toJSON();
+    const row = at(buildComposerCard(CLIENT_URL).components, 0).toJSON();
     expect(row.components[1]).toMatchObject({
       type: ComponentType.Button,
       style: ButtonStyle.Secondary,

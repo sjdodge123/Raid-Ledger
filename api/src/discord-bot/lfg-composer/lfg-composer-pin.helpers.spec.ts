@@ -15,6 +15,7 @@ import {
   type EnsureComposerDeps,
 } from './lfg-composer-pin.helpers';
 import { LFG_COMPOSER_IDS } from './lfg-composer.constants';
+import { at } from '../../common/testing/narrow';
 
 const BOT = 'bot-user';
 
@@ -97,7 +98,7 @@ describe('ensurePinnedComposer (ROK-1612 AC1 — a real pin)', () => {
   it('second boot edits the same pinned message and never posts again', async () => {
     const channel = fakeChannel();
     await ensurePinnedComposer(deps(channel));
-    const first = ownComposers(channel)[0];
+    const first = at(ownComposers(channel), 0);
     await expect(ensurePinnedComposer(deps(channel))).resolves.toBe(
       'edited-pinned',
     );

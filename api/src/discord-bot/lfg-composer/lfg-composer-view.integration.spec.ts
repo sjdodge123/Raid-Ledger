@@ -22,7 +22,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { LfgComposerListener } from './lfg-composer.listener';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 /** The wire id the pinned card sends — the smoke pins the same literal. */
 const VIEW_CUSTOM_ID = 'lfgc:view';
@@ -123,7 +123,9 @@ function linkUrls(p: Press): string[] {
 function theLink(p: Press): { path: string; token: string | null } {
   const urls = linkUrls(p);
   expect(urls).toHaveLength(1);
-  const [path, fragment = ''] = urls[0].split('#');
+  const parts = at(urls, 0).split('#');
+  const path = at(parts, 0);
+  const fragment = parts[1] ?? '';
   const token = fragment.startsWith('token=')
     ? decodeURIComponent(fragment.slice('token='.length))
     : null;

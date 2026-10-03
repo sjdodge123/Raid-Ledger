@@ -7,6 +7,7 @@ import {
 } from './lfg.command.helpers';
 import { readOpenGroupHorizon } from '../../lfg/lfg-group-horizon.helpers';
 import { listGroupMembers } from '../../lfg/lfg-query.helpers';
+import { at } from '../../common/testing/narrow';
 
 // ROK-1656 — the open-group read is a real query the fake DB cannot answer;
 // it is pinned against Postgres in `lfg-now-spawn.integration.spec.ts`. Here
@@ -214,7 +215,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       respond,
     } as never);
     const choices = respond.mock.calls[0][0] as Array<{ value: string }>;
-    expect(choices[0].value).toBe(LFG_LIST_SENTINEL);
+    expect(choices[0]?.value).toBe(LFG_LIST_SENTINEL);
     expect(choices[1]).toEqual({ name: 'Deep Rock Galactic', value: '42' });
   });
 
@@ -459,7 +460,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     const payload = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { description?: string } }>;
     };
-    const description = payload.embeds[0].toJSON().description ?? '';
+    const description = at(payload.embeds, 0).toJSON().description ?? '';
     expect(description).toContain("That's 2 now");
     expect(description).toContain('Ana');
     expect(description).toContain('bo');
@@ -555,7 +556,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
       const payload = editReply.mock.calls[0][0] as {
         embeds: Array<{ toJSON: () => { description?: string } }>;
       };
-      const description = payload.embeds[0].toJSON().description ?? '';
+      const description = at(payload.embeds, 0).toJSON().description ?? '';
       if (line) expect(description).toContain(line);
       else expect(description).not.toContain('**When:**');
     });

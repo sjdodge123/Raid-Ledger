@@ -81,12 +81,15 @@ async function seedInertBinding(testApp: TestApp): Promise<void> {
 }
 
 async function latestExecution(testApp: TestApp, jobId: number) {
-  const [row] = await testApp.db
-    .select()
-    .from(schema.cronJobExecutions)
-    .where(eq(schema.cronJobExecutions.cronJobId, jobId))
-    .orderBy(desc(schema.cronJobExecutions.startedAt))
-    .limit(1);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.cronJobExecutions)
+      .where(eq(schema.cronJobExecutions.cronJobId, jobId))
+      .orderBy(desc(schema.cronJobExecutions.startedAt))
+      .limit(1),
+    'latest execution',
+  );
   return row;
 }
 

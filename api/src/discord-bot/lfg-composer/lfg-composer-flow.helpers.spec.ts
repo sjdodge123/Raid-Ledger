@@ -23,6 +23,7 @@ import {
   submitComposerSearch,
   type ComposerFlowDeps,
 } from './lfg-composer-flow.helpers';
+import { at } from '../../common/testing/narrow';
 
 jest.mock('../commands/lfg.command', () => ({ resolveLfgCaller: jest.fn() }));
 jest.mock('./lfg-composer-search.db-helpers', () => ({
@@ -114,7 +115,7 @@ interface EditedBody {
 }
 
 function edited(i: { editReply: jest.Mock }): EditedBody {
-  return (i.editReply.mock.calls as EditedBody[][])[0][0];
+  return at(at(i.editReply.mock.calls as EditedBody[][], 0), 0);
 }
 
 beforeEach(() => {

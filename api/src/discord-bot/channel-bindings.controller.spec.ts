@@ -9,6 +9,7 @@ import { ChannelBindingsService } from './services/channel-bindings.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import type { BindingRecord } from './services/channel-bindings.service';
+import { at } from '../common/testing/narrow';
 
 const makeBinding = (
   overrides: Partial<BindingRecord> = {},
@@ -123,7 +124,7 @@ describe('ChannelBindingsController — listBindings: enrichment', () => {
 
     const result = await controller.listBindings();
 
-    expect(result.data[0].channelName).toBeUndefined();
+    expect(at(result.data, 0).channelName).toBeUndefined();
   });
 
   it('should enrich voice channel names from voice channel list', async () => {
@@ -182,8 +183,8 @@ describe('ChannelBindingsController — listBindings: DTO mapping', () => {
       gameName: 'World of Warcraft',
       config: { minPlayers: 5 },
     });
-    expect(typeof result.data[0].createdAt).toBe('string');
-    expect(typeof result.data[0].updatedAt).toBe('string');
+    expect(typeof result.data[0]?.createdAt).toBe('string');
+    expect(typeof result.data[0]?.updatedAt).toBe('string');
   });
 });
 

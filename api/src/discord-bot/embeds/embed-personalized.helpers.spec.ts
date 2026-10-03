@@ -22,12 +22,16 @@ import {
   personalizedFieldName,
   type PersonalizedKind,
 } from './embed-personalized.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const KINDS: PersonalizedKind[] = ['owned', 'wishlist', 'hearted'];
 
 /** Tolerant of a Set or a readonly array — both are iterable. */
-function personalizedNames(): string[] {
-  return [...(PERSONALIZED_FIELD_NAMES as Iterable<string>)];
+function personalizedNames(): readonly [string, ...string[]] {
+  return nonEmpty(
+    [...(PERSONALIZED_FIELD_NAMES as Iterable<string>)],
+    'PERSONALIZED_FIELD_NAMES',
+  );
 }
 
 function dmEmbed() {

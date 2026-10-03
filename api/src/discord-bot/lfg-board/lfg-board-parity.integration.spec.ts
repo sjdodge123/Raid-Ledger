@@ -46,7 +46,7 @@ import { setLfgBoardEnabled } from '../../settings/settings-lfg-board.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { LfmEmbedService } from '../lfm/lfm-embed.service';
 import { LfgBoardService } from './lfg-board.service';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 let lfmEmbed: LfmEmbedService;
@@ -271,6 +271,6 @@ describe('LFG board ⇄ web chips parity (ROK-1505 AC4)', () => {
     await expectParity([game.id]);
     const rows = await boardRows(game.id);
     expect(rows.map((r) => r.state)).toEqual(['closed', 'open']);
-    expect(rows[1].threadId).not.toBe(rows[0].threadId);
+    expect(at(rows, 1).threadId).not.toBe(at(rows, 0).threadId);
   });
 });

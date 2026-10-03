@@ -10,6 +10,7 @@ import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { ChannelType } from 'discord.js';
 import { APP_EVENT_EVENTS } from '../discord-bot.constants';
+import { at } from '../../common/testing/narrow';
 
 function makeSelectChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> = {};
@@ -137,10 +138,13 @@ async function buildModule(mockDb: { select: jest.Mock; update: jest.Mock }) {
 function getEmbedDescription(
   interaction: ReturnType<typeof mockEventBindInteraction>,
 ) {
-  const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+  const replyArg = at(
+    interaction.editReply.mock.calls as unknown[][],
+    0,
+  )[0] as {
     embeds: { data: { description: string } }[];
   };
-  return replyArg.embeds[0].data.description ?? '';
+  return at(replyArg.embeds, 0).data.description ?? '';
 }
 
 /** Setup select mocks for a channel override test with re-fetch and signup count. */
