@@ -47,7 +47,7 @@ import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 import { LineupsService } from './lineups.service';
 import { LineupsGateway } from './lineups.gateway';
 import * as transitionMod from './lineups-transition.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 // The two SETTING_KEYS the implementation must add. We resolve them
 // at runtime so the spec FILE still compiles before the implementation
@@ -328,8 +328,8 @@ function describeGrace() {
     const lineupId = createRes.body.id as number;
 
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
 
     // Force-advance to voting (we test the voting → decided grace path).
     await advanceToVoting(lineupId, adminToken);
@@ -338,9 +338,9 @@ function describeGrace() {
     // All 3 voters cast their single vote → voting quorum met. The
     // implementation must NOT flip status immediately — it must set
     // pending_advance_at and enqueue the grace job.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
@@ -385,13 +385,13 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
@@ -447,14 +447,14 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
     // Cast quorum-closing votes so grace is scheduled.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
     expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
@@ -485,7 +485,7 @@ function describeGrace() {
     // exercised — the pause must suppress advance regardless.
     for (let i = 0; i < 3; i++) {
       const morePersonal = await createGames(1);
-      await nominate(adminToken, lineupId, morePersonal[0].id);
+      await nominate(adminToken, lineupId, at(morePersonal, 0).id);
     }
     for (const token of [adminToken, v1.token, v2.token]) {
       await testApp.request
@@ -522,8 +522,8 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
 
     // Stamp every voter's nominations_submitted_at BEFORE the revert so
     // there's something to clear.
@@ -580,13 +580,13 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: submit closes the voting-quorum gate so grace is set.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
@@ -608,7 +608,7 @@ function describeGrace() {
     // Top up nominations to satisfy the nomination floor (default 4).
     for (let i = 0; i < 3; i++) {
       const g = await createGames(1);
-      await nominate(adminToken, lineupId, g[0].id);
+      await nominate(adminToken, lineupId, at(g, 0).id);
     }
 
     // ROK-1296: every voter must submit-nominations for building quorum.
@@ -638,12 +638,12 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
@@ -680,13 +680,13 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
     expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
@@ -725,13 +725,13 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
     expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
@@ -742,7 +742,7 @@ function describeGrace() {
     const adv = await testApp.request
       .patch(`/lineups/${lineupId}/status`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ status: 'decided', decidedGameId: games[0].id });
+      .send({ status: 'decided', decidedGameId: at(games, 0).id });
     expect(adv.status).toBe(200);
     expect(await readStatus(lineupId)).toBe('decided');
 
@@ -777,15 +777,15 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
     // Cast 2 of 3 votes so quorum is NOT yet met. The third vote
     // — fired concurrently from two parallel callers — should drive
     // both to invoke maybeAutoAdvance against a quorum-ready row.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
 
     // Build the deps the helper needs. We expose the helper directly
     // (the service has its own copy; we ask for a public test handle
@@ -802,7 +802,7 @@ function describeGrace() {
     // Cast v2's vote so quorum closes, then fire two parallel advance
     // attempts. The conditional-UPDATE (`pending_advance_at IS NULL`)
     // must ensure only one wins; the loser must no-op.
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
@@ -841,15 +841,15 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
     expect(await readStatus(lineupId)).toBe('voting');
 
     // All 3 voters back games[0] — unique top, no tie.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
@@ -867,7 +867,7 @@ function describeGrace() {
         .where(eq(schema.communityLineups.id, lineupId)),
       'decidedRow',
     );
-    expect(decidedRow.decidedGameId).toBe(games[0].id);
+    expect(decidedRow.decidedGameId).toBe(at(games, 0).id);
 
     // `logTransition` must have written a `lineup_decided` activity entry —
     // the bypassing UPDATE in the previous implementation never reached it.
@@ -947,15 +947,15 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
     // All 3 voters vote, but only 2 submit — quorum not yet ready under
     // the ROK-1296 per-voter submission gate.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     await submitAllVotes(lineupId, [adminToken, v1.token]);
 
     // Spy on the gateway BEFORE the quorum-closing submit so the emit is
@@ -977,7 +977,7 @@ function describeGrace() {
       );
 
       expect(spy).toHaveBeenCalledTimes(1);
-      const [emittedId, emittedAt] = spy.mock.calls[0];
+      const [emittedId, emittedAt] = at(spy.mock.calls, 0);
       expect(emittedId).toBe(lineupId);
       expect(emittedAt).toBeInstanceOf(Date);
       const state = await readAdvanceState(lineupId);
@@ -1006,17 +1006,17 @@ function describeGrace() {
     );
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(v1.token, lineupId, at(games, 1).id);
     await advanceToVoting(lineupId, adminToken);
 
     // Cast all 3 votes so the quorum predicate inside processGraceAdvance
     // returns ready: true → reaches runGraceTransition where the stub
     // throws. Without this the grace branch short-circuits to
     // clearPendingAdvance and we never exercise the catch path.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(v1.token, lineupId, at(games, 0).id);
+    await vote(v2.token, lineupId, at(games, 0).id);
     // ROK-1296: explicit submit closes the per-voter quorum gate.
     await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
 
