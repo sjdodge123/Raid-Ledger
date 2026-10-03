@@ -14,7 +14,7 @@ import {
   fanOutEventCreatedDMsToInvitees,
 } from './lineup-notification-dm-batch.helpers';
 import type { MatchInfo } from './lineup-notification.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 // 2026-05-04T01:00:00Z == 9:00 PM EDT Sun May 3 / 6:00 PM PDT Sun May 3 /
 // 1:00 AM UTC Mon May 4 — the boundary case that rolls into the next UTC day.
@@ -112,7 +112,8 @@ describe('fanOutEventCreatedDMs recipient timezone (ROK-1112)', () => {
       'UTC',
     );
 
-    const [a, b] = calls();
+    const a = at(calls(), 0);
+    const b = at(calls(), 1);
     expect(a.message).not.toBe(b.message);
     // EDT recipient: Sun, May 3 — NOT the next-day UTC date.
     expect(a.message).toContain('Sun');
@@ -186,7 +187,8 @@ describe('fanOutEventCreatedDMsToInvitees recipient timezone (ROK-1112)', () => 
       'UTC',
     );
 
-    const [a, b] = calls();
+    const a = at(calls(), 0);
+    const b = at(calls(), 1);
     expect(a.message).not.toBe(b.message);
     expect(a.message).toContain('Sun');
     expect(a.message).toContain('May 3');
