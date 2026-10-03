@@ -52,7 +52,7 @@ assert_eq() {
 
 assert_out_matches() {
     local pattern="$1" label="$2"
-    if printf '%s' "$OUT" | grep -E -q -e "$pattern"; then pass; else
+    if grep -E -q -e "$pattern" <<<"$OUT"; then pass; else
         fail "$label: output did not match '$pattern' (output: $(printf '%s' "$OUT" | tr '\n' '|'))"
     fi
 }
@@ -141,6 +141,16 @@ run_helper() {
 
 ci_calls() { grep -c -E '^ci( |$)' "$CASE_DIR/npm.calls" || true; }
 marker() { cat "$MARKER" 2>/dev/null || echo "<no marker>"; }
+
+# Harness self-check: assert_out_matches must keep an early match in a large
+# output. A `printf | grep -q` pipe under pipefail lost it to EPIPE.
+CURRENT_TEST_NAME="harness: an early match in a 1 MiB output is still a match"
+OUT="needle-line"$'\n'"$(head -c 1048576 /dev/zero | tr '\0' x)"
+after=$(assert_out_matches '^needle-line$' self-check >/dev/null; echo "$TEST_PASS_COUNT")
+if [ "$after" -gt "$TEST_PASS_COUNT" ]; then pass; else
+    fail "assert_out_matches on a 1 MiB output: expected pass, got fail"
+fi
+OUT=""
 
 new_case "(a) runner, tsc present, no marker: installs and stamps the lockfile sha"
 seed_install
