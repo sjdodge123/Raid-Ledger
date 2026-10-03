@@ -241,7 +241,7 @@ function describeMultiMessageSync() {
       expect(Array.isArray(result)).toBe(true);
       const records = result as unknown as Array<{ guildId: string }>;
       expect(records.length).toBe(1);
-      expect(records[0].guildId).toBe(TEST_GUILD_ID);
+      expect(records[0]?.guildId).toBe(TEST_GUILD_ID);
     });
   });
 }

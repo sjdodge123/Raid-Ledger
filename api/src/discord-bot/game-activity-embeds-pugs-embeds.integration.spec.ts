@@ -25,15 +25,18 @@ afterEach(async () => {
 async function createFutureEvent(title: string, gameId?: number | null) {
   const futureStart = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
   const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId: testApp.seed.adminUser.id,
-      duration: [futureStart, futureEnd],
-      ...(gameId !== undefined ? { gameId } : {}),
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId: testApp.seed.adminUser.id,
+        duration: [futureStart, futureEnd],
+        ...(gameId !== undefined ? { gameId } : {}),
+      })
+      .returning(),
+    'event',
+  );
   return event;
 }
 
@@ -338,15 +341,18 @@ describe('pug slot lifecycle — create and constraints', () => {
     const db = testApp.db;
     const testEventId = await createPugEvent();
 
-    const [slot] = await db
-      .insert(schema.pugSlots)
-      .values({
-        eventId: testEventId,
-        discordUsername: 'pugplayer',
-        role: 'dps',
-        createdBy: testApp.seed.adminUser.id,
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await db
+        .insert(schema.pugSlots)
+        .values({
+          eventId: testEventId,
+          discordUsername: 'pugplayer',
+          role: 'dps',
+          createdBy: testApp.seed.adminUser.id,
+        })
+        .returning(),
+      'slot',
+    );
 
     expect(slot.status).toBe('pending');
     expect(slot.discordUsername).toBe('pugplayer');
@@ -487,11 +493,14 @@ describe('pug slot lifecycle — atomic claim', () => {
       .set({ cancelledAt: new Date() })
       .where(eq(schema.events.id, testEventId));
 
-    const [event] = await db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, testEventId))
-      .limit(1);
+    const [event] = nonEmpty(
+      await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, testEventId))
+        .limit(1),
+      'event',
+    );
 
     expect(event.cancelledAt).not.toBeNull();
   });
@@ -549,7 +558,7 @@ describe('pug slot lifecycle — claim by ID or invite code', () => {
       .returning();
 
     expect(byIdResult.length).toBe(1);
-    expect(byIdResult[0].claimedByUserId).toBe(claimUser.id);
+    expect(byIdResult[0]?.claimedByUserId).toBe(claimUser.id);
     expect(byIdResult[0]?.status).toBe('claimed');
 
     const byCodeResult = await db
@@ -568,7 +577,7 @@ describe('pug slot lifecycle — claim by ID or invite code', () => {
       .returning();
 
     expect(byCodeResult.length).toBe(1);
-    expect(byCodeResult[0].claimedByUserId).toBe(claimUser.id);
+    expect(byCodeResult[0]?.claimedByUserId).toBe(claimUser.id);
   });
 });
 

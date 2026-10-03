@@ -27,6 +27,7 @@ import {
   LFG_NOW_INDICATOR_UNICODE,
   LFG_NOW_SPAWN_BUTTON_LABEL,
 } from '../lfg-now/lfg-now-indicator.helpers';
+import { at } from '../../common/testing/narrow';
 
 const CLIENT_URL = 'https://raid.example';
 const GAME_ID = 12;
@@ -43,16 +44,21 @@ function render(overrides: Record<string, unknown> = {}) {
   }).map((row) => row.toJSON());
 }
 
+/** The buttons on the single row an open-state post renders. */
+function buttons(overrides: Record<string, unknown> = {}) {
+  return at(render(overrides), 0).components;
+}
+
 describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
   it('is exactly one row of exactly two buttons', () => {
     const rows = render();
     expect(rows).toHaveLength(1);
-    expect(rows[0].type).toBe(ComponentType.ActionRow);
+    expect(rows[0]?.type).toBe(ComponentType.ActionRow);
     expect(rows[0]?.components).toHaveLength(2);
   });
 
   it('carries a join id the REAL listener parser recovers the game id from', () => {
-    const [join] = render()[0].components;
+    const [join] = buttons();
     expect(join).toMatchObject({
       type: ComponentType.Button,
       style: ButtonStyle.Primary,
@@ -64,7 +70,7 @@ describe('buildLfgPostComponents — the open-state row (AC5 iii)', () => {
   });
 
   it('links the second button at the web group page', () => {
-    const [, link] = render()[0].components;
+    const [, link] = buttons();
     expect(link).toMatchObject({
       type: ComponentType.Button,
       style: ButtonStyle.Link,
@@ -88,13 +94,13 @@ describe('buildLfgPostComponents — ROK-1619, the threshold-crossing mark', () 
   const EMOJI = { name: LFG_NOW_INDICATOR_UNICODE };
 
   it('leaves the ROK-1471 button untouched when the press does not spawn', () => {
-    const [join] = render()[0].components;
+    const [join] = buttons();
     expect(join).toMatchObject({ label: LFG_JOIN_BUTTON_LABEL });
     expect((join as { emoji?: unknown }).emoji).toBeUndefined();
   });
 
   it('swaps the label and carries the emoji when the press forms the group', () => {
-    const [join] = render({ spawnsNow: true, spawnEmoji: EMOJI })[0].components;
+    const [join] = buttons({ spawnsNow: true, spawnEmoji: EMOJI });
     expect(join).toMatchObject({
       label: LFG_NOW_SPAWN_BUTTON_LABEL,
       emoji: { name: LFG_NOW_INDICATOR_UNICODE },
@@ -102,24 +108,25 @@ describe('buildLfgPostComponents — ROK-1619, the threshold-crossing mark', () 
   });
 
   it('keeps the custom id identical — the mark changes how it READS, not what it writes', () => {
-    const plain = render()[0].components[0] as { custom_id: string };
-    const marked = render({ spawnsNow: true, spawnEmoji: EMOJI })[0]
-      .components[0] as { custom_id: string };
+    const plain = at(buttons(), 0) as { custom_id: string };
+    const marked = at(buttons({ spawnsNow: true, spawnEmoji: EMOJI }), 0) as {
+      custom_id: string;
+    };
     expect(marked.custom_id).toBe(plain.custom_id);
     expect(parseJoinCustomId(marked.custom_id)).toBe(GAME_ID);
   });
 
   it('carries a custom emoji as { id, name }, never as a raw <:name:id> label (AC5)', () => {
-    const [join] = render({
+    const [join] = buttons({
       spawnsNow: true,
       spawnEmoji: { id: '987', name: 'praise_sun' },
-    })[0].components;
+    });
     expect(join).toMatchObject({ emoji: { id: '987', name: 'praise_sun' } });
     expect((join as { label: string }).label).not.toContain('<:');
   });
 
   it('still renders a usable button if the emoji could not be resolved at all', () => {
-    const [join] = render({ spawnsNow: true })[0].components;
+    const [join] = buttons({ spawnsNow: true });
     expect(join).toMatchObject({ label: LFG_NOW_SPAWN_BUTTON_LABEL });
     expect((join as { emoji?: unknown }).emoji).toBeUndefined();
   });
