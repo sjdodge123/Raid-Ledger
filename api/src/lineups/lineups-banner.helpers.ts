@@ -2,7 +2,7 @@
  * Banner helpers for the lineup Games-page banner (ROK-935).
  * Builds lightweight banner data for building/voting/decided lineups.
  */
-import { and, desc, inArray, or, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -49,11 +49,33 @@ interface BannerLineup {
   includeSchedulingPhase?: boolean;
 }
 
+/** Largest id a Postgres int4 column can hold; a bigger value would 500. */
+const MAX_INT4 = 2147483647;
+
+/**
+ * Parse the DEMO_MODE-only `?lineupId=` banner scope (a smoke-test seam that
+ * pins the banner to one spec's lineup). Returns undefined — i.e. the normal
+ * global banner — unless DEMO_MODE is 'true' and `raw` is a positive int4.
+ * Env-only gate on purpose: unlike /admin/test/* it skips the SettingsService
+ * demo-mode read so this hot path stays a single query.
+ */
+export function parseBannerScope(
+  raw: unknown,
+  demoMode: string | undefined = process.env.DEMO_MODE,
+): number | undefined {
+  if (demoMode !== 'true' || typeof raw !== 'string') return undefined;
+  if (!/^\d+$/.test(raw)) return undefined;
+  const n = Number(raw);
+  return n > 0 && n <= MAX_INT4 ? n : undefined;
+}
+
 /**
  * Find the most recent community lineup eligible for the banner.
  * Excludes standalone scheduling poll lineups (phaseDurationOverride.standalone).
+ * A `scope` narrows to that one lineup: archived, standalone or missing
+ * yields no row — it never falls back to the global banner.
  */
-export function findBannerLineup(db: Db) {
+export function findBannerLineup(db: Db, scope?: number) {
   return db
     .select()
     .from(schema.communityLineups)
@@ -64,6 +86,7 @@ export function findBannerLineup(db: Db) {
           isNull(schema.communityLineups.phaseDurationOverride),
           sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' IS NULL`,
         ),
+        scope !== undefined ? eq(schema.communityLineups.id, scope) : undefined,
       ),
     )
     .orderBy(desc(schema.communityLineups.createdAt))
@@ -173,8 +196,9 @@ export function buildBannerResponse(
  */
 export async function loadGamesPageBanner(
   db: Db,
+  rawScope?: unknown,
 ): Promise<LineupBannerResponseDto | null> {
-  const [lineup] = await findBannerLineup(db);
+  const [lineup] = await findBannerLineup(db, parseBannerScope(rawScope));
   if (!lineup) return null;
   return buildBannerData(db, lineup);
 }

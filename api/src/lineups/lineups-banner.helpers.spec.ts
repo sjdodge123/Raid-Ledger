@@ -1,8 +1,13 @@
 /**
  * Unit tests for lineup banner helpers (ROK-935).
- * Tests findBannerLineup query and buildBannerResponse mapping.
+ * Tests buildBannerResponse mapping and the parseBannerScope gate. The
+ * findBannerLineup query itself is covered against a real database in
+ * lineups-banner-scope.integration.spec.ts.
  */
-import { buildBannerResponse } from './lineups-banner.helpers';
+import {
+  buildBannerResponse,
+  parseBannerScope,
+} from './lineups-banner.helpers';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 
 const NOW = new Date('2026-03-22T20:00:00Z');
@@ -128,5 +133,52 @@ describe('buildBannerResponse', () => {
     const banner = result as LineupBannerResponseDto;
     expect(banner.totalMembers).toBe(15);
     expect(banner.votingEligibleCount).toBe(4);
+  });
+});
+
+describe('parseBannerScope', () => {
+  it('returns the id when DEMO_MODE is true and the value is a positive int', () => {
+    expect(parseBannerScope('7', 'true')).toBe(7);
+  });
+
+  it('accepts the int4 upper bound', () => {
+    expect(parseBannerScope('2147483647', 'true')).toBe(2147483647);
+  });
+
+  it('ignores the scope when DEMO_MODE is unset', () => {
+    expect(parseBannerScope('7', undefined)).toBeUndefined();
+  });
+
+  it('ignores the scope when DEMO_MODE is false', () => {
+    expect(parseBannerScope('7', 'false')).toBeUndefined();
+  });
+
+  it.each([
+    ['zero', '0'],
+    ['negative', '-1'],
+    ['non-numeric', 'abc'],
+    ['decimal', '1.5'],
+    ['above int4', '99999999999'],
+    ['just above int4', '2147483648'],
+    ['empty', ''],
+  ])('ignores a %s value', (_label, raw) => {
+    expect(parseBannerScope(raw, 'true')).toBeUndefined();
+  });
+
+  it('ignores a repeated query param (array)', () => {
+    expect(parseBannerScope(['7'], 'true')).toBeUndefined();
+  });
+
+  it('reads DEMO_MODE at call time when no override is passed', () => {
+    const original = process.env.DEMO_MODE;
+    try {
+      process.env.DEMO_MODE = 'true';
+      expect(parseBannerScope('7')).toBe(7);
+      delete process.env.DEMO_MODE;
+      expect(parseBannerScope('7')).toBeUndefined();
+    } finally {
+      if (original === undefined) delete process.env.DEMO_MODE;
+      else process.env.DEMO_MODE = original;
+    }
   });
 });
