@@ -40,7 +40,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { computeTieExpiresAt } from './tiebreaker/tie-hold.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 type Response = { status: number; body: unknown };
@@ -185,7 +185,9 @@ async function arrangeTiedVote(): Promise<{
   const created = await createPrivateLineup(adminToken, [v1.userId], 1);
   expectOk(created, 'create lineup');
   const lineupId = (created.body as { id: number }).id;
-  const [a, b] = await createGames(2);
+  const games = await createGames(2);
+  const a = at(games, 0);
+  const b = at(games, 1);
   expectOk(await nominate(adminToken, lineupId, a.id), 'nominate game A');
   expectOk(await nominate(v1.token, lineupId, b.id), 'nominate game B');
   expectOk(await advanceToVoting(lineupId, adminToken), 'advance to voting');

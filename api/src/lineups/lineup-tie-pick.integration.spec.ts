@@ -43,7 +43,7 @@ import {
   LINEUP_PHASE_TRANSITION,
 } from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 type Response = { status: number; body: unknown };
@@ -233,7 +233,9 @@ async function arrangeTiedVoting(): Promise<TiedFixture> {
     .update(schema.communityLineups)
     .set({ createdBy: creator.userId })
     .where(eq(schema.communityLineups.id, lineupId));
-  const [a, b] = await createGames(2);
+  const games = await createGames(2);
+  const a = at(games, 0);
+  const b = at(games, 1);
   expectOk(await nominate(creator.token, lineupId, a.id), 'nominate game A');
   expectOk(await nominate(voter.token, lineupId, b.id), 'nominate game B');
   expectOk(await advanceToVoting(lineupId, adminToken), 'advance to voting');

@@ -107,16 +107,19 @@ function describeBadgePersonalization() {
   async function insertGame(
     overrides: Partial<typeof schema.games.$inferInsert> = {},
   ): Promise<typeof schema.games.$inferSelect> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'ROK-1314 Badge Game',
-        slug: overrides.slug ?? `rok1314-${Date.now()}-${Math.random()}`,
-        steamAppId:
-          overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
-        ...overrides,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'ROK-1314 Badge Game',
+          slug: overrides.slug ?? `rok1314-${Date.now()}-${Math.random()}`,
+          steamAppId:
+            overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
+          ...overrides,
+        })
+        .returning(),
+      'inserted game',
+    );
     return game;
   }
 

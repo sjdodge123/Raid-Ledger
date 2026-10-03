@@ -39,7 +39,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { LineupReminderService } from './lineup-reminder.service';
 import { TieExpiryService } from './tiebreaker/tie-expiry.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 type TiebreakerRow = typeof schema.communityLineupTiebreakers.$inferSelect;
@@ -173,7 +173,9 @@ async function arrangeTiedVote(): Promise<{ lineupId: number }> {
   const created = await createPrivateLineup(adminToken, [v1.userId]);
   expectOk(created, 'create lineup');
   const lineupId = (created.body as { id: number }).id;
-  const [a, b] = await createGames(2);
+  const games = await createGames(2);
+  const a = at(games, 0);
+  const b = at(games, 1);
   expectOk(await nominate(adminToken, lineupId, a.id), 'nominate game A');
   expectOk(await nominate(v1.token, lineupId, b.id), 'nominate game B');
   expectOk(await advanceToVoting(lineupId, adminToken), 'advance to voting');
@@ -290,12 +292,15 @@ describe('scenario 12 — a passed round_deadline escalates (D14 / AC17 / E13)',
     await reminderService.checkTiebreakerReminders();
 
     expect(await readEscalationDms(adminUserId)).toHaveLength(1);
-    const [tb] = (await testApp.db
-      .select()
-      .from(schema.communityLineupTiebreakers)
-      .where(
-        eq(schema.communityLineupTiebreakers.id, tiebreakerId),
-      )) as TiebreakerRow[];
+    const [tb] = nonEmpty(
+      (await testApp.db
+        .select()
+        .from(schema.communityLineupTiebreakers)
+        .where(
+          eq(schema.communityLineupTiebreakers.id, tiebreakerId),
+        )) as TiebreakerRow[],
+      'tiebreaker row',
+    );
     // Q3: escalation notifies, louder. It never decides.
     expect(tb.winnerGameId).toBeNull();
     expect(tb.status).toBe('active');
