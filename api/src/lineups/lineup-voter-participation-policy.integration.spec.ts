@@ -30,6 +30,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 import { LineupsService } from './lineups.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeParticipationPolicy() {
   let testApp: TestApp;
@@ -61,14 +62,17 @@ function describeParticipationPolicy() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('PolicyTest1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@policy.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@policy.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@policy.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -95,15 +99,18 @@ function describeParticipationPolicy() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Policy Game ${i + 1}`,
-          slug: `policy-game-${i + 1}-${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Policy Game ${i + 1}`,
+            slug: `policy-game-${i + 1}-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;

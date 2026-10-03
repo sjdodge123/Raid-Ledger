@@ -24,6 +24,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeInviteePermissions() {
   let testApp: TestApp;
@@ -45,14 +46,17 @@ function describeInviteePermissions() {
   ): Promise<{ id: number; token: string }> {
     const email = `invperm-${suffix}@test.local`;
     const hash = await bcrypt.hash('InvPermPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:invperm-${suffix}`,
-        username: `invperm-${suffix}`,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:invperm-${suffix}`,
+          username: `invperm-${suffix}`,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -95,13 +99,16 @@ function describeInviteePermissions() {
 
     expect(res.status).toBe(201);
     const lineupId = res.body.id as number;
-    const [row] = await testApp.db
-      .select({
-        visibility: schema.communityLineups.visibility,
-        publicShareEnabled: schema.communityLineups.publicShareEnabled,
-      })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({
+          visibility: schema.communityLineups.visibility,
+          publicShareEnabled: schema.communityLineups.publicShareEnabled,
+        })
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId)),
+      'row',
+    );
     expect(row.visibility).toBe('public');
     expect(row.publicShareEnabled).toBe(true);
     expect((await loadInvitees(lineupId)).map((i) => i.userId).sort()).toEqual(
@@ -121,10 +128,13 @@ function describeInviteePermissions() {
 
     expect(res.status).toBe(201);
     expect(await loadInvitees(lineupId)).toHaveLength(1);
-    const [row] = await testApp.db
-      .select({ visibility: schema.communityLineups.visibility })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ visibility: schema.communityLineups.visibility })
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId)),
+      'row',
+    );
     expect(row.visibility).toBe('public');
   });
 
@@ -134,14 +144,17 @@ function describeInviteePermissions() {
     const creator = await createUser('creator');
     const alice = await createUser('creator-alice');
     // Seed the lineup directly so `created_by` is the non-operator user.
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Creator-owned lineup',
-        createdBy: creator.id,
-        publicSlug: `cr-${creator.id}`,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Creator-owned lineup',
+          createdBy: creator.id,
+          publicSlug: `cr-${creator.id}`,
+        })
+        .returning(),
+      'lineup',
+    );
 
     const res = await testApp.request
       .post(`/lineups/${lineup.id}/invitees`)
@@ -155,14 +168,17 @@ function describeInviteePermissions() {
   it('lets a non-operator CREATOR remove an invitee', async () => {
     const creator = await createUser('rm-creator');
     const alice = await createUser('rm-alice');
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Creator-owned lineup',
-        createdBy: creator.id,
-        publicSlug: `rm-${creator.id}`,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Creator-owned lineup',
+          createdBy: creator.id,
+          publicSlug: `rm-${creator.id}`,
+        })
+        .returning(),
+      'lineup',
+    );
     await testApp.db
       .insert(schema.communityLineupInvitees)
       .values({ lineupId: lineup.id, userId: alice.id });
@@ -179,14 +195,17 @@ function describeInviteePermissions() {
     const creator = await createUser('guard-creator');
     const stranger = await createUser('guard-stranger');
     const alice = await createUser('guard-alice');
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Creator-owned lineup',
-        createdBy: creator.id,
-        publicSlug: `gd-${creator.id}`,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Creator-owned lineup',
+          createdBy: creator.id,
+          publicSlug: `gd-${creator.id}`,
+        })
+        .returning(),
+      'lineup',
+    );
 
     const res = await testApp.request
       .post(`/lineups/${lineup.id}/invitees`)

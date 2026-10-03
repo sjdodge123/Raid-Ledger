@@ -46,6 +46,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupsGateway } from './lineups.gateway';
 import { LineupNotificationService } from './lineup-notification.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 interface Spies {
   notifyVotingOpen: jest.SpyInstance;
@@ -116,14 +117,17 @@ function describeDeadlineNotify() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('Deadline1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@deadline.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@deadline.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@deadline.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -151,15 +155,18 @@ function describeDeadlineNotify() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Deadline Game ${i + 1}`,
-          slug: `deadline-game-${i + 1}-${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Deadline Game ${i + 1}`,
+            slug: `deadline-game-${i + 1}-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;

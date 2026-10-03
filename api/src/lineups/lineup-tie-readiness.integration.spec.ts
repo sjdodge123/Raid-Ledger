@@ -26,6 +26,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 type Response = { status: number; body: unknown };
 type Member = { userId: number; token: string };
@@ -76,10 +77,13 @@ async function member(tag: string): Promise<Member> {
 
 /** A user who is NOT on any roster and never logs in — cheap to make. */
 async function bystander(tag: string): Promise<number> {
-  const [row] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId: `local:${tag}`, username: tag, role: 'member' })
-    .returning({ id: schema.users.id });
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: `local:${tag}`, username: tag, role: 'member' })
+      .returning({ id: schema.users.id }),
+    'row',
+  );
   return row.id;
 }
 
@@ -201,9 +205,12 @@ function etaOf(body: unknown, gameId: number, userId: number) {
 }
 
 async function countGames(): Promise<number> {
-  const [row] = await testApp.db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(schema.games);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.games),
+    'row',
+  );
   return row.n;
 }
 

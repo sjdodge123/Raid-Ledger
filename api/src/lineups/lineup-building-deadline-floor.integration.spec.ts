@@ -31,6 +31,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupsGateway } from './lineups.gateway';
 import { LineupNotificationService } from './lineup-notification.service';
 import { NOBODY_NOMINATED_REASON } from './lineup-building-deadline.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const EXTENDED = 'lineup_deadline_extended';
 
@@ -82,14 +83,17 @@ function describeBuildingDeadlineFloor() {
   async function createMember(tag: string): Promise<Member> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('Floor1!!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@floor.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@floor.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@floor.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -287,7 +291,7 @@ function describeBuildingDeadlineFloor() {
     const aborted = await activityRows(lineupId, 'lineup_aborted');
     expect(aborted).toHaveLength(1);
     expect(aborted[0].actorId).toBeNull();
-    expect(aborted[0].metadata).toEqual({ reason: NOBODY_NOMINATED_REASON });
+    expect(aborted[0]?.metadata).toEqual({ reason: NOBODY_NOMINATED_REASON });
     expect(await activityRows(lineupId, EXTENDED)).toHaveLength(1);
     await settle();
     expect(notifyVotingOpen).not.toHaveBeenCalled();

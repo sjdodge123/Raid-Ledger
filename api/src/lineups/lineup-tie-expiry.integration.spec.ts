@@ -39,6 +39,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { LineupReminderService } from './lineup-reminder.service';
 import { TieExpiryService } from './tiebreaker/tie-expiry.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 type TiebreakerRow = typeof schema.communityLineupTiebreakers.$inferSelect;
@@ -97,13 +98,16 @@ function createPrivateLineup(token: string, inviteeUserIds: number[]) {
 async function createGames(count: number) {
   const games: (typeof schema.games.$inferSelect)[] = [];
   for (let i = 0; i < count; i++) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Expiry Game ${i + 1}`,
-        slug: `expiry-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Expiry Game ${i + 1}`,
+          slug: `expiry-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     games.push(game);
   }
   return games;

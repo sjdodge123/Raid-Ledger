@@ -43,6 +43,7 @@ import {
   LINEUP_PHASE_TRANSITION,
 } from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
+import { nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 type Response = { status: number; body: unknown };
@@ -102,13 +103,16 @@ function createPrivateLineup(
 async function createGames(count: number) {
   const games: (typeof schema.games.$inferSelect)[] = [];
   for (let i = 0; i < count; i++) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Tie Pick Game ${i + 1}`,
-        slug: `tie-pick-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Tie Pick Game ${i + 1}`,
+          slug: `tie-pick-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     games.push(game);
   }
   return games;
@@ -302,7 +306,7 @@ describe('ROK-1374 tie pick — authorisation (AC15)', () => {
 
   it('400s when the chosen game is not one of the tied games', async () => {
     const { lineupId } = await arrangeArmedTieHold();
-    const [outsider] = await createGames(1);
+    const [outsider] = nonEmpty(await createGames(1), 'outsider');
 
     const res = await pick(adminToken, lineupId, outsider.id);
 

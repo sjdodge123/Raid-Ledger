@@ -23,6 +23,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 type Response = { status: number; body: unknown };
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -52,13 +53,16 @@ function expectOk(res: Response, step: string): void {
 async function createGames(count: number) {
   const games: (typeof schema.games.$inferSelect)[] = [];
   for (let i = 0; i < count; i++) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Tiebreak Game ${i + 1}`,
-        slug: `tb-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Tiebreak Game ${i + 1}`,
+          slug: `tb-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     games.push(game);
   }
   return games;

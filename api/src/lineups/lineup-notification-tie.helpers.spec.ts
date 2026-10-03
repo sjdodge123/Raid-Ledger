@@ -132,7 +132,7 @@ describe('lineup tie notifications', () => {
       voteCount: 3,
     });
     expect(mockAnnounce).toHaveBeenCalledTimes(1);
-    expect(mockAnnounce.mock.calls[0][2]).toEqual({
+    expect(mockAnnounce.mock.calls[0]?.[2]).toEqual({
       tiedGames: TIED,
       rosterSize: 3,
     });

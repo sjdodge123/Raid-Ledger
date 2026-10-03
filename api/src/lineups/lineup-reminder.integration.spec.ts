@@ -26,6 +26,7 @@ import * as schema from '../drizzle/schema';
 import { LineupReminderService } from './lineup-reminder.service';
 import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -55,25 +56,31 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   async function createDiscordUser(tag: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:${tag}-${Date.now()}-${Math.random()}`,
-        username: `mem-${tag}-${Date.now()}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:${tag}-${Date.now()}-${Math.random()}`,
+          username: `mem-${tag}-${Date.now()}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function createGame(name: string): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `${name}-${Date.now()}`,
-        slug: `${name.toLowerCase()}-${Date.now()}-${Math.random()}`,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `${name}-${Date.now()}`,
+          slug: `${name.toLowerCase()}-${Date.now()}-${Math.random()}`,
+        })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -84,21 +91,24 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
     phaseDeadlineHoursAhead: number;
   }): Promise<number> {
     const deadline = new Date(Date.now() + opts.phaseDeadlineHoursAhead * HOUR);
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: `ROK-1126 ${opts.visibility} ${opts.status}`,
-        status: opts.status,
-        visibility: opts.visibility,
-        createdBy: opts.creatorId,
-        phaseDeadline: deadline,
-        publicSlug:
-          `r1126${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`.slice(
-            0,
-            16,
-          ),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: `ROK-1126 ${opts.visibility} ${opts.status}`,
+          status: opts.status,
+          visibility: opts.visibility,
+          createdBy: opts.creatorId,
+          phaseDeadline: deadline,
+          publicSlug:
+            `r1126${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`.slice(
+              0,
+              16,
+            ),
+        })
+        .returning(),
+      'lineup',
+    );
     return lineup.id;
   }
 
@@ -334,29 +344,35 @@ describe('LineupReminderService cron (integration, ROK-1126)', () => {
       await inviteUsers(lineupId, [inviteeA, inviteeB]);
 
       // Create a scheduling match with all 3 users as members.
-      const [match] = await testApp.db
-        .insert(schema.communityLineupMatches)
-        .values({
-          lineupId,
-          gameId: gameAId,
-          status: 'scheduling',
-          voteCount: 0,
-        })
-        .returning();
+      const [match] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineupMatches)
+          .values({
+            lineupId,
+            gameId: gameAId,
+            status: 'scheduling',
+            voteCount: 0,
+          })
+          .returning(),
+        'match',
+      );
       await testApp.db.insert(schema.communityLineupMatchMembers).values([
         { matchId: match.id, userId: creatorId, source: 'voted' },
         { matchId: match.id, userId: inviteeA, source: 'voted' },
         { matchId: match.id, userId: inviteeB, source: 'voted' },
       ]);
       // Add a slot and have inviteeA vote on it → exclude from reminders.
-      const [slot] = await testApp.db
-        .insert(schema.communityLineupScheduleSlots)
-        .values({
-          matchId: match.id,
-          proposedTime: new Date(Date.now() + 24 * HOUR),
-          suggestedBy: 'system',
-        })
-        .returning();
+      const [slot] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineupScheduleSlots)
+          .values({
+            matchId: match.id,
+            proposedTime: new Date(Date.now() + 24 * HOUR),
+            suggestedBy: 'system',
+          })
+          .returning(),
+        'slot',
+      );
       await testApp.db
         .insert(schema.communityLineupScheduleVotes)
         .values({ slotId: slot.id, userId: inviteeA });

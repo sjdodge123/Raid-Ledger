@@ -14,6 +14,7 @@ import {
   fanOutEventCreatedDMsToInvitees,
 } from './lineup-notification-dm-batch.helpers';
 import type { MatchInfo } from './lineup-notification.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 // 2026-05-04T01:00:00Z == 9:00 PM EDT Sun May 3 / 6:00 PM PDT Sun May 3 /
 // 1:00 AM UTC Mon May 4 — the boundary case that rolls into the next UTC day.
@@ -137,7 +138,7 @@ describe('fanOutEventCreatedDMs recipient timezone (ROK-1112)', () => {
       'America/New_York',
     );
 
-    const [a] = calls();
+    const [a] = nonEmpty(calls(), 'a');
     expect(a.message).toContain('May 3');
     expect(a.message).not.toContain('May 4');
   });
@@ -157,7 +158,7 @@ describe('fanOutEventCreatedDMs recipient timezone (ROK-1112)', () => {
       'America/Los_Angeles',
     );
 
-    const [a] = calls();
+    const [a] = nonEmpty(calls(), 'a');
     // PDT default → 6:00 PM Sun May 3.
     expect(a.message).toContain('6:00');
     expect(a.message).toContain('May 3');

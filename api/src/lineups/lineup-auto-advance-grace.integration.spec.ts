@@ -47,6 +47,7 @@ import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 import { LineupsService } from './lineups.service';
 import { LineupsGateway } from './lineups.gateway';
 import * as transitionMod from './lineups-transition.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 // The two SETTING_KEYS the implementation must add. We resolve them
 // at runtime so the spec FILE still compiles before the implementation
@@ -101,14 +102,17 @@ function describeGrace() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('GraceTest1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@grace.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@grace.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@grace.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -140,13 +144,16 @@ function describeGrace() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Grace Game ${i + 1}`,
-          slug: `grace-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Grace Game ${i + 1}`,
+            slug: `grace-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;
@@ -853,10 +860,13 @@ function describeGrace() {
     // `runStatusTransition` → `deriveTopVotedGame`, leaving decided_game_id
     // set instead of NULL. Previously the direct UPDATE in the processor
     // would land the row in `decided` with no winner picked.
-    const [decidedRow] = await testApp.db
-      .select({ decidedGameId: schema.communityLineups.decidedGameId })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId));
+    const [decidedRow] = nonEmpty(
+      await testApp.db
+        .select({ decidedGameId: schema.communityLineups.decidedGameId })
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId)),
+      'decidedRow',
+    );
     expect(decidedRow.decidedGameId).toBe(games[0].id);
 
     // `logTransition` must have written a `lineup_decided` activity entry —

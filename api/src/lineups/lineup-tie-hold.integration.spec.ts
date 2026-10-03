@@ -40,6 +40,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
 import { computeTieExpiresAt } from './tiebreaker/tie-hold.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 type Response = { status: number; body: unknown };
@@ -101,13 +102,16 @@ function createPrivateLineup(
 async function createGames(count: number) {
   const games: (typeof schema.games.$inferSelect)[] = [];
   for (let i = 0; i < count; i++) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Tie Game ${i + 1}`,
-        slug: `tie-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Tie Game ${i + 1}`,
+          slug: `tie-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     games.push(game);
   }
   return games;

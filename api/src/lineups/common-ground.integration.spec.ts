@@ -14,6 +14,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeCommonGround() {
   let testApp: TestApp;
@@ -34,14 +35,17 @@ function describeCommonGround() {
   async function loginAsMember(): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:member@test.local',
-        username: 'member',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:member@test.local',
+          username: 'member',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'member@test.local',
       passwordHash: hash,
@@ -476,14 +480,20 @@ function describeCommonGround() {
       await createBuildingLineup();
 
       // Create 3 users to build ownership spread
-      const [user2] = await testApp.db
-        .insert(schema.users)
-        .values({ discordId: 'u2', username: 'user2', role: 'member' })
-        .returning();
-      const [user3] = await testApp.db
-        .insert(schema.users)
-        .values({ discordId: 'u3', username: 'user3', role: 'member' })
-        .returning();
+      const [user2] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({ discordId: 'u2', username: 'user2', role: 'member' })
+          .returning(),
+        'user2',
+      );
+      const [user3] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({ discordId: 'u3', username: 'user3', role: 'member' })
+          .returning(),
+        'user3',
+      );
 
       // High score: 3 owners, no sale → (3*10) - 2 = 28
       const highScoreGame = await insertGame({
@@ -712,10 +722,13 @@ function describeCommonGround() {
 
       // Insert 20 distinct games and nominate them directly
       for (let i = 0; i < 20; i++) {
-        const [g] = await testApp.db
-          .insert(schema.games)
-          .values({ name: `Cap Game ${i}`, slug: `cap-game-${i}` })
-          .returning();
+        const [g] = nonEmpty(
+          await testApp.db
+            .insert(schema.games)
+            .values({ name: `Cap Game ${i}`, slug: `cap-game-${i}` })
+            .returning(),
+          'g',
+        );
         await testApp.db.insert(schema.communityLineupEntries).values({
           lineupId,
           gameId: g.id,

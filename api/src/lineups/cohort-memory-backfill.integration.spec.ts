@@ -33,6 +33,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema/community-lineups';
 import { hashParticipantIds } from './cohort-memory-signature.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const MIGRATIONS_DIR = path.join(__dirname, '../drizzle/migrations');
 
@@ -148,17 +149,20 @@ function describeCohortMemoryBackfill() {
     status: LineupStatus,
     decidedGameId: number | null,
   ): Promise<number> {
-    const [row] = await db()
-      .insert(schema.communityLineups)
-      .values({
-        title,
-        status,
-        visibility: 'public',
-        createdBy: adminId,
-        publicSlug: slug,
-        decidedGameId,
-      })
-      .returning();
+    const [row] = nonEmpty(
+      await db()
+        .insert(schema.communityLineups)
+        .values({
+          title,
+          status,
+          visibility: 'public',
+          createdBy: adminId,
+          publicSlug: slug,
+          decidedGameId,
+        })
+        .returning(),
+      'row',
+    );
     return row.id;
   }
 
@@ -321,15 +325,24 @@ function describeCohortMemoryBackfill() {
     );
     // Compare against the values as Postgres stored them, so the assertion
     // cannot pass or fail on a timezone round-trip.
-    const [lineupRow] = await db()
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, decidedLineup));
-    const [tbRow] = await db().select().from(schema.communityLineupTiebreakers);
-    const [matchRow] = await db()
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.gameId, games[1]));
+    const [lineupRow] = nonEmpty(
+      await db()
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, decidedLineup)),
+      'lineupRow',
+    );
+    const [tbRow] = nonEmpty(
+      await db().select().from(schema.communityLineupTiebreakers),
+      'tbRow',
+    );
+    const [matchRow] = nonEmpty(
+      await db()
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.gameId, games[1])),
+      'matchRow',
+    );
 
     expect(at[`decided:${games[0]}`]).toBe(lineupRow.updatedAt.getTime());
     expect(at[`match:${games[1]}`]).toBe(matchRow.createdAt.getTime());
@@ -455,15 +468,18 @@ function describeCohortMemoryBackfill() {
     });
 
     it('includes an invitee who never nominated and never voted', async () => {
-      const [bystander] = await db()
-        .insert(schema.users)
-        .values({
-          id: 55000,
-          discordId: 'bf-bystander',
-          username: 'bfbystander',
-          role: 'member' as const,
-        })
-        .returning();
+      const [bystander] = nonEmpty(
+        await db()
+          .insert(schema.users)
+          .values({
+            id: 55000,
+            discordId: 'bf-bystander',
+            username: 'bfbystander',
+            role: 'member' as const,
+          })
+          .returning(),
+        'bystander',
+      );
       await db()
         .insert(schema.communityLineupInvitees)
         .values({ lineupId: decidedLineup, userId: bystander.id });

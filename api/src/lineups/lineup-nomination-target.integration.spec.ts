@@ -26,6 +26,7 @@ import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeNominationTarget() {
   let testApp: TestApp;
@@ -58,14 +59,17 @@ function describeNominationTarget() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('NomTarget1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@nomtarget.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@nomtarget.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@nomtarget.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -94,13 +98,16 @@ function describeNominationTarget() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `NomTarget Game ${i + 1}`,
-          slug: `nomtarget-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `NomTarget Game ${i + 1}`,
+            slug: `nomtarget-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;
@@ -295,7 +302,7 @@ function describeNominationTarget() {
     expect((await unnominate(b.token, lineupId, games[4].id)).status).toBe(204);
     expect(await readStatus(lineupId)).toBe('building');
 
-    const [replacement] = await createGames(1);
+    const [replacement] = nonEmpty(await createGames(1), 'replacement');
     expect((await nominate(b.token, lineupId, replacement.id)).status).toBe(
       201,
     );
@@ -422,17 +429,20 @@ function describeNominationTarget() {
     const games = await createGames(5);
 
     // A finished lineup whose below-threshold matches are carry-over fodder.
-    const [prev] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Carryover Source',
-        createdBy: members[0].userId,
-        status: 'decided',
-        visibility: 'public',
-        // public_slug is varchar(16).
-        publicSlug: `cs-${Date.now()}`.slice(0, 16),
-      })
-      .returning();
+    const [prev] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Carryover Source',
+          createdBy: members[0].userId,
+          status: 'decided',
+          visibility: 'public',
+          // public_slug is varchar(16).
+          publicSlug: `cs-${Date.now()}`.slice(0, 16),
+        })
+        .returning(),
+      'prev',
+    );
     for (const [i, game] of games.entries()) {
       await testApp.db.insert(schema.communityLineupEntries).values({
         lineupId: prev.id,

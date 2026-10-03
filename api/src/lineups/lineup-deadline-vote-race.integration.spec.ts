@@ -53,6 +53,7 @@ import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { SettingsService } from '../settings/settings.service';
 import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
+import { nonEmpty } from '../common/testing/narrow';
 
 const KEY_MAP = SETTING_KEYS as Record<string, string>;
 const graceKey = (KEY_MAP.LINEUP_AUTO_ADVANCE_GRACE_MS ??
@@ -86,14 +87,17 @@ function describeDeadlineVoteRace() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('RaceTest1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@race.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@race.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@race.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,

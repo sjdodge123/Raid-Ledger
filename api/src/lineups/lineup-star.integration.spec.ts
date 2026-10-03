@@ -19,6 +19,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 type Response = { status: number; body: unknown };
 type Detail = {
@@ -53,13 +54,16 @@ function expectOk(res: Response, step: string): void {
 async function createGames(count: number) {
   const games: (typeof schema.games.$inferSelect)[] = [];
   for (let i = 0; i < count; i++) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Star Game ${i + 1}`,
-        slug: `star-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Star Game ${i + 1}`,
+          slug: `star-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     games.push(game);
   }
   return games;
@@ -233,7 +237,7 @@ describe('POST /lineups/:id/star', () => {
 
   it('rejects a star for a game this lineup never nominated', async () => {
     const { lineupId, voter } = await arrangeVotingLineup();
-    const [outsider] = await createGames(1);
+    const [outsider] = nonEmpty(await createGames(1), 'outsider');
 
     const res = await star(voter.token, lineupId, outsider.id);
 

@@ -17,6 +17,7 @@ import {
 } from '../common/testing/integration-helpers';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeSchedulingToggle() {
   let testApp: TestApp;
@@ -37,14 +38,17 @@ function describeSchedulingToggle() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@test.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@test.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@test.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -173,8 +177,9 @@ function describeSchedulingToggle() {
     const { lineupId, gameA } = await buildDecidedLineup({
       includeSchedulingPhase: false,
     });
-    const [match] = (await matchesFor(lineupId)).filter(
-      (m) => m.gameId === gameA.id,
+    const [match] = nonEmpty(
+      (await matchesFor(lineupId)).filter((m) => m.gameId === gameA.id),
+      'match',
     );
     const latecomer = await loginAsMember('latecomer');
     const res = await testApp.request
@@ -183,8 +188,9 @@ function describeSchedulingToggle() {
       .send();
     expect(res.status).toBeLessThan(400);
     expect(res.body.promoted).toBe(false);
-    const [after] = (await matchesFor(lineupId)).filter(
-      (m) => m.id === match.id,
+    const [after] = nonEmpty(
+      (await matchesFor(lineupId)).filter((m) => m.id === match.id),
+      'after',
     );
     expect(after.status).toBe('suggested');
   });
@@ -193,16 +199,18 @@ function describeSchedulingToggle() {
     const { lineupId, gameA } = await buildDecidedLineup({
       includeSchedulingPhase: false,
     });
-    const [match] = (await matchesFor(lineupId)).filter(
-      (m) => m.gameId === gameA.id,
+    const [match] = nonEmpty(
+      (await matchesFor(lineupId)).filter((m) => m.gameId === gameA.id),
+      'match',
     );
     const res = await testApp.request
       .post(`/lineups/${lineupId}/matches/${match.id}/advance`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send();
     expect(res.status).toBe(400);
-    const [after] = (await matchesFor(lineupId)).filter(
-      (m) => m.id === match.id,
+    const [after] = nonEmpty(
+      (await matchesFor(lineupId)).filter((m) => m.id === match.id),
+      'after',
     );
     expect(after.status).toBe('suggested');
   });
@@ -211,8 +219,9 @@ function describeSchedulingToggle() {
     const { lineupId, gameA } = await buildDecidedLineup({
       includeSchedulingPhase: false,
     });
-    const [match] = (await matchesFor(lineupId)).filter(
-      (m) => m.gameId === gameA.id,
+    const [match] = nonEmpty(
+      (await matchesFor(lineupId)).filter((m) => m.gameId === gameA.id),
+      'match',
     );
     const res = await testApp.request
       .get(`/lineups/${lineupId}/schedule/${match.id}`)
@@ -226,8 +235,9 @@ function describeSchedulingToggle() {
     const { lineupId, gameA } = await buildDecidedLineup({
       includeSchedulingPhase: false,
     });
-    const [match] = (await matchesFor(lineupId)).filter(
-      (m) => m.gameId === gameA.id,
+    const [match] = nonEmpty(
+      (await matchesFor(lineupId)).filter((m) => m.gameId === gameA.id),
+      'match',
     );
     const future = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
     const res = await testApp.request
@@ -243,8 +253,9 @@ function describeSchedulingToggle() {
 
   it('allows POST .../suggest for a scheduling-enabled lineup (control)', async () => {
     const { lineupId, gameA } = await buildDecidedLineup();
-    const [match] = (await matchesFor(lineupId)).filter(
-      (m) => m.gameId === gameA.id,
+    const [match] = nonEmpty(
+      (await matchesFor(lineupId)).filter((m) => m.gameId === gameA.id),
+      'match',
     );
     const future = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
     const res = await testApp.request
