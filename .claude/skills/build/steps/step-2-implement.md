@@ -31,7 +31,7 @@ Identify from `git diff main..HEAD --name-only`:
 | `.claude/**`, root configs, `*.md`, `*.yml` | skip CI (no compiled code) |
 | Multi-workspace | **escalate to `standard`** — run 2-light-e escape hatch |
 
-Run the typechecks from the repo root with an explicit `-p`. A bare `cd web && npx tsc --noEmit` resolves the solution-style `web/tsconfig.json` and checks 0 files; `cd api && npx tsc --noEmit` resolves the workspace's pinned TypeScript and floods with jest-globals errors.
+Run the typechecks from the repo root, each with its own `-p`: a tsc started inside `web/` with no project flag resolves the solution-style root tsconfig there and checks 0 files, and one started inside `api/` resolves the workspace's pinned TypeScript and floods with jest-globals errors.
 
 Lint/type errors → fix directly, commit `fix: resolve CI issues (ROK-XXX)`. Test failures → fix directly. Don't push with known failures.
 
