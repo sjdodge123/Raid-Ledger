@@ -25,7 +25,7 @@ import {
   writeTiebreakerCohortMemory,
 } from './cohort-memory-write.helpers';
 import { buildCohortSignature } from './cohort-memory-signature.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 /** ROK-1538: the cohort is the ROSTER, so the creator is always a member. */
 const rosterOf = (adminId: number, ...ids: number[]) => [adminId, ...ids];
@@ -95,12 +95,14 @@ function describeCohortMemoryWrites() {
       games.map((gameId, i) => ({
         lineupId,
         gameId,
-        nominatedBy: cohort[i],
+        nominatedBy: at(cohort, i),
       })),
     );
     await testApp.db
       .insert(schema.communityLineupVotes)
-      .values(cohort.map((userId) => ({ lineupId, userId, gameId: games[0] })));
+      .values(
+        cohort.map((userId) => ({ lineupId, userId, gameId: at(games, 0) })),
+      );
   });
 
   it('writes a decided row + one match row per match-tier game on voting->decided', async () => {
@@ -123,7 +125,7 @@ function describeCohortMemoryWrites() {
 
     const decided = rows.filter((r) => r.resolution === 'decided');
     expect(decided).toHaveLength(1);
-    expect(decided[0].gameId).toBe(games[0]);
+    expect(decided[0]?.gameId).toBe(games[0]);
 
     const matches = await testApp.db
       .select()
@@ -148,7 +150,7 @@ function describeCohortMemoryWrites() {
     // "Match".
     await testApp.db
       .insert(schema.communityLineupVotes)
-      .values({ lineupId, userId: cohort[0], gameId: games[1] });
+      .values({ lineupId, userId: at(cohort, 0), gameId: at(games, 1) });
 
     await testApp.request
       .patch(`/lineups/${lineupId}/status`)
@@ -177,23 +179,23 @@ function describeCohortMemoryWrites() {
           lineupId,
           mode: 'veto',
           status: 'active',
-          tiedGameIds: [games[1], games[2]],
+          tiedGameIds: [at(games, 1), at(games, 2)],
           originalVoteCount: 3,
         })
         .returning(),
       'tb',
     );
 
-    await resolveTiebreaker(testApp.db, tb.id, games[1]);
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 1));
 
     const rows = await memoryRows();
     const won = rows.filter((r) => r.resolution === 'veto_won');
     const lost = rows.filter((r) => r.resolution === 'veto_lost');
     expect(won).toHaveLength(1);
-    expect(won[0].gameId).toBe(games[1]);
+    expect(won[0]?.gameId).toBe(games[1]);
     expect(lost).toHaveLength(1);
-    expect(lost[0].gameId).toBe(games[2]);
-    expect(won[0].participantHash).toBe(
+    expect(lost[0]?.gameId).toBe(games[2]);
+    expect(won[0]?.participantHash).toBe(
       buildCohortSignature(rosterOf(adminId, ...cohort))?.participantHash,
     );
   });
@@ -205,7 +207,9 @@ function describeCohortMemoryWrites() {
     // re-surface a rejected game badged "Match".
     await testApp.db
       .insert(schema.communityLineupVotes)
-      .values(cohort.map((userId) => ({ lineupId, userId, gameId: games[1] })));
+      .values(
+        cohort.map((userId) => ({ lineupId, userId, gameId: at(games, 1) })),
+      );
 
     const [tb] = nonEmpty(
       await testApp.db
@@ -214,13 +218,13 @@ function describeCohortMemoryWrites() {
           lineupId,
           mode: 'veto',
           status: 'active',
-          tiedGameIds: [games[0], games[1]],
+          tiedGameIds: [at(games, 0), at(games, 1)],
           originalVoteCount: 3,
         })
         .returning(),
       'tb',
     );
-    await resolveTiebreaker(testApp.db, tb.id, games[0]);
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 0));
 
     await testApp.request
       .patch(`/lineups/${lineupId}/status`)
@@ -262,13 +266,13 @@ function describeCohortMemoryWrites() {
           lineupId,
           mode: 'veto',
           status: 'active',
-          tiedGameIds: [games[1], games[2]],
+          tiedGameIds: [at(games, 1), at(games, 2)],
           originalVoteCount: 3,
         })
         .returning(),
       'tb',
     );
-    await resolveTiebreaker(testApp.db, tb.id, games[1]);
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 1));
 
     const before = (await memoryRows()).length;
     expect(before).toBeGreaterThan(0);
@@ -279,13 +283,13 @@ function describeCohortMemoryWrites() {
     // `ON CONFLICT DO NOTHING` guard removed (verified — it did). Asserting
     // that nothing was logged is what makes this test non-vacuous.
     const logger = { error: jest.fn() } as unknown as Logger;
-    await resolveTiebreaker(testApp.db, tb.id, games[1]);
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 1));
     await writeDecidedCohortMemory(testApp.db, lineupId, logger);
     await writeTiebreakerCohortMemory(
       testApp.db,
       lineupId,
       tb.id,
-      games[1],
+      at(games, 1),
       logger,
     );
 
@@ -321,7 +325,7 @@ function describeCohortMemoryWrites() {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.participantIds).toEqual([adminId]);
     expect(rows[0]?.cohortSize).toBe(1);
-    expect(rows[0].participantHash).toBe(
+    expect(rows[0]?.participantHash).toBe(
       buildCohortSignature([adminId])?.participantHash,
     );
   });

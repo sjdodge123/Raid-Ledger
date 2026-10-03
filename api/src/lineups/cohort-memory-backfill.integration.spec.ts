@@ -33,7 +33,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import type { LineupStatus } from '../drizzle/schema/community-lineups';
 import { hashParticipantIds } from './cohort-memory-signature.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at as itemAt, defined, nonEmpty } from '../common/testing/narrow';
 
 const MIGRATIONS_DIR = path.join(__dirname, '../drizzle/migrations');
 
@@ -173,14 +173,18 @@ function describeCohortMemoryBackfill() {
       .values(
         userIds.map((nominatedBy, i) => ({
           lineupId,
-          gameId: games[i],
+          gameId: itemAt(games, i),
           nominatedBy,
         })),
       );
     await db()
       .insert(schema.communityLineupVotes)
       .values(
-        userIds.map((userId) => ({ lineupId, userId, gameId: games[0] })),
+        userIds.map((userId) => ({
+          lineupId,
+          userId,
+          gameId: itemAt(games, 0),
+        })),
       );
   }
 
@@ -198,7 +202,7 @@ function describeCohortMemoryBackfill() {
       .values([
         {
           lineupId: decidedLineup,
-          gameId: games[1],
+          gameId: itemAt(games, 1),
           status: 'suggested',
           voteCount: 3,
           thresholdMet: true,
@@ -206,7 +210,7 @@ function describeCohortMemoryBackfill() {
         },
         {
           lineupId: decidedLineup,
-          gameId: games[2],
+          gameId: itemAt(games, 2),
           status: 'suggested',
           voteCount: 1,
           thresholdMet: false,
@@ -219,9 +223,9 @@ function describeCohortMemoryBackfill() {
         lineupId: decidedLineup,
         mode: 'veto',
         status: 'resolved',
-        tiedGameIds: [games[1], games[2]],
+        tiedGameIds: [itemAt(games, 1), itemAt(games, 2)],
         originalVoteCount: 3,
-        winnerGameId: games[1],
+        winnerGameId: itemAt(games, 1),
         resolvedAt: TIE_AT,
       });
     await db()
@@ -243,16 +247,21 @@ function describeCohortMemoryBackfill() {
       'Decided',
       'bfslug01',
       'decided',
-      games[0],
+      itemAt(games, 0),
     );
     archivedLineup = await makeLineup(
       'Archived',
       'bfslug02',
       'archived',
-      games[2],
+      itemAt(games, 2),
     );
     votingLineup = await makeLineup('Voting', 'bfslug03', 'voting', null);
-    emptyLineup = await makeLineup('Empty', 'bfslug04', 'decided', games[0]);
+    emptyLineup = await makeLineup(
+      'Empty',
+      'bfslug04',
+      'decided',
+      itemAt(games, 0),
+    );
 
     await engage(decidedLineup, COHORT_IDS);
     await engage(archivedLineup, PAIR_IDS);
@@ -340,7 +349,7 @@ function describeCohortMemoryBackfill() {
       await db()
         .select()
         .from(schema.communityLineupMatches)
-        .where(eq(schema.communityLineupMatches.gameId, games[1])),
+        .where(eq(schema.communityLineupMatches.gameId, itemAt(games, 1))),
       'matchRow',
     );
 
@@ -369,7 +378,7 @@ function describeCohortMemoryBackfill() {
     await db()
       .update(schema.communityLineupMatches)
       .set({ thresholdMet: true })
-      .where(eq(schema.communityLineupMatches.gameId, games[2]));
+      .where(eq(schema.communityLineupMatches.gameId, itemAt(games, 2)));
 
     await runBackfill();
 
@@ -409,7 +418,7 @@ function describeCohortMemoryBackfill() {
     );
     expect(unguarded.join('\n')).not.toMatch(/ON CONFLICT/i);
     const rejection = await db()
-      .execute(sql.raw(unguarded[0]))
+      .execute(sql.raw(itemAt(unguarded, 0)))
       .then(
         () => null,
         (err: unknown) => err,
@@ -524,10 +533,11 @@ function describeCohortMemoryBackfill() {
       // NOTHING never fired. Re-keying both rows onto one roster hash would
       // violate the key and abort the whole migration.
       await runBackfill();
-      const [original] = (await memoryRows()).filter(
+      const [maybeOriginal] = (await memoryRows()).filter(
         (r) => r.sourceLineupId === decidedLineup && r.resolution === 'decided',
       );
-      expect(original).toBeDefined();
+      expect(maybeOriginal).toBeDefined();
+      const original = defined(maybeOriginal, 'original decided row');
 
       // The second decide: same row, different engaged set => different hash.
       const reDecidedIds = [...COHORT_IDS, 55001].sort(ASC);
@@ -559,10 +569,10 @@ function describeCohortMemoryBackfill() {
           r.resolution === 'decided',
       );
       expect(survivors).toHaveLength(1);
-      expect(survivors[0].participantHash).toBe(
+      expect(survivors[0]?.participantHash).toBe(
         hashParticipantIds(rosterIds()),
       );
-      expect(survivors[0].participantIds).toEqual(rosterIds());
+      expect(survivors[0]?.participantIds).toEqual(rosterIds());
     });
   });
 }

@@ -24,7 +24,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { resolveTiebreaker } from './tiebreaker/tiebreaker-lifecycle.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 /** Create a bare `voting` lineup and return its id. */
 async function createLineup(
@@ -63,10 +63,10 @@ async function engage(
   for (const [i, userId] of userIds.entries()) {
     await testApp.db
       .insert(schema.communityLineupEntries)
-      .values({ lineupId, gameId: gameIds[i], nominatedBy: userId });
+      .values({ lineupId, gameId: at(gameIds, i), nominatedBy: userId });
     await testApp.db
       .insert(schema.communityLineupVotes)
-      .values({ lineupId, userId, gameId: gameIds[0] });
+      .values({ lineupId, userId, gameId: at(gameIds, 0) });
   }
 }
 
@@ -110,7 +110,7 @@ function describeCohortMemoryEndpoint() {
       )
       .returning();
     cohort = users.slice(0, 3).map((u) => u.id);
-    outsider = users[3].id;
+    outsider = at(users, 3).id;
 
     const gameRows = await testApp.db
       .insert(schema.games)
@@ -140,13 +140,13 @@ function describeCohortMemoryEndpoint() {
           lineupId: lineupA,
           mode: 'veto',
           status: 'active',
-          tiedGameIds: [gameIds[1], gameIds[2]],
+          tiedGameIds: [at(gameIds, 1), at(gameIds, 2)],
           originalVoteCount: 3,
         })
         .returning(),
       'tb',
     );
-    await resolveTiebreaker(testApp.db, tb.id, gameIds[1]);
+    await resolveTiebreaker(testApp.db, tb.id, at(gameIds, 1));
   });
 
   it('returns decided + veto_won games for the same cohort, never veto_lost', async () => {
@@ -163,10 +163,10 @@ function describeCohortMemoryEndpoint() {
     expect(body.cohortSize).toBe(4);
 
     const byGame = new Map(body.entries.map((e) => [e.gameId, e.resolution]));
-    expect(byGame.get(gameIds[0])).toBe('decided');
-    expect(byGame.get(gameIds[1])).toBe('veto_won');
+    expect(byGame.get(at(gameIds, 0))).toBe('decided');
+    expect(byGame.get(at(gameIds, 1))).toBe('veto_won');
     // games[2] was vetoed OUT — filtered at the API layer.
-    expect(byGame.has(gameIds[2])).toBe(false);
+    expect(byGame.has(at(gameIds, 2))).toBe(false);
     expect(
       body.entries.some((e) => (e.resolution as string) === 'veto_lost'),
     ).toBe(false);
