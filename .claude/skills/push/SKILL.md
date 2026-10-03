@@ -278,7 +278,7 @@ custom prompt isn't needed. Two quirks when reading the output:
 
 **Verdict handling:**
 
-- Output starts with "No blockers" or equivalent → proceed to Step 9.
+- The verdict line (the last non-empty line, printed above) says "No blockers" or equivalent → proceed to Step 9.
 - Output lists BLOCKERS → **STOP**, present them to the operator with the question: "Codex flagged N blockers — fix before pushing, or override and continue?" Wait for operator decision.
 - Codex CLI errors out (network, auth, non-zero exit) or prints no verdict line → record `ran-no-verdict (exit <rc>)` and proceed (don't block the push on tooling failure); never print ✓ for Codex in Step 12.
 

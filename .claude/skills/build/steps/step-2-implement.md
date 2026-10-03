@@ -25,11 +25,13 @@ Identify from `git diff main..HEAD --name-only`:
 
 | Touched | Run |
 |---------|-----|
-| `web/**` only | `npm run lint -w web && cd web && npx tsc --noEmit && npx vitest run --coverage && cd -` |
-| `api/**` only | `npm run lint -w api && cd api && npx tsc --noEmit && npm run test -w api && cd -` |
+| `web/**` only | `npm run lint -w web && npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json && cd web && npx vitest run --coverage && cd -` |
+| `api/**` only | `npm run lint -w api && npx tsc --noEmit -p api/tsconfig.json && npm run test -w api` |
 | `packages/contract/**` only | `npm run build -w packages/contract` |
 | `.claude/**`, root configs, `*.md`, `*.yml` | skip CI (no compiled code) |
 | Multi-workspace | **escalate to `standard`** — run 2-light-e escape hatch |
+
+Run the typechecks from the repo root with an explicit `-p`. A bare `cd web && npx tsc --noEmit` resolves the solution-style `web/tsconfig.json` and checks 0 files; `cd api && npx tsc --noEmit` resolves the workspace's pinned TypeScript and floods with jest-globals errors.
 
 Lint/type errors → fix directly, commit `fix: resolve CI issues (ROK-XXX)`. Test failures → fix directly. Don't push with known failures.
 

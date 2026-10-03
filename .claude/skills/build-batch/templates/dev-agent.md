@@ -64,7 +64,7 @@ If your milestone is in a story that touches MCP/CLI surface used by `/push` or 
 3. **Implement against the tests.** Contract first (Zod schemas, types), then API/CLI (server-side), then frontend if applicable.
 4. **Run the tests as you go.** When all milestone tests pass, you're in green phase.
 5. **Refactor** if structure is awkward — extract helpers (max 30 lines/function, max 300 lines/file per CLAUDE.md), inline trivial wrappers, name things well.
-6. **Run lint + tsc on YOUR workspace** — `npm run lint -w <workspace>`, `npx tsc --noEmit -p <tsconfig>`. Fix any errors you introduced. Pre-existing failures → check `TECH-DEBT-BACKLOG.md` per CLAUDE.md STRICT rule.
+6. **Run lint + tsc on YOUR workspace** — `npm run lint -w <workspace>`, `npx tsc --noEmit -p <tsconfig>` (for web, the leaf configs `web/tsconfig.app.json`, `web/tsconfig.node.json` and `web/tsconfig.test.json` — the web root tsconfig.json is solution-style and checks 0 files). Fix any errors you introduced. Pre-existing failures → check `TECH-DEBT-BACKLOG.md` per CLAUDE.md STRICT rule.
 7. **Commit final state**, then SendMessage to team-lead.
 
 ---
