@@ -59,7 +59,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly clientService: DiscordBotClientService,
     private readonly channelResolver: ChannelResolverService,
-    @Optional() private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   onModuleInit(): void {

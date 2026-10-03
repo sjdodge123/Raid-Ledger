@@ -8,6 +8,7 @@
  *    and the mixed-igdbId skip rule.
  */
 import { eq } from 'drizzle-orm';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -19,6 +20,10 @@ import { upsertItadGame } from './igdb-itad-upsert.helpers';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
 import type { GameDetailDto } from '@raid-ledger/contract';
+import {
+  CHANNEL_BINDING_EVENTS,
+  type ChannelBindingChangedPayload,
+} from '../discord-bot/services/channel-binding-events';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -621,5 +626,42 @@ describe('Regression: channel_bindings collision during merge', () => {
       .map((b) => `${b.channelId}:${b.recurrenceGroupId ?? '-'}`)
       .sort();
     expect(moved).toEqual(['vc-a:-', `vc-a:${seriesId}`, 'vc-b:-']);
+  });
+});
+
+describe('Channel-binding change announce during merge', () => {
+  it('announces every channel whose bindings the merge rewrote', async () => {
+    const winner = await insertGame({
+      name: 'Satisfactory',
+      slug: 'satisfactory-igdb',
+      igdbId: 119178,
+    });
+    const loser = await insertGame({
+      name: 'Satisfactory',
+      slug: 'satisfactory-steam',
+      steamAppId: 526870,
+    });
+    await testApp.db
+      .insert(schema.channelBindings)
+      .values([
+        binding(winner.id, 'vc-keep'),
+        binding(loser.id, 'vc-keep'),
+        binding(loser.id, 'vc-move'),
+      ]);
+    const emit = jest.spyOn(testApp.app.get(EventEmitter2), 'emit');
+
+    try {
+      const res = await mergeByName();
+
+      expect(res.body.errors).toEqual([]);
+      // vc-keep: the loser's colliding row was dropped; vc-move: repointed.
+      const announced = emit.mock.calls
+        .filter(([name]) => name === CHANNEL_BINDING_EVENTS.CHANGED)
+        .map(([, p]) => (p as ChannelBindingChangedPayload).channelId)
+        .sort();
+      expect(announced).toEqual(['vc-keep', 'vc-move']);
+    } finally {
+      emit.mockRestore();
+    }
   });
 });

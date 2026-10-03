@@ -82,6 +82,23 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
       expect(h.rosterOf('bind-game:1')).toEqual(['u1', 'u2']);
       expect(h.joinCalls().map((c) => c.memberId)).not.toContain('bot9');
     });
+
+    // ROK-1390: the companion bot alone, its /playing override on the bound
+    // game, minPlayers 1. The bot counts and confirms, so the join reaches the
+    // immediate spawn, where the roster skips it. That return used to be
+    // silent, which hid why the series quick-play smoke never saw an event.
+    it('bot-only channel at threshold with confirmed bound game traces no-human-members and mints nothing', async () => {
+      h = await setupRok1445Harness(gameBinding({ config: { minPlayers: 1 } }));
+
+      await h.joinMember({ id: 'bot9', ...BOUND_GAME, bot: true });
+
+      expect(h.mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+      expect(h.gateLines()).toEqual([
+        expect.stringContaining(
+          '[voice-gate] outcome=no-human-members ch=' + CHANNEL_ID,
+        ),
+      ]);
+    });
   });
 
   // ─── Review MED-1: never mint a second event alongside an existing one ────

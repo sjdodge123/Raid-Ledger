@@ -588,6 +588,13 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
 - **`fieldSize`, not `size`**, on `Input` and `Textarea` — the native `size` attribute is a number.
 - **Loading buttons stay focusable**: `Button loading` is `aria-disabled`, not `disabled`, and ignores clicks —
   never hand-roll `disabled={saving}` on top of it.
+- **One save at a time across rows**: when a list lets several rows open an editor but the page runs one
+  mutation, the saving row's submit is `Button loading`, and every sibling row's submit (plus any other
+  action firing that mutation, such as a repair button) is native `disabled` until it settles. The list
+  computes the two as mutually exclusive, so the cross-row lock and `loading` never land on one button; this
+  `disabled` locks a *different* row and is not `disabled={saving}` on the saving one. Validation-disabled
+  may still coincide with a row's own `loading`. Reference: `components/admin/ChannelBindingList.tsx`
+  (`isSaving` / `saveLocked` per row, TDB:1970).
 - **A floating `Button` is positioned by a wrapper `<div>`**, never through its `className`: there is no
   tailwind-merge, so `hidden`/`md:flex`/`rounded-full` on the button fight its own `inline-flex`/`rounded-lg`.
   The wrapper owns `fixed`, the breakpoint display and the shape (`[&>button]:rounded-full [&>button]:p-0`,
@@ -678,7 +685,7 @@ Native control chrome follows root-only `color-scheme` (`:617-631`) — check sl
 ROOT, not in a scoped preview (`design-system-tokens.md` §3). A `brandColor` fill is the caller's data and
 does not flip; its label is white in both. Rendered: `/dev/design-system` → *Forms*
 (`web/src/dev/design-system/forms-section.tsx` + `forms-pickers-demo.tsx` + `forms-recipes-demo.tsx` — the
-segmented "All" filter and the row menu).
+segmented "All" filter, the row menu and the one-save-at-a-time row lock).
 
 ### 4.12 Badges with counts
 

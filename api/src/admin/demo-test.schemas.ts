@@ -279,3 +279,24 @@ export const RenderDmEmbedSchema = z.object({
   message: z.string().min(1).max(4096),
   payload: z.record(z.string(), z.unknown()).optional(),
 });
+
+/**
+ * Body for `/admin/test/render-pug-invite-embed`: the event the PUG invite DM
+ * is rendered for, the slot role shown in its footer, and the invitee whose
+ * library drives the personalized fields (absent = no reader-specific half).
+ * A role carrying `<t:` markup is a 400 here rather than a chrome throw (500):
+ * Discord does not render timestamps in a footer.
+ */
+export const RenderPugInviteEmbedSchema = z.object({
+  eventId: z.number().int().positive(),
+  role: z
+    .string()
+    .min(1)
+    .max(32)
+    .refine((r) => !r.includes('<t:'), 'Timestamp markup is not allowed')
+    .optional(),
+  discordUserId: z
+    .string()
+    .regex(/^\d{17,20}$/, 'Invalid Discord ID format')
+    .optional(),
+});

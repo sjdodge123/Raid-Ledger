@@ -92,14 +92,16 @@ export default defineConfig({
      * env URL like https://slot-1.gamernight.net), skip the webServer block
      * entirely — the app is already deployed somewhere else, no Vite to spin
      * up. */
-    webServer: IS_REMOTE_TARGET
-        ? undefined
+    ...(IS_REMOTE_TARGET
+        ? {}
         : {
-              command: 'npm run dev -w web',
-              url: 'http://localhost:5173',
-              reuseExistingServer: true,
-              timeout: 120_000,
-          },
+              webServer: {
+                  command: 'npm run dev -w web',
+                  url: 'http://localhost:5173',
+                  reuseExistingServer: true,
+                  timeout: 120_000,
+              },
+          }),
 
     /* Configure projects for desktop and mobile viewports */
     projects: [

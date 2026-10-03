@@ -1071,8 +1071,13 @@ install_runner_deps() {
     # ROK-1359: tools/test-bot is a STANDALONE package (not an npm
     # workspace), so the root `npm ci` above doesn't cover it. Pre-install
     # its deps too so the `--full` Discord smoke step doesn't die at import
-    # (ERR_MODULE_NOT_FOUND: @discordjs/voice) on a fresh runner. Same
-    # skip-when-populated guard; validate-ci.sh has the same fallback.
+    # (ERR_MODULE_NOT_FOUND: @discordjs/voice) on a fresh runner. When the
+    # checkout's helper carries the RL_DEPS_SUBROOT_V1 capability token it
+    # takes tools/test-bot as a SUBDIR: same lock, its own lockfile-sha256
+    # marker, so a test-bot lockfile change re-installs on a warm runner
+    # too. A branch that predates the token keeps the old
+    # skip-when-populated guard. validate-ci.sh calls the same helper and
+    # owns the npm install fallback on lockfile drift.
     ssh_run run-on-runner -- bash -c \
         'if [ -f /workspace/scripts/ci/ensure-runner-deps.sh ]; then \
            bash /workspace/scripts/ci/ensure-runner-deps.sh /workspace; \
@@ -1080,8 +1085,12 @@ install_runner_deps() {
            [ -x /workspace/node_modules/.bin/tsc ] || \
              (cd /workspace && npm ci --silent --no-audit --no-fund); \
          fi; \
-         [ -d /workspace/tools/test-bot/node_modules ] || \
-           (cd /workspace/tools/test-bot && npm ci --silent --no-audit --no-fund)' \
+         if grep -q RL_DEPS_SUBROOT_V1 /workspace/scripts/ci/ensure-runner-deps.sh 2>/dev/null; then \
+           bash /workspace/scripts/ci/ensure-runner-deps.sh /workspace tools/test-bot; \
+         else \
+           [ -d /workspace/tools/test-bot/node_modules ] || \
+             (cd /workspace/tools/test-bot && npm ci --silent --no-audit --no-fund); \
+         fi' \
         >/dev/null 2>&1 || true
 }
 

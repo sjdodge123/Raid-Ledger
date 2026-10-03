@@ -16,6 +16,8 @@ import { REDIS_CLIENT } from '../redis/redis.module';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { NotificationDedupService } from './notification-dedup.service';
+import * as schema from '../drizzle/schema';
+import { NOTIFICATION_TYPES } from '../drizzle/schema/notification-preferences';
 
 describe('DiscordNotificationService — system type & failure TTL (ROK-373)', () => {
   let service: DiscordNotificationService;
@@ -252,30 +254,36 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
   // ============================================================
 
   describe('autoDisableDiscord — disables all types', () => {
-    it('should set discord: false for all notification types in channelPrefs', async () => {
+    it('should set discord: false for EVERY notification type, keeping stored values (TDB:1956)', async () => {
       mockRedis.incr.mockResolvedValue(3);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          channelPrefs: {
-            event_reminder: { inApp: true, push: true, discord: true },
-            new_event: { inApp: true, push: true, discord: true },
-            slot_vacated: { inApp: true, push: true, discord: true },
-          },
-        },
-      ]);
+      const stored = {
+        event_reminder: { inApp: true, push: false, discord: true },
+        new_event: { inApp: true, push: true, discord: true },
+        slot_vacated: { inApp: false, push: true, discord: true },
+      };
+      mockDb.limit.mockResolvedValueOnce([{ channelPrefs: stored }]);
 
       await service.recordFailure(10);
 
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalledWith(
+        schema.userNotificationPreferences,
+      );
       const setCallArgs = mockDb.set.mock.calls as Array<
-        [{ channelPrefs: Record<string, { discord?: boolean }> }]
+        [{ channelPrefs: Record<string, Record<string, boolean>> }]
       >;
       const updatedPrefs = setCallArgs[0]?.[0]?.channelPrefs;
-
-      if (updatedPrefs) {
-        for (const type of Object.keys(updatedPrefs)) {
-          expect(updatedPrefs[type]?.discord).toBe(false);
-        }
+      expect(updatedPrefs).toBeDefined();
+      // A type missing from the stored row must ALSO be written as off: every
+      // send path resolves missing types over the defaults (Discord on).
+      expect(Object.keys(updatedPrefs ?? {}).sort()).toEqual(
+        [...NOTIFICATION_TYPES].sort(),
+      );
+      const stillOn = NOTIFICATION_TYPES.filter(
+        (t) => updatedPrefs?.[t]?.discord !== false,
+      );
+      expect(stillOn).toEqual([]);
+      for (const [type, channels] of Object.entries(stored)) {
+        expect(updatedPrefs?.[type]).toEqual({ ...channels, discord: false });
       }
     });
 
@@ -286,6 +294,42 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
       await service.recordFailure(11);
 
       expect(mockRedis.del).toHaveBeenCalledWith('discord-notif:failures:11');
+    });
+  });
+
+  describe('autoDisableDiscord — no prefs row yet', () => {
+    it('with no prefs row, upserts one with Discord off for EVERY type (TDB:1956)', async () => {
+      mockRedis.incr.mockResolvedValue(3);
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await service.recordFailure(12);
+
+      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(mockDb.insert).toHaveBeenCalledWith(
+        schema.userNotificationPreferences,
+      );
+      const valuesCalls = mockDb.values.mock.calls as Array<
+        [
+          {
+            userId?: number;
+            channelPrefs?: Record<string, { discord?: boolean }>;
+          },
+        ]
+      >;
+      const prefsWrite = valuesCalls.find((c) => c[0]?.channelPrefs)?.[0];
+      expect(prefsWrite?.userId).toBe(12);
+      expect(Object.keys(prefsWrite?.channelPrefs ?? {}).sort()).toEqual(
+        [...NOTIFICATION_TYPES].sort(),
+      );
+      const stillOn = NOTIFICATION_TYPES.filter(
+        (t) => prefsWrite?.channelPrefs?.[t]?.discord !== false,
+      );
+      expect(stillOn).toEqual([]);
+      expect(mockDb.onConflictDoUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          target: schema.userNotificationPreferences.userId,
+        }),
+      );
     });
   });
 
