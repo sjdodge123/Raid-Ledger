@@ -1,12 +1,14 @@
 /**
  * Unit tests for lineup banner helpers (ROK-935).
- * Tests buildBannerResponse mapping and the parseBannerScope gate. The
+ * Tests buildBannerResponse mapping and the two-key banner scope gate
+ * (parseBannerScope + resolveBannerScope). The
  * findBannerLineup query itself is covered against a real database in
  * lineups-banner-scope.integration.spec.ts.
  */
 import {
   buildBannerResponse,
   parseBannerScope,
+  resolveBannerScope,
 } from './lineups-banner.helpers';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 
@@ -180,5 +182,39 @@ describe('parseBannerScope', () => {
       if (original === undefined) delete process.env.DEMO_MODE;
       else process.env.DEMO_MODE = original;
     }
+  });
+});
+
+describe('resolveBannerScope', () => {
+  const settingsWith = (demoMode: boolean) => ({
+    getDemoMode: jest.fn().mockResolvedValue(demoMode),
+  });
+
+  it('returns the id when env DEMO_MODE and the demo_mode setting are both on', async () => {
+    await expect(
+      resolveBannerScope('7', settingsWith(true), 'true'),
+    ).resolves.toBe(7);
+  });
+
+  it('ignores the scope when the demo_mode setting is off even though env DEMO_MODE is true', async () => {
+    await expect(
+      resolveBannerScope('7', settingsWith(false), 'true'),
+    ).resolves.toBeUndefined();
+  });
+
+  it('skips the settings read when env DEMO_MODE is off', async () => {
+    const settings = settingsWith(true);
+    await expect(
+      resolveBannerScope('7', settings, undefined),
+    ).resolves.toBeUndefined();
+    expect(settings.getDemoMode).not.toHaveBeenCalled();
+  });
+
+  it('skips the settings read when no scope was sent', async () => {
+    const settings = settingsWith(true);
+    await expect(
+      resolveBannerScope(undefined, settings, 'true'),
+    ).resolves.toBeUndefined();
+    expect(settings.getDemoMode).not.toHaveBeenCalled();
   });
 });

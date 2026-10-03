@@ -52,12 +52,16 @@ interface BannerLineup {
 /** Largest id a Postgres int4 column can hold; a bigger value would 500. */
 const MAX_INT4 = 2147483647;
 
+/** The one SettingsService read the banner scope gate needs. */
+export interface DemoModeReader {
+  getDemoMode(): Promise<boolean>;
+}
+
 /**
- * Parse the DEMO_MODE-only `?lineupId=` banner scope (a smoke-test seam that
- * pins the banner to one spec's lineup). Returns undefined — i.e. the normal
- * global banner — unless DEMO_MODE is 'true' and `raw` is a positive int4.
- * Env-only gate on purpose: unlike /admin/test/* it skips the SettingsService
- * demo-mode read so this hot path stays a single query.
+ * Parse the `?lineupId=` banner scope (a smoke-test seam that pins the banner
+ * to one spec's lineup). Returns undefined — i.e. the normal global banner —
+ * unless env DEMO_MODE is 'true' and `raw` is a positive int4. This is only
+ * the env half of the demo gate; `resolveBannerScope` adds the settings half.
  */
 export function parseBannerScope(
   raw: unknown,
@@ -67,6 +71,22 @@ export function parseBannerScope(
   if (!/^\d+$/.test(raw)) return undefined;
   const n = Number(raw);
   return n > 0 && n <= MAX_INT4 ? n : undefined;
+}
+
+/**
+ * Resolve the banner scope behind the same two-key demo gate every demo-only
+ * endpoint uses: env DEMO_MODE AND the `demo_mode` app setting. The settings
+ * read (cached by SettingsService) only happens when a valid scope was sent,
+ * so the normal unscoped banner request pays nothing for it.
+ */
+export async function resolveBannerScope(
+  raw: unknown,
+  settings: DemoModeReader,
+  envDemoMode: string | undefined = process.env.DEMO_MODE,
+): Promise<number | undefined> {
+  const scope = parseBannerScope(raw, envDemoMode);
+  if (scope === undefined) return undefined;
+  return (await settings.getDemoMode()) ? scope : undefined;
 }
 
 /**
@@ -196,9 +216,11 @@ export function buildBannerResponse(
  */
 export async function loadGamesPageBanner(
   db: Db,
-  rawScope?: unknown,
+  rawScope: unknown,
+  settings: DemoModeReader,
 ): Promise<LineupBannerResponseDto | null> {
-  const [lineup] = await findBannerLineup(db, parseBannerScope(rawScope));
+  const scope = await resolveBannerScope(rawScope, settings);
+  const [lineup] = await findBannerLineup(db, scope);
   if (!lineup) return null;
   return buildBannerData(db, lineup);
 }

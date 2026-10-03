@@ -295,7 +295,7 @@ export class LineupsService {
 
   /** Get banner data for the Games page. Returns null if no eligible lineup. */
   async findBanner(scope?: string): Promise<LineupBannerResponseDto | null> {
-    return loadGamesPageBanner(this.db, scope);
+    return loadGamesPageBanner(this.db, scope, this.settings);
   }
 
   /** Get grouped matches for decided view (ROK-937). */
