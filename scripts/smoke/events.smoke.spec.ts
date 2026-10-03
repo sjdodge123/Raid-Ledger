@@ -5,6 +5,17 @@ import { test, expect } from './base';
 import { navigateToFirstEvent, isMobile, isPhoneLayout } from './helpers';
 import { getAdminToken, apiGet, apiPost, apiPatch, apiDelete } from './api-helpers';
 import { STORAGE_STATE_PATH } from '../auth-paths';
+import type { Locator } from '@playwright/test';
+
+/**
+ * The search box's value and the card count, read together so a failed
+ * filter wait names its cause: value '' with cards left means the input was
+ * remounted after fill() (TDB:1817); the value kept with cards left means a
+ * filter or data problem (TDB:1038's first guess).
+ */
+async function searchState(input: Locator, cards: Locator) {
+    return { value: await input.inputValue(), cards: await cards.count() };
+}
 
 // ROK-1070 Codex review (P2): removed the file-level reset-to-seed
 // beforeAll. Playwright runs desktop+mobile projects in parallel and a
@@ -67,16 +78,19 @@ test.describe('Events list', () => {
         const searchInput = desktopFilterBar.locator('input[aria-label="Search events"]');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state. A plain fill is
-        // enough: the ~300ms StartupGate remount that once detached this input
-        // was fixed by #1342 (TDB:1817).
+        // Search for a nonsense term — should show empty state. A plain fill, no
+        // retry: #1342 fixed the StartupGate whole-app remount, the likeliest
+        // cause of the lost fills in TDB:1817 / TDB:1038. If this flakes again,
+        // 1817 lists the other remount candidates to instrument.
+        const eventCards = page.locator('.hidden.md\\:grid [role="button"]');
         await searchInput.fill('xyznonexistent');
         await expect(searchInput).toHaveValue('xyznonexistent');
-        // Wait for the event cards to disappear (filtered out)
-        await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
+        // Wait for the event cards to disappear (filtered out) — see searchState()
+        await expect
+            .poll(() => searchState(searchInput, eventCards), { timeout: 10_000 })
+            .toEqual({ value: 'xyznonexistent', cards: 0 });
 
         // Should show zero event cards
-        const eventCards = page.locator('.hidden.md\\:grid [role="button"]');
         const count = await eventCards.count();
         expect(count).toBe(0);
 
@@ -145,16 +159,19 @@ test.describe('Events list — mobile', () => {
         const searchInput = page.getByRole('searchbox', { name: 'Search events' });
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state. A plain fill is
-        // enough: the ~300ms StartupGate remount that once detached this toolbar
-        // input was fixed by #1342 (TDB:1817).
+        // Search for a nonsense term — should show empty state. A plain fill, no
+        // retry: #1342 fixed the StartupGate whole-app remount, the likeliest
+        // cause of the lost toolbar fills in TDB:1817 / TDB:1038. If this flakes
+        // again, 1817 lists the other remount candidates to instrument.
+        const eventCards = page.locator('[data-testid="mobile-event-card"]');
         await searchInput.fill('xyznonexistent');
         await expect(searchInput).toHaveValue('xyznonexistent');
-        // Wait for the mobile event cards to disappear (filtered out)
-        await expect(page.locator('[data-testid="mobile-event-card"]').first()).not.toBeVisible({ timeout: 10_000 });
+        // Wait for the mobile event cards to disappear (filtered out) — see searchState()
+        await expect
+            .poll(() => searchState(searchInput, eventCards), { timeout: 10_000 })
+            .toEqual({ value: 'xyznonexistent', cards: 0 });
 
         // Should show zero mobile event cards
-        const eventCards = page.locator('[data-testid="mobile-event-card"]');
         const count = await eventCards.count();
         expect(count).toBe(0);
 
