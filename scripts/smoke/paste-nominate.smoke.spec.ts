@@ -15,17 +15,18 @@ import {
     API_BASE,
     getAdminToken,
     apiPost,
-    apiGet,
     apiPatch,
     createLineupOrRetry,
     awaitProcessing,
+    getScopedBanner,
 } from './api-helpers';
 import { isPhoneLayout } from './helpers';
 
-// ROK-1147: ensureBuildingLineup checks /lineups/banner and reuses any
-// active lineup, including siblings'. The paste-on-detail-page tests then
-// dispatch on the wrong lineup's UI, so the modal/toast never appears.
-// Serialise so each test owns the page state for its full duration.
+// ROK-1147: ensureBuildingLineup reuses only this worker's own tracked
+// lineup (never whatever the global /lineups/banner returns, which may be a
+// sibling's), so the paste-on-detail-page tests always dispatch on our
+// lineup's UI. Serialise so each test owns the page state for its full
+// duration.
 test.describe.configure({ mode: 'serial' });
 
 // ROK-1147: per-worker title prefix scopes /admin/test/reset-lineups so
@@ -44,19 +45,24 @@ async function archiveLineup(token: string, _id: number): Promise<void> {
     await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
 }
 
+/** The building lineup this worker created and is driving (ROK-1147). */
+let ownLineupId: number | undefined;
+
 async function ensureBuildingLineup(token: string): Promise<number> {
     // ROK-1167: keep the fast-path reuse so beforeEach doesn't churn the DB,
-    // but only reuse the banner when it belongs to THIS worker (title prefix
-    // match). Sibling-owned banners must fall through to reset + recreate.
-    const banner = await apiGet(token, '/lineups/banner');
-    if (
-        banner &&
-        typeof banner.id === 'number' &&
-        banner.status === 'building' &&
-        typeof banner.title === 'string' &&
-        banner.title.startsWith(workerPrefix)
-    ) {
-        return banner.id;
+    // but only reuse this worker's own tracked lineup, read through the banner
+    // scoped to its id, while it is still building under our title prefix.
+    // Anything else falls through to reset + recreate.
+    if (ownLineupId !== undefined) {
+        const b = await getScopedBanner(token, ownLineupId);
+        if (
+            b?.id === ownLineupId &&
+            b.status === 'building' &&
+            typeof b.title === 'string' &&
+            b.title.startsWith(workerPrefix)
+        ) {
+            return ownLineupId;
+        }
     }
     await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
     const { id } = await createLineupOrRetry(
@@ -67,6 +73,7 @@ async function ensureBuildingLineup(token: string): Promise<number> {
         },
         workerPrefix,
     );
+    ownLineupId = id;
     // Drain BullMQ + buffered async writes (event listeners, embed-sync,
     // notification dedup) before the test navigates — without this the
     // first detail-page render can race the lineup row's downstream side
