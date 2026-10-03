@@ -3,6 +3,8 @@
  * Validates useActiveLineups (array), useCommonGround, and useNominateGame.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -373,10 +375,23 @@ describe('useLineupBanner', () => {
     });
 
     describe('smoke banner scope', () => {
+        /** The key the hook reads; scripts/smoke/api-helpers.ts writes it. */
+        const SMOKE_KEY = 'rl:smoke-banner-lineup';
         afterEach(() => { sessionStorage.clear(); });
 
+        it('reads the same key the smoke helpers write', () => {
+            // No import links the two sides, so a rename on either one would
+            // silently unscope every banner-backed smoke page.
+            const helpers = readFileSync(
+                resolve(__dirname, '../../../scripts/smoke/api-helpers.ts'),
+                'utf8',
+            );
+            const smokeKey = /const BANNER_SCOPE_KEY = '([^']+)'/.exec(helpers)?.[1];
+            expect(smokeKey).toBe(SMOKE_KEY);
+        });
+
         it('scopes the fetch to the sessionStorage lineup id', async () => {
-            sessionStorage.setItem('rl:smoke-banner-lineup', '42');
+            sessionStorage.setItem(SMOKE_KEY, '42');
             mockGetLineupBanner.mockResolvedValue(mockBanner);
             const { wrapper } = createWrapper();
             const { result } = renderHook(() => useLineupBanner(), { wrapper });
@@ -393,7 +408,7 @@ describe('useLineupBanner', () => {
         });
 
         it('ignores a non-numeric sessionStorage value', async () => {
-            sessionStorage.setItem('rl:smoke-banner-lineup', 'abc');
+            sessionStorage.setItem(SMOKE_KEY, 'abc');
             mockGetLineupBanner.mockResolvedValue(mockBanner);
             const { wrapper } = createWrapper();
             const { result } = renderHook(() => useLineupBanner(), { wrapper });

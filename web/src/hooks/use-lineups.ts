@@ -91,7 +91,11 @@ export function useNominateGame() {
   });
 }
 
-/** sessionStorage key a smoke spec sets to pin the banner to its lineup. */
+/**
+ * sessionStorage key a smoke spec sets to pin the banner to its lineup. Must
+ * equal `BANNER_SCOPE_KEY` in scripts/smoke/api-helpers.ts — no import links
+ * the two; use-lineups.test.ts pins that they match.
+ */
 const SMOKE_BANNER_SCOPE_KEY = 'rl:smoke-banner-lineup';
 
 /**
