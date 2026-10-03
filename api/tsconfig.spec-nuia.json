@@ -10,7 +10,7 @@
   "compilerOptions": { "noUncheckedIndexedAccess": true, "noEmit": true, "incremental": false },
   "include": ["src/**/*.spec*.ts", "src/**/*.test-fixtures.ts", "src/common/testing/**/*.ts", "test/**/*.ts"],
   "exclude": [
-    "src/discord-bot/**",
+    "src/discord-bot/services/**", // WF8
     "src/lineups/**",
     "src/lfg/**", "src/notifications/**"
   ]
