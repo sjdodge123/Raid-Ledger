@@ -36,7 +36,7 @@ import { LfmEmbedService } from '../lfm/lfm-embed.service';
 import { isTerminalRender, type LfmGroupView } from '../lfm/lfm-embed.helpers';
 import type { LfmMessageRow } from '../lfm/lfm-embed.db-helpers';
 import { LfgBoardService } from './lfg-board.service';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -170,7 +170,7 @@ describe('LFG board post-age cap (ROK-1691, integration)', () => {
     expect(after.map((h) => h.status)).toEqual(['expired', 'expired']);
 
     // 2 — the row closed as EXPIRED, like a post whose hands ran out.
-    const [closed] = await boardRows(gameId);
+    const [closed] = nonEmpty(await boardRows(gameId), 'closed');
     expect(closed.id).toBe(row.id);
     expect(closed.state).toBe('expired');
     expect(closed.closedAt).not.toBeNull();
@@ -180,7 +180,7 @@ describe('LFG board post-age cap (ROK-1691, integration)', () => {
     expect(edits.map((e) => [e.row.id, e.view.state])).toEqual([
       [row.id, 'expired'],
     ]);
-    expect(isTerminalRender(edits[0].view.state)).toBe(true);
+    expect(isTerminalRender(at(edits, 0).view.state)).toBe(true);
   });
 
   it('leaves a 3-day-old post with live hands untouched', async () => {
@@ -215,7 +215,7 @@ describe('LFG board post-age cap (ROK-1691, integration)', () => {
     ]);
     await raiseHand(c.token, gameId);
     await raiseHand(d.token, gameId);
-    const [, young] = await boardRows(gameId);
+    const young = at(await boardRows(gameId), 1);
     expect(young).toMatchObject({ state: 'open', postKind: 'forum' });
     edits = [];
 

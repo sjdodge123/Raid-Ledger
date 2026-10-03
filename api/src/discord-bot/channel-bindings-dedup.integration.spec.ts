@@ -27,7 +27,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { validateMigrationState } from '../../scripts/run-migrations-with-sentry';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 const MIGRATIONS_DIR = path.join(__dirname, '../drizzle/migrations');
 const GUILD = 'rok1419-dedup-guild';
@@ -74,7 +74,7 @@ function loadStatements(): Migration0161 {
     ...raw.matchAll(
       /CREATE\s+UNIQUE\s+INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+"([^"]+)"/gi,
     ),
-  ].map((m) => m[1]);
+  ].map((m) => defined(m[1], 'unique index name'));
   return {
     dedup: chunks.filter((c) => !isCreateIndex(c)),
     createIndexes: chunks.filter(isCreateIndex),
@@ -256,22 +256,28 @@ describe('ROK-1419 (B2-2) audited dedupe — orphan guard + per-loser audit', ()
       .from(schema.channelBindings)
       .where(eq(schema.channelBindings.channelId, CHANNEL));
     expect(remaining).toHaveLength(1);
-    expect(remaining[0].id).toBe(survivor.id);
+    expect(remaining[0]?.id).toBe(survivor.id);
 
     // THE orphan guard (the single most important assertion in this story):
     // the live event is repointed to the survivor and is NEVER left NULL.
-    const [liveAfter] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, liveEvent.id));
+    const [liveAfter] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, liveEvent.id)),
+      'liveAfter',
+    );
     expect(liveAfter.channelBindingId).toBe(survivor.id);
     expect(liveAfter.channelBindingId).not.toBeNull();
 
     // The historical event took the FK ON DELETE SET NULL.
-    const [histAfter] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, historicalEvent.id));
+    const [histAfter] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, historicalEvent.id)),
+      'histAfter',
+    );
     expect(histAfter.channelBindingId).toBeNull();
 
     // Per-loser audit rows: two losers, both loser_row payloads captured,
@@ -317,11 +323,14 @@ describe('ROK-1419 (B2-2) audited dedupe — orphan guard + per-loser audit', ()
       .from(schema.channelBindings)
       .where(eq(schema.channelBindings.channelId, CHANNEL));
     expect(afterRerun).toHaveLength(1);
-    const [{ c: auditCount }] = [
-      ...(await testApp.db.execute<{ c: number }>(
-        sql`SELECT count(*)::int AS c FROM channel_bindings_dedup_audit`,
-      )),
-    ];
+    const [{ c: auditCount }] = nonEmpty(
+      [
+        ...(await testApp.db.execute<{ c: number }>(
+          sql`SELECT count(*)::int AS c FROM channel_bindings_dedup_audit`,
+        )),
+      ],
+      'audit count row',
+    );
     expect(Number(auditCount)).toBe(2);
   });
 });
@@ -402,10 +411,13 @@ describe('ROK-1419 (B2-3) restore path — rebuild loser + re-link the moved eve
     await testApp.db.execute(sql.raw(restore.restoreLinkage));
 
     // Binding returns with its ORIGINAL id, config and created_at.
-    const [loserBack] = await testApp.db
-      .select()
-      .from(schema.channelBindings)
-      .where(eq(schema.channelBindings.id, loser.id));
+    const [loserBack] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.channelBindings)
+        .where(eq(schema.channelBindings.id, loser.id)),
+      'loserBack',
+    );
     expect(loserBack).toBeDefined();
     expect(loserBack.config).toMatchObject({ minPlayers: 3 });
     expect(

@@ -1,3 +1,4 @@
+import { at } from '../../common/testing/narrow';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventCreateCommand } from './event-create.command';
 import { EventsService } from '../../events/events.service';
@@ -108,14 +109,14 @@ async function buildModule(mockDb: { select: jest.Mock; insert: jest.Mock }) {
 }
 
 function getEmbedDescription(interaction: ReturnType<typeof makeInteraction>) {
-  const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+  const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
     embeds: { data: { description?: string } }[];
   };
-  return call.embeds[0].data.description;
+  return at(call.embeds, 0).data.description;
 }
 
 function getComponents(interaction: ReturnType<typeof makeInteraction>) {
-  const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+  const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
     components: unknown[];
   };
   return call.components;
@@ -302,9 +303,10 @@ describe('EventCreateCommand — create: time & slots', () => {
   it('should create with parsed start and 2-hour default end', async () => {
     const interaction = makeInteraction({ time: 'December 25, 2030 8pm' });
     await command.handleInteraction(castInteraction(interaction));
-    const callArgs = (
-      (eventsService.create as jest.Mock).mock.calls as unknown[][]
-    )[0][1] as { startTime: string; endTime: string };
+    const callArgs = at(
+      (eventsService.create as jest.Mock).mock.calls as unknown[][],
+      0,
+    )[1] as { startTime: string; endTime: string };
     const diff =
       new Date(callArgs.endTime).getTime() -
       new Date(callArgs.startTime).getTime();
@@ -638,7 +640,7 @@ describe('EventCreateCommand — autocomplete: non-game & format', () => {
     await command.handleAutocomplete(
       interaction as unknown as AutocompleteParam,
     );
-    const callArgs = (mockRespond.mock.calls as unknown[][])[0][0] as {
+    const callArgs = at(mockRespond.mock.calls as unknown[][], 0)[0] as {
       name: string;
       value: string;
     }[];

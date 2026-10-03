@@ -19,6 +19,7 @@
  * `LfmEmbedService.postOrHeal` and both cases fail on
  * `expect(received).toBe('▸ PLAYING NOW · 2 in voice')`.
  */
+import { at } from '../../common/testing/narrow';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import type { EmbedBuilder } from 'discord.js';
@@ -177,7 +178,7 @@ describe('LFM_REACHED on a game whose session is already live (AC7)', () => {
     await service.onLfmReached(NOW_REACHED);
 
     expect(client.sendEmbed).toHaveBeenCalledTimes(1);
-    const embed = client.sendEmbed.mock.calls[0][1] as EmbedBuilder;
+    const embed = at(client.sendEmbed.mock.calls, 0)[1] as EmbedBuilder;
     expect(embed.data.author?.name).toBe('▸ PLAYING NOW · 2 in voice');
   });
 });

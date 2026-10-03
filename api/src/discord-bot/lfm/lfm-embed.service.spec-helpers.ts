@@ -9,6 +9,7 @@
  * `jest.mock('./lfm-embed.db-helpers')` itself — the mock is per test file and
  * hoisted above this import, which is what makes `store` here the mocked one.
  */
+import { at } from '../../common/testing/narrow';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import type { EmbedBuilder } from 'discord.js';
@@ -274,10 +275,10 @@ export async function createService(): Promise<LfmEmbedService> {
 
 /** The embed payload the Nth `editEmbed` call rendered. */
 export function edited(index = 0) {
-  return client.editEmbed.mock.calls[index][2].data;
+  return at(client.editEmbed.mock.calls, index)[2].data;
 }
 
 /** The embed payload the Nth `sendEmbed` call rendered. */
 export function sent(index = 0) {
-  return client.sendEmbed.mock.calls[index][1].data;
+  return at(client.sendEmbed.mock.calls, index)[1].data;
 }
