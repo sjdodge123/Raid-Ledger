@@ -2,7 +2,7 @@
  * Tests for use-lineups hooks (ROK-934, ROK-1065).
  * Validates useActiveLineups (array), useCommonGround, and useNominateGame.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
@@ -370,6 +370,36 @@ describe('useLineupBanner', () => {
         const { result } = renderHook(() => useLineupBanner(), { wrapper });
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(result.current.data).toBeNull();
+    });
+
+    describe('smoke banner scope', () => {
+        afterEach(() => { sessionStorage.clear(); });
+
+        it('scopes the fetch to the sessionStorage lineup id', async () => {
+            sessionStorage.setItem('rl:smoke-banner-lineup', '42');
+            mockGetLineupBanner.mockResolvedValue(mockBanner);
+            const { wrapper } = createWrapper();
+            const { result } = renderHook(() => useLineupBanner(), { wrapper });
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+            expect(mockGetLineupBanner).toHaveBeenCalledWith(42);
+        });
+
+        it('fetches unscoped when the key is absent', async () => {
+            mockGetLineupBanner.mockResolvedValue(mockBanner);
+            const { wrapper } = createWrapper();
+            const { result } = renderHook(() => useLineupBanner(), { wrapper });
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+            expect(mockGetLineupBanner).toHaveBeenCalledWith(undefined);
+        });
+
+        it('ignores a non-numeric sessionStorage value', async () => {
+            sessionStorage.setItem('rl:smoke-banner-lineup', 'abc');
+            mockGetLineupBanner.mockResolvedValue(mockBanner);
+            const { wrapper } = createWrapper();
+            const { result } = renderHook(() => useLineupBanner(), { wrapper });
+            await waitFor(() => expect(result.current.isSuccess).toBe(true));
+            expect(mockGetLineupBanner).toHaveBeenCalledWith(undefined);
+        });
     });
 });
 

@@ -91,11 +91,32 @@ export function useNominateGame() {
   });
 }
 
+/** sessionStorage key a smoke spec sets to pin the banner to its lineup. */
+const SMOKE_BANNER_SCOPE_KEY = 'rl:smoke-banner-lineup';
+
+/**
+ * Read the smoke-test banner scope. Not gated on demo mode here: the API
+ * ignores the param outside DEMO_MODE, and the client demo-mode flag races
+ * under smoke load (see LineupBanner).
+ */
+function readSmokeBannerScope(): number | undefined {
+  let raw: string | null;
+  try {
+    raw = sessionStorage.getItem(SMOKE_BANNER_SCOPE_KEY);
+  } catch {
+    raw = null;
+  }
+  if (raw === null || !/^\d+$/.test(raw)) return undefined;
+  const n = Number(raw);
+  return n > 0 ? n : undefined;
+}
+
 /** Hook for fetching the lightweight lineup banner. */
 export function useLineupBanner() {
+  const scope = readSmokeBannerScope();
   return useQuery<LineupBannerResponseDto | null>({
-    queryKey: [...BANNER_KEY],
-    queryFn: getLineupBanner,
+    queryKey: [...BANNER_KEY, scope ?? null],
+    queryFn: () => getLineupBanner(scope),
     staleTime: 120_000,
     retry: false,
   });
