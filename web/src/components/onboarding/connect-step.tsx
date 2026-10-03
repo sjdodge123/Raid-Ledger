@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { API_BASE_URL } from '../../lib/config';
+import { useDiscordLinkAction } from '../../hooks/use-discord-link';
 import { DiscordIcon } from '../icons/DiscordIcon';
 
 
@@ -38,14 +37,15 @@ function DiscordConnectButton({ isRedirecting, onClick }: { isRedirecting: boole
 }
 
 export function ConnectStep() {
-    const [isRedirecting, setIsRedirecting] = useState(false);
-    const handleDiscordConnect = () => { setIsRedirecting(true); window.location.href = `${API_BASE_URL}/auth/discord/link`; };
+    // ROK-1630: POST start → nonce hop (was a bare GET with no credential → raw 401 JSON page).
+    const { linkDiscord, isPending } = useDiscordLinkAction();
+    const handleDiscordConnect = () => { void linkDiscord(); };
 
     return (
         <div className="space-y-6">
             <ConnectHeader />
             <div className="max-w-sm mx-auto space-y-3">
-                <DiscordConnectButton isRedirecting={isRedirecting} onClick={handleDiscordConnect} />
+                <DiscordConnectButton isRedirecting={isPending} onClick={handleDiscordConnect} />
                 <p className="text-xs text-dim text-center mt-2">You can always link accounts later from your profile settings.</p>
             </div>
         </div>

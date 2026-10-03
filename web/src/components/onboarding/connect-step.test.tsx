@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ConnectStep } from './connect-step';
 
 vi.mock('../../lib/config', () => ({
@@ -65,4 +65,22 @@ beforeEach(() => {
 
     connectstepGroup1();
     connectstepGroup2();
+});
+
+describe('ConnectStep Discord link start (ROK-1630 AC16)', () => {
+    it('clicking POSTs /auth/discord/link/start (not a bare GET) and re-enables the button after a 401', async () => {
+        const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
+        vi.stubGlobal('fetch', fetchFn);
+        try {
+            render(<ConnectStep />);
+            fireEvent.click(screen.getByRole('button', { name: /connect discord/i }));
+            await waitFor(() => expect(fetchFn).toHaveBeenCalledWith(
+                'http://localhost:3000/auth/discord/link/start',
+                expect.objectContaining({ method: 'POST' }),
+            ));
+            await waitFor(() => expect(screen.getByRole('button', { name: /connect discord/i })).not.toBeDisabled());
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
 });

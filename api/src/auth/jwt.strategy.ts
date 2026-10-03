@@ -18,6 +18,7 @@ interface JwtPayload {
   username: string;
   iat: number;
   impersonatedBy?: number | null;
+  magicLink?: boolean;
 }
 
 @Injectable()
@@ -35,6 +36,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
+    // ROK-1366 D2: a magic link is redeemed once, never used as a bearer —
+    // covers links signed with JWT_SECRET before the purpose-secret switch.
+    if (payload.magicLink) {
+      throw new UnauthorizedException(
+        'Magic-link tokens are not session tokens',
+      );
+    }
     if (await this.tokenBlocklist.isBlocked(payload.sub, payload.iat)) {
       throw new UnauthorizedException('Token has been revoked');
     }
