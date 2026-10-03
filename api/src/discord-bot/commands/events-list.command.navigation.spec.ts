@@ -4,6 +4,7 @@ import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
+import { at } from '../../common/testing/narrow';
 
 const originalClientUrl = process.env.CLIENT_URL;
 
@@ -419,7 +420,10 @@ describe('EventsListCommand — dropdown: max & single', () => {
   }
 
   function getSelectMenu(interaction: { editReply: jest.Mock }) {
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(
+      at(interaction.editReply.mock.calls as unknown[][], 0),
+      0,
+    ) as {
       components: {
         components: {
           options: {
@@ -428,7 +432,7 @@ describe('EventsListCommand — dropdown: max & single', () => {
         }[];
       }[];
     };
-    return call.components[0].components[0];
+    return at(at(call.components, 0).components, 0);
   }
 
   it('should include all 10 events at max', async () => {
@@ -485,7 +489,10 @@ describe('EventsListCommand — dropdown: value & desc', () => {
   }
 
   function getSelectMenu(interaction: { editReply: jest.Mock }) {
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(
+      at(interaction.editReply.mock.calls as unknown[][], 0),
+      0,
+    ) as {
       components: {
         components: {
           options: {
@@ -494,7 +501,7 @@ describe('EventsListCommand — dropdown: value & desc', () => {
         }[];
       }[];
     };
-    return call.components[0].components[0];
+    return at(at(call.components, 0).components, 0);
   }
 
   it('should use event id as dropdown value', async () => {
@@ -564,14 +571,18 @@ describe('EventsListCommand — dropdown: truncation', () => {
       makeFindAllResult([makeEvent({ id: 1, title: longTitle })]),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(
+      at(interaction.editReply.mock.calls as unknown[][], 0),
+      0,
+    ) as {
       components: {
         components: {
           options: { data: { label: string } }[];
         }[];
       }[];
     };
-    const label = call.components[0].components[0].options[0].data.label;
+    const menu = at(at(call.components, 0).components, 0);
+    const label = at(menu.options, 0).data.label;
     expect(label).toHaveLength(100);
     expect(label).toBe('X'.repeat(100));
   });
@@ -608,13 +619,16 @@ describe('EventsListCommand — View All button', () => {
     };
     eventsService.findAll.mockResolvedValue(makeFindAllResult([makeEvent()]));
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(
+      at(interaction.editReply.mock.calls as unknown[][], 0),
+      0,
+    ) as {
       components: {
         components: { data: { url?: string; label?: string } }[];
       }[];
     };
-    const buttonRow = call.components[1];
-    const viewAllButton = buttonRow.components[0];
+    const buttonRow = at(call.components, 1);
+    const viewAllButton = at(buttonRow.components, 0);
     expect(viewAllButton.data.url).toBe('https://myraid.com/events');
     expect(viewAllButton.data.label).toBe('View All in Raid Ledger');
   });

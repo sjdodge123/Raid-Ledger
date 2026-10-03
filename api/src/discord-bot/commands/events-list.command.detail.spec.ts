@@ -4,6 +4,7 @@ import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
+import { at } from '../../common/testing/narrow';
 import { colorForState } from '../embeds/embed-chrome.helpers';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 
@@ -114,7 +115,7 @@ async function triggerEventSelect(
 }
 
 function getUpdateEmbedData(updateMock: jest.Mock) {
-  return (updateMock.mock.calls as unknown[][])[0][0] as {
+  return at(at(updateMock.mock.calls as unknown[][], 0), 0) as {
     embeds: {
       data: {
         title?: string;
@@ -276,7 +277,7 @@ describe('EventsListCommand — detail: thumbnail present', () => {
       [event],
     );
     expect(
-      getUpdateEmbedData(updateMock).embeds[0].data.thumbnail,
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.thumbnail,
     ).toBeUndefined();
   });
 });
@@ -313,7 +314,7 @@ describe('EventsListCommand — detail: truncation', () => {
       [event],
     );
     const desc =
-      getUpdateEmbedData(updateMock).embeds[0].data.description ?? '';
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.description ?? '';
     expect(desc).toContain('...');
     expect(desc).not.toContain('A'.repeat(1100));
   });
@@ -330,7 +331,7 @@ describe('EventsListCommand — detail: truncation', () => {
       [event],
     );
     const desc =
-      getUpdateEmbedData(updateMock).embeds[0].data.description ?? '';
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.description ?? '';
     expect(desc).toContain('B'.repeat(1024));
     expect(desc).not.toContain('B'.repeat(1024) + '...');
   });
@@ -425,7 +426,7 @@ describe('EventsListCommand — detail: duration format', () => {
       [event],
     );
     const desc =
-      getUpdateEmbedData(updateMock).embeds[0].data.description ?? '';
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.description ?? '';
     expect(desc).toContain('1 hour');
     expect(desc).not.toContain('1 hours');
   });
@@ -577,7 +578,7 @@ describe('EventsListCommand — detail: embed color', () => {
       'user-123',
       [event],
     );
-    const { data } = getUpdateEmbedData(updateMock).embeds[0];
+    const { data } = at(getUpdateEmbedData(updateMock).embeds, 0);
     expect(data.color).toBe(colorForState('done'));
     expect(data.author?.name).toBe(COMMAND_REPLY_AUTHORS.EVENT_DETAIL);
   });

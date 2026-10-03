@@ -3,6 +3,7 @@ import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
+import { at } from '../../common/testing/narrow';
 import { MessageFlags } from 'discord.js';
 import { colorForState } from '../embeds/embed-chrome.helpers';
 import { eventsListAuthorLine } from './command-reply-chrome.helpers';
@@ -68,7 +69,7 @@ async function buildModule() {
 }
 
 function getEmbedData(interaction: ReturnType<typeof mockInteraction>) {
-  return (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+  return at(at(interaction.editReply.mock.calls as unknown[][], 0), 0) as {
     embeds: {
       data: {
         color?: number;
@@ -226,7 +227,7 @@ describe('EventsListCommand — embed content: color & game', () => {
     const interaction = mockInteraction();
     eventsService.findAll.mockResolvedValue(makeFindAllResult([makeEvent()]));
     await command.handleInteraction(interaction as unknown as HandleParam);
-    expect(getEmbedData(interaction).embeds[0].data.color).toBe(
+    expect(at(getEmbedData(interaction).embeds, 0).data.color).toBe(
       colorForState('done'),
     );
   });
@@ -237,7 +238,7 @@ describe('EventsListCommand — embed content: color & game', () => {
       makeFindAllResult([makeEvent(), makeEvent({ id: 2 })], 12),
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const { data } = getEmbedData(interaction).embeds[0];
+    const { data } = at(getEmbedData(interaction).embeds, 0);
     expect(data.author?.name).toBe(eventsListAuthorLine(2, 12));
     expect(data.title).toBeUndefined();
   });

@@ -28,17 +28,20 @@ describe('Channel Bindings CRUD — create and read', () => {
   it('should create a channel binding and persist to DB', async () => {
     const db = testApp.db;
 
-    const [result] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: '111222333444',
-        channelId: '555666777888',
-        channelType: 'text',
-        bindingPurpose: 'game-announcements',
-        gameId: testApp.seed.game.id,
-        config: {},
-      })
-      .returning();
+    const [result] = nonEmpty(
+      await db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: '111222333444',
+          channelId: '555666777888',
+          channelType: 'text',
+          bindingPurpose: 'game-announcements',
+          gameId: testApp.seed.game.id,
+          config: {},
+        })
+        .returning(),
+      'binding',
+    );
 
     expect(result).toBeDefined();
     expect(result.id).toBeDefined();
@@ -46,11 +49,14 @@ describe('Channel Bindings CRUD — create and read', () => {
     expect(result.channelId).toBe('555666777888');
     expect(result.gameId).toBe(testApp.seed.game.id);
 
-    const [readBack] = await db
-      .select()
-      .from(schema.channelBindings)
-      .where(eq(schema.channelBindings.id, result.id))
-      .limit(1);
+    const [readBack] = nonEmpty(
+      await db
+        .select()
+        .from(schema.channelBindings)
+        .where(eq(schema.channelBindings.id, result.id))
+        .limit(1),
+      'readBack',
+    );
 
     expect(readBack).toBeDefined();
     expect(readBack.guildId).toBe('111222333444');
@@ -85,7 +91,7 @@ describe('Channel Bindings CRUD — create and read', () => {
 
     expect(rows.length).toBe(1);
     expect(rows[0]?.gameName).toBe('Test Game');
-    expect(rows[0].gameId).toBe(testApp.seed.game.id);
+    expect(rows[0]?.gameId).toBe(testApp.seed.game.id);
   });
 });
 
@@ -403,10 +409,13 @@ describe('Channel Bindings CRUD — FK cascade', () => {
 
     await db.delete(schema.games).where(eq(schema.games.id, tempGame.id));
 
-    const [updated] = await db
-      .select()
-      .from(schema.channelBindings)
-      .where(eq(schema.channelBindings.id, binding.id));
+    const [updated] = nonEmpty(
+      await db
+        .select()
+        .from(schema.channelBindings)
+        .where(eq(schema.channelBindings.id, binding.id)),
+      'updated binding',
+    );
 
     expect(updated).toBeDefined();
     expect(updated.gameId).toBeNull();
@@ -449,30 +458,36 @@ describe('non-series uniqueness (Regression: ROK-1419)', () => {
     channelType?: 'text' | 'voice';
     recurrenceGroupId?: string | null;
   }): Promise<typeof schema.channelBindings.$inferSelect> {
-    const [row] = await testApp.db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: GUILD,
-        channelId: CHANNEL,
-        channelType: overrides.channelType ?? 'voice',
-        bindingPurpose: overrides.bindingPurpose,
-        gameId: overrides.gameId,
-        recurrenceGroupId: overrides.recurrenceGroupId ?? null,
-        config: {},
-      })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: GUILD,
+          channelId: CHANNEL,
+          channelType: overrides.channelType ?? 'voice',
+          bindingPurpose: overrides.bindingPurpose,
+          gameId: overrides.gameId,
+          recurrenceGroupId: overrides.recurrenceGroupId ?? null,
+          config: {},
+        })
+        .returning(),
+      'binding',
+    );
     return row;
   }
 
   async function secondGame(): Promise<typeof schema.games.$inferSelect> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Second Game 1419',
-        slug: 'second-game-1419',
-        igdbId: null,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Second Game 1419',
+          slug: 'second-game-1419',
+          igdbId: null,
+        })
+        .returning(),
+      'second game',
+    );
     return g;
   }
 
