@@ -6,7 +6,7 @@
  *
  * Uses POST /admin/test/signup to create signups for demo users.
  */
-import { pollForEmbed } from '../../helpers/polling.js';
+import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
 import {
   createEvent,
   signupAs,
@@ -207,6 +207,48 @@ const roleShiftChain: SmokeTest = {
   },
 };
 
+/**
+ * Partial `GET /events/:id/roster/assignments` response, mirrored from
+ * `packages/contract/src/roster.schema.ts` (declared locally for the reason
+ * given in `fixtures.ts`): only the fields the displacement check reads.
+ */
+interface RosterAssignmentsLite {
+  pool: { userId: number; slot: string | null }[];
+  assignments: { userId: number; slot: string | null }[];
+}
+
+/**
+ * The confirmed `winnerId` holds a dps slot and the tentative `loserId` has
+ * been displaced from the dps slot (A7 in
+ * `api/src/events/signups-allocation.integration.spec.ts`). Where the loser
+ * lands (unassigned pool or bench) is deliberately not asserted.
+ */
+async function assertDisplaced(
+  ctx: TestContext,
+  eventId: number,
+  winnerId: number,
+  loserId: number,
+): Promise<void> {
+  let last: RosterAssignmentsLite | null = null;
+  const isDps = (id: number) => (a: { userId: number; slot: string | null }) =>
+    a.userId === id && a.slot === 'dps';
+  await pollForCondition(async () => {
+    last = await ctx.api.get<RosterAssignmentsLite>(
+      `/events/${eventId}/roster/assignments`,
+    );
+    const rows = last.assignments ?? [];
+    return rows.some(isDps(winnerId)) && !rows.some(isDps(loserId))
+      ? true
+      : null;
+  }, ctx.config.timeoutMs).catch(() => {
+    throw new Error(
+      `Expected confirmed user ${winnerId} in a dps slot and tentative user ` +
+        `${loserId} displaced from the dps slot; last roster/assignments: ` +
+        JSON.stringify(last),
+    );
+  });
+}
+
 const tentativeDisplacement: SmokeTest = {
   name: 'Tentative displaced to bench when roster fills',
   category: 'embed',
@@ -229,7 +271,8 @@ const tentativeDisplacement: SmokeTest = {
       await signupAs(ctx.api, ev.id, users[4], ['dps'], {
         status: 'tentative',
       });
-      // User 5 signs up CONFIRMED for dps — tentative should be displaced
+      // User 5 signs up CONFIRMED for dps — the tentative user is displaced
+      // from the dps slot
       await signupAs(ctx.api, ev.id, users[5], ['dps']);
       await awaitProcessing(ctx.api);
       const dispMsg = await pollForEmbed(
@@ -244,15 +287,13 @@ const tentativeDisplacement: SmokeTest = {
       );
       const embed = dispMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
-      // Only checks that 5+ signups reached the roster. The displacement itself
-      // (tentative user on Bench, confirmed user in the dps slot) is not asserted
-      // yet: see TECH-DEBT-BACKLOG.md, 2026-09-30.
       const totalSignups = signupCountOf(embed) ?? 0;
       if (totalSignups < 5) {
         throw new Error(
           `Expected 5+ signups in roster, got ${totalSignups}`,
         );
       }
+      await assertDisplaced(ctx, ev.id, users[5], users[4]);
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
