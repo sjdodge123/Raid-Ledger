@@ -21,6 +21,7 @@ import { awaitProcessing, assertConditionNeverMet } from '../fixtures.js';
 import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
 const GRACE_KEY = 'lineup_auto_advance_grace_ms';
 const GRACE_MS = 3000;
@@ -35,18 +36,20 @@ interface TestNotification {
   payload?: { subtype?: string; lineupId?: number } | null;
 }
 
-async function archiveAllLineups(api: ApiClient): Promise<void> {
-  const res = await api
-    .get<{ id: number }[] | { id: number } | null>('/lineups/active')
-    .catch(() => null);
-  const list = Array.isArray(res) ? res : res ? [res] : [];
-  for (const row of list) {
-    if (!row?.id) continue;
-    await api.patch(`/lineups/${row.id}/status`, { status: 'archived' }).catch(
-      () => null,
-    );
-  }
-}
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = [
+  'Tie Hold ',
+  'Tie Pick ',
+  'Private Tie ',
+  'Star Break ',
+] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() =>
@@ -165,7 +168,7 @@ const publicTieAnnouncesOnce: SmokeTest = {
   name: 'Public tie announces one viewer-independent embed (ROK-1374 AC8/AC9)',
   category: 'embed',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     const title = `Tie Hold ${Date.now()}`;
     const { lineupId } = await buildTiedLineup(ctx, title, {
       visibility: 'public',
@@ -213,7 +216,7 @@ const tiePickEditsSameMessage: SmokeTest = {
   name: 'Picking a tied game edits the same tie message (ROK-1374 AC8/D7)',
   category: 'embed',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     await ctx.api.post('/admin/test/set-setting', {
       key: GRACE_KEY,
       value: String(GRACE_MS),
@@ -274,7 +277,7 @@ const privateTieSuppressesChannel: SmokeTest = {
   name: 'Private tie DMs the roster and posts no channel embed (ROK-1374 AC10)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     const title = `Private Tie ${Date.now()}`;
     const { lineupId } = await buildTiedLineup(ctx, title, {
       visibility: 'private',
@@ -327,7 +330,7 @@ const starBreaksTieAndCardSaysWhy: SmokeTest = {
   name: 'A starred top pick breaks the tie and the decided card states why (ROK-1474 AC3)',
   category: 'embed',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     const title = `Star Break ${Date.now()}`;
     const { lineupId, gameIds } = await buildTiedLineup(ctx, title, {
       visibility: 'public',

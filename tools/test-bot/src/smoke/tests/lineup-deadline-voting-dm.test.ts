@@ -20,6 +20,7 @@ import { awaitProcessing } from '../fixtures.js';
 import { pollForCondition } from '../../helpers/polling.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
 interface LineupPayload {
   id: number;
@@ -39,22 +40,15 @@ interface TestNotification {
   payload?: { subtype?: string; lineupId?: number } | null;
 }
 
-async function archiveAllLineups(api: ApiClient): Promise<void> {
-  try {
-    const res = await api.get<{ id: number }[] | { id: number } | null>(
-      '/lineups/active',
-    );
-    const list = Array.isArray(res) ? res : res ? [res] : [];
-    for (const row of list) {
-      if (!row?.id) continue;
-      await api
-        .patch(`/lineups/${row.id}/status`, { status: 'archived' })
-        .catch(() => null);
-    }
-  } catch {
-    /* no active lineups */
-  }
-}
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = ['Deadline Voting ', 'Deadline Extend '] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
@@ -127,7 +121,7 @@ const deadlineVotingOpenDmsInvitee: SmokeTest = {
   name: 'Deadline-driven building→voting DMs invitee the voting-open notification (ROK-1363)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Deadline Voting ${Date.now()}`;
     const lineup = await ctx.api.post<LineupPayload>('/lineups', {
@@ -170,7 +164,7 @@ const belowFloorDeadlineExtendsInsteadOfOpeningVoting: SmokeTest = {
   name: 'Building deadline below the nomination floor extends instead of opening voting (ROK-1443)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const lineup = await ctx.api.post<LineupPayload>('/lineups', {
       title: `Deadline Extend ${Date.now()}`,
