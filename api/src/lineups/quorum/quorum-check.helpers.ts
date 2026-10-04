@@ -1,31 +1,27 @@
 /**
- * Quorum predicates for lineup auto-advance (ROK-1118, ROK-1296).
+ * Quorum predicates for lineup auto-advance (ROK-1118, ROK-1296, ROK-1444).
  *
- * Building quorum — ready when EITHER branch passes:
- *   a) ROK-1444: the entry count has crossed the per-lineup
- *      `nomination_target_pct` share of the dynamic nomination cap, or
- *   b) every expected voter has stamped `nominations_submitted_at`.
- *   ...and, for both, total nominations ≥ floor (settings).
+ * Building quorum — ready ONLY when the ROK-1444 count target fires: the entry
+ * count has crossed the per-lineup `nomination_target_pct` share of the
+ * dynamic nomination cap, with total nominations ≥ floor (settings). See
+ * `nomination-target.helpers.ts` for the revert-trap guard that keeps it from
+ * re-firing on a standing count after an operator revert. Otherwise the
+ * building phase advances on its deadline or by a manual advance.
  *
- * (a) is checked FIRST and is exempt from the ≥2-voter solo guard — see the
- * comment on the guard for why.
- *
- * Branch (a) exists because (b) is currently unreachable from the web app —
- * `useSubmitNominations` is defined but mounted nowhere, so nothing writes the
- * stamp (b) reads. See `nomination-target.helpers.ts` for the revert-trap guard
- * that keeps (a) from re-firing on a standing count after an operator revert.
+ * TDB:449: the ROK-1296 building-phase submission quorum (every expected
+ * voter stamping `nominations_submitted_at`) is retired — no client ever
+ * mounted the nominations Submit step, so that branch could never fire. The
+ * column is retained but no longer written or read here.
  *
  * Voting quorum:
- *   - every expected voter has stamped `votes_submitted_at`.
+ *   - every expected voter has stamped `votes_submitted_at`, behind the
+ *     ≥2-voter "solo lineup" guard.
  *
- * ROK-1296 pivot: the per-voter gate switched from counting raw entries /
- * votes to checking submission presence. Operators repeatedly asked "how
- * many actually said they were done?" — autosave-touch counts were the
- * wrong signal. The explicit Submit ritual now carries the "I'm done"
- * semantic; autosave only protects in-flight work.
- *
- * ≥2-voter "solo lineup" guard and the building-phase nomination floor
- * stay intact.
+ * ROK-1296 pivot: the per-voter voting gate checks submission presence
+ * rather than raw vote counts. Operators repeatedly asked "how many
+ * actually said they were done?" — autosave-touch counts were the wrong
+ * signal. The explicit Submit ritual carries the "I'm done" semantic;
+ * autosave only protects in-flight work.
  */
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -63,25 +59,29 @@ export interface QuorumResult {
   tie?: TieResult;
 }
 
-/** Building → voting quorum predicate. */
+/**
+ * Building → voting quorum predicate.
+ *
+ * Only the ROK-1444 count target can make the building phase ready. With no
+ * target configured, or one not yet met, the lineup waits for its phase
+ * deadline or a manual advance (TDB:449 retired the submission branch).
+ */
 export async function checkBuildingQuorum(
   db: Db,
   settings: SettingsService,
   lineup: LineupRow,
 ): Promise<QuorumResult> {
-  // TDB:460: only the floor and total feed both branches. The gating-voter
-  // roster is loaded after the count target, which never needs it.
+  // TDB:460: the floor and total are the target's only inputs. No per-voter
+  // roster or submission rows are read on the building path.
   const totalNominations = await countNominations(db, lineup.id);
   const floor = await readMinNominations(settings);
 
-  // ROK-1444: the count target is evaluated BEFORE the ≥2-voter guard.
-  //
-  // Configuring a target is an explicit operator opt-in that says "open voting
-  // once there are enough games", so it outranks the ROK-1118 solo guard —
-  // otherwise a lineup where one keen person nominates everything (exactly the
-  // same-day "Tonight" case this feature was built for) silently ignores the
-  // target the create modal advertised. The global floor still gates the
-  // advance, so this can never fire on one or two games.
+  // ROK-1444: configuring a target is an explicit operator opt-in that says
+  // "open voting once there are enough games", so it needs no ≥2-voter guard —
+  // a lineup where one keen person nominates everything (the same-day
+  // "Tonight" case) must still honour the target the create modal advertised.
+  // The global floor still gates the advance, so this can never fire on one
+  // or two games.
   //
   // `checkVotingQuorum` deliberately KEEPS its solo guard: others can still
   // turn up to vote once voting is open, and the phase deadline advances the
@@ -96,25 +96,13 @@ export async function checkBuildingQuorum(
     if (target.ready) return target;
   }
 
-  const expected = await loadQuorumGatingVoters(db, lineup);
-  if (expected.length < 2) {
-    return { ready: false, reason: 'solo lineup; manual advance required' };
-  }
-  const submitted = await loadNominationSubmitters(db, lineup.id);
-  const shortfall = countMissingSubmissions(expected, submitted);
-  if (shortfall > 0) {
-    return {
-      ready: false,
-      reason: `${shortfall} expected nominator(s) have not submitted`,
-    };
-  }
-  if (totalNominations < floor) {
-    return {
-      ready: false,
-      reason: `nomination floor not met (${totalNominations}/${floor})`,
-    };
-  }
-  return { ready: true };
+  return {
+    ready: false,
+    reason:
+      lineup.nominationTargetPct == null
+        ? 'no nomination target; deadline or manual advance required'
+        : 'nomination target not met; deadline or manual advance required',
+  };
 }
 
 /**
@@ -160,27 +148,6 @@ export async function checkVotingQuorum(
     return { ready: false, reason: TIE_AWAITING_PICK_REASON, tie };
   }
   return { ready: true };
-}
-
-/** Distinct userIds with `nominations_submitted_at IS NOT NULL`. */
-async function loadNominationSubmitters(
-  db: Db,
-  lineupId: number,
-): Promise<Set<number>> {
-  const rows = await db
-    .select({
-      userId: schema.communityLineupUserSubmissions.userId,
-      count: sql<number>`count(*)::int`,
-    })
-    .from(schema.communityLineupUserSubmissions)
-    .where(
-      and(
-        eq(schema.communityLineupUserSubmissions.lineupId, lineupId),
-        isNotNull(schema.communityLineupUserSubmissions.nominationsSubmittedAt),
-      ),
-    )
-    .groupBy(schema.communityLineupUserSubmissions.userId);
-  return new Set(rows.map((r) => r.userId));
 }
 
 /** Distinct userIds with `votes_submitted_at IS NOT NULL`. */

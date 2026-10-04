@@ -3,7 +3,11 @@
  *
  * Extracted from SchedulingService to keep that file under the 300-line limit.
  */
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { and, eq, gte, lte } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -47,6 +51,35 @@ export async function assertCallerMayVote(
   if (!lineup) throw new NotFoundException('Lineup not found');
   if (match) assertPollOpen(match, lineup);
   await assertUserCanParticipate(db, lineup, caller);
+}
+
+/**
+ * Gate the READ of a poll page on a private lineup. Public lineups (incl.
+ * every standalone poll) pass. A private lineup's poll is visible only to
+ * the callers who may participate in it — creator, invitees and
+ * admin/operator, via `assertUserCanParticipate`. Everyone else, anonymous
+ * viewers included, gets the same 404 as a lineup-mismatched match, so the
+ * poll's existence does not leak.
+ *
+ * @throws NotFoundException when the caller may not view the poll.
+ */
+export async function assertCallerMayViewPoll(
+  db: Db,
+  lineup: { id: number; createdBy: number; visibility: 'public' | 'private' },
+  caller: { id: number; role?: string | null } | null,
+): Promise<void> {
+  if (lineup.visibility !== 'private') return;
+  const hidden = new NotFoundException('Match not found in this lineup');
+  if (!caller) throw hidden;
+  try {
+    await assertUserCanParticipate(db, lineup, {
+      id: caller.id,
+      role: caller.role ?? undefined,
+    });
+  } catch (err) {
+    if (err instanceof ForbiddenException) throw hidden;
+    throw err;
+  }
 }
 
 /**

@@ -12,8 +12,8 @@
 # containers labelled `org.testcontainers=true`, classifies each as orphan
 # (parent jest dead OR owning ryuk session container is gone) vs active
 # (live jest on an active claim slot), and `docker rm -f` the orphans. Hook
-# into release (per-slot scope) AND gc-sweeper (periodic `all` scope) so any
-# orphans missed by release get cleaned within one sweep cycle.
+# into release (per-slot scope). The gc-sweeper's periodic `all` pass was
+# never live (its bin path was never mounted) and was removed (TDB:1101).
 #
 # Tests stub `docker` via a tmp dir prepended to PATH (same pattern used by
 # release-runner-cleanup.test.sh — see header comments there).
@@ -418,76 +418,34 @@ EOF
     _cleanup_fake
 }
 
-# AC-M8-6: gc-sweeper invokes `runner-testcontainers-reap all` every cycle.
-test_sweeper_invokes_reaper() {
-    CURRENT_TEST_NAME="AC-M8-6: gc-sweeper invokes runner-testcontainers-reap all"
-    # Use a stub-reaper that writes a sentinel when called, then point the
-    # sweeper at it via $ORCHESTRATOR_BIN_DIR. We rely on the production
-    # sweeper script that ships in this repo.
-    SWEEPER_SCRIPT="$(cd "$TEST_DIR/../../gc-sweeper" && pwd)/sweep.sh"
-    if [[ ! -f "$SWEEPER_SCRIPT" ]]; then
+# TDB:1101: gc-sweeper no longer runs any orchestrator executable. Its old
+# fleet-wide `runner-testcontainers-reap all` pass (and its lease-advance call)
+# resolved under ORCHESTRATOR_BIN_DIR=/orchestrator/bin, which compose never
+# mounted in the sweeper container, so both were permanent no-ops. They were
+# deleted; release reaps per slot at handoff and runs lease-advance itself.
+# This replaces AC-M8-6, which asserted the dead reap call, and pins the
+# deletion so a dead call cannot be reintroduced unnoticed. Comment lines are
+# stripped first so history notes do not trip it.
+test_sweeper_runs_no_orchestrator_bins() {
+    CURRENT_TEST_NAME="TDB:1101: gc-sweeper calls neither runner-testcontainers-reap nor lease-advance"
+    local sweeper_script code hits
+    sweeper_script="$(cd "$TEST_DIR/../../gc-sweeper" && pwd)/sweep.sh"
+    if [[ ! -f "$sweeper_script" ]]; then
         TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
         TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: sweep.sh missing")
         echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] sweep.sh missing"
         return
     fi
-
-    # Bootstrap state files the sweeper expects.
-    echo "[]" > "$RL_STATE_DIR/claims.json"
-    echo "[]" > "$RL_STATE_DIR/env-registry.json"
-    echo "[]" > "$RL_STATE_DIR/queue.json"
-
-    # Build a fake orchestrator/bin dir holding ONLY a fake reaper that
-    # writes a sentinel. The sweeper resolves it via $ORCHESTRATOR_BIN_DIR.
-    local fake_orch
-    fake_orch=$(mktemp -d -t rl-fake-orch.XXXXXX)
-    mkdir -p "$fake_orch/bin"
-    local invoked="$RL_STATE_DIR/sweeper-invoked-reaper.txt"
-    : > "$invoked"
-    cat > "$fake_orch/bin/runner-testcontainers-reap" <<EOF
-#!/usr/bin/env bash
-echo "runner-testcontainers-reap \$*" >> "$invoked"
-exit 0
-EOF
-    chmod +x "$fake_orch/bin/runner-testcontainers-reap"
-    # Provide a stub lease-advance so the sweeper's other paths don't fail.
-    cat > "$fake_orch/bin/lease-advance" <<'EOF'
-#!/usr/bin/env bash
-exit 0
-EOF
-    chmod +x "$fake_orch/bin/lease-advance"
-
-    # Also stub `docker` so the sweeper's docker calls don't blow up on a
-    # local mac without docker daemon access. All return empty / success.
-    local fake_path
-    fake_path=$(mktemp -d -t rl-fake-path.XXXXXX)
-    cat > "$fake_path/docker" <<'EOF'
-#!/usr/bin/env bash
-# minimal stub — return empty for any ps query, success for any other op
-if [[ "$1" == "ps" ]]; then exit 0; fi
-exit 0
-EOF
-    chmod +x "$fake_path/docker"
-
-    TASKS_DIR="$RL_TASKS_DIR" \
-        RL_STATE_DIR="$RL_STATE_DIR" \
-        RL_TASKS_DIR="$RL_TASKS_DIR" \
-        STATE_DIR="$RL_STATE_DIR" \
-        ORCHESTRATOR_BIN_DIR="$fake_orch/bin" \
-        PATH="$fake_path:$PATH" \
-        bash "$SWEEPER_SCRIPT" >/dev/null 2>&1 || true
-
-    if grep -q "runner-testcontainers-reap all" "$invoked" 2>/dev/null; then
+    code=$(grep -v '^[[:space:]]*#' "$sweeper_script")
+    hits=$(grep -nE 'runner-testcontainers-reap|lease-advance|ORCHESTRATOR_BIN_DIR' <<<"$code" || true)
+    if [[ -z "$hits" ]]; then
         TEST_PASS_COUNT=$((TEST_PASS_COUNT + 1))
     else
         TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
-        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: sweeper did not invoke reaper with 'all'")
-        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] sweeper should call runner-testcontainers-reap all"
-        echo "invoked sentinel:"
-        cat "$invoked" 2>/dev/null | sed 's/^/  /'
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: sweep.sh still references an orchestrator bin")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] expected no non-comment reference to runner-testcontainers-reap / lease-advance / ORCHESTRATOR_BIN_DIR in sweep.sh, found:"
+        sed 's/^/  /' <<<"$hits"
     fi
-
-    rm -rf "$fake_orch" "$fake_path"
 }
 
 # AC-M8-bonus: reaper exits 0 even when 0 containers are reaped.
@@ -575,7 +533,7 @@ run_test "ac-m8-2-active-preserved" test_active_testcontainer_preserved
 run_test "ac-m8-3-ryuk-gone-children-reaped" test_ryuk_gone_children_reaped
 run_test "ac-m8-4-slot-arg-scopes" test_slot_arg_scopes_to_owning_slot
 run_test "ac-m8-5-all-arg-across-slots" test_all_arg_reaps_across_slots
-run_test "ac-m8-6-sweeper-invokes-reaper" test_sweeper_invokes_reaper
+run_test "tdb-1101-sweeper-runs-no-orchestrator-bins" test_sweeper_runs_no_orchestrator_bins
 run_test "ac-m8-bonus-zero-containers-exit-zero" test_zero_containers_exit_zero
 run_test "ac-m8-bonus2-audit-logged" test_reaper_audit_logged
 

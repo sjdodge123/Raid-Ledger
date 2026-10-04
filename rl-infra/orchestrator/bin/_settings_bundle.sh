@@ -63,3 +63,53 @@ settings_bundle::payload() {
     fi
     jq -c '.' <<<"$plaintext"
 }
+
+# TDB:1904 — bundle.enc freshness for `rl status`, so a stale or undecryptable
+# bundle is visible without SSH. Echoes ONE compact JSON object:
+#   {present, mtime, age_hours, key_count, decrypts, warning}
+# It decrypts in memory to count the keys and NEVER emits a key name or value:
+# the plaintext only ever reaches `jq 'keys|length'`.
+#
+# ALWAYS exits 0 — bin/status runs under `set -euo pipefail`, and a non-zero
+# exit here would take the whole of `rl status` down fleet-wide.
+settings_bundle::freshness_json() {
+    local path epoch="" probe="" warn="" count="" decrypts=false
+    path=$(settings_bundle::path)
+    if [[ ! -e "$path" ]]; then
+        printf '%s\n' '{"present":false,"mtime":null,"age_hours":null,"key_count":null,"decrypts":null,"warning":null}'
+        return 0
+    fi
+    epoch=$(stat -c %Y "$path" 2>/dev/null || stat -f %m "$path" 2>/dev/null || true)
+    [[ "$epoch" =~ ^[0-9]+$ ]] || epoch=""
+    # payload() and the warning read run in the SAME subshell, so the warning
+    # survives. A sentinel splits them — NOT a newline: `$( )` strips trailing
+    # newlines, so an empty warning would leave no separator and the plaintext
+    # would be read back AS the warning (caught by the no-leak test). The
+    # warning is taken after the LAST sentinel, which is always our own printf.
+    probe=$(settings_bundle::payload 2>/dev/null; printf '\n__RL_SB_WARN__%s' "${SETTINGS_BUNDLE_WARNING:-}")
+    warn="${probe##*__RL_SB_WARN__}"
+    if [[ -z "$warn" ]]; then
+        decrypts=true
+        # Cut at the LAST sentinel (shortest suffix): a decrypted value that
+        # itself contains the sentinel must not truncate the JSON.
+        count=$(printf '%s' "${probe%__RL_SB_WARN__*}" | jq 'keys | length' 2>/dev/null || true)
+    fi
+    probe=""
+    [[ "$count" =~ ^[0-9]+$ ]] || count=""
+    settings_bundle::_freshness_object "$epoch" "$count" "$decrypts" "$warn"
+    return 0
+}
+
+# Builds the present:true object; falls back to a fixed object if jq fails.
+settings_bundle::_freshness_object() {
+    jq -nc --arg epoch "$1" --arg count "$2" --argjson decrypts "$3" --arg warn "$4" '
+        ($epoch | if . == "" then null else tonumber end) as $e
+        | {present: true,
+           mtime: (if $e == null then null else ($e | todate) end),
+           age_hours: (if $e == null then null else ((((now - $e) / 360) | round) / 10) end),
+           key_count: (if $count == "" then null else ($count | tonumber) end),
+           decrypts: $decrypts,
+           warning: (if $warn == "" then null else $warn end)}' 2>/dev/null \
+        || printf '%s\n' '{"present":true,"mtime":null,"age_hours":null,"key_count":null,"decrypts":null,"warning":"settings bundle freshness probe failed"}'
+    return 0
+}
