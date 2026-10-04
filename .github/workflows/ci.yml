@@ -80,6 +80,8 @@ jobs:
               # scripts/test/runner-playwright-pin.test.sh, which pins this
               # file's Playwright tag to package-lock.json.
               - 'rl-infra/runner/Dockerfile'
+              # The lint job runs the rl-infra dashboard node:test suite.
+              - 'rl-infra/dashboard/**'
             api:
               - 'api/package.json'
               - 'package-lock.json'
@@ -253,6 +255,12 @@ jobs:
       # packages/contract/dist, built above.
       - name: Script node:test specs (scripts/*.spec.mjs)
         run: node --test scripts/*.spec.mjs
+
+      # 2026-10-04: the rl-infra dashboard suite ran in no CI job. Pass the
+      # glob, not the directory: Node >=21 reads `node --test <dir>` as a
+      # module path and fails with MODULE_NOT_FOUND.
+      - name: rl-infra dashboard node:test specs
+        run: node --test rl-infra/dashboard/test/*.test.js
 
       # ROK-1693: a migration whose journal `when` is <= the newest entry
       # already on main is silently SKIPPED by Drizzle on every DB that ran

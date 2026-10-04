@@ -1,9 +1,14 @@
-name: Release
+name: Publish images
 
+# Builds and pushes the tagged images, then creates the GitHub release (the
+# only release creator). Runs on a v* tag push made with your own credentials,
+# or on a workflow_dispatch against a tag ref — release.yml dispatches it that
+# way, because its GITHUB_TOKEN tag push does not fire push-event workflows.
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   docker-build:
@@ -13,6 +18,12 @@ jobs:
       packages: write
 
     steps:
+      - name: Refuse a non-tag ref
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          echo "::error::Publish images only runs on a v* tag ref (got $GITHUB_REF). Dispatch it with --ref vX.Y.Z."
+          exit 1
+
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
@@ -68,8 +79,8 @@ jobs:
         with:
           images: ghcr.io/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ github.ref_name }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ github.ref_name }}
             type=sha,prefix=
 
       - name: Build and push
@@ -100,6 +111,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           body: |
             ## Quick Deploy

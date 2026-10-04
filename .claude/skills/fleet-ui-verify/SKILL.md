@@ -34,9 +34,12 @@ Anything missing → do not guess a user or an object; mark the affected steps `
    Lead with one line on what the operator must look at. Everything else you run.
 2. **Sign in as the step's user** with `rl_env_signin_link({ slug, user_id | username, path })` —
    `path` = the step's `test_url` path, so the link lands on the object. It returns
-   `{ url, user_id, expires_in_seconds }` (15 min). One browser context per user: `browser_close`
-   before switching users, then `browser_navigate` to the fresh link. Confirm the signed-in identity
-   on the page before asserting anything. Link expired → mint a new one; never reuse another user's.
+   `{ url, user_id, expires_in_seconds }` (15 min). A link signs in **once** (ROK-1366): the first
+   browser to open it spends it, and the same URL anywhere else lands on the login screen. Mint a
+   fresh link for every browser context. One browser context per user: `browser_close` before
+   switching users, then `browser_navigate` to a newly minted link. Confirm the signed-in identity
+   on the page before asserting anything. Link expired or already opened → mint a new one; never
+   reuse another user's.
 3. **Viewports** (`browser_resize`) as the step implies — desktop **1280×800**, tablet **820×1180**,
    phone **375×812**. A step that says "layout", "responsive" or names no device runs at all three.
 4. **Both colour families.** Every asserted state is checked in `default-dark` AND `default-light`.
@@ -49,7 +52,8 @@ Anything missing → do not guess a user or an object; mark the affected steps `
    `<step>-<viewport>-<dark|light>.png`. Use `browser_snapshot` for text/structure assertions.
 6. **iPad / tablet-specific steps** (sheets, safe areas, viewport units, Safari behaviour) also run in
    the **iOS Simulator** when `mcp__Claude_Code_iOS_Simulator__control` is available: `attach` on an
-   iPad device, `open_url` with a fresh sign-in link (Safari), `screenshot`, `inspect` before any
+   iPad device, `open_url` with its **own** freshly minted sign-in link (Safari is a separate browser; the link
+   Chromium already opened is spent), `screenshot`, `inspect` before any
    `tap`. Chromium at 820×1180 does not reproduce iPadOS Safari. Tool missing or permission denied →
    that part is `BLOCKED` (say which), not PASS on Chromium's word.
 7. **Mutating steps:** follow the `reset_hint` exactly after the step (and before re-running it in

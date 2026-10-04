@@ -100,23 +100,42 @@ history, so the script **exits 2** naming `fetch-depth: 0` rather than degrading
 ## Cutting a release
 
 1. Confirm the span earns it: `bash scripts/check-feat-since-tag.sh` on an up-to-date `main`.
-2. Run the **Release** workflow (`workflow_dispatch`) with `patch` / `minor` / `major`
-   (`major` for any breaking change). Leave `allow_no_feat` unticked.
-3. The pre-flight runs *before* the bump, commit, tag and push — a failure there leaves no tag, no
-   commit and nothing to clean up.
-4. The tag push triggers `docker-publish.yml`, which builds `Dockerfile.allinone` and pushes the tagged
-   images. Its warn-only notice re-checks the span, so a tag cut **by hand** (bypassing `release.yml`)
-   still leaves a visible annotation.
+2. Run the **Release** workflow (`workflow_dispatch`) from `main` with `patch` / `minor` / `major`
+   (`major` for any breaking change). Leave `allow_no_feat` unticked. A dispatch from any other ref
+   fails at its first step.
+3. The pre-flight runs *before* anything is tagged or pushed — a failure there leaves no tag and
+   nothing to clean up. The workflow then derives the version from tags, not from a file:
+   `scripts/next-release-version.sh` bumps the highest existing `vX.Y.Z` tag across the whole repo,
+   reachable from HEAD or not (pre-release and other tags are ignored), so the new version is greater
+   than every release tag and cannot collide with one. It creates an annotated tag on
+   `main`'s HEAD and pushes **only the tag** — there is no version-bump commit, because protected
+   `main` refuses a push made with `GITHUB_TOKEN`. A published image reports its version from the
+   `APP_VERSION` build arg baked from the tag; `api/package.json` is only the local-dev fallback.
+4. A tag pushed with `GITHUB_TOKEN` does not fire push-event workflows, so **Release** then dispatches
+   **Publish images** (`docker-publish.yml`) on the new tag. That builds `Dockerfile.allinone`, pushes
+   the tagged images and creates the GitHub release. Its warn-only notice re-checks the span. A tag
+   pushed **by hand** with your own credentials (bypassing `release.yml`) still triggers Publish
+   images through its `push` trigger, so it too gets images, a release and a visible annotation.
+   **If the dispatch step fails** after the tag push, the tag exists with no images and no release.
+   Run `gh workflow run docker-publish.yml --ref vX.Y.Z` (or Actions → Publish images → Run workflow
+   on the tag); the failed step's summary prints that command. **Do not re-run Release** for it: it
+   would bump past the orphaned tag, and the no-feature pre-flight refuses because HEAD is now tagged.
 
-> **Two workflows try to create the GitHub release for the same tag** — `release.yml`'s final
-> `gh release create --generate-notes` step and `docker-publish.yml`'s `softprops/action-gh-release`
-> step. Both workflows are also *named* `Release`, so the Actions tab shows two runs per tag. Which one
-> wins the race has not been observed (no tag has been cut since `v1.1.0`). Expect the loser to error
-> or to no-op; if release notes look wrong after a cut, this is the first thing to check. Tracked in
-> `TECH-DEBT-BACKLOG.md` — one creator, not two.
+The version base and the pre-flight span start from different tags. The version bumps the global
+highest `vX.Y.Z`; the span (`check-feat-since-tag.sh`) starts at `git describe --match 'v*'`, the
+nearest tag reachable from HEAD, which may be a pre-release. With only plain release tags on `main`
+the two agree.
+
+**Publish images** (`softprops/action-gh-release`) is the only creator of the GitHub release: the
+Quick Deploy body first, then the generated notes.
 
 ## Tests
 
 `scripts/test/check-feat-since-tag.test.sh` (36 assertions) covers the matching table above against
 throwaway git repositories. It is discovered by `scripts/test/run-all.sh`, which GitHub CI runs in the
 `lint` job — so a change to the matching rules that breaks the table fails on the PR.
+
+`scripts/test/next-release-version.test.sh` covers the version computation the same way: patch /
+minor / major from the highest `vX.Y.Z` tag, numeric ordering (`v1.10.0` beats `v1.9.0`), pre-release
+and non-semver tags ignored, the highest tag winning even when HEAD cannot reach it, and exit 2 on
+no tags or a bad argument. It is discovered by `run-all.sh` in the same `lint` job.

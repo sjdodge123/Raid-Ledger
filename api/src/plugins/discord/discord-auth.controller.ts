@@ -5,7 +5,6 @@ import {
   Req,
   Res,
   Query,
-  HttpStatus,
   Logger,
   Optional,
   Inject,
@@ -13,7 +12,6 @@ import {
 import { AuthService } from '../../auth/auth.service';
 import { UsersService } from '../../users/users.service';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../../settings/settings.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RateLimit } from '../../throttler/rate-limit.decorator';
@@ -36,6 +34,13 @@ import {
   issueDiscordRefreshCookie,
 } from './discord-auth.helpers';
 import { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
+import {
+  LinkNonceService,
+  LINK_REQUEST_EXPIRED_MESSAGE,
+} from '../../auth/link-nonce.service';
+import { consumeBrowserBoundNonce } from '../../auth/link-nonce-cookie.helpers';
+import { bindLinkStateToBrowser } from '../../auth/link-state-cookie.helpers';
+import { verifyDiscordLinkState } from './discord-link-state.helpers';
 
 interface RequestWithUser extends Request {
   user: {
@@ -54,7 +59,6 @@ export class DiscordAuthController {
     private authService: AuthService,
     private usersService: UsersService,
     private configService: ConfigService,
-    private jwtService: JwtService,
     private settingsService: SettingsService,
     @Optional()
     @Inject(DiscordNotificationService)
@@ -62,6 +66,7 @@ export class DiscordAuthController {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly eventEmitter: EventEmitter2,
     private readonly refreshService: RefreshTokenService,
+    private readonly linkNonceService: LinkNonceService,
   ) {}
 
   /** Get the frontend client URL for post-auth redirects. */
@@ -188,12 +193,14 @@ export class DiscordAuthController {
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) {
       res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
       );
       return;
     }
+    // `r` binds the state to this browser through the callback (ROK-1366).
+    const r = bindLinkStateToBrowser(res, 'discord');
     const state = signOAuthState(
-      { userId, action: 'link', timestamp: Date.now() },
+      { userId, action: 'link', timestamp: Date.now(), r },
       this.getSecret(),
     );
     const redirectUri = oauthConfig.callbackUrl.replace(
@@ -203,48 +210,34 @@ export class DiscordAuthController {
     res.redirect(this.buildOAuthUrl(oauthConfig.clientId, redirectUri, state));
   }
 
-  /** GET /auth/discord/link — initiate Discord OAuth for account linking. */
+  /** GET /auth/discord/link?nonce= — single-use nonce from POST .../link/start (ROK-1630), bound to the minting browser's cookie. */
   @RateLimit('auth')
   @Get('discord/link')
   async discordLink(
-    @Query('token') token: string,
+    @Query('nonce') nonce: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    if (!token) {
-      res
-        .status(HttpStatus.UNAUTHORIZED)
-        .json({ message: 'Authentication token required' });
+    const claims = await consumeBrowserBoundNonce(
+      this.linkNonceService,
+      'discord',
+      nonce,
+      req,
+      res,
+    );
+    if (!claims) {
+      res.redirect(
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE)}`,
+      );
       return;
     }
-    const userId = this.verifyTokenOrRedirect(token, res, clientUrl);
-    if (userId === null) return;
-    await this.initiateDiscordLinkFlow(userId, clientUrl, res);
-  }
-
-  /** Verify JWT token, redirect to error on failure. Returns userId or null. */
-  private verifyTokenOrRedirect(
-    token: string,
-    res: Response,
-    clientUrl: string,
-  ): number | null {
-    try {
-      return this.jwtService.verify<{ sub: number }>(token).sub;
-    } catch {
-      res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
-      );
-      return null;
-    }
+    await this.initiateDiscordLinkFlow(claims.userId, clientUrl, res);
   }
 
   /** Complete the Discord link: persist link, emit event, send DM. */
-  private async completeLinkFlow(code: string, state: string): Promise<number> {
-    const { userId, discordProfile } = await this.performLinkExchange(
-      code,
-      state,
-    );
+  private async completeLinkFlow(code: string, userId: number): Promise<void> {
+    const discordProfile = await this.performLinkExchange(code, userId);
     await this.usersService.linkDiscord(
       userId,
       discordProfile.id,
@@ -256,7 +249,6 @@ export class DiscordAuthController {
       discordId: discordProfile.id,
     } satisfies DiscordLoginPayload);
     this.sendWelcomeDMSafe(userId);
-    return userId;
   }
 
   /** GET /auth/discord/link/callback — handle Discord OAuth callback for linking. */
@@ -270,36 +262,32 @@ export class DiscordAuthController {
   ) {
     const clientUrl = this.getClientUrl(req);
     try {
-      await this.completeLinkFlow(code, state);
-      res.redirect(`${clientUrl}/profile?linked=success`);
+      // Verified first: the state must come back to the browser the GET hop
+      // bound it to (ROK-1366) before any code exchange happens.
+      const userId = verifyDiscordLinkState(
+        state,
+        this.getSecret(),
+        this.logger,
+        { req, res },
+      );
+      await this.completeLinkFlow(code, userId);
+      res.redirect(`${clientUrl}/profile/integrations?linked=success`);
     } catch (error) {
       this.logger.error('Discord link error:', error);
       const msg = error instanceof Error ? error.message : 'Link failed';
       res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(msg)}`,
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(msg)}`,
       );
     }
   }
 
-  /** Verify link state and extract userId. */
-  private verifyLinkState(state: string): number {
-    const stateData = verifyOAuthState(state, this.getSecret(), this.logger);
-    if (!stateData || stateData.action !== 'link')
-      throw new Error('Invalid or tampered state parameter');
-    return stateData.userId as number;
-  }
-
-  /** Perform the link OAuth exchange: verify state, exchange code, fetch profile. */
+  /** Perform the link OAuth exchange for a verified userId: exchange code, fetch profile. */
   private async performLinkExchange(
     code: string,
-    state: string,
-  ): Promise<{
-    userId: number;
-    discordProfile: { id: string; username: string; avatar?: string };
-  }> {
+    userId: number,
+  ): Promise<{ id: string; username: string; avatar?: string }> {
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) throw new Error('Discord OAuth is not configured');
-    const userId = this.verifyLinkState(state);
     const redirectUri = oauthConfig.callbackUrl.replace(
       '/callback',
       '/link/callback',
@@ -316,7 +304,7 @@ export class DiscordAuthController {
       discordFetch,
     );
     await this.validateNoExistingLink(discordProfile.id, userId);
-    return { userId, discordProfile };
+    return discordProfile;
   }
 
   /** Validate that the Discord account isn't already linked to another user. */
