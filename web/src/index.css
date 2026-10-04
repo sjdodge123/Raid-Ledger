@@ -205,7 +205,8 @@ html {
     --color-panel: #E8F0F7;
     --color-overlay: #D8E8F4;
     --color-faint: #C2D4E8;
-    --color-dim: #7B9AB5;
+    --color-dim: #4E6E8B;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.35 surface / 4.64 panel (was #7B9AB5) — faint-decorative.guard.test.ts */
     --color-muted: #4A6580;
     --color-secondary: #2A4A64;
     --color-foreground: #0D1F2D;
@@ -257,7 +258,8 @@ html {
     --color-panel: #FFE8D0;
     --color-overlay: #FDDBB8;
     --color-faint: #E8C99A;
-    --color-dim: #B08060;
+    --color-dim: #8A6045;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 4.93 surface / 4.61 panel (was #B08060) — faint-decorative.guard.test.ts */
     --color-muted: #7A5535;
     --color-secondary: #4A2E18;
     --color-foreground: #2D1F0F;
@@ -309,7 +311,8 @@ html {
     --color-panel: #EEF2FB;
     --color-overlay: #E0E6F5;
     --color-faint: #C8D3E8;
-    --color-dim: #748AAD;
+    --color-dim: #576E93;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.18 surface / 4.62 panel (was #748AAD) — faint-decorative.guard.test.ts */
     --color-muted: #4A5E82;
     --color-secondary: #2A3A5A;
     --color-foreground: #0F1A2E;
@@ -361,7 +364,8 @@ html {
     --color-panel: #E4DDD0;
     --color-overlay: #D8D0C0;
     --color-faint: #C0B098;
-    --color-dim: #8A7860;
+    --color-dim: #6D5E4B;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.12 surface / 4.64 panel (was #8A7860) — faint-decorative.guard.test.ts */
     --color-muted: #6A5840;
     --color-secondary: #3D3560;
     --color-foreground: #1A1A2E;
