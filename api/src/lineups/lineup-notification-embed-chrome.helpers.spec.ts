@@ -26,7 +26,6 @@ import {
   buildMilestoneEmbed,
   buildVotingOpenEmbed,
   buildDecidedEmbed,
-  buildSchedulingEmbed,
   buildEventCreatedEmbed,
   buildTiebreakerStartedEmbed,
   buildTiebreakerReminderEmbed,
@@ -46,7 +45,6 @@ const ERROR_RED = 0xef4444;
 const DIE = '\u{1F3B2}';
 const BALLOT = '\u{1F5F3}';
 const TROPHY = '\u{1F3C6}';
-const CALENDAR = '\u{1F4C5}';
 const SOLID = '\u25CF';
 const SWORDS = '\u2694\u{FE0F}';
 const DOTTED = '\u25CC';
@@ -131,13 +129,6 @@ const CASES: ParityCase[] = [
     author: `${TROPHY} MATCHES DECIDED`,
   },
   {
-    builder: 'buildSchedulingEmbed',
-    build: (c) => buildSchedulingEmbed(c, 'Deep Rock', 7),
-    color: ANNOUNCEMENT_CYAN,
-    footerLabel: 'Scheduling',
-    author: `${CALENDAR} SCHEDULING ${SEP} pick a time`,
-  },
-  {
     builder: 'buildEventCreatedEmbed',
     build: (c) =>
       buildEventCreatedEmbed(c, 'Deep Rock', 1, DEADLINE, 99, ['Ana', 'Bo']),
@@ -169,8 +160,8 @@ const CASES: ParityCase[] = [
 ];
 
 describe('lineup embed chrome parity (AC5)', () => {
-  it('covers all nine lineup builders', () => {
-    expect(CASES).toHaveLength(9);
+  it('covers all eight lineup builders (scheduling notice retired, TDB:576)', () => {
+    expect(CASES).toHaveLength(8);
   });
 
   it.each(CASES.map((c) => [c.builder, c] as const))(

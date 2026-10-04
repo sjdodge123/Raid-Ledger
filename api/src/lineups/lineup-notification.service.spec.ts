@@ -721,13 +721,21 @@ describe('LineupNotificationService', () => {
   });
 
   // -----------------------------------------------------------------------
-  // AC-8: Channel embed per match when scheduling opens + DMs
+  // AC-8: DMs when scheduling opens. The poll card is the only channel
+  // surface (TDB:576), so no channel notice is posted here.
   // -----------------------------------------------------------------------
   describe('notifySchedulingOpen', () => {
-    it('posts per-match channel embed', async () => {
+    it('posts no channel embed — the poll card is the only channel surface', async () => {
+      mockDb.execute.mockResolvedValueOnce([makeMember(1)]);
+
       await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
 
-      expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+      expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+      expect(mockDedupService.checkAndMarkSent).not.toHaveBeenCalledWith(
+        `lineup-scheduling:${MATCH_ID}`,
+        expect.anything(),
+      );
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
     });
 
     it('dispatches DMs to match members', async () => {
@@ -751,15 +759,6 @@ describe('LineupNotificationService', () => {
             subtype: 'lineup_scheduling_open',
           }),
         }),
-      );
-    });
-
-    it('uses dedup key lineup-scheduling:{matchId}', async () => {
-      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
-
-      expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
-        `lineup-scheduling:${MATCH_ID}`,
-        expect.anything(),
       );
     });
 
@@ -944,10 +943,10 @@ describe('LineupNotificationService', () => {
   });
 
   // -----------------------------------------------------------------------
-  // ROK-1033: Skip duplicate scheduling channel embed when interactive
-  // poll embed already posted (embedMessageId set on match row)
+  // ROK-1033 → TDB:576: the duplicate-notice guard is retired; the
+  // interactive poll card is the only scheduling channel surface.
   // -----------------------------------------------------------------------
-  describe('ROK-1033: duplicate scheduling embed guard', () => {
+  describe('scheduling channel surface (TDB:576)', () => {
     /**
      * Helper: stub the Drizzle select chain that the guard will use
      * to look up embedMessageId on the match row.
@@ -971,44 +970,41 @@ describe('LineupNotificationService', () => {
       });
     }
 
-    // AC1: embedMessageId already set -> NO channel embed posted
-    it('AC1: skips channel embed when embedMessageId is already set', async () => {
-      stubMatchLookup([{ id: MATCH_ID, embedMessageId: 'msg-existing' }]);
+    // TDB:576: the poll card owns the channel, so whether or not it has
+    // landed yet (embedMessageId set or null), no notice is posted — the
+    // old guard only suppressed the notice when the card won the race.
+    it.each([
+      ['already set', 'msg-existing'],
+      ['null', null],
+    ])(
+      'posts no channel embed when embedMessageId is %s',
+      async (_label, embedMessageId) => {
+        stubMatchLookup([{ id: MATCH_ID, embedMessageId }]);
 
-      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
+        await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
 
-      expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
-    });
+        expect(mockBotClient.sendEmbed).not.toHaveBeenCalled();
+      },
+    );
 
-    // AC2: embedMessageId already set -> DMs still sent
-    it('AC2: still sends DMs when embedMessageId is already set', async () => {
-      stubMatchLookup([{ id: MATCH_ID, embedMessageId: 'msg-existing' }]);
-      const members = [makeMember(1), makeMember(2)];
-      mockDb.execute.mockResolvedValueOnce(members);
+    it.each([
+      ['already set', 'msg-existing'],
+      ['null', null],
+    ])(
+      'still sends DMs when embedMessageId is %s',
+      async (_label, embedMessageId) => {
+        stubMatchLookup([{ id: MATCH_ID, embedMessageId }]);
+        const members = [makeMember(1), makeMember(2)];
+        mockDb.execute.mockResolvedValueOnce(members);
 
-      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
+        await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
 
-      expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
-    });
-
-    // AC3: embedMessageId null (lineup matches) -> channel embed posted
-    it('AC3: posts channel embed when embedMessageId is null', async () => {
-      stubMatchLookup([{ id: MATCH_ID, embedMessageId: null }]);
-
-      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
-
-      expect(mockBotClient.sendEmbed).toHaveBeenCalledTimes(1);
-    });
-
-    // AC4: embedMessageId null -> DMs still sent
-    it('AC4: still sends DMs when embedMessageId is null', async () => {
-      stubMatchLookup([{ id: MATCH_ID, embedMessageId: null }]);
-      const members = [makeMember(1), makeMember(2)];
-      mockDb.execute.mockResolvedValueOnce(members);
-
-      await service.notifySchedulingOpen(makeMatch({ status: 'scheduling' }));
-
-      expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
-    });
+        expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
+        expect(mockDedupService.checkAndMarkSent).toHaveBeenCalledWith(
+          `lineup-sched-dm:${MATCH_ID}:1`,
+          expect.anything(),
+        );
+      },
+    );
   });
 });

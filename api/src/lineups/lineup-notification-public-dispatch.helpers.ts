@@ -24,7 +24,6 @@ import { loadEffectiveNominationCapById } from './lineups-nomination-cap.helpers
 import {
   buildMilestoneEmbed,
   buildDecidedEmbed,
-  buildSchedulingEmbed,
   buildEventCreatedEmbed,
 } from './lineup-notification-embed.helpers';
 import {
@@ -37,10 +36,7 @@ import {
   fanOutSchedulingDMs,
   fanOutEventCreatedDMs,
 } from './lineup-notification-dm-batch.helpers';
-import {
-  findMatchMemberUsers,
-  hasExistingPollEmbed,
-} from './lineup-notification-targets.helpers';
+import { findMatchMemberUsers } from './lineup-notification-targets.helpers';
 import { loadDecisionReason } from './lineup-decision-reason.helpers';
 import { resolveEventRosterNames } from './lineup-notification-event-roster.helpers';
 import {
@@ -168,19 +164,15 @@ export async function orchestrateMatchesFound(
   );
 }
 
-/** Build the scheduling-embed builder bound to a match + ctx. */
-function schedulingBuilder(
-  deps: OrchestrationDeps,
-  match: MatchInfo,
-  ctx: EmbedContext,
-): BuildFn {
-  return async () => {
-    if (await hasExistingPollEmbed(deps.db, match.id)) return null;
-    return buildSchedulingEmbed(ctx, match.gameName, match.id);
-  };
-}
-
-/** AC-8: Scheduling-open notification — gates on visibility, then posts. */
+/**
+ * AC-8: Scheduling-open notification — gates on visibility, then DMs.
+ *
+ * The scheduling poll card (ROK-1473, posted by `fireMatchEnteredScheduling`
+ * on the same promote paths) is the only channel surface for a match entering
+ * scheduling (TDB:576). A separate channel notice raced the card and doubled
+ * up, so this posts no channel embed — it only routes private lineups and
+ * fans the per-member DMs out for public ones.
+ */
 export async function orchestrateSchedulingOpen(
   deps: OrchestrationDeps,
   match: MatchInfo,
@@ -195,17 +187,6 @@ export async function orchestrateSchedulingOpen(
     match,
   );
   if (routedPrivate) return;
-  const ctx = await resolveEmbedCtx(
-    dispatchDeps(deps),
-    match.lineupId,
-    'decided',
-  );
-  await postEmbed(
-    deps,
-    `lineup-scheduling:${match.id}`,
-    schedulingBuilder(deps, match, ctx),
-    ctx,
-  );
   await fanOutSchedulingDMs(
     deps.db,
     deps.notificationService,
