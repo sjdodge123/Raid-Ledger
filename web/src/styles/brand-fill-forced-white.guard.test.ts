@@ -12,8 +12,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import { defined } from '../test/defined';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { readdirSync, readFileSync } from 'fs';
+import { join, resolve, sep } from 'path';
+import { stripComments as stripCodeComments } from '../test/form-primitives-count';
 import { BRAND_LABEL_HEX } from '../lib/brand-label';
 
 const LIGHT_SCHEMES = ['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial'];
@@ -106,5 +107,27 @@ describe('index.css forced-dark label — fills white cannot clear (ROK-1472)', 
 
     it('cyan-600 is not also in the forced-white list (white is 3.62:1 on it)', () => {
         expect(forcedWhiteRules(css)[0]?.fills).not.toContain('.bg-cyan-600');
+    });
+});
+
+const SRC = resolve(__dirname, '..');
+
+/** `file:line` of every class string that pairs `bg-cyan-600` with a raw `text-white` label. */
+function cyanFillWhiteLabels(): string[] {
+    const files = (readdirSync(SRC, { recursive: true }) as string[])
+        .map((f) => f.split(sep).join('/'))
+        .filter((f) => /\.tsx?$/.test(f) && !/\.(test|spec)\.tsx?$/.test(f));
+    return files.sort().flatMap((f) => {
+        const code = stripCodeComments(readFileSync(join(SRC, f), 'utf-8'));
+        return [...code.matchAll(/(['"`])([^'"`]*)\1/g)]
+            .filter(([, , cls]) => /(^|\s)bg-cyan-600(\s|$)/.test(cls ?? '') && /(^|\s)text-white(\s|$)/.test(cls ?? ''))
+            .map((m) => `${f}:${code.slice(0, m.index).split('\n').length}`);
+    });
+}
+
+describe('bg-cyan-600 labels use text-foreground, never text-white (ROK-1472)', () => {
+    it('no class string in web/src pairs bg-cyan-600 with text-white', () => {
+        expect(cyanFillWhiteLabels(), 'white is 3.62:1 on cyan-600 on the light schemes — use text-foreground (the #0f172a rule)')
+            .toEqual([]);
     });
 });
