@@ -70,7 +70,7 @@ describe('GoogleProvider', () => {
       });
       const models = await provider.listModels();
       expect(models).toHaveLength(1);
-      expect(models[0].id).toBe('gemini-2.0-flash');
+      expect(models[0]?.id).toBe('gemini-2.0-flash');
     });
 
     it('throws when no API key is configured', async () => {

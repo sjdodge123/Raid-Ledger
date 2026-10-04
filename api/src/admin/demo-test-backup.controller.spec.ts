@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DemoTestBackupController } from './demo-test-backup.controller';
 import { BackupService } from '../backup/backup.service';
+import { at } from '../common/testing/narrow';
 
 jest.mock('node:fs');
 
@@ -19,7 +20,7 @@ function realDump(size: number): Buffer {
 }
 
 function writtenCall(): [string, Buffer] {
-  const call = mockFs.writeFileSync.mock.calls[0];
+  const call = at(mockFs.writeFileSync.mock.calls, 0);
   return [String(call[0]), call[1] as Buffer];
 }
 

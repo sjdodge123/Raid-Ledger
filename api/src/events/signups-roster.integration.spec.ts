@@ -19,6 +19,7 @@ import { SignupsService } from './signups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -171,11 +172,14 @@ async function testAutoClassifyRoachedOut() {
     'roacher',
     'roacher@test.local',
   );
-  const [event] = await testApp.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
+  const [event] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1),
+    'event',
+  );
   const eventStart = event.duration[0];
   const roachedOutAt = new Date(eventStart.getTime() - 48 * 60 * 60 * 1000);
   await testApp.db.insert(schema.eventSignups).values({

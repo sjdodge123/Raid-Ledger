@@ -42,7 +42,7 @@ function thenableResult(data: unknown[]): ThenableQuery {
 describe('IgdbService', () => {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
-  let mockRedis: Record<string, jest.Mock>;
+  let mockRedis: Record<'del' | 'get' | 'keys' | 'setex', jest.Mock>;
   let mockConfigService: Partial<ConfigService>;
   let selectResults: unknown[];
 

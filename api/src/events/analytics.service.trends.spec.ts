@@ -1,12 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AnalyticsService } from './analytics.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { at } from '../common/testing/narrow';
 
 let service: AnalyticsService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'execute', jest.Mock> & Record<string, jest.Mock>;
 
 async function setupEach() {
-  mockDb = {};
+  mockDb = {
+    execute: jest.fn().mockReturnThis(),
+  };
   const chainMethods = [
     'select',
     'from',
@@ -23,7 +26,6 @@ async function setupEach() {
     'set',
     'delete',
     'groupBy',
-    'execute',
   ];
   for (const m of chainMethods) {
     mockDb[m] = jest.fn().mockReturnThis();
@@ -204,7 +206,7 @@ async function testReliabilityRate() {
     ])
     .mockResolvedValueOnce([{ count: '1' }]);
   const result = await service.getUserReliability(20, 0);
-  expect(result.users[0].attendanceRate).toBe(0.75);
+  expect(result.users[0]?.attendanceRate).toBe(0.75);
 }
 
 async function testReliabilityZeroEvents() {
@@ -222,7 +224,7 @@ async function testReliabilityZeroEvents() {
     ])
     .mockResolvedValueOnce([{ count: '1' }]);
   const result = await service.getUserReliability(20, 0);
-  expect(result.users[0].attendanceRate).toBe(0);
+  expect(result.users[0]?.attendanceRate).toBe(0);
 }
 
 async function testReliabilityNullAvatar() {
@@ -240,7 +242,7 @@ async function testReliabilityNullAvatar() {
     ])
     .mockResolvedValueOnce([{ count: '1' }]);
   const result = await service.getUserReliability(20, 0);
-  expect(result.users[0].avatar).toBeNull();
+  expect(at(result.users, 0).avatar).toBeNull();
 }
 
 async function testReliabilityMissingCountRow() {
@@ -301,8 +303,8 @@ async function testGameRates() {
     },
   ]);
   const result = await service.getGameAttendance();
-  expect(result.games[0].avgAttendanceRate).toBe(0.75);
-  expect(result.games[0].avgNoShowRate).toBe(0.2);
+  expect(result.games[0]?.avgAttendanceRate).toBe(0.75);
+  expect(result.games[0]?.avgNoShowRate).toBe(0.2);
 }
 
 async function testGameZeroSignups() {
@@ -318,8 +320,8 @@ async function testGameZeroSignups() {
     },
   ]);
   const result = await service.getGameAttendance();
-  expect(result.games[0].avgAttendanceRate).toBe(0);
-  expect(result.games[0].avgNoShowRate).toBe(0);
+  expect(result.games[0]?.avgAttendanceRate).toBe(0);
+  expect(result.games[0]?.avgNoShowRate).toBe(0);
 }
 
 async function testGameNullCover() {
@@ -335,7 +337,7 @@ async function testGameNullCover() {
     },
   ]);
   const result = await service.getGameAttendance();
-  expect(result.games[0].coverUrl).toBeNull();
+  expect(at(result.games, 0).coverUrl).toBeNull();
 }
 
 async function testGameMultiple() {
@@ -361,8 +363,8 @@ async function testGameMultiple() {
   ]);
   const result = await service.getGameAttendance();
   expect(result.games).toHaveLength(2);
-  expect(result.games[0].gameName).toBe('Game A');
-  expect(result.games[1].gameName).toBe('Game B');
+  expect(result.games[0]?.gameName).toBe('Game A');
+  expect(result.games[1]?.gameName).toBe('Game B');
 }
 
 beforeEach(() => setupEach());

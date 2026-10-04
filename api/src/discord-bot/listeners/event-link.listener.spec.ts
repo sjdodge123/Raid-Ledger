@@ -3,10 +3,10 @@ import { EventLinkListener } from './event-link.listener';
 import { ChannelType, Events, EmbedBuilder } from 'discord.js';
 
 let listener: EventLinkListener;
-let mockClientService: Record<string, jest.Mock>;
-let mockEmbedFactory: Record<string, jest.Mock>;
+let mockClientService: Record<'getClient', jest.Mock>;
+let mockEmbedFactory: Record<'buildEventEmbed', jest.Mock>;
 let mockSettingsService: Record<string, jest.Mock>;
-let mockEventsService: Record<string, jest.Mock>;
+let mockEventsService: Record<'buildEmbedEventData' | 'findOne', jest.Mock>;
 let mockPugsService: Record<string, jest.Mock>;
 let mockDb: { insert: jest.Mock };
 let mockReply: jest.Mock;

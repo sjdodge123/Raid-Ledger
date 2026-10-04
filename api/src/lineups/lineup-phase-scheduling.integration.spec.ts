@@ -18,6 +18,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describePhaseScheduling() {
   let testApp: TestApp;
@@ -355,10 +356,10 @@ function describePhaseScheduling() {
   //       match belongs to a different lineup (route guard).
 
   async function seedGame(name: string, slug: string) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db.insert(schema.games).values({ name, slug }).returning(),
+      'seeded game',
+    );
     return game;
   }
 

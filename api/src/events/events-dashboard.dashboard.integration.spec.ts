@@ -9,6 +9,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { nonEmpty } from '../common/testing/narrow';
 
 async function createMemberAndLogin(
   testApp: TestApp,
@@ -17,14 +18,17 @@ async function createMemberAndLogin(
   discordId?: string,
 ): Promise<{ userId: number; token: string }> {
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: discordId ?? `local:${email}`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: discordId ?? `local:${email}`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db
     .insert(schema.localCredentials)
     .values({ email, passwordHash, userId: user.id });
@@ -62,15 +66,18 @@ async function createPastEvent(
 ): Promise<number> {
   const start = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Past Integration Test Event',
-      creatorId,
-      duration: [start, end] as [Date, Date],
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Past Integration Test Event',
+        creatorId,
+        duration: [start, end] as [Date, Date],
+        ...overrides,
+      })
+      .returning(),
+    'event',
+  );
   return event.id;
 }
 
@@ -174,10 +181,13 @@ async function testRosterFillPercent() {
   const eventId = await createFutureEvent(testApp, adminToken, {
     slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 2, flex: 0, bench: 0 },
   });
-  const [adminSignup] = await testApp.db
-    .select()
-    .from(schema.eventSignups)
-    .where(eq(schema.eventSignups.eventId, eventId));
+  const [adminSignup] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId)),
+    'adminSignup',
+  );
   await testApp.db.insert(schema.rosterAssignments).values({
     eventId,
     signupId: adminSignup.id,
@@ -225,24 +235,30 @@ async function testAttendanceMetrics() {
     'att_p2',
     'att_p2@test.local',
   );
-  const [s1] = await testApp.db
-    .insert(schema.eventSignups)
-    .values({
-      eventId: pastEventId,
-      userId: u1,
-      status: 'signed_up',
-      confirmationStatus: 'pending',
-    })
-    .returning();
-  const [s2] = await testApp.db
-    .insert(schema.eventSignups)
-    .values({
-      eventId: pastEventId,
-      userId: u2,
-      status: 'signed_up',
-      confirmationStatus: 'pending',
-    })
-    .returning();
+  const [s1] = nonEmpty(
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({
+        eventId: pastEventId,
+        userId: u1,
+        status: 'signed_up',
+        confirmationStatus: 'pending',
+      })
+      .returning(),
+    's1',
+  );
+  const [s2] = nonEmpty(
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({
+        eventId: pastEventId,
+        userId: u2,
+        status: 'signed_up',
+        confirmationStatus: 'pending',
+      })
+      .returning(),
+    's2',
+  );
   await testApp.request
     .patch(`/events/${pastEventId}/attendance`)
     .set('Authorization', `Bearer ${adminToken}`)

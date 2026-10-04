@@ -14,6 +14,7 @@
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 const COMMUNITY_PLAYING_SLUG = 'community-has-been-playing';
 
@@ -67,18 +68,24 @@ async function seedUser(
   discordId: string,
   username: string,
 ): Promise<number> {
-  const [u] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId, username, role: 'member' })
-    .returning();
+  const [u] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId, username, role: 'member' })
+      .returning(),
+    'u',
+  );
   return u.id;
 }
 
 async function seedGame(testApp: TestApp, name: string): Promise<number> {
-  const [g] = await testApp.db
-    .insert(schema.games)
-    .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
-    .returning();
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
+      .returning(),
+    'g',
+  );
   return g.id;
 }
 
@@ -126,28 +133,34 @@ async function seedAttendedEvent(
   attendeeUserId: number | null,
   options: AttendedEventOpts = {},
 ): Promise<{ eventId: number; signupId: number }> {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Seeded Attended Event',
-      creatorId,
-      gameId,
-      duration: options.duration ?? pastEventRange(24, 3),
-      cancelledAt: options.cancelled ? new Date() : null,
-    })
-    .returning();
-  const [signup] = await testApp.db
-    .insert(schema.eventSignups)
-    .values({
-      eventId: event.id,
-      userId: options.discordOnly ? null : attendeeUserId,
-      discordUserId: options.discordOnly
-        ? `discord-${event.id}-${Math.random().toString(36).slice(2, 8)}`
-        : null,
-      discordUsername: options.discordOnly ? 'Anon' : null,
-      attendanceStatus: 'attended',
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Seeded Attended Event',
+        creatorId,
+        gameId,
+        duration: options.duration ?? pastEventRange(24, 3),
+        cancelledAt: options.cancelled ? new Date() : null,
+      })
+      .returning(),
+    'event',
+  );
+  const [signup] = nonEmpty(
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({
+        eventId: event.id,
+        userId: options.discordOnly ? null : attendeeUserId,
+        discordUserId: options.discordOnly
+          ? `discord-${event.id}-${Math.random().toString(36).slice(2, 8)}`
+          : null,
+        discordUsername: options.discordOnly ? 'Anon' : null,
+        attendanceStatus: 'attended',
+      })
+      .returning(),
+    'signup',
+  );
   return { eventId: event.id, signupId: signup.id };
 }
 
@@ -187,8 +200,8 @@ describe('Community Has Been Playing discover row (ROK-565, integration)', () =>
 
     const rows = await fetchDiscoverRows(testApp);
     expect(rows.length).toBeGreaterThan(0);
-    expect(rows[0].slug).toBe(COMMUNITY_PLAYING_SLUG);
-    expect(rows[0].category).toBe('Your Community Has Been Playing');
+    expect(rows[0]?.slug).toBe(COMMUNITY_PLAYING_SLUG);
+    expect(rows[0]?.category).toBe('Your Community Has Been Playing');
   });
 
   it('unifies Discord rollups, Steam playtime2weeks, and attended events (AC 2)', async () => {
@@ -432,10 +445,11 @@ describe('Community Has Been Playing discover row (ROK-565, integration)', () =>
     const ids = row!.games.map((g) => g.id);
     // Both games have playerCount=1 — long event wins on secondary sort.
     expect(ids.indexOf(longGame)).toBeLessThan(ids.indexOf(shortGame));
-    expect(row!.metadata![String(longGame)].playerCount).toBe(1);
-    expect(row!.metadata![String(shortGame)].playerCount).toBe(1);
-    expect(row!.metadata![String(longGame)].totalSeconds).toBeGreaterThan(
-      row!.metadata![String(shortGame)].totalSeconds,
+    expect(row!.metadata![String(longGame)]?.playerCount).toBe(1);
+    expect(row!.metadata![String(shortGame)]?.playerCount).toBe(1);
+    expect(row!.metadata![String(longGame)]?.totalSeconds).toBeGreaterThan(
+      defined(row!.metadata![String(shortGame)], 'short game metadata')
+        .totalSeconds,
     );
   });
 

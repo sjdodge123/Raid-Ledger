@@ -7,6 +7,7 @@ import {
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { TokenBlocklistService } from '../auth/token-blocklist.service';
+import { defined } from '../common/testing/narrow';
 
 function describeUsersService() {
   let service: UsersService;
@@ -74,8 +75,8 @@ function describeUsersService() {
 
       const result = await service.findRecent();
 
-      expect(result[0].username).toBe('NewestPlayer');
-      expect(result[1].username).toBe('OlderNewbie');
+      expect(result[0]?.username).toBe('NewestPlayer');
+      expect(result[1]?.username).toBe('OlderNewbie');
     });
 
     it('should respect the recent member limit', async () => {
@@ -112,7 +113,7 @@ function describeUsersService() {
       expect(result[0]).toHaveProperty('username', 'TestUser');
       expect(result[0]).toHaveProperty('avatar', 'hash123');
       expect(result[0]).toHaveProperty('createdAt');
-      expect(result[0].createdAt).toBeInstanceOf(Date);
+      expect(result[0]?.createdAt).toBeInstanceOf(Date);
     });
   }
   describe('findRecent', () => describeFindRecent());
@@ -266,7 +267,7 @@ function describeUsersService() {
 
       mockDb.returning.mockResolvedValue([resetUser]);
 
-      const result = await service.resetOnboarding(1);
+      const result = defined(await service.resetOnboarding(1), 'reset user');
 
       expect(result.onboardingCompletedAt).toBeNull();
       expect(mockDb.update).toHaveBeenCalled();
@@ -291,7 +292,7 @@ function describeUsersService() {
 
       const result = await service.resetOnboarding(2);
 
-      expect(result.updatedAt).toBeInstanceOf(Date);
+      expect(result?.updatedAt).toBeInstanceOf(Date);
     });
   }
   describe('resetOnboarding (ROK-312)', () => describeResetOnboarding());

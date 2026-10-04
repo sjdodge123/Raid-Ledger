@@ -17,7 +17,8 @@ import {
     createLineupOrRetry,
     awaitProcessing,
     pollForCondition,
-    claimBannerOwnership,
+    scopeBannerTo,
+    getScopedBanner,
 } from './api-helpers';
 import { isPhoneLayout } from './helpers';
 
@@ -636,22 +637,25 @@ test.describe('Force-resolve tiebreaker', () => {
 
 test.describe('Tiebreaker active badge on Games page', () => {
     test('Games page banner shows Tiebreaker active badge', async ({ page }) => {
-        // ROK-1533: the badge only renders for the lineup the GLOBAL
-        // `/lineups/banner` singleton resolves to (most recently CREATED), and
-        // on the fleet one env serves desktop + mobile + every other lane, so
-        // ownership is TRANSIENT — a sibling's newer lineup takes it mid-test.
-        // Claim the banner and read the page inside ONE retried window, so an
-        // attempt lands while we still own it. Every assertion below is
-        // unchanged; only the window is retried.
-        test.setTimeout(180_000);
-        let bannerLineupId: number | undefined;
-        await expect(async () => {
-            bannerLineupId = await claimBannerOwnership(
-                adminToken,
-                async () => (await createVotingLineupWithTiebreaker(adminToken, 'veto')).lineupId,
-                { existing: bannerLineupId, attempts: 2 },
-            );
+        // The Games-page `LineupBanner` (which renders `TiebreakerBadge`) reads
+        // `GET /lineups/banner`, a GLOBAL singleton (the newest eligible lineup
+        // on the instance). On the fleet one env serves desktop + mobile + every
+        // other lane, so a sibling's newer lineup would own it. Scope the page
+        // to OUR lineup: under DEMO_MODE the web passes `?lineupId=` from the
+        // `scopeBannerTo` session key. The scoped API read fails by name if our
+        // lineup is not the banner; only UI eventual consistency is retried.
+        test.setTimeout(120_000);
+        const { lineupId: bannerLineupId } = await createVotingLineupWithTiebreaker(
+            adminToken,
+            'veto',
+        );
+        await scopeBannerTo(page, bannerLineupId);
+        expect(
+            (await getScopedBanner(adminToken, bannerLineupId))?.id,
+            `GET /lineups/banner?lineupId=${bannerLineupId} resolves to the tiebreaker fixture`,
+        ).toBe(bannerLineupId);
 
+        await expect(async () => {
             await page.goto('/games');
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i, {
                 timeout: 10_000,
@@ -663,7 +667,7 @@ test.describe('Tiebreaker active badge on Games page', () => {
             const tiebreakerBadge = page.locator('[data-testid="tiebreaker-badge"]');
             await expect(tiebreakerBadge).toBeVisible({ timeout: 10_000 });
             await expect(tiebreakerBadge).toHaveText(/tiebreaker/i);
-        }).toPass({ timeout: 150_000, intervals: [1_000] });
+        }).toPass({ timeout: 60_000, intervals: [1_000] });
     });
 });
 

@@ -9,6 +9,7 @@ import {
   type ItadSearchDeps,
 } from './igdb-itad-search.helpers';
 import type { ItadSearchGame } from './igdb-itad-merge.helpers';
+import { at } from '../common/testing/narrow';
 
 function makeMockDeps(overrides: Partial<ItadSearchDeps> = {}): ItadSearchDeps {
   return {
@@ -91,7 +92,7 @@ describe('filterAdultItadGames', () => {
     const result = filterAdultItadGames(games, true);
 
     expect(result).toHaveLength(1);
-    expect(result[0].title).toBe('Game A');
+    expect(result[0]?.title).toBe('Game A');
   });
 
   it('excludes games matching adult keywords when filter is on', () => {
@@ -104,7 +105,7 @@ describe('filterAdultItadGames', () => {
     const result = filterAdultItadGames([GAME_A, adultKeywordGame], true);
 
     expect(result).toHaveLength(1);
-    expect(result[0].title).toBe('Game A');
+    expect(result[0]?.title).toBe('Game A');
   });
 });
 
@@ -121,11 +122,11 @@ describe('executeItadSearch', () => {
     const result = await executeItadSearch(deps, 'game a');
 
     expect(result.games).toHaveLength(1);
-    expect(result.games[0].name).toBe('Game A');
-    expect(result.games[0].itadBoxartUrl).toBe(
+    expect(result.games[0]?.name).toBe('Game A');
+    expect(result.games[0]?.itadBoxartUrl).toBe(
       'https://itad.example.com/a.jpg',
     );
-    expect(result.games[0].igdbId).toBeNull();
+    expect(at(result.games, 0).igdbId).toBeNull();
     expect(result.source).toBe('itad');
   });
 
@@ -156,9 +157,9 @@ describe('executeItadSearch', () => {
 
     const result = await executeItadSearch(deps, 'game a');
 
-    expect(result.games[0].igdbId).toBe(999);
-    expect(result.games[0].coverUrl).toBe('https://igdb.com/cover.jpg');
-    expect(result.games[0].summary).toBe('A great game');
+    expect(result.games[0]?.igdbId).toBe(999);
+    expect(result.games[0]?.coverUrl).toBe('https://igdb.com/cover.jpg');
+    expect(result.games[0]?.summary).toBe('A great game');
     expect(result.source).toBe('itad');
   });
 
@@ -170,7 +171,7 @@ describe('executeItadSearch', () => {
     const result = await executeItadSearch(deps, 'game');
 
     expect(result.games).toHaveLength(1);
-    expect(result.games[0].name).toBe('Game A');
+    expect(result.games[0]?.name).toBe('Game A');
   });
 
   it('applies adult filter when enabled', async () => {
@@ -182,7 +183,7 @@ describe('executeItadSearch', () => {
     const result = await executeItadSearch(deps, 'game');
 
     expect(result.games).toHaveLength(1);
-    expect(result.games[0].name).toBe('Game A');
+    expect(result.games[0]?.name).toBe('Game A');
   });
 
   it('excludes banned/hidden games', async () => {
@@ -198,7 +199,7 @@ describe('executeItadSearch', () => {
     const result = await executeItadSearch(deps, 'game');
 
     expect(result.games).toHaveLength(1);
-    expect(result.games[0].name).toBe('Game A');
+    expect(result.games[0]?.name).toBe('Game A');
   });
 
   it('checks banned/hidden once for the whole result set (READLOGS:D2)', async () => {
@@ -258,7 +259,7 @@ describe('executeItadSearch', () => {
     const result = await executeItadSearch(deps, 'game');
 
     expect(result.games).toHaveLength(1);
-    expect(result.games[0].name).toBe('Game A');
+    expect(result.games[0]?.name).toBe('Game A');
 
     expect(debugSpy).toHaveBeenCalledWith(expect.stringContaining('game-b'));
     expect(debugSpy).toHaveBeenCalledWith(

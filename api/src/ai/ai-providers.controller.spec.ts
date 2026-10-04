@@ -132,7 +132,7 @@ describe('AiProvidersController', () => {
       mockRegistry.list.mockReturnValue([provider]);
       mockSettings.get.mockResolvedValue('sk-test');
       const result = await controller.listProviders();
-      expect(result[0].configured).toBe(true);
+      expect(result[0]?.configured).toBe(true);
     });
   });
 

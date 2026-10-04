@@ -11,6 +11,7 @@
 import { and, asc, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { type TestApp } from '../common/testing/test-app';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Scheduler-registry name the expiry cron must register under (AC9). */
 export const LFG_EXPIRY_JOB_NAME = 'LfgExpiryService_expireIntents';
@@ -123,16 +124,19 @@ export async function createGame(
   overrides: Partial<typeof schema.games.$inferInsert> = {},
 ): Promise<typeof schema.games.$inferSelect> {
   gameSeq += 1;
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name,
-      slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${gameSeq}`,
-      coverUrl: null,
-      igdbId: null,
-      ...overrides,
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name,
+        slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${gameSeq}`,
+        coverUrl: null,
+        igdbId: null,
+        ...overrides,
+      })
+      .returning(),
+    'inserted game row',
+  );
   return game;
 }
 
@@ -164,27 +168,33 @@ export async function createLineupMatch(
   createdBy: number,
   gameId: number,
 ): Promise<number> {
-  const [lineup] = await testApp.db
-    .insert(schema.communityLineups)
-    .values({
-      title: 'LFG convert target',
-      createdBy,
-      publicSlug: `lfg${Date.now().toString(36)}${gameSeq}`.slice(0, 16),
-    })
-    .returning();
-  const [match] = await testApp.db
-    .insert(schema.communityLineupMatches)
-    // NOTE: `status` / `threshold_met` / `vote_count` are declared with
-    // Drizzle-side defaults but the migrated columns are NOT NULL with no DB
-    // default, so they must be supplied explicitly here.
-    .values({
-      lineupId: lineup.id,
-      gameId,
-      status: 'suggested',
-      thresholdMet: false,
-      voteCount: 0,
-    })
-    .returning();
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'LFG convert target',
+        createdBy,
+        publicSlug: `lfg${Date.now().toString(36)}${gameSeq}`.slice(0, 16),
+      })
+      .returning(),
+    'inserted community lineup row',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      // NOTE: `status` / `threshold_met` / `vote_count` are declared with
+      // Drizzle-side defaults but the migrated columns are NOT NULL with no DB
+      // default, so they must be supplied explicitly here.
+      .values({
+        lineupId: lineup.id,
+        gameId,
+        status: 'suggested',
+        thresholdMet: false,
+        voteCount: 0,
+      })
+      .returning(),
+    'inserted lineup match row',
+  );
   return match.id;
 }
 
@@ -332,18 +342,24 @@ export async function createQuickPlayEvent(
   startedAt: Date,
   overrides: Partial<typeof schema.events.$inferInsert> = {},
 ): Promise<number> {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Quick Play session',
-      creatorId,
-      gameId,
-      isAdHoc: true,
-      adHocStatus: 'live',
-      duration: [startedAt, new Date(startedAt.getTime() + 2 * 60 * 60 * 1000)],
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Quick Play session',
+        creatorId,
+        gameId,
+        isAdHoc: true,
+        adHocStatus: 'live',
+        duration: [
+          startedAt,
+          new Date(startedAt.getTime() + 2 * 60 * 60 * 1000),
+        ],
+        ...overrides,
+      })
+      .returning(),
+    'inserted quick play event row',
+  );
   return event.id;
 }
 

@@ -12,6 +12,7 @@ import type { ChatInputCommandInteraction } from 'discord.js';
 import { HelpCommand } from './help.command';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 import { colorForState } from '../embeds/embed-chrome.helpers';
+import { at } from '../../common/testing/narrow';
 
 interface ReplyPayload {
   embeds: { data: { description?: string } }[];
@@ -73,7 +74,7 @@ describe('HelpCommand — shared chrome (ROK-1477)', () => {
     const payload = reply.mock.calls[0]?.[0] as {
       embeds: { data: Record<string, unknown> }[];
     };
-    return payload.embeds[0].data;
+    return at(payload.embeds, 0).data;
   }
 
   it('carries the BOT COMMANDS author line', async () => {

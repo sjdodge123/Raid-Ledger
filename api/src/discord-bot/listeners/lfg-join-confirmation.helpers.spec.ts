@@ -10,6 +10,7 @@
  *  - the time must be Discord timestamp markup, never a server-formatted clock.
  */
 import { ButtonStyle } from 'discord.js';
+import { at } from '../../common/testing/narrow';
 import type { LfgIntentResponseDto } from '@raid-ledger/contract';
 import { LFG_INVITE_VIEW_LABEL } from '../embeds/lfg-view-group-button.helpers';
 import {
@@ -193,7 +194,7 @@ describe('buildLfgJoinConfirmation — the View button (walk feedback 4)', () =>
     );
 
     expect(built.components).toHaveLength(1);
-    const buttons = built.components[0].toJSON().components;
+    const buttons = at(built.components, 0).toJSON().components;
     expect(buttons).toHaveLength(1);
     expect(buttons[0]).toMatchObject({
       style: ButtonStyle.Link,

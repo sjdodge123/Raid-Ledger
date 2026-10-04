@@ -56,9 +56,9 @@ describe('EventDetailService — PUG slot visibility (ROK-1626)', () => {
     const { pugs } = await buildService().findDetail(7, null);
 
     expect(pugs).toHaveLength(1);
-    expect(pugs[0].inviteCode).toBeNull();
-    expect(pugs[0].serverInviteUrl).toBeNull();
-    expect(pugs[0].discordUserId).toBeNull();
+    expect(pugs[0]?.inviteCode).toBeNull();
+    expect(pugs[0]?.serverInviteUrl).toBeNull();
+    expect(pugs[0]?.discordUserId).toBeNull();
   });
 
   it('still shows a logged-out viewer that the slot exists', async () => {

@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('GET /games/discover dynamic rows (ROK-567)', () => {
   let testApp: TestApp;
@@ -23,10 +24,13 @@ describe('GET /games/discover dynamic rows (ROK-567)', () => {
     name: string,
     vector: number[],
   ): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
+        .returning(),
+      'game',
+    );
     await testApp.db.execute(sql`
       INSERT INTO game_taste_vectors (game_id, vector, dimensions, confidence, signal_hash)
       VALUES (
@@ -45,19 +49,22 @@ describe('GET /games/discover dynamic rows (ROK-567)', () => {
       'Dynamic Candidate',
       [1, 0, 0, 0, 0, 0, 0],
     );
-    const [sugg] = await testApp.db
-      .insert(schema.discoveryCategorySuggestions)
-      .values({
-        name: 'Dynamic Row Category',
-        description: 'x',
-        categoryType: 'trend',
-        themeVector: [1, 0, 0, 0, 0, 0, 0],
-        status: 'approved',
-        populationStrategy: 'fixed',
-        sortOrder: 2000,
-        candidateGameIds: [gameId],
-      })
-      .returning({ id: schema.discoveryCategorySuggestions.id });
+    const [sugg] = nonEmpty(
+      await testApp.db
+        .insert(schema.discoveryCategorySuggestions)
+        .values({
+          name: 'Dynamic Row Category',
+          description: 'x',
+          categoryType: 'trend',
+          themeVector: [1, 0, 0, 0, 0, 0, 0],
+          status: 'approved',
+          populationStrategy: 'fixed',
+          sortOrder: 2000,
+          candidateGameIds: [gameId],
+        })
+        .returning({ id: schema.discoveryCategorySuggestions.id }),
+      'sugg',
+    );
 
     const res = await testApp.request.get('/games/discover');
     expect(res.status).toBe(200);

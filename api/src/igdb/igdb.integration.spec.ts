@@ -12,6 +12,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq, and } from 'drizzle-orm';
+import { defined } from '../common/testing/narrow';
 
 /** Insert a test game directly and return its ID. */
 async function insertTestGame(
@@ -31,7 +32,7 @@ async function insertTestGame(
       ...overrides,
     })
     .returning();
-  return game;
+  return defined(game, 'inserted game');
 }
 
 function describeGamesIGDB() {
@@ -296,7 +297,7 @@ function describeGamesIGDB() {
         .where(eq(schema.gameInterests.gameId, game.id));
 
       expect(interests.length).toBe(1);
-      expect(interests[0].source).toBe('manual');
+      expect(interests[0]?.source).toBe('manual');
     });
 
     it('should be idempotent when adding interest twice', async () => {

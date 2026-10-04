@@ -19,14 +19,17 @@ import { RateLimit } from '../throttler/rate-limit.decorator';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import { validateSteamReturnTo } from './steam-link-returnto.helpers';
+import { startSteamPostLinkSync } from './steam-link-autosync.helpers';
 import {
   LinkNonceService,
   LINK_REQUEST_EXPIRED_MESSAGE,
 } from '../auth/link-nonce.service';
+import { consumeBrowserBoundNonce } from '../auth/link-nonce-cookie.helpers';
 import {
-  ITAD_BACKGROUND_FETCH,
-  ITAD_INTERACTIVE_FETCH,
-} from '../itad/itad.constants';
+  assertLinkStateBoundToBrowser,
+  bindLinkStateToBrowser,
+} from '../auth/link-state-cookie.helpers';
+import { ITAD_INTERACTIVE_FETCH } from '../itad/itad.constants';
 import {
   buildSteamOpenIdUrl,
   verifySteamOpenId,
@@ -143,10 +146,19 @@ export class SteamAuthController {
     res.redirect(`${clientUrl}${returnTo}?steam=error&message=${msg}`);
   }
 
+  /** Every GET-hop miss: one 302 to the integrations error landing (D7). */
+  private redirectLinkExpired(res: Response, clientUrl: string): void {
+    const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
+    res.redirect(
+      `${clientUrl}/profile/integrations?steam=error&message=${msg}`,
+    );
+  }
+
   /**
    * GET /auth/steam/link?nonce= — initiates Steam OpenID 2.0 linking. The
    * nonce (POST /auth/steam/link/start, ROK-1630) is single-use and carries
-   * the user id + allowlisted returnTo; every miss gets the same error 302.
+   * the user id + allowlisted returnTo, and only counts from the browser that
+   * holds its cookie; every miss gets the same error 302.
    */
   @RateLimit('auth')
   @Get('link')
@@ -156,12 +168,15 @@ export class SteamAuthController {
     @Res() res: Response,
   ) {
     const clientUrl = this.getClientUrl(req);
-    const claims = await this.linkNonceService.consume('steam', nonce);
+    const claims = await consumeBrowserBoundNonce(
+      this.linkNonceService,
+      'steam',
+      nonce,
+      req,
+      res,
+    );
     if (!claims) {
-      const msg = encodeURIComponent(LINK_REQUEST_EXPIRED_MESSAGE);
-      res.redirect(
-        `${clientUrl}/profile/integrations?steam=error&message=${msg}`,
-      );
+      this.redirectLinkExpired(res, clientUrl);
       return;
     }
     const returnTo = validateSteamReturnTo(claims.returnTo);
@@ -169,11 +184,23 @@ export class SteamAuthController {
       this.redirectSteamNotConfigured(res, clientUrl, returnTo);
       return;
     }
+    this.redirectToSteamOpenId(req, res, claims.userId, returnTo);
+  }
+
+  /** 302 to Steam OpenID with a signed `steam_link` state in return_to. */
+  private redirectToSteamOpenId(
+    req: Request,
+    res: Response,
+    userId: number,
+    returnTo: string,
+  ): void {
     const state = this.signState({
-      userId: claims.userId,
+      userId,
       action: 'steam_link',
       timestamp: Date.now(),
       returnTo,
+      // Binds the state to this browser through the callback (ROK-1366).
+      r: bindLinkStateToBrowser(res, 'steam'),
     });
     const callbackUrl = `${this.getApiBaseUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
     res.redirect(buildSteamOpenIdUrl(callbackUrl));
@@ -193,7 +220,11 @@ export class SteamAuthController {
     const clientUrl = this.getClientUrl(req);
     const returnTo = this.extractReturnToFromState(query.state);
     try {
-      const { userId, steamId } = await this.processLinkCallback(query);
+      const { userId, steamId } = await this.processLinkCallback(
+        query,
+        req,
+        res,
+      );
       const isPublic = await this.checkAndSyncSteam(userId, steamId);
       const privacyParam = isPublic ? '' : '&steam_private=true';
       res.redirect(`${clientUrl}${returnTo}?steam=success${privacyParam}`);
@@ -216,11 +247,14 @@ export class SteamAuthController {
   /** Process the Steam link callback: verify state, verify OpenID, link account. */
   private async processLinkCallback(
     query: Record<string, string>,
+    req: Request,
+    res: Response,
   ): Promise<{ userId: number; steamId: string }> {
     if (!query.state) throw new Error('Missing state parameter');
     const stateData = this.verifyState(query.state);
     if (!stateData || stateData.action !== 'steam_link')
       throw new Error('Invalid or tampered state parameter');
+    assertLinkStateBoundToBrowser(req, res, 'steam', stateData.r);
     const userId = stateData.userId as number;
     const steamId = await verifySteamOpenId(query);
     if (!steamId) throw new Error('Steam verification failed');
@@ -239,19 +273,12 @@ export class SteamAuthController {
     const profile = await getPlayerSummary(apiKey, steamId);
     const isPublic = profile?.communityvisibilitystate === 3;
     if (isPublic) {
-      this.steamService.syncLibrary(userId).catch((err: unknown) => {
-        this.logger.warn(
-          `Auto-sync library after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        );
-      });
-      // Background (fire-and-forget): ITAD discovery waits out a 429 pause.
-      this.steamWishlistService
-        .syncWishlist(userId, ITAD_BACKGROUND_FETCH)
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `Auto-sync wishlist after Steam link failed for user ${userId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        });
+      startSteamPostLinkSync(
+        this.steamService,
+        this.steamWishlistService,
+        this.logger,
+        userId,
+      );
     }
     return isPublic;
   }

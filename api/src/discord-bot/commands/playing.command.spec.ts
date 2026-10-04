@@ -6,6 +6,7 @@ import { colorForState } from '../embeds/embed-chrome.helpers';
 import { PlayingCommand } from './playing.command';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { at } from '../../common/testing/narrow';
 
 /** Build a ChatInputCommandInteraction-like mock. */
 function makeChatInteraction(gameName: string | null = null) {
@@ -252,7 +253,7 @@ describe('PlayingCommand — shared chrome (ROK-1477)', () => {
     const payload = interaction.reply.mock.calls[0][0] as {
       embeds: { data: { color?: number; author?: { name: string } } }[];
     };
-    return payload.embeds[0].data;
+    return at(payload.embeds, 0).data;
   }
 
   it('names the SET outcome in the author line', async () => {
@@ -297,7 +298,9 @@ describe('PlayingCommand — LIKE wildcards in the game name (TDB:960)', () => {
       const module = await buildModule(db, detector);
       const command = module.get(PlayingCommand);
       await command.handleInteraction(makeChatInteraction(typed) as never);
-      const chain = db.select.mock.results[0].value as { where: jest.Mock };
+      const chain = at(db.select.mock.results, 0).value as {
+        where: jest.Mock;
+      };
       const predicate: unknown = chain.where.mock.calls[0][0];
       expect(boundStrings(predicate)).toContain(expected);
       // The override itself keeps what the user typed, unescaped.

@@ -185,8 +185,8 @@ function describeGameTime() {
         .where(eq(schema.gameTimeTemplates.userId, userId));
 
       expect(dbRows.length).toBe(1);
-      expect(dbRows[0].dayOfWeek).toBe(6); // DB convention: Sun=6
-      expect(dbRows[0].startHour).toBe(10);
+      expect(dbRows[0]?.dayOfWeek).toBe(6); // DB convention: Sun=6
+      expect(dbRows[0]?.startHour).toBe(10);
     });
   }
   describe('template save and retrieve', () =>
@@ -345,7 +345,7 @@ function describeGameTime() {
         );
 
       expect(rows.length).toBe(1);
-      expect(rows[0].status).toBe('available');
+      expect(rows[0]?.status).toBe('available');
     }
     it('should upsert on same (userId, date, hour) rather than duplicate', () =>
       testUpsertOnSameRatherThanDuplicate());

@@ -324,7 +324,7 @@ describe('MatchDetailResponseSchema (ROK-964)', () => {
     if (result.success) {
       expect(result.data.gameName).toBe('Test Game');
       expect(result.data.members).toHaveLength(1);
-      expect(result.data.members[0].displayName).toBe('Player1');
+      expect(result.data.members[0]?.displayName).toBe('Player1');
     }
   });
 });
@@ -372,8 +372,8 @@ describe('SchedulePollResponseSchema (ROK-964)', () => {
     const result = SchedulePollResponseSchema.safeParse(validPoll);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.slots[0].votes).toHaveLength(2);
-      expect(result.data.slots[0].votes[0].displayName).toBe('Player1');
+      expect(result.data.slots[0]?.votes).toHaveLength(2);
+      expect(result.data.slots[0]?.votes[0]?.displayName).toBe('Player1');
     }
   });
 });
