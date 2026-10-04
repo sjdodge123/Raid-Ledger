@@ -233,7 +233,7 @@ Root-only regardless of family — verify these at the root, never in a scoped p
 |---|---|---|
 | `color-scheme: dark/light` | `:619-641` | Native form controls, scrollbars, UA widgets |
 | Page background | `body` `:633`, `#root` `:640` | A scoped column must paint its own `bg-backdrop` |
-| quest-log parchment | `[data-variant="quest-log"] body::before` `:1310`, `body::after` `:1323` | Scoped quest-log gets panels but no page texture |
+| quest-log parchment | `[data-variant="quest-log"] body::before` `:1339`, `body::after` `:1352` | Scoped quest-log gets panels but no page texture |
 | Ambient particles | `components/ui/ThemeParticles.tsx` | Mounted once at app level (§2.7) |
 
 ---

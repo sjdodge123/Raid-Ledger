@@ -104,7 +104,7 @@ including `in oklab` — `components/features/game-time/phone/week-strip.fills.t
 
 **Themes.** Fifteen schemes (`web/src/stores/theme-registry.ts`). `data-scheme` on `<html>` swaps every
 value — except `quest-log`, applied via `data-variant` (`theme-helpers.ts:53,76-82`; tokens at
-`index.css:1206`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
+`index.css:1269`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
 block `index.css:106`, plus per-scheme re-overrides `:199` `sky`, `:251` `dawn`, `:303` `holy`, `:355`
 `celestial` — see checklist item 7). Dark family: `default-dark`, `space`, `underwater`, `obsidian`,
 `ember`, `arctic`, `bloodmoon`, `forest`, `fel`. Every colour must be a token or a §2.2 accent hue — a raw
@@ -113,8 +113,8 @@ hex is a bug in 14 of the 15 themes.
 **The two families are not symmetric:** light tokens sit on *unqualified* `[data-scheme=...]` selectors
 and therefore cascade into nested scopes, while the dark tokens are declared on `@theme` (`:32`) and
 `html` (`:96`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
-either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1277`,
-`:1290`) — full list in `docs/design-system-tokens.md` §4.
+either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1339`,
+`:1352`) — full list in `docs/design-system-tokens.md` §4.
 
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
