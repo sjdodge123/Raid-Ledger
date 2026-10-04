@@ -21,23 +21,14 @@ updates:
       # permanent and self-reproducing: #1062 accumulated 36 commits (35 of
       # them `Merge branch 'main'`) and still failed install, and its
       # replacement #1131 failed the same way at its very first commit
-      # (`Missing: @nestjs/common@12.0.1 from lock file`). CI could not vouch
-      # for the migration either way — GitHub's path filter classifies a
-      # deps-only diff as `code` (lint only), never `api`, so unit +
-      # integration SKIP entirely and auto-merge would land a framework major
-      # untested. Closed #1062 and #1131 on 2026-09-09 for this reason. NestJS
-      # 11 -> 12 comes back as its own story with a `--full` gate; minor and
-      # patch nestjs updates still flow through the `nestjs` group below.
+      # (`Missing: @nestjs/common@12.0.1 from lock file`), so CI never got as
+      # far as a test. The path filter is not the gap: `api/package.json` and
+      # `package-lock.json` sit in its `api` and `web` filters (since #1073),
+      # so a deps-only diff does run unit + integration. Closed #1062 and #1131
+      # on 2026-09-09 because the desync cannot clear itself. NestJS 11 -> 12
+      # comes back as its own story with a `--full` gate; minor and patch
+      # nestjs updates still flow through the `nestjs` group below.
       - dependency-name: "@nestjs/*"
-        update-types: ["version-update:semver-major"]
-      # @testcontainers/* 12.x is a real regression on this repo, not a flake
-      # (ROK-1529, 2026-09-11, PR #1142). With Node 22 in place the import-time
-      # undici error is gone, but lfg-board-parity.integration.spec.ts loses its
-      # container connection (ECONNRESET on the Testcontainers-mapped host port)
-      # on every run across different Jest --randomize seeds, while main on 11.x
-      # passes the same shard 426/426. Majors come back as their own story with
-      # a spec-loop reproduction (ROK-1529); 11.x minors/patches still flow.
-      - dependency-name: "@testcontainers/*"
         update-types: ["version-update:semver-major"]
     groups:
       nestjs:
