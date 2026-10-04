@@ -137,7 +137,10 @@ function buildUpdateChain(): Record<string, jest.Mock> {
 }
 
 function buildMockDb(): Record<string, jest.Mock> {
-  const mockDb: Record<string, jest.Mock> = {
+  const mockDb: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  > = {
     select: jest.fn().mockReturnValue(buildSelectChain()),
     insert: jest.fn().mockReturnValue(buildInsertChain()),
     delete: jest.fn().mockReturnValue(buildDeleteChain()),

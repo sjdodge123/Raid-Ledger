@@ -19,6 +19,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -26,15 +27,18 @@ async function createMember(
   username: string,
   opts: { deactivated?: boolean } = {},
 ) {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${username}@test.local`,
-      username,
-      role: 'member',
-      deactivatedAt: opts.deactivated ? new Date() : null,
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${username}@test.local`,
+        username,
+        role: 'member',
+        deactivatedAt: opts.deactivated ? new Date() : null,
+      })
+      .returning(),
+    `inserted member ${username}`,
+  );
   return user;
 }
 

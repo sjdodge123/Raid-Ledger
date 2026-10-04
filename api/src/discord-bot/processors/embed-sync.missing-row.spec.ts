@@ -71,7 +71,7 @@ const job = (attemptsMade = 0) =>
 
 describe('EmbedSyncProcessor — missing tracked message (ROK-1622)', () => {
   let processor: EmbedSyncProcessor;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'select' | 'update', jest.Mock>;
   let scheduledEvent: { updateDescription: jest.Mock };
 
   /** `process()` selects tracked messages first, then the event row. */

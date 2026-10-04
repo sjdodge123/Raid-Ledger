@@ -31,6 +31,7 @@ import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LineupsGateway } from './lineups.gateway';
 import { LineupNotificationService } from './lineup-notification.service';
 import { NOBODY_NOMINATED_REASON } from './lineup-building-deadline.helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 const EXTENDED = 'lineup_deadline_extended';
 
@@ -82,14 +83,17 @@ function describeBuildingDeadlineFloor() {
   async function createMember(tag: string): Promise<Member> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('Floor1!!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@floor.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@floor.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@floor.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -103,15 +107,18 @@ function describeBuildingDeadlineFloor() {
   }
 
   async function createGame(tag: string) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Floor Game ${tag}`,
-        slug: `floor-game-${tag}-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Floor Game ${tag}`,
+          slug: `floor-game-${tag}-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     return game;
   }
 
@@ -166,7 +173,7 @@ function describeBuildingDeadlineFloor() {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
       const game = await createGame(`${tag}-${i}`);
-      await nominate(nominators[i], lineupId, game.id);
+      await nominate(at(nominators, i), lineupId, game.id);
       games.push(game);
     }
     expect((await readLineup(lineupId)).status).toBe('building');
@@ -174,10 +181,13 @@ function describeBuildingDeadlineFloor() {
   }
 
   async function readLineup(lineupId: number) {
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId)),
+      'lineup row',
+    );
     return row;
   }
 
@@ -268,8 +278,8 @@ function describeBuildingDeadlineFloor() {
     );
     const extensions = await activityRows(lineupId, EXTENDED);
     expect(extensions).toHaveLength(1);
-    expect(extensions[0].actorId).toBeNull();
-    expect(extensions[0].metadata).toEqual(
+    expect(at(extensions, 0).actorId).toBeNull();
+    expect(extensions[0]?.metadata).toEqual(
       expect.objectContaining({ nominationCount: 0 }),
     );
     await expectVotingJobParked(`lineup-phase-${lineupId}-voting`);
@@ -286,8 +296,8 @@ function describeBuildingDeadlineFloor() {
     expect(afterSecond.phaseDeadline).toBeNull();
     const aborted = await activityRows(lineupId, 'lineup_aborted');
     expect(aborted).toHaveLength(1);
-    expect(aborted[0].actorId).toBeNull();
-    expect(aborted[0].metadata).toEqual({ reason: NOBODY_NOMINATED_REASON });
+    expect(at(aborted, 0).actorId).toBeNull();
+    expect(aborted[0]?.metadata).toEqual({ reason: NOBODY_NOMINATED_REASON });
     expect(await activityRows(lineupId, EXTENDED)).toHaveLength(1);
     await settle();
     expect(notifyVotingOpen).not.toHaveBeenCalled();
@@ -314,7 +324,7 @@ function describeBuildingDeadlineFloor() {
     expect(row.phaseDeadline?.getTime()).toBeGreaterThan(before.getTime());
     const extensions = await activityRows(lineupId, EXTENDED);
     expect(extensions).toHaveLength(1);
-    expect(extensions[0].metadata).toEqual(
+    expect(extensions[0]?.metadata).toEqual(
       expect.objectContaining({ nominationCount: 1 }),
     );
     expect(votingSchedules(lineupId)).toHaveLength(schedulesBeforeFire + 1);
@@ -370,7 +380,7 @@ function describeBuildingDeadlineFloor() {
     const g1 = await createGame('f-1');
     const g2 = await createGame('f-2');
     await nominate(adminToken, lineupId, g1.id);
-    await nominate(members[0].token, lineupId, g2.id);
+    await nominate(at(members, 0).token, lineupId, g2.id);
     await expireDeadline(lineupId);
     await fireVotingDeadline(lineupId);
     expect((await readLineup(lineupId)).status).toBe('voting');
@@ -378,7 +388,7 @@ function describeBuildingDeadlineFloor() {
     // Operator reverts; nominators pull their games back out.
     expect((await patchStatus(lineupId, 'building')).status).toBe(200);
     await removeNomination(adminToken, lineupId, g1.id);
-    await removeNomination(members[0].token, lineupId, g2.id);
+    await removeNomination(at(members, 0).token, lineupId, g2.id);
     await expireDeadline(lineupId);
 
     await fireVotingDeadline(lineupId);

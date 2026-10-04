@@ -30,6 +30,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 import * as schema from '../drizzle/schema';
 import { BackupService } from './backup.service';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 const execFileAsync = promisify(execFile);
 
@@ -268,7 +269,7 @@ function describeBackupCRUD() {
         listRes.body.backups as { type: string; filename: string }[]
       ).filter((b) => b.type === 'migration');
       expect(migrationBackups.length).toBeGreaterThanOrEqual(1);
-      expect(migrationBackups[0].filename).toMatch(/^pre_restore_/);
+      expect(migrationBackups[0]?.filename).toMatch(/^pre_restore_/);
     });
   }
   describe('POST /admin/backups/:type/:filename/restore', () =>
@@ -314,7 +315,7 @@ async function getDataSegmentTables(dumpFile: string): Promise<string[]> {
   const tables: string[] = [];
   for (const line of stdout.split('\n')) {
     const match = line.match(/^\s*\d+;\s+\d+\s+\d+\s+TABLE DATA\s+\S+\s+(\S+)/);
-    if (match) tables.push(match[1]);
+    if (match) tables.push(defined(match[1], 'TABLE DATA name group'));
   }
   return tables;
 }
@@ -330,7 +331,7 @@ function parseSchemaTableLine(line: string): string | null {
   const match = line.match(
     /^\s*\d+;\s+\d+\s+\d+\s+TABLE\s+(?!DATA\s)\S+\s+(\S+)/,
   );
-  return match ? match[1] : null;
+  return match ? defined(match[1], 'TABLE name group') : null;
 }
 
 /**
@@ -500,14 +501,17 @@ describeBackup('Backup sanitization (integration, ROK-1279)', () => {
 
 /** Build a non-admin user JWT by reaching into the running app's JwtService. */
 async function signMemberToken(testApp: TestApp): Promise<string> {
-  const [member] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: 'local:member@test.local',
-      username: 'member-user',
-      role: 'member',
-    })
-    .returning();
+  const [member] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:member@test.local',
+        username: 'member-user',
+        role: 'member',
+      })
+      .returning(),
+    'member',
+  );
   const jwtService = testApp.app.get(JwtService);
   return jwtService.sign({ sub: member.id, username: member.username });
 }

@@ -11,6 +11,7 @@
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { upsertGamesFromApi, upsertSingleGameRow } from './igdb-upsert.helpers';
 import { upsertItadGame } from './igdb-itad-upsert.helpers';
@@ -39,18 +40,21 @@ async function seedRow(
   shortName: string | null = 'WoW Classic Era',
 ) {
   await testApp.db.delete(schema.games).where(eq(schema.games.slug, slug));
-  const [row] = await testApp.db
-    .insert(schema.games)
-    .values({ slug, name, igdbId, shortName })
-    .returning();
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ slug, name, igdbId, shortName })
+      .returning(),
+    'seeded game row',
+  );
   return row;
 }
 
 async function readRow(id: number) {
-  const [row] = await testApp.db
-    .select()
-    .from(schema.games)
-    .where(eq(schema.games.id, id));
+  const [row] = nonEmpty(
+    await testApp.db.select().from(schema.games).where(eq(schema.games.id, id)),
+    `game row ${id}`,
+  );
   return row;
 }
 

@@ -8,7 +8,7 @@ import { AttendanceService } from './attendance.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
 let service: AttendanceService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'select' | 'update', jest.Mock> & Record<string, jest.Mock>;
 
 const pastEvent = {
   id: 1,
@@ -96,9 +96,11 @@ function joinedSelectChain(value: unknown[]) {
 }
 
 async function setupEach() {
-  mockDb = {};
+  mockDb = {
+    select: jest.fn().mockReturnThis(),
+    update: jest.fn().mockReturnThis(),
+  };
   const chainMethods = [
-    'select',
     'from',
     'where',
     'orderBy',
@@ -109,7 +111,6 @@ async function setupEach() {
     'insert',
     'values',
     'returning',
-    'update',
     'set',
     'delete',
     'groupBy',

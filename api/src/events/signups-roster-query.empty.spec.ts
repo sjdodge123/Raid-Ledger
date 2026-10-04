@@ -255,8 +255,8 @@ describe('partitionAssignments (ROK-914)', () => {
 
     const { pool, assigned } = partitionAssignments(rows);
 
-    expect(pool[0].signupId).toBe(99);
-    expect(assigned[0].signupId).toBe(100);
+    expect(pool[0]?.signupId).toBe(99);
+    expect(assigned[0]?.signupId).toBe(100);
   });
 
   it('assigned row slot matches the roster_assignments role', () => {
@@ -269,7 +269,7 @@ describe('partitionAssignments (ROK-914)', () => {
 
     const { assigned } = partitionAssignments(rows);
 
-    expect(assigned[0].slot).toBe('healer');
+    expect(assigned[0]?.slot).toBe('healer');
   });
 
   it('pool row slot is null when no assignment', () => {
@@ -279,6 +279,6 @@ describe('partitionAssignments (ROK-914)', () => {
 
     const { pool } = partitionAssignments(rows);
 
-    expect(pool[0].slot).toBeNull();
+    expect(pool[0]?.slot).toBeNull();
   });
 });

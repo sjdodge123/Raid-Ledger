@@ -6,6 +6,7 @@ import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { MessageFlags } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot.constants';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
+import { at } from '../../common/testing/narrow';
 
 const originalClientUrl = process.env.CLIENT_URL;
 
@@ -20,6 +21,11 @@ const mockInteraction = (eventInput: string) => ({
   editReply: jest.fn().mockResolvedValue(undefined),
   options: { getString: jest.fn().mockReturnValue(eventInput) },
 });
+
+/** The first argument of the first `editReply` call; throws when there was none. */
+function firstReply(interaction: ReturnType<typeof mockInteraction>): unknown {
+  return at(at(interaction.editReply.mock.calls as unknown[][], 0), 0);
+}
 
 function makeRoster(
   assignments: { slot: string | null; username: string }[] = [],
@@ -67,10 +73,10 @@ async function buildModule(mockDb: { select: jest.Mock }) {
 }
 
 function getEmbedDescription(interaction: ReturnType<typeof mockInteraction>) {
-  const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+  const call = firstReply(interaction) as {
     embeds: { data: { description?: string } }[];
   };
-  return call.embeds[0].data.description ?? '';
+  return at(call.embeds, 0).data.description ?? '';
 }
 
 function restoreClientUrl() {
@@ -369,10 +375,10 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
       makeRoster() as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = firstReply(interaction) as {
       embeds: { data: { color?: number } }[];
     };
-    expect(call.embeds[0].data.color).toBe(EMBED_COLORS.SYSTEM);
+    expect(at(call.embeds, 0).data.color).toBe(EMBED_COLORS.SYSTEM);
   });
 
   it('should include footer with total and max', async () => {
@@ -388,11 +394,11 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
       roster as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = firstReply(interaction) as {
       embeds: { data: { footer?: { text: string } } }[];
     };
-    expect(call.embeds[0].data.footer?.text).toContain('2 total signups');
-    expect(call.embeds[0].data.footer?.text).toContain('25');
+    expect(call.embeds[0]?.data.footer?.text).toContain('2 total signups');
+    expect(call.embeds[0]?.data.footer?.text).toContain('25');
   });
 
   /**
@@ -410,10 +416,12 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
       makeRoster() as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = firstReply(interaction) as {
       embeds: { data: { author?: { name: string } } }[];
     };
-    expect(call.embeds[0].data.author?.name).toBe(COMMAND_REPLY_AUTHORS.ROSTER);
+    expect(at(call.embeds, 0).data.author?.name).toBe(
+      COMMAND_REPLY_AUTHORS.ROSTER,
+    );
   });
 
   it('folds the signup count into ONE chrome footer', async () => {
@@ -429,10 +437,10 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
       roster as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = firstReply(interaction) as {
       embeds: { data: { footer?: { text: string } } }[];
     };
-    expect(call.embeds[0].data.footer?.text).toBe(
+    expect(call.embeds[0]?.data.footer?.text).toBe(
       'Raid Ledger · 2 total signups / 25 slots',
     );
   });
@@ -446,10 +454,10 @@ describe('RosterViewCommand — roster: pool & color & footer', () => {
       makeRoster() as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = firstReply(interaction) as {
       embeds: { data: { footer?: { text: string } } }[];
     };
-    expect(call.embeds[0].data.footer?.text).not.toContain('slots');
+    expect(at(call.embeds, 0).data.footer?.text).not.toContain('slots');
   });
 });
 
@@ -483,7 +491,7 @@ describe('RosterViewCommand — CLIENT_URL button present', () => {
       makeRoster() as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = firstReply(interaction) as {
       components: unknown[];
     };
     expect(call.components.length).toBeGreaterThan(0);
@@ -499,7 +507,7 @@ describe('RosterViewCommand — CLIENT_URL button present', () => {
       makeRoster() as unknown as RosterReturn,
     );
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = firstReply(interaction) as {
       components: unknown[];
     };
     expect(call.components).toHaveLength(0);
@@ -606,11 +614,11 @@ describe('RosterViewCommand — autocomplete: upcoming & format', () => {
     await command.handleAutocomplete(
       interaction as unknown as AutocompleteParam,
     );
-    const callArgs = (mockRespond.mock.calls as unknown[][])[0][0] as {
+    const callArgs = at(at(mockRespond.mock.calls as unknown[][], 0), 0) as {
       name: string;
       value: string;
     }[];
-    expect(typeof callArgs[0].value).toBe('string');
-    expect(callArgs[0].value).toBe('42');
+    expect(typeof at(callArgs, 0).value).toBe('string');
+    expect(callArgs[0]?.value).toBe('42');
   });
 });

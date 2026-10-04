@@ -10,6 +10,7 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { utcIsoText } from '../../drizzle/timestamp-utils';
 import type { EphemeralEventRow } from '../services/ephemeral-voice.db-helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -36,8 +37,10 @@ export async function loadLfgNowEphemeralRow(
       id: schema.events.id,
       title: schema.events.title,
       gameId: schema.events.gameId,
-      startTime: sql<string>`lower(${schema.events.duration})::text`,
-      endTime: sql<string>`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))::text`,
+      startTime: utcIsoText(sql`lower(${schema.events.duration})`),
+      endTime: utcIsoText(
+        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))`,
+      ),
       recurrenceGroupId: schema.events.recurrenceGroupId,
       ephemeralVoiceEnabled: schema.events.ephemeralVoiceEnabled,
       ephemeralVoiceChannelId: schema.events.ephemeralVoiceChannelId,

@@ -14,6 +14,7 @@ import {
 } from './scheduled-event.helpers';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ScheduledEventRecord } from './scheduled-event.db-helpers';
+import { parseEventTimestampUtc } from './scheduled-event.revalidate';
 
 type Guild = NonNullable<ReturnType<DiscordBotClientService['getGuild']>>;
 
@@ -265,8 +266,8 @@ export async function tryCreateNewEvent(
     () =>
       guild.scheduledEvents.create({
         name: buildScheduledEventName(eventData),
-        scheduledStartTime: new Date(eventData.startTime),
-        scheduledEndTime: new Date(eventData.endTime),
+        scheduledStartTime: parseEventTimestampUtc(eventData.startTime),
+        scheduledEndTime: parseEventTimestampUtc(eventData.endTime),
         privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
         entityType: GuildScheduledEventEntityType.Voice,
         channel: voiceChannelId,
@@ -296,8 +297,8 @@ export async function tryEditFullEvent(
     () =>
       guild.scheduledEvents.edit(seId, {
         name: name ?? buildScheduledEventName(eventData),
-        scheduledStartTime: new Date(eventData.startTime),
-        scheduledEndTime: new Date(eventData.endTime),
+        scheduledStartTime: parseEventTimestampUtc(eventData.startTime),
+        scheduledEndTime: parseEventTimestampUtc(eventData.endTime),
         description,
         ...(voiceChannelId ? { channel: voiceChannelId } : {}),
       }),

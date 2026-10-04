@@ -26,6 +26,7 @@ import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 function describeNominationTarget() {
   let testApp: TestApp;
@@ -58,14 +59,17 @@ function describeNominationTarget() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('NomTarget1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@nomtarget.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@nomtarget.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@nomtarget.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -94,13 +98,16 @@ function describeNominationTarget() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `NomTarget Game ${i + 1}`,
-          slug: `nomtarget-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `NomTarget Game ${i + 1}`,
+            slug: `nomtarget-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;
@@ -292,10 +299,12 @@ function describeNominationTarget() {
     // 5. The realistic edit: drop a weak game, add a better one. That dips
     //    below the target and re-crosses it — a genuine rising edge, which is
     //    precisely why rising-edge detection ALONE is insufficient.
-    expect((await unnominate(b.token, lineupId, games[4].id)).status).toBe(204);
+    expect((await unnominate(b.token, lineupId, at(games, 4).id)).status).toBe(
+      204,
+    );
     expect(await readStatus(lineupId)).toBe('building');
 
-    const [replacement] = await createGames(1);
+    const [replacement] = nonEmpty(await createGames(1), 'replacement');
     expect((await nominate(b.token, lineupId, replacement.id)).status).toBe(
       201,
     );
@@ -317,10 +326,12 @@ function describeNominationTarget() {
     await settings.set(SETTING_KEYS.LINEUP_AUTO_ADVANCE_PAUSE_TTL_MS, '0');
 
     for (let i = 0; i < 3; i++) {
-      expect((await unnominate(b.token, lineupId, games[4].id)).status).toBe(
-        204,
+      expect(
+        (await unnominate(b.token, lineupId, at(games, 4).id)).status,
+      ).toBe(204);
+      expect((await nominate(b.token, lineupId, at(games, 4).id)).status).toBe(
+        201,
       );
-      expect((await nominate(b.token, lineupId, games[4].id)).status).toBe(201);
       expect(await readStatus(lineupId)).toBe('building');
     }
   });
@@ -350,7 +361,9 @@ function describeNominationTarget() {
 
     // A 6th nomination triggers evaluation. The condition is standing, not
     // crossing, so the lineup must stay put.
-    expect((await nominate(b.token, lineupId, games[5].id)).status).toBe(201);
+    expect((await nominate(b.token, lineupId, at(games, 5).id)).status).toBe(
+      201,
+    );
 
     expect(await readStatus(lineupId)).toBe('building');
   });
@@ -373,20 +386,22 @@ function describeNominationTarget() {
 
     // One entry each from five distinct nominators -> cap ratchets to 25.
     for (const [i, m] of ms.entries()) {
-      expect((await nominate(m.token, lineupId, games[i].id)).status).toBe(201);
+      expect((await nominate(m.token, lineupId, at(games, i).id)).status).toBe(
+        201,
+      );
     }
     // Pad to 21 entries: 21/25 = 84%, under the 90% target.
     for (let i = 5; i < 21; i++) {
-      expect((await nominate(ms[0].token, lineupId, games[i].id)).status).toBe(
-        201,
-      );
+      expect(
+        (await nominate(at(ms, 0).token, lineupId, at(games, i).id)).status,
+      ).toBe(201);
     }
     expect(await readStatus(lineupId)).toBe('building');
 
     // The fifth nominator removes their ONLY entry. Live cap would fall to 20.
-    expect((await unnominate(ms[4].token, lineupId, games[4].id)).status).toBe(
-      204,
-    );
+    expect(
+      (await unnominate(at(ms, 4).token, lineupId, at(games, 4).id)).status,
+    ).toBe(204);
 
     expect(await readStatus(lineupId)).toBe('building');
 
@@ -422,22 +437,25 @@ function describeNominationTarget() {
     const games = await createGames(5);
 
     // A finished lineup whose below-threshold matches are carry-over fodder.
-    const [prev] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Carryover Source',
-        createdBy: members[0].userId,
-        status: 'decided',
-        visibility: 'public',
-        // public_slug is varchar(16).
-        publicSlug: `cs-${Date.now()}`.slice(0, 16),
-      })
-      .returning();
+    const [prev] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Carryover Source',
+          createdBy: at(members, 0).userId,
+          status: 'decided',
+          visibility: 'public',
+          // public_slug is varchar(16).
+          publicSlug: `cs-${Date.now()}`.slice(0, 16),
+        })
+        .returning(),
+      'prev',
+    );
     for (const [i, game] of games.entries()) {
       await testApp.db.insert(schema.communityLineupEntries).values({
         lineupId: prev.id,
         gameId: game.id,
-        nominatedBy: members[i].userId,
+        nominatedBy: at(members, i).userId,
       });
       await testApp.db.insert(schema.communityLineupMatches).values({
         lineupId: prev.id,

@@ -25,6 +25,7 @@
  * heal restores the ORIGINAL row whenever one did not — otherwise the group is
  * left untracked and every later change returns early (E4).
  */
+import { at } from '../../common/testing/narrow';
 import { Logger } from '@nestjs/common';
 import type { EmbedContext } from '../services/discord-embed.factory';
 import { resolveLfgBoardSurface } from '../lfg-board/lfg-board-surface.helpers';
@@ -231,7 +232,7 @@ describe('replaceDeletedPost — the E3 heal never drops a row it cannot replace
     expect(jest.mocked(restoreLfmMessage).mock.calls).toEqual([
       [deps.db, DELETED_ROW],
     ]);
-    expect(jest.mocked(restoreLfmMessage).mock.calls[0][1]).toBe(DELETED_ROW);
+    expect(jest.mocked(restoreLfmMessage).mock.calls[0]?.[1]).toBe(DELETED_ROW);
   });
 
   it('rethrows the POST error, not the restore error, when both fail', async () => {
@@ -285,6 +286,6 @@ describe('replaceDeletedPost — the E3 heal never drops a row it cannot replace
     expect(deleteLfmMessage).toHaveBeenCalledWith(deps.db, 'row-1');
     expect(
       jest.mocked(deleteLfmMessage).mock.invocationCallOrder[0],
-    ).toBeLessThan(sendEmbed.mock.invocationCallOrder[0]);
+    ).toBeLessThan(at(sendEmbed.mock.invocationCallOrder, 0));
   });
 });

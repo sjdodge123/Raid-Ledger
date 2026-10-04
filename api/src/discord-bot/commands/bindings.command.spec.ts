@@ -6,6 +6,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { BindingRecord } from '../services/channel-bindings.service';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 import { colorForState } from '../embeds/embed-chrome.helpers';
+import { at } from '../../common/testing/narrow';
 
 const makeBinding = (
   overrides: Partial<BindingRecord> = {},
@@ -133,7 +134,7 @@ describe('BindingsCommand — empty bindings', () => {
     bindingsService.getBindings.mockResolvedValue([]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0];
+    const replyArg = at(interaction.editReply.mock.calls as unknown[][], 0)[0];
     expect(typeof replyArg).toBe('string');
     expect(replyArg as string).toMatch(/No channel bindings/);
   });
@@ -142,7 +143,7 @@ describe('BindingsCommand — empty bindings', () => {
     bindingsService.getBindings.mockResolvedValue([]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0];
+    const replyArg = at(interaction.editReply.mock.calls as unknown[][], 0)[0];
     expect(replyArg as string).toContain('/bind');
   });
 });
@@ -178,7 +179,7 @@ describe('BindingsCommand — with bindings embed', () => {
     bindingsService.getBindings.mockResolvedValue([makeBinding()]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       components: unknown[];
     };
     expect(call.components.length).toBeGreaterThan(0);
@@ -189,7 +190,7 @@ describe('BindingsCommand — with bindings embed', () => {
     bindingsService.getBindings.mockResolvedValue([makeBinding()]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       components: unknown[];
     };
     expect(call.components).toHaveLength(0);
@@ -243,7 +244,7 @@ describe('BindingsCommand — binding labels: announcements', () => {
     ]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       embeds: Array<{ data: { description?: string } }>;
     };
     expect(call.embeds[0]?.data?.description ?? '').toContain('Any');
@@ -277,7 +278,7 @@ describe('BindingsCommand — game lookup found', () => {
     mockDb.select.mockReturnValueOnce({ from: fromMock });
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       embeds: Array<{ data: { description?: string } }>;
     };
     expect(call.embeds[0]?.data?.description ?? '').toContain(
@@ -295,7 +296,7 @@ describe('BindingsCommand — game lookup found', () => {
     mockDb.select.mockReturnValueOnce({ from: fromMock });
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       embeds: Array<{ data: { description?: string } }>;
     };
     expect(call.embeds[0]?.data?.description ?? '').toContain('Unknown');
@@ -381,10 +382,10 @@ describe('BindingsCommand — shared chrome (ROK-1477)', () => {
     );
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       embeds: { data: Record<string, unknown> }[];
     };
-    return call.embeds[0].data;
+    return at(call.embeds, 0).data;
   }
 
   it('carries the CHANNEL BINDINGS author line, not a bare community name', async () => {

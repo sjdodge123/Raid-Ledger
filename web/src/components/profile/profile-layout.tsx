@@ -6,25 +6,47 @@ import { ProfileSidebar } from './profile-sidebar';
 import { toast } from '../../lib/toast';
 import './integration-hub.css';
 
+/** Query params a Discord/Steam link callback lands with (ROK-1630). */
+const LINK_RESULT_PARAMS = ['linked', 'steam'];
+
+function isProfileRoot(pathname: string): boolean {
+    return pathname === '/profile' || pathname === '/profile/';
+}
+
+/**
+ * Where the bare `/profile` index sends the user. A link-result landing
+ * (legacy `/profile?linked=…` / `/profile?steam=…`) is forwarded to the
+ * Integrations page WITH its query so the result is shown there (ROK-1630).
+ */
+function profileRootTarget(search: string): string {
+    const params = new URLSearchParams(search);
+    const isLinkResult = LINK_RESULT_PARAMS.some((p) => params.has(p));
+    return isLinkResult ? `/profile/integrations${search}` : '/profile/avatar';
+}
+
 function useDiscordLinkCallback(refetch: () => void) {
     const [searchParams, setSearchParams] = useSearchParams();
+    const { pathname } = useLocation();
     const processedRef = useRef(false);
 
     useEffect(() => {
-        if (processedRef.current) return;
+        // At the bare /profile index the forward <Navigate> owns this commit;
+        // clearing params here would navigate back to /profile and win the
+        // race, leaving a blank page (ROK-1630). Handle it after the forward.
+        if (processedRef.current || isProfileRoot(pathname)) return;
         const linked = searchParams.get('linked');
         const message = searchParams.get('message');
         if (linked === 'success') {
             processedRef.current = true;
             toast.success('Discord account linked successfully!');
-            setSearchParams({});
+            setSearchParams({}, { replace: true });
             refetch();
         } else if (linked === 'error') {
             processedRef.current = true;
             toast.error(message || 'Failed to link Discord account');
-            setSearchParams({});
+            setSearchParams({}, { replace: true });
         }
-    }, [searchParams, setSearchParams, refetch]);
+    }, [pathname, searchParams, setSearchParams, refetch]);
 }
 
 function ProfileLoadingSkeleton() {
@@ -60,7 +82,7 @@ export function ProfileLayout() {
     const location = useLocation();
     useDiscordLinkCallback(refetch);
 
-    if (location.pathname === '/profile' || location.pathname === '/profile/') return <Navigate to="/profile/avatar" replace />;
+    if (isProfileRoot(location.pathname)) return <Navigate to={profileRootTarget(location.search)} replace />;
     if (authLoading) return <ProfileLoadingSkeleton />;
     if (!isAuthenticated || !user) return <Navigate to="/" replace />;
     return <ProfileShell />;

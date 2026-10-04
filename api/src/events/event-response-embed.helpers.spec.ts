@@ -13,6 +13,7 @@
  * No Drizzle internals are tested — only the transformation logic.
  */
 import { buildEmbedEventData } from './event-response-embed.helpers';
+import { at } from '../common/testing/narrow';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
@@ -222,7 +223,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions).toHaveLength(1);
-    expect(result.signupMentions![0].username).toBe('alice');
+    expect(at(result.signupMentions ?? [], 0).username).toBe('alice');
   });
 
   it('excludes rows with no discordId and no username', async () => {
@@ -249,7 +250,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
     expect(result.signupMentions).toHaveLength(1);
-    expect(result.signupMentions![0].discordId).toBe('u1');
+    expect(at(result.signupMentions ?? [], 0).discordId).toBe('u1');
   });
 
   it('maps role correctly for assigned user', async () => {
@@ -267,7 +268,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    const mention = result.signupMentions![0];
+    const mention = at(result.signupMentions ?? [], 0);
     expect(mention.role).toBe('healer');
     expect(mention.className).toBe('Paladin');
     expect(mention.preferredRoles).toEqual(['healer']);
@@ -289,7 +290,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(result.signupMentions![0].role).toBeNull();
+    expect(at(result.signupMentions ?? [], 0).role).toBeNull();
   });
 
   // ROK-1460 F2 — the sync path (embed-sync.helpers::toSignupMention) already
@@ -311,7 +312,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(result.signupMentions![0].displayName).toBe('Ana Lyst');
+    expect(at(result.signupMentions ?? [], 0).displayName).toBe('Ana Lyst');
   });
 
   it('renders the bold displayName in the roster, not the username', async () => {
@@ -356,7 +357,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const data = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(data.signupMentions![0].discordUsername).toBe('raider');
+    expect(at(data.signupMentions ?? [], 0).discordUsername).toBe('raider');
     const { embed } = makeFactory().buildEventEmbed(data, {
       communityName: 'Test Guild',
       clientUrl: 'http://localhost:5173',
@@ -380,7 +381,7 @@ describe('buildEmbedEventData — signupMentions filtering', () => {
       ],
     );
     const result = await buildEmbedEventData(db, makeEventDto(), 1);
-    expect(result.signupMentions![0].className).toBeNull();
+    expect(at(result.signupMentions ?? [], 0).className).toBeNull();
   });
 });
 

@@ -13,6 +13,7 @@ import { eq, and, isNull, lt } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 function formatDate(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -36,6 +37,44 @@ afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
+/** Reads one session row by id; throws, naming `what`, when it is missing. */
+async function readSession(
+  id: string,
+  what: string,
+): Promise<typeof schema.gameActivitySessions.$inferSelect> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.gameActivitySessions)
+      .where(eq(schema.gameActivitySessions.id, id))
+      .limit(1),
+    what,
+  );
+  return row;
+}
+
+/** Inserts one closed admin session ending at `endedAt`; throws if none returns. */
+async function insertClosedSession(
+  endedAt: Date,
+  durationSeconds: number,
+): Promise<typeof schema.gameActivitySessions.$inferSelect> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.gameActivitySessions)
+      .values({
+        userId: testApp.seed.adminUser.id,
+        gameId: testApp.seed.game.id,
+        discordActivityName: 'Test Game',
+        startedAt: new Date(endedAt.getTime() - durationSeconds * 1000),
+        endedAt,
+        durationSeconds,
+      })
+      .returning(),
+    'closed session',
+  );
+  return row;
+}
+
 // ===================================================================
 // Game Activity Sessions — Flush & Close
 // ===================================================================
@@ -45,15 +84,18 @@ describe('game activity sessions — persist and close', () => {
     const db = testApp.db;
     const startedAt = new Date();
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Test Game',
-        startedAt,
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Test Game',
+          startedAt,
+        })
+        .returning(),
+      'session',
+    );
 
     expect(session.userId).toBe(testApp.seed.adminUser.id);
     expect(session.gameId).toBe(testApp.seed.game.id);
@@ -68,22 +110,25 @@ describe('game activity sessions — persist and close', () => {
       .limit(1);
 
     expect(readBack).toBeDefined();
-    expect(readBack.userId).toBe(testApp.seed.adminUser.id);
+    expect(readBack?.userId).toBe(testApp.seed.adminUser.id);
   });
 
   it('should close a session with correct duration calculation', async () => {
     const db = testApp.db;
     const startedAt = new Date(Date.now() - 3600 * 1000);
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Test Game',
-        startedAt,
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Test Game',
+          startedAt,
+        })
+        .returning(),
+      'session',
+    );
 
     const endedAt = new Date();
     const durationSeconds = Math.floor(
@@ -95,11 +140,7 @@ describe('game activity sessions — persist and close', () => {
       .set({ endedAt, durationSeconds })
       .where(eq(schema.gameActivitySessions.id, session.id));
 
-    const [closed] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, session.id))
-      .limit(1);
+    const closed = await readSession(session.id, 'closed session');
 
     expect(closed.endedAt).not.toBeNull();
     expect(closed.durationSeconds).toBeGreaterThanOrEqual(3590);
@@ -125,17 +166,20 @@ describe('game activity sessions — game ID resolution', () => {
       .limit(1);
 
     expect(mapping).toBeDefined();
-    expect(mapping.gameId).toBe(testApp.seed.game.id);
+    expect(mapping?.gameId).toBe(testApp.seed.game.id);
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: mapping.gameId,
-        discordActivityName: 'FINAL FANTASY XIV',
-        startedAt: new Date(),
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: defined(mapping, 'mapping').gameId,
+          discordActivityName: 'FINAL FANTASY XIV',
+          startedAt: new Date(),
+        })
+        .returning(),
+      'session',
+    );
 
     expect(session.gameId).toBe(testApp.seed.game.id);
   });
@@ -150,21 +194,24 @@ describe('game activity sessions — game ID resolution', () => {
       .limit(1);
 
     expect(game).toBeDefined();
-    expect(game.id).toBe(testApp.seed.game.id);
+    expect(game?.id).toBe(testApp.seed.game.id);
   });
 
   it('should store session with null gameId for unmatched activity names', async () => {
     const db = testApp.db;
 
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: null,
-        discordActivityName: 'Some Unknown Game',
-        startedAt: new Date(),
-      })
-      .returning();
+    const [session] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: null,
+          discordActivityName: 'Some Unknown Game',
+          startedAt: new Date(),
+        })
+        .returning(),
+      'session',
+    );
 
     expect(session.gameId).toBeNull();
     expect(session.discordActivityName).toBe('Some Unknown Game');
@@ -199,7 +246,7 @@ describe('game activity sessions — open session matching', () => {
       .limit(1);
 
     expect(openSession).toBeDefined();
-    expect(openSession.id).toBeDefined();
+    expect(defined(openSession, 'openSession').id).toBeDefined();
   });
 });
 
@@ -213,15 +260,18 @@ describe('stale session sweep', () => {
     const MAX_DURATION = 24 * 60 * 60;
     const staleStart = new Date(Date.now() - 25 * 60 * 60 * 1000);
 
-    const [staleSession] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Stale Game',
-        startedAt: staleStart,
-      })
-      .returning();
+    const [staleSession] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Stale Game',
+          startedAt: staleStart,
+        })
+        .returning(),
+      'staleSession',
+    );
 
     await db
       .update(schema.gameActivitySessions)
@@ -233,11 +283,7 @@ describe('stale session sweep', () => {
         ),
       );
 
-    const [swept] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, staleSession.id))
-      .limit(1);
+    const swept = await readSession(staleSession.id, 'swept session');
 
     expect(swept.endedAt).not.toBeNull();
     expect(swept.durationSeconds).toBe(MAX_DURATION);
@@ -248,15 +294,18 @@ describe('stale session sweep', () => {
     const MAX_DURATION = 24 * 60 * 60;
     const recentStart = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
-    const [recentSession] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Recent Game',
-        startedAt: recentStart,
-      })
-      .returning();
+    const [recentSession] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Recent Game',
+          startedAt: recentStart,
+        })
+        .returning(),
+      'recentSession',
+    );
 
     const cutoff = new Date(Date.now() - MAX_DURATION * 1000);
     const swept = await db
@@ -273,11 +322,7 @@ describe('stale session sweep', () => {
     const sweptIds = swept.map((r) => r.id);
     expect(sweptIds).not.toContain(recentSession.id);
 
-    const [session] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, recentSession.id))
-      .limit(1);
+    const session = await readSession(recentSession.id, 'recent session');
 
     expect(session.endedAt).toBeNull();
     expect(session.durationSeconds).toBeNull();
@@ -295,15 +340,18 @@ describe('orphaned session cleanup — stale orphans', () => {
     const now = new Date();
 
     const staleStart = new Date(now.getTime() - 30 * 60 * 60 * 1000);
-    const [stale] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: null,
-        discordActivityName: 'Orphan Stale',
-        startedAt: staleStart,
-      })
-      .returning();
+    const [stale] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: null,
+          discordActivityName: 'Orphan Stale',
+          startedAt: staleStart,
+        })
+        .returning(),
+      'stale',
+    );
 
     const staleResult = await db
       .update(schema.gameActivitySessions)
@@ -318,11 +366,7 @@ describe('orphaned session cleanup — stale orphans', () => {
 
     expect(staleResult.length).toBe(1);
 
-    const [closed] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, stale.id))
-      .limit(1);
+    const closed = await readSession(stale.id, 'closed stale orphan');
 
     expect(closed.durationSeconds).toBe(MAX_DURATION);
     expect(closed.endedAt).not.toBeNull();
@@ -335,15 +379,18 @@ describe('orphaned session cleanup — recent orphans', () => {
     const now = new Date();
 
     const recentStart = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-    const [recent] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Orphan Recent',
-        startedAt: recentStart,
-      })
-      .returning();
+    const [recent] = nonEmpty(
+      await db
+        .insert(schema.gameActivitySessions)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          discordActivityName: 'Orphan Recent',
+          startedAt: recentStart,
+        })
+        .returning(),
+      'recent',
+    );
 
     const expectedDuration = Math.floor(
       (now.getTime() - recentStart.getTime()) / 1000,
@@ -353,11 +400,7 @@ describe('orphaned session cleanup — recent orphans', () => {
       .set({ endedAt: now, durationSeconds: expectedDuration })
       .where(eq(schema.gameActivitySessions.id, recent.id));
 
-    const [closed] = await db
-      .select()
-      .from(schema.gameActivitySessions)
-      .where(eq(schema.gameActivitySessions.id, recent.id))
-      .limit(1);
+    const closed = await readSession(recent.id, 'closed recent orphan');
 
     expect(closed.endedAt).not.toBeNull();
     expect(closed.durationSeconds).toBeGreaterThanOrEqual(7190);
@@ -373,18 +416,7 @@ describe('daily rollup — upsert all periods', () => {
   it('should upsert day/week/month rollup rows from closed sessions', async () => {
     const db = testApp.db;
 
-    const sessionDate = new Date();
-    const [session] = await db
-      .insert(schema.gameActivitySessions)
-      .values({
-        userId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        discordActivityName: 'Test Game',
-        startedAt: new Date(sessionDate.getTime() - 3600_000),
-        endedAt: sessionDate,
-        durationSeconds: 3600,
-      })
-      .returning();
+    const session = await insertClosedSession(new Date(), 3600);
 
     expect(session.durationSeconds).toBe(3600);
 
@@ -481,7 +513,7 @@ describe('daily rollup — idempotent upsert', () => {
       );
 
     expect(rollups.length).toBe(1);
-    expect(rollups[0].totalSeconds).toBe(5400);
+    expect(rollups[0]?.totalSeconds).toBe(5400);
   });
 });
 
@@ -529,17 +561,20 @@ describe('daily rollup — multi-session aggregation', () => {
         set: { totalSeconds },
       });
 
-    const [rollup] = await db
-      .select()
-      .from(schema.gameActivityRollups)
-      .where(
-        and(
-          eq(schema.gameActivityRollups.userId, testApp.seed.adminUser.id),
-          eq(schema.gameActivityRollups.gameId, testApp.seed.game.id),
-          eq(schema.gameActivityRollups.period, 'day'),
-        ),
-      )
-      .limit(1);
+    const [rollup] = nonEmpty(
+      await db
+        .select()
+        .from(schema.gameActivityRollups)
+        .where(
+          and(
+            eq(schema.gameActivityRollups.userId, testApp.seed.adminUser.id),
+            eq(schema.gameActivityRollups.gameId, testApp.seed.game.id),
+            eq(schema.gameActivityRollups.period, 'day'),
+          ),
+        )
+        .limit(1),
+      'rollup',
+    );
 
     expect(rollup.totalSeconds).toBe(5400);
   });

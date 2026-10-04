@@ -23,6 +23,7 @@ import {
   RestoreDrillStatusSchema,
   type RestoreDrillReportDto,
 } from '@raid-ledger/contract';
+import { at, defined } from '../common/testing/narrow';
 
 /**
  * `json_finding` (shell, :183-186) and `finding` (mjs, :28) build the same
@@ -159,7 +160,7 @@ describe('DrillFindingSchema / RestoreDrillStatusSchema (ROK-1160 D10)', () => {
     });
 
     expect(result.success).toBe(false);
-    const issue = result.error!.issues[0];
+    const issue = at(defined(result.error, 'safeParse error').issues, 0);
     expect(issue.path).toEqual(['tier']);
     expect(issue.message).toContain('A5');
   });
@@ -202,7 +203,7 @@ describe('RestoreDrillReportSchema — nullability, strictness, timestamps', () 
     );
 
     expect(result.success).toBe(false);
-    const issue = result.error!.issues[0];
+    const issue = at(defined(result.error, 'safeParse error').issues, 0);
     expect(issue.code).toBe('unrecognized_keys');
     expect((issue as { keys: string[] }).keys).toContain('sentryCheckInId');
   });
@@ -212,7 +213,9 @@ describe('RestoreDrillReportSchema — nullability, strictness, timestamps', () 
     const result = RestoreDrillReportSchema.safeParse(bad);
 
     expect(result.success).toBe(false);
-    expect(result.error!.issues[0].code).toBe('unrecognized_keys');
+    expect(at(defined(result.error, 'safeParse error').issues, 0).code).toBe(
+      'unrecognized_keys',
+    );
   });
 
   // Case 6 — the two real timestamp shapes. `startedAt` has no milliseconds,
@@ -240,6 +243,8 @@ describe('RestoreDrillReportSchema — nullability, strictness, timestamps', () 
     const result = RestoreDrillReportSchema.safeParse(partial);
 
     expect(result.success).toBe(false);
-    expect(result.error!.issues[0].path).toEqual(['totalDurationMs']);
+    expect(at(defined(result.error, 'safeParse error').issues, 0).path).toEqual(
+      ['totalDurationMs'],
+    );
   });
 });

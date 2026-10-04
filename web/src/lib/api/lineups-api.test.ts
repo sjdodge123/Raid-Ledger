@@ -1,5 +1,5 @@
 /**
- * Tests for lineups-api toggleVote function (ROK-936).
+ * Tests for lineups-api client functions (ROK-936).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -8,7 +8,11 @@ vi.mock('./fetch-api', () => ({
   fetchApi: vi.fn(),
 }));
 
-import { toggleVote, getLineupParticipants } from './lineups-api';
+import {
+  toggleVote,
+  getLineupParticipants,
+  getLineupBanner,
+} from './lineups-api';
 import { fetchApi } from './fetch-api';
 
 const mockFetchApi = vi.mocked(fetchApi);
@@ -65,5 +69,27 @@ describe('getLineupParticipants', () => {
     await getLineupParticipants(5, 12);
 
     expect(mockFetchApi).toHaveBeenCalledWith('/lineups/5/participants?matchId=12');
+  });
+});
+
+describe('getLineupBanner', () => {
+  beforeEach(() => {
+    mockFetchApi.mockReset();
+  });
+
+  it('calls the unscoped banner endpoint by default', async () => {
+    mockFetchApi.mockResolvedValueOnce(null);
+
+    await getLineupBanner();
+
+    expect(mockFetchApi).toHaveBeenCalledWith('/lineups/banner');
+  });
+
+  it('passes a scope as the lineupId query param', async () => {
+    mockFetchApi.mockResolvedValueOnce(null);
+
+    await getLineupBanner(7);
+
+    expect(mockFetchApi).toHaveBeenCalledWith('/lineups/banner?lineupId=7');
   });
 });

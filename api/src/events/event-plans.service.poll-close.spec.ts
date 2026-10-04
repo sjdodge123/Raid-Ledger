@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
 import { autoSignupPollVoters } from './event-plans-auto-signup.helpers';
+import { at } from '../common/testing/narrow';
 
 // Wiring boundary — voter resolution + signup-loop behavior is covered by
 // event-plans-auto-signup.helpers.spec.ts; here we assert the args it receives.
@@ -239,7 +240,7 @@ async function testOnlyRegisteredVotesCount() {
       [
         0,
         makePollAnswer([
-          REGISTERED_USER_IDS[0],
+          at(REGISTERED_USER_IDS, 0),
           'unregistered-1',
           'unregistered-2',
         ]),
@@ -268,7 +269,7 @@ async function testUnregisteredNoneNotCounted() {
       [
         3,
         makePollAnswer([
-          REGISTERED_USER_IDS[3],
+          at(REGISTERED_USER_IDS, 3),
           'unregistered-1',
           'unregistered-2',
         ]),
@@ -364,7 +365,7 @@ async function testAonRepollBelowThreshold() {
       [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
       [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
       [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+      [3, makePollAnswer([at(REGISTERED_USER_IDS, 4)])],
     ]),
   );
 
@@ -381,7 +382,7 @@ async function testAonCreatesWhenThresholdMet() {
       [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
       [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
       [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+      [3, makePollAnswer([at(REGISTERED_USER_IDS, 4)])],
     ]),
   );
 
@@ -416,7 +417,7 @@ async function testAonRepollNoSlotConfig() {
       [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 5))],
       [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
       [2, makePollAnswer(REGISTERED_USER_IDS.slice(0, 1))],
-      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+      [3, makePollAnswer([at(REGISTERED_USER_IDS, 4)])],
     ]),
   );
 
@@ -432,7 +433,7 @@ async function testAonExpiresOnRepollFailure() {
   setupPollWithAnswers(
     new Map([
       [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+      [3, makePollAnswer([at(REGISTERED_USER_IDS, 4)])],
     ]),
   );
   discordClient.deleteMessage.mockResolvedValue(undefined);
@@ -505,7 +506,7 @@ async function testAutoSignupWinningVoters() {
   setupPollWithAnswers(
     new Map([
       [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-      [1, makePollAnswer([REGISTERED_USER_IDS[3]])],
+      [1, makePollAnswer([at(REGISTERED_USER_IDS, 3)])],
       [2, makePollAnswer([])],
       [3, makePollAnswer([])],
     ]),
@@ -521,14 +522,14 @@ async function testAutoSignupWinningVoters() {
   );
   const passedIds = (autoSignupPollVoters as jest.Mock).mock.calls[0][0]
     .voterDiscordIds as string[];
-  expect(passedIds).not.toContain(REGISTERED_USER_IDS[3]);
+  expect(passedIds).not.toContain(at(REGISTERED_USER_IDS, 3));
 }
 
 async function testNoAutoSignupWhenNoneWins() {
   setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
   setupPollWithAnswers(
     new Map([
-      [0, makePollAnswer([REGISTERED_USER_IDS[0]])],
+      [0, makePollAnswer([at(REGISTERED_USER_IDS, 0)])],
       [1, makePollAnswer([])],
       [2, makePollAnswer([])],
       [3, makePollAnswer(REGISTERED_USER_IDS.slice(0, 4))],
@@ -562,7 +563,7 @@ async function testRepollIncrementsRound() {
   setupPollWithAnswers(
     new Map([
       [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 3))],
-      [3, makePollAnswer([REGISTERED_USER_IDS[4]])],
+      [3, makePollAnswer([at(REGISTERED_USER_IDS, 4)])],
     ]),
   );
 

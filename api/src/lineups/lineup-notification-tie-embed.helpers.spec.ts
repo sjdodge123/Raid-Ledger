@@ -14,6 +14,7 @@ import {
   buildTieExpiredEmbed,
 } from './lineup-notification-tie-embed.helpers';
 import type { EmbedContext } from './lineup-notification-embed.helpers';
+import { at } from '../common/testing/narrow';
 
 const ctx: EmbedContext = {
   baseUrl: 'https://raid.example.net',
@@ -83,7 +84,7 @@ describe('buildTieDetectedEmbed', () => {
 
 describe('buildTieDecidedEmbed', () => {
   const decided = () =>
-    buildTieDecidedEmbed(ctx, TIED[0], 'Roknua', {
+    buildTieDecidedEmbed(ctx, at(TIED, 0), 'Roknua', {
       count: 6,
       rosterSize: 6,
     }).embed;
@@ -103,7 +104,7 @@ describe('buildTieDecidedEmbed', () => {
   });
 
   it('neutralises a mention smuggled in through the picker name (AC9)', () => {
-    const embed = buildTieDecidedEmbed(ctx, TIED[0], '<@123456789>', {
+    const embed = buildTieDecidedEmbed(ctx, at(TIED, 0), '<@123456789>', {
       count: 1,
       rosterSize: 4,
     }).embed;

@@ -13,6 +13,7 @@ import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import { SettingsService } from '../settings/settings.service';
 import { getQueueToken } from '@nestjs/bullmq';
+import { at } from '../common/testing/narrow';
 
 const PLAN_ID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
 const CREATOR_ID = 42;
@@ -202,7 +203,7 @@ async function testCreateNoneOption() {
   const sendCall = (
     discordClient._mockTextChannel.send.mock.calls[1] as unknown[]
   )[0] as { poll: { answers: Array<{ text: string }> } };
-  const lastAnswer = sendCall.poll.answers[sendCall.poll.answers.length - 1];
+  const lastAnswer = at(sendCall.poll.answers, -1);
   expect(lastAnswer.text).toBe('None of these work');
 }
 

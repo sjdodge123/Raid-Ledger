@@ -5,6 +5,7 @@ import { DiscordBotClientService } from './discord-bot-client.service';
 import { REQUIRED_PERMISSIONS } from './discord-bot-client.helpers';
 import { DISCORD_BOT_EVENTS } from './discord-bot.constants';
 import { Events } from 'discord.js';
+import { at } from '../common/testing/narrow';
 
 /**
  * Typed interface for the mock Discord.js Client used in these tests.
@@ -195,7 +196,7 @@ describe('DiscordBotClientService — connect: failures', () => {
     mockClient = getClient(service)!;
 
     setImmediate(() => {
-      const loginPromise = mockClient.login.mock.results[0]
+      const loginPromise = at(mockClient.login.mock.results, 0)
         .value as Promise<void>;
       loginPromise.catch(() => {});
       setClient(service, null);
@@ -398,7 +399,7 @@ describe('DiscordBotClientService — sendEmbedDM: success', () => {
     const sendCalls = mockUser.send.mock.calls as Array<
       [{ embeds: unknown[]; components?: unknown[] }]
     >;
-    expect(sendCalls[0][0].components).toBeUndefined();
+    expect(at(sendCalls, 0)[0].components).toBeUndefined();
   });
 });
 

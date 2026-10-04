@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { SteamIcon } from '../icons/SteamIcon';
-import { useSteamLink, getSteamLinkUrl } from '../../hooks/use-steam-link';
+import { useSteamLink } from '../../hooks/use-steam-link';
+import { Button } from '../ui/button';
 
 /** Header with Steam icon in emerald circle and title. */
 function SteamStepHeader() {
@@ -18,20 +18,31 @@ function SteamStepHeader() {
     );
 }
 
-/** Primary "Connect Steam" link styled as a button. Uses <a> for testable href. */
-function ConnectSteamLink({ isRedirecting, href, onClick }: {
-    isRedirecting: boolean; href: string | null; onClick: () => void;
-}) {
+/**
+ * Steam's own brand pair (the fill + hover of origin/main's anchor and the
+ * Retry button below). `brandColor` paints the fill; its default hover is
+ * `brightness-110`, so the Steam hover colour is restored with important
+ * modifiers (they must beat the inline fill). See PR notes, "New pattern".
+ */
+const STEAM_FILL = '#171a21';
+const STEAM_HOVER_CLS = 'hover:bg-[#2a475e]! hover:filter-none! cursor-pointer';
+/** The old anchor's label: 16px/600 with a 12px icon gap (48px tall at py-3). */
+const STEAM_LABEL_CLS = 'inline-flex items-center gap-3 text-base font-semibold';
+
+/**
+ * Primary "Connect Steam" button. ROK-1630: a real button, not an <a href> —
+ * the Steam hop needs a single-use nonce minted on click, so there is no URL
+ * to render up front. The shared Button with Steam's brand fill (design-system
+ * §4.11), styled to match the anchor it replaced pixel for pixel (AC16).
+ * `disabled` as well as `loading`, so a pending start cannot fire twice from
+ * the keyboard either.
+ */
+function ConnectSteamButton({ isRedirecting, onClick }: { isRedirecting: boolean; onClick: () => void }) {
     return (
-        <a role="button" href={href ?? '#'} onClick={(e) => { if (isRedirecting || !href) e.preventDefault(); onClick(); }}
-            className="w-full py-3 px-4 min-h-[44px] bg-[#171a21] hover:bg-[#2a475e] text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-3"
-            aria-disabled={isRedirecting}>
-            {isRedirecting ? (
-                <><span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Redirecting to Steam...</>
-            ) : (
-                <><SteamIcon className="w-5 h-5" />Connect Steam</>
-            )}
-        </a>
+        <Button onClick={onClick} size="lg" fullWidth brandColor={STEAM_FILL} className={STEAM_HOVER_CLS}
+            loading={isRedirecting} disabled={isRedirecting} loadingLabel="Redirecting to Steam...">
+            <span className={STEAM_LABEL_CLS}><SteamIcon className="w-5 h-5" />Connect Steam</span>
+        </Button>
     );
 }
 
@@ -67,18 +78,13 @@ function SteamErrorMessage({ message, onRetry }: { message: string | null; onRet
  */
 export function SteamStep() {
     const [searchParams] = useSearchParams();
-    const { linkSteam } = useSteamLink();
-    const [isRedirecting, setIsRedirecting] = useState(false);
+    const { linkSteam, isLinkPending } = useSteamLink();
 
     const steamResult = searchParams.get('steam');
     const isSuccess = steamResult === 'success';
     const isError = steamResult === 'error';
-    const steamLinkUrl = getSteamLinkUrl('/onboarding');
 
-    const handleConnect = () => {
-        setIsRedirecting(true);
-        linkSteam('/onboarding');
-    };
+    const handleConnect = () => { void linkSteam('/onboarding'); };
 
     return (
         <div className="space-y-6">
@@ -87,7 +93,7 @@ export function SteamStep() {
                 {isSuccess && <SteamSuccessMessage />}
                 {isError && <SteamErrorMessage message={searchParams.get('message')} onRetry={handleConnect} />}
                 {!isSuccess && !isError && (
-                    <ConnectSteamLink isRedirecting={isRedirecting} href={steamLinkUrl} onClick={handleConnect} />
+                    <ConnectSteamButton isRedirecting={isLinkPending} onClick={handleConnect} />
                 )}
                 <p className="text-xs text-dim text-center mt-2">
                     You can always link accounts later from your profile settings.

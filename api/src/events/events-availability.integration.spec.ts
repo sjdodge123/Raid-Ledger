@@ -16,6 +16,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { clearAuthUserCache } from '../auth/auth-user-cache';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -51,16 +52,19 @@ async function createCharacter(
   gameId: number,
   overrides: Partial<typeof schema.characters.$inferInsert> = {},
 ) {
-  const [char] = await testApp.db
-    .insert(schema.characters)
-    .values({
-      userId,
-      gameId,
-      name: `Char-${userId}-${Date.now()}`,
-      isMain: true,
-      ...overrides,
-    })
-    .returning();
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId,
+        gameId,
+        name: `Char-${userId}-${Date.now()}`,
+        isMain: true,
+        ...overrides,
+      })
+      .returning(),
+    'character',
+  );
   return char;
 }
 
@@ -126,14 +130,17 @@ async function testRosterAvailabilityEmptySignups() {
   // Create event via direct DB insert to avoid admin auto-signup
   const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'No Signup Event',
-      creatorId: testApp.seed.adminUser.id,
-      duration: [start, end] as [Date, Date],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'No Signup Event',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [start, end] as [Date, Date],
+      })
+      .returning(),
+    'event',
+  );
 
   const res = await testApp.request
     .get(`/events/${event.id}/roster/availability`)
@@ -187,14 +194,17 @@ async function testAggregateGameTimeEmpty() {
   // Direct DB insert to avoid admin auto-signup
   const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Empty GT Event',
-      creatorId: testApp.seed.adminUser.id,
-      duration: [start, end] as [Date, Date],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Empty GT Event',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [start, end] as [Date, Date],
+      })
+      .returning(),
+    'event',
+  );
 
   const res = await testApp.request
     .get(`/events/${event.id}/aggregate-game-time`)

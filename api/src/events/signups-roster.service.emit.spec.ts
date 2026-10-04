@@ -17,7 +17,10 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 
 describe('SignupsRosterService — emit timing (ROK-824)', () => {
   let service: SignupsRosterService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  >;
   let mockEventEmitter: { emit: jest.Mock; emitAsync: jest.Mock };
   let callOrder: string[];
 

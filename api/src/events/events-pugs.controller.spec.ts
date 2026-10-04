@@ -9,6 +9,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { PATH_METADATA, GUARDS_METADATA } from '@nestjs/common/constants';
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { EventsPugsController } from './events-pugs.controller';
+import { defined } from '../common/testing/narrow';
 
 type Handler = (...args: unknown[]) => unknown;
 
@@ -20,7 +21,7 @@ function routeHandlers(): [string, Handler][] {
   >;
   return Object.getOwnPropertyNames(proto)
     .filter((name) => name !== 'constructor')
-    .map((name): [string, Handler] => [name, proto[name]])
+    .map((name): [string, Handler] => [name, defined(proto[name], name)])
     .filter(([, fn]) => Reflect.hasMetadata(PATH_METADATA, fn));
 }
 

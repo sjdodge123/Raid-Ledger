@@ -2,6 +2,7 @@ import {
   ChurnDetectionService,
   type ChurnInputRow,
 } from './churn-detection.service';
+import { at } from '../common/testing/narrow';
 
 describe('ChurnDetectionService', () => {
   const service = new ChurnDetectionService();
@@ -28,8 +29,8 @@ describe('ChurnDetectionService', () => {
     );
     const res = service.findAtRiskPlayers([steady, dropping], settings);
     expect(res.atRisk).toHaveLength(1);
-    expect(res.atRisk[0].userId).toBe(2);
-    expect(res.atRisk[0].dropPct).toBeGreaterThanOrEqual(70);
+    expect(res.atRisk[0]?.userId).toBe(2);
+    expect(res.atRisk[0]?.dropPct).toBeGreaterThanOrEqual(70);
     expect(res.candidates).toHaveLength(2);
   });
 
@@ -46,7 +47,7 @@ describe('ChurnDetectionService', () => {
     const res = service.findAtRiskPlayers([steady], settings);
     expect(res.atRisk).toHaveLength(0);
     expect(res.candidates).toHaveLength(1);
-    expect(res.candidates[0].dropPct).toBeCloseTo(0, 1);
+    expect(at(res.candidates, 0).dropPct).toBeCloseTo(0, 1);
   });
 
   it('returns candidates sorted by dropPct desc', () => {
@@ -59,7 +60,7 @@ describe('ChurnDetectionService', () => {
       [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 0, 0, 0, 0],
     );
     const res = service.findAtRiskPlayers([mid, big], settings);
-    expect(res.candidates[0].userId).toBe(6);
-    expect(res.candidates[1].userId).toBe(5);
+    expect(res.candidates[0]?.userId).toBe(6);
+    expect(res.candidates[1]?.userId).toBe(5);
   });
 });

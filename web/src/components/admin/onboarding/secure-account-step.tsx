@@ -1,7 +1,7 @@
 import { useState, type JSX, type ReactNode } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { useOnboarding } from '../../../hooks/use-onboarding';
-import { useDiscordLink } from '../../../hooks/use-discord-link';
+import { useDiscordLinkAction } from '../../../hooks/use-discord-link';
 import { isDiscordLinked } from '../../../lib/avatar';
 import { toast } from '../../../lib/toast';
 import { Button } from '../../ui/button';
@@ -161,7 +161,9 @@ function PasswordSection({ passwordChanged, onChangePassword, isPending }: {
     );
 }
 
-function DiscordLinkSection({ hasDiscordLinked, onLinkDiscord }: { hasDiscordLinked: boolean; onLinkDiscord: () => void }) {
+function DiscordLinkSection({ hasDiscordLinked, onLinkDiscord, linkPending }: {
+    hasDiscordLinked: boolean; onLinkDiscord: () => void; linkPending: boolean;
+}) {
     return (
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
             <div className="flex items-center justify-between">
@@ -172,7 +174,7 @@ function DiscordLinkSection({ hasDiscordLinked, onLinkDiscord }: { hasDiscordLin
                 {hasDiscordLinked && ConnectedBadge}
             </div>
             {!hasDiscordLinked && (
-                <Button brandColor={DISCORD_BRAND} onClick={onLinkDiscord}>
+                <Button brandColor={DISCORD_BRAND} onClick={onLinkDiscord} disabled={linkPending}>
                     {DiscordIcon} Link Discord Account
                 </Button>
             )}
@@ -187,7 +189,7 @@ export function SecureAccountStep({ onNext, onSkip }: SecureAccountStepProps) {
     const { user } = useAuth();
     const { changePassword } = useOnboarding();
     const [passwordChanged, setPasswordChanged] = useState(false);
-    const handleLinkDiscord = useDiscordLink();
+    const { linkDiscord: handleLinkDiscord, isPending: linkPending } = useDiscordLinkAction();
 
     const handleSkip = () => { toast.warning('Security reminder: Consider changing your default password soon.', { duration: 6000 }); onSkip(); };
     const handleChangePassword = (cur: string, pw: string) => { changePassword.mutate({ currentPassword: cur, newPassword: pw }, { onSuccess: () => setPasswordChanged(true) }); };
@@ -200,7 +202,7 @@ export function SecureAccountStep({ onNext, onSkip }: SecureAccountStepProps) {
             </div>
             <PasswordRecoveryWarning />
             <PasswordSection passwordChanged={passwordChanged} onChangePassword={handleChangePassword} isPending={changePassword.isPending} />
-            <DiscordLinkSection hasDiscordLinked={isDiscordLinked(user?.discordId)} onLinkDiscord={handleLinkDiscord} />
+            <DiscordLinkSection hasDiscordLinked={isDiscordLinked(user?.discordId)} onLinkDiscord={handleLinkDiscord} linkPending={linkPending} />
             <div className="flex items-center justify-between pt-4 border-t border-edge/30">
                 <Button variant="ghost" onClick={handleSkip}>I'll do this later</Button>
                 <Button onClick={onNext}>Next</Button>

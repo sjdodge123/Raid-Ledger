@@ -7,9 +7,9 @@ describe('CORE_JOB_METADATA', () => {
         CORE_JOB_METADATA['VoiceAttendanceService_snapshotOnEventStart'];
 
       expect(meta).toBeDefined();
-      expect(meta.description).toEqual(expect.any(String));
-      expect(meta.description.length).toBeGreaterThan(0);
-      expect(meta.category).toBe('Events');
+      expect(meta?.description).toEqual(expect.any(String));
+      expect(meta?.description.length).toBeGreaterThan(0);
+      expect(meta?.category).toBe('Events');
     });
   });
 
@@ -19,9 +19,9 @@ describe('CORE_JOB_METADATA', () => {
         CORE_JOB_METADATA['ScheduledEventReconciliation_reconcileMissing'];
 
       expect(meta).toBeDefined();
-      expect(meta.description).toEqual(expect.any(String));
-      expect(meta.description.length).toBeGreaterThan(0);
-      expect(meta.category).toBe('Events');
+      expect(meta?.description).toEqual(expect.any(String));
+      expect(meta?.description.length).toBeGreaterThan(0);
+      expect(meta?.category).toBe('Events');
     });
   });
 
@@ -30,18 +30,18 @@ describe('CORE_JOB_METADATA', () => {
       const meta = CORE_JOB_METADATA['ActiveEventCacheService_refresh'];
 
       expect(meta).toBeDefined();
-      expect(meta.description).toEqual(expect.any(String));
-      expect(meta.description.length).toBeGreaterThan(0);
-      expect(meta.category).toBe('Events');
+      expect(meta?.description).toEqual(expect.any(String));
+      expect(meta?.description.length).toBeGreaterThan(0);
+      expect(meta?.category).toBe('Events');
     });
 
     it('should include AdHocReaperService_reapOrphans', () => {
       const meta = CORE_JOB_METADATA['AdHocReaperService_reapOrphans'];
 
       expect(meta).toBeDefined();
-      expect(meta.description).toEqual(expect.any(String));
-      expect(meta.description.length).toBeGreaterThan(0);
-      expect(meta.category).toBe('Events');
+      expect(meta?.description).toEqual(expect.any(String));
+      expect(meta?.description.length).toBeGreaterThan(0);
+      expect(meta?.category).toBe('Events');
     });
   });
 
@@ -51,9 +51,9 @@ describe('CORE_JOB_METADATA', () => {
         CORE_JOB_METADATA['StandalonePollReminderService_runReminders'];
 
       expect(meta).toBeDefined();
-      expect(meta.description).toEqual(expect.any(String));
-      expect(meta.description.length).toBeGreaterThan(0);
-      expect(meta.category).toBe('Notifications');
+      expect(meta?.description).toEqual(expect.any(String));
+      expect(meta?.description.length).toBeGreaterThan(0);
+      expect(meta?.category).toBe('Notifications');
     });
   });
 
@@ -67,9 +67,9 @@ describe('CORE_JOB_METADATA', () => {
       const meta = CORE_JOB_METADATA['CooptimusSyncService_weeklySync'];
 
       expect(meta).toBeDefined();
-      expect(meta.description).toEqual(expect.any(String));
-      expect(meta.description.length).toBeGreaterThan(0);
-      expect(meta.category).toBe('Data Sync');
+      expect(meta?.description).toEqual(expect.any(String));
+      expect(meta?.description.length).toBeGreaterThan(0);
+      expect(meta?.category).toBe('Data Sync');
     });
   });
 });
@@ -95,8 +95,8 @@ describe('CORE_JOB_METADATA — every live @Cron job is described', () => {
     (name) => {
       expect(CORE_JOB_METADATA).toHaveProperty(name);
       const meta = CORE_JOB_METADATA[name];
-      expect(meta.description.trim().length).toBeGreaterThan(0);
-      expect(meta.category).toEqual(expect.any(String));
+      expect(meta?.description.trim().length).toBeGreaterThan(0);
+      expect(meta?.category).toEqual(expect.any(String));
     },
   );
   describe('ROK-1632', () => {
@@ -104,9 +104,9 @@ describe('CORE_JOB_METADATA — every live @Cron job is described', () => {
       const meta = CORE_JOB_METADATA['SchedulingUnanimousService_sweep'];
 
       expect(meta).toBeDefined();
-      expect(meta.description).toEqual(expect.any(String));
-      expect(meta.description.length).toBeGreaterThan(0);
-      expect(meta.category).toBe('Notifications');
+      expect(meta?.description).toEqual(expect.any(String));
+      expect(meta?.description.length).toBeGreaterThan(0);
+      expect(meta?.category).toBe('Notifications');
     });
   });
 });
@@ -119,8 +119,8 @@ describe('CORE_JOB_METADATA — Regression: poll expiry sweep boot WARN', () => 
     const meta = CORE_JOB_METADATA['SchedulingPollExpiryService_runSweep'];
 
     expect(meta).toBeDefined();
-    expect(meta.description).toEqual(expect.any(String));
-    expect(meta.description.length).toBeGreaterThan(0);
-    expect(meta.category).toBe('Notifications');
+    expect(meta?.description).toEqual(expect.any(String));
+    expect(meta?.description.length).toBeGreaterThan(0);
+    expect(meta?.category).toBe('Notifications');
   });
 });
