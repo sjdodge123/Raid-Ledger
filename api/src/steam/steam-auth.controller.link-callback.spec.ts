@@ -87,7 +87,7 @@ const onlyRedirect = (res: Response) =>
 async function hop(ctrl: SteamAuthController) {
   const res = mockRes();
   await ctrl.steamLink('n', reqWith({ rl_link_steam: sha256('n') }), res);
-  const [openIdUrl] = onlyRedirect(res);
+  const openIdUrl = onlyRedirect(res)[0] as string;
   const back = new URL(
     new URL(openIdUrl).searchParams.get('openid.return_to') as string,
   );
