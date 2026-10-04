@@ -1,10 +1,10 @@
 /**
  * TDB:460 — `checkBuildingQuorum` fetches its inputs lazily.
  *
- * The nomination floor and total feed BOTH branches, so they stay eager. The
- * gating-voter roster only feeds the ≥2-voter guard and the submission branch,
- * so a lineup whose ROK-1444 count target has already fired must return
- * without loading it.
+ * The nomination floor and total feed the ROK-1444 count target, so they stay
+ * eager. The gating-voter roster fed only the ≥2-voter guard and the
+ * submission branch, both retired by TDB:449, so the building path must never
+ * load it — whether or not the count target fires.
  */
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
@@ -55,7 +55,7 @@ describe('checkBuildingQuorum — lazy inputs (TDB:460)', () => {
     expect(loadQuorumGatingVoters).not.toHaveBeenCalled();
   });
 
-  it('still loads the gating voters when the count target has not fired', async () => {
+  it('never loads the gating voters when the count target has not fired (TDB:449)', async () => {
     const db = createDrizzleMock();
     db.execute.mockResolvedValueOnce([{ total: 12 }]);
     (evaluateNominationTarget as jest.Mock).mockResolvedValue({
@@ -69,7 +69,10 @@ describe('checkBuildingQuorum — lazy inputs (TDB:460)', () => {
       targetLineup,
     );
 
-    expect(loadQuorumGatingVoters).toHaveBeenCalledWith(db, targetLineup);
-    expect(result.reason).toContain('solo lineup');
+    expect(loadQuorumGatingVoters).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      ready: false,
+      reason: 'nomination target not met; deadline or manual advance required',
+    });
   });
 });
