@@ -13,7 +13,9 @@ including the accent tokens `--color-success` / `-warning` / `-danger` / `-busy`
 Raw Tailwind accents do not — `index.css` repaints them for the light family: text bumps
 from a `-400` to a `-600`/`-700`, tinted fills collapse to a `-100` wash, borders to a
 `-300`. Two shades were never given an override and are unreadable on light (see the
-table). Solid accent fills are identical in both families.
+table). Solid accent fills keep their hue in both families, except the primary `bg-emerald-600`,
+which steps to emerald-700 on light (ROK-1472); a `Button brandColor` label is white or dark by
+contrast on every scheme.
 
 ---
 
@@ -59,7 +61,7 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:770-771` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:777-789` |
-| `bg-emerald-600` (button fill) | `#059669` | `#059669` — same fill both families | design-system.md §6.10 |
+| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:837-851`, design-system.md §6.10 |
 
 `web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
 `bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`
@@ -70,12 +72,15 @@ Only the hues listed at `:739-762` get the tint treatment — `red`, `amber`, `e
 `green`, `yellow`, `indigo`, `cyan`. A `bg-blue-500/10` or `bg-purple-500/10` surface has
 **no** light-family mapping.
 
-**Text on an accent fill.** Solid accent buttons keep their fill in both families, so the
-label would go near-black on light (`--color-foreground` is `#0f172a` there). `:814-820`
+**Text on an accent fill.** Solid accent buttons keep their hue in both families, so the
+label would go near-black on light (`--color-foreground` is `#0f172a` there). `:819-827`
 forces `--color-foreground: #ffffff` for `.text-foreground` on `.bg-blue-600`,
 `.bg-indigo-600`, `.bg-emerald-600`, `.bg-purple-600`, `.bg-red-600`, `.bg-red-500`,
 `.bg-amber-600`, `.bg-violet-600` and Discord's `#5865F2`. Use `text-foreground` on a
 solid accent button — not `text-white`, which opts out of that rule's bookkeeping.
+**`Button brandColor` is not in that list** (ruling 2026-10-04, ROK-1472): it emits
+`data-brand-label="light|dark"` from `brandLabelFor` (`web/src/lib/brand-label.ts`) and `:853-857`
+paints white or `#0f172a` — whichever has the higher contrast on the runtime fill — on every scheme.
 **Exception — a token fill takes `text-white`:** `bg-success` (and any other token fill) is
 not in that list, so `text-foreground` on it goes `#0f172a` on light. Write `text-white`
 (`JourneyHero.tsx:163`), and keep solid *button* fills on the raw `bg-emerald-600` so the
@@ -111,8 +116,8 @@ Every block below splits a pattern into what flips and what does not. The rule o
 anything spelled as a token — the surface roles AND the accent tokens `success` /
 `warning` / `danger` / `busy` / `slot` (§1) — flips with the family at any alpha; anything
 spelled as a raw hue flips only if `index.css` hand-lists that exact class and alpha; and
-two things never flip by design — a solid accent button fill (`bg-emerald-600`, label
-forced white) and a data-driven inline alpha (`computeHeatmapBg`'s rgba).
+two things never flip by design — a solid accent button fill's hue (`bg-emerald-600`, label
+forced white; it only steps to emerald-700 on light, ROK-1472) and a data-driven inline alpha (`computeHeatmapBg`'s rgba).
 
 ### Filtering (§4.1)
 
@@ -133,7 +138,9 @@ does not: `GradientOverlay`'s `from-black/80 to-transparent`
 to make white title text legible over the *image*, not over the theme surface. Anything
 layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
 `text-dim` — `#64748b` dark, `#5a697f` light (the same slate, a step darker so it clears AA on
-the light panel and overlay) — so an image-less tile reads as the same quiet slate in
+the light panel and overlay; the tinted schemes' own dims — sky `#4E6E8B`, dawn `#8A6045`, holy `#576E93`,
+celestial `#6D5E4B`, quest-log `#756247` — clear AA on their own surface and panel, ROK-1472; quest-log's
+`--color-muted` moved with it to `#685640`, 6.33 surface / 5.56 panel) — so an image-less tile reads as the same quiet slate in
 either family.
 
 ### Chips (§4.3)
@@ -188,7 +195,7 @@ Frame, badge and progress fill are tokens and flip: `border-success/30` / `borde
 `border-warning/30` by tone, `text-success` / `text-warning` badges, the `bg-success` progress fill
 over `bg-edge-subtle`, and the `bg-success text-white` ✓ disc (`text-white` is correct on a token fill —
 `text-foreground` would go dark on light). Two things do NOT flip: the inline CTA's `bg-emerald-600`
-(`JourneyHero.tsx:177`, a deliberate keep — `index.css` forces its white label off that class name,
+(`JourneyHero.tsx:177`, beyond the light emerald-700 step of §1 — a deliberate keep — `index.css` forces its white label off that class name,
 §2.2 D-6), and the Manage shells (§4.14), which are pure surface tokens with no accent at all.
 
 ### Week strip (§4.15)
@@ -226,7 +233,7 @@ Root-only regardless of family — verify these at the root, never in a scoped p
 |---|---|---|
 | `color-scheme: dark/light` | `:619-641` | Native form controls, scrollbars, UA widgets |
 | Page background | `body` `:633`, `#root` `:640` | A scoped column must paint its own `bg-backdrop` |
-| quest-log parchment | `[data-variant="quest-log"] body::before` `:1302`, `body::after` `:1315` | Scoped quest-log gets panels but no page texture |
+| quest-log parchment | `[data-variant="quest-log"] body::before` `:1339`, `body::after` `:1352` | Scoped quest-log gets panels but no page texture |
 | Ambient particles | `components/ui/ThemeParticles.tsx` | Mounted once at app level (§2.7) |
 
 ---

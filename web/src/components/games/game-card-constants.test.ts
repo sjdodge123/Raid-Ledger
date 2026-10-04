@@ -12,15 +12,15 @@ import {
 
 describe('getRatingClasses — green tier (>= 75)', () => {
     it('returns green classes for rating exactly 75', () => {
-        expect(getRatingClasses(75)).toBe('bg-emerald-500/90 text-white');
+        expect(getRatingClasses(75)).toBe('bg-success text-white');
     });
 
     it('returns green classes for rating 100', () => {
-        expect(getRatingClasses(100)).toBe('bg-emerald-500/90 text-white');
+        expect(getRatingClasses(100)).toBe('bg-success text-white');
     });
 
     it('returns green classes for rating 76', () => {
-        expect(getRatingClasses(76)).toBe('bg-emerald-500/90 text-white');
+        expect(getRatingClasses(76)).toBe('bg-success text-white');
     });
 });
 

@@ -8,8 +8,8 @@ import {
 } from './price-badge.helpers';
 
 const BADGE_CONFIG = {
-    'best-price': { label: 'Best Price', className: 'bg-emerald-500/90 text-white' },
-    'on-sale': { label: 'On Sale', className: 'bg-amber-500/90 text-white' },
+    'best-price': { label: 'Best Price', className: 'bg-success text-white' },
+    'on-sale': { label: 'On Sale', className: 'bg-warning text-white' },
 } as const;
 
 const CHIP_CLS = 'px-1.5 py-0.5 text-[10px] font-bold rounded';

@@ -34,7 +34,7 @@ import { RecipeStates } from './forms-recipes-demo';
 function ButtonVariants(): JSX.Element {
     return (
         <>
-            <StateFrame label="Button — variants" note="Solid fills stay bg-emerald-600 / bg-red-600: index.css forces their label white on light. The three *-soft variants share one token-tint shape.">
+            <StateFrame label="Button — variants" note="Solid fills stay bg-emerald-600 / bg-red-600: index.css forces their label white on light, and the primary steps to #047857 (hover #065f46) there. The three *-soft variants share one token-tint shape.">
                 <Button>Primary</Button>
                 <Button variant="secondary">Secondary</Button>
                 <Button variant="ghost">Ghost</Button>

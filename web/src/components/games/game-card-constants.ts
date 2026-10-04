@@ -9,7 +9,7 @@ export const HEART_PATH =
 
 /** Return Tailwind color classes based on rating value. */
 export function getRatingClasses(rating: number): string {
-    if (rating >= 75) return 'bg-emerald-500/90 text-white';
+    if (rating >= 75) return 'bg-success text-white';
     if (rating >= 50) return 'bg-yellow-500/90 text-black';
     return 'bg-red-500/90 text-white';
 }

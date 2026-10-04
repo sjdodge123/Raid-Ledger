@@ -366,7 +366,9 @@ describe('DesignSystemPage — ROK-1586 sections', () => {
         }
         // D-6: the solid button fill stays raw, shown beside the token it must not become.
         expect(screen.getByTestId('ds-button-raw')).toHaveClass('bg-emerald-600');
-        expect(screen.getByTestId('ds-button-token')).toHaveClass('bg-success');
+        expect(screen.getByTestId('ds-button-token')).toHaveClass('bg-success', 'text-white');
+        expect(screen.getByTestId('ds-button-token'), '#0f172a on light #047857 is 3.26:1 — the success fill takes a white label')
+            .not.toHaveClass('text-foreground');
     });
 
     it('mounts the real JourneyHero in all three tones at both widths', () => {
@@ -432,6 +434,9 @@ describe('DesignSystemPage — ROK-1655 form foundation (Forms)', () => {
         const brand = within(forms).queryByRole('button', { name: 'Link Discord' });
         expect(brand, 'a brandColor Button demo must be present').not.toBeNull();
         expect(brand).toHaveAttribute('data-brand-fill');
+        expect(brand, 'white label on Discord blurple').toHaveAttribute('data-brand-label', 'light');
+        const accent = within(forms).queryByRole('button', { name: 'Light accent' });
+        expect(accent, 'a light-accent brandColor demo must show the dark label (ROK-1472)').toHaveAttribute('data-brand-label', 'dark');
     });
 });
 

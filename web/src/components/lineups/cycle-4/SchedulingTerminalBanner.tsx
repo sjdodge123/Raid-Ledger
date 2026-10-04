@@ -149,7 +149,7 @@ function ExpiredBody(props: {
           type="button"
           data-testid="expired-lock-in-action"
           onClick={onLockIn}
-          className="mt-3 min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-cyan-500 bg-cyan-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-colors hover:bg-cyan-500 active:bg-cyan-700"
+          className="mt-3 min-h-[44px] sm:min-h-[36px] w-full sm:w-auto inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md border border-cyan-500 bg-cyan-600 px-4 py-2 text-sm font-semibold text-foreground shadow-md transition-colors hover:bg-cyan-500 active:bg-cyan-700"
         >
           Schedule {lockInLabel}
         </button>
