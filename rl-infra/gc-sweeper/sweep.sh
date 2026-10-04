@@ -208,27 +208,17 @@ if [[ -d "$TASKS_DIR" ]]; then
     done
 fi
 
-# ROK-1331 M5a — helper: call orchestrator's lease-advance for a slot after
-# the sweeper frees it. Best-effort; never fatal. Resolves the binary path
-# relative to the sweeper container's mounted /orchestrator dir (set up by
-# docker-compose.yml) OR via $ORCHESTRATOR_BIN_DIR override for tests.
-ORCHESTRATOR_BIN_DIR="${ORCHESTRATOR_BIN_DIR:-/orchestrator/bin}"
-sweeper_lease_advance() {
-    local slot="$1"
-    local advance_bin="${ORCHESTRATOR_BIN_DIR}/lease-advance"
-    [[ -x "$advance_bin" ]] || return 0
-    RL_STATE_DIR="$STATE_DIR" "$advance_bin" --slot "$slot" >/dev/null 2>&1 || true
-}
-
 # ROK-1515 — the reap paths below must also sweep the shared Discord test
 # guild's leaked ⏰ voice channels, exactly as env-destroy does (ROK-1508).
 # The helper lives in the orchestrator's bin dir, mounted read-only at
 # $DISCORD_SWEEP_LIB_DIR (/orchestrator-lib in docker-compose.yml). Only the
 # two function-only files are sourced — NEVER _state.sh, which re-sources
 # /srv/rl-infra/.env, probes the docker socket proxy and mkdir's under
-# /srv/rl-infra/state. Absent mount (fresh deploy, local tests) → silent no-op,
-# mirroring sweeper_lease_advance's `[[ -x ]] || return 0` idiom.
-DISCORD_SWEEP_LIB_DIR="${DISCORD_SWEEP_LIB_DIR:-$ORCHESTRATOR_BIN_DIR}"
+# /srv/rl-infra/state. Absent mount (fresh deploy, local tests) → silent no-op:
+# the `[[ -r ]]` guard below simply skips the source.
+# The default is the path compose actually mounts. It used to fall back to
+# /orchestrator/bin, which was never mounted in this container (TDB:1101).
+DISCORD_SWEEP_LIB_DIR="${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}"
 SWEEP_DISCORD_READY=0
 if [[ -r "${DISCORD_SWEEP_LIB_DIR}/_bot_identity.sh" && -r "${DISCORD_SWEEP_LIB_DIR}/_discord_sweep.sh" ]]; then
     # shellcheck disable=SC1091
@@ -359,9 +349,8 @@ for slot in $DEAD_SLOTS; do
     # `if` rather than `[[ … ]] && …`: under `set -e` a false AND-list mid-body
     # would abort the whole sweeper cycle.
     if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
-    # ROK-1331 M5a — promote any queued waiter immediately so dead claims
-    # don't strand the queue.
-    sweeper_lease_advance "$slot"
+    # Queued waiters are not promoted here: claim-wait re-runs `claim` on every
+    # lease-queue wake or timeout, which picks up the slot this freed (TDB:1101).
 done
 
 # 1b'. Hoarded-slot reaper. Claims older than MAX_CLAIM_AGE_SECONDS get
@@ -398,14 +387,13 @@ for slot in $HOARDED_SLOTS; do
     audit hoarded_slot_released "$(jq -nc --argjson slot "$slot" '{slot:$slot}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
     if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
-    sweeper_lease_advance "$slot"
 done
 
 # 1d. ROK-1331 M5a — Claim-expiry reaper. Claims past `expires_at` get
 # released ONLY when there's a queued waiter for the slot (operator
 # quote: "leave up until an agent is queued"). When the queue is empty
 # AND the claim is past expiry, leave the env up + slot "claimed but
-# idle" — the next claim will inherit/destroy via lease-advance when
+# idle" — the next claim/release path inherits or destroys the envs when
 # someone arrives.
 LEASE_QUEUE_DIR="${LEASE_QUEUE_DIR:-${STATE_DIR}/lease-queue}"
 EXPIRED_SLOTS=$(jq -r --argjson now "$NOW_EPOCH" \
@@ -433,7 +421,6 @@ for slot in $EXPIRED_SLOTS; do
         '(.[] | select(.slot == $s)) |= (.claimed=false | .agent_id=null | .branch=null | .started_at=null | .last_heartbeat=null | .expires_at=null | .extends_count=0)'
     audit claim_expired_released "$(jq -nc --argjson slot "$slot" --argjson q "$QLEN" '{slot:$slot, queue_depth:$q}')"
     CYCLE_CLAIMS_SWEPT=$((CYCLE_CLAIMS_SWEPT + 1))
-    sweeper_lease_advance "$slot"
 done
 
 # 1e. ROK-1331 M5a — Stale lease-queue heads. Drop entries whose
@@ -683,11 +670,9 @@ docker container prune -f --filter "label=rl.role=env" >/dev/null 2>&1 || true
 # a host that only needed its builder cache keeps its images and volumes.
 # Best-effort: the library fails open (and no-ops when df is unreadable), so a
 # sweeper cycle is never lost to it.
-# The lib lives with the other orchestrator helpers, which compose mounts at
-# /orchestrator-lib (NOT at ORCHESTRATOR_BIN_DIR=/orchestrator/bin — that path
-# is deliberately dead in this container, see the compose volume comment: it
-# would also switch on lease-advance + runner-testcontainers-reap). Same
-# resolution the ⏰ Discord sweep uses. Getting this wrong made the whole
+# The lib lives with the other orchestrator helpers, which compose mounts
+# read-only at /orchestrator-lib (DISCORD_SWEEP_LIB_DIR). Same resolution the
+# ⏰ Discord sweep uses. Getting this wrong made the whole
 # ladder a silent no-op (review BLOCKER 1).
 DISK_PRESSURE_LIB="${DISK_PRESSURE_LIB:-${DISCORD_SWEEP_LIB_DIR:-/orchestrator-lib}/_disk_pressure.sh}"
 if [[ -r "$DISK_PRESSURE_LIB" ]]; then
@@ -698,18 +683,6 @@ if [[ -r "$DISK_PRESSURE_LIB" ]]; then
     log "disk: $(jq -rc '"used=" + ((.after_pct // "?")|tostring) + "% free=" + ((.free_gb // "?")|tostring) + "G pruned=" + ((.pruned // false)|tostring)' <<<"$DISK_RESULT" 2>/dev/null || echo unknown)"
 else
     log "disk: ladder library not found at $DISK_PRESSURE_LIB — skipping disk-pressure check"
-fi
-
-# 3a. ROK-1331 M8 — testcontainers orphan reap (fleet-wide).
-# release fires the reaper per-slot at handoff; this is the safety net for
-# anything that slipped through (jest killed by OOM after release already
-# ran, ryuk-session desync surfaced post-release, etc.). Best-effort —
-# silenced because the operator's Mac runs the sweeper-test without docker
-# available, and we don't want the noise. The reaper itself exits 0 on
-# zero-reap or docker unreachable.
-REAP_BIN="${ORCHESTRATOR_BIN_DIR}/runner-testcontainers-reap"
-if [[ -x "$REAP_BIN" ]]; then
-    RL_STATE_DIR="$STATE_DIR" "$REAP_BIN" all >/dev/null 2>&1 || true
 fi
 
 # 3c. ROK-1331 M1 — task retention block moved to a self-contained function
