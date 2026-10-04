@@ -1,6 +1,4 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { BullModule } from '@nestjs/bullmq';
 import { SteamAuthController } from './steam-auth.controller';
 import { SteamService } from './steam.service';
@@ -11,6 +9,7 @@ import { UsersModule } from '../users/users.module';
 import { SettingsModule } from '../settings/settings.module';
 import { IgdbModule } from '../igdb/igdb.module';
 import { ItadModule } from '../itad/itad.module';
+import { AuthModule } from '../auth/auth.module';
 
 /**
  * Steam Integration Module (ROK-417)
@@ -22,14 +21,9 @@ import { ItadModule } from '../itad/itad.module';
     SettingsModule,
     IgdbModule,
     ItadModule,
+    // ROK-1630: LinkNonceService for the GET /auth/steam/link?nonce= hop.
+    AuthModule,
     BullModule.registerQueue({ name: STEAM_SYNC_QUEUE }),
-    JwtModule.registerAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        secret: config.get<string>('JWT_SECRET'),
-      }),
-    }),
   ],
   controllers: [SteamAuthController],
   providers: [SteamService, SteamWishlistService, SteamSyncProcessor],

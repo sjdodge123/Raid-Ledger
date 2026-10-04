@@ -1,10 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { createHash } from 'node:crypto';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import type { IntentTokenPayload } from '@raid-ledger/contract';
+import { consumeTokenOnce } from './single-use-token.helpers';
 
 /** Intent token TTL: 15 minutes (matches Discord interaction timeout) */
 const INTENT_TOKEN_TTL = 15 * 60;
@@ -61,28 +61,11 @@ export class IntentTokenService {
       return null;
     }
 
-    const tokenHash = this.hashToken(token);
-
-    const result = await this.db
-      .insert(schema.consumedIntentTokens)
-      .values({ tokenHash })
-      .onConflictDoNothing()
-      .returning({ id: schema.consumedIntentTokens.id });
-
-    if (result.length === 0) {
+    if (!(await consumeTokenOnce(this.db, token))) {
       this.logger.warn('Intent token already used');
       return null;
     }
 
     return payload;
-  }
-
-  /**
-   * Hash a token with SHA-256 for storage (avoids storing raw JWTs).
-   * @param token - The raw JWT string
-   * @returns Hex-encoded SHA-256 hash (64 characters)
-   */
-  private hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
   }
 }

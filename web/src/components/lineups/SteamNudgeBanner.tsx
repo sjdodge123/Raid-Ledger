@@ -19,13 +19,14 @@ function isDismissed(lineupId: number): boolean {
 
 /** Banner action buttons — Link Steam CTA and dismiss. */
 function BannerActions({ onDismiss }: { onDismiss: () => void }) {
-    const { linkSteam } = useSteamLink();
+    const { linkSteam, isLinkPending } = useSteamLink();
     return (
         <div className="ml-4 flex items-center gap-2">
             <button
                 type="button"
-                onClick={() => linkSteam()}
-                className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
+                onClick={() => { void linkSteam(); }}
+                disabled={isLinkPending}
+                className="rounded bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
                 Link Steam
             </button>
