@@ -2253,3 +2253,10 @@ same day (#1278, #1279, #1280).
   Suggested: convert the column like 0197 (`USING "round_deadline" AT TIME ZONE 'UTC'`), switch the `:94` cast to `::timestamptz`, and parse at `:107` with `parseTimestampUtc` (`api/src/drizzle/timestamp-utils.ts`), all in one PR.
 - **[nit]** `api/src/discord-bot/services/scheduled-event.revalidate.ts:48-53` (`parseEventTimestampUtc`): now that `parseTimestampUtc` (`api/src/drizzle/timestamp-utils.ts:27`) accepts the same short offsets (`/[+-]\d{2}(:?\d{2})?$/`), the two helpers are near-duplicates. The only differences are that `parseEventTimestampUtc` trims its input and maps `null`/empty to an Invalid Date.
   Suggested: make `parseEventTimestampUtc` a thin wrapper (trim + null/empty guard) over `parseTimestampUtc`, and keep its existing unit cases.
+
+### 2026-10-04 — fix/b55-events-search-remount-1002 (search toPass removal proved on the fleet)
+
+- **[resolved 2026-10-04]** TDB:1817 `scripts/smoke/events.smoke.spec.ts` "search input accepts text and filters results" (desktop `:70` and mobile `:153`): the `toPass` retry around `fill()` is gone and the tests now do a plain `fill()`; #1342 (`983d330ab`) fixed the StartupGate whole-app remount, the likeliest cause of the lost fills. Proof: fleet task `b4a20cf7223a` ran `npx playwright test scripts/smoke/events.smoke.spec.ts -g "search input accepts text and filters results" --repeat-each=20 --retries=0` on an env built from this branch: desktop 20/20 passed, mobile 20/20 passed, tablet skipped, 0 failed, 0 flaky. A scoped run of the whole spec (same task, all projects) had 0 failures. The wait now reports `{ value, cards }`, so a lost fill reads `value: ''` and a filter/data miss reads `value kept, cards: N`.
+  Suggested: none. If it recurs, instrument the other remount candidates listed in TDB:1817 (the AuthGuard loading swap, the `if (error)` swap in `web/src/pages/events-page.tsx`).
+- **[resolved 2026-10-04]** TDB:1038: same root cause (the search state was wiped by the remount while the cards stayed visible) and the same proof run.
+  Suggested: none.
