@@ -9,6 +9,8 @@ import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
+import { ForeverIdentityFields } from '../characters/forever-identity-fields';
+import { emptyForeverIdentity, foreverCreateFields, isWowForeverSlug, validateForeverIdentity, type ForeverIdentity, type ForeverIdentityErrors } from '../characters/forever-identity';
 
 interface CharacterStepProps {
     /** The registry game to create a character for (pre-filled from hearted games) */
@@ -29,16 +31,23 @@ interface FormState {
     spec: string;
     role: CharacterRole | '';
     realm: string;
+    /** ROK-1721: WoW: Forever identity (used only for the Forever game). */
+    forever: ForeverIdentity;
 }
 
 /** A missing name is a Field error on Name; a failed create is a separate form-level alert (ROK-1648). */
-interface StepErrors { name?: string; submit?: string }
+interface StepErrors { name?: string; submit?: string; forever?: ForeverIdentityErrors }
 
-const EMPTY_FORM: FormState = { name: '', class: '', spec: '', role: '', realm: '' };
+const EMPTY_FORM: FormState = { name: '', class: '', spec: '', role: '', realm: '', forever: emptyForeverIdentity() };
 
 type UpdateField = <K extends keyof FormState>(f: K, v: FormState[K]) => void;
 
-function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean) {
+function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean, isForever: boolean) {
+    const payload = buildBasePayload(form, gameId, showMmoFields, isMain);
+    return isForever ? { ...payload, realm: undefined, ...foreverCreateFields(form.forever) } : payload;
+}
+
+function buildBasePayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean) {
     return {
         gameId,
         name: form.name.trim(),
@@ -78,7 +87,7 @@ function TextField({ label, field, form, updateField, placeholder, maxLength }: 
     );
 }
 
-function MmoFields({ form, updateField }: { form: FormState; updateField: UpdateField }) {
+function MmoFields({ form, updateField, showRealm }: { form: FormState; updateField: UpdateField; showRealm: boolean }) {
     return (
         <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -90,7 +99,7 @@ function MmoFields({ form, updateField }: { form: FormState; updateField: Update
                     <option value="tank">Tank</option><option value="healer">Healer</option><option value="dps">DPS</option>
                 </Select>
             </Field>
-            <TextField label="Realm/Server" field="realm" form={form} updateField={updateField} placeholder="e.g. Illidan" maxLength={100} />
+            {showRealm && <TextField label="Realm/Server" field="realm" form={form} updateField={updateField} placeholder="e.g. Illidan" maxLength={100} />}
         </>
     );
 }
@@ -115,8 +124,12 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
     const handleDelete = (id: string) => { s.deleteMutation.mutate(id, { onSuccess: () => { if (charIndex > 0) onRemoveStep?.(); } }); };
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault(); s.setErrors({});
-        if (!s.form.name.trim()) { s.setErrors({ name: 'Character name is required' }); return; }
-        s.createMutation.mutate(buildCharacterPayload(s.form, preselectedGame.id, preselectedGame.hasRoles, s.existingChars.length === 0), { onSuccess: () => s.resetForm(), onError: () => s.setErrors({ submit: 'Failed to create character. Please try again.' }) });
+        // ROK-1721: WoW: Forever is detected by the game's slug.
+        const isForever = isWowForeverSlug(preselectedGame.slug);
+        const foreverErrors = isForever ? validateForeverIdentity(s.form.forever) : null;
+        if (foreverErrors) { s.setErrors({ forever: foreverErrors }); return; }
+        if (!isForever && !s.form.name.trim()) { s.setErrors({ name: 'Character name is required' }); return; }
+        s.createMutation.mutate(buildCharacterPayload(s.form, preselectedGame.id, preselectedGame.hasRoles, s.existingChars.length === 0, isForever), { onSuccess: () => s.resetForm(), onError: () => s.setErrors({ submit: 'Failed to create character. Please try again.' }) });
     };
 
     return (
@@ -136,15 +149,18 @@ function CharacterStepForm({ s, preselectedGame, onRegisterValidator, handleSubm
     s: ReturnType<typeof useCharacterStepState>; preselectedGame: GameRegistryDto;
     onRegisterValidator?: ((fn: () => boolean) => void) | undefined; handleSubmit: (e: React.FormEvent) => void;
 }) {
+    const isForever = isWowForeverSlug(preselectedGame.slug);
     return (
         <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
             {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, onRegisterValidator }} />}
             {s.activeTab === 'manual' && (
                 <>
-                    <Field label="Name" required error={s.errors.name}>
-                        <Input type="text" value={s.form.name} onChange={(e) => s.updateField('name', e.target.value)} placeholder="Character name" maxLength={100} />
-                    </Field>
-                    {preselectedGame.hasRoles && <MmoFields form={s.form} updateField={s.updateField} />}
+                    {isForever ? <ForeverIdentityFields value={s.form.forever} onChange={(v) => s.updateField('forever', v)} errors={s.errors.forever} /> : (
+                        <Field label="Name" required error={s.errors.name}>
+                            <Input type="text" value={s.form.name} onChange={(e) => s.updateField('name', e.target.value)} placeholder="Character name" maxLength={100} />
+                        </Field>
+                    )}
+                    {preselectedGame.hasRoles && <MmoFields form={s.form} updateField={s.updateField} showRealm={!isForever} />}
                     {s.errors.submit && <p role="alert" className="text-sm text-danger">{s.errors.submit}</p>}
                     <Button type="submit" variant="primary" fullWidth loading={s.createMutation.isPending} loadingLabel="Creating…">Create Character</Button>
                 </>

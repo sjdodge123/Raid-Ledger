@@ -94,19 +94,28 @@ function MainCheckbox({ form, isEditing, editingIsMain, hasMainForGame, onUpdate
     );
 }
 
+/** Name — or, for WoW: Forever, region / ruleset / two-part name with region locked when editing (ROK-1721). */
+function IdentityFields({ form, isForever, isEditing, isArmorySynced, nameError, foreverErrors, onUpdateField }: {
+    form: FormState; isForever: boolean; isEditing: boolean; isArmorySynced: boolean; nameError?: string | undefined;
+    foreverErrors?: ForeverIdentityErrors | undefined; onUpdateField: CharacterFormFieldsProps['onUpdateField'];
+}) {
+    if (isForever) {
+        return <ForeverIdentityFields value={form.forever} onChange={(v) => onUpdateField('forever', v)} errors={foreverErrors} regionLocked={isEditing} />;
+    }
+    return (
+        <SyncableInput label="Name" value={form.name} onChange={(v) => onUpdateField('name', v)}
+            placeholder="Character name" maxLength={100} isArmorySynced={isArmorySynced} required error={nameError} />
+    );
+}
+
 export function CharacterFormFields({
     form, showMmoFields, isArmorySynced, isEditing, editingIsMain, hasMainForGame, nameError, isForever, foreverErrors, onUpdateField,
 }: CharacterFormFieldsProps) {
     return (
         <>
             {isArmorySynced && <ArmorySyncBanner />}
-            {isForever ? (
-                <ForeverIdentityFields value={form.forever} onChange={(v) => onUpdateField('forever', v)}
-                    errors={foreverErrors} regionLocked={isEditing} />
-            ) : (
-                <SyncableInput label="Name" value={form.name} onChange={(v) => onUpdateField('name', v)}
-                    placeholder="Character name" maxLength={100} isArmorySynced={isArmorySynced} required error={nameError} />
-            )}
+            <IdentityFields form={form} isForever={!!isForever} isEditing={isEditing} isArmorySynced={isArmorySynced}
+                nameError={nameError} foreverErrors={foreverErrors} onUpdateField={onUpdateField} />
             {showMmoFields && (
                 <>
                     <div className="grid grid-cols-2 gap-3">
