@@ -148,10 +148,11 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   what the dark family already paints, and the light fill (`#047857`) is darker than the dark one, so the
   label only gains contrast there (`JourneyHero.tsx:163`). This is the one
   exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
-- **DON'T put `text-white` on a raw `bg-emerald-500` / `bg-amber-500` (any `/NN`) or `bg-cyan-600`.** None is
+- **DON'T put `text-white` on a raw `bg-emerald-500` / `bg-amber-500` / `bg-cyan-500` (any `/NN`) or `bg-cyan-600`.** None is
   repainted on the light schemes and white measures 2.2–3.6:1 on them (the `/games` "Best Price" chip was
-  2.3:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,
-  `WishlistBadge`, the rating chip); `brand-fill-forced-white.guard.test.ts` fails the pairing.
+  2.3:1, "You own" 2.34:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,
+  `WishlistBadge`, the rating chip); a cyan chip is solid `bg-cyan-500` / `bg-cyan-600` + `text-foreground`
+  (`YouOwnBadge`; `#0f172a` on light, 7.55:1); `brand-fill-forced-white.guard.test.ts` fails the pairing.
 - **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
 
 Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
@@ -174,7 +175,7 @@ text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a 
 (`:759-773`); solid fills keep their hue with the label forced white on light (`:819-827`) — except the primary
 `bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
 (`:837-851`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
-`bg-cyan-600` (white is 3.62:1 on it), whose `text-foreground` label is forced to `#0f172a` (4.93:1; dawn's own
+`bg-cyan-600` / `bg-cyan-500` (white is 3.62 / 2.37:1 on them), whose `text-foreground` label is forced to `#0f172a` (4.93 / 7.55:1; dawn's own
 foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past

@@ -101,7 +101,7 @@ export function YouOwnBadge(): JSX.Element {
     return (
         <span
             data-testid="you-own-badge"
-            className={`${BADGE_CLS} bg-cyan-500/90 text-white`}
+            className={`${BADGE_CLS} bg-cyan-500 text-foreground`}
         >
             You own
         </span>

@@ -829,8 +829,8 @@ body {
 /* --- Solid fills a white label cannot clear: force the dark label (ROK-1472) ---
    cyan-600 #0092b8 is 3.62:1 under white, and each light scheme's own foreground
    lands between 4.42 (dawn #2D1F0F) and 4.93 (default-light #0f172a). #0f172a
-   (the brand dark label) is 4.93 on it and 7.55 on the hover:bg-cyan-500 #00b8db. */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.bg-cyan-600).text-foreground {
+   (the brand dark label) is 4.93 on it and 7.55 on cyan-500 #00b8db (hover, YouOwnBadge; white 2.37). */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.bg-cyan-600, .bg-cyan-500).text-foreground {
     --color-foreground: #0f172a;
 }
 
