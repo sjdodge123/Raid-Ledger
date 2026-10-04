@@ -11,7 +11,9 @@
  * for >10s, and the helper must surface per-chunk telemetry the caller can
  * aggregate into a degraded-status signal (AC #5).
  */
+import { Logger } from '@nestjs/common';
 import {
+  EARLY_ACCESS_BREAKER_THRESHOLD,
   EARLY_ACCESS_CALL_TIMEOUT_MS,
   enrichChunkEarlyAccess,
   enrichEarlyAccessPhase,
@@ -110,6 +112,7 @@ describe('enrichChunkEarlyAccess — per-call timeout (ROK-1197)', () => {
     expect(itadService.getGameInfo).toHaveBeenCalledWith(expect.any(String), {
       ...ITAD_BACKGROUND_FETCH,
       throwOnExhausted: true,
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -202,6 +205,38 @@ describe('enrichChunkEarlyAccess — call budget vs an ITAD 429 pause', () => {
   });
 });
 
+describe('enrichChunkEarlyAccess — timed-out call is cancelled', () => {
+  beforeEach(() => {
+    jest.useFakeTimers({ now: Date.UTC(2020, 0, 1) });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('aborts a timed-out call so it stops retrying in the background', async () => {
+    let signal: AbortSignal | undefined;
+    const getGameInfo = jest.fn(
+      (_id: string, opts: { signal?: AbortSignal }) => {
+        signal = opts.signal;
+        return new Promise(() => {
+          /* never resolves */
+        });
+      },
+    );
+    const pending = enrichChunkEarlyAccess(
+      createDrizzleMock() as never,
+      { getGameInfo } as never,
+      buildChunk(1),
+    );
+
+    await jest.advanceTimersByTimeAsync(EARLY_ACCESS_CALL_TIMEOUT_MS + 1);
+
+    await expect(pending).resolves.toMatchObject({ updated: 0, failed: 1 });
+    expect(signal?.aborted).toBe(true);
+  });
+});
+
 describe('enrichEarlyAccessPhase — tail pass', () => {
   it('retries failed games once at the end and only counts double failures', async () => {
     const itadService = buildItadService();
@@ -232,6 +267,176 @@ describe('enrichEarlyAccessPhase — tail pass', () => {
       'game-uuid-2',
       'game-uuid-4',
     ]);
-    expect(result).toEqual({ updated: 3, failed: 1, retried: 2 });
+    expect(result).toEqual({
+      updated: 3,
+      failed: 1,
+      retried: 2,
+      tripped: false,
+    });
+  });
+});
+
+const exhausted = () =>
+  Promise.reject(new ItadRetriesExhaustedError('/games/info/v2'));
+
+/** The game number from a `game-uuid-N` id. */
+const gameNo = (id: string) => Number(id.slice('game-uuid-'.length));
+
+describe('enrichEarlyAccessPhase — consecutive-exhaustion breaker trips', () => {
+  it('stops after 10 consecutive exhausted calls: no later chunk, no tail pass', async () => {
+    expect(EARLY_ACCESS_BREAKER_THRESHOLD).toBe(10);
+    const itadService = buildItadService();
+    itadService.getGameInfo.mockImplementation(exhausted);
+    const games = buildChunk(20);
+    const onChunk = jest.fn();
+
+    const result = await enrichEarlyAccessPhase(
+      createDrizzleMock() as never,
+      itadService as never,
+      [games.slice(0, 12), games.slice(12)],
+      onChunk,
+    );
+
+    // Two slices of EARLY_ACCESS_CONCURRENCY (5), then the breaker stops.
+    expect(itadService.getGameInfo).toHaveBeenCalledTimes(10);
+    expect(result).toEqual({
+      updated: 0,
+      failed: 20,
+      retried: 0,
+      tripped: true,
+    });
+    expect(onChunk).toHaveBeenCalledTimes(1);
+    expect(onChunk).toHaveBeenCalledWith(
+      12,
+      expect.objectContaining({ updated: 0, failed: 12, tripped: true }),
+    );
+  });
+
+  it('still writes the updates gathered before the trip', async () => {
+    const db = createDrizzleMock();
+    const itadService = buildItadService();
+    itadService.getGameInfo.mockImplementation((id: string) =>
+      gameNo(id) <= 2 ? Promise.resolve({ earlyAccess: true }) : exhausted(),
+    );
+
+    const result = await enrichEarlyAccessPhase(
+      db as never,
+      itadService as never,
+      [buildChunk(17)],
+      () => undefined,
+    );
+
+    // Games 3-12 make ten in a row; 13-15 share that slice; 16-17 never run.
+    expect(itadService.getGameInfo).toHaveBeenCalledTimes(15);
+    expect(result).toEqual({
+      updated: 2,
+      failed: 15,
+      retried: 0,
+      tripped: true,
+    });
+    expect(db.execute).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('enrichEarlyAccessPhase — breaker trip warning', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => undefined);
+  });
+  afterEach(() => warn.mockRestore());
+
+  const run = (itadService: ItadServiceLike, games: number) =>
+    enrichEarlyAccessPhase(
+      createDrizzleMock() as never,
+      itadService as never,
+      [buildChunk(games)],
+      () => undefined,
+    );
+
+  it('says the tail pass was skipped when the first pass trips', async () => {
+    const itadService = buildItadService();
+    itadService.getGameInfo.mockImplementation(exhausted);
+
+    await run(itadService, 10);
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('10 games skipped or failed (tail pass skipped)'),
+    );
+  });
+
+  it('says it tripped during the tail pass when the retries exhaust', async () => {
+    const itadService = buildItadService();
+    const seen = new Set<string>();
+    // First pass: a plain error (no streak). Tail pass: exhausted every time.
+    itadService.getGameInfo.mockImplementation((id: string) => {
+      if (seen.has(id)) return exhausted();
+      seen.add(id);
+      return Promise.reject(new Error('boom'));
+    });
+
+    const result = await run(itadService, 10);
+
+    expect(result).toMatchObject({ retried: 10, failed: 10, tripped: true });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '10 games skipped or failed (during the tail pass)',
+      ),
+    );
+  });
+});
+
+describe('enrichEarlyAccessPhase — consecutive-exhaustion streak', () => {
+  it('a fulfilled call resets the streak, so interleaved successes never trip it', async () => {
+    const itadService = buildItadService();
+    const seen = new Set<string>();
+    itadService.getGameInfo.mockImplementation((id: string) => {
+      const first = !seen.has(id);
+      seen.add(id);
+      // First pass: nine exhausted calls between each success.
+      if (first && gameNo(id) % 10 !== 0) return exhausted();
+      return Promise.resolve({ earlyAccess: false });
+    });
+
+    const result = await enrichEarlyAccessPhase(
+      createDrizzleMock() as never,
+      itadService as never,
+      [buildChunk(20)],
+      () => undefined,
+    );
+
+    expect(itadService.getGameInfo).toHaveBeenCalledTimes(38);
+    expect(result).toEqual({
+      updated: 20,
+      failed: 0,
+      retried: 18,
+      tripped: false,
+    });
+  });
+
+  it('timeouts and other errors neither count toward nor reset the streak', async () => {
+    const itadService = buildItadService();
+    // Games 1-5 and 11-15 exhausted; 6-10 fail some other way.
+    itadService.getGameInfo.mockImplementation((id: string) => {
+      const n = gameNo(id);
+      if (n > 5 && n <= 10) return Promise.reject(new Error('timeout'));
+      return exhausted();
+    });
+
+    const result = await enrichEarlyAccessPhase(
+      createDrizzleMock() as never,
+      itadService as never,
+      [buildChunk(20)],
+      () => undefined,
+    );
+
+    expect(itadService.getGameInfo).toHaveBeenCalledTimes(15);
+    expect(result).toEqual({
+      updated: 0,
+      failed: 20,
+      retried: 0,
+      tripped: true,
+    });
   });
 });

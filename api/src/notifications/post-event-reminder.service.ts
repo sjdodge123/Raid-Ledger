@@ -35,7 +35,9 @@ export class PostEventReminderService {
     private readonly pugInviteService: PugInviteService,
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
-    @Optional() private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   /**

@@ -13,6 +13,9 @@
  *      = min gameId of tied set (NEW — the bug).
  *   3. No tiebreaker row, voting, no ties → 400 'No ties to dismiss'.
  *   4. Lineup not in voting → 400 from `findAndValidateLineup`.
+ *   5. TDB:920 — `start()` is atomic: a bracket-build failure leaves no
+ *      tiebreaker row and no `activeTiebreakerId` link behind.
+ *   6. `start()` commits one `active` row linked to the lineup.
  */
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -23,6 +26,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { TiebreakerService } from './tiebreaker.service';
+import * as bracket from './tiebreaker-bracket.helpers';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
 
 interface TiedLineupSetup {
@@ -38,6 +42,7 @@ function describeTiebreakerDismiss() {
   let adminToken: string;
   let tiebreakerService: TiebreakerService;
   let sendEmbedSpy: jest.SpyInstance;
+  let buildBracketSpy: jest.SpyInstance | undefined;
 
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -55,6 +60,8 @@ function describeTiebreakerDismiss() {
 
   afterEach(async () => {
     sendEmbedSpy.mockRestore();
+    buildBracketSpy?.mockRestore();
+    buildBracketSpy = undefined;
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
@@ -110,6 +117,13 @@ function describeTiebreakerDismiss() {
     ]);
 
     return { lineupId: lineup.id, gameAId, gameBId, voterAId, voterBId };
+  }
+
+  async function getTiebreakerRows(lineupId: number) {
+    return testApp.db
+      .select()
+      .from(schema.communityLineupTiebreakers)
+      .where(eq(schema.communityLineupTiebreakers.lineupId, lineupId));
   }
 
   async function getLineup(lineupId: number) {
@@ -230,6 +244,51 @@ function describeTiebreakerDismiss() {
 
     expect(res.status).toBe(400);
     expect(String(res.body.message)).toMatch(/voting/i);
+  });
+
+  // ── Case 5: TDB:920 — a failed start() leaves nothing behind ─────────
+
+  it('rolls back the row and the lineup link when the bracket build fails (TDB:920)', async () => {
+    const { lineupId } = await setupVotingLineupWithTies();
+    buildBracketSpy = jest
+      .spyOn(bracket, 'buildBracket')
+      .mockRejectedValueOnce(new Error('boom'));
+
+    await expect(
+      tiebreakerService.start(
+        lineupId,
+        { mode: 'bracket', roundDurationHours: 24 },
+        { id: 1, role: 'operator' },
+      ),
+    ).rejects.toThrow('boom');
+
+    // Precondition: the failure came from the stubbed bracket build.
+    expect(buildBracketSpy).toHaveBeenCalledTimes(1);
+    expect(await getTiebreakerRows(lineupId)).toHaveLength(0);
+    const lineup = await getLineup(lineupId);
+    expect(lineup.activeTiebreakerId).toBeNull();
+  });
+
+  // ── Case 6: start() commits one active, linked row ───────────────────
+  // Non-discriminating: this also passes before TDB:920, where a separate
+  // pending→active update ran last. It pins the end state that the single
+  // atomic insert must keep.
+
+  it('start() leaves one active tiebreaker linked to the lineup', async () => {
+    const { lineupId } = await setupVotingLineupWithTies();
+
+    const detail = await tiebreakerService.start(
+      lineupId,
+      { mode: 'veto', roundDurationHours: 24 },
+      { id: 1, role: 'operator' },
+    );
+
+    const rows = await getTiebreakerRows(lineupId);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('active');
+    expect(detail.status).toBe('active');
+    const lineup = await getLineup(lineupId);
+    expect(lineup.activeTiebreakerId).toBe(rows[0].id);
   });
 }
 

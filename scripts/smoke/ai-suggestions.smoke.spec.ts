@@ -145,12 +145,16 @@ test.describe('AI suggestions blend into Common Ground', () => {
       `/lineups/common-ground?minOwners=2&lineupId=${lineupId}`,
     );
     const rows: Array<{ gameId: number; gameName: string }> = cg?.data ?? [];
-    test.skip(
-      rows.length === 0,
-      'SKIPPED — Common Ground returned no games (minOwners=2): this env has no seeded ownership overlap to blend into',
-    );
-    blendGameId = rows[0].gameId;
-    blendGameName = rows[0].gameName;
+    const first = rows[0];
+    if (first === undefined) {
+      test.skip(
+        true,
+        'SKIPPED — Common Ground returned no games (minOwners=2): this env has no seeded ownership overlap to blend into',
+      );
+      return;
+    }
+    blendGameId = first.gameId;
+    blendGameName = first.gameName;
 
     // The stub must be a game Common Ground did NOT return. An id far above
     // every real row, offset per worker, is both absent from `cg.data` and

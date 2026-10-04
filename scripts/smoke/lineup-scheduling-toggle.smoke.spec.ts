@@ -27,7 +27,7 @@ async function apiPost(
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
         },
-        body: body ? JSON.stringify(body) : undefined,
+        ...(body ? { body: JSON.stringify(body) } : {}),
     });
     if (!res.ok) {
         const text = await res.text().catch(() => '');

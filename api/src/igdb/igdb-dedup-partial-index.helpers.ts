@@ -73,3 +73,31 @@ export async function dropCollidingChannelBindings(
     ),
   );
 }
+
+/**
+ * Distinct Discord channels holding a binding for `gameId`. Read before the
+ * reassignment so the caller can tell the per-channel binding caches which
+ * entries the merge rewrote (repointed or dropped as colliding).
+ *
+ * Typed `execute`, no cast and no fallback: postgres.js resolves a row list,
+ * and a result that is not one throws here, rolling the merge back and
+ * reporting the group, rather than quietly announcing no channels.
+ */
+export async function selectBindingChannelIdsForGame(
+  tx: Tx,
+  gameId: number,
+): Promise<string[]> {
+  const rows = await tx.execute<{ channel_id: string }>(
+    sql`SELECT DISTINCT channel_id FROM channel_bindings WHERE game_id = ${gameId}`,
+  );
+  return rows.map((r) => r.channel_id);
+}
+
+/** Append `gameId`'s bound channels to `sink`; no read when there is no sink. */
+export async function collectBindingChannelIds(
+  tx: Tx,
+  gameId: number,
+  sink: string[] | undefined,
+): Promise<void> {
+  if (sink) sink.push(...(await selectBindingChannelIdsForGame(tx, gameId)));
+}

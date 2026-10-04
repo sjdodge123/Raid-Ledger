@@ -5,6 +5,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
+import { at } from './defined';
 import { isDesktop, isMobile, isPhoneLayout } from './helpers';
 
 // ---------------------------------------------------------------------------
@@ -54,7 +55,8 @@ async function weeksFromShownWeekTo(page: Page, iso: string): Promise<number> {
             const t = Date.UTC(y, m - 1, d);
             return t - new Date(t).getUTCDay() * 86_400_000;
         };
-        const diff = sundayOf(part('year'), part('month'), part('day')) - sundayOf(shown[0], shown[1], shown[2]);
+        const [y = NaN, m = NaN, d = NaN] = shown;
+        const diff = sundayOf(part('year'), part('month'), part('day')) - sundayOf(y, m, d);
         return Math.round(diff / (7 * 86_400_000));
     }, iso);
 }
@@ -124,7 +126,7 @@ test.describe('Calendar — desktop', () => {
     });
 
     test('toolbar funnel opens the Filters panel: search, None, a checkbox per game (ROK-1662)', async ({ page }) => {
-        const [game] = await configuredGames();
+        const game = at(await configuredGames(), 0);
         await page.goto('/calendar');
         const funnel = page.getByTestId('filter-panel-trigger');
         await expect(funnel).toBeVisible({ timeout: 15_000 });
@@ -145,7 +147,7 @@ test.describe('Calendar — desktop', () => {
     });
 
     test('unticking a game badges the funnel with the hidden count; Clear all resets it (ROK-1662)', async ({ page }) => {
-        const [game] = await configuredGames();
+        const game = at(await configuredGames(), 0);
         await resetSavedGameFilter();
         try {
             await page.goto('/calendar');
@@ -244,7 +246,7 @@ test.describe('Calendar — Filters FAB (phone + tablet)', () => {
     });
 
     test('Filters FAB opens the sheet with the game search and a row per game (ROK-1662)', async ({ page }) => {
-        const [game] = await configuredGames();
+        const game = at(await configuredGames(), 0);
         await page.goto('/calendar');
         const sheet = await openFilterSheet(page);
         // No toolbar funnel below 1024px, and the retired "Filter by game" button is gone.

@@ -5,7 +5,17 @@
  * decision rather than through a mocked transaction — the interesting part is
  * WHICH write happens, not that Drizzle was called.
  */
-import { resolveStanceAction, isAnswering } from './scheduling-stance.helpers';
+import type { ScheduleVoteStance } from '@raid-ledger/contract';
+import {
+  resolveStanceAction,
+  isAnswering,
+  isYesStance,
+  stanceTallyFor,
+  tallyStancesBySlot,
+} from './scheduling-stance.helpers';
+
+/** A value the CHECK constraint forbids — the drift case these guard. */
+const UNKNOWN_STANCE = 'maybe' as unknown as ScheduleVoteStance;
 
 describe('resolveStanceAction', () => {
   it('none -> yes inserts a yes', () => {
@@ -66,5 +76,33 @@ describe('isAnswering', () => {
     // withdrawal must stay legal or a Friday voter could never untick it on
     // Saturday.
     expect(isAnswering(resolveStanceAction('yes', 'yes'))).toBe(false);
+  });
+});
+
+describe('isYesStance', () => {
+  it('is true for an explicit yes', () => {
+    expect(isYesStance('yes')).toBe(true);
+  });
+
+  it('is true for an absent stance (the column default)', () => {
+    expect(isYesStance(undefined)).toBe(true);
+    expect(isYesStance(null)).toBe(true);
+  });
+
+  it('is false for a no', () => {
+    expect(isYesStance('no')).toBe(false);
+  });
+
+  it('is false for a stance the schema does not know', () => {
+    expect(isYesStance(UNKNOWN_STANCE)).toBe(false);
+  });
+});
+
+describe('tallyStancesBySlot', () => {
+  it('counts an unknown stance as neither a yes nor a no', () => {
+    // A support count must never grow from a value that is not literally
+    // `yes` — the same rule the SQL tallies apply with `stance = 'yes'`.
+    const tallies = tallyStancesBySlot([{ slotId: 7, stance: UNKNOWN_STANCE }]);
+    expect(stanceTallyFor(tallies, 7)).toEqual({ voteCount: 0, noCount: 0 });
   });
 });
