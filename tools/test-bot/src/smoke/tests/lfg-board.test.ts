@@ -103,7 +103,8 @@ import type { SmokeTest, TestContext } from '../types.js';
  * `LFG_BOARD_TAGS` — the forum's lifecycle tags, verbatim. A hand-copied
  * literal (the companion bot does not depend on the api workspace), so it goes
  * stale when a tag is appended: ROK-1494's `PLAYING NOW` was missing until
- * ROK-1505 appended it together with its own `LOOKING`.
+ * ROK-1505 appended it together with its own `LOOKING`. Drift now fails loudly
+ * in both directions on a freshly created forum (`assertForumTags`).
  */
 const BOARD_TAGS = [
   'NEEDS PLAYERS',
@@ -259,6 +260,21 @@ async function assertForumTags(run: Run): Promise<void> {
       `AC16 step 1: the board forum ${forumId(run)} must offer the ` +
         `lifecycle tags, missing [${missing.join(', ')}] — it offers ` +
         `[${tags.join(', ')}]`,
+    );
+  }
+  if (run.forumPreexisting) {
+    console.log(
+      '  assertForumTags: extra-tag check skipped for a reused forum ' +
+        '(ensureTags is append-only, so it may carry retired or operator tags)',
+    );
+    return;
+  }
+  const extra = tags.filter((t) => !BOARD_TAGS.includes(t));
+  if (extra.length > 0) {
+    throw new Error(
+      `AC16 step 1: the fresh board forum ${forumId(run)} offers [${tags.join(', ')}] but BOARD_TAGS ` +
+        `is [${BOARD_TAGS.join(', ')}] — the literal has drifted from LFG_BOARD_TAGS in ` +
+        `api/src/discord-bot/lfg-board/lfg-board.constants.ts (extra: [${extra.join(', ')}])`,
     );
   }
 }
