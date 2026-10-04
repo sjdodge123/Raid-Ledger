@@ -1,11 +1,24 @@
 // rl_env_spin — bring up a per-test env (allinone + sibling Postgres).
+//
+// ASYNC BY DEFAULT (TDB:208, follows the ROK-1362 120s wait cap). The VM-side
+// spin can outlast any single MCP call, so execute() dispatches it to a
+// detached LAPTOP runner (runner-entry.ts → env-spin-runner.runSpinTask) and
+// returns a `local-<id>` task_id in ~1s. spinEnv() is the synchronous core the
+// runner (and the rl_env_deploy chain) call directly.
 import { runRl, parseJsonFromStdout } from '../exec.js';
 import { redactAdminPassword } from '../credentials.js';
+import {
+  newLocalTaskId,
+  spawnLocalRunner,
+  waitLocalTask,
+  type SpawnLocalRunnerResult,
+} from '../local-task.js';
 import type { OperatorAdminMode } from './operator-admin.js';
+import type { ExecuteStatusReturn, StillRunningResult } from './task-schemas.js';
 
 export const TOOL_NAME = 'rl_env_spin';
 export const TOOL_DESCRIPTION =
-  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user with a known password. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it points at the slot-stable hostname (https://slot-N.{RL_PUBLIC_DOMAIN}) which routes to the same env AND supports Discord OAuth (registered redirect URI). The per-slug `public_url` (https://{slug}test.{RL_PUBLIC_DOMAIN}) is kept in the response for backward compat but should NOT be sent to testers — Discord login won't work on it. Also returns: `internal_url` (LAN fallback http://{slug}.rl.lan) and `admin_email`. The admin password is NOT returned by default (A3-B P4): you get `admin_password_available: true|false` instead, so the credential does not enter your context as a side effect of deploying. You rarely need the value — rl_validate_ci({against_env_slug}) re-seeds and threads it into the runner itself, and testers log in via Discord OAuth. If you genuinely must POST {email, password} to {url}/api/auth/local yourself, re-call with `include_credentials: true`; this call is idempotent, so re-calling is cheap. `admin_password_available: false` means the bootstrap-admin exec failed — read `bootstrap_warnings`. `operator_admin` ('configured' | 'first-login' | 'none') says who lands as admin via Discord login — tell the operator before he signs in. Slug must match [a-z0-9-]+.";
+  "Spin a per-test environment on the fleet: pulls the allinone image, starts a sibling Postgres + the app container, registers the Traefik route, seeds the admin@local user. ASYNC BY DEFAULT: returns {ok:true, task_id:'local-...', started_at} in ~1s while the spin runs in a detached laptop process. Poll rl_task_status local-... or rl_task_wait local-... (each wait caps at 120s and returns a still_running snapshot until the spin finishes). The result fields arrive in the TERMINAL status: `url`, `slot_url`, `internal_url` (LAN fallback http://{slug}.rl.lan), `admin_email`, `operator_admin` and `bootstrap_warnings`. **ALWAYS use the `url` field for any tester-facing link, agent navigation, test_url in plans, etc.** — it is the slot-stable https://slot-N.{RL_PUBLIC_DOMAIN} host, which routes to the same env AND supports Discord OAuth. NEVER hand out the per-slug `public_url` — Discord login won't work on it. Set wait:true to block for at most wait_timeout_seconds (≤120s) and get the terminal status (or a still_running snapshot) back inline. Idempotent on the slug, so re-spinning an existing env is cheap. The admin password is withheld by default (A3-B P4) — the terminal status carries `admin_password_available` instead; you rarely need the value (rl_validate_ci({against_env_slug}) threads it into the runner, testers log in via Discord OAuth). If you genuinely must POST {email, password} to {url}/api/auth/local yourself, read it with rl_task_status({task_id, include_credentials:true}). `admin_password_available: false` means the bootstrap-admin exec failed — read `bootstrap_warnings`. `operator_admin` ('configured' | 'first-login' | 'none') says who lands as admin via Discord login — tell the operator before he signs in. Slug must match [a-z0-9-]+.";
 
 export interface EnvSpinResult {
   ok: boolean;
@@ -127,14 +140,45 @@ export interface EnvSpinParams {
   /** Same worktree_path used at rl_claim time (or rl_claim_wait if enqueued). */
   worktree_path?: string;
   /**
-   * A3-B P4: opt in to receiving `admin_password` in the response. Default
-   * false — the value is withheld so it does not enter an agent's context
-   * merely because that agent spun an env.
+   * A3-B P4: on spinEnv() (the synchronous core) this opts in to receiving
+   * `admin_password` in the result. On the async execute() it does NOT return
+   * the value — the dispatch / wait payload adds a `credentials_hint` naming the
+   * single opt-in route, rl_task_status({task_id, include_credentials:true}).
    */
   include_credentials?: boolean;
+  /** wait:true blocks (≤120s) on the laptop task, then returns the terminal
+   *  status OR a still_running snapshot. Default false (returns task_id). */
+  wait?: boolean;
+  /** Wait budget when wait:true. Capped at 120s by waitLocalTask. */
+  wait_timeout_seconds?: number;
 }
 
-export async function execute(params: EnvSpinParams): Promise<EnvSpinResult> {
+export interface EnvSpinDispatch {
+  ok: boolean;
+  task_id?: string;
+  started_at?: string;
+  message?: string;
+  error?: string;
+  credentials_hint?: string;
+}
+
+/** Where an include_credentials caller reads the password now the spin is async. */
+export function credentialsHint(taskId: string): string {
+  return `include_credentials is not honoured on rl_env_spin — read admin_password with rl_task_status({task_id: '${taskId}', include_credentials: true}) once the spin is terminal.`;
+}
+
+/**
+ * The detached runner's cwd is the fleet package dir of whichever checkout the
+ * server code was loaded from (the MAIN checkout for a fresh worktree), so an
+ * omitted worktree_path must default to THIS server's cwd — the session folder
+ * the synchronous spin used to run in — or RL_AGENT_ID hashes to the wrong agent.
+ */
+export function withDefaultWorktree<T extends { worktree_path?: string }>(params: T): T {
+  return { ...params, worktree_path: params.worktree_path ?? process.cwd() };
+}
+
+/** Synchronous spin core: runs `rl env spin` inline and parses its JSON. */
+export async function spinEnv(params: EnvSpinParams): Promise<EnvSpinResult> {
   // CLI forwards args verbatim to /srv/rl-infra/orchestrator/bin/env-spin
   // which expects --slug/--image/--ttl flags (not positional). Pass --slug.
   const args = ['env', 'spin', '--slug', params.slug];
@@ -150,5 +194,31 @@ export async function execute(params: EnvSpinParams): Promise<EnvSpinResult> {
     ok: false,
     error: 'failed_to_parse_response',
     message: stderr || stdout || `rl env spin exited ${exitCode}`,
+  };
+}
+
+export async function execute(
+  params: EnvSpinParams,
+): Promise<EnvSpinDispatch | ExecuteStatusReturn | StillRunningResult> {
+  const taskId = newLocalTaskId();
+  const spawned: SpawnLocalRunnerResult = spawnLocalRunner(
+    taskId,
+    'rl_env_spin',
+    withDefaultWorktree(params),
+    params.slug,
+  );
+  const hint = params.include_credentials ? { credentials_hint: credentialsHint(taskId) } : {};
+
+  if (params.wait) {
+    // A3-B P4: the wait payload is redacted by default; an include_credentials
+    // caller gets credentials_hint naming the one opt-in route instead.
+    return { ...(await waitLocalTask(taskId, params.wait_timeout_seconds)), ...hint };
+  }
+  return {
+    ok: true,
+    task_id: taskId,
+    started_at: spawned.started_at,
+    message: `Env spin started for ${params.slug} — poll rl_task_status ${taskId} or rl_task_wait ${taskId} (each wait caps at 120s). url (the slot-stable https://slot-N host) and admin_email arrive in the terminal status.`,
+    ...hint,
   };
 }

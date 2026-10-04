@@ -342,9 +342,12 @@ new_caller_case() {
 }
 
 # run_vci_test_bot_deps <npm mode>: validate-ci.sh's real
-# _ensure_test_bot_deps in laptop mode, with REPO_ROOT at the fixture.
+# _ensure_test_bot_deps in laptop mode, with REPO_ROOT at the fixture. The
+# contract entry is seeded so these cases pin the install alone; the
+# contract-build step is covered by validate-ci-test-bot-deps-contract.test.sh.
 run_vci_test_bot_deps() {
     local fn
+    mkdir -p "$ROOT/packages/contract/dist" && : >"$ROOT/packages/contract/dist/index.js"
     fn=$(extract_fn "$REPO_ROOT/scripts/validate-ci.sh" _ensure_test_bot_deps)
     OUT=$(PATH="$STUB_BIN:$PATH" RL_DEPS_RUNNER_ROOT="$CASE_DIR/not-root" \
         RL_WORKSPACE_ROOT="$CASE_DIR/not-root" RL_NPM_CI_LOCK="$CASE_DIR/lock" \
