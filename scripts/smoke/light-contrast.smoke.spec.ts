@@ -2,8 +2,9 @@
  * Light-scheme colour-contrast guard (ROK-1472).
  *
  * Boots each route in `default-light` (every project) and in the tinted light
- * schemes sky / holy / dawn / celestial (desktop only, see below) through the
- * theme store's own localStorage keys, waits for the route's data to render and for finite
+ * schemes sky / holy / dawn / celestial (desktop only, see below; quest-log gets a
+ * token-only check at the end of this file) through the theme store's own
+ * localStorage keys, waits for the route's data to render and for finite
  * animations to settle, then runs axe's `color-contrast` rule on the WHOLE
  * page. A red run prints one line per failing node (selector, colours, ratio).
  *
@@ -139,3 +140,24 @@ for (const scheme of TINTED_LIGHT_SCHEMES) {
         }
     });
 }
+
+/*
+ * quest-log is `data-scheme="light"` plus `data-variant="quest-log"`, so it shares
+ * default-light's routes; its parchment tokens are what it can break. Token-level
+ * only (operator ruling 2026-10-04: dim AND muted darkened to AA), desktop only.
+ */
+test.describe('Light scheme colour contrast (quest-log tokens)', () => {
+    test.beforeEach(async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name !== 'desktop', 'a token check does not vary with the viewport');
+        await useLightScheme(page, 'quest-log');
+    });
+
+    for (const text of ['--color-dim', '--color-muted']) {
+        test(`${text} reaches 4.5:1 on surface and panel`, async ({ page }) => {
+            await page.goto('/players');
+            await expectLightScheme(page, 'light');
+            await expect(page.locator('html')).toHaveAttribute('data-variant', 'quest-log');
+            await expectTokenContrast(page, text, DIM_BACKGROUNDS);
+        });
+    }
+});

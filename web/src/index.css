@@ -1263,8 +1263,8 @@ body {
     --color-panel: #f0e4c8;
     --color-overlay: #e8d8b0;
     --color-faint: #c9b896;
-    --color-dim: #a89070;
-    --color-muted: #8b7355;
+    --color-dim: #756247;   /* 5.28 surface / 4.63 panel (ROK-1472; was #a89070, 2.75 / 2.42) */
+    --color-muted: #685640; /* 6.33 surface / 5.56 panel (ROK-1472; was #8b7355, 4.05 / 3.55) */
     --color-secondary: #5c4a32;
     --color-foreground: #2c1810;
     --color-edge: #d4c4a0;
