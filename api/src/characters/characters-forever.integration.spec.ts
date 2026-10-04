@@ -1,6 +1,7 @@
 /**
  * WoW: Forever manual characters (ROK-1721) against a real database:
- * create, cross-user 409 on region + full name, ruleset edit, region lock,
+ * create, cross-user 409 on region + full name (pre-check AND the DB index
+ * on its own), rename 409, Hardcore 400, ruleset edit, region lock,
  * and the nightly auto-sync skipping realm-less characters.
  */
 import * as bcrypt from 'bcrypt';
@@ -117,6 +118,87 @@ describe('WoW: Forever manual characters (integration)', () => {
       ruleset: 'pvp',
     });
     expect(other.status).toBe(201);
+  });
+
+  it('the DB index alone rejects a second Forever row with the same region + name (any case)', async () => {
+    const a = await memberToken(testApp, 'foreverdba');
+    const b = await memberToken(testApp, 'foreverdbb');
+    const row = { gameId, realm: null, region: 'us', ruleset: 'pvp' as const };
+    await testApp.db
+      .insert(schema.characters)
+      .values({ ...row, userId: a.userId, name: 'Ana Forever' });
+    const err: unknown = await testApp.db
+      .insert(schema.characters)
+      .values({ ...row, userId: b.userId, name: 'ANA FOREVER' })
+      .then(
+        () => null,
+        (e: unknown) => e,
+      );
+    const e = err as (Error & { cause?: Error }) | null;
+    expect(`${e?.message ?? 'no error'} ${e?.cause?.message ?? ''}`).toContain(
+      'idx_characters_ruleset_identity',
+    );
+  });
+
+  it("409s when a rename lands on another player's full name", async () => {
+    const a = await memberToken(testApp, 'foreverrena');
+    const b = await memberToken(testApp, 'foreverrenb');
+    await create(a.token, {
+      name: 'Ana Forever',
+      region: 'us',
+      ruleset: 'pvp',
+    });
+    const mine = await create(b.token, {
+      name: 'Bea Forever',
+      region: 'us',
+      ruleset: 'pvp',
+    });
+    const res = await testApp.request
+      .patch(`/users/me/characters/${mine.body.id as string}`)
+      .set('Authorization', `Bearer ${b.token}`)
+      .send({ name: 'ana forever' });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe(
+      'ana forever (US) is already claimed by another player',
+    );
+  });
+
+  it('rejects the not-yet-open Hardcore ruleset on create', async () => {
+    const { token } = await memberToken(testApp, 'foreverhc');
+    const res = await create(token, {
+      name: 'Ana Forever',
+      region: 'us',
+      ruleset: 'hardcore',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a region on an update to a non-Forever character', async () => {
+    const { userId, token } = await memberToken(testApp, 'retailregion');
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Not Forever', slug: 'not-forever-1721' })
+        .returning(),
+      'other game',
+    );
+    const [char] = nonEmpty(
+      await testApp.db
+        .insert(schema.characters)
+        .values({ userId, gameId: game.id, name: 'Thrall', isMain: true })
+        .returning(),
+      'retail character',
+    );
+    const res = await testApp.request
+      .patch(`/users/me/characters/${char.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ region: 'eu' });
+    expect(res.status).toBe(400);
+    const [row] = await testApp.db
+      .select({ region: schema.characters.region })
+      .from(schema.characters)
+      .where(eq(schema.characters.id, char.id));
+    expect(row?.region).toBeNull();
   });
 
   it('rejects a single-word name and a missing ruleset', async () => {
