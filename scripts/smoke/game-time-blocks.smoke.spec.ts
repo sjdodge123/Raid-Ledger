@@ -246,6 +246,18 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
      */
     test('a drag inside the grid scrolls the day rather than painting on it', async ({ page }) => {
         test.skip(!isMobile(test.info()), 'Touch-scroll behaviour is mobile-specific');
+        // Each band resolves as `expanded = choice ?? auto` (`useWindowBand`,
+        // `use-profile-window.ts`). Auto opens a band whenever an available hour
+        // in the signed-in admin's saved week falls outside the fitted window, and
+        // that week is shared with every spec running in parallel, so another
+        // spec's saved hour can open "Show earlier" before this test sees it (a
+        // tap would then CLOSE it). A stored choice outranks auto, so both bands
+        // are pinned: earlier open, because the overflow below needs the morning,
+        // and later shut, because the 1 AM–6 AM band would turn 19 cells into 24.
+        // The key mirrors PROFILE_WINDOW_KEY in `phone-window.helpers.ts`.
+        await page.addInitScript(() => {
+            localStorage.setItem('rl.gameTime.profileWindow', JSON.stringify({ earlier: true, later: false }));
+        });
         await openGameTime(page);
         await waitForLayer(page);
         // A day with nothing on it: a pointer-down ON a block selects it
@@ -254,19 +266,13 @@ test.describe('Game Time blocks — scrolling (ROK-1426)', () => {
         await openEmptyPhoneDay(page);
 
         // The profile window is FITTED (only the rows that fit, ending at 1 AM), so
-        // the day overflows its box only once the morning is revealed.
-        const earlier = page.getByTestId('phone-week-show-earlier');
-        if (await earlier.count()) {
-            // Under the FULL parallel suite the first tap on this button has been
-            // seen to focus it without toggling (fleet 17e58f8d4360, CI 35056153221);
-            // alone and per-file it toggles every time, and a real pointer tap on the
-            // env always does. Re-tap once — the assertion below is unchanged.
-            // TECH-DEBT-BACKLOG 2026-09-16 tracks the anomaly.
-            await earlier.click();
-            const expanded = await earlier.getAttribute('aria-expanded');
-            if (expanded !== 'true') await earlier.click();
-            await expect(earlier, '"Show earlier" did not expand after two taps').toHaveAttribute('aria-expanded', 'true');
-        }
+        // the day overflows its box only once the morning is revealed. The stored
+        // choice reveals it. The toggle must render, since the band it holds back
+        // is what overflows.
+        await expect(
+            page.getByTestId('phone-week-show-earlier'),
+            '"Show earlier" is not open: the stored band choice did not take effect',
+        ).toHaveAttribute('aria-expanded', 'true');
         // PROFILE_HOURS wraps 6 AM → 5 AM (24 rows, ROK-1584). "Show earlier"
         // reveals 6 AM–6 PM (12) on top of the fitted 6 PM–1 AM base (7) = 19;
         // the 1 AM–6 AM band stays behind "Show later".

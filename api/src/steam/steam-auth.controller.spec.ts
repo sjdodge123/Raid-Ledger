@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
+import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 
 // Sentry's nestjs export wraps `setUser` in a non-redefinable proxy that
 // `jest.spyOn(Sentry, 'setUser')` cannot replace. Hoisted `jest.mock` lets
@@ -22,6 +22,7 @@ import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
+import { LinkNonceService } from '../auth/link-nonce.service';
 import {
   ITAD_BACKGROUND_FETCH,
   ITAD_INTERACTIVE_FETCH,
@@ -31,19 +32,30 @@ import type { Response, Request } from 'express';
 import type { AuthenticatedExpressRequest } from '../auth/types';
 import { at } from '../common/testing/narrow';
 
+const LINK_EXPIRED_COPY = 'Link request expired. Please try again.';
+
+/** The browser-binding cookie POST /link/start sets: sha256(nonce), hex. */
+const sha256 = (v: string) =>
+  crypto.createHash('sha256').update(v).digest('hex');
+const boundTo = (nonce: string) => ({ rl_link_steam: sha256(nonce) });
+
 function createMockResponse(): Response {
   return {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
     redirect: jest.fn(),
+    cookie: jest.fn(),
+    clearCookie: jest.fn(),
   } as unknown as Response;
 }
 
+/** Defaults to a browser holding the cookie for 'valid-nonce'. */
 function createMockRequest(overrides: Partial<Request> = {}): Request {
   return {
     protocol: 'https',
     headers: { host: 'raid.gamernight.net' },
     query: {},
+    cookies: boundTo('valid-nonce'),
     ...overrides,
   } as unknown as Request;
 }
@@ -83,7 +95,7 @@ function extractStateFromRedirect(
 
 interface MockDeps {
   config: { get: jest.Mock };
-  jwt: { verify: jest.Mock };
+  linkNonce: { consume: jest.Mock };
   settings: { isSteamConfigured: jest.Mock };
   steam: { syncLibrary: jest.Mock };
   wishlist: { syncWishlist: jest.Mock };
@@ -100,7 +112,7 @@ async function createTestController(): Promise<{
         return undefined;
       }),
     },
-    jwt: { verify: jest.fn() },
+    linkNonce: { consume: jest.fn() },
     settings: { isSteamConfigured: jest.fn() },
     steam: { syncLibrary: jest.fn() },
     wishlist: { syncWishlist: jest.fn() },
@@ -112,7 +124,7 @@ async function createTestController(): Promise<{
       { provide: UsersService, useValue: {} },
       { provide: SettingsService, useValue: mocks.settings },
       { provide: ConfigService, useValue: mocks.config },
-      { provide: JwtService, useValue: mocks.jwt },
+      { provide: LinkNonceService, useValue: mocks.linkNonce },
       { provide: SteamService, useValue: mocks.steam },
       { provide: SteamWishlistService, useValue: mocks.wishlist },
     ],
@@ -136,14 +148,14 @@ describe('SteamAuthController', () => {
         if (key === 'CLIENT_URL') return 'https://raid.gamernight.net';
         return undefined;
       });
-      mocks.jwt.verify.mockReturnValue({ sub: 42 });
+      mocks.linkNonce.consume.mockResolvedValue({ userId: 42 });
       mocks.settings.isSteamConfigured.mockResolvedValue(true);
 
       const req = createMockRequest({
         headers: { host: 'raid.gamernight.net', 'x-forwarded-proto': 'https' },
       });
       const res = createMockResponse();
-      await controller.steamLink('valid-token', req, res);
+      await controller.steamLink('valid-nonce', req, res);
 
       expect(res.redirect).toHaveBeenCalledTimes(1);
       expect(extractReturnTo(res)).toContain('/api/auth/steam/link/callback');
@@ -154,7 +166,7 @@ describe('SteamAuthController', () => {
         if (key === 'JWT_SECRET') return 'test-secret';
         return undefined;
       });
-      mocks.jwt.verify.mockReturnValue({ sub: 42 });
+      mocks.linkNonce.consume.mockResolvedValue({ userId: 42 });
       mocks.settings.isSteamConfigured.mockResolvedValue(true);
 
       const req = createMockRequest({
@@ -162,7 +174,7 @@ describe('SteamAuthController', () => {
         headers: { host: 'localhost:3000' },
       });
       const res = createMockResponse();
-      await controller.steamLink('valid-token', req, res);
+      await controller.steamLink('valid-nonce', req, res);
 
       expect(res.redirect).toHaveBeenCalledTimes(1);
       const returnTo = extractReturnTo(res);
@@ -173,27 +185,34 @@ describe('SteamAuthController', () => {
     });
   });
 
-  describe('returnTo query parameter (ROK-941)', () => {
-    /** Shared setup: configure mocks for a valid Steam link request. */
-    function setupValidLinkMocks() {
+  // ROK-941 returnTo now rides in the link nonce (ROK-1630): minted after the
+  // allowlist check at POST /link/start, and re-validated here on the GET hop.
+  describe('returnTo from the link nonce (ROK-941, ROK-1630)', () => {
+    /** Shared setup: a valid nonce for user 42 carrying `returnTo`. */
+    function setupValidLinkMocks(returnTo?: string) {
       mocks.config.get.mockImplementation((key: string) => {
         if (key === 'JWT_SECRET') return 'test-secret';
         return undefined;
       });
-      mocks.jwt.verify.mockReturnValue({ sub: 42 });
+      mocks.linkNonce.consume.mockResolvedValue(
+        returnTo === undefined ? { userId: 42 } : { userId: 42, returnTo },
+      );
       mocks.settings.isSteamConfigured.mockResolvedValue(true);
     }
 
-    it('includes returnTo in signed state when provided', async () => {
-      setupValidLinkMocks();
-      const req = createMockRequest({
+    function localReq(query: Record<string, string> = {}): Request {
+      return createMockRequest({
         protocol: 'http',
         headers: { host: 'localhost:3000' },
-        query: { token: 'valid-token', returnTo: '/onboarding' },
+        query,
       });
+    }
+
+    it('includes returnTo in signed state when provided', async () => {
+      setupValidLinkMocks('/onboarding');
       const res = createMockResponse();
 
-      await controller.steamLink('valid-token', req, res);
+      await controller.steamLink('valid-nonce', localReq(), res);
 
       expect(res.redirect).toHaveBeenCalledTimes(1);
       const state = extractStateFromRedirect(res, 'test-secret');
@@ -202,15 +221,10 @@ describe('SteamAuthController', () => {
     });
 
     it('validates returnTo against allowlist', async () => {
-      setupValidLinkMocks();
-      const req = createMockRequest({
-        protocol: 'http',
-        headers: { host: 'localhost:3000' },
-        query: { token: 'valid-token', returnTo: 'https://evil.com/phish' },
-      });
+      setupValidLinkMocks('https://evil.com/phish');
       const res = createMockResponse();
 
-      await controller.steamLink('valid-token', req, res);
+      await controller.steamLink('valid-nonce', localReq(), res);
 
       expect(res.redirect).toHaveBeenCalledTimes(1);
       const state = extractStateFromRedirect(res, 'test-secret');
@@ -221,13 +235,9 @@ describe('SteamAuthController', () => {
 
     it('defaults returnTo to /profile when not provided', async () => {
       setupValidLinkMocks();
-      const req = createMockRequest({
-        protocol: 'http',
-        headers: { host: 'localhost:3000' },
-      });
       const res = createMockResponse();
 
-      await controller.steamLink('valid-token', req, res);
+      await controller.steamLink('valid-nonce', localReq(), res);
 
       expect(res.redirect).toHaveBeenCalledTimes(1);
       const state = extractStateFromRedirect(res, 'test-secret');
@@ -236,24 +246,28 @@ describe('SteamAuthController', () => {
       expect(state!.returnTo).toBe('/profile');
     });
 
-    it('callback uses returnTo from state for redirect', async () => {
+    it('ignores a ?returnTo= query param — only the nonce carries it', async () => {
       setupValidLinkMocks();
-
-      // Build a signed state with returnTo included
-      // We need to invoke steamLink with returnTo, then use the state
-      // in a callback. Since we can't easily test the callback in unit
-      // tests (it calls verifySteamOpenId), we verify the redirect path
-      // in the signed state is propagated.
-      const req = createMockRequest({
-        protocol: 'http',
-        headers: { host: 'localhost:3000' },
-        query: { token: 'valid-token', returnTo: '/onboarding' },
-      });
       const res = createMockResponse();
 
-      await controller.steamLink('valid-token', req, res);
+      await controller.steamLink(
+        'valid-nonce',
+        localReq({ returnTo: '/onboarding' }),
+        res,
+      );
 
-      // Extract the state to verify returnTo is persisted for the callback
+      const state = extractStateFromRedirect(res, 'test-secret');
+      expect(state).not.toBeNull();
+      expect(state!.returnTo).toBe('/profile');
+    });
+
+    it('signed state carries userId, action and returnTo for the callback', async () => {
+      setupValidLinkMocks('/onboarding');
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-nonce', localReq(), res);
+
+      // The callback reads userId + returnTo back out of this state.
       const state = extractStateFromRedirect(res, 'test-secret');
       expect(state).not.toBeNull();
       expect(state!.returnTo).toBe('/onboarding');
@@ -262,15 +276,10 @@ describe('SteamAuthController', () => {
     });
 
     it('rejects returnTo with protocol-relative URLs', async () => {
-      setupValidLinkMocks();
-      const req = createMockRequest({
-        protocol: 'http',
-        headers: { host: 'localhost:3000' },
-        query: { token: 'valid-token', returnTo: '//evil.com' },
-      });
+      setupValidLinkMocks('//evil.com');
       const res = createMockResponse();
 
-      await controller.steamLink('valid-token', req, res);
+      await controller.steamLink('valid-nonce', localReq(), res);
 
       expect(res.redirect).toHaveBeenCalledTimes(1);
       const state = extractStateFromRedirect(res, 'test-secret');
@@ -280,10 +289,93 @@ describe('SteamAuthController', () => {
     });
   });
 
-  // ROK-1307 AC-3: tag every Sentry event with the acting userId so when
-  // ANY Steam-sync exception (a 4xx that slips past the filter, or a real
-  // 5xx) reaches Sentry, the inbox row is attributed to the user instead
-  // of anonymous.
+  describe('GET /auth/steam/link?nonce= (ROK-1630)', () => {
+    it('consumes the nonce as a steam-bound nonce', async () => {
+      mocks.linkNonce.consume.mockResolvedValue({ userId: 42 });
+      mocks.settings.isSteamConfigured.mockResolvedValue(true);
+
+      await controller.steamLink(
+        'the-nonce',
+        createMockRequest({ cookies: boundTo('the-nonce') }),
+        createMockResponse(),
+      );
+
+      expect(mocks.linkNonce.consume).toHaveBeenCalledWith(
+        'steam',
+        'the-nonce',
+      );
+    });
+
+    it.each([
+      ['a replayed/expired/cross-provider nonce', 'spent-nonce'],
+      ['a missing nonce', undefined],
+    ])(
+      'redirects %s to the error landing, never a JSON 401',
+      async (_label, nonce) => {
+        mocks.linkNonce.consume.mockResolvedValue(null);
+        const res = createMockResponse();
+
+        await controller.steamLink(nonce, createMockRequest(), res);
+
+        expect(res.redirect).toHaveBeenCalledTimes(1);
+        expect(res.redirect).toHaveBeenCalledWith(
+          `https://raid.gamernight.net/profile/integrations?steam=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
+        );
+        expect(res.status).not.toHaveBeenCalled();
+        expect(mocks.settings.isSteamConfigured).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each<[string, Record<string, string> | undefined]>([
+      ['no binding cookie (a forwarded link)', undefined],
+      ['a cookie for a different nonce', boundTo('someone-elses-nonce')],
+      ['the raw nonce instead of its hash', { rl_link_steam: 'valid-nonce' }],
+    ])(
+      'redirects %s to the error landing without consuming the nonce',
+      async (_label, cookies) => {
+        mocks.linkNonce.consume.mockResolvedValue({ userId: 42 });
+        mocks.settings.isSteamConfigured.mockResolvedValue(true);
+        const res = createMockResponse();
+
+        await controller.steamLink(
+          'valid-nonce',
+          createMockRequest({ cookies }),
+          res,
+        );
+
+        expect(res.redirect).toHaveBeenCalledTimes(1);
+        expect(res.redirect).toHaveBeenCalledWith(
+          `https://raid.gamernight.net/profile/integrations?steam=error&message=${encodeURIComponent(LINK_EXPIRED_COPY)}`,
+        );
+        expect(mocks.linkNonce.consume).not.toHaveBeenCalled();
+      },
+    );
+
+    it('clears the binding cookie once it has been matched', async () => {
+      mocks.linkNonce.consume.mockResolvedValue({ userId: 42 });
+      mocks.settings.isSteamConfigured.mockResolvedValue(true);
+      const res = createMockResponse();
+
+      await controller.steamLink('valid-nonce', createMockRequest(), res);
+
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'rl_link_steam',
+        expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }),
+      );
+    });
+
+    it('declares @Query("nonce") and no @Query("token")', () => {
+      const args = Reflect.getMetadata(
+        ROUTE_ARGS_METADATA,
+        SteamAuthController,
+        'steamLink',
+      ) as Record<string, { data?: unknown }>;
+      const names = Object.values(args).map((a) => a.data);
+      expect(names).toContain('nonce');
+      expect(names).not.toContain('token');
+    });
+  });
+
   describe('ROK-1307 AC-3: Sentry.setUser on sync endpoints', () => {
     function fakeRequest(userId: number): AuthenticatedExpressRequest {
       return {

@@ -150,7 +150,10 @@ export async function runDeployChain(
   // password has to reach that file for rl_task_status({include_credentials:
   // true}) to have anything to hand back later; the withholding happens when
   // that file is READ, in local-task.ts.
-  const sp = await envSpin.execute({
+  // spinEnv, not execute: execute() is the async dispatcher and returns a
+  // local- task_id with no url, which would record env_spin as passed with
+  // an empty URL.
+  const sp = await envSpin.spinEnv({
     slug: params.slug,
     image: `registry.rl.lan:5000/rl-allinone:${params.slug}`,
     worktree_path: params.worktree_path,
