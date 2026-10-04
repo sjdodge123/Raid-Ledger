@@ -140,9 +140,10 @@ export interface EnvSpinParams {
   /** Same worktree_path used at rl_claim time (or rl_claim_wait if enqueued). */
   worktree_path?: string;
   /**
-   * A3-B P4: opt in to receiving `admin_password` in the response. Default
-   * false — the value is withheld so it does not enter an agent's context
-   * merely because that agent spun an env.
+   * A3-B P4: on spinEnv() (the synchronous core) this opts in to receiving
+   * `admin_password` in the result. On the async execute() it does NOT return
+   * the value — the dispatch / wait payload adds a `credentials_hint` naming the
+   * single opt-in route, rl_task_status({task_id, include_credentials:true}).
    */
   include_credentials?: boolean;
   /** wait:true blocks (≤120s) on the laptop task, then returns the terminal
@@ -158,6 +159,22 @@ export interface EnvSpinDispatch {
   started_at?: string;
   message?: string;
   error?: string;
+  credentials_hint?: string;
+}
+
+/** Where an include_credentials caller reads the password now the spin is async. */
+export function credentialsHint(taskId: string): string {
+  return `include_credentials is not honoured on rl_env_spin — read admin_password with rl_task_status({task_id: '${taskId}', include_credentials: true}) once the spin is terminal.`;
+}
+
+/**
+ * The detached runner's cwd is the fleet package dir of whichever checkout the
+ * server code was loaded from (the MAIN checkout for a fresh worktree), so an
+ * omitted worktree_path must default to THIS server's cwd — the session folder
+ * the synchronous spin used to run in — or RL_AGENT_ID hashes to the wrong agent.
+ */
+export function withDefaultWorktree<T extends { worktree_path?: string }>(params: T): T {
+  return { ...params, worktree_path: params.worktree_path ?? process.cwd() };
 }
 
 /** Synchronous spin core: runs `rl env spin` inline and parses its JSON. */
@@ -187,22 +204,21 @@ export async function execute(
   const spawned: SpawnLocalRunnerResult = spawnLocalRunner(
     taskId,
     'rl_env_spin',
-    params,
+    withDefaultWorktree(params),
     params.slug,
   );
+  const hint = params.include_credentials ? { credentials_hint: credentialsHint(taskId) } : {};
 
   if (params.wait) {
-    // A3-B P4: include_credentials is still ACCEPTED here (existing callers
-    // validate) but it is not honoured on this path — the dispatch payload
-    // never carries a password, and waitLocalTask redacts by default. The
-    // single opt-in route is rl_task_status({task_id, include_credentials:
-    // true}) on the returned id.
-    return waitLocalTask(taskId, params.wait_timeout_seconds);
+    // A3-B P4: the wait payload is redacted by default; an include_credentials
+    // caller gets credentials_hint naming the one opt-in route instead.
+    return { ...(await waitLocalTask(taskId, params.wait_timeout_seconds)), ...hint };
   }
   return {
     ok: true,
     task_id: taskId,
     started_at: spawned.started_at,
     message: `Env spin started for ${params.slug} — poll rl_task_status ${taskId} or rl_task_wait ${taskId} (each wait caps at 120s). url (the slot-stable https://slot-N host) and admin_email arrive in the terminal status.`,
+    ...hint,
   };
 }

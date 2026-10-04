@@ -30,11 +30,22 @@ function copySpinFields(res: EnvSpinResult, current: LocalTaskJson): void {
   current.admin_password = res.admin_password ?? null;
   current.operator_admin = res.operator_admin ?? null;
   current.bootstrap_warnings = res.bootstrap_warnings ?? null;
+  // Structured failure diagnostics the sync tool returned inline (Codex P2).
+  if (res.hint) current.hint = res.hint;
+}
+
+/** phase / exit_code / hint folded into one line so a plain status read keeps them. */
+function failureDetail(res: EnvSpinResult): string {
+  const parts: string[] = [];
+  if (res.phase) parts.push(`phase=${res.phase}`);
+  if (typeof res.exit_code === 'number') parts.push(`exit_code=${res.exit_code}`);
+  const tags = parts.length ? ` (${parts.join(', ')})` : '';
+  return res.hint ? `${tags} — hint: ${res.hint}` : tags;
 }
 
 function outcomeMessage(slug: string, res: EnvSpinResult): string {
   if (res.ok) return `Env ${slug} is up at ${res.url ?? '(no url returned)'}.`;
-  return `env spin failed for ${slug}: ${res.message ?? res.error ?? 'unknown'}`;
+  return `env spin failed for ${slug}: ${res.message ?? res.error ?? 'unknown'}${failureDetail(res)}`;
 }
 
 export async function runSpinTask(

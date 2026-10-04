@@ -75,6 +75,8 @@ export const LocalTaskJsonSchema = z.object({
     .array(z.object({ code: z.string(), detail: z.string() }))
     .nullable()
     .optional(),
+  // rl_env_spin failure remediation pointer (orchestrator `hint`).
+  hint: z.string().optional(),
 });
 export type LocalTaskJson = z.infer<typeof LocalTaskJsonSchema>;
 
@@ -196,6 +198,7 @@ function toStatusReturn(
     synced_head: raw.synced_head,
     operator_admin: raw.operator_admin,
     bootstrap_warnings: raw.bootstrap_warnings,
+    hint: raw.hint,
   } as ExecuteStatusReturn;
 }
 

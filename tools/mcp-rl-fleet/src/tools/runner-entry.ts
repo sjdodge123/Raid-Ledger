@@ -23,6 +23,7 @@ import {
 import { runDeployChain, type ChainCtx } from './env-deploy-steps.js';
 import { runCloneCore } from './env-clone-prod.js';
 import { runSpinTask } from './env-spin-runner.js';
+import { dispatchTool } from './runner-dispatch.js';
 import type { EnvSpinParams } from './env-spin.js';
 import type { EnvDeployParams } from './env-deploy.js';
 import type { EnvCloneProdParams } from './env-clone-prod.js';
@@ -120,18 +121,12 @@ async function runSpin(): Promise<number> {
   return res.ok ? 0 : 1;
 }
 
-async function runTool(): Promise<number> {
-  switch (tool) {
-    case 'rl_env_deploy':
-      return runDeploy();
-    case 'rl_env_clone_prod':
-      return runClone();
-    case 'rl_env_spin':
-      return runSpin();
-    default:
-      finalize(false, { error: 'unknown_tool', message: `unknown tool ${tool}` });
-      return 1;
-  }
+function runTool(): Promise<number> {
+  return dispatchTool(
+    tool,
+    { rl_env_deploy: runDeploy, rl_env_clone_prod: runClone, rl_env_spin: runSpin },
+    (opts) => finalize(false, opts),
+  );
 }
 
 // Cancel (SIGTERM from cancelLocalTask) — exit fast; cancelLocalTask owns the
