@@ -24,6 +24,7 @@ import {
   getVoiceMembers,
 } from '../../helpers/voice.js';
 import { pollForCondition } from '../../helpers/polling.js';
+import { DiscordAPIError } from 'discord.js';
 import { getGuild } from '../../client.js';
 import {
   createEvent,
@@ -209,8 +210,12 @@ async function assertIdleDestroyed(
  * companion bot may lack Manage Channels.
  */
 async function reportOrphanChannel(channelId: string): Promise<void> {
-  const channel = await getGuild()
-    .channels.fetch(channelId)
+  // force: ask Discord itself, not the gateway cache — a CHANNEL_DELETE the
+  // companion bot has not processed yet would otherwise read as a survivor.
+  // getGuild() sits inside the async callback so its synchronous throw (no
+  // guild) becomes a rejection the .catch absorbs.
+  const channel = await Promise.resolve()
+    .then(() => getGuild().channels.fetch(channelId, { force: true }))
     .catch(() => null);
   if (!channel) return;
   console.warn(
@@ -219,9 +224,10 @@ async function reportOrphanChannel(channelId: string): Promise<void> {
   try {
     await channel.delete('smoke cleanup (ROK-1352)');
   } catch (err) {
-    const e = err as { code?: unknown; message?: unknown };
+    const code = err instanceof DiscordAPIError ? err.code : undefined;
+    const message = err instanceof Error ? err.message : String(err);
     console.warn(
-      `[ROK-1352] companion-bot delete of ${channelId} failed: code=${String(e?.code)} ${String(e?.message ?? err)}`,
+      `[ROK-1352] companion-bot delete of ${channelId} failed: code=${String(code)} ${message}`,
     );
   }
 }
