@@ -658,23 +658,9 @@ function describeGrace() {
   it('GAP-A: cancelAllForLineup removes a pending grace job', async () => {
     await settings.set(graceKey, '300000');
 
-    const v1 = await createMember('gapa-v1');
-    const v2 = await createMember('gapa-v2');
-    const createRes = await createPrivateLineup(
-      adminToken,
-      [v1.userId, v2.userId],
-      1,
-    );
-    const lineupId = createRes.body.id as number;
-    const games = await createGames(2);
-    await nominate(adminToken, lineupId, at(games, 0).id);
-    await nominate(v1.token, lineupId, at(games, 1).id);
-    await advanceToVoting(lineupId, adminToken);
-    await vote(adminToken, lineupId, at(games, 0).id);
-    await vote(v1.token, lineupId, at(games, 0).id);
-    await vote(v2.token, lineupId, at(games, 0).id);
+    const { lineupId, tokens } = await createVotedLineup('gapa');
     // ROK-1296: explicit submit closes the per-voter quorum gate.
-    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
+    await submitAllVotes(lineupId, tokens);
 
     // Grace job exists.
     const before = await getGraceJob(lineupId);
