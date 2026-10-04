@@ -6,8 +6,22 @@
  * difference is the whole story — so it is pinned here, next to the proof
  * that the vote-side guard did not loosen.
  */
-import { BadRequestException } from '@nestjs/common';
-import { assertPollLockable, assertPollOpen } from './scheduling-guard.helpers';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  assertCallerMayViewPoll,
+  assertPollLockable,
+  assertPollOpen,
+} from './scheduling-guard.helpers';
+import { assertUserCanParticipate } from '../lineups-eligibility.helpers';
+
+jest.mock('../lineups-eligibility.helpers', () => ({
+  assertUserCanParticipate: jest.fn(),
+}));
+const participate = jest.mocked(assertUserCanParticipate);
 
 /** A poll whose parent lineup the phase job archived (the prod expiry shape). */
 const EXPIRED_LINEUP = { status: 'archived', phaseDeadline: null };
@@ -74,5 +88,51 @@ describe('assertPollOpen — opt-in slot times (remind, batch 2026-09-22)', () =
 
   it('ignores passed times when the caller omits the slots (vote / suggest)', () => {
     expect(() => assertPollOpen(SCHEDULING, LIVE_LINEUP)).not.toThrow();
+  });
+});
+
+describe('assertCallerMayViewPoll — private poll read gate (TDB:189)', () => {
+  const db = {} as Parameters<typeof assertCallerMayViewPoll>[0];
+  const PRIVATE = { id: 9, createdBy: 1, visibility: 'private' as const };
+  const PUBLIC = { ...PRIVATE, visibility: 'public' as const };
+
+  beforeEach(() => participate.mockReset().mockResolvedValue(undefined));
+
+  it('lets anyone, anonymous included, read a public poll', async () => {
+    await expect(assertCallerMayViewPoll(db, PUBLIC, null)).resolves.toBe(
+      undefined,
+    );
+    expect(participate).not.toHaveBeenCalled();
+  });
+
+  it('404s an anonymous viewer of a private poll', async () => {
+    await expect(assertCallerMayViewPoll(db, PRIVATE, null)).rejects.toThrow(
+      new NotFoundException('Match not found in this lineup'),
+    );
+  });
+
+  it('404s (not 403s) a caller who may not participate', async () => {
+    participate.mockRejectedValue(new ForbiddenException('Not invited'));
+    await expect(
+      assertCallerMayViewPoll(db, PRIVATE, { id: 5, role: 'member' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('passes a participant and forwards their role to the eligibility rule', async () => {
+    await expect(
+      assertCallerMayViewPoll(db, PRIVATE, { id: 5, role: 'admin' }),
+    ).resolves.toBe(undefined);
+    expect(participate).toHaveBeenCalledWith(db, PRIVATE, {
+      id: 5,
+      role: 'admin',
+    });
+  });
+
+  it('rethrows an unexpected error untouched', async () => {
+    const boom = new Error('db down');
+    participate.mockRejectedValue(boom);
+    await expect(assertCallerMayViewPoll(db, PRIVATE, { id: 5 })).rejects.toBe(
+      boom,
+    );
   });
 });
