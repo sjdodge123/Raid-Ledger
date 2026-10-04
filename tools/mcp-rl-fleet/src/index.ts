@@ -83,7 +83,7 @@ const slugSchema = z
   .min(1)
   .max(63);
 // ROK-1362: widened to accept the `local-` namespace (laptop tasks: rl_env_deploy
-// / rl_env_clone_prod) alongside VM task ids.
+// / rl_env_clone_prod / rl_env_spin) alongside VM task ids.
 // ROK-1567: single-sourced from task-schemas.ts — the CLI validates against the same one.
 const taskIdSchema = z.string().regex(TASK_ID_RE);
 // ROK-1362: every blocking wait caps at 120s (no MCP call holds the channel
@@ -138,7 +138,11 @@ const envSpinSchema: Shape = {
   image: z.string().optional(),
   ttl_hours: z.number().int().min(1).max(168).optional(),
   worktree_path: worktreePathSchema,
+  // Accepted for back-compat; the password is read via rl_task_status
+  // include_credentials:true now that the spin is async, and a caller that sets
+  // it gets a credentials_hint naming that route.
   include_credentials: includeCredentialsSchema,
+  ...waitFragment,
 };
 registerTool(envSpin.TOOL_NAME, envSpin.TOOL_DESCRIPTION, envSpinSchema, async (p) =>
   jsonResult(await envSpin.execute(p as envSpin.EnvSpinParams)),
@@ -360,7 +364,7 @@ registerTool(testPlan.CLEAR_TOOL, testPlan.CLEAR_DESC, testPlanClearSchema, asyn
 
 // ----- Task tools (ROK-1331 M2) -----
 const TASK_STATUS_DESC =
-  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1567: a NON-TERMINAL read is BRIEF by default (progress fields only — no cmd/env/cwd/log_tail, ~10x cheaper per poll); a TERMINAL read returns the full payload. Override either way with brief:true/false. Secrets are redacted out of `cmd`, `args_summary` and `env` values in every mode — ROK-1534 widened that from the env admin password to the whole `*PASSWORD`/`*TOKEN`/`*SECRET` class, and extended it to rl_task_inspect and rl_task_list, which previously returned the orchestrator record verbatim. `log_tail` is still NOT redacted (a terminal read returns it in full). ROK-1568: an image-build task sitting in `running` may be parked on DISK, not memory — admission_state:'waiting_disk' means it is below RL_BUILD_MIN_FREE_GB (20 GB) and has triggered one prune ladder pass; failure_reason:'disk_pressure' (exit 76, vs 75 for the memory admission_timeout) means the pressure never cleared. Check rl_status host.disk_free_gb and run rl_fleet_prune.";
+  "Read the current state of a task — both VM tasks (rl_validate_ci, rl_env_build_image_from_runner) AND laptop tasks (`local-...` from rl_env_deploy / rl_env_clone_prod / rl_env_spin). Cheap one-shot (single file read; no blocking). Returns TaskStatusResult: steps[] from PASS/FAIL parsing, current_step, log_tail (last 50KB by default, up to 1MB via log_tail_bytes), and separate script_exit_code vs mcp_runtime_status. This is the preferred non-blocking poll — call it every 60–90s while a task runs. For a push-like wait use rl_task_wait (caps at 120s per call). A3-B P4: for a `local-` deploy or spin task the env admin password is WITHHELD by default — you get admin_password_available instead; pass include_credentials:true only when you must log in as admin@local yourself. ROK-1567: a NON-TERMINAL read is BRIEF by default (progress fields only — no cmd/env/cwd/log_tail, ~10x cheaper per poll); a TERMINAL read returns the full payload. Override either way with brief:true/false. Secrets are redacted out of `cmd`, `args_summary` and `env` values in every mode — ROK-1534 widened that from the env admin password to the whole `*PASSWORD`/`*TOKEN`/`*SECRET` class, and extended it to rl_task_inspect and rl_task_list, which previously returned the orchestrator record verbatim. `log_tail` is still NOT redacted (a terminal read returns it in full). ROK-1568: an image-build task sitting in `running` may be parked on DISK, not memory — admission_state:'waiting_disk' means it is below RL_BUILD_MIN_FREE_GB (20 GB) and has triggered one prune ladder pass; failure_reason:'disk_pressure' (exit 76, vs 75 for the memory admission_timeout) means the pressure never cleared. Check rl_status host.disk_free_gb and run rl_fleet_prune.";
 const taskStatusSchema: Shape = {
   task_id: taskIdSchema,
   log_tail_bytes: z.number().int().min(0).max(1048576).optional(),

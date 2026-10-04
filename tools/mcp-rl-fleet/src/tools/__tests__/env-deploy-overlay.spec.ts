@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const claimExecute = vi.fn();
 vi.mock('../claim.js', () => ({ execute: (...a: unknown[]) => claimExecute(...a) }));
 const envSpinExecute = vi.fn();
-vi.mock('../env-spin.js', () => ({ execute: (...a: unknown[]) => envSpinExecute(...a) }));
+vi.mock('../env-spin.js', () => ({ spinEnv: (...a: unknown[]) => envSpinExecute(...a) }));
 const envSyncExecute = vi.fn();
 vi.mock('../env-sync.js', () => ({ execute: (...a: unknown[]) => envSyncExecute(...a) }));
 const overlayRun = vi.fn();
