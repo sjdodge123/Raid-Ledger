@@ -830,9 +830,16 @@ body {
    emerald-600 #059669 is 3.77:1 with the forced-white label; emerald-700 #047857
    (= the light --color-success) is 5.48:1. Its hover goes DARKER, emerald-800
    #065f46 (7.68:1) — scoped to elements that also carry .bg-emerald-600, so other
-   hover:bg-emerald-500 uses keep their paint. quest-log's !important gold wins. */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600 { background-color: #047857; }
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):hover { background-color: #065f46; }
+   hover:bg-emerald-500 uses keep their paint. quest-log's !important gold wins.
+   Unlayered, so these beat every @layer utilities variant: both skip :disabled and
+   [aria-disabled="true"] so disabled:bg-* / aria-disabled:bg-* still paint a disabled
+   button. Every .bg-emerald-600 steps — badges, dots and toggle tracks too: the
+   darker green keeps or gains contrast on light surfaces. Hover is gated like
+   Tailwind v4's own hover: variant. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:not(:disabled):not([aria-disabled="true"]) { background-color: #047857; }
+@media (hover: hover) {
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):not(:disabled):not([aria-disabled="true"]):hover { background-color: #065f46; }
+}
 
 /* --- Button brandColor label (ROK-1472, operator ruling 2026-10-04) ---
    data-brand-label is brandLabelFor(fill) — whichever of white / #0f172a has the
