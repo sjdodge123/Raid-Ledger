@@ -3,7 +3,8 @@
  *
  * - Seven variants. The solid fills (`bg-emerald-600`, `bg-red-600`) stay raw
  *   on purpose: `index.css` forces their label white on the light schemes by
- *   those exact class names (design-system.md §2.2). The three `*-soft`
+ *   those exact class names, and darkens the primary fill (+ its hover) to
+ *   emerald-700/800 there (ROK-1472; design-system.md §6.10). The three `*-soft`
  *   variants share one shape — a `/10` token tint, token label, `/30` border,
  *   `/20` hover — on `danger`, `warning` and `success`. Tint a button with a
  *   variant, never with colour classes in `className` (no tailwind-merge here).
@@ -20,12 +21,15 @@
  *   merges an inline `backgroundColor` into the caller's `style` (other keys
  *   survive), replaces the variant's paint with a `text-foreground` label and
  *   `hover:brightness-110` (the inline fill beats any `hover:bg-*`), and emits
- *   `data-brand-fill`, the hook index.css uses to force the label white on the
- *   light schemes. Loading, disabled, iconOnly and type are unchanged.
+ *   `data-brand-fill` + `data-brand-label="light|dark"` — the label colour with
+ *   the higher WCAG contrast on the fill (`brandLabelFor`, ROK-1472), which
+ *   index.css paints on EVERY scheme. Loading, disabled, iconOnly and type are
+ *   unchanged.
  * - Link-styled actions stay `<Link>`; this is not a link.
  */
 import { forwardRef, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
 import { DISABLED, FOCUS_RING } from './form-classes';
+import { brandLabelFor } from '../../lib/brand-label';
 
 export type ButtonVariant =
     | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'warning-soft' | 'success-soft';
@@ -41,7 +45,7 @@ const VARIANT_CLS: Record<ButtonVariant, string> = {
     'success-soft': 'bg-success/10 text-success border border-success/30 hover:bg-success/20',
 };
 
-/** A brand fill replaces the variant paint; index.css forces the label white via `data-brand-fill`. */
+/** A brand fill replaces the variant paint; index.css colours the label via `data-brand-label`. */
 const BRAND_CLS = 'text-foreground hover:brightness-110';
 
 const SIZE_CLS: Record<ButtonSize, string> = {
@@ -111,6 +115,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
             className={buttonClass({ variant, size, fullWidth, iconOnly, className, brandColor })}
             style={brandStyle(style, brandColor)}
             data-brand-fill={brandColor ? '' : undefined}
+            data-brand-label={brandColor ? brandLabelFor(brandColor) : undefined}
             {...rest}
             onClick={(e) => { if (loading) e.preventDefault(); else onClick?.(e); }}
         >

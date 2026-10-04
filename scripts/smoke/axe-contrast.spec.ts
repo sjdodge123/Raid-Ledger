@@ -11,9 +11,12 @@ vi.mock('@axe-core/playwright', () => ({ default: class {} }));
 
 import {
     formatContrastViolations,
+    gotoWithPinnedPreferences,
+    isPreferencesRead,
     knownMatcherFrom,
     matchKnownSelectors,
     pinLightPreferences,
+    releaseLightScheme,
     reportedTargets,
     withoutKnownViolations,
 } from './axe-contrast';
@@ -124,5 +127,47 @@ describe('pinLightPreferences', () => {
     it('passes a body without a data object through unchanged', () => {
         expect(pinLightPreferences({ error: 'nope' }, 'default-light')).toEqual({ error: 'nope' });
         expect(pinLightPreferences(null, 'default-light')).toBeNull();
+    });
+});
+
+describe('isPreferencesRead', () => {
+    it('matches only the GET of /users/me/preferences, however the API is mounted', () => {
+        expect(isPreferencesRead('https://slot-1.example/api/users/me/preferences', 'GET')).toBe(true);
+        expect(isPreferencesRead('http://localhost:3000/users/me/preferences?x=1', 'GET')).toBe(true);
+        expect(isPreferencesRead('https://slot-1.example/api/users/me/preferences', 'PATCH')).toBe(false);
+        expect(isPreferencesRead('https://slot-1.example/api/users/me/preferences/extra', 'GET')).toBe(false);
+    });
+});
+
+describe('releaseLightScheme', () => {
+    it('waits for running route handlers instead of ignoring their errors', async () => {
+        const unrouteAll = vi.fn().mockResolvedValue(undefined);
+        await releaseLightScheme({ unrouteAll } as unknown as Parameters<typeof releaseLightScheme>[0]);
+        expect(unrouteAll).toHaveBeenCalledWith({ behavior: 'wait' });
+    });
+});
+
+describe('gotoWithPinnedPreferences', () => {
+    type GotoPage = Parameters<typeof gotoWithPinnedPreferences>[0];
+
+    it('bounds the preferences wait and names the scheme when it never arrives', async () => {
+        const waitForResponse = vi.fn().mockRejectedValue(new Error('Timeout 50ms exceeded'));
+        const goto = vi.fn().mockResolvedValue(null);
+        const page = { waitForResponse, goto } as unknown as GotoPage;
+        await expect(gotoWithPinnedPreferences(page, '/players', 'dawn', 50))
+            .rejects.toThrow('preferences GET never arrived while pinning scheme dawn (/players)');
+        expect(waitForResponse).toHaveBeenCalledWith(expect.any(Function), { timeout: 50 });
+    });
+
+    it('surfaces a goto failure and still observes the pinned wait (no unhandled rejection)', async () => {
+        const wait = new Promise<never>(() => undefined);
+        const observe = vi.spyOn(wait, 'then');
+        // A plain function: vi.fn records settled results by calling .then on what it returns.
+        const waitForResponse = () => wait;
+        const goto = vi.fn().mockRejectedValue(new Error('net::ERR_CONNECTION_REFUSED'));
+        const page = { waitForResponse, goto } as unknown as GotoPage;
+        await expect(gotoWithPinnedPreferences(page, '/players', 'sky')).rejects.toThrow('ERR_CONNECTION_REFUSED');
+        expect(observe, 'nothing handles the pinned wait once goto throws, so its later rejection goes unhandled')
+            .toHaveBeenCalled();
     });
 });

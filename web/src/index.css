@@ -205,7 +205,8 @@ html {
     --color-panel: #E8F0F7;
     --color-overlay: #D8E8F4;
     --color-faint: #C2D4E8;
-    --color-dim: #7B9AB5;
+    --color-dim: #4E6E8B;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.35 surface / 4.64 panel (was #7B9AB5) — faint-decorative.guard.test.ts */
     --color-muted: #4A6580;
     --color-secondary: #2A4A64;
     --color-foreground: #0D1F2D;
@@ -257,7 +258,8 @@ html {
     --color-panel: #FFE8D0;
     --color-overlay: #FDDBB8;
     --color-faint: #E8C99A;
-    --color-dim: #B08060;
+    --color-dim: #8A6045;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 4.93 surface / 4.61 panel (was #B08060) — faint-decorative.guard.test.ts */
     --color-muted: #7A5535;
     --color-secondary: #4A2E18;
     --color-foreground: #2D1F0F;
@@ -309,7 +311,8 @@ html {
     --color-panel: #EEF2FB;
     --color-overlay: #E0E6F5;
     --color-faint: #C8D3E8;
-    --color-dim: #748AAD;
+    --color-dim: #576E93;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.18 surface / 4.62 panel (was #748AAD) — faint-decorative.guard.test.ts */
     --color-muted: #4A5E82;
     --color-secondary: #2A3A5A;
     --color-foreground: #0F1A2E;
@@ -361,7 +364,8 @@ html {
     --color-panel: #E4DDD0;
     --color-overlay: #D8D0C0;
     --color-faint: #C0B098;
-    --color-dim: #8A7860;
+    --color-dim: #6D5E4B;
+    /* AA as text, ROK-1472 ruling 2026-10-04: 5.12 surface / 4.64 panel (was #8A7860) — faint-decorative.guard.test.ts */
     --color-muted: #6A5840;
     --color-secondary: #3D3560;
     --color-foreground: #1A1A2E;
@@ -813,14 +817,44 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
 
 /* --- Solid-color button text: force white on colored backgrounds ---
-   [data-brand-fill] = Button brandColor (ROK-1655): an inline runtime/provider fill. */
+   Button brandColor is NOT listed: its label is picked by contrast below. */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(
     .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
     .bg-red-600, .bg-red-500, .bg-amber-600, .bg-violet-600,
-    .bg-\[\#5865F2\], [data-brand-fill]
+    .bg-\[\#5865F2\]
 ).text-foreground {
     --color-foreground: #ffffff;
 }
+
+/* --- Solid fills a white label cannot clear: force the dark label (ROK-1472) ---
+   cyan-600 #0092b8 is 3.62:1 under white, and each light scheme's own foreground
+   lands between 4.42 (dawn #2D1F0F) and 4.93 (default-light #0f172a). #0f172a
+   (the brand dark label) is 4.93 on it and 7.55 on cyan-500 #00b8db (hover, YouOwnBadge; white 2.37). */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.bg-cyan-600, .bg-cyan-500).text-foreground {
+    --color-foreground: #0f172a;
+}
+
+/* --- Primary fill on light (ROK-1472, operator ruling 2026-10-04) ---
+   emerald-600 #059669 is 3.77:1 with the forced-white label; emerald-700 #047857
+   (= the light --color-success) is 5.48:1. Its hover goes DARKER, emerald-800
+   #065f46 (7.68:1) — scoped to elements that also carry .bg-emerald-600, so other
+   hover:bg-emerald-500 uses keep their paint. quest-log's !important gold wins.
+   Unlayered, so these beat every @layer utilities variant: both skip a :disabled /
+   [aria-disabled="true"] element that carries its OWN disabled:bg-* / aria-disabled:bg-*
+   paint, so that paint wins; an opacity-only disabled or loading primary (Button's
+   DISABLED is disabled:opacity-50, `loading` sets aria-disabled) keeps this fill and fades. Every .bg-emerald-600 steps — badges, dots and toggle tracks too: the
+   darker green keeps or gains contrast on light surfaces. Hover is gated like
+   Tailwind v4's own hover: variant. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]) { background-color: #047857; }
+@media (hover: hover) {
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):hover { background-color: #065f46; }
+}
+
+/* --- Button brandColor label (ROK-1472, operator ruling 2026-10-04) ---
+   data-brand-label is brandLabelFor(fill) — whichever of white / #0f172a has the
+   higher WCAG contrast on the runtime fill (lib/brand-label.ts). EVERY scheme. */
+[data-brand-fill][data-brand-label="light"].text-foreground { --color-foreground: #ffffff; }
+[data-brand-fill][data-brand-label="dark"].text-foreground { --color-foreground: #0f172a; }
 
 /* --- Panel/card shadow for light mode panel-on-surface distinction ---
  * In @layer components so Tailwind utilities (focus-visible:ring-*, shadow-*)
@@ -1238,8 +1272,8 @@ body {
     --color-panel: #f0e4c8;
     --color-overlay: #e8d8b0;
     --color-faint: #c9b896;
-    --color-dim: #a89070;
-    --color-muted: #8b7355;
+    --color-dim: #756247;   /* 5.28 surface / 4.63 panel (ROK-1472; was #a89070, 2.75 / 2.42) */
+    --color-muted: #685640; /* 6.33 surface / 5.56 panel (ROK-1472; was #8b7355, 4.05 / 3.55) */
     --color-secondary: #5c4a32;
     --color-foreground: #2c1810;
     --color-edge: #d4c4a0;
@@ -1410,8 +1444,11 @@ body {
         2px 2px 0 1px rgba(196, 168, 108, 0.4);
 }
 
-/* --- Buttons: fantasy embossed leather/gold aesthetic --- */
-[data-variant="quest-log"] .bg-emerald-600 {
+/* --- Buttons: fantasy embossed leather/gold aesthetic ---
+   Skips a disabled / aria-disabled button that carries its own disabled:bg-* /
+   aria-disabled:bg-* paint (the !important gold otherwise beats it and the button
+   reads as enabled); opacity-only disabled and loading primaries keep the gold. */
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]) {
     background: linear-gradient(180deg,
             #d4b45c 0%,
             var(--ql-gold) 40%,
@@ -1430,18 +1467,20 @@ body {
     letter-spacing: 0.03em;
 }
 
-[data-variant="quest-log"] .bg-emerald-600:hover {
-    background: linear-gradient(180deg,
-            #dfc066 0%,
-            #d4b45c 40%,
-            var(--ql-gold) 100%) !important;
-    box-shadow:
-        0 3px 12px rgba(201, 168, 76, 0.45),
-        inset 0 1px 0 rgba(255, 230, 140, 0.7),
-        inset 0 -1px 0 rgba(92, 64, 10, 0.25);
+@media (hover: hover) {
+    [data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):hover {
+        background: linear-gradient(180deg,
+                #dfc066 0%,
+                #d4b45c 40%,
+                var(--ql-gold) 100%) !important;
+        box-shadow:
+            0 3px 12px rgba(201, 168, 76, 0.45),
+            inset 0 1px 0 rgba(255, 230, 140, 0.7),
+            inset 0 -1px 0 rgba(92, 64, 10, 0.25);
+    }
 }
 
-[data-variant="quest-log"] .bg-emerald-600:active {
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):active {
     background: linear-gradient(180deg,
             var(--ql-gold-hover) 0%,
             var(--ql-gold) 100%) !important;
