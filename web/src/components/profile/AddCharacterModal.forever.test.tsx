@@ -10,22 +10,22 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import { AddCharacterModal } from './AddCharacterModal';
 import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
 import { withHttpStatus } from '../../lib/api/api-error';
+import { useGameRegistry } from '../../hooks/use-game-registry';
+import { GameSearchInput } from '../events/game-search-input';
 
 vi.mock('../../hooks/use-character-mutations', () => ({
     useCreateCharacter: vi.fn(), useUpdateCharacter: vi.fn(),
     useSetMainCharacter: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 vi.mock('../../hooks/use-characters', () => ({ useMyCharacters: vi.fn(() => ({ data: { data: [] }, isLoading: false })) }));
-vi.mock('../../hooks/use-game-registry', () => ({
-    useGameRegistry: vi.fn(() => ({
-        games: [
-            { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', hasRoles: true },
-            { id: 7, name: 'World of Warcraft: Forever', slug: 'world-of-warcraft-forever', hasRoles: true },
-        ],
-        isLoading: false,
-    })),
+const { registryGames } = vi.hoisted(() => ({
+    registryGames: [
+        { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', hasRoles: true },
+        { id: 7, name: 'World of Warcraft: Forever', slug: 'world-of-warcraft-forever', hasRoles: true },
+    ],
 }));
-vi.mock('../events/game-search-input', () => ({ GameSearchInput: () => null }));
+vi.mock('../../hooks/use-game-registry', () => ({ useGameRegistry: vi.fn() }));
+vi.mock('../events/game-search-input', () => ({ GameSearchInput: vi.fn(() => null) }));
 vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
 
 const createMutate = vi.fn();
@@ -33,11 +33,13 @@ const updateMutate = vi.fn();
 
 beforeEach(() => {
     createMutate.mockReset(); updateMutate.mockReset();
+    vi.mocked(useGameRegistry).mockReturnValue({ games: registryGames, isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
+    vi.mocked(GameSearchInput).mockImplementation(() => <></>);
     vi.mocked(useCreateCharacter).mockReturnValue({ mutate: createMutate, isPending: false } as unknown as ReturnType<typeof useCreateCharacter>);
     vi.mocked(useUpdateCharacter).mockReturnValue({ mutate: updateMutate, isPending: false } as unknown as ReturnType<typeof useUpdateCharacter>);
 });
 
-function renderModal(gameId: number, editingCharacter: CharacterDto | null = null) {
+function renderModal(gameId: number | undefined, editingCharacter: CharacterDto | null = null) {
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
         <QueryClientProvider client={qc}>
@@ -144,5 +146,20 @@ describe('AddCharacterModal — WoW: Forever edit', () => {
         expect(dto).toMatchObject({ name: 'Thrall', roleOverride: 'tank', realm: 'Faerlina' });
         expect(dto).not.toHaveProperty('ruleset');
         expect(dto).not.toHaveProperty('region');
+    });
+});
+
+describe('AddCharacterModal — WoW: Forever with no registry game id', () => {
+    it('blocks a Forever create when the registry has not resolved a game id (no gameId: undefined mutation)', () => {
+        vi.mocked(useGameRegistry).mockReturnValue({ games: [], isLoading: true } as unknown as ReturnType<typeof useGameRegistry>);
+        vi.mocked(GameSearchInput).mockImplementation(({ onChange }) => (
+            <button type="button" onClick={() => onChange({ id: 0, igdbId: 99, name: 'World of Warcraft: Forever', slug: 'world-of-warcraft-forever', coverUrl: null })}>pick forever</button>
+        ));
+        renderModal(undefined);
+        fireEvent.click(screen.getByRole('button', { name: 'pick forever' }));
+        type('First name', 'Ana'); type('Second name', 'Forever');
+        submit(/add character/i);
+        expect(createMutate, 'a Forever submit with no resolved game id must not reach the mutation').not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent('This game is not registered in the system.');
     });
 });

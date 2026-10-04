@@ -86,13 +86,16 @@ function buildBaseCreateDto(form: FormState, showMmoFields: boolean, gameId: num
     };
 }
 
-/** Game first: the Name field only renders once a game is picked, so its error would be invisible before that. */
-function validateCharacterForm(form: FormState, effectiveGameId: number | undefined, selectedIgdbGame: IgdbGameDto | null, isForever: boolean): FormErrors | null {
-    if (!effectiveGameId && !selectedIgdbGame) return { game: 'Please select a game' };
-    if (isForever) { const forever = validateForeverIdentity(form.forever); return forever ? { forever } : null; }
-    if (!form.name.trim()) return { name: 'Character name is required' };
-    if (!effectiveGameId) return { form: 'This game is not registered in the system. Only a name can be set for generic characters.' };
-    return null;
+/**
+ * Game first: the Name field only renders once a game is picked, so its error would be invisible before that.
+ * Every path — Forever included (ROK-1721) — needs a resolved registry game id; the narrowed id is returned for the save.
+ */
+function validateCharacterForm(form: FormState, effectiveGameId: number | undefined, selectedIgdbGame: IgdbGameDto | null, isForever: boolean): { errors: FormErrors } | { gameId: number } {
+    if (!effectiveGameId && !selectedIgdbGame) return { errors: { game: 'Please select a game' } };
+    if (isForever) { const forever = validateForeverIdentity(form.forever); if (forever) return { errors: { forever } }; }
+    else if (!form.name.trim()) return { errors: { name: 'Character name is required' } };
+    if (!effectiveGameId) return { errors: { form: 'This game is not registered in the system. Only a name can be set for generic characters.' } };
+    return { gameId: effectiveGameId };
 }
 
 /** Pinned in the Modal footer (ROK-1655): the submit reaches the form by id; Cancel goes through the guard. */
@@ -194,8 +197,8 @@ function saveErrorToFormErrors(e: Error, isForever: boolean): FormErrors {
 
 function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, editingCharacter: CharacterDto | null | undefined, onClose: () => void) {
     s.setErrors({});
-    const errs = validateCharacterForm(s.form, s.effectiveGameId, s.selectedIgdbGame, s.isForever);
-    if (errs) { s.setErrors(errs); return; }
+    const result = validateCharacterForm(s.form, s.effectiveGameId, s.selectedIgdbGame, s.isForever);
+    if ('errors' in result) { s.setErrors(result.errors); return; }
     const onError = (e: Error) => s.setErrors(saveErrorToFormErrors(e, s.isForever));
     if (s.isEditing && editingCharacter) {
         const needsSetMain = s.form.isMain && !editingCharacter.isMain;
@@ -203,7 +206,7 @@ function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, edi
         if (needsSetMain) s.setMainMutation.mutate(editingCharacter.id, { onSuccess: doUpdate, onError });
         else doUpdate();
     } else {
-        s.createMutation.mutate(buildCreateDto(s.form, s.showMmoFields, s.effectiveGameId!, s.isForever), { onSuccess: () => { onClose(); s.setSelectedIgdbGame(null); }, onError });
+        s.createMutation.mutate(buildCreateDto(s.form, s.showMmoFields, result.gameId, s.isForever), { onSuccess: () => { onClose(); s.setSelectedIgdbGame(null); }, onError });
     }
 }
 
