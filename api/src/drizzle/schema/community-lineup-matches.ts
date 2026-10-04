@@ -58,7 +58,9 @@ export const communityLineupMatches = pgTable(
     /** Minimum unique voters before organizer is notified (ROK-1015). */
     minVoteThreshold: integer('min_vote_threshold'),
     /** Timestamp when the threshold notification was sent (ROK-1015). */
-    thresholdNotifiedAt: timestamp('threshold_notified_at'),
+    thresholdNotifiedAt: timestamp('threshold_notified_at', {
+      withTimezone: true,
+    }),
     /**
      * Operator's reason for cancelling the poll (ROK-1545). Collected by
      * `CancelPollModal`, DM'd to voters, and — since ROK-1545 — persisted so
@@ -100,7 +102,9 @@ export const communityLineupMatchMembers = pgTable(
      * (ROK-1296, U4 SubmitBar). Per-match: a user can submit one match while
      * leaving others autosaving. Re-submission overwrites to `now()`.
      */
-    schedulingSubmittedAt: timestamp('scheduling_submitted_at'),
+    schedulingSubmittedAt: timestamp('scheduling_submitted_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

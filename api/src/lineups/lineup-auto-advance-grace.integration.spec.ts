@@ -39,6 +39,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { parseTimestampUtc } from '../drizzle/timestamp-utils';
 import { SettingsService } from '../settings/settings.service';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
 import { LINEUP_PHASE_QUEUE } from './queue/lineup-phase.constants';
@@ -228,14 +229,8 @@ function describeGrace() {
       autoAdvancePausedAt: string | Date | null;
     }>;
     const row = rows[0];
-    const toDate = (v: string | Date | null): Date | null => {
-      if (v === null || v === undefined) return null;
-      if (v instanceof Date) return v;
-      // postgres-js returns naive timestamps; treat as UTC.
-      const s = String(v);
-      if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
-      return new Date(s.replace(' ', 'T') + 'Z');
-    };
+    const toDate = (v: string | Date | null): Date | null =>
+      v == null ? null : parseTimestampUtc(v);
     return {
       pendingAdvanceAt: toDate(row?.pendingAdvanceAt ?? null),
       autoAdvancePausedAt: toDate(row?.autoAdvancePausedAt ?? null),
@@ -249,18 +244,18 @@ function describeGrace() {
     value: Date | null,
   ): Promise<void> {
     // postgres-js cannot bind a JS Date through Drizzle's `sql` template,
-    // so we serialise to ISO and let Postgres coerce to timestamp.
+    // so we serialise to ISO and let Postgres coerce to timestamptz.
     const literal = value === null ? null : value.toISOString();
     if (column === 'pending_advance_at') {
       await testApp.db.execute(sql`
         UPDATE community_lineups
-        SET pending_advance_at = ${literal}::timestamp
+        SET pending_advance_at = ${literal}::timestamptz
         WHERE id = ${lineupId}
       `);
     } else {
       await testApp.db.execute(sql`
         UPDATE community_lineups
-        SET auto_advance_paused_at = ${literal}::timestamp
+        SET auto_advance_paused_at = ${literal}::timestamptz
         WHERE id = ${lineupId}
       `);
     }
