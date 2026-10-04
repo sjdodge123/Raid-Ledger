@@ -15,6 +15,7 @@ import {
   type MirrorSourceMessage,
   type MirrorSourceReaction,
 } from './thread-mirror.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /** A message with no mentions, no attachments and a resolved author. */
 function sourceMessage(
@@ -276,7 +277,10 @@ describe('toReactionSnapshot (ROK-1506 D3 / D7)', () => {
       me: true,
     };
 
-    const [entry] = toReactionSnapshot(new Map([['🔥', withUsers]]));
+    const [entry] = nonEmpty(
+      toReactionSnapshot(new Map([['🔥', withUsers]])),
+      'entry',
+    );
 
     expect(Object.keys(entry)).toEqual([
       'key',

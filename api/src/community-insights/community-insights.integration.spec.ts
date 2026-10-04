@@ -23,18 +23,22 @@ import { SettingsService } from '../settings/settings.service';
 import { ChurnDetectionService } from './churn-detection.service';
 import { CommunityInsightsService } from './community-insights.service';
 import { buildSnapshotFixture } from './__fixtures__/snapshot-fixture';
+import { nonEmpty } from '../common/testing/narrow';
 
 async function createMemberAndLogin(testApp: TestApp): Promise<string> {
   const email = 'member@test.local';
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${email}`,
-      username: 'member',
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${email}`,
+        username: 'member',
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email,
     passwordHash,
@@ -49,14 +53,17 @@ async function createMemberAndLogin(testApp: TestApp): Promise<string> {
 async function createOperatorAndLogin(testApp: TestApp): Promise<string> {
   const email = 'operator@test.local';
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${email}`,
-      username: 'operator',
-      role: 'operator',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${email}`,
+        username: 'operator',
+        role: 'operator',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email,
     passwordHash,
@@ -289,10 +296,13 @@ describe('Community Insights (ROK-1099)', () => {
         deltaPct: -100,
       });
 
-      const [stored] = await testApp.db
-        .select()
-        .from(schema.communityInsightsSnapshots)
-        .where(eq(schema.communityInsightsSnapshots.snapshotDate, today));
+      const [stored] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.communityInsightsSnapshots)
+          .where(eq(schema.communityInsightsSnapshots.snapshotDate, today)),
+        'stored',
+      );
       const storedWeeks = stored.radarPayload.driftSeries.map(
         (p) => p.weekStart,
       );
@@ -425,7 +435,9 @@ describe('Community Insights (ROK-1099)', () => {
           .select()
           .from(schema.communityInsightsSnapshots);
         expect(rows).toHaveLength(1);
-        const churnPayload = rows[0].churnPayload as { atRisk: unknown[] };
+        const churnPayload = nonEmpty(rows, 'snapshot row')[0].churnPayload as {
+          atRisk: unknown[];
+        };
         expect(churnPayload.atRisk).toEqual([]);
 
         const churnLogCall = errorSpy.mock.calls.find((call) =>

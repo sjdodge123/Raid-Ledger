@@ -9,6 +9,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SignupsService } from './signups.service';
 import { SettingsService } from '../settings/settings.service';
 import { PugRoleSchema } from '@raid-ledger/contract';
+import { at } from '../common/testing/narrow';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,7 +63,11 @@ let mockSettingsService: {
 };
 let selectCallCount: number;
 let selectSequence: unknown[][];
-let mockDb: Record<string, jest.Mock>;
+type InviteMockDb = Record<
+  'select' | 'update' | 'delete' | 'insert' | 'transaction',
+  jest.Mock
+>;
+let mockDb: InviteMockDb;
 
 const inviteProviders = () => [
   InviteService,
@@ -75,7 +80,7 @@ const inviteProviders = () => [
 
 function buildMockDb() {
   selectCallCount = 0;
-  const db: Record<string, jest.Mock> = {
+  const db: InviteMockDb = {
     select: jest.fn().mockImplementation(() => {
       const idx = selectCallCount++;
       return makeChain(selectSequence[idx] ?? []);
@@ -200,7 +205,7 @@ async function testPath2UpdatesStatus() {
   await svc.claimInvite('abc12345', 1);
 
   expect(mockDb.update).toHaveBeenCalled();
-  const updateChain = mockDb.update.mock.results[0].value as Record<
+  const updateChain = at(mockDb.update.mock.results, 0).value as Record<
     string,
     jest.Mock
   >;

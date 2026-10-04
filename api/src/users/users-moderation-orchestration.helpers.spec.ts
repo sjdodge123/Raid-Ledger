@@ -22,6 +22,7 @@ import * as audit from './users-admin-actions.helpers';
 import * as wipe from './users-delete.helpers';
 import * as authCache from '../auth/auth-user-cache';
 import * as signupCancel from '../events/signup-cancel-batch.helpers';
+import { at } from '../common/testing/narrow';
 
 jest.mock('./users-moderation.helpers');
 jest.mock('./users-admin-actions.helpers');
@@ -96,7 +97,7 @@ describe('runKick', () => {
     expect(deps.discord.kickMember).toHaveBeenCalledWith('123456789', 'spam');
     // §9.1 ordering invariant: DB write precedes cache invalidation.
     expect(kickUserById.mock.invocationCallOrder[0]).toBeLessThan(
-      invalidateAuthUser.mock.invocationCallOrder[0],
+      at(invalidateAuthUser.mock.invocationCallOrder, 0),
     );
   });
 
@@ -217,7 +218,7 @@ describe('runBan', () => {
     expect(wipeUserData).not.toHaveBeenCalled();
     // Lockout precedes the best-effort cascade.
     expect(invalidateAuthUser.mock.invocationCallOrder[0]).toBeLessThan(
-      cancelAll.mock.invocationCallOrder[0],
+      at(cancelAll.mock.invocationCallOrder, 0),
     );
   });
 

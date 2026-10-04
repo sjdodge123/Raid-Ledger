@@ -94,7 +94,7 @@ describe('DemoTestRenderDmEmbedController — POST /admin/test/render-dm-embed',
     expect(embed.footer?.text).toBe(`${COMMUNITY} · Event Reminder`);
     expect(embed.color).toBe(colorForState('needs_you'));
     expect(result.components.length).toBeGreaterThanOrEqual(1);
-    expect(result.components[0].components.length).toBeGreaterThanOrEqual(1);
+    expect(result.components[0]?.components.length).toBeGreaterThanOrEqual(1);
   });
 
   it("falls back to 'Raid Ledger' when no community name is configured", async () => {

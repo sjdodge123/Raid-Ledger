@@ -13,6 +13,7 @@
 import { sql, TransactionRollbackError } from 'drizzle-orm';
 import * as schema from './schema';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { nonEmpty } from '../common/testing/narrow';
 
 type DefaultedFields = Pick<
   typeof schema.communityLineupMatches.$inferSelect,
@@ -38,21 +39,27 @@ async function insertMatchOmittingDefaults(): Promise<
   let result: DefaultedFields | { error: string } = { error: 'no result' };
   try {
     await testApp.db.transaction(async (tx) => {
-      const [lineup] = await tx
-        .insert(schema.communityLineups)
-        .values({
-          title: 'TDB:489 defaults',
-          status: 'decided',
-          visibility: 'public',
-          createdBy: testApp.seed.adminUser.id,
-          publicSlug: 'tdb489-defaults',
-        })
-        .returning({ id: schema.communityLineups.id });
+      const [lineup] = nonEmpty(
+        await tx
+          .insert(schema.communityLineups)
+          .values({
+            title: 'TDB:489 defaults',
+            status: 'decided',
+            visibility: 'public',
+            createdBy: testApp.seed.adminUser.id,
+            publicSlug: 'tdb489-defaults',
+          })
+          .returning({ id: schema.communityLineups.id }),
+        'lineup',
+      );
       try {
-        const [match] = await tx
-          .insert(schema.communityLineupMatches)
-          .values({ lineupId: lineup.id, gameId: testApp.seed.game.id })
-          .returning();
+        const [match] = nonEmpty(
+          await tx
+            .insert(schema.communityLineupMatches)
+            .values({ lineupId: lineup.id, gameId: testApp.seed.game.id })
+            .returning(),
+          'community_lineup_matches row',
+        );
         const { status, thresholdMet, voteCount } = match;
         result = { status, thresholdMet, voteCount };
       } catch (err) {

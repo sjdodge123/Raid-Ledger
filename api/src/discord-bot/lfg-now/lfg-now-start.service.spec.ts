@@ -14,6 +14,7 @@ import { dispatchLiveSessionInvites } from './lfg-now-invite.helpers';
 import { holdsLiveIntent } from '../../lfg/lfg-invite.helpers';
 import { LFG_NOW_START_NEEDS_INTENT } from './lfg-now.constants';
 import { LFG_EVENTS } from '../../lfg/lfg.constants';
+import { at } from '../../common/testing/narrow';
 
 jest.mock('./lfg-now-spawn.helpers', () => ({
   spawnUnderGroupLock: jest.fn(),
@@ -117,8 +118,8 @@ describe('LfgNowSpawnService.startNow', () => {
       }),
     );
     // Post-COMMIT ordering: the spawn's promise settles before the first DM.
-    expect(spawn.mock.invocationCallOrder[0]).toBeLessThan(
-      dispatch.mock.invocationCallOrder[0],
+    expect(at(spawn.mock.invocationCallOrder, 0)).toBeLessThan(
+      at(dispatch.mock.invocationCallOrder, 0),
     );
   });
 

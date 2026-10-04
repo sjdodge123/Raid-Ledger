@@ -24,6 +24,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeCommonGroundCoop() {
   let testApp: TestApp;
@@ -64,17 +65,20 @@ function describeCommonGroundCoop() {
     name: string,
     overrides: Partial<typeof schema.games.$inferInsert> = {},
   ): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`,
-        steamAppId: Math.floor(Math.random() * 900000) + 100000,
-        ...overrides,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`,
+          steamAppId: Math.floor(Math.random() * 900000) + 100000,
+          ...overrides,
+        })
+        .returning(),
+      'game',
+    );
     await testApp.db.insert(schema.gameInterests).values({
       userId: testApp.seed.adminUser.id,
       gameId: game.id,
@@ -85,14 +89,17 @@ function describeCommonGroundCoop() {
 
   /** Add a second library owner so a game can clear `minOwners: 2`. */
   async function addSecondOwner(gameId: number, suffix: string): Promise<void> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `rok1400:${suffix}`,
-        username: `rok1400-${suffix}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `rok1400:${suffix}`,
+          username: `rok1400-${suffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.gameInterests).values({
       userId: user.id,
       gameId,

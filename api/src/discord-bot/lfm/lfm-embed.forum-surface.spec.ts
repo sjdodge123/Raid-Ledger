@@ -11,6 +11,7 @@
  * already being introduced on a sibling branch (ROK-1505) and a competing
  * extraction here would collide at merge time.
  */
+import { at } from '../../common/testing/narrow';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import type { EmbedBuilder } from 'discord.js';
@@ -298,7 +299,7 @@ describe('ROK-1471 — the forum surface is dispatched, not subscribed', () => {
     // resolves the surface FROM `lfg_group_messages`, so a BOUND that lands
     // first resolves nothing and backfills nothing.
     expect(emitter.emit.mock.invocationCallOrder[0]).toBeGreaterThan(
-      jest.mocked(store).insertLfmMessage.mock.invocationCallOrder[0],
+      at(jest.mocked(store).insertLfmMessage.mock.invocationCallOrder, 0),
     );
     // `channel_id` MUST be the thread: a button interaction inside a forum post
     // carries the thread as its `channelId`, and `findLfmMessageByIds` matches

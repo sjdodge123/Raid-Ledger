@@ -8,10 +8,50 @@
 import { SteamLinkListener } from './steam-link.listener';
 import { ChannelType } from 'discord.js';
 
+/** Every drizzle builder method the steam-link listener specs stub or read. */
+export type SteamLinkDbMock = Record<
+  | 'from'
+  | 'where'
+  | 'limit'
+  | 'insert'
+  | 'values'
+  | 'onConflictDoNothing'
+  | 'onConflictDoUpdate'
+  | 'select'
+  | 'orderBy',
+  jest.Mock
+>;
+
+/** Flat drizzle chain: builder methods return the chain, terminals resolve. */
+export function buildSteamLinkDbMock(): SteamLinkDbMock {
+  const chain: SteamLinkDbMock = {
+    from: jest.fn(),
+    where: jest.fn(),
+    limit: jest.fn().mockResolvedValue([]),
+    insert: jest.fn(),
+    values: jest.fn(),
+    onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+    onConflictDoUpdate: jest.fn().mockResolvedValue(undefined),
+    select: jest.fn(),
+    orderBy: jest.fn(),
+  };
+  for (const method of [
+    chain.from,
+    chain.where,
+    chain.insert,
+    chain.values,
+    chain.select,
+    chain.orderBy,
+  ]) {
+    method.mockReturnValue(chain);
+  }
+  return chain;
+}
+
 export interface MockContext {
   listener: SteamLinkListener;
-  mockClientService: Record<string, jest.Mock>;
-  mockDb: Record<string, jest.Mock>;
+  mockClientService: Record<'getClient', jest.Mock>;
+  mockDb: SteamLinkDbMock;
   mockLineupsService: { nominate: jest.Mock };
   mockDmSend: jest.Mock;
   messageIdCounter: { count: number };
@@ -27,16 +67,7 @@ export interface MockContext {
 export function buildMockContext(): MockContext {
   const mockClientService = { getClient: jest.fn() };
 
-  const chain: Record<string, jest.Mock> = {};
-  chain.from = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockReturnValue(chain);
-  chain.limit = jest.fn().mockResolvedValue([]);
-  chain.insert = jest.fn().mockReturnValue(chain);
-  chain.values = jest.fn().mockReturnValue(chain);
-  chain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
-  chain.onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
-  chain.select = jest.fn().mockReturnValue(chain);
-  chain.orderBy = jest.fn().mockReturnValue(chain);
+  const chain = buildSteamLinkDbMock();
 
   const mockLineupsService = {
     nominate: jest.fn().mockResolvedValue(undefined),

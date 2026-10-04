@@ -2,6 +2,7 @@
  * ROK-1612 — the card's two controls, the prefilled modal, and the AC8
  * invariant: no reply is ever a dead end.
  */
+import { at } from '../../common/testing/narrow';
 import { ButtonStyle, ComponentType } from 'discord.js';
 import { LFG_URGENCY_CHOICES } from '../commands/lfg.command.helpers';
 import {
@@ -34,9 +35,9 @@ const WEB_SEARCH_QUERY_MAX = 100;
 function modalInput(
   modal: ReturnType<typeof buildComposerModal>,
 ): Record<string, unknown> {
-  const row = modal.toJSON().components[0];
+  const row = at(modal.toJSON().components, 0);
   if (!('components' in row)) throw new Error('expected an action row');
-  return row.components[0] as unknown as Record<string, unknown>;
+  return at(row.components, 0) as unknown as Record<string, unknown>;
 }
 
 /** The URL of the one Link button across a reply's rows, if any. */
@@ -63,7 +64,7 @@ describe('buildComposerCard', () => {
   });
 
   it('keeps View games as permanent furniture beside Post an LFG', () => {
-    const row = buildComposerCard(CLIENT_URL).components[0].toJSON();
+    const row = at(buildComposerCard(CLIENT_URL).components, 0).toJSON();
     expect(row.components).toHaveLength(2);
     expect(row.components[0]).toMatchObject({
       style: ButtonStyle.Primary,
@@ -79,7 +80,7 @@ describe('buildComposerCard', () => {
   });
 
   it('drops View games rather than the card when no client URL is configured', () => {
-    const row = buildComposerCard(null).components[0].toJSON();
+    const row = at(buildComposerCard(null).components, 0).toJSON();
     expect(row.components).toHaveLength(1);
     expect(gamesPageUrl(null)).toBeNull();
   });
@@ -113,7 +114,7 @@ describe('buildCandidatesReply', () => {
       gamesPageUrl(CLIENT_URL, 'rock'),
     );
     expect(reply.content).toBe('2 games match “rock”');
-    const select = reply.components[0].toJSON().components[0];
+    const select = at(at(reply.components, 0).toJSON().components, 0);
     expect(select.type).toBe(ComponentType.StringSelect);
     expect(select).toMatchObject({
       options: [
@@ -159,7 +160,7 @@ describe('buildUrgencyReply', () => {
       clientUrl: CLIENT_URL,
     });
     expect(reply.content).toBe('When do you want to play Deep Rock Galactic?');
-    const row = reply.components[0].toJSON();
+    const row = at(reply.components, 0).toJSON();
     expect(row.components).toHaveLength(LFG_URGENCY_CHOICES.length);
     expect(row.components.map((c) => ('style' in c ? c.style : null))).toEqual(
       LFG_URGENCY_CHOICES.map(() => ButtonStyle.Primary),
@@ -176,11 +177,11 @@ describe('buildUrgencyReply', () => {
         choices: LFG_URGENCY_CHOICES,
         clientUrl: CLIENT_URL,
       });
-      const tailRow = reply.components[1].toJSON().components;
+      const tailRow = at(reply.components, 1).toJSON().components;
       expect(tailRow.map((c) => ('label' in c ? c.label : c.type))).toEqual([
         LFG_COMPOSER_COPY.BACK_BUTTON,
       ]);
-      const tail = tailRow[0];
+      const tail = at(tailRow, 0);
       expect('custom_id' in tail ? tail.custom_id : undefined).toBe(
         'lfgc:backc:deep rock',
       );

@@ -30,6 +30,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { maybeAutoAdvance } from './lineups-auto-advance.helpers';
 import { LineupsService } from './lineups.service';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 function describeParticipationPolicy() {
   let testApp: TestApp;
@@ -61,14 +62,17 @@ function describeParticipationPolicy() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('PolicyTest1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@policy.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@policy.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@policy.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -95,15 +99,18 @@ function describeParticipationPolicy() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Policy Game ${i + 1}`,
-          slug: `policy-game-${i + 1}-${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Policy Game ${i + 1}`,
+            slug: `policy-game-${i + 1}-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;
@@ -187,13 +194,13 @@ function describeParticipationPolicy() {
     // Each voter (admin + voter1 + voter2) needs 3 distinct vote targets, so
     // floor a unique pool of 7 games (one shared favorite + 2 personal each).
     const games = await createGames(7);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(voter1.token, lineupId, games[1].id);
-    await nominate(voter2.token, lineupId, games[2].id);
-    await nominate(adminToken, lineupId, games[3].id);
-    await nominate(voter1.token, lineupId, games[4].id);
-    await nominate(voter2.token, lineupId, games[5].id);
-    await nominate(adminToken, lineupId, games[6].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(voter1.token, lineupId, at(games, 1).id);
+    await nominate(voter2.token, lineupId, at(games, 2).id);
+    await nominate(adminToken, lineupId, at(games, 3).id);
+    await nominate(voter1.token, lineupId, at(games, 4).id);
+    await nominate(voter2.token, lineupId, at(games, 5).id);
+    await nominate(adminToken, lineupId, at(games, 6).id);
 
     const adv = await advanceToVoting(lineupId, adminToken);
     expect(adv.status).toBe(200);
@@ -203,15 +210,15 @@ function describeParticipationPolicy() {
     // silent so quorum can't close under the pre-fix policy.
     // Distribution: g0 wins (3 votes) and each voter picks 2 distinct
     // personal games so no second-place tie can produce TIEBREAKER_REQUIRED.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(adminToken, lineupId, games[1].id);
-    await vote(adminToken, lineupId, games[2].id);
-    await vote(voter1.token, lineupId, games[0].id);
-    await vote(voter1.token, lineupId, games[3].id);
-    await vote(voter1.token, lineupId, games[4].id);
-    await vote(voter2.token, lineupId, games[0].id);
-    await vote(voter2.token, lineupId, games[5].id);
-    await vote(voter2.token, lineupId, games[6].id);
+    await vote(adminToken, lineupId, at(games, 0).id);
+    await vote(adminToken, lineupId, at(games, 1).id);
+    await vote(adminToken, lineupId, at(games, 2).id);
+    await vote(voter1.token, lineupId, at(games, 0).id);
+    await vote(voter1.token, lineupId, at(games, 3).id);
+    await vote(voter1.token, lineupId, at(games, 4).id);
+    await vote(voter2.token, lineupId, at(games, 0).id);
+    await vote(voter2.token, lineupId, at(games, 5).id);
+    await vote(voter2.token, lineupId, at(games, 6).id);
 
     // Post-ROK-1296: explicit submit is required for the per-voter quorum
     // gate. All three actual voters submit; the two non-voters never do,
@@ -254,7 +261,7 @@ function describeParticipationPolicy() {
       .from(schema.communityLineups)
       .where(eq(schema.communityLineups.id, lineupId));
     expect(row?.deadline).toBeTruthy();
-    expect(row.deadline!.getTime()).toBeGreaterThan(Date.now());
+    expect(row?.deadline?.getTime()).toBeGreaterThan(Date.now());
 
     const drop1 = await testApp.request
       .delete(`/lineups/${lineupId}/invitees/${nonVoter1}`)
@@ -285,9 +292,9 @@ function describeParticipationPolicy() {
     const lineupId = createRes.body.id as number;
 
     const games = await createGames(3);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(invitee.token, lineupId, games[1].id);
-    await nominate(adminToken, lineupId, games[2].id);
+    await nominate(adminToken, lineupId, at(games, 0).id);
+    await nominate(invitee.token, lineupId, at(games, 1).id);
+    await nominate(adminToken, lineupId, at(games, 2).id);
 
     await advanceToVoting(lineupId, adminToken);
     expect(await readStatus(lineupId)).toBe('voting');

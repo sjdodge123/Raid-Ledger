@@ -62,7 +62,10 @@ function makeSelectChain(resolvedValue: unknown[]) {
 }
 
 function createMockDb() {
-  const db: Record<string, jest.Mock> = {
+  const db: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  > = {
     select: jest.fn(),
     insert: jest.fn(),
     delete: jest.fn(),
@@ -96,7 +99,7 @@ function createMockDb() {
 }
 
 let service: SignupsService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: ReturnType<typeof createMockDb>;
 
 async function setupEach() {
   mockDb = createMockDb();

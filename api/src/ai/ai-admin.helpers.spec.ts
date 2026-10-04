@@ -48,7 +48,7 @@ describe('ai-admin.helpers', () => {
       });
       expect(result.avgLatencyMs).toBe(151);
       expect(result.errorRate).toBe(0.0512);
-      expect(result.byFeature[0].avgLatencyMs).toBe(140);
+      expect(result.byFeature[0]?.avgLatencyMs).toBe(140);
     });
   });
 });
@@ -136,7 +136,7 @@ describe('ai-admin.helpers (adversarial)', () => {
         errorRate: 0,
         byFeature: [{ feature: 'categories', count: 5, avgLatencyMs: 50 }],
       });
-      expect(result.byFeature[0].count).toBe(5);
+      expect(result.byFeature[0]?.count).toBe(5);
     });
 
     it('maps multiple byFeature entries correctly', () => {

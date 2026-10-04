@@ -40,6 +40,7 @@ import { LFG_BOARD_RETIRED_NOTE } from './lfg-board.constants';
 import { LfgBoardChannelService } from './lfg-board-channel.service';
 import { LfgBoardService } from './lfg-board.service';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 let lfmEmbed: LfmEmbedService;
@@ -156,8 +157,8 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     await raiseHand(a.token, gameTwo.id);
 
     // 1 — the board is populated: two live posts, two open rows.
-    const [openOne] = await boardRows(gameOne.id);
-    const [openTwo] = await boardRows(gameTwo.id);
+    const [openOne] = nonEmpty(await boardRows(gameOne.id), 'openOne');
+    const [openTwo] = nonEmpty(await boardRows(gameTwo.id), 'openTwo');
     expect(openOne).toMatchObject({ state: 'open', postKind: 'forum' });
     expect(openTwo).toMatchObject({ state: 'open', postKind: 'forum' });
     edits = [];
@@ -166,8 +167,8 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
 
     // 2 — every row is closed. THE checkpoint: with E4's early return back in
     // the listener these rows are still `open`.
-    const [closedOne] = await boardRows(gameOne.id);
-    const [closedTwo] = await boardRows(gameTwo.id);
+    const [closedOne] = nonEmpty(await boardRows(gameOne.id), 'closedOne');
+    const [closedTwo] = nonEmpty(await boardRows(gameTwo.id), 'closedTwo');
     expect(closedOne.state).toBe('closed');
     expect(closedTwo.state).toBe('closed');
     expect(closedOne.closedAt).not.toBeNull();
@@ -184,7 +185,7 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
 
     // 4 — the copy says the BOARD went away, and still links the group. It
     // must never read as a cancellation: the group is untouched.
-    const rendered = descriptionOf(retired[0]);
+    const rendered = descriptionOf(at(retired, 0));
     expect(rendered).toContain(LFG_BOARD_RETIRED_NOTE);
     expect(rendered).toContain(`/lfg/${gameOne.slug}`);
 
@@ -238,10 +239,10 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     );
     const game = await createGame(testApp, 'Retire Fresh Game');
     await raiseHand(a.token, game.id);
-    const [first] = await boardRows(game.id);
+    const [first] = nonEmpty(await boardRows(game.id), 'first');
 
     await disableBoard();
-    expect((await boardRows(game.id))[0].state).toBe('closed');
+    expect((await boardRows(game.id))[0]?.state).toBe('closed');
 
     // THE AC: enabling posts again for a group that is still live. No second
     // hand, no `LFM_REACHED` — the toggle alone has to bring the board back.
@@ -257,9 +258,9 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     expect(rows).toHaveLength(2);
     const open = rows.filter((r) => r.state === 'open');
     expect(open).toHaveLength(1);
-    expect(open[0].postKind).toBe('forum');
+    expect(open[0]?.postKind).toBe('forum');
     // A genuinely NEW post, not the retired one re-opened.
-    expect(open[0].id).not.toBe(first.id);
+    expect(at(open, 0).id).not.toBe(first.id);
 
     // Mutation proof: drop `@OnEvent(LFG_BOARD_EVENTS.ENABLED)` from
     // `LfmEmbedService.onBoardEnabled` and this reads `Expected length: 2
@@ -288,7 +289,7 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     );
     const game = await createGame(testApp, 'Retire Transient Game');
     await raiseHand(a.token, game.id);
-    const [posted] = await boardRows(game.id);
+    const [posted] = nonEmpty(await boardRows(game.id), 'posted');
 
     // Discord blips for exactly the farewell edit. Not a refusal: the post is
     // still there, so the row must stay open rather than go untracked.
@@ -315,8 +316,8 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
     expect(settled?.closedAt).not.toBeNull();
     const retire = edits.filter((e) => e.row.id === posted.id);
     expect(retire).toHaveLength(1);
-    expect(retire[0].view.state).toBe('closed');
-    expect(retire[0].view.boardRetired).toBe(true);
+    expect(retire[0]?.view.state).toBe('closed');
+    expect(retire[0]?.view.boardRetired).toBe(true);
   });
 
   it('closes the row even when Discord refuses the farewell edit', async () => {
@@ -336,7 +337,7 @@ describe('LFG board disable retires live posts (ROK-1523, integration)', () => {
 
     // The wedge class: an unclosable `open` row holds the game hostage to the
     // partial unique index for a post nobody can edit any more.
-    const [row] = await boardRows(game.id);
+    const [row] = nonEmpty(await boardRows(game.id), 'row');
     expect(row.state).toBe('closed');
   });
 });

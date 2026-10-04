@@ -28,6 +28,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { normalizeAndDeleteGames } from './services/channel-bindings-invariant.helpers';
+import { at, defined, nonEmpty } from '../common/testing/narrow';
 
 const GUILD = 'rok1415-guild';
 const CHANNEL = 'rok1415-voice-channel';
@@ -61,18 +62,21 @@ async function insertBinding(o: {
   gameId: number | null;
   channelId?: string;
 }): Promise<typeof cb.$inferSelect> {
-  const [row] = await testApp.db
-    .insert(cb)
-    .values({
-      guildId: GUILD,
-      channelId: o.channelId ?? CHANNEL,
-      channelType: 'voice',
-      bindingPurpose: o.bindingPurpose,
-      gameId: o.gameId,
-      recurrenceGroupId: null,
-      config: {},
-    })
-    .returning();
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(cb)
+      .values({
+        guildId: GUILD,
+        channelId: o.channelId ?? CHANNEL,
+        channelType: 'voice',
+        bindingPurpose: o.bindingPurpose,
+        gameId: o.gameId,
+        recurrenceGroupId: null,
+        config: {},
+      })
+      .returning(),
+    'binding row',
+  );
   return row;
 }
 
@@ -80,14 +84,17 @@ async function insertBinding(o: {
 async function makeGame(
   name: string,
 ): Promise<typeof schema.games.$inferSelect> {
-  const [g] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name,
-      slug: name.toLowerCase().replace(/\s+/g, '-'),
-      igdbId: null,
-    })
-    .returning();
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name,
+        slug: name.toLowerCase().replace(/\s+/g, '-'),
+        igdbId: null,
+      })
+      .returning(),
+    'game row',
+  );
   return g;
 }
 
@@ -143,7 +150,10 @@ describe('Channel binding invariant guard (Regression: ROK-1415)', () => {
     expect(res.status).toBe(400);
     expect(res.body.code).toBe('BINDING_MONITOR_REQUIRES_GAME');
 
-    const [after] = await testApp.db.select().from(cb).where(eq(cb.id, b.id));
+    const [after] = nonEmpty(
+      await testApp.db.select().from(cb).where(eq(cb.id, b.id)),
+      'after',
+    );
     expect(after.bindingPurpose).toBe('general-lobby');
   });
 
@@ -160,7 +170,10 @@ describe('Channel binding invariant guard (Regression: ROK-1415)', () => {
       .send({ bindingPurpose: 'general-lobby' });
 
     expect(res.status).toBe(200);
-    const [after] = await testApp.db.select().from(cb).where(eq(cb.id, b.id));
+    const [after] = nonEmpty(
+      await testApp.db.select().from(cb).where(eq(cb.id, b.id)),
+      'after',
+    );
     expect(after.bindingPurpose).toBe('general-lobby');
   });
 });
@@ -179,8 +192,8 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
 
     const [after] = await testApp.db.select().from(cb).where(eq(cb.id, b.id));
     expect(after).toBeDefined(); // binding survives the delete
-    expect(after.gameId).toBeNull(); // FK SET NULL fired
-    expect(after.bindingPurpose).toBe('general-lobby'); // normalized
+    expect(defined(after, 'binding after delete').gameId).toBeNull(); // FK SET NULL fired
+    expect(after?.bindingPurpose).toBe('general-lobby'); // normalized
 
     // The game row is gone and no 23514 was raised (no DB CHECK exists).
     const games = await testApp.db
@@ -215,8 +228,8 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
 
     const rows = await bindingsOnChannel();
     expect(rows).toHaveLength(1);
-    expect(rows[0].bindingPurpose).toBe('general-lobby');
-    expect(rows[0].gameId).toBeNull();
+    expect(rows[0]?.bindingPurpose).toBe('general-lobby');
+    expect(at(rows, 0).gameId).toBeNull();
   });
 
   // (4e) Same hazard on TEXT channels: announcements(game) nulling into a
@@ -250,8 +263,8 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
       .from(cb)
       .where(eq(cb.channelId, TEXT_CH));
     expect(rows).toHaveLength(1);
-    expect(rows[0].bindingPurpose).toBe('game-announcements');
-    expect(rows[0].gameId).toBeNull();
+    expect(rows[0]?.bindingPurpose).toBe('game-announcements');
+    expect(at(rows, 0).gameId).toBeNull();
   });
 
   // (4f) Codex P1 pin: a LEGACY inert monitor(NULL) (raw/restore shape) shares
@@ -308,8 +321,8 @@ describe('App-side game delete normalization (Regression: ROK-1415)', () => {
 
     const rows = await bindingsOnChannel();
     expect(rows).toHaveLength(1); // one survivor, one dropped as redundant
-    expect(rows[0].bindingPurpose).toBe('general-lobby');
-    expect(rows[0].gameId).toBeNull();
+    expect(rows[0]?.bindingPurpose).toBe('general-lobby');
+    expect(at(rows, 0).gameId).toBeNull();
 
     const health = await getHealth();
     expect(health.data.find((d) => d.channelId === CHANNEL)).toBeUndefined();
@@ -329,7 +342,10 @@ describe('Binding health endpoint (Regression: ROK-1415)', () => {
     // Simulate a raw SQL / restore path: delete the game with no normalization.
     await testApp.db.delete(schema.games).where(eq(schema.games.id, game.id));
 
-    const [after] = await testApp.db.select().from(cb).where(eq(cb.id, b.id));
+    const [after] = nonEmpty(
+      await testApp.db.select().from(cb).where(eq(cb.id, b.id)),
+      'binding after raw delete',
+    );
     expect(after.gameId).toBeNull();
     expect(after.bindingPurpose).toBe('game-voice-monitor'); // still inert
 
