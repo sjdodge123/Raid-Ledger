@@ -52,6 +52,18 @@ describe('rl_env_deploy async-by-default', () => {
     expect(res.mcp_runtime_status).toBe('succeeded');
   });
 
+  it('an omitted worktree_path defaults to the server cwd (the detached runner runs from the package dir)', async () => {
+    await execute({ slug: 'rok-test' });
+    const params = spawnLocalRunner.mock.calls[0][2] as { worktree_path?: string };
+    expect(params.worktree_path).toBe(process.cwd());
+  });
+
+  it('an explicit worktree_path is passed through unchanged', async () => {
+    await execute({ slug: 'rok-test', worktree_path: '/wt' });
+    const params = spawnLocalRunner.mock.calls[0][2] as { worktree_path?: string };
+    expect(params.worktree_path).toBe('/wt');
+  });
+
   it('TOOL_DESCRIPTION documents the async + 120s-cap polling pattern', () => {
     expect(TOOL_DESCRIPTION).toMatch(/ASYNC BY DEFAULT/);
     expect(TOOL_DESCRIPTION).toMatch(/120s/);

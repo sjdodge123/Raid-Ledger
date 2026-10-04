@@ -14,6 +14,7 @@ import {
   waitLocalTask,
   type SpawnLocalRunnerResult,
 } from '../local-task.js';
+import { withDefaultWorktree } from './env-spin.js';
 import type { ExecuteStatusReturn, StillRunningResult } from './task-schemas.js';
 
 export const TOOL_NAME = 'rl_env_deploy';
@@ -59,7 +60,7 @@ export async function execute(
   const spawned: SpawnLocalRunnerResult = spawnLocalRunner(
     taskId,
     'rl_env_deploy',
-    params,
+    withDefaultWorktree(params),
     params.slug,
   );
 
