@@ -16,6 +16,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { generatePublicSlug } from '../lineups/public-lineup-slug.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeDemoData() {
   let testApp: TestApp;
@@ -240,27 +241,36 @@ function describeDemoData() {
         .post('/admin/settings/demo/install')
         .set('Authorization', `Bearer ${adminToken}`);
 
-      const [seedAdmin] = await testApp.db
-        .select({ id: schema.users.id })
-        .from(schema.users)
-        .where(eq(schema.users.username, 'SeedAdmin'));
+      const [seedAdmin] = nonEmpty(
+        await testApp.db
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(eq(schema.users.username, 'SeedAdmin')),
+        'seedAdmin',
+      );
       const adminUserId = testApp.seed.adminUser.id;
-      const [demoLineup] = await testApp.db
-        .insert(schema.communityLineups)
-        .values({
-          createdBy: seedAdmin.id,
-          title: 'Demo blocker lineup',
-          publicSlug: generatePublicSlug(),
-        })
-        .returning({ id: schema.communityLineups.id });
-      const [adminLineup] = await testApp.db
-        .insert(schema.communityLineups)
-        .values({
-          createdBy: adminUserId,
-          title: 'Real admin lineup',
-          publicSlug: generatePublicSlug(),
-        })
-        .returning({ id: schema.communityLineups.id });
+      const [demoLineup] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineups)
+          .values({
+            createdBy: seedAdmin.id,
+            title: 'Demo blocker lineup',
+            publicSlug: generatePublicSlug(),
+          })
+          .returning({ id: schema.communityLineups.id }),
+        'demoLineup',
+      );
+      const [adminLineup] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineups)
+          .values({
+            createdBy: adminUserId,
+            title: 'Real admin lineup',
+            publicSlug: generatePublicSlug(),
+          })
+          .returning({ id: schema.communityLineups.id }),
+        'adminLineup',
+      );
 
       const clearRes = await testApp.request
         .post('/admin/settings/demo/clear')

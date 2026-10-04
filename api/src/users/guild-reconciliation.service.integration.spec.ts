@@ -15,6 +15,7 @@ import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { GuildReconciliationService } from './guild-reconciliation.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { defined } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let service: GuildReconciliationService;
@@ -40,7 +41,7 @@ async function createUserWithDiscordId(
     .insert(schema.users)
     .values({ discordId, username, role: 'member' })
     .returning();
-  return user;
+  return defined(user, 'inserted user');
 }
 
 async function getDeactivatedAt(userId: number): Promise<Date | string | null> {

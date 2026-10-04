@@ -5,6 +5,7 @@ import { type TestApp } from '../common/testing/test-app';
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Helper to create a member user with local credentials and return their token. */
 export async function createMemberAndLogin(
@@ -13,10 +14,13 @@ export async function createMemberAndLogin(
   email: string,
 ): Promise<{ userId: number; token: string }> {
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId: `local:${email}`, username, role: 'member' })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: `local:${email}`, username, role: 'member' })
+      .returning(),
+    'inserted user',
+  );
   await testApp.db
     .insert(schema.localCredentials)
     .values({ email, passwordHash, userId: user.id });
@@ -64,15 +68,18 @@ export async function createPastEvent(
 ): Promise<number> {
   const start = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Past Integration Test Event',
-      creatorId,
-      duration: [start, end] as [Date, Date],
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Past Integration Test Event',
+        creatorId,
+        duration: [start, end] as [Date, Date],
+        ...overrides,
+      })
+      .returning(),
+    'inserted past event',
+  );
   return event.id;
 }
 
@@ -106,15 +113,18 @@ export async function signupViaDb(
   eventId: number,
   userId: number,
 ): Promise<typeof schema.eventSignups.$inferSelect> {
-  const [signup] = await testApp.db
-    .insert(schema.eventSignups)
-    .values({
-      eventId,
-      userId,
-      status: 'signed_up',
-      confirmationStatus: 'pending',
-    })
-    .returning();
+  const [signup] = nonEmpty(
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({
+        eventId,
+        userId,
+        status: 'signed_up',
+        confirmationStatus: 'pending',
+      })
+      .returning(),
+    'inserted signup',
+  );
   return signup;
 }
 
@@ -170,10 +180,13 @@ export async function createMmoGame(
   name = 'WoW Test',
   slug = 'wow-test',
 ): Promise<typeof schema.games.$inferSelect> {
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({ name, slug, hasRoles: true, hasSpecs: true })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name, slug, hasRoles: true, hasSpecs: true })
+      .returning(),
+    'inserted MMO game',
+  );
   return game;
 }
 
@@ -184,16 +197,19 @@ export async function createMainCharacter(
   gameId: number,
   charClass: string,
 ): Promise<typeof schema.characters.$inferSelect> {
-  const [char] = await testApp.db
-    .insert(schema.characters)
-    .values({
-      userId,
-      gameId,
-      name: `Main-${charClass}`,
-      class: charClass,
-      role: charClass.toLowerCase(),
-      isMain: true,
-    })
-    .returning();
+  const [char] = nonEmpty(
+    await testApp.db
+      .insert(schema.characters)
+      .values({
+        userId,
+        gameId,
+        name: `Main-${charClass}`,
+        class: charClass,
+        role: charClass.toLowerCase(),
+        isMain: true,
+      })
+      .returning(),
+    'inserted main character',
+  );
   return char;
 }

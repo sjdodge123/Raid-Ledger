@@ -13,6 +13,7 @@ import {
   type EventCreateDeps,
 } from './event-create-lfg.helpers';
 import { DEFAULT_ROSTER_SLOT_CONFIG } from './event-roster-slots.helpers';
+import { at } from '../common/testing/narrow';
 
 const CREATOR = 7;
 const BASE_DTO: CreateEventDto = {
@@ -81,8 +82,10 @@ describe('createEventWithSignups', () => {
     });
     const convertOrder =
       deps.lfgEventConvert.createForGroup.mock.invocationCallOrder[0];
-    const firstSignupOrder =
-      deps.signupsService.signup.mock.invocationCallOrder[0];
+    const firstSignupOrder = at(
+      deps.signupsService.signup.mock.invocationCallOrder,
+      0,
+    );
     expect(convertOrder).toBeLessThan(firstSignupOrder);
   });
 

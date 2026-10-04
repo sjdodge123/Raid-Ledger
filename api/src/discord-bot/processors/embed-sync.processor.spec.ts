@@ -113,7 +113,7 @@ describe('EmbedSyncProcessor — description update: success', () => {
   let processor: EmbedSyncProcessor;
   let clientService: jest.Mocked<DiscordBotClientService>;
   let scheduledEventService: jest.Mocked<ScheduledEventService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'select' | 'update', jest.Mock>;
 
   const mockEvent = {
     id: 42,
@@ -202,7 +202,7 @@ describe('EmbedSyncProcessor — description update: skip conditions', () => {
   let processor: EmbedSyncProcessor;
   let clientService: jest.Mocked<DiscordBotClientService>;
   let scheduledEventService: jest.Mocked<ScheduledEventService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'select' | 'update', jest.Mock>;
 
   const mockRecord = {
     id: 'record-uuid',
@@ -341,7 +341,7 @@ function makeSlotConfigEvent(slotConfig: Record<string, unknown>) {
 describe('EmbedSyncProcessor — slot-config fullness: FULL', () => {
   let processor: EmbedSyncProcessor;
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'select' | 'update', jest.Mock>;
 
   const mockRecord = {
     id: 'record-uuid',
@@ -441,7 +441,7 @@ describe('EmbedSyncProcessor — slot-config fullness: FULL', () => {
 describe('EmbedSyncProcessor — slot-config fullness: FILLING', () => {
   let processor: EmbedSyncProcessor;
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'select' | 'update', jest.Mock>;
 
   const mockRecord = {
     id: 'record-uuid',
@@ -500,7 +500,7 @@ describe('EmbedSyncProcessor — slot-config fullness: FILLING', () => {
 describe('EmbedSyncProcessor — bump message cleanup (ROK-728)', () => {
   let processor: EmbedSyncProcessor;
   let clientService: jest.Mocked<DiscordBotClientService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'select' | 'update', jest.Mock>;
 
   const recordWithBump = {
     id: 'record-uuid',

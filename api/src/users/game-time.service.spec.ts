@@ -3,6 +3,7 @@ import { GameTimeService } from './game-time.service';
 import { GAME_TIME_FRESHNESS_DAYS } from './game-time-freshness.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { at } from '../common/testing/narrow';
 
 function describeGameTimeService() {
   let service: GameTimeService;
@@ -143,7 +144,7 @@ function describeGameTimeService() {
       expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
       // After the write, never before it (review MINOR a on confirmGameTime).
       expect(invalidate.mock.invocationCallOrder[0]).toBeGreaterThan(
-        mockDb.set.mock.invocationCallOrder[0],
+        at(mockDb.set.mock.invocationCallOrder, 0),
       );
     });
 

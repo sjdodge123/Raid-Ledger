@@ -14,6 +14,7 @@ import {
   type GameRow,
 } from './games-dedup-audit.helpers';
 import { pickNameGroupWinner } from '../igdb/igdb-name-dedup.helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 // ROK-1277: union-find grouping helper. The file
 // `./games-dedup-union-find.helpers` DOES NOT YET EXIST — the dev agent
@@ -82,7 +83,7 @@ describe('bucketRowsByDedupKey', () => {
     ];
     const buckets = bucketRowsByDedupKey(rows);
     expect(buckets.size).toBe(1);
-    const [[, group]] = [...buckets.entries()];
+    const [[, group]] = nonEmpty([...buckets.entries()], 'name bucket');
     expect(group).toHaveLength(2);
   });
 
@@ -258,12 +259,12 @@ describe('GamesDedupAuditService.runAudit', () => {
     expect(result.summary.totalGroups).toBe(1);
     expect(result.summary.totalDupRows).toBe(1); // 2 in group - 1 canonical
     expect(result.groups).toHaveLength(1);
-    expect(result.groups[0].canonicalId).toBe(5);
-    expect(result.groups[0].dupIds).toEqual([2]);
-    expect(result.groups[0].matchType).toBe('igdb');
-    expect(result.groups[0].matchKey).toBe('10');
+    expect(result.groups[0]?.canonicalId).toBe(5);
+    expect(result.groups[0]?.dupIds).toEqual([2]);
+    expect(result.groups[0]?.matchType).toBe('igdb');
+    expect(result.groups[0]?.matchKey).toBe('10');
     expect(result.blastRadius).toHaveLength(1);
-    expect(result.blastRadius[0].gameId).toBe(2);
+    expect(result.blastRadius[0]?.gameId).toBe(2);
   });
 
   it('detects a steam-key dup pair when igdbId is null on both rows', async () => {
@@ -276,9 +277,9 @@ describe('GamesDedupAuditService.runAudit', () => {
     );
     const result = await svc.runAudit();
     expect(result.summary.totalGroups).toBe(1);
-    expect(result.groups[0].matchType).toBe('steam');
-    expect(result.groups[0].matchKey).toBe('777');
-    expect(result.groups[0].canonicalId).toBe(1); // lowest id wins
+    expect(result.groups[0]?.matchType).toBe('steam');
+    expect(result.groups[0]?.matchKey).toBe('777');
+    expect(result.groups[0]?.canonicalId).toBe(1); // lowest id wins
   });
 
   it('detects a name-key dup pair when no igdb/steam keys match', async () => {
@@ -291,9 +292,9 @@ describe('GamesDedupAuditService.runAudit', () => {
     );
     const result = await svc.runAudit();
     expect(result.summary.totalGroups).toBe(1);
-    expect(result.groups[0].matchType).toBe('name');
-    expect(result.groups[0].matchKey).toMatch(/slay the spire 2/);
-    expect(result.groups[0].canonicalId).toBe(30);
+    expect(result.groups[0]?.matchType).toBe('name');
+    expect(result.groups[0]?.matchKey).toMatch(/slay the spire 2/);
+    expect(result.groups[0]?.canonicalId).toBe(30);
   });
 
   it('emits blast-radius counts populated from drizzle responses (per-table mapping)', async () => {
@@ -336,7 +337,7 @@ describe('GamesDedupAuditService.runAudit', () => {
     );
     const result = await svc.runAudit();
     expect(result.blastRadius).toHaveLength(1);
-    const br = result.blastRadius[0];
+    const br = at(result.blastRadius, 0);
     expect(br.gameId).toBe(2);
     expect(br.events).toBe(3);
     expect(br.eventPlans).toBe(1);
@@ -381,9 +382,9 @@ describe('GamesDedupAuditService.runAudit', () => {
     const { svc } = await buildService(() => rows, zeros(138));
     const result = await svc.runAudit();
     expect(result.groups).toHaveLength(3);
-    expect(result.groups[0].matchKey).toBe('100'); // A
-    expect(result.groups[1].matchKey).toBe('300'); // C
-    expect(result.groups[2].matchKey).toBe('200'); // B
+    expect(result.groups[0]?.matchKey).toBe('100'); // A
+    expect(result.groups[1]?.matchKey).toBe('300'); // C
+    expect(result.groups[2]?.matchKey).toBe('200'); // B
   });
 });
 
@@ -524,9 +525,9 @@ describe('groupRowsByConnectedKeys (union-find)', () => {
     const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
     const groups = groupRowsByConnectedKeys(rows);
     expect(groups).toHaveLength(1);
-    expect(groups[0].rows.map((r) => r.id).sort()).toEqual([1, 2]);
-    expect(groups[0].matchType).toBe('igdb');
-    expect(groups[0].matchKey).toBe('100');
+    expect(groups[0]?.rows.map((r) => r.id).sort()).toEqual([1, 2]);
+    expect(groups[0]?.matchType).toBe('igdb');
+    expect(groups[0]?.matchKey).toBe('100');
   });
 
   it('groups two rows that share only steamAppId — matchType=steam', () => {
@@ -537,8 +538,8 @@ describe('groupRowsByConnectedKeys (union-find)', () => {
     const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
     const groups = groupRowsByConnectedKeys(rows);
     expect(groups).toHaveLength(1);
-    expect(groups[0].matchType).toBe('steam');
-    expect(groups[0].matchKey).toBe('555');
+    expect(groups[0]?.matchType).toBe('steam');
+    expect(groups[0]?.matchKey).toBe('555');
   });
 
   it('groups two rows that share only normalized name — matchType=name', () => {
@@ -549,10 +550,10 @@ describe('groupRowsByConnectedKeys (union-find)', () => {
     const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
     const groups = groupRowsByConnectedKeys(rows);
     expect(groups).toHaveLength(1);
-    expect(groups[0].matchType).toBe('name');
+    expect(groups[0]?.matchType).toBe('name');
     // normalized form of both is 'slay the spire 2' (Roman numeral + arabic
     // both normalize to the same digit form).
-    expect(groups[0].matchKey).toMatch(/slay the spire 2/);
+    expect(groups[0]?.matchKey).toMatch(/slay the spire 2/);
   });
 
   it('groups BG3 cross-key: igdb-only + same-name steam-only — matchType=name', () => {
@@ -566,9 +567,9 @@ describe('groupRowsByConnectedKeys (union-find)', () => {
     const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
     const groups = groupRowsByConnectedKeys(rows);
     expect(groups).toHaveLength(1);
-    expect(groups[0].rows.map((r) => r.id).sort()).toEqual([10, 11]);
-    expect(groups[0].matchType).toBe('name');
-    expect(groups[0].matchKey).toMatch(/baldur.s gate 3/);
+    expect(groups[0]?.rows.map((r) => r.id).sort()).toEqual([10, 11]);
+    expect(groups[0]?.matchType).toBe('name');
+    expect(groups[0]?.matchKey).toMatch(/baldur.s gate 3/);
   });
 
   it('reports the STRONGEST shared key when a 3-row component shares igdb (A+B) and name (B+C)', () => {
@@ -584,9 +585,9 @@ describe('groupRowsByConnectedKeys (union-find)', () => {
     const groupRowsByConnectedKeys = loadGroupRowsByConnectedKeys();
     const groups = groupRowsByConnectedKeys(rows);
     expect(groups).toHaveLength(1);
-    expect(groups[0].rows.map((r) => r.id).sort()).toEqual([20, 21, 22]);
-    expect(groups[0].matchType).toBe('igdb');
-    expect(groups[0].matchKey).toBe('42');
+    expect(groups[0]?.rows.map((r) => r.id).sort()).toEqual([20, 21, 22]);
+    expect(groups[0]?.matchType).toBe('igdb');
+    expect(groups[0]?.matchKey).toBe('42');
   });
 
   it('excludes single-row components from output (only ≥2-row groups returned)', () => {

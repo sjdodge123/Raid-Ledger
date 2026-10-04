@@ -9,6 +9,7 @@ import { BindCommand } from './bind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { ChannelType } from 'discord.js';
+import { at } from '../../common/testing/narrow';
 
 function makeSelectChain(rows: unknown[] = []) {
   const chain: Record<string, jest.Mock> = {};
@@ -309,12 +310,13 @@ describe('BindCommand ROK-599 misc — autocomplete: format & empty', () => {
     await command.handleAutocomplete(
       interaction as unknown as AutocompleteParam,
     );
-    const respondArg = (
-      interaction.respond.mock.calls as unknown[][]
-    )[0][0] as Array<{ name: string; value: string }>;
-    expect(respondArg[0].name).toMatch(/Summer Raid/);
-    expect(respondArg[0].name).toMatch(/Jun.*15|June.*15/i);
-    expect(respondArg[0].value).toBe('42');
+    const respondArg = at(
+      interaction.respond.mock.calls as unknown[][],
+      0,
+    )[0] as Array<{ name: string; value: string }>;
+    expect(respondArg[0]?.name).toMatch(/Summer Raid/);
+    expect(respondArg[0]?.name).toMatch(/Jun.*15|June.*15/i);
+    expect(respondArg[0]?.value).toBe('42');
   });
 
   it('responds with empty array when no accessible events', async () => {

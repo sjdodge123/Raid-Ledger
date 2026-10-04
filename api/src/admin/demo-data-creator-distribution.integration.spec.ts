@@ -14,6 +14,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { ROLE_ACCOUNTS } from './demo-data.constants';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Raid leader usernames expected after ROK-1037. */
 const EXPECTED_RAID_LEADERS = ['ShadowMage', 'ProRaider', 'TankMaster'];
@@ -65,11 +66,13 @@ function describeCreatorDistribution() {
     const raidLeaderIds = new Set(raidLeaderUsers.map((u) => u.id));
 
     // Find SeedAdmin
-    const [seedAdmin] = await testApp.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.username, 'SeedAdmin'));
-    expect(seedAdmin).toBeDefined();
+    const [seedAdmin] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.username, 'SeedAdmin')),
+      'SeedAdmin user',
+    );
 
     // Get original events: the first 6 events inserted (non-ad-hoc,
     // non-cancelled, with a gameId, matching the 6 original titles)

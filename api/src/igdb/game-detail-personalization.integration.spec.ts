@@ -16,6 +16,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 interface PersonalizedGameDetail {
   id: number;
@@ -46,14 +47,17 @@ function describeGameDetailPersonalization() {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
     const email = `${handle}@test.local`;
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username: handle,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: handle,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -75,7 +79,7 @@ function describeGameDetailPersonalization() {
         slug: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
       })
       .returning();
-    return game;
+    return defined(game, 'inserted game');
   }
 
   async function addInterest(

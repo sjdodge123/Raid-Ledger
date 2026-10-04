@@ -61,7 +61,7 @@ describe('mergeActivityWithSteam', () => {
     const result = mergeActivityWithSteam(discordRows, steamRows, 'all');
     expect(result).toHaveLength(1);
     // 3600 + 60*60 = 7200
-    expect(result[0].totalSeconds).toBe(7200);
+    expect(result[0]?.totalSeconds).toBe(7200);
   });
 
   it('should use playtime2weeks for week/month periods', () => {
@@ -79,7 +79,7 @@ describe('mergeActivityWithSteam', () => {
     ];
     const result = mergeActivityWithSteam(discordRows, steamRows, 'week');
     // 1800 + 30*60 = 3600
-    expect(result[0].totalSeconds).toBe(3600);
+    expect(result[0]?.totalSeconds).toBe(3600);
   });
 
   it('should treat null playtime2weeks as 0 for non-all periods', () => {
@@ -97,7 +97,7 @@ describe('mergeActivityWithSteam', () => {
     ];
     const result = mergeActivityWithSteam(discordRows, steamRows, 'month');
     // null playtime2weeks => 0 contribution
-    expect(result[0].totalSeconds).toBe(500);
+    expect(result[0]?.totalSeconds).toBe(500);
   });
 
   it('should sort by totalSeconds descending', () => {
@@ -106,8 +106,8 @@ describe('mergeActivityWithSteam', () => {
       { gameId: 2, gameName: 'High', coverUrl: null, totalSeconds: 9999 },
     ];
     const result = mergeActivityWithSteam(discordRows, [], 'all');
-    expect(result[0].gameName).toBe('High');
-    expect(result[1].gameName).toBe('Low');
+    expect(result[0]?.gameName).toBe('High');
+    expect(result[1]?.gameName).toBe('Low');
   });
 
   it('should mark only the first entry as isMostPlayed', () => {
@@ -116,8 +116,8 @@ describe('mergeActivityWithSteam', () => {
       { gameId: 2, gameName: 'B', coverUrl: null, totalSeconds: 200 },
     ];
     const result = mergeActivityWithSteam(discordRows, [], 'all');
-    expect(result[0].isMostPlayed).toBe(true);
-    expect(result[1].isMostPlayed).toBe(false);
+    expect(result[0]?.isMostPlayed).toBe(true);
+    expect(result[1]?.isMostPlayed).toBe(false);
   });
 
   it('should limit output to 20 entries', () => {

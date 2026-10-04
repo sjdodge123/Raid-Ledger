@@ -8,6 +8,7 @@
  */
 import { sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('pgvector extension (ROK-948)', () => {
   let testApp: TestApp;
@@ -21,7 +22,7 @@ describe('pgvector extension (ROK-948)', () => {
       sql`SELECT extname FROM pg_extension WHERE extname = 'vector'`,
     );
     expect(rows.length).toBe(1);
-    expect(rows[0].extname).toBe('vector');
+    expect(rows[0]?.extname).toBe('vector');
   });
 
   it('supports vector(7) casts and cosine distance operator', async () => {
@@ -35,7 +36,7 @@ describe('pgvector extension (ROK-948)', () => {
         ('[1,0,0,0,0,0,0]'::vector(7) <=> '[1,1,0,0,0,0,0]'::vector(7))::text AS partial,
         ('[1,0,0,0,0,0,0]'::vector(7) <=> '[0,0,0,0,0,0,1]'::vector(7))::text AS orthogonal
     `);
-    const [row] = rows;
+    const [row] = nonEmpty(rows, 'cosine distance row');
     expect(Number(row.identical)).toBeCloseTo(0);
     expect(Number(row.partial)).toBeGreaterThan(0);
     expect(Number(row.partial)).toBeLessThan(1);
