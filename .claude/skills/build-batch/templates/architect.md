@@ -49,7 +49,7 @@ For every PAIR of milestones with cross-references:
 
 ### POST_REVIEW checks (integration validation)
 
-1. **Combined-compile type errors.** Run `npx tsc --noEmit -p api/tsconfig.json` and `npx tsc --noEmit -p web/tsconfig.json`. Per-milestone reviewers may have seen clean compiles in isolation but not the combined surface.
+1. **Combined-compile type errors.** Run `npx tsc --noEmit -p api/tsconfig.json` and `npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json`. Per-milestone reviewers may have seen clean compiles in isolation but not the combined surface.
 
 2. **Cutover gaps.** If the story did a hard cutover (e.g. ROK-1331's claim 409 → queue), grep the entire repo for callers of the old shape. Any surviving caller is a runtime break waiting to happen.
 
