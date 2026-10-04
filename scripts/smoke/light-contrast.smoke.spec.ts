@@ -94,7 +94,7 @@ const TINTED_LIGHT_SCHEMES = ['sky', 'holy', 'dawn', 'celestial'] as const;
 const DIM_BACKGROUNDS = ['--color-surface', '--color-panel'];
 
 async function scanRoute(page: Page, route: LightRoute, scheme: string): Promise<void> {
-    await gotoWithPinnedPreferences(page, route.path);
+    await gotoWithPinnedPreferences(page, route.path, scheme);
     await expectLightScheme(page, scheme);
     await route.ready(page);
     await waitForFiniteAnimations(page);
@@ -135,7 +135,7 @@ for (const scheme of TINTED_LIGHT_SCHEMES) {
         // Token-level, so it fails even where no scanned route renders dim text.
         // Never allow-list a --color-dim miss: fix the scheme's token instead.
         test('--color-dim reaches 4.5:1 on surface and panel', async ({ page }) => {
-            await gotoWithPinnedPreferences(page, '/players');
+            await gotoWithPinnedPreferences(page, '/players', scheme);
             await expectLightScheme(page, scheme);
             await expectTokenContrast(page, '--color-dim', DIM_BACKGROUNDS);
         });
@@ -161,7 +161,7 @@ test.describe('Light scheme colour contrast (quest-log tokens)', () => {
 
     for (const text of ['--color-dim', '--color-muted']) {
         test(`${text} reaches 4.5:1 on surface and panel`, async ({ page }) => {
-            await gotoWithPinnedPreferences(page, '/players');
+            await gotoWithPinnedPreferences(page, '/players', 'quest-log');
             await expectLightScheme(page, 'light');
             await expect(page.locator('html')).toHaveAttribute('data-variant', 'quest-log');
             await expectTokenContrast(page, text, DIM_BACKGROUNDS);

@@ -80,16 +80,29 @@ export function isPreferencesRead(url: string, method: string): boolean {
     return method === 'GET' && new URL(url).pathname.endsWith('/users/me/preferences');
 }
 
+/** How long `gotoWithPinnedPreferences` waits for the pinned preferences read. */
+export const PINNED_PREFERENCES_TIMEOUT_MS = 15_000;
+
 /**
  * Navigate and wait until the pinned preferences read has been fulfilled. Past
  * this point the app has applied the server theme (the pinned light one), so a
  * check made now cannot be overtaken by a late theme sync, and the route
  * handler is no longer mid-flight.
  */
-export async function gotoWithPinnedPreferences(page: Page, path: string): Promise<void> {
-    const pinned = page.waitForResponse((r) => isPreferencesRead(r.url(), r.request().method()));
-    await page.goto(path);
-    await pinned;
+export async function gotoWithPinnedPreferences(
+    page: Page,
+    path: string,
+    schemeId: string,
+    timeout = PINNED_PREFERENCES_TIMEOUT_MS,
+): Promise<void> {
+    const pinned = page
+        .waitForResponse((r) => isPreferencesRead(r.url(), r.request().method()), { timeout })
+        .catch((cause: unknown) => {
+            throw new Error(`preferences GET never arrived while pinning scheme ${schemeId} (${path})`, { cause });
+        });
+    // Promise.all observes both, so a goto that throws first cannot leave the
+    // pinned wait as an unhandled rejection.
+    await Promise.all([pinned, page.goto(path)]);
 }
 
 /**
