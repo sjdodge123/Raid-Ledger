@@ -151,7 +151,7 @@ Run **full CI locally** since the combined branch touches multiple PRs:
 ```bash
 npm run build -w packages/contract
 npm run build -w api && npx tsc --noEmit -p api/tsconfig.json && npm run lint -w api && npm run test -w api
-npm run build -w web && npx tsc --noEmit -p web/tsconfig.json && npm run lint -w web && npm run test -w web
+npm run build -w web && npx tsc --noEmit -p web/tsconfig.test.json && npm run lint -w web && npm run test -w web
 ```
 
 If only one workspace is affected across ALL grouped PRs, scope the checks accordingly (same rules as `/push`).
