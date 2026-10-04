@@ -15,6 +15,7 @@ import {
   createPastEvent,
 } from './signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -47,14 +48,17 @@ async function insertSignup(
 
 /** Create a second game for per-game tests. */
 async function createSecondGame(name = 'Second Game') {
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name,
-      slug: 'second-game',
-      coverUrl: 'https://example.com/cover.jpg',
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name,
+        slug: 'second-game',
+        coverUrl: 'https://example.com/cover.jpg',
+      })
+      .returning(),
+    'second game',
+  );
   return game;
 }
 

@@ -29,6 +29,7 @@ import {
   LFG_BOARD_EDIT_DEBOUNCE_MS,
   LFG_JOIN_BUTTON_LABEL,
 } from './lfg-board.constants';
+import { at } from '../../common/testing/narrow';
 
 const CLIENT_URL = 'https://raid.example';
 const FORUM_ID = 'forum-1';
@@ -180,7 +181,7 @@ describe('LfgBoardService.postThread (AC1, AC5, AC6)', () => {
   it("renders with linkStyle 'button', so the description carries no masked link", async () => {
     await service.postThread(FORUM_ID, view(), context);
 
-    expect(createArgs().message.embeds[0].data.description).not.toContain(
+    expect(at(createArgs().message.embeds, 0).data.description).not.toContain(
       '[Open group',
     );
   });

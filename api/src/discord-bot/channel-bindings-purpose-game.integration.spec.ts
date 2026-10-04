@@ -25,6 +25,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 import { DiscordBotClientService } from './discord-bot-client.service';
 
 const GUILD = 'rok1416-guild';
@@ -57,18 +58,21 @@ async function insertBinding(o: {
   gameId: number | null;
   config?: Record<string, unknown>;
 }): Promise<typeof cb.$inferSelect> {
-  const [row] = await testApp.db
-    .insert(cb)
-    .values({
-      guildId: GUILD,
-      channelId: CHANNEL,
-      channelType: 'voice',
-      bindingPurpose: o.bindingPurpose,
-      gameId: o.gameId,
-      recurrenceGroupId: null,
-      config: o.config ?? {},
-    })
-    .returning();
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(cb)
+      .values({
+        guildId: GUILD,
+        channelId: CHANNEL,
+        channelType: 'voice',
+        bindingPurpose: o.bindingPurpose,
+        gameId: o.gameId,
+        recurrenceGroupId: null,
+        config: o.config ?? {},
+      })
+      .returning(),
+    'binding',
+  );
   return row;
 }
 
@@ -76,19 +80,25 @@ async function insertBinding(o: {
 async function makeGame(
   name: string,
 ): Promise<typeof schema.games.$inferSelect> {
-  const [g] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name,
-      slug: name.toLowerCase().replace(/\s+/g, '-'),
-      igdbId: null,
-    })
-    .returning();
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name,
+        slug: name.toLowerCase().replace(/\s+/g, '-'),
+        igdbId: null,
+      })
+      .returning(),
+    'game',
+  );
   return g;
 }
 
 async function readBinding(id: string): Promise<typeof cb.$inferSelect> {
-  const [row] = await testApp.db.select().from(cb).where(eq(cb.id, id));
+  const [row] = nonEmpty(
+    await testApp.db.select().from(cb).where(eq(cb.id, id)),
+    'binding read-back',
+  );
   return row;
 }
 

@@ -26,6 +26,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { findActiveScheduledEvent } from './services/ad-hoc-event.helpers';
 import { AdHocEventService } from './services/ad-hoc-event.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** A valid UUID that never matches a seeded binding (the "querying" binding). */
 const UNRELATED_BINDING = '00000000-0000-0000-0000-000000000000';
@@ -58,20 +59,23 @@ async function createScheduledEvent(fields: {
   channelBindingId?: string | null;
   isAdHoc?: boolean;
 }): Promise<number> {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Scheduled — suppression fixture',
-      creatorId: testApp.seed.adminUser.id,
-      duration: [fields.start, fields.end] as [Date, Date],
-      gameId: fields.gameId ?? null,
-      extendedUntil: fields.extendedUntil ?? null,
-      ephemeralVoiceChannelId: fields.ephemeralVoiceChannelId ?? null,
-      recurrenceGroupId: fields.recurrenceGroupId ?? null,
-      channelBindingId: fields.channelBindingId ?? null,
-      isAdHoc: fields.isAdHoc ?? false,
-    })
-    .returning({ id: schema.events.id });
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Scheduled — suppression fixture',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [fields.start, fields.end] as [Date, Date],
+        gameId: fields.gameId ?? null,
+        extendedUntil: fields.extendedUntil ?? null,
+        ephemeralVoiceChannelId: fields.ephemeralVoiceChannelId ?? null,
+        recurrenceGroupId: fields.recurrenceGroupId ?? null,
+        channelBindingId: fields.channelBindingId ?? null,
+        isAdHoc: fields.isAdHoc ?? false,
+      })
+      .returning({ id: schema.events.id }),
+    'event',
+  );
   return event.id;
 }
 
@@ -81,18 +85,21 @@ async function createVoiceBinding(fields: {
   gameId?: number | null;
   recurrenceGroupId?: string | null;
 }): Promise<string> {
-  const [binding] = await testApp.db
-    .insert(schema.channelBindings)
-    .values({
-      guildId: 'guild-1418',
-      channelId: fields.channelId,
-      channelType: 'voice',
-      bindingPurpose: fields.bindingPurpose ?? 'game-voice-monitor',
-      gameId: fields.gameId ?? null,
-      recurrenceGroupId: fields.recurrenceGroupId ?? null,
-      config: {},
-    })
-    .returning({ id: schema.channelBindings.id });
+  const [binding] = nonEmpty(
+    await testApp.db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: 'guild-1418',
+        channelId: fields.channelId,
+        channelType: 'voice',
+        bindingPurpose: fields.bindingPurpose ?? 'game-voice-monitor',
+        gameId: fields.gameId ?? null,
+        recurrenceGroupId: fields.recurrenceGroupId ?? null,
+        config: {},
+      })
+      .returning({ id: schema.channelBindings.id }),
+    'binding',
+  );
   return binding.id;
 }
 
@@ -104,16 +111,19 @@ async function createVoiceBinding(fields: {
 async function readEpochs(
   eventId: number,
 ): Promise<{ extEpoch: number | null; endEpoch: number }> {
-  const [row] = await testApp.db
-    .select({
-      extEpoch: sql<
-        number | null
-      >`extract(epoch from ${schema.events.extendedUntil})`,
-      endEpoch: sql<number>`extract(epoch from upper(${schema.events.duration}))`,
-    })
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({
+        extEpoch: sql<
+          number | null
+        >`extract(epoch from ${schema.events.extendedUntil})`,
+        endEpoch: sql<number>`extract(epoch from upper(${schema.events.duration}))`,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1),
+    'row',
+  );
   return {
     extEpoch: row.extEpoch == null ? null : Number(row.extEpoch),
     endEpoch: Number(row.endEpoch),

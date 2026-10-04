@@ -18,6 +18,7 @@ import {
 import { AD_HOC_EVENTS } from '../discord-bot/discord-bot.constants';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 /** The LFG-born event's temp channel — a snowflake, as the body schema requires. */
@@ -55,32 +56,42 @@ afterAll(() => {
 });
 
 async function seedLinkedUser(): Promise<number> {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({ username: 'voicejoiner', discordId: DISCORD_ID, role: 'member' })
-    .returning({ id: schema.users.id });
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        username: 'voicejoiner',
+        discordId: DISCORD_ID,
+        role: 'member',
+      })
+      .returning({ id: schema.users.id }),
+    'user',
+  );
   return user.id;
 }
 
 /** An open LFG-born session: ad-hoc, live, unbound, owning `VOICE_CHANNEL`. */
 async function seedLfgBornEvent(): Promise<number> {
   const now = Date.now();
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'LFG now — voice endpoint fixture',
-      creatorId: testApp.seed.adminUser.id,
-      duration: [new Date(now - 5 * 60_000), new Date(now + 55 * 60_000)] as [
-        Date,
-        Date,
-      ],
-      gameId: testApp.seed.game.id,
-      isAdHoc: true,
-      adHocStatus: 'live',
-      channelBindingId: null,
-      ephemeralVoiceChannelId: VOICE_CHANNEL,
-    })
-    .returning({ id: schema.events.id });
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'LFG now — voice endpoint fixture',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [new Date(now - 5 * 60_000), new Date(now + 55 * 60_000)] as [
+          Date,
+          Date,
+        ],
+        gameId: testApp.seed.game.id,
+        isAdHoc: true,
+        adHocStatus: 'live',
+        channelBindingId: null,
+        ephemeralVoiceChannelId: VOICE_CHANNEL,
+      })
+      .returning({ id: schema.events.id }),
+    'event',
+  );
   return event.id;
 }
 
@@ -131,8 +142,8 @@ describe('POST /admin/test/lfg-now/voice-join|voice-leave', () => {
     const closed = await rosterRows(eventId);
     // The SAME row closed — not a second row, not a delete.
     expect(closed).toHaveLength(1);
-    expect(closed[0].id).toBe(open[0].id);
-    expect(closed[0].leftAt).toBeInstanceOf(Date);
+    expect(at(closed, 0).id).toBe(at(open, 0).id);
+    expect(closed[0]?.leftAt).toBeInstanceOf(Date);
   });
 
   it('records nothing for a channel no open LFG-born event owns', async () => {

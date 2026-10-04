@@ -4,6 +4,7 @@
  * The key behavior: when an event has been auto-extended, the embed should
  * remain LIVE (not COMPLETED) until the extendedUntil time passes.
  */
+import { at } from '../../common/testing/narrow';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
 import { EmbedSyncProcessor } from './embed-sync.processor';
@@ -82,7 +83,7 @@ function makeEvent(overrides: {
 }
 
 let processor: EmbedSyncProcessor;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'select' | 'update', jest.Mock>;
 let scheduledEventService: jest.Mocked<ScheduledEventService>;
 
 /**
@@ -182,7 +183,7 @@ function getComputedState(): string {
   const embedFactory = processor[
     'embedFactory'
   ] as jest.Mocked<DiscordEmbedFactory>;
-  return embedFactory.buildEventUpdate.mock.calls[0][2];
+  return at(embedFactory.buildEventUpdate.mock.calls, 0)[2];
 }
 
 // ─── Core LIVE-during-extension behavior ───────────────────────────────────

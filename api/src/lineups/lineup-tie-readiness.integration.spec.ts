@@ -26,6 +26,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 type Response = { status: number; body: unknown };
 type Member = { userId: number; token: string };
@@ -76,21 +77,27 @@ async function member(tag: string): Promise<Member> {
 
 /** A user who is NOT on any roster and never logs in — cheap to make. */
 async function bystander(tag: string): Promise<number> {
-  const [row] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId: `local:${tag}`, username: tag, role: 'member' })
-    .returning({ id: schema.users.id });
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: `local:${tag}`, username: tag, role: 'member' })
+      .returning({ id: schema.users.id }),
+    'row',
+  );
   return row.id;
 }
 
 async function createGame(name: string) {
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name,
-      slug: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name,
+        slug: `${name.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      })
+      .returning(),
+    'game',
+  );
   return game;
 }
 
@@ -201,9 +208,12 @@ function etaOf(body: unknown, gameId: number, userId: number) {
 }
 
 async function countGames(): Promise<number> {
-  const [row] = await testApp.db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(schema.games);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.games),
+    'row',
+  );
   return row.n;
 }
 
@@ -245,7 +255,7 @@ describe('GET /lineups/:id/tie-readiness (ROK-1374)', () => {
 
     // The two members who do NOT own it see the same shared count, and their
     // own flag says so.
-    const asNonOwner = await readiness(members[7].token, lineupId);
+    const asNonOwner = await readiness(at(members, 7).token, lineupId);
     expect(asNonOwner.status).toBe(200);
     expect(gameOf(asNonOwner.body, gameA.id)).toMatchObject({
       ownedCount: 7,
@@ -272,7 +282,7 @@ describe('GET /lineups/:id/tie-readiness (ROK-1374)', () => {
     const before = await countGames();
 
     expectOk(
-      await setInstallSize(members[0].token, gameA.id, {
+      await setInstallSize(at(members, 0).token, gameA.id, {
         installSizeBytes: INSTALL_BYTES,
         downloadSizeBytes: DOWNLOAD_BYTES,
       }),
@@ -281,7 +291,7 @@ describe('GET /lineups/:id/tie-readiness (ROK-1374)', () => {
 
     expect(await countGames()).toBe(before);
     const seenByAnother = gameOf(
-      (await readiness(members[7].token, lineupId)).body,
+      (await readiness(at(members, 7).token, lineupId)).body,
       gameA.id,
     );
     expect(seenByAnother.installSizeBytes).toBe(INSTALL_BYTES);
@@ -305,7 +315,7 @@ describe('GET /lineups/:id/tie-readiness (ROK-1374)', () => {
 
   it('scenario 18 — the estimate needs consent + a speed; revoking consent deletes the datum (AC21/E19)', async () => {
     const { lineupId, gameA, members } = await arrange();
-    const viewer = members[0];
+    const viewer = at(members, 0);
     expectOk(
       await setInstallSize(adminToken, gameA.id, {
         installSizeBytes: INSTALL_BYTES,
@@ -379,7 +389,10 @@ async function arrangeRosterEtas() {
     }),
     'set install size',
   );
-  const [viewer, sharer, silent, unmeasured] = base.members;
+  const viewer = at(base.members, 0);
+  const sharer = at(base.members, 1);
+  const silent = at(base.members, 2);
+  const unmeasured = at(base.members, 3);
   expectOk(await setConsent(viewer.token, true), 'viewer consent');
   expectOk(
     await setSpeed(viewer.token, {
@@ -476,10 +489,13 @@ describe("everyone's download ETA on the card (operator ruling 2026-09-05)", () 
       consentAt: null,
       shareEtaAt: null,
     });
-    const [row] = await testApp.db
-      .select({ shareEtaAt: schema.users.shareDownloadEtaAt })
-      .from(schema.users)
-      .where(eq(schema.users.id, sharer.userId));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ shareEtaAt: schema.users.shareDownloadEtaAt })
+        .from(schema.users)
+        .where(eq(schema.users.id, sharer.userId)),
+      'sharer row',
+    );
     expect(row.shareEtaAt).toBeNull();
 
     const after = await readiness(viewer.token, lineupId);

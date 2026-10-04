@@ -23,6 +23,7 @@ import {
 import * as schema from '../drizzle/schema';
 import type { CommonGroundResponseDto } from '@raid-ledger/contract';
 import { loadCohortSignature } from './cohort-memory-signature.helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 function describeCohortRow() {
   let testApp: TestApp;
@@ -35,10 +36,17 @@ function describeCohortRow() {
 
   /** A game nobody owns — it can only reach the response via cohort memory. */
   async function insertGame(name: string, slug: string): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug, steamAppId: Math.floor(Math.random() * 9e5) + 1e5 })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug,
+          steamAppId: Math.floor(Math.random() * 9e5) + 1e5,
+        })
+        .returning(),
+      'game',
+    );
     return game.id;
   }
 
@@ -47,16 +55,19 @@ function describeCohortRow() {
     slug: string,
     status: 'building' | 'decided',
   ): Promise<number> {
-    const [row] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title,
-        status,
-        visibility: 'public',
-        createdBy: adminId,
-        publicSlug: slug,
-      })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title,
+          status,
+          visibility: 'public',
+          createdBy: adminId,
+          publicSlug: slug,
+        })
+        .returning(),
+      'row',
+    );
     return row.id;
   }
 
@@ -139,7 +150,7 @@ function describeCohortRow() {
     expect(tile?.itadTags).toEqual([]);
     expect(tile?.currentUserOwns).toBe(false);
     // And it leads the payload — the cohort row renders FIRST.
-    expect(body.data[0].gameId).toBe(rememberedGame);
+    expect(at(body.data, 0).gameId).toBe(rememberedGame);
   });
 
   it('re-themes a remembered game that IS in the pool instead of duplicating it', async () => {
@@ -155,10 +166,10 @@ function describeCohortRow() {
 
     const hits = body.data.filter((g) => g.gameId === poolGame);
     expect(hits).toHaveLength(1);
-    expect(hits[0].theme).toBe('cohort');
-    expect(hits[0].whyReason).toBe('Matched together · Sep 14');
+    expect(hits[0]?.theme).toBe('cohort');
+    expect(hits[0]?.whyReason).toBe('Matched together · Sep 14');
     // The pool enrichment survives the re-theme.
-    expect(hits[0].ownerCount).toBe(1);
+    expect(hits[0]?.ownerCount).toBe(1);
     // `meta.total` is assigned `data.length` at the call site, so comparing
     // the two can never fail. Assert the invariant that CAN: the re-theme
     // moves a game between rows, it never emits it twice.
@@ -218,7 +229,7 @@ function describeCohortRow() {
     const tile = body.data.find((g) => g.gameId === rememberedGame);
     expect(tile).toBeDefined();
     expect(tile?.theme).toBe('cohort');
-    expect(body.data[0].gameId).toBe(rememberedGame);
+    expect(at(body.data, 0).gameId).toBe(rememberedGame);
     // The pool game does not match the search and is gone.
     expect(body.data.find((g) => g.gameId === poolGame)).toBeUndefined();
   });

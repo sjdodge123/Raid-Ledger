@@ -11,6 +11,7 @@ import { NotificationService } from '../notifications/notification.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
+import { at } from '../common/testing/narrow';
 
 // ---------------------------------------------------------------------------
 // Shared mocks
@@ -286,7 +287,8 @@ describe('LineupNotificationService', () => {
       await service.notifyLineupCreated(makeLineup({ id: 99 }));
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
-      const setCall = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+      const setCall = at(mockDb.update.mock.results, 0).value.set.mock
+        .calls[0][0];
       expect(setCall).toMatchObject({
         discordCreatedChannelId: 'chan-lineup',
         discordCreatedMessageId: 'msg-created-42',

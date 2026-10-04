@@ -23,6 +23,7 @@ import {
 import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { LfgBoardToggleListener } from './lfg-board-toggle.listener';
 import type { LfgBoardRetireService } from './lfg-board-retire.service';
+import { at } from '../../common/testing/narrow';
 
 jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 
@@ -716,7 +717,7 @@ describe('LfgBoardToggleListener — startup forum census', () => {
     await listener.onBotConnected();
 
     expect(warn).toHaveBeenCalledTimes(1);
-    const msg = String(warn.mock.calls[0][0]);
+    const msg = String(at(warn.mock.calls, 0)[0]);
     expect(msg).toContain('2 forums');
     // Both ids, or the operator cannot act on the warning.
     expect(msg).toContain('f1');

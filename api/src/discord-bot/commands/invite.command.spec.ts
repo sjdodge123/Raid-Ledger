@@ -138,11 +138,11 @@ describe('InviteCommand — definition', () => {
       required: boolean;
       autocomplete?: boolean;
     }[];
-    expect(options[0].name).toBe('event');
-    expect(options[0].required).toBe(true);
-    expect(options[0].autocomplete).toBe(true);
-    expect(options[1].name).toBe('user');
-    expect(options[1].required).toBe(false);
+    expect(options[0]?.name).toBe('event');
+    expect(options[0]?.required).toBe(true);
+    expect(options[0]?.autocomplete).toBe(true);
+    expect(options[1]?.name).toBe('user');
+    expect(options[1]?.required).toBe(false);
   });
 });
 
@@ -286,7 +286,7 @@ describe('InviteCommand — autocomplete matching', () => {
     const calls = mockAutocomplete.respond.mock.calls as [
       { name: string; value: number }[],
     ][];
-    expect(calls[0][0]).toHaveLength(1);
+    expect(calls[0]?.[0]).toHaveLength(1);
   });
 
   it('should return all events when query is empty', async () => {
@@ -294,7 +294,7 @@ describe('InviteCommand — autocomplete matching', () => {
     const calls = mockAutocomplete.respond.mock.calls as [
       { name: string; value: number }[],
     ][];
-    expect(calls[0][0]).toHaveLength(2);
+    expect(calls[0]?.[0]).toHaveLength(2);
   });
 });
 
@@ -326,7 +326,7 @@ describe('InviteCommand — autocomplete error & format', () => {
     const calls = mockAutocomplete.respond.mock.calls as [
       { name: string; value: number }[],
     ][];
-    expect(calls[0][0][0].name).toContain('Mythic Raid Night');
-    expect(calls[0][0][0].name).toContain('Feb');
+    expect(calls[0]?.[0][0]?.name).toContain('Mythic Raid Night');
+    expect(calls[0]?.[0][0]?.name).toContain('Feb');
   });
 });

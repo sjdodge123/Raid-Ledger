@@ -4,6 +4,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
+import { at } from '../../common/testing/narrow';
 
 interface ThenableQueryResult {
   then: (
@@ -58,7 +59,7 @@ const depManifest: PluginManifest = {
 };
 
 let service: PluginRegistryService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: ReturnType<typeof buildMockDb>;
 let mockEventEmitter: { emit: jest.Mock };
 
 let selectResults: unknown[];
@@ -144,9 +145,9 @@ async function testListPluginsMerge() {
 
   const result = await service.listPlugins();
   expect(result).toHaveLength(1);
-  expect(result[0].slug).toBe('test-plugin');
-  expect(result[0].status).toBe('active');
-  expect(result[0].installedAt).toBe(installedAt.toISOString());
+  expect(result[0]?.slug).toBe('test-plugin');
+  expect(result[0]?.status).toBe('active');
+  expect(at(result, 0).installedAt).toBe(installedAt.toISOString());
 }
 
 async function testConfiguredFlag() {
@@ -155,7 +156,7 @@ async function testConfiguredFlag() {
   mockSelectWithCredentials([], bothKeys);
 
   const result = await service.listPlugins();
-  expect(result[0].integrations[0].configured).toBe(true);
+  expect(result[0]?.integrations[0]?.configured).toBe(true);
 }
 
 async function testConfiguredFalseWhenKeyMissing() {
@@ -163,7 +164,7 @@ async function testConfiguredFalseWhenKeyMissing() {
   mockSelectWithCredentials([], [{ key: 'test_client_id' }]);
 
   const result = await service.listPlugins();
-  expect(result[0].integrations[0].configured).toBe(false);
+  expect(result[0]?.integrations[0]?.configured).toBe(false);
 }
 
 async function testInstallEmitsEvent() {
@@ -262,15 +263,15 @@ describe('PluginRegistryService — manifest registration', () => {
       service.registerManifest(testManifest);
       mockSelectWithCredentials([], []);
       const result = await service.listPlugins();
-      expect(result[0].author).toEqual({ name: 'Test Author' });
+      expect(result[0]?.author).toEqual({ name: 'Test Author' });
     });
 
     it('should return not_installed for manifests without DB records', async () => {
       service.registerManifest(testManifest);
       mockSelectWithCredentials([], []);
       const result = await service.listPlugins();
-      expect(result[0].status).toBe('not_installed');
-      expect(result[0].installedAt).toBeNull();
+      expect(result[0]?.status).toBe('not_installed');
+      expect(at(result, 0).installedAt).toBeNull();
     });
 
     it('should resolve configured flag for integrations', () =>

@@ -3,6 +3,7 @@ import {
   foldFrequencyRows,
   type FrequencyRow,
 } from './cohort-frequency-section';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('cohortSizeBucket (ROK-1310)', () => {
   it('collapses 6 and 7 into 6+ and leaves 1 unbucketed', () => {
@@ -36,13 +37,16 @@ describe('foldFrequencyRows count semantics (ROK-1310)', () => {
   });
 
   it('counts one lineup once however many resolution rows it wrote', () => {
-    const [bucket] = foldFrequencyRows(
-      [row({ lineups: 1, decided: 1, match: 1, vetoWon: 1 })],
-      5,
+    const [bucket] = nonEmpty(
+      foldFrequencyRows(
+        [row({ lineups: 1, decided: 1, match: 1, vetoWon: 1 })],
+        5,
+      ),
+      'bucket',
     );
 
-    expect(bucket.entries[0].count).toBe(1);
-    expect(bucket.entries[0].breakdown).toEqual({
+    expect(bucket.entries[0]?.count).toBe(1);
+    expect(bucket.entries[0]?.breakdown).toEqual({
       decided: 1,
       match: 1,
       vetoWon: 1,
@@ -51,19 +55,22 @@ describe('foldFrequencyRows count semantics (ROK-1310)', () => {
   });
 
   it('ranks a twice-played game above a once-tiebroken one', () => {
-    const [bucket] = foldFrequencyRows(
-      [
-        row({ gameId: 1, gameName: 'Twice played', lineups: 2, decided: 2 }),
-        row({
-          gameId: 2,
-          gameName: 'Tiebroken once',
-          lineups: 1,
-          decided: 1,
-          match: 1,
-          vetoWon: 1,
-        }),
-      ],
-      5,
+    const [bucket] = nonEmpty(
+      foldFrequencyRows(
+        [
+          row({ gameId: 1, gameName: 'Twice played', lineups: 2, decided: 2 }),
+          row({
+            gameId: 2,
+            gameName: 'Tiebroken once',
+            lineups: 1,
+            decided: 1,
+            match: 1,
+            vetoWon: 1,
+          }),
+        ],
+        5,
+      ),
+      'bucket',
     );
 
     expect(bucket.entries.map((e) => [e.gameName, e.count])).toEqual([

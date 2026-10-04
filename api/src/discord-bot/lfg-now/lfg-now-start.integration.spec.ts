@@ -12,6 +12,7 @@ import { createMemberAndLogin } from '../../events/signups.integration.spec-help
 import { createGame } from '../../lfg/lfg.integration.spec-helpers';
 import * as schema from '../../drizzle/schema';
 import { LFG_NOW_START_NEEDS_INTENT } from './lfg-now.constants';
+import { at } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -101,10 +102,12 @@ describe('POST /lfg/:gameId/start-now (integration)', () => {
     });
     const events = await liveAdHocEvents(gameId);
     expect(events).toHaveLength(1);
-    expect(events[0].creatorId).toBe(starter.userId);
-    expect(events[0].adHocStatus).toBe('live');
+    expect(events[0]?.creatorId).toBe(starter.userId);
+    expect(events[0]?.adHocStatus).toBe('live');
     // AC4: the starter is IN, the other is only asked.
-    expect(await rosterDiscordIds(events[0].id)).toEqual([starter.discordId]);
+    expect(await rosterDiscordIds(at(events, 0).id)).toEqual([
+      starter.discordId,
+    ]);
     expect(await intentStatus(starter.userId, gameId)).toBe('converted');
     expect(await intentStatus(other.userId, gameId)).toBe('active');
   });

@@ -4,6 +4,7 @@ import { BindCommand } from './bind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { at } from '../../common/testing/narrow';
 
 /** A Drizzle stub whose `select(...).limit()` resolves the given rows. */
 function makeDb(rows: unknown[]) {
@@ -219,7 +220,7 @@ describe('BindCommand — handleInteraction bind & reply', () => {
     process.env.CLIENT_URL = 'https://raidledger.com';
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const call = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       components: unknown[];
     };
     expect(call.components.length).toBeGreaterThan(0);

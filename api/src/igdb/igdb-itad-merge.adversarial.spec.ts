@@ -99,7 +99,7 @@ describe('mergeItadWithIgdb — IGDB data propagation', () => {
 
     expect(result.screenshots).toHaveLength(2);
     expect(result.videos).toHaveLength(2);
-    expect(result.videos[0].videoId).toBe('abc');
+    expect(result.videos[0]?.videoId).toBe('abc');
   });
 
   it('propagates IGDB player count and crossplay', () => {
