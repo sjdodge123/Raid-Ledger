@@ -61,7 +61,7 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:770-771` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:777-789` |
-| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips `:disabled` / `[aria-disabled="true"]` so `disabled:bg-*` still wins; non-button uses (badges, dots, toggle tracks) step too | `:829-843`, design-system.md §6.10 |
+| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:829-843`, design-system.md §6.10 |
 
 `web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
 `bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`

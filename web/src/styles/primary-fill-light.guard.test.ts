@@ -6,10 +6,11 @@
  * hover rule is scoped to elements that ALSO carry `.bg-emerald-600`, so other
  * `hover:bg-emerald-500` uses keep their paint. Dark schemes are untouched.
  * Both rules are unlayered, so they beat every Tailwind v4 `@layer utilities`
- * variant: each must skip `:disabled` and `[aria-disabled="true"]`, or a
- * disabled primary button paints enabled-green over its `disabled:bg-*`.
- * The same holds for quest-log's `!important` gold `.bg-emerald-600` rules, so the
- * disabled guard covers every scheme's solid primary fill rule.
+ * variant: each must skip a disabled / aria-disabled element that carries its
+ * own `disabled:bg-*` / `aria-disabled:bg-*` paint, or that button paints
+ * enabled-green. An opacity-only disabled or loading primary (Button `loading`
+ * sets aria-disabled) must KEEP the scheme fill. The same holds for quest-log's
+ * `!important` gold rules, so the guard covers every scheme's solid primary fill.
  *
  * Comments are stripped first so a rule's own comment cannot satisfy the guard.
  */
@@ -31,7 +32,7 @@ function fillOf(selector: string): string | undefined {
     return undefined;
 }
 
-const ENABLED = ':not(:disabled):not([aria-disabled="true"])';
+const ENABLED = ':not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"])';
 const BASE = `${SCOPE} .bg-emerald-600${ENABLED}`;
 const HOVER = `${SCOPE} .bg-emerald-600:is(.hover\\:bg-emerald-500, .hover\\:bg-emerald-700)${ENABLED}:hover`;
 
@@ -64,8 +65,26 @@ describe('primary fill on the light schemes (ROK-1472)', () => {
         const sels = primaryFillSelectors();
         expect(sels, 'expected the light fill + hover and the quest-log gold rules').toEqual(expect.arrayContaining([BASE, HOVER]));
         expect(sels.length, 'quest-log gold fill rules not found').toBeGreaterThanOrEqual(5);
-        const leaky = sels.filter((s) => !s.includes(':not(:disabled)') || !s.includes(':not([aria-disabled="true"])'));
-        expect(leaky, '.bg-emerald-600 fill rules (unlayered or !important) must skip :disabled and [aria-disabled="true"]').toEqual([]);
+        const leaky = sels.filter((s) => !s.includes(ENABLED));
+        expect(leaky, `.bg-emerald-600 fill rules (unlayered or !important) must end in \`${ENABLED}\``).toEqual([]);
+    });
+
+    it.each([
+        ['a native-disabled primary with disabled:bg-* gets its own disabled paint', { disabled: true, cls: 'disabled:bg-overlay' }, false],
+        ['an aria-disabled primary with aria-disabled:bg-* gets its own disabled paint', { aria: true, cls: 'aria-disabled:bg-overlay' }, false],
+        ['a loading primary (aria-disabled, opacity-only) keeps the scheme fill', { aria: true, cls: 'disabled:opacity-50' }, true],
+        ['a native-disabled opacity-only primary keeps the scheme fill', { disabled: true, cls: 'disabled:opacity-50' }, true],
+        ['an enabled primary keeps the scheme fill', { cls: 'disabled:bg-overlay' }, true],
+    ] as const)('every scheme fill rule: %s', (_, state, keeps) => {
+        const host = document.createElement('div');
+        host.innerHTML = '<div data-scheme="light" data-variant="quest-log"><button></button></div>';
+        const button = host.querySelector('button') as HTMLButtonElement;
+        button.className = `bg-emerald-600 hover:bg-emerald-500 ${state.cls}`;
+        if ('disabled' in state) button.disabled = true;
+        if ('aria' in state) button.setAttribute('aria-disabled', 'true');
+        for (const sel of primaryFillSelectors()) {
+            expect(button.matches(sel.replace(/:(hover|active)$/, '')), `${sel} on ${button.outerHTML}`).toBe(keeps);
+        }
     });
 
     it('gates every primary-fill hover rule behind @media (hover: hover), like Tailwind v4 hover:', () => {

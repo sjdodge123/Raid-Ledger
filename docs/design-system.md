@@ -137,9 +137,10 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
   an emerald-800 `#065f46` hover (7.68:1) on any element that also carries `hover:bg-emerald-500` /
   `hover:bg-emerald-700` (`:829-843`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
-  Both rules are unlayered, so they skip `:disabled` and `[aria-disabled="true"]` — otherwise they beat
-  Tailwind v4's `@layer utilities` `disabled:bg-*` and a disabled button paints enabled-green — and the
-  hover sits in `@media (hover: hover)` like Tailwind's own `hover:`.
+  Both rules are unlayered, so they skip a disabled / `aria-disabled` element that carries its own
+  `disabled:bg-*` / `aria-disabled:bg-*` — otherwise they beat Tailwind v4's `@layer utilities` variant and
+  that button paints enabled-green. An opacity-only disabled or `loading` primary keeps the fill and fades.
+  quest-log's `!important` gold rules use the same skip. The hover sits in `@media (hover: hover)`.
   A token fill gets neither. The journey hero's CTA keeps `bg-emerald-600` for exactly this reason
   (`JourneyHero.tsx:173-175`).
 - **Text on a `bg-success` fill is `text-white`, not `text-foreground`.** `bg-success` is not in the
@@ -161,13 +162,14 @@ Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/s
 | `cyan`, `purple`, `yellow`, `green` | ≤14 each | One-off categorical accents — do not add more |
 
 Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over `bg-panel`, border
-`border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for buttons only.
+`border-emerald-500/30`. Solid fills (`bg-emerald-600`) are mainly buttons; the few badges, dots and toggle
+tracks that use it step to emerald-700 on light with the buttons (§4.12).
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
 text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
 (`:759-773`); solid fills keep their hue with the label forced white on light (`:819-827`) — except the primary
 `bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
-(`:829-843`, ROK-1472 ruling 2026-10-04; disabled / `aria-disabled` buttons keep their `disabled:bg-*`) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
+(`:829-843`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity

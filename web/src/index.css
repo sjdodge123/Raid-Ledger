@@ -831,14 +831,15 @@ body {
    (= the light --color-success) is 5.48:1. Its hover goes DARKER, emerald-800
    #065f46 (7.68:1) — scoped to elements that also carry .bg-emerald-600, so other
    hover:bg-emerald-500 uses keep their paint. quest-log's !important gold wins.
-   Unlayered, so these beat every @layer utilities variant: both skip :disabled and
-   [aria-disabled="true"] so disabled:bg-* / aria-disabled:bg-* still paint a disabled
-   button. Every .bg-emerald-600 steps — badges, dots and toggle tracks too: the
+   Unlayered, so these beat every @layer utilities variant: both skip a :disabled /
+   [aria-disabled="true"] element that carries its OWN disabled:bg-* / aria-disabled:bg-*
+   paint, so that paint wins; an opacity-only disabled or loading primary (Button's
+   DISABLED is disabled:opacity-50, `loading` sets aria-disabled) keeps this fill and fades. Every .bg-emerald-600 steps — badges, dots and toggle tracks too: the
    darker green keeps or gains contrast on light surfaces. Hover is gated like
    Tailwind v4's own hover: variant. */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:not(:disabled):not([aria-disabled="true"]) { background-color: #047857; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]) { background-color: #047857; }
 @media (hover: hover) {
-    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):not(:disabled):not([aria-disabled="true"]):hover { background-color: #065f46; }
+    :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):hover { background-color: #065f46; }
 }
 
 /* --- Button brandColor label (ROK-1472, operator ruling 2026-10-04) ---
@@ -1436,9 +1437,10 @@ body {
 }
 
 /* --- Buttons: fantasy embossed leather/gold aesthetic ---
-   Skips :disabled / [aria-disabled="true"]: the !important gold otherwise beats
-   every disabled:bg-* variant and a disabled button reads as enabled. */
-[data-variant="quest-log"] .bg-emerald-600:not(:disabled):not([aria-disabled="true"]) {
+   Skips a disabled / aria-disabled button that carries its own disabled:bg-* /
+   aria-disabled:bg-* paint (the !important gold otherwise beats it and the button
+   reads as enabled); opacity-only disabled and loading primaries keep the gold. */
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]) {
     background: linear-gradient(180deg,
             #d4b45c 0%,
             var(--ql-gold) 40%,
@@ -1458,7 +1460,7 @@ body {
 }
 
 @media (hover: hover) {
-    [data-variant="quest-log"] .bg-emerald-600:not(:disabled):not([aria-disabled="true"]):hover {
+    [data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):hover {
         background: linear-gradient(180deg,
                 #dfc066 0%,
                 #d4b45c 40%,
@@ -1470,7 +1472,7 @@ body {
     }
 }
 
-[data-variant="quest-log"] .bg-emerald-600:not(:disabled):not([aria-disabled="true"]):active {
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):active {
     background: linear-gradient(180deg,
             var(--ql-gold-hover) 0%,
             var(--ql-gold) 100%) !important;
