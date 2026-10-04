@@ -193,7 +193,7 @@ export class DiscordAuthController {
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) {
       res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
       );
       return;
     }
@@ -271,12 +271,12 @@ export class DiscordAuthController {
         { req, res },
       );
       await this.completeLinkFlow(code, userId);
-      res.redirect(`${clientUrl}/profile?linked=success`);
+      res.redirect(`${clientUrl}/profile/integrations?linked=success`);
     } catch (error) {
       this.logger.error('Discord link error:', error);
       const msg = error instanceof Error ? error.message : 'Link failed';
       res.redirect(
-        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(msg)}`,
+        `${clientUrl}/profile/integrations?linked=error&message=${encodeURIComponent(msg)}`,
       );
     }
   }

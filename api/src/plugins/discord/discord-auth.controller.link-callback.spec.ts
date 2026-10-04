@@ -31,7 +31,7 @@ import { LinkNonceService } from '../../auth/link-nonce.service';
 const SECRET = 'test-secret';
 const CLIENT_URL = 'https://raid.test';
 const STATE_COOKIE = 'rl_link_state_discord';
-const EXPIRED_LANDING = `${CLIENT_URL}/profile?linked=error&message=${encodeURIComponent('Link request expired. Please try again.')}`;
+const EXPIRED_LANDING = `${CLIENT_URL}/profile/integrations?linked=error&message=${encodeURIComponent('Link request expired. Please try again.')}`;
 const sha256 = (v: string) =>
   crypto.createHash('sha256').update(v).digest('hex');
 
@@ -175,7 +175,9 @@ describe('DiscordAuthController — link callback is bound to the hop browser (R
       res,
     );
 
-    expect(onlyRedirect(res)).toEqual([`${CLIENT_URL}/profile?linked=success`]);
+    expect(onlyRedirect(res)).toEqual([
+      `${CLIENT_URL}/profile/integrations?linked=success`,
+    ]);
     expect(m.linkDiscord).toHaveBeenCalledWith(7, 'victim-d', 'v', undefined);
     expect(res.clearCookie).toHaveBeenCalledWith(
       STATE_COOKIE,
