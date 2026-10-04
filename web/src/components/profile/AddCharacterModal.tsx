@@ -8,6 +8,7 @@ import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { GameSearchInput } from '../events/game-search-input';
 import { PluginSlot } from '../../plugins';
+import { isConflictError } from '../../lib/api/api-error';
 import { CharacterFormFields } from './character-form-fields';
 import {
     foreverCreateFields, foreverIdentityFromCharacter, foreverUpdateFields, sameForeverIdentity, usesForeverIdentity, validateForeverIdentity,
@@ -106,9 +107,12 @@ function CharacterFormActions({ formId, onCancel, isPending, isEditing }: { form
     );
 }
 
+// A 409 (name already claimed) is shown inline by the form, so its toast is suppressed.
+const CONFLICT_SHOWN_INLINE = { isHandledError: isConflictError };
+
 function useCharacterModalMutations() {
-    const createMutation = useCreateCharacter();
-    const updateMutation = useUpdateCharacter();
+    const createMutation = useCreateCharacter(CONFLICT_SHOWN_INLINE);
+    const updateMutation = useUpdateCharacter(CONFLICT_SHOWN_INLINE);
     const setMainMutation = useSetMainCharacter();
     const isPending = createMutation.isPending || updateMutation.isPending || setMainMutation.isPending;
     return { createMutation, updateMutation, setMainMutation, isPending };
@@ -178,12 +182,21 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     return { form, errors, setErrors, selectedIgdbGame, setSelectedIgdbGame, activeTab, setActiveTab, resetKey, effectiveRegistryGame, effectiveGameId, showMmoFields, isForever, gameChars, hasMainForGame, isEditing, isDirty, ...mutations, updateField, onClose };
 }
 
+/**
+ * A failed save is a form alert, shown once: a Forever 409 sits under the name
+ * row it concerns (its toast is suppressed); anything else stays a form-level
+ * alert and the hooks also toast it.
+ */
+function saveErrorToFormErrors(e: Error, isForever: boolean): FormErrors {
+    const message = e.message || 'Failed to save character';
+    return isForever && isConflictError(e) ? { forever: { name: message } } : { form: message };
+}
+
 function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, editingCharacter: CharacterDto | null | undefined, onClose: () => void) {
     s.setErrors({});
     const errs = validateCharacterForm(s.form, s.effectiveGameId, s.selectedIgdbGame, s.isForever);
     if (errs) { s.setErrors(errs); return; }
-    // A failed save is a form-level alert (the hooks also toast it).
-    const onError = (e: Error) => s.setErrors({ form: e.message || 'Failed to save character' });
+    const onError = (e: Error) => s.setErrors(saveErrorToFormErrors(e, s.isForever));
     if (s.isEditing && editingCharacter) {
         const needsSetMain = s.form.isMain && !editingCharacter.isMain;
         const doUpdate = () => s.updateMutation.mutate({ id: editingCharacter.id, dto: buildUpdateDto(s.form, s.showMmoFields, s.isForever) }, { onSuccess: () => onClose(), onError });

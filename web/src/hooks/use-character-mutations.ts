@@ -8,12 +8,20 @@ import {
 } from '../lib/api-client';
 import type { CreateCharacterDto, UpdateCharacterDto } from '@raid-ledger/contract';
 
+/** A caller that shows some errors inline itself opts those out of the generic error toast. */
+export interface CharacterMutationOptions { isHandledError?: (error: Error) => boolean }
+
+function toastUnlessHandled(error: Error, fallback: string, opts?: CharacterMutationOptions): void {
+    if (opts?.isHandledError?.(error)) return;
+    toast.error(error.message || fallback);
+}
+
 /**
  * Mutation hook for creating a character.
  * Creating with isMain=true triggers a server-side swap, so invalidate
  * all character-related caches to reflect the new main across views.
  */
-export function useCreateCharacter() {
+export function useCreateCharacter(opts?: CharacterMutationOptions) {
     const queryClient = useQueryClient();
 
     return useMutation({
@@ -24,9 +32,7 @@ export function useCreateCharacter() {
             queryClient.invalidateQueries({ queryKey: ['characters'] });
             queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
-        onError: (error: Error) => {
-            toast.error(error.message || 'Failed to create character');
-        },
+        onError: (error: Error) => toastUnlessHandled(error, 'Failed to create character', opts),
     });
 }
 
@@ -35,7 +41,7 @@ export function useCreateCharacter() {
  * Invalidates all character-related caches since edits may pair with
  * a setMain call that changes isMain across characters.
  */
-export function useUpdateCharacter() {
+export function useUpdateCharacter(opts?: CharacterMutationOptions) {
     const queryClient = useQueryClient();
 
     return useMutation({
@@ -47,9 +53,7 @@ export function useUpdateCharacter() {
             queryClient.invalidateQueries({ queryKey: ['characters'] });
             queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
-        onError: (error: Error) => {
-            toast.error(error.message || 'Failed to update character');
-        },
+        onError: (error: Error) => toastUnlessHandled(error, 'Failed to update character', opts),
     });
 }
 

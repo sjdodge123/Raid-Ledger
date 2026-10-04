@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { AddCharacterModal } from './AddCharacterModal';
 import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
+import { withHttpStatus } from '../../lib/api/api-error';
 
 vi.mock('../../hooks/use-character-mutations', () => ({
     useCreateCharacter: vi.fn(), useUpdateCharacter: vi.fn(),
@@ -99,13 +100,20 @@ describe('AddCharacterModal — WoW: Forever fields', () => {
         expect(dto.realm).toBeUndefined();
     });
 
-    it('shows the server 409 as a form alert', () => {
+    it('shows the server 409 once, under the name row, and opts it out of the error toast', () => {
+        const claimed = 'Ana Forever (US) is already claimed by another player';
         createMutate.mockImplementation((_dto, opts: { onError: (e: Error) => void }) =>
-            opts.onError(new Error('Ana Forever (US) is already claimed by another player')));
+            opts.onError(withHttpStatus(new Error(claimed), 409)));
         renderModal(7);
         type('First name', 'Ana'); type('Second name', 'Forever');
         submit(/add character/i);
-        expect(screen.getByRole('alert')).toHaveTextContent('Ana Forever (US) is already claimed by another player');
+        expect(screen.getAllByRole('alert')).toHaveLength(1);
+        const alert = screen.getByRole('alert');
+        expect(alert).toHaveTextContent(claimed);
+        expect(alert.closest('[data-testid="forever-identity-fields"]'), 'the 409 sits under the name row, not below the form').not.toBeNull();
+        const hookOpts = vi.mocked(useCreateCharacter).mock.calls.at(-1)?.[0];
+        expect(hookOpts?.isHandledError?.(withHttpStatus(new Error(claimed), 409)), 'a 409 must not also toast').toBe(true);
+        expect(hookOpts?.isHandledError?.(withHttpStatus(new Error('boom'), 500)), 'other failures still toast').toBe(false);
     });
 });
 

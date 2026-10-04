@@ -178,13 +178,16 @@ test.describe('WoW: Forever manual characters (ROK-1721)', () => {
             await createViaApi(otherToken, name.full, 'us');
             const form = await openForeverAdd(page);
             await form.region.selectOption('us');
-            await form.first.fill(name.first);
-            await form.second.fill(name.second);
+            // Typed lowercase: the 409 names the character as stored, not as typed.
+            await form.first.fill(name.first.toLowerCase());
+            await form.second.fill(name.second.toLowerCase());
             await submit(form, 'Add Character');
+            const claimed = `${name.full} (US) is already claimed by another player`;
             await expect(
-                form.dialog.getByRole('alert').filter({ hasText: `${name.full} (US) is already claimed by another player` }),
+                form.dialog.getByRole('alert').filter({ hasText: claimed }),
                 'the other player\'s claim should surface as the 409 copy',
             ).toBeVisible({ timeout: 15_000 });
+            await expect(page.getByText(claimed), 'the 409 shows once — inline, with no duplicate toast').toHaveCount(1);
             await expect(form.dialog, 'a rejected claim keeps the modal open').toBeVisible();
         } finally {
             await deleteByName(otherToken, name.full);
