@@ -6,13 +6,18 @@
  * Pure relocation: every function below is the byte-equivalent body of the
  * private method it replaced, with `this.db` promoted to a leading `db`
  * parameter. No behaviour changed, no call site gained or lost a step.
+ *
+ * TDB:920 added `createActiveTiebreaker` (new composition, not a relocation)
+ * and made `insertTiebreaker` write `active` instead of `pending`.
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { StartTiebreakerDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/defined.helpers';
 import { writeTiebreakerCohortMemory } from '../cohort-memory-write.helpers';
+import { buildBracket } from './tiebreaker-bracket.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type LineupRow = typeof schema.communityLineups.$inferSelect;
@@ -45,7 +50,11 @@ export function assertNoActiveTiebreaker(lineup: LineupRow): void {
   }
 }
 
-/** Insert the tiebreaker row in `pending`, returning the inserted row. */
+/**
+ * Insert the tiebreaker row already `active`, returning the inserted row.
+ * TDB:920: it used to insert `pending` and flip to `active` in a separate
+ * statement; `createActiveTiebreaker` now makes the whole start atomic.
+ */
 export function insertTiebreaker(
   db: Db,
   lineupId: number,
@@ -62,12 +71,39 @@ export function insertTiebreaker(
     .values({
       lineupId,
       mode: dto.mode,
-      status: 'pending',
+      status: 'active',
       tiedGameIds,
       originalVoteCount: voteCount,
       roundDeadline: deadline,
     })
     .returning();
+}
+
+/**
+ * TDB:920 — create a started tiebreaker: insert it `active`, link it to the
+ * lineup and, for a bracket, seed round 1. Run it inside ONE transaction and
+ * pass that `tx` as `db`, so a bracket-build failure rolls back the row AND
+ * the lineup link instead of stranding a `pending` row as the active one.
+ */
+export async function createActiveTiebreaker(
+  db: Db,
+  lineupId: number,
+  dto: StartTiebreakerDto,
+  ties: { tiedGameIds: number[]; voteCount: number },
+): Promise<TiebreakerRow> {
+  const [inserted] = await insertTiebreaker(
+    db,
+    lineupId,
+    dto,
+    ties.tiedGameIds,
+    ties.voteCount,
+  );
+  const row = defined(inserted, 'inserted tiebreaker row');
+  await linkTiebreakerToLineup(db, lineupId, row.id);
+  if (dto.mode === 'bracket') {
+    await buildBracket(db, row.id, ties.tiedGameIds);
+  }
+  return row;
 }
 
 /** Point the lineup at its active tiebreaker. */

@@ -17,6 +17,17 @@
  *  - button rows in the order `sendEmbedDM` sends them: type-specific rows
  *    first (event_reminder's Roach Out row), the primary row last
  *  - the embed passes the shared render rules
+ *
+ * Plus one PUG fill-request case through `POST /admin/test/render-pug-invite-embed`,
+ * which runs the REAL `buildPugInviteEmbed` against a seeded event. An invite
+ * DM's author is the `◌ FILL NEEDED · starts in …` line, not the community, so
+ * it has its own chrome checks (`assertPugChrome`) rather than `assertChrome`.
+ * It proves the amber colour, the FILL NEEDED author line, the role footer
+ * (against /system/branding), no masked link and the Accept / Decline /
+ * View Event row and URL. It does NOT prove the ≤2 personalized-field cap or
+ * the absent Voice Channel field: the seam never resolves a voice channel, the
+ * loader trims fields upstream and this suite seeds no library rows. Those are
+ * pinned at unit tier (`pug-invite.helpers.spec.ts`, the seam's controller spec).
  */
 import {
   assertEmbedColor,
@@ -24,6 +35,7 @@ import {
   assertNoDiscordTokens,
   SmokeAssertionError,
 } from '../assert.js';
+import { createEvent, deleteEvent } from '../fixtures.js';
 import type { SimpleEmbed } from '../../helpers/messages.js';
 import type { ApiClient } from '../api.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -57,6 +69,24 @@ interface RenderedDmEmbed {
   };
   components: { components?: { type?: number; label?: string }[] }[];
 }
+
+/** `POST /admin/test/render-pug-invite-embed` — `buildPugInviteEmbed` as JSON. */
+interface RenderedPugInvite {
+  communityName: string;
+  embed: RenderedDmEmbed['embed'];
+  components: { components?: { type?: number; label?: string; url?: string }[] }[];
+}
+
+const PUG_TAG = 'render-pug-invite-embed';
+/** The slot role the seam renders; it becomes the footer label. */
+const PUG_ROLE = 'tank';
+/**
+ * `MAX_PERSONALIZED_FIELDS` in api/src/discord-bot/services/pug-invite.helpers.ts.
+ * Here only a sanity bound on the field count, not cap coverage (see header).
+ */
+const MAX_PERSONALIZED_FIELDS = 2;
+/** `pugActionButtons` then `viewEventButton`, as `buildInviteRow` adds them. */
+const PUG_ROW_LABELS = ['Accept', 'Decline', 'View Event'];
 
 interface RenderCase {
   type: 'event_reminder' | 'new_event' | 'event_cancelled';
@@ -157,4 +187,86 @@ function renderTest(c: RenderCase): SmokeTest {
   };
 }
 
-export const dmEmbedRenderTests: SmokeTest[] = CASES.map(renderTest);
+/** MMO slot config when the env has an MMO game, as dm-notifications does. */
+function pugOverrides(ctx: TestContext) {
+  if (!ctx.mmoGameId) return {};
+  return {
+    gameId: ctx.mmoGameId,
+    slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
+  };
+}
+
+function renderPugInvite(ctx: TestContext, eventId: number): Promise<RenderedPugInvite> {
+  return ctx.api.post<RenderedPugInvite>('/admin/test/render-pug-invite-embed', {
+    eventId,
+    role: PUG_ROLE,
+    discordUserId: ctx.testBotDiscordId,
+  });
+}
+
+/** Author = FILL NEEDED line, footer = `<community> · <role>`, amber, render rules. */
+function assertPugChrome(embed: SimpleEmbed, community: string) {
+  if (!embed.author?.includes('FILL NEEDED')) {
+    fail(`${PUG_TAG}: expected the author line to carry "FILL NEEDED", got "${embed.author}"`);
+  }
+  const footer = `${community} · ${PUG_ROLE}`;
+  if (embed.footer !== footer) {
+    fail(`${PUG_TAG}: expected footer "${footer}", got "${embed.footer}"`);
+  }
+  assertEmbedColor(embed, REMINDER_AMBER);
+  assertEmbedRenderRules(embed);
+}
+
+/**
+ * No masked link (View Event is the only route). The field-count bound is a
+ * sanity guard-rail against an unexpected extra field, not cap coverage.
+ */
+function assertPugBody(embed: SimpleEmbed) {
+  if ((embed.description ?? '').includes('](')) {
+    fail(`${PUG_TAG}: expected no masked link in the description, got "${embed.description}"`);
+  }
+  const names = embed.fields.map((f) => f.name);
+  if (names.length > MAX_PERSONALIZED_FIELDS) {
+    fail(`${PUG_TAG}: expected at most ${MAX_PERSONALIZED_FIELDS} fields (sanity bound), got ${names.length}: ${JSON.stringify(names)}`);
+  }
+}
+
+/** One row ending Accept, Decline, View Event — the link points at the event. */
+function assertPugButtons(res: RenderedPugInvite, eventId: number) {
+  const row = res.components[res.components.length - 1];
+  if (!row) {
+    fail(`${PUG_TAG}: expected an Accept / Decline / View Event row, got no components (is CLIENT_URL set?)`);
+  }
+  const buttons = (row.components ?? []).filter((b) => b.type === BUTTON_COMPONENT_TYPE);
+  const labels = buttons.map((b) => b.label ?? '');
+  if (JSON.stringify(labels.slice(-PUG_ROW_LABELS.length)) !== JSON.stringify(PUG_ROW_LABELS)) {
+    fail(`${PUG_TAG}: expected the row to end ${JSON.stringify(PUG_ROW_LABELS)}, got ${JSON.stringify(labels)}`);
+  }
+  const url = buttons[buttons.length - 1]?.url ?? '';
+  if (!url.endsWith(`/events/${eventId}`)) {
+    fail(`${PUG_TAG}: expected the View Event url to end "/events/${eventId}", got "${url}"`);
+  }
+}
+
+const pugInviteRenderTest: SmokeTest = {
+  name: 'render-pug-invite-embed: PUG invite DM chrome (needs_you amber)',
+  category: 'dm',
+  async run(ctx: TestContext) {
+    const community = await expectedCommunityName(ctx.api);
+    const ev = await createEvent(ctx.api, 'render-pug', pugOverrides(ctx));
+    try {
+      const res = await renderPugInvite(ctx, ev.id);
+      if (res.communityName !== community) {
+        fail(`${PUG_TAG}: seam resolved community "${res.communityName}", branding says "${community}"`);
+      }
+      const embed = toSimpleEmbed(res.embed);
+      assertPugChrome(embed, community);
+      assertPugBody(embed);
+      assertPugButtons(res, ev.id);
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
+export const dmEmbedRenderTests: SmokeTest[] = [...CASES.map(renderTest), pugInviteRenderTest];

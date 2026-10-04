@@ -8,12 +8,17 @@
  */
 import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
 import type { SpawnClearance } from '../services/ad-hoc-spawn-clearance';
-import type { DiscordMemberInfo, ResolvedBinding } from './voice-state.helpers';
+import {
+  resolveVoiceChannel,
+  type DiscordMemberInfo,
+  type ResolvedBinding,
+} from './voice-state.helpers';
 import {
   getGameFilteredCount,
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
 import { handleGameSpecificGroupRoster } from './voice-state-recovery.handlers';
+import { humanMembers } from './voice-lobby-groups.helpers';
 import {
   gateCtx,
   traceGate,
@@ -200,6 +205,8 @@ async function spawnAllConfirmed(
     // so the guard has to live here too. Mirrors `executeDelayedSpawn`.
     if (deps.adHocEventService.getActiveBindingEventGameId(binding.bindingId))
       return;
+    if (hasNoHumanMembers(deps, channelId))
+      return traceGate(deps.logger, 'no-human-members', ctx);
     // allConfirmed ⟹ every counted member confirmed the bound game, so the
     // sticky game is correct and the ROK-1394 degrade is unreachable here.
     const rostered = await handleGameSpecificGroupRoster(
@@ -214,4 +221,17 @@ async function spawnAllConfirmed(
     if (rostered) return traceGate(deps.logger, 'spawned-immediate', ctx);
     return;
   }
+}
+
+/**
+ * ROK-1390: true when the channel resolves and holds only bots. A bot's
+ * /playing confirmation still counts toward the threshold (MED-2/AC12), so a
+ * bot-only room can reach the immediate spawn, but the roster skips every bot
+ * (ROK-1445 AC9) and would mint nothing. The caller traces that outcome
+ * instead of returning silently. An unresolvable channel is left to the roster
+ * helper's own guard.
+ */
+function hasNoHumanMembers(deps: VoiceHandlerDeps, channelId: string): boolean {
+  const channel = resolveVoiceChannel(deps.clientService, channelId);
+  return channel !== null && humanMembers(channel).length === 0;
 }

@@ -12,7 +12,7 @@ export const PURPOSE_BY_TYPE: Record<ChannelType, readonly BindingPurpose[]> = {
     forum: ['lfg-board'],
 };
 
-export interface PurposeOption {
+interface PurposeOption {
     value: BindingPurpose;
     label: string;
 }

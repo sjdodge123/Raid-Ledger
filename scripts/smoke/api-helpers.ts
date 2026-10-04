@@ -230,7 +230,7 @@ export async function apiPost(
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
         },
-        body: body ? JSON.stringify(body) : undefined,
+        ...(body ? { body: JSON.stringify(body) } : {}),
     });
     return res.json();
 }
