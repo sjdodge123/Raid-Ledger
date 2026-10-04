@@ -2216,3 +2216,8 @@ same day (#1278, #1279, #1280).
 
 - **[nit]** `web/src/components/admin/BindingConfigForm.tsx:67` (`BindingConfigForm`): 64 lines against the 30-line `max-lines-per-function` budget (ESLint warning, not an error). It was about 80 on main and 87 once the cross-row save lock added the `saveLocked` default and the multi-line `InertHealBanner` block. Moving the purpose-specific fields into `PurposeConfigSections` on this branch brought it to 64. The remainder is the JSX for the title, the inert-heal banner, `PurposeSelect`, `GameField`, the save error and `FormActions`.
   Suggested: split the remainder into a header child (title + `InertHealBanner`) and a footer child (save error + `FormActions`), keeping `handleSubmit` / `handleConvert` in the parent.
+
+### 2026-10-04 — fix/rok-1472-light-followup (surfaced during PR #1459 CI)
+
+- **[med]** `api/src/cron-jobs/cron-job.integration.spec.ts:421` ("flush keeps a newer failed run over an older deferred completed run"): `expect(received).toBeGreaterThan(expected)` — Expected: > 1791135592776, Received: 1791135592776. Both `executeWithTracking` calls stamp `finishedAt` from `new Date()` (`api/src/cron-jobs/cron-job.execution.helpers.ts:51`) in the same millisecond, so the "newer" run is not newer. Failed on main run 37082092527 (shard 2/4) and on PR #1459 run 37220355874; pre-existing since #1428, unrelated to this branch's web-only diff.
+  Suggested: give the two runs distinct timestamps (jest fake timers or a stepped `Date` stub); never `sleep()` or loosen the assertion.
