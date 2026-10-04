@@ -1520,6 +1520,22 @@ _discord_lock_required() {
   [[ -z "$set" || -z "$identity" ]]
 }
 
+# Fail loud when a fleet runner is missing the /state-locks mount. The
+# runner/laptop decision is the SAME predicate smoke_channel_set_for_slot uses
+# (/workspace present OR RL_TARGET=remote); off the runner this is a no-op.
+# On a runner, check-state-locks.sh keys on RL_SLOT: a runner without the
+# mount exits 98 instead of letting smoke run unsynchronized and report
+# success. The guard here matters because the script alone would also fire on
+# a laptop that happens to export RL_SLOT. Invoked with `bash`, never ./ —
+# Mutagen strips the exec bit.
+_check_state_locks_mount() {
+  local dir="$1"
+  if [ ! -d /workspace ] && [ "${RL_TARGET:-local}" != "remote" ]; then
+    return 0
+  fi
+  bash "$REPO_ROOT/rl-infra/runner/check-state-locks.sh" "$dir"
+}
+
 # ROK-1689 — fleet Discord smoke runs the way GitHub CI does.
 #
 # discord-smoke.yml's job-level env: runs the companion bot with concurrency 1,
@@ -1876,10 +1892,13 @@ run_discord_smoke() {
   # flock on /state-locks/discord.lock (bind-mounted into the runner from
   # /srv/rl-infra/state/locks/) before running smoke, release after.
   #
-  # The lock dir only exists inside fleet runners; on the operator's laptop
-  # the directory is absent and we run unsynchronized (single-host = no
-  # cross-slot contention possible).
+  # Runner vs laptop is decided by the /workspace-or-RL_TARGET=remote
+  # predicate plus RL_SLOT (rl-infra/runner/check-state-locks.sh), not by the
+  # lock dir's existence. A laptop runs unsynchronized (single host = no
+  # cross-slot contention); on a runner missing the mount the check exits 98
+  # (a named FATAL) and the step fails instead of running unsynchronized.
   local lock_dir="${RL_DISCORD_LOCK_DIR:-/state-locks}"
+  _check_state_locks_mount "$lock_dir" || return 1
   if [[ -d "$lock_dir" ]] && _discord_lock_required; then
     local lock_file="$lock_dir/discord.lock"
     echo "Acquiring fleet Discord lock at $lock_file (up to 45 min)..."
