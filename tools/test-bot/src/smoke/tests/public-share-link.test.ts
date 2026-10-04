@@ -13,7 +13,7 @@
  * to avoid leaking state between runs.
  */
 import type { SmokeTest, TestContext } from '../types.js';
-import type { ApiClient } from '../api.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
 interface PublicLineupBody {
   title: string;
@@ -57,28 +57,21 @@ async function fetchPublic(
   return { status: res.status, body };
 }
 
-async function archiveAllLineups(api: ApiClient): Promise<void> {
-  try {
-    const res = await api.get<{ id: number }[] | { id: number } | null>(
-      '/lineups/active',
-    );
-    const list = Array.isArray(res) ? res : res ? [res] : [];
-    for (const row of list) {
-      if (!row?.id) continue;
-      await api
-        .patch(`/lineups/${row.id}/status`, { status: 'archived' })
-        .catch(() => null);
-    }
-  } catch {
-    /* no active lineups */
-  }
-}
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = ['Public Share '] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 const publicShareLinkResolvesUnauthed: SmokeTest = {
   name: 'Public lineup slug resolves un-authed and toggling off returns 404 (ROK-1067)',
   category: 'flow',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Public Share ${Date.now()}`;
     const lineup = await ctx.api.post<CreatedLineup>('/lineups', {
