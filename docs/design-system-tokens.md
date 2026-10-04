@@ -61,7 +61,7 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:770-771` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:777-789` |
-| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:829-843`, design-system.md §6.10 |
+| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:837-851`, design-system.md §6.10 |
 
 `web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
 `bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`
@@ -79,7 +79,7 @@ forces `--color-foreground: #ffffff` for `.text-foreground` on `.bg-blue-600`,
 `.bg-amber-600`, `.bg-violet-600` and Discord's `#5865F2`. Use `text-foreground` on a
 solid accent button — not `text-white`, which opts out of that rule's bookkeeping.
 **`Button brandColor` is not in that list** (ruling 2026-10-04, ROK-1472): it emits
-`data-brand-label="light|dark"` from `brandLabelFor` (`web/src/lib/brand-label.ts`) and `:837-841`
+`data-brand-label="light|dark"` from `brandLabelFor` (`web/src/lib/brand-label.ts`) and `:853-857`
 paints white or `#0f172a` — whichever has the higher contrast on the runtime fill — on every scheme.
 **Exception — a token fill takes `text-white`:** `bg-success` (and any other token fill) is
 not in that list, so `text-foreground` on it goes `#0f172a` on light. Write `text-white`
@@ -233,7 +233,7 @@ Root-only regardless of family — verify these at the root, never in a scoped p
 |---|---|---|
 | `color-scheme: dark/light` | `:619-641` | Native form controls, scrollbars, UA widgets |
 | Page background | `body` `:633`, `#root` `:640` | A scoped column must paint its own `bg-backdrop` |
-| quest-log parchment | `[data-variant="quest-log"] body::before` `:1302`, `body::after` `:1315` | Scoped quest-log gets panels but no page texture |
+| quest-log parchment | `[data-variant="quest-log"] body::before` `:1310`, `body::after` `:1323` | Scoped quest-log gets panels but no page texture |
 | Ambient particles | `components/ui/ThemeParticles.tsx` | Mounted once at app level (§2.7) |
 
 ---

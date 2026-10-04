@@ -75,3 +75,36 @@ describe('index.css brand label rules — every scheme (ROK-1472, ruling 2026-10
         expect(value, `data-brand-label="${label}" must paint ${BRAND_LABEL_HEX[label]}`).toBe(BRAND_LABEL_HEX[label]);
     });
 });
+
+const FORCED_DARK = /--color-foreground:\s*#0f172a/i;
+
+/** Fill selectors of every `:is(<schemes>) :is(<fills>).text-foreground { --color-foreground: #0f172a }` rule, with its schemes. */
+function forcedDarkRules(src: string): ForcedWhiteRule[] {
+    const rules: ForcedWhiteRule[] = [];
+    for (const [, selector, body] of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const shape = SELECTOR.exec(defined(selector, 'rule selector').trim());
+        if (!shape || !FORCED_DARK.test(defined(body, 'rule body'))) continue;
+        rules.push({ schemes: defined(shape[1], 'scheme group'), fills: defined(shape[2], 'fill group').split(',').map((s) => s.trim()) });
+    }
+    return rules;
+}
+
+describe('index.css forced-dark label — fills white cannot clear (ROK-1472)', () => {
+    // cyan-600 #0092b8: white 3.62:1, dawn's own foreground #2D1F0F 4.42:1, #0f172a 4.93:1.
+    const rule = forcedDarkRules(css).find((r) => r.fills.includes('.bg-cyan-600'));
+
+    it('forces #0f172a on a .bg-cyan-600 text-foreground label', () => {
+        expect(rule, 'no light-family rule paints #0f172a on .bg-cyan-600.text-foreground (dawn falls to 4.42:1)').toBeDefined();
+    });
+
+    it('covers all six light schemes', () => {
+        for (const scheme of LIGHT_SCHEMES) {
+            expect(rule?.schemes ?? '', `the cyan-600 dark-label rule must cover data-scheme="${scheme}"`)
+                .toContain(`[data-scheme="${scheme}"]`);
+        }
+    });
+
+    it('cyan-600 is not also in the forced-white list (white is 3.62:1 on it)', () => {
+        expect(forcedWhiteRules(css)[0]?.fills).not.toContain('.bg-cyan-600');
+    });
+});
