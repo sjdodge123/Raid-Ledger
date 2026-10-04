@@ -129,9 +129,9 @@ Three custom MCP servers cover environment management, story tracking and Discor
 
 The gotchas that bite:
 
-- **`rl_env_spin`: ALWAYS hand out the `url` field** (slot-stable `https://slot-N.gamernight.net`, Discord OAuth works); NEVER the per-slug `public_url` (OAuth broken). Browser tests point there, never `localhost:5173`.
+- **`rl_env_spin`: ALWAYS hand out the `url` field** (slot-stable `https://slot-N.gamernight.net`, Discord OAuth works); NEVER the per-slug `public_url` (OAuth broken). The spin is async, so `url` arrives in the terminal `rl_task_status` of its `local-…` task, not in the dispatch reply. Browser tests point there, never `localhost:5173`.
 - **`rl_claim` may return `enqueued`** — poll `rl_claim_wait` or pick non-env work. `rl_release` preserves child envs by default (`preserve_envs: false` to nuke).
-- **The 120s wait cap (ROK-1362):** EVERY blocking wait caps at 120s. `rl_validate_ci` / `rl_env_build_image_from_runner` / `rl_env_deploy` / `rl_env_clone_prod` are async, returning a `task_id` (`local-…` ids run detached on your laptop). **Poll `rl_task_status` every 60–90s** — `rl_task_wait` blocks the channel and hides progress from the operator. There is no walk-away blocking wait; use the README's background push-notify pattern.
+- **The 120s wait cap (ROK-1362):** EVERY blocking wait caps at 120s. `rl_validate_ci` / `rl_env_build_image_from_runner` / `rl_env_deploy` / `rl_env_spin` / `rl_env_clone_prod` are async, returning a `task_id` (`local-…` ids run detached on your laptop). **Poll `rl_task_status` every 60–90s** — `rl_task_wait` blocks the channel and hides progress from the operator. There is no walk-away blocking wait; use the README's background push-notify pattern.
 - **`rl_run_on_runner`:** shell in `/workspace`, needs a claim. `timeout_seconds ≤ 120` runs sync; **`> 120` auto-dispatches as a VM task** and returns `{routed:'task', task_id}`.
 - **`rl_force_resync`** is the recovery when a redeploy serves OLD code or the runner lags your branch (stale Mutagen sync).
 - **`rl_db_query` is read-only SQL.** Dashboard: `http://fleet.gamernight.net`.

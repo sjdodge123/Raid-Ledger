@@ -25,9 +25,12 @@ vi.mock('../../exec.js', () => ({
 }));
 
 const readRawLocalTask = vi.fn();
+const spawnLocalRunner = vi.fn();
 vi.mock('../../local-task.js', () => ({
   isLocalTaskId: (id: string) => id.startsWith('local-'),
   readRawLocalTask: (...a: unknown[]) => readRawLocalTask(...a),
+  newLocalTaskId: () => 'local-5pin0000abcd',
+  spawnLocalRunner: (...a: unknown[]) => spawnLocalRunner(...a),
   readLocalTask: vi.fn(),
   waitLocalTask: vi.fn(),
   cancelLocalTask: vi.fn(),
@@ -52,13 +55,14 @@ const SPIN_JSON = JSON.stringify({
 beforeEach(() => {
   runRl.mockReset();
   readRawLocalTask.mockReset();
+  spawnLocalRunner.mockReset();
   execFileP.mockReset();
   runRl.mockResolvedValue({ stdout: SPIN_JSON, stderr: '', exitCode: 0 });
 });
 
 describe('rl_env_spin — credential boundary', () => {
   it('does NOT return admin_password when the caller did not ask for it', async () => {
-    const r = await envSpin.execute({ slug: 'rok-test' });
+    const r = await envSpin.spinEnv({ slug: 'rok-test' });
     expect(
       r.admin_password,
       `spinning an env must not put the credential in the caller's context — expected undefined, got ${JSON.stringify(r.admin_password)}`,
@@ -70,7 +74,7 @@ describe('rl_env_spin — credential boundary', () => {
   });
 
   it('reports that a password exists, and keeps url/admin_email intact', async () => {
-    const r = await envSpin.execute({ slug: 'rok-test' });
+    const r = await envSpin.spinEnv({ slug: 'rok-test' });
     expect(
       r.admin_password_available,
       `the caller still needs to know the env HAS a usable admin login — expected true, got ${JSON.stringify(r.admin_password_available)}`,
@@ -94,7 +98,7 @@ describe('rl_env_spin — credential boundary', () => {
       stderr: '',
       exitCode: 0,
     });
-    const r = await envSpin.execute({ slug: 'rok-test' });
+    const r = await envSpin.spinEnv({ slug: 'rok-test' });
     expect(
       r.admin_password_available,
       `a failed bootstrap must surface as available:false, not as a missing key — got ${JSON.stringify(r.admin_password_available)}`,
@@ -103,11 +107,42 @@ describe('rl_env_spin — credential boundary', () => {
   });
 
   it('returns the value when include_credentials:true is passed explicitly', async () => {
-    const r = await envSpin.execute({ slug: 'rok-test', include_credentials: true });
+    const r = await envSpin.spinEnv({ slug: 'rok-test', include_credentials: true });
     expect(
       r.admin_password,
       `the explicit opt-in must still work — expected ${SECRET}, got ${JSON.stringify(r.admin_password)}`,
     ).toBe(SECRET);
+  });
+});
+
+describe('rl_env_spin dispatch — credential boundary', () => {
+  it('returns a local- task_id without spinning inline, and never carries the password', async () => {
+    spawnLocalRunner.mockReturnValue({
+      task_id: 'local-5pin0000abcd',
+      pid: 4242,
+      started_at: '2026-10-04T00:00:00.000Z',
+    });
+    const r = (await envSpin.execute({ slug: 'rok-test', include_credentials: true })) as Record<
+      string,
+      unknown
+    >;
+    expect(
+      runRl.mock.calls.length,
+      `the dispatcher must hand the blocking CLI spin to the detached runner — expected 0 inline runRl calls, got ${runRl.mock.calls.length}`,
+    ).toBe(0);
+    expect(
+      r.task_id,
+      `the dispatch payload must be the local task handle — expected local-5pin0000abcd, got ${JSON.stringify(r)}`,
+    ).toBe('local-5pin0000abcd');
+    const payload = JSON.stringify(r);
+    expect(
+      payload.includes(SECRET),
+      `the dispatch payload must never carry the credential — expected false, got true for ${payload}`,
+    ).toBe(false);
+    expect(
+      'admin_password' in r,
+      `the dispatch payload must have no admin_password key at all — got ${payload}`,
+    ).toBe(false);
   });
 });
 
