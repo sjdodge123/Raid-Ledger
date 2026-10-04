@@ -50,6 +50,7 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
   /** Create a member user (+ local creds) and return id + login token. */
   async function createUser(
     suffix: string,
+    role: 'member' | 'admin' = 'member',
   ): Promise<{ id: number; token: string }> {
     const email = `pollstate-${suffix}@test.local`;
     const hash = await bcrypt.hash('PollStatePass1!', 4);
@@ -58,7 +59,7 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
       .values({
         discordId: `local:${email}`,
         username: `pollstate-${suffix}`,
-        role: 'member',
+        role,
       })
       .returning();
     await testApp.db.insert(schema.localCredentials).values({
@@ -320,15 +321,35 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
 
   // ── (e) canVote on private vs public ───────────────────────────────
 
-  it('a non-invitee of a PRIVATE lineup gets canVote=false (their vote would 403)', async () => {
+  it('a non-invitee of a PRIVATE lineup gets 404 — the poll is hidden from them', async () => {
     const outsider = await createUser('private-outsider');
     const poll = await seedOpenPoll('private');
 
     const res = await getPoll(poll, outsider.token);
 
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Match not found in this lineup');
+    expect(res.body.pollStatus).toBeUndefined();
+  });
+
+  it('an anonymous viewer of a PRIVATE lineup gets 404', async () => {
+    const poll = await seedOpenPoll('private');
+
+    const res = await getPoll(poll);
+
+    expect(res.status).toBe(404);
+    expect(res.body.message).toBe('Match not found in this lineup');
+    expect(res.body.pollStatus).toBeUndefined();
+  });
+
+  it('an admin who is neither creator nor invitee can read a PRIVATE poll', async () => {
+    const otherAdmin = await createUser('private-admin', 'admin');
+    const poll = await seedOpenPoll('private');
+
+    const res = await getPoll(poll, otherAdmin.token);
+
     expect(res.status).toBe(200);
     expect(res.body.pollStatus).toBe('open');
-    expect(res.body.canVote).toBe(false);
   });
 
   it('an invitee of a PRIVATE lineup gets canVote=true', async () => {
@@ -340,6 +361,7 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
 
     const res = await getPoll(poll, invitee.token);
 
+    expect(res.status).toBe(200);
     expect(res.body.canVote).toBe(true);
   });
 

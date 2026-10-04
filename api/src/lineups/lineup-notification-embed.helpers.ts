@@ -25,7 +25,6 @@ import {
   milestoneBody,
   nominatedGamesField,
   nominationProgress,
-  schedulingBody,
   topVotedField,
 } from './lineup-notification-embed-copy.helpers';
 import { decidedEmbedCopy } from './lineup-notification-decided-copy.helpers';
@@ -220,21 +219,6 @@ function addTierField(
     name,
     value: tier.map((m) => gameLink(m, ctx)).join('\n'),
   });
-}
-
-/** Scheduling opened for a match (AC-8). */
-export function buildSchedulingEmbed(
-  ctx: EmbedContext,
-  gameName: string,
-  matchId: number,
-): EmbedWithRow {
-  const embed = createLineupEmbed(ctx, 'scheduling', 'Scheduling');
-  embed.setDescription(
-    schedulingBody(gameName) +
-      `\n\n${lineupLink(ctx, `Vote on a time ${ARROW}`, matchId)}`,
-  );
-  appendBreadcrumb(embed, ctx);
-  return { embed };
 }
 
 /** The trailing link line of the event-created embed (event first, then lineup). */

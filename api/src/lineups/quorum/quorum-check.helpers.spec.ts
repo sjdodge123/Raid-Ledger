@@ -1,10 +1,9 @@
 /**
  * Unit tests for quorum predicates (ROK-1118).
  *
- * Both predicates require participants to use their full allotment:
- *   - building → voting: each voter has nominated ≥ minPerVoter games AND
- *     total distinct nominations ≥ floor.
- *   - voting → decided: each voter has cast `lineup.maxVotesPerPlayer` votes.
+ *   - building → voting: ready only when the ROK-1444 nomination count
+ *     target fires (TDB:449 retired the submission branch).
+ *   - voting → decided: every expected voter has stamped `votes_submitted_at`.
  */
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
 
@@ -26,7 +25,14 @@ jest.mock('../tiebreaker/tiebreaker-star.helpers', () => ({
   }),
 }));
 
+// TDB:449: the building predicate's only ready path is the ROK-1444 count
+// target. Its evaluation is its own unit (`nomination-target.helpers.spec.ts`).
+jest.mock('./nomination-target.helpers', () => ({
+  evaluateNominationTarget: jest.fn(),
+}));
+
 import { loadQuorumGatingVoters } from './quorum-voters.helpers';
+import { evaluateNominationTarget } from './nomination-target.helpers';
 import { resolveApprovalTieByStars } from '../tiebreaker/tiebreaker-star.helpers';
 import { checkBuildingQuorum, checkVotingQuorum } from './quorum-check.helpers';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
@@ -62,10 +68,6 @@ function setExpectedVoters(ids: number[]): void {
   (loadQuorumGatingVoters as jest.Mock).mockResolvedValue(ids);
 }
 
-function nominationsPerVoter(rows: Array<{ userId: number; count: number }>) {
-  return rows;
-}
-
 function totalRow(count: number) {
   return [{ total: count }];
 }
@@ -88,9 +90,8 @@ interface QuorumTestSettings {
 }
 
 /**
- * Settings mock that returns different values per key. Building reads:
- *   1. LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS (floor)
- *   2. LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER (per-voter min)
+ * Settings mock that returns different values per key. Building reads only
+ * LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS (the floor fed to the count target).
  */
 function makeSettings(
   overrides: Record<string, string> = {},
@@ -107,166 +108,82 @@ function makeSettings(
 describe('checkBuildingQuorum', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('reports not ready when there are no expected voters', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([]);
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(false);
-    expect(result.reason).toContain('solo lineup');
-  });
-
-  it('reports not ready for a solo lineup (1 expected voter)', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1]);
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(false);
-    expect(result.reason).toContain('solo lineup');
-  });
-
-  it('reports not ready when an expected nominator has not submitted (ROK-1296)', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2, 3, 4]);
-    // Only voters 1-3 stamped `nominations_submitted_at`; voter 4 missing.
-    db.groupBy.mockResolvedValueOnce(
-      nominationsPerVoter([
-        { userId: 1, count: 3 },
-        { userId: 2, count: 3 },
-        { userId: 3, count: 3 },
-      ]),
-    );
-    db.execute.mockResolvedValueOnce(totalRow(9));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/have not submitted/);
-  });
-
-  it('reports not ready when zero nominators have submitted (ROK-1296 — was: 1 of 3 nominations each)', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2, 3, 4]);
-    // Pre-1296 this row set encoded "all 4 voters at 1/3 entries" and the
-    // per-voter min was 3 → short. Post-1296 the per-voter gate is
-    // submission presence — the same input now means "all 4 voters DID
-    // submit" → ready. Update the input to express the new intent (nobody
-    // submitted) so the test still validates the predicate's short-circuit.
-    db.groupBy.mockResolvedValueOnce(nominationsPerVoter([]));
-    db.execute.mockResolvedValueOnce(totalRow(4));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(false);
-    expect(result.reason).toMatch(/have not submitted/);
-  });
-
-  it('reports not ready when per-voter is met but total floor not met', async () => {
-    const db = createDrizzleMock();
-    // Two voters × 1 nomination each = 2 (below default floor of 4) but each
-    // hits a custom per-voter min of 1.
+  // Every fixture below also queues the inputs the retired ROK-1296 branch
+  // read (two expected voters, both submitted, floor met). The old predicate
+  // returned ready on them; the count target is now the only ready path.
+  function queueRetiredSubmissionBranch(
+    db: ReturnType<typeof createDrizzleMock>,
+  ): void {
     setExpectedVoters([1, 2]);
-    db.groupBy.mockResolvedValueOnce(
-      nominationsPerVoter([
-        { userId: 1, count: 1 },
-        { userId: 2, count: 1 },
-      ]),
+    db.execute.mockResolvedValueOnce(totalRow(99));
+    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
+  }
+
+  it('is not ready with no target, after reading only the total and floor (TDB:449)', async () => {
+    const db = createDrizzleMock();
+    queueRetiredSubmissionBranch(db);
+    const settings = makeSettings();
+
+    const result = await checkBuildingQuorum(
+      db as never,
+      settings as never,
+      baseLineup,
     );
-    db.execute.mockResolvedValueOnce(totalRow(2));
+
+    expect(result).toEqual({
+      ready: false,
+      reason: 'no nomination target; deadline or manual advance required',
+    });
+    // countNominations + the floor read are the only inputs left.
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect(settings.get).toHaveBeenCalledTimes(1);
+    expect(settings.get).toHaveBeenCalledWith(
+      SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS,
+    );
+    expect(db.groupBy).not.toHaveBeenCalled();
+    expect(loadQuorumGatingVoters).not.toHaveBeenCalled();
+    expect(evaluateNominationTarget).not.toHaveBeenCalled();
+  });
+
+  it('is not ready when the target is armed but not met, whoever submitted', async () => {
+    const db = createDrizzleMock();
+    queueRetiredSubmissionBranch(db);
+    const lineup = { ...baseLineup, nominationTargetPct: 50 } as LineupRow;
+    (evaluateNominationTarget as jest.Mock).mockResolvedValue({
+      ready: false,
+    });
+
+    const result = await checkBuildingQuorum(
+      db as never,
+      makeSettings() as never,
+      lineup,
+    );
+
+    expect(result).toEqual({
+      ready: false,
+      reason: 'nomination target not met; deadline or manual advance required',
+    });
+    expect(evaluateNominationTarget).toHaveBeenCalledWith(db, lineup, 99, 4);
+    expect(db.groupBy).not.toHaveBeenCalled();
+    expect(loadQuorumGatingVoters).not.toHaveBeenCalled();
+  });
+
+  it('is ready when the count target fires', async () => {
+    const db = createDrizzleMock();
+    db.execute.mockResolvedValueOnce(totalRow(12));
+    const lineup = { ...baseLineup, nominationTargetPct: 50 } as LineupRow;
+    (evaluateNominationTarget as jest.Mock).mockResolvedValue({ ready: true });
 
     const result = await checkBuildingQuorum(
       db as never,
       makeSettings({
-        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER]: '1',
+        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS]: '6',
       }) as never,
-      baseLineup,
+      lineup,
     );
 
-    expect(result.ready).toBe(false);
-    expect(result.reason).toContain('floor');
-  });
-
-  it('reports ready when each voter hits the per-voter min and the floor is met', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2]);
-    db.groupBy.mockResolvedValueOnce(
-      nominationsPerVoter([
-        { userId: 1, count: 3 },
-        { userId: 2, count: 3 },
-      ]),
-    );
-    db.execute.mockResolvedValueOnce(totalRow(6));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(true);
-  });
-
-  it('honors a custom floor from settings', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2]);
-    db.groupBy.mockResolvedValueOnce(
-      nominationsPerVoter([
-        { userId: 1, count: 3 },
-        { userId: 2, count: 3 },
-      ]),
-    );
-    db.execute.mockResolvedValueOnce(totalRow(6));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings({
-        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS]: '2',
-      }) as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(true);
-  });
-
-  it('honors a custom per-voter min from settings', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2]);
-    db.groupBy.mockResolvedValueOnce(
-      nominationsPerVoter([
-        { userId: 1, count: 1 },
-        { userId: 2, count: 1 },
-      ]),
-    );
-    db.execute.mockResolvedValueOnce(totalRow(2));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings({
-        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS]: '2',
-        [SETTING_KEYS.LINEUP_AUTO_ADVANCE_MIN_NOMINATIONS_PER_VOTER]: '1',
-      }) as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(true);
+    expect(result).toEqual({ ready: true });
+    expect(evaluateNominationTarget).toHaveBeenCalledWith(db, lineup, 12, 6);
   });
 });
 
@@ -571,17 +488,12 @@ describe('loadQuorumGatingVoters (ROK-1258 hybrid policy)', () => {
 // ============================================================================
 // ROK-1296 (U4 SubmitBar) — submission-presence quorum semantics.
 //
-// New contract: quorum no longer counts nominations or vote totals per voter.
-// It checks whether every expected voter has stamped a row in
-// `community_lineup_user_submissions`:
-//   - building → voting: `nominations_submitted_at IS NOT NULL` for all.
-//   - voting   → decided: `votes_submitted_at IS NOT NULL` for all.
+// Voting quorum no longer counts vote totals per voter. It checks whether
+// every expected voter has stamped `votes_submitted_at` in
+// `community_lineup_user_submissions`. (The building half of this pivot was
+// retired by TDB:449 — see the `checkBuildingQuorum` block above.)
 //
-// The nomination FLOOR + ≥2-voter guards stay intact — those tests already
-// exist above and continue to pass. These tests pin the NEW per-voter
-// predicate. They MUST fail at commit time because checkBuildingQuorum and
-// checkVotingQuorum still read from community_lineup_entries /
-// community_lineup_votes for the per-voter gate.
+// The ≥2-voter guard stays intact. These tests pin the per-voter predicate.
 // ============================================================================
 
 /**
@@ -597,93 +509,6 @@ describe('loadQuorumGatingVoters (ROK-1258 hybrid policy)', () => {
 function submissionsForVoters(voterIds: number[]) {
   return voterIds.map((userId) => ({ userId, count: 0 }));
 }
-
-describe('checkBuildingQuorum — ROK-1296 submission-presence semantics', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  // CRITICAL DIFFERENCE FROM OLD SEMANTICS:
-  // Old code counts entries-per-voter via communityLineupEntries.groupBy. New
-  // code probes communityLineupUserSubmissions for nominations_submitted_at.
-  // The deliberate split below would return DIFFERENT ready values under each
-  // semantic, which is the only way to force the dev to actually rewrite the
-  // predicate rather than tweak the existing one.
-
-  it('NOT ready when entries-per-voter passes but NO submission rows exist (new behaviour diverges from old)', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2]);
-    // First .groupBy() call: NEW code reads submission rows — none exist.
-    db.groupBy.mockResolvedValueOnce(submissionsForVoters([]));
-    // Floor query: trivially satisfied.
-    db.execute.mockResolvedValueOnce(totalRow(99));
-    // OLD code would also read .groupBy() here (entries-per-voter, both at 5,
-    // i.e. ≥ minPerVoter 3) and return ready: true. The drizzle-mock returns
-    // empty on extra calls, so the OLD code path actually flags both voters
-    // as short and returns ready: false — but for the WRONG reason. The
-    // reason match below pins the new semantic.
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(false);
-    // The new gate's reason mentions submissions, not "below N nominations".
-    expect(result.reason).toMatch(/submit|submission/i);
-  });
-
-  it('READY when every voter has a submission row, even with ZERO entries (new ignores entry count)', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2]);
-    // NEW: both voters submitted.
-    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
-    // Floor satisfied.
-    db.execute.mockResolvedValueOnce(totalRow(99));
-    // OLD code would query entries-per-voter on a SECOND groupBy and see []
-    // (drizzle-mock default), flag both as 0 < 3, return NOT ready. NEW code
-    // returns ready: true because the per-voter gate is just submission
-    // presence. Only the new semantic produces ready === true here.
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(true);
-  });
-
-  it('still blocks on the nomination floor regardless of submissions', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1, 2]);
-    // Both submitted — per-voter gate passes…
-    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1, 2]));
-    // …but total nominations (3) fall below the default floor of 4.
-    db.execute.mockResolvedValueOnce(totalRow(3));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(false);
-    expect(result.reason).toContain('floor');
-  });
-
-  it('still blocks for a solo lineup (creator alone) regardless of submission (≥2 voters guard stays)', async () => {
-    const db = createDrizzleMock();
-    setExpectedVoters([1]);
-    db.groupBy.mockResolvedValueOnce(submissionsForVoters([1]));
-
-    const result = await checkBuildingQuorum(
-      db as never,
-      makeSettings() as never,
-      baseLineup,
-    );
-
-    expect(result.ready).toBe(false);
-    expect(result.reason).toContain('solo lineup');
-  });
-});
 
 describe('checkVotingQuorum — ROK-1296 submission-presence semantics', () => {
   beforeEach(() => jest.clearAllMocks());

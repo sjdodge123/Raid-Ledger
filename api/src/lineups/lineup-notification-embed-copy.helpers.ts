@@ -53,16 +53,6 @@ export const VOTING_BODY =
   'most want to play; each member gets a limited number of votes, ' +
   'so choose wisely.';
 
-/** Body of the scheduling-open embed for one match. */
-export function schedulingBody(gameName: string): string {
-  return (
-    `The **${gameName}** match has enough players! Now it's time to ` +
-    'find a time that works. Suggest time slots or vote on ones ' +
-    'already proposed. Once a slot has enough votes, any member ' +
-    'can create the event.'
-  );
-}
-
 /** `N of M nominations filled.`, degrading to the bare count without a cap. */
 export function nominationProgress(
   ctx: EmbedContext,

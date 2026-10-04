@@ -67,19 +67,6 @@ export async function findInviteeDiscordMembers(
   return rows as DiscordMember[];
 }
 
-/** Check if a match already has a poll embed posted (ROK-1033). */
-export async function hasExistingPollEmbed(
-  db: Db,
-  matchId: number,
-): Promise<boolean> {
-  const [row] = await db
-    .select({ embedMessageId: schema.communityLineupMatches.embedMessageId })
-    .from(schema.communityLineupMatches)
-    .where(eq(schema.communityLineupMatches.id, matchId))
-    .limit(1);
-  return !!row?.embedMessageId;
-}
-
 /** Get match members with Discord linked. */
 export async function findMatchMemberUsers(
   db: Db,
