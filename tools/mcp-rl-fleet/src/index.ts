@@ -139,7 +139,8 @@ const envSpinSchema: Shape = {
   ttl_hours: z.number().int().min(1).max(168).optional(),
   worktree_path: worktreePathSchema,
   // Accepted for back-compat; the password is read via rl_task_status
-  // include_credentials:true now that the spin is async.
+  // include_credentials:true now that the spin is async, and a caller that sets
+  // it gets a credentials_hint naming that route.
   include_credentials: includeCredentialsSchema,
   ...waitFragment,
 };
