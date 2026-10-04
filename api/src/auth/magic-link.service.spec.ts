@@ -77,7 +77,7 @@ describe('MagicLinkService.generateLink (ROK-1366 AC1)', () => {
     ]);
     expect(decoded.sub).toBe(1);
     expect(decoded.magicLink).toBe(true);
-    expect(decoded.exp - decoded.iat).toBe(15 * 60);
+    expect((decoded.exp ?? 0) - (decoded.iat ?? 0)).toBe(15 * 60);
   });
 
   it('carries the token in the fragment only, never the query string', async () => {

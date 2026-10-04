@@ -78,7 +78,7 @@ const EXPIRED_LANDING = `${CLIENT_URL}/profile/integrations?linked=error&message
 function redirectedTo(res: Response): string {
   const calls = (res.redirect as jest.Mock).mock.calls as string[][];
   expect(calls).toHaveLength(1);
-  return calls[0][0];
+  return calls[0]?.[0] ?? '';
 }
 
 describe('DiscordAuthController — GET /auth/discord/link?nonce= (ROK-1630)', () => {

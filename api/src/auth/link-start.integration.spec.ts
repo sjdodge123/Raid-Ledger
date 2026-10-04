@@ -213,7 +213,7 @@ describe('GET /auth/discord/link?nonce= (AC13)', () => {
     const res = await hop('discord', { nonce }, cookie);
 
     expect(res.status).toBe(302);
-    const loc = new URL(res.headers.location);
+    const loc = new URL(res.headers.location ?? '');
     expect(`${loc.origin}${loc.pathname}`).toBe(
       'https://discord.com/api/oauth2/authorize',
     );
@@ -243,7 +243,7 @@ describe('GET /auth/steam/link?nonce= (AC11, AC13)', () => {
       const res = await hop('steam', { nonce }, cookie);
 
       expect(res.status).toBe(302);
-      const loc = new URL(res.headers.location);
+      const loc = new URL(res.headers.location ?? '');
       expect(`${loc.origin}${loc.pathname}`).toBe(
         'https://steamcommunity.com/openid/login',
       );
@@ -415,7 +415,7 @@ async function boundHop(p: Provider) {
   const { nonce, cookie } = await mintBound(p);
   const res = await hop(p, { nonce }, cookie);
   expect(res.status).toBe(302);
-  return { res, state: hopState(p, res.headers.location) };
+  return { res, state: hopState(p, res.headers.location ?? '') };
 }
 
 function callback(p: Provider, state: string, cookie?: string) {

@@ -84,7 +84,7 @@ function extractRefreshCookie(res: {
 }): string | null {
   for (const line of setCookieLines(res)) {
     const match = line.match(new RegExp(`^${REFRESH_COOKIE_NAME}=([^;]*)`));
-    if (match) return match[1];
+    if (match) return match[1] ?? null;
   }
   return null;
 }
@@ -112,6 +112,8 @@ async function createMember(
     .insert(schema.users)
     .values({ discordId: `discord-${username}`, username, role: 'member' })
     .returning();
+  if (!user)
+    throw new Error(`createMember: insert returned no row for ${username}`);
   if (Object.keys(overrides).length === 0) return user;
   await testApp.db
     .update(schema.users)

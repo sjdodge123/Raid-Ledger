@@ -97,7 +97,7 @@ const onlyRedirect = (res: Response) =>
 async function hop(ctrl: DiscordAuthController) {
   const res = mockRes();
   await ctrl.discordLink('n', reqWith({ rl_link_discord: sha256('n') }), res);
-  const [authorizeUrl] = onlyRedirect(res);
+  const [authorizeUrl = ''] = onlyRedirect(res);
   const state = new URL(authorizeUrl).searchParams.get('state') as string;
   const set = (res.cookie as jest.Mock).mock.calls.find(
     (c: unknown[]) => c[0] === STATE_COOKIE,
