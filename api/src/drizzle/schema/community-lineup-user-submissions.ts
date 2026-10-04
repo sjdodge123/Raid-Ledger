@@ -15,11 +15,14 @@ import { users } from './users';
  * Storage backing the universal Submit ritual: a row is upserted whenever a
  * member explicitly commits to a phase via the SubmitBar's CTA. Autosave
  * touches (nominations, votes) do NOT write here — only the explicit
- * `submit-nominations` / `submit-votes` endpoints stamp these columns.
+ * `submit-votes` endpoint stamps `votes_submitted_at`.
  *
- * Quorum predicates (`checkBuildingQuorum`, `checkVotingQuorum`) read these
- * timestamps to decide auto-advance: every expected voter must have stamped
- * the relevant column before the lineup may advance.
+ * `checkVotingQuorum` reads `votes_submitted_at` to decide auto-advance: every
+ * expected voter must have stamped it before the lineup may advance.
+ *
+ * TDB:449: `nominations_submitted_at` is retained but no longer written — the
+ * `submit-nominations` endpoint is retired and building quorum advances on
+ * the nomination count target instead. A lineup revert still clears it.
  *
  * Re-submission overwrites the timestamp to `now()` — the table is an
  * upsert target (unique on `(lineup_id, user_id)`), not an append log.
@@ -32,7 +35,7 @@ export const communityLineupUserSubmissions = pgTable(
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
-    /** Stamped when the user explicitly submits during the building phase. */
+    /** Retained, no longer written (TDB:449); a revert still clears it. */
     nominationsSubmittedAt: timestamp('nominations_submitted_at'),
     /** Stamped when the user explicitly submits during the voting phase. */
     votesSubmittedAt: timestamp('votes_submitted_at'),
