@@ -12,6 +12,7 @@ import { isTimeoutError } from "./retry.js";
 import { SMOKE } from "./config.js";
 import { teardownChannelPool } from "./channel-pool.js";
 import { setup } from "./setup.js";
+import { partitionTests } from "./test-partition.js";
 import type { SmokeTest, TestContext, TestResult } from "./types.js";
 import { channelEmbedTests } from "./tests/channel-embeds.test.js";
 import { dmNotificationTests } from "./tests/dm-notifications.test.js";
@@ -225,16 +226,13 @@ async function main(): Promise<void> {
       !nameFilter || t.name.toLowerCase().includes(nameFilter.toLowerCase()),
   );
 
-  const sequentialCats = new Set(["voice", "cdp-command"]);
-  const sequentialTests = allTests.filter((t) =>
-    sequentialCats.has(t.category),
-  );
-  const parallelTests = allTests.filter((t) => !sequentialCats.has(t.category));
+  const { parallel: parallelTests, sequential: sequentialTests } =
+    partitionTests(allTests);
 
   const concurrency = SMOKE.concurrency;
   console.log(
     `=== Running ${parallelTests.length} tests (concurrency=${concurrency})` +
-      `${sequentialTests.length ? `, ${sequentialTests.length} sequential tests (voice/cdp)` : ""} ===\n`,
+      `${sequentialTests.length ? `, ${sequentialTests.length} sequential tests (voice/cdp/serial)` : ""} ===\n`,
   );
 
   const parallelResults = await runWithConcurrency(
