@@ -154,34 +154,44 @@ test.describe('Start Lineup button on Games page', () => {
     });
 
     test('Games page shows lineup banner with countdown instead of Start Lineup when active', async ({ page }) => {
-        // Ensure an active lineup exists -- create one if needed
-        const banner = await apiGet(adminToken, '/lineups/banner');
-        if (!banner || typeof banner.id !== 'number') {
-            const createRes = await fetch(`${API_BASE}/lineups`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${adminToken}`,
-                },
-                body: JSON.stringify({ title: lineupTitle }),
+        // Room for the toPass window below; the CI default test timeout is 30s.
+        test.setTimeout(90_000);
+        await expect(async () => {
+            // TDB:443: seeded demo lineups carry no phaseDeadline, and the
+            // banner is the newest row, so after a reset-to-seed the banner
+            // can be a demo lineup that renders no countdown. The guard
+            // therefore creates a deadline-bearing lineup whenever the banner
+            // lacks one (every POST /lineups gets a phaseDeadline), and toPass
+            // re-runs it if a sibling archives the banner back to a demo row.
+            const banner = await apiGet(adminToken, '/lineups/banner');
+            if (!banner || typeof banner.id !== 'number' || !banner.phaseDeadline) {
+                await createLineupOrRetry(
+                    adminToken,
+                    {
+                        title: lineupTitle,
+                        buildingDurationHours: 720,
+                        votingDurationHours: 720,
+                        decidedDurationHours: 720,
+                    },
+                    workerPrefix,
+                );
+            }
+
+            await page.goto('/games');
+            await expect(page.locator('body')).not.toHaveText(
+                /something went wrong/i,
+                { timeout: 10_000 },
+            );
+
+            // When a lineup is active, the banner must show a phase countdown
+            // (e.g., "Building - 23h remaining"). This only renders after
+            // ROK-946 adds the phaseDeadline field and countdown display.
+            await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({
+                timeout: 15_000,
             });
-            expect(createRes.ok).toBe(true);
-        }
-
-        await page.goto('/games');
-        await expect(page.locator('body')).not.toHaveText(
-            /something went wrong/i,
-            { timeout: 10_000 },
-        );
-
-        // When a lineup is active, the banner must show a phase countdown
-        // (e.g., "Building - 23h remaining"). This only renders after
-        // ROK-946 adds the phaseDeadline field and countdown display.
-        await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({
-            timeout: 15_000,
-        });
-        const countdown = page.getByText(/remaining/i);
-        await expect(countdown).toBeVisible({ timeout: 10_000 });
+            const countdown = page.getByText(/remaining/i);
+            await expect(countdown).toBeVisible({ timeout: 10_000 });
+        }).toPass({ timeout: 60_000 });
     });
 });
 
