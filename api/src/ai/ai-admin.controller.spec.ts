@@ -8,6 +8,7 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 import { Reflector } from '@nestjs/core';
 import type { LlmProvider } from './llm-provider.interface';
 import { AI_DEFAULTS, CLOUD_DEFAULTS } from './llm.constants';
+import { at } from '../common/testing/narrow';
 
 function createMockProvider(): LlmProvider {
   return {
@@ -254,7 +255,7 @@ describe('AiAdminController (adversarial)', () => {
         },
       ]);
       const result = await controller.getModels();
-      expect(result[0].family).toBe('llama');
+      expect(result[0]?.family).toBe('llama');
     });
 
     it('family is undefined when capabilities is absent', async () => {
@@ -262,7 +263,7 @@ describe('AiAdminController (adversarial)', () => {
         { id: 'custom', name: 'custom', provider: 'ollama' },
       ]);
       const result = await controller.getModels();
-      expect(result[0].family).toBeUndefined();
+      expect(at(result, 0).family).toBeUndefined();
     });
   });
 

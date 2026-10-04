@@ -57,13 +57,13 @@ Check for:
 
 For each critical issue found:
 1. Edit the file directly to fix the issue
-2. Verify the fix: `npx tsc --noEmit` and relevant lint/test commands
+2. Verify the fix from the repo root: `npx tsc --noEmit -p api/tsconfig.json` (api) or the web leaf configs `web/tsconfig.app.json`, `web/tsconfig.node.json` and `web/tsconfig.test.json` (web) — never a bare `npx tsc --noEmit`, which in `web/` resolves the solution-style root tsconfig.json and checks 0 files — and relevant lint/test commands
 3. Continue to the next issue
 
 After ALL critical fixes are applied:
 ```bash
 npx tsc --noEmit -p api/tsconfig.json
-npx tsc --noEmit -p web/tsconfig.json
+npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json
 npm run lint -w api
 npm run lint -w web
 npm run test -w api -- --passWithNoTests

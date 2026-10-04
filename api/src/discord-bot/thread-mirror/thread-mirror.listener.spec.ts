@@ -14,6 +14,7 @@ import type {
 } from 'discord.js';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import { ThreadMirrorListener } from './thread-mirror.listener';
+import { defined } from '../../common/testing/narrow';
 import type { ThreadMirrorService } from './thread-mirror.service';
 import type { ThreadSurfaceRegistry } from './thread-surface.registry';
 
@@ -47,6 +48,21 @@ function message(over: Partial<FakeMessage> = {}): FakeMessage {
     channel: { id: THREAD, isThread: () => true },
     ...over,
   };
+}
+
+/** The handler the listener bound for `event` on its first attach. */
+function boundHandler(
+  attachToClient: jest.Mock,
+  event: string,
+): (...args: unknown[]) => void {
+  const bindings = attachToClient.mock.calls[0][1] as {
+    event: string;
+    handler: (...args: unknown[]) => void;
+  }[];
+  return defined(
+    bindings.find((b) => b.event === event)?.handler,
+    `${event} handler`,
+  );
 }
 
 describe('ThreadMirrorListener', () => {
@@ -129,19 +145,16 @@ describe('ThreadMirrorListener', () => {
 
     it('routes a reaction event to the service through reaction.message, dropping the user', () => {
       listener.handleBotConnected();
-      const handlers = Object.fromEntries(
-        (
-          attachToClient.mock.calls[0][1] as {
-            event: string;
-            handler: (...args: unknown[]) => void;
-          }[]
-        ).map((b) => [b.event, b.handler]),
-      );
       const reacted = { id: '4000000000000000050', guildId: GUILD };
+      const handler = (event: string) => boundHandler(attachToClient, event);
 
-      handlers.messageReactionAdd({ message: reacted }, { id: 'reactor' }, {});
-      handlers.messageReactionRemoveEmoji({ message: reacted });
-      handlers.messageReactionRemoveAll(reacted, new Map());
+      handler('messageReactionAdd')(
+        { message: reacted },
+        { id: 'reactor' },
+        {},
+      );
+      handler('messageReactionRemoveEmoji')({ message: reacted });
+      handler('messageReactionRemoveAll')(reacted, new Map());
 
       expect(mirror.onReactionChange).toHaveBeenNthCalledWith(1, reacted, {
         cleared: false,

@@ -195,7 +195,7 @@ describe('findConflictingEvents', () => {
     });
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(10);
+    expect(result[0]?.id).toBe(10);
   });
 
   it('works without excludeEventId (parameter is optional)', async () => {
@@ -256,7 +256,7 @@ describe('findConflictingEvents', () => {
     });
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(15);
+    expect(result[0]?.id).toBe(15);
   });
 
   it('includes signed_up signups as conflicts', async () => {
@@ -273,6 +273,6 @@ describe('findConflictingEvents', () => {
     });
 
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe(16);
+    expect(result[0]?.id).toBe(16);
   });
 });

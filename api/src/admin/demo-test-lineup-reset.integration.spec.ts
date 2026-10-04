@@ -11,6 +11,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { resetLineupsForTest } from './demo-test-lineup.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('resetLineupsForTest — tiebreaker cleanup (ROK-1151)', () => {
   let testApp: TestApp;
@@ -29,33 +30,42 @@ describe('resetLineupsForTest — tiebreaker cleanup (ROK-1151)', () => {
     status: 'building' | 'voting',
     tbStatus: 'pending' | 'active' | 'resolved',
   ): Promise<{ lineupId: number; tiebreakerId: number }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title,
-        status,
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: `tb-${Math.random().toString(36).slice(2, 10)}`,
-      })
-      .returning({ id: schema.communityLineups.id });
-    const [tb] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId: lineup.id,
-        mode: 'bracket',
-        status: tbStatus,
-        tiedGameIds: [testApp.seed.game.id],
-        originalVoteCount: 2,
-      })
-      .returning({ id: schema.communityLineupTiebreakers.id });
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title,
+          status,
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: `tb-${Math.random().toString(36).slice(2, 10)}`,
+        })
+        .returning({ id: schema.communityLineups.id }),
+      'lineup',
+    );
+    const [tb] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId: lineup.id,
+          mode: 'bracket',
+          status: tbStatus,
+          tiedGameIds: [testApp.seed.game.id],
+          originalVoteCount: 2,
+        })
+        .returning({ id: schema.communityLineupTiebreakers.id }),
+      'tb',
+    );
     return { lineupId: lineup.id, tiebreakerId: tb.id };
   }
 
   async function tiebreakerStatus(id: number): Promise<string> {
-    const [row] = await testApp.db
-      .select({ status: schema.communityLineupTiebreakers.status })
-      .from(schema.communityLineupTiebreakers)
-      .where(eq(schema.communityLineupTiebreakers.id, id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.communityLineupTiebreakers.status })
+        .from(schema.communityLineupTiebreakers)
+        .where(eq(schema.communityLineupTiebreakers.id, id)),
+      'row',
+    );
     return row.status;
   }
 
@@ -72,10 +82,13 @@ describe('resetLineupsForTest — tiebreaker cleanup (ROK-1151)', () => {
     expect(result.dismissedTiebreakerCount).toBe(1);
     expect(await tiebreakerStatus(tiebreakerId)).toBe('dismissed');
 
-    const [lineup] = await testApp.db
-      .select({ status: schema.communityLineups.status })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId));
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.communityLineups.status })
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId)),
+      'lineup',
+    );
     expect(lineup.status).toBe('archived');
   });
 

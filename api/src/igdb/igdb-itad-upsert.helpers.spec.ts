@@ -11,6 +11,7 @@
  * The flat mock can't handle both patterns on the same `where` method.
  */
 import { upsertItadGame } from './igdb-itad-upsert.helpers';
+import { defined } from '../common/testing/narrow';
 
 // ─── Test data builders ───────────────────────────────────────────────────
 
@@ -145,7 +146,7 @@ function buildUpsertDb(
   //   no .limit() follows. We dispatch on whether update() was called recently.
   let inUpdate = false;
   let whereSelectIdx = 0;
-  const origUpdate = db.update;
+  const origUpdate = defined(db.update, 'db.update mock');
   db.update = jest.fn().mockImplementation((...args: unknown[]) => {
     inUpdate = true;
     return origUpdate(...args);

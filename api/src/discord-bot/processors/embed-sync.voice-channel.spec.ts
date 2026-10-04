@@ -16,6 +16,7 @@ import { QueueHealthService } from '../../queue/queue-health.service';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import type { Job } from 'bullmq';
 import type { EmbedSyncJobData } from '../queues/embed-sync.queue';
+import { at } from '../../common/testing/narrow';
 
 const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
 const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
@@ -69,7 +70,7 @@ function makeUpdateChain() {
   return chain;
 }
 
-function setupDbForSuccessfulSync(mockDb: Record<string, jest.Mock>) {
+function setupDbForSuccessfulSync(mockDb: Record<'select', jest.Mock>) {
   mockDb.select
     .mockReturnValueOnce(makeSelectChain([mockRecord]))
     .mockReturnValueOnce(makeSelectChain([mockEvent]))
@@ -81,7 +82,7 @@ function setupDbForSuccessfulSync(mockDb: Record<string, jest.Mock>) {
 let processor: EmbedSyncProcessor;
 let embedFactory: jest.Mocked<DiscordEmbedFactory>;
 let channelResolver: jest.Mocked<ChannelResolverService>;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'select' | 'update', jest.Mock>;
 
 beforeEach(async () => {
   mockDb = {
@@ -221,7 +222,7 @@ describe('EmbedSyncProcessor voice channel — embed data', () => {
 
     await processor.process(job);
 
-    const eventDataArg = embedFactory.buildEventUpdate.mock.calls[0][0];
+    const [eventDataArg] = at(embedFactory.buildEventUpdate.mock.calls, 0);
     expect(eventDataArg.voiceChannelId).toBeUndefined();
   });
 });

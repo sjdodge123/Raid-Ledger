@@ -28,6 +28,7 @@ import {
 } from './lineup-notification-embed.helpers';
 import { buildAbortedEmbed } from './lineup-notification-aborted-embed.helpers';
 import { personalizedFieldName } from '../discord-bot/embeds/embed-personalized.helpers';
+import { at } from '../common/testing/narrow';
 
 const DIE = '\u{1F3B2}';
 const BALLOT = '\u{1F5F3}';
@@ -278,7 +279,7 @@ function json(result: BuildResult) {
 function lastDescriptionLine(result: BuildResult): string {
   const desc = json(result).description ?? '';
   const lines = desc.trimEnd().split('\n');
-  return lines[lines.length - 1];
+  return at(lines, -1);
 }
 
 beforeEach(() => {

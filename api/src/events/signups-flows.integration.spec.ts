@@ -13,6 +13,7 @@ import {
   createFutureEvent,
   createPastEvent,
 } from './signups.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -257,15 +258,18 @@ async function testNonMmoWithoutChar() {
 }
 
 async function testMmoWithoutChar() {
-  const [mmoGame] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name: 'World of Warcraft',
-      slug: 'world-of-warcraft',
-      hasRoles: true,
-      hasSpecs: true,
-    })
-    .returning();
+  const [mmoGame] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'World of Warcraft',
+        slug: 'world-of-warcraft',
+        hasRoles: true,
+        hasSpecs: true,
+      })
+      .returning(),
+    'mmoGame',
+  );
   const { token } = await createMemberAndLogin(
     testApp,
     'mmo_no_char',
@@ -283,15 +287,18 @@ async function testMmoWithoutChar() {
 }
 
 async function testMmoWithChar() {
-  const [mmoGame] = await testApp.db
-    .insert(schema.games)
-    .values({
-      name: 'Final Fantasy XIV',
-      slug: 'ffxiv',
-      hasRoles: true,
-      hasSpecs: true,
-    })
-    .returning();
+  const [mmoGame] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Final Fantasy XIV',
+        slug: 'ffxiv',
+        hasRoles: true,
+        hasSpecs: true,
+      })
+      .returning(),
+    'mmoGame',
+  );
   const { token } = await createMemberAndLogin(
     testApp,
     'mmo_with_char',

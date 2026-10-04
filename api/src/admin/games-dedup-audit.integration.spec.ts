@@ -16,6 +16,7 @@ import {
   truncateAllTables,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 interface AuditResponse {
   summary: {
@@ -87,9 +88,9 @@ async function seedGames(testApp: TestApp): Promise<{
     .returning({ id: schema.games.id });
 
   return {
-    steamDupIds: [pairs[0].id, pairs[1].id],
-    nameDupIds: [pairs[2].id, pairs[3].id],
-    steamDup2Ids: [pairs[4].id, pairs[5].id],
+    steamDupIds: [at(pairs, 0).id, at(pairs, 1).id],
+    nameDupIds: [at(pairs, 2).id, at(pairs, 3).id],
+    steamDup2Ids: [at(pairs, 4).id, at(pairs, 5).id],
     uniqueIds: unique.map((r) => r.id),
   };
 }
@@ -175,12 +176,14 @@ describe('GET /admin/games/dedup-audit', () => {
     await seedDepRowsForLoser(testApp, steamDup2Ids[1]);
 
     // Baseline counts BEFORE the audit call.
-    const [{ c: gamesBefore }] = await testApp.db
-      .select({ c: count() })
-      .from(schema.games);
-    const [{ c: eventsBefore }] = await testApp.db
-      .select({ c: count() })
-      .from(schema.events);
+    const [{ c: gamesBefore }] = nonEmpty(
+      await testApp.db.select({ c: count() }).from(schema.games),
+      'games count',
+    );
+    const [{ c: eventsBefore }] = nonEmpty(
+      await testApp.db.select({ c: count() }).from(schema.events),
+      'events count',
+    );
 
     const res = await testApp.request
       .get('/admin/games/dedup-audit')
@@ -224,12 +227,14 @@ describe('GET /admin/games/dedup-audit', () => {
     }
 
     // No mutations: games and events row counts are unchanged.
-    const [{ c: gamesAfter }] = await testApp.db
-      .select({ c: count() })
-      .from(schema.games);
-    const [{ c: eventsAfter }] = await testApp.db
-      .select({ c: count() })
-      .from(schema.events);
+    const [{ c: gamesAfter }] = nonEmpty(
+      await testApp.db.select({ c: count() }).from(schema.games),
+      'games count',
+    );
+    const [{ c: eventsAfter }] = nonEmpty(
+      await testApp.db.select({ c: count() }).from(schema.events),
+      'events count',
+    );
     expect(gamesAfter).toBe(gamesBefore);
     expect(eventsAfter).toBe(eventsBefore);
   }, 60_000);
@@ -376,19 +381,25 @@ describe('POST /admin/games/dedup-audit/run', () => {
   it('rejects authenticated non-admin POSTs with 403', async () => {
     // Re-use admin's password hash so the non-admin can log in with the same
     // known password from the test seed.
-    const [{ passwordHash }] = await testApp.db
-      .select({ passwordHash: schema.localCredentials.passwordHash })
-      .from(schema.localCredentials)
-      .where(eq(schema.localCredentials.userId, testApp.seed.adminUser.id));
+    const [{ passwordHash }] = nonEmpty(
+      await testApp.db
+        .select({ passwordHash: schema.localCredentials.passwordHash })
+        .from(schema.localCredentials)
+        .where(eq(schema.localCredentials.userId, testApp.seed.adminUser.id)),
+      'admin credentials',
+    );
 
-    const [nonAdmin] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:nonadmin@test.local',
-        username: 'nonadmin',
-        role: 'member',
-      })
-      .returning();
+    const [nonAdmin] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:nonadmin@test.local',
+          username: 'nonadmin',
+          role: 'member',
+        })
+        .returning(),
+      'nonAdmin',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'nonadmin@test.local',
       passwordHash,
@@ -432,9 +443,9 @@ describe('POST /admin/games/dedup-audit/run', () => {
     expect(Array.isArray(body.topGroups)).toBe(true);
     expect(body.topGroups.length).toBeGreaterThan(0);
     expect(body.topGroups.length).toBeLessThanOrEqual(10);
-    expect(typeof body.topGroups[0].canonicalGameId).toBe('number');
-    expect(typeof body.topGroups[0].downstreamRowCount).toBe('number');
-    expect(typeof body.topGroups[0].uniqueConflictCount).toBe('number');
+    expect(typeof body.topGroups[0]?.canonicalGameId).toBe('number');
+    expect(typeof body.topGroups[0]?.downstreamRowCount).toBe('number');
+    expect(typeof body.topGroups[0]?.uniqueConflictCount).toBe('number');
   }, 60_000);
 
   // -------------------------------------------------------------------------
@@ -616,7 +627,9 @@ describe('POST /admin/games/dedup-audit/run', () => {
         },
       ])
       .returning({ id: schema.games.id });
-    const [rowA, rowB, rowC] = inserted;
+    const rowA = at(inserted, 0);
+    const rowB = at(inserted, 1);
+    const rowC = at(inserted, 2);
 
     const res = await testApp.request
       .post('/admin/games/dedup-audit/run')
@@ -688,37 +701,46 @@ describe('POST /admin/games/dedup-audit/run', () => {
     // so the vote row is the ONLY new-FK row attached to the dup id.
     // publicSlug is varchar(16) — keep it short to satisfy the column cap.
     const slug = `tb${Date.now().toString(36).slice(-8)}`;
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Tiebreaker Lineup',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: slug,
-      })
-      .returning({ id: schema.communityLineups.id });
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Tiebreaker Lineup',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: slug,
+        })
+        .returning({ id: schema.communityLineups.id }),
+      'lineup',
+    );
 
-    const [tiebreaker] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId: lineup.id,
-        mode: 'bracket',
-        tiedGameIds: [steamDupIds[0], steamDupIds[1]],
-        originalVoteCount: 0,
-      })
-      .returning({ id: schema.communityLineupTiebreakers.id });
+    const [tiebreaker] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId: lineup.id,
+          mode: 'bracket',
+          tiedGameIds: [steamDupIds[0], steamDupIds[1]],
+          originalVoteCount: 0,
+        })
+        .returning({ id: schema.communityLineupTiebreakers.id }),
+      'tiebreaker',
+    );
 
-    const [matchup] = await testApp.db
-      .insert(schema.communityLineupTiebreakerBracketMatchups)
-      .values({
-        tiebreakerId: tiebreaker.id,
-        round: 1,
-        position: 1,
-        gameAId: steamDupIds[0],
-        gameBId: steamDupIds[0],
-      })
-      .returning({
-        id: schema.communityLineupTiebreakerBracketMatchups.id,
-      });
+    const [matchup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakerBracketMatchups)
+        .values({
+          tiebreakerId: tiebreaker.id,
+          round: 1,
+          position: 1,
+          gameAId: steamDupIds[0],
+          gameBId: steamDupIds[0],
+        })
+        .returning({
+          id: schema.communityLineupTiebreakerBracketMatchups.id,
+        }),
+      'matchup',
+    );
 
     // The actual new-FK row we care about — vote.game_id = dup id.
     await testApp.db
@@ -816,7 +838,8 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
         },
       ])
       .returning({ id: schema.games.id });
-    const [rowA, rowB] = inserted;
+    const rowA = at(inserted, 0);
+    const rowB = at(inserted, 1);
 
     const res = await testApp.request
       .post('/admin/games/dedup-audit/run')
@@ -826,7 +849,7 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
     const rows = await readAuditRows(testApp);
     // Exactly one group containing both ids.
     expect(rows).toHaveLength(1);
-    const group = rows[0];
+    const group = at(rows, 0);
     expect(group.match_type).toBe('name');
     expect(group.match_key).toMatch(/baldur.s gate 3/);
     expect(group.group_size).toBe(2);
@@ -855,7 +878,8 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
         { name: 'Shared Title Alpha', slug: 'sta-noid' },
       ])
       .returning({ id: schema.games.id });
-    const [rowA, rowB] = inserted;
+    const rowA = at(inserted, 0);
+    const rowB = at(inserted, 1);
 
     const res = await testApp.request
       .post('/admin/games/dedup-audit/run')
@@ -864,7 +888,7 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
 
     const rows = await readAuditRows(testApp);
     expect(rows).toHaveLength(1);
-    const group = rows[0];
+    const group = at(rows, 0);
     expect(group.match_type).toBe('name');
     expect(group.group_size).toBe(2);
 
@@ -887,7 +911,8 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
         { name: 'Shared Title Beta', slug: 'stb-noid' },
       ])
       .returning({ id: schema.games.id });
-    const [rowA, rowB] = inserted;
+    const rowA = at(inserted, 0);
+    const rowB = at(inserted, 1);
 
     const res = await testApp.request
       .post('/admin/games/dedup-audit/run')
@@ -896,7 +921,7 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
 
     const rows = await readAuditRows(testApp);
     expect(rows).toHaveLength(1);
-    const group = rows[0];
+    const group = at(rows, 0);
     expect(group.match_type).toBe('name');
     expect(group.group_size).toBe(2);
 
@@ -941,7 +966,9 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
         },
       ])
       .returning({ id: schema.games.id });
-    const [rowA, rowB, rowC] = inserted;
+    const rowA = at(inserted, 0);
+    const rowB = at(inserted, 1);
+    const rowC = at(inserted, 2);
 
     const res = await testApp.request
       .post('/admin/games/dedup-audit/run')
@@ -951,7 +978,7 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
     const rows = await readAuditRows(testApp);
     // Exactly ONE group — A, B, C all transitively connected.
     expect(rows).toHaveLength(1);
-    const group = rows[0];
+    const group = at(rows, 0);
     expect(group.group_size).toBe(3);
 
     const idsInGroup = [group.canonical_game_id, ...group.dup_game_ids].sort();
@@ -981,7 +1008,8 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
         { name: 'Collision Title', slug: 'coll-b', igdbId: 555_006 },
       ])
       .returning({ id: schema.games.id });
-    const [rowA, rowB] = inserted;
+    const rowA = at(inserted, 0);
+    const rowB = at(inserted, 1);
 
     const res = await testApp.request
       .post('/admin/games/dedup-audit/run')
@@ -993,7 +1021,7 @@ describe('union-find grouping (POST /admin/games/dedup-audit/run)', () => {
     // false negatives. Operator review catches false positives; Phase 2
     // misses false negatives entirely.
     expect(rows).toHaveLength(1);
-    const group = rows[0];
+    const group = at(rows, 0);
     expect(group.match_type).toBe('name');
     expect(group.group_size).toBe(2);
 

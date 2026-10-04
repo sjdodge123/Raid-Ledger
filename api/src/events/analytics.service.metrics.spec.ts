@@ -2,9 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { AnalyticsService } from './analytics.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { at } from '../common/testing/narrow';
 
 let service: AnalyticsService;
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'select', jest.Mock> & Record<string, jest.Mock>;
 
 const mockEventRow = {
   id: 10,
@@ -60,9 +61,10 @@ function setupThreeSelects(
 }
 
 async function setupEach() {
-  mockDb = {};
+  mockDb = {
+    select: jest.fn().mockReturnThis(),
+  };
   const chainMethods = [
-    'select',
     'from',
     'where',
     'orderBy',
@@ -245,7 +247,7 @@ async function testVoiceNullLastLeave() {
   ];
   setupThreeSelects([mockEventRow], [], voice);
   const result = await service.getEventMetrics(10);
-  expect(result.voiceSummary!.sessions[0].lastLeaveAt).toBeNull();
+  expect(at(result.voiceSummary!.sessions, 0).lastLeaveAt).toBeNull();
 }
 
 async function testRosterBreakdownWithVoice() {
@@ -285,8 +287,8 @@ async function testRosterBreakdownNoVoice() {
   const signups = [makeSignup({ userId: 2, username: 'Bob' })];
   setupThreeSelects([mockEventRow], signups, []);
   const result = await service.getEventMetrics(10);
-  expect(result.rosterBreakdown[0].voiceClassification).toBeNull();
-  expect(result.rosterBreakdown[0].voiceDurationSec).toBeNull();
+  expect(at(result.rosterBreakdown, 0).voiceClassification).toBeNull();
+  expect(at(result.rosterBreakdown, 0).voiceDurationSec).toBeNull();
 }
 
 async function testDiscordUsernameFallback() {
@@ -298,14 +300,14 @@ async function testDiscordUsernameFallback() {
   ];
   setupThreeSelects([mockEventRow], signups, []);
   const result = await service.getEventMetrics(10);
-  expect(result.rosterBreakdown[0].username).toBe('Anonymous#9999');
+  expect(result.rosterBreakdown[0]?.username).toBe('Anonymous#9999');
 }
 
 async function testUnknownFallback() {
   const signups = [makeSignup({})];
   setupThreeSelects([mockEventRow], signups, []);
   const result = await service.getEventMetrics(10);
-  expect(result.rosterBreakdown[0].username).toBe('Unknown');
+  expect(result.rosterBreakdown[0]?.username).toBe('Unknown');
 }
 
 async function testSerializesTimestamps() {

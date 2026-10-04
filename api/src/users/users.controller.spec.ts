@@ -326,8 +326,8 @@ describe('UsersController', () => {
 
       const result = await controller.listRecentPlayers();
 
-      expect(typeof result.data[0].createdAt).toBe('string');
-      expect(result.data[0].createdAt).toBe('2026-02-13T15:30:00.000Z');
+      expect(typeof result.data[0]?.createdAt).toBe('string');
+      expect(result.data[0]?.createdAt).toBe('2026-02-13T15:30:00.000Z');
     });
 
     it('should match the RecentPlayersResponseDto schema', async () => {

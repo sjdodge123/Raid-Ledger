@@ -27,7 +27,7 @@ Re-run lint + type-check after rebase to catch any drift:
 npm run lint -w api
 npm run lint -w web
 npx tsc --noEmit -p api/tsconfig.json
-npx tsc --noEmit -p web/tsconfig.json
+npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json
 ```
 
 If lint:fix produced unrelated drift, `git checkout -- .` AFTER the last check per `feedback_lint_fix_worktree_drift.md`.

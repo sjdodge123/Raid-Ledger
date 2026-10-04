@@ -11,6 +11,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { LineupSteamNudgeService } from './lineup-steam-nudge.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 type ModerationState = Partial<
   Pick<
@@ -37,16 +38,19 @@ function describeSteamNudgeModeration() {
     suffix: string,
     state: ModerationState = {},
   ): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:nudge-${suffix}`,
-        username: `nudge-${suffix}`,
-        role: 'member',
-        steamId: null,
-        ...state,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:nudge-${suffix}`,
+          username: `nudge-${suffix}`,
+          role: 'member',
+          steamId: null,
+          ...state,
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 

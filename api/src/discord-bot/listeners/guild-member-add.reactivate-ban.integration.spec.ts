@@ -12,6 +12,7 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { GuildMemberAddListener } from './guild-member-add.listener';
+import { nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -50,24 +51,30 @@ async function rejoin(
 }
 
 it('leaves a banned rejoiner deactivated but reactivates a non-banned one', async () => {
-  const [banned] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: 'discord-banned-1',
-      username: 'bannedreturner',
-      deactivatedAt: new Date(),
-      bannedAt: new Date(),
-      banReason: 'abuse',
-    })
-    .returning();
-  const [control] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: 'discord-control-1',
-      username: 'cleanreturner',
-      deactivatedAt: new Date(),
-    })
-    .returning();
+  const [banned] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'discord-banned-1',
+        username: 'bannedreturner',
+        deactivatedAt: new Date(),
+        bannedAt: new Date(),
+        banReason: 'abuse',
+      })
+      .returning(),
+    'banned',
+  );
+  const [control] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'discord-control-1',
+        username: 'cleanreturner',
+        deactivatedAt: new Date(),
+      })
+      .returning(),
+    'control',
+  );
 
   const listener = buildListener();
   await rejoin(listener, 'discord-banned-1');

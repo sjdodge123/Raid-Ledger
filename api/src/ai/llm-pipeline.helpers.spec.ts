@@ -24,7 +24,7 @@ describe('llm-pipeline.helpers', () => {
       ];
       const result = prepareMessages(messages, 'Default prompt');
       expect(result).toHaveLength(2);
-      expect(result[0].content).toBe('Custom prompt');
+      expect(result[0]?.content).toBe('Custom prompt');
     });
   });
 
@@ -91,7 +91,7 @@ describe('llm-pipeline.helpers (adversarial)', () => {
       ];
       const result = prepareMessages(messages, 'Ignored base prompt');
       expect(result).toHaveLength(2);
-      expect(result[0].content).toBe('My custom prompt');
+      expect(result[0]?.content).toBe('My custom prompt');
     });
 
     it('handles empty messages array by prepending system prompt', () => {
@@ -110,7 +110,7 @@ describe('llm-pipeline.helpers (adversarial)', () => {
     it('prepends system prompt when only assistant messages exist', () => {
       const messages = [{ role: 'assistant' as const, content: 'Hello' }];
       const result = prepareMessages(messages, 'Base prompt');
-      expect(result[0].role).toBe('system');
+      expect(result[0]?.role).toBe('system');
     });
   });
 

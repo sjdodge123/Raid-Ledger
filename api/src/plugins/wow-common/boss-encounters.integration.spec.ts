@@ -14,6 +14,7 @@ import {
   loginAsAdmin,
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/testing/narrow';
 
 /** Insert a boss encounter directly and return the row. */
 async function insertBoss(
@@ -32,7 +33,7 @@ async function insertBoss(
       ...overrides,
     })
     .returning();
-  return boss;
+  return defined(boss, 'inserted boss');
 }
 
 /** Insert a loot item for a boss and return the row. */
@@ -50,7 +51,7 @@ async function insertLoot(
     .insert(schema.wowClassicBossLoot)
     .values(overrides)
     .returning();
-  return loot;
+  return defined(loot, 'inserted loot');
 }
 
 let testApp: TestApp;

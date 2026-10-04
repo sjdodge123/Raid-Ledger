@@ -47,6 +47,8 @@ const CHAIN_METHODS = [
 ] as const;
 
 type MockDb = Record<string, jest.Mock>;
+/** A MockDb whose `where` is always present (set by buildGenericMockDb). */
+type WhereMockDb = MockDb & { where: jest.Mock };
 
 /**
  * Build a generic mock DB with chainable methods and a configurable
@@ -55,16 +57,18 @@ type MockDb = Record<string, jest.Mock>;
 function buildGenericMockDb(opts: {
   limitResult: unknown[];
   whereHandler: (callCount: number, db: MockDb) => unknown;
-}): MockDb {
+}): WhereMockDb {
   let whereCallCount = 0;
-  const mockDb: MockDb = {};
+  const chain: MockDb = {};
   for (const m of CHAIN_METHODS) {
-    mockDb[m] = jest.fn().mockReturnThis();
+    chain[m] = jest.fn().mockReturnThis();
   }
-  mockDb.limit = jest.fn().mockResolvedValue(opts.limitResult);
-  mockDb.where = jest.fn().mockImplementation(() => {
-    whereCallCount++;
-    return opts.whereHandler(whereCallCount, mockDb);
+  chain.limit = jest.fn().mockResolvedValue(opts.limitResult);
+  const mockDb: WhereMockDb = Object.assign(chain, {
+    where: jest.fn().mockImplementation(() => {
+      whereCallCount++;
+      return opts.whereHandler(whereCallCount, mockDb);
+    }),
   });
   mockDb.transaction = jest
     .fn()

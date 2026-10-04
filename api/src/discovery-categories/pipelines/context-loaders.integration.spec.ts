@@ -13,6 +13,7 @@ import {
   loadTopPlayedLastMonth,
   loadTrending,
 } from './context-loaders';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const ZERO_DIMENSIONS = Object.fromEntries(
   TASTE_PROFILE_AXIS_POOL.map((a) => [a, 0]),
@@ -34,10 +35,13 @@ describe('discovery-categories context loaders (ROK-567)', () => {
     vector: number[],
     ageDays = 0,
   ): Promise<void> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({ discordId, username: discordId, role: 'member' })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({ discordId, username: discordId, role: 'member' })
+        .returning(),
+      'user',
+    );
     const computedAt = new Date();
     computedAt.setUTCDate(computedAt.getUTCDate() - ageDays);
     await testApp.db.insert(schema.playerTasteVectors).values({
@@ -86,22 +90,31 @@ describe('discovery-categories context loaders (ROK-567)', () => {
     });
 
     it('ranks games by total seconds in the most recent month bucket', async () => {
-      const [u] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'top-player',
-          username: 'top-player',
-          role: 'member',
-        })
-        .returning();
-      const [gameA] = await testApp.db
-        .insert(schema.games)
-        .values({ name: 'Alpha', slug: 'alpha' })
-        .returning();
-      const [gameB] = await testApp.db
-        .insert(schema.games)
-        .values({ name: 'Beta', slug: 'beta' })
-        .returning();
+      const [u] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'top-player',
+            username: 'top-player',
+            role: 'member',
+          })
+          .returning(),
+        'u',
+      );
+      const [gameA] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({ name: 'Alpha', slug: 'alpha' })
+          .returning(),
+        'gameA',
+      );
+      const [gameB] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({ name: 'Beta', slug: 'beta' })
+          .returning(),
+        'gameB',
+      );
       const periodStart = '2026-04-01';
       await testApp.db.insert(schema.gameActivityRollups).values([
         {
@@ -121,7 +134,7 @@ describe('discovery-categories context loaders (ROK-567)', () => {
       ]);
       const rows = await loadTopPlayedLastMonth(testApp.db, 5);
       expect(rows.map((r) => r.name)).toEqual(['Beta', 'Alpha']);
-      expect(rows[0].totalSeconds).toBe(4000);
+      expect(rows[0]?.totalSeconds).toBe(4000);
     });
   });
 
@@ -132,18 +145,24 @@ describe('discovery-categories context loaders (ROK-567)', () => {
     });
 
     it('computes percentage delta between the two most recent weeks', async () => {
-      const [u] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'trend-player',
-          username: 'trend-player',
-          role: 'member',
-        })
-        .returning();
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({ name: 'Gamma', slug: 'gamma' })
-        .returning();
+      const [u] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'trend-player',
+            username: 'trend-player',
+            role: 'member',
+          })
+          .returning(),
+        'u',
+      );
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({ name: 'Gamma', slug: 'gamma' })
+          .returning(),
+        'game',
+      );
       await testApp.db.insert(schema.gameActivityRollups).values([
         {
           userId: u.id,
