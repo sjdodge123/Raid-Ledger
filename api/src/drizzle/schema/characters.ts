@@ -66,6 +66,8 @@ export const characters = pgTable(
     profileUrl: text('profile_url'),
     /** Blizzard API region (us, eu, kr, tw) — persisted for auto-sync */
     region: varchar('region', { length: 10 }),
+    /** ROK-1721: WoW: Forever ruleset (normal|pvp|roleplaying|hardcore); null for every other game */
+    ruleset: varchar('ruleset', { length: 20 }),
     /** WoW game variant (retail, classic_era, classic, classic_anniversary, wow_forever) */
     gameVariant: varchar('game_variant', { length: 30 }),
     /** Full equipped items data from Blizzard API (JSONB) */
@@ -98,6 +100,14 @@ export const characters = pgTable(
       table.userId,
       table.name,
     ),
+    /**
+     * ROK-1721: one owner per WoW: Forever character across ALL players —
+     * region + lowercased full two-part name. Ruleset is excluded from the key
+     * because it is mutable; it only marks the row as a Forever identity.
+     */
+    rulesetIdentity: uniqueIndex('idx_characters_ruleset_identity')
+      .on(table.gameId, table.region, sql`lower(${table.name})`)
+      .where(sql`${table.ruleset} IS NOT NULL`),
     // ROK-1157: FK backing index (parent delete / RI scan)
     gameIdIndex: index('idx_characters_game_id').on(table.gameId),
   }),
