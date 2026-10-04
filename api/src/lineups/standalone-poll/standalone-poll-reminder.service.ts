@@ -157,9 +157,12 @@ export class StandalonePollReminderService {
 
   /**
    * Match members who haven't voted on any schedule slot for this match.
-   * 'bandwagon' rows are slot-voter self-enrolments (ensureMatchMember), so a
-   * non-invitee who retracted every vote is skipped; invitees ('voted') and
-   * creator-added members ('added') are still reminded.
+   * 'bandwagon' rows come from slot-vote self-enrolment (ensureMatchMember)
+   * and from the bandwagon-join endpoint (executeBandwagonJoin, which no
+   * standalone-poll UI exposes). Both are deliberately excluded under the
+   * TDB:191 option A ruling, so a non-invitee who retracted every vote is
+   * skipped; invitees ('voted') and creator-added members ('added') are still
+   * reminded.
    */
   private async findNonVoters(matchId: number): Promise<StandaloneNonVoter[]> {
     return (await this.db.execute(sql`
