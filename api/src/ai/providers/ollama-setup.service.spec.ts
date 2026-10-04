@@ -17,9 +17,17 @@ const mockFetchOllama = fetchOllama as jest.Mock;
 describe('Regression: ROK-840', () => {
   describe('OllamaSetupService', () => {
     let service: OllamaSetupService;
-    let mockSettings: Record<string, jest.Mock>;
-    let mockDocker: Record<string, jest.Mock>;
-    let mockModelService: Record<string, jest.Mock>;
+    let mockSettings: Record<'delete' | 'get' | 'set', jest.Mock>;
+    let mockDocker: Record<
+      | 'getApiNetwork'
+      | 'getContainerStatus'
+      | 'getContainerUrl'
+      | 'isDockerAvailable'
+      | 'startContainer'
+      | 'stopContainer',
+      jest.Mock
+    >;
+    let mockModelService: Record<'pullModel', jest.Mock>;
     let mockNative: Record<string, jest.Mock>;
 
     beforeEach(async () => {
@@ -284,7 +292,16 @@ describe('ROK-882: Native Ollama Install', () => {
     let mockSettings: Record<string, jest.Mock>;
     let mockDocker: Record<string, jest.Mock>;
     let mockModelService: Record<string, jest.Mock>;
-    let mockNative: Record<string, jest.Mock>;
+    let mockNative: Record<
+      | 'getOllamaUrl'
+      | 'getServiceStatus'
+      | 'install'
+      | 'isAllinoneMode'
+      | 'isBinaryInstalled'
+      | 'startService'
+      | 'writeSupervisorConfig',
+      jest.Mock
+    >;
 
     beforeEach(async () => {
       mockSettings = {
@@ -493,7 +510,15 @@ describe('ROK-882: Docker available but allinone mode — native path wins', () 
   describe('OllamaSetupService — docker-available-but-allinone', () => {
     let service: OllamaSetupService;
     let mockSettings: Record<string, jest.Mock>;
-    let mockDocker: Record<string, jest.Mock>;
+    let mockDocker: Record<
+      | 'getApiNetwork'
+      | 'getContainerStatus'
+      | 'getContainerUrl'
+      | 'isDockerAvailable'
+      | 'startContainer'
+      | 'stopContainer',
+      jest.Mock
+    >;
     let mockModelService: Record<string, jest.Mock>;
     let mockNative: Record<string, jest.Mock>;
 

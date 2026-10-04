@@ -11,6 +11,7 @@ import {
   loginAsAdmin,
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/testing/narrow';
 
 /** Create a test event owned by the admin user. */
 async function createTestEvent(
@@ -27,7 +28,7 @@ async function createTestEvent(
       duration: [now, later],
     })
     .returning();
-  return event;
+  return defined(event, 'inserted event');
 }
 
 let testApp: TestApp;

@@ -62,8 +62,8 @@ describe('OpenAiProvider', () => {
       });
       const models = await provider.listModels();
       expect(models).toHaveLength(2);
-      expect(models[0].id).toBe('gpt-4o');
-      expect(models[1].id).toBe('gpt-4o-mini');
+      expect(models[0]?.id).toBe('gpt-4o');
+      expect(models[1]?.id).toBe('gpt-4o-mini');
     });
 
     it('throws when no API key is configured', async () => {

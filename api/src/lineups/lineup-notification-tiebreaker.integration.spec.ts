@@ -42,6 +42,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { SettingsService } from '../settings/settings.service';
 import { NotificationDedupService } from '../notifications/notification-dedup.service';
 import { LineupReminderService } from './lineup-reminder.service';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 interface PublicLineupSetup {
   lineupId: number;
@@ -96,22 +97,28 @@ function describeTiebreakerNotifications() {
   // ── Helpers ────────────────────────────────────────────────────────────
 
   async function createMember(tag: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:${tag}`,
-        username: `mem-${tag}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:${tag}`,
+          username: `mem-${tag}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function createGame(name: string): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -127,16 +134,19 @@ function describeTiebreakerNotifications() {
     const gameAId = await createGame('TBGameA-1117');
     const gameBId = await createGame('TBGameB-1117');
 
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1117 public',
-        status: 'voting',
-        visibility: 'public',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1117 public',
+          status: 'voting',
+          visibility: 'public',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
 
     // Nominate both games (nominator owns gameA, voterA owns gameB).
     await testApp.db.insert(schema.communityLineupEntries).values([
@@ -167,17 +177,20 @@ function describeTiebreakerNotifications() {
     const gameBId = await createGame('TBPrivB-1117');
     const creatorId = testApp.seed.adminUser.id;
 
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1117 private',
-        status: 'voting',
-        visibility: 'private',
-        createdBy: creatorId,
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1117 private',
+          status: 'voting',
+          visibility: 'private',
+          createdBy: creatorId,
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
     await testApp.db.insert(schema.communityLineupInvitees).values([
       { lineupId: lineup.id, userId: inviteeA },
       { lineupId: lineup.id, userId: inviteeB },
@@ -264,7 +277,7 @@ function describeTiebreakerNotifications() {
 
     // ROK-1117 rework: the open-DM body lists tied games as deep links
     // and ends with a CTA pointing at the lineup detail page.
-    const openDmRow = await findTiebreakerOpenDM(participantIds[0]);
+    const openDmRow = await findTiebreakerOpenDM(at(participantIds, 0));
     expect(openDmRow).toBeTruthy();
     const message = openDmRow!.message;
     for (const gameId of tiedGameIds) {
@@ -338,22 +351,28 @@ function describeTiebreakerReminders() {
   });
 
   async function createMember(tag: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:${tag}`,
-        username: `mem-${tag}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:${tag}`,
+          username: `mem-${tag}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function createGame(name: string): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -367,16 +386,19 @@ function describeTiebreakerReminders() {
     const gameAId = await createGame('TBRemA-1117');
     const gameBId = await createGame('TBRemB-1117');
 
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1117 reminder',
-        status: 'voting',
-        visibility: 'public',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1117 reminder',
+          status: 'voting',
+          visibility: 'public',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
     await testApp.db.insert(schema.communityLineupEntries).values([
       { lineupId: lineup.id, gameId: gameAId, nominatedBy: nominator },
       { lineupId: lineup.id, gameId: gameBId, nominatedBy: voterA },
@@ -431,7 +453,7 @@ function describeTiebreakerReminders() {
         return payload?.subtype === 'lineup_tiebreaker_reminder';
       });
       expect(reminderRows.length).toBeGreaterThan(0);
-      const message = reminderRows[0].message;
+      const message = at(reminderRows, 0).message;
       expect(message).toMatch(/🎮 \[\*\*.+\*\*\]\(.+\/games\/\d+\)/);
       expect(message).toMatch(
         new RegExp(

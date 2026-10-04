@@ -116,7 +116,9 @@ describe('LfgWithdrawListener (ROK-1454 D11 / AC7)', () => {
     const rendered = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { author?: { name: string } } }>;
     };
-    expect(rendered.embeds[0].toJSON().author?.name).toBe('📋 YOUR GROUPS · 0');
+    expect(rendered.embeds[0]?.toJSON().author?.name).toBe(
+      '📋 YOUR GROUPS · 0',
+    );
     expect(followUp.mock.calls[0][0]).toMatchObject({
       content: 'Withdrawn from **Deep Rock Galactic**.',
       flags: 64,

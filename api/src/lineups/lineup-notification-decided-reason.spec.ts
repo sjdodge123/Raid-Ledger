@@ -56,6 +56,7 @@ jest.mock('./lineup-decision-reason.helpers', () => ({
 
 import { orchestrateMatchesFound } from './lineup-notification-public-dispatch.helpers';
 import { loadDecisionReason } from './lineup-decision-reason.helpers';
+import { at } from '../common/testing/narrow';
 import { routeMatchesFoundIfPrivate } from './lineup-notification-routing.helpers';
 import { sendMatchesFoundDM } from './lineup-notification-private-dm.helpers';
 import type { OrchestrationDeps } from './lineup-notification-public-dispatch.helpers';
@@ -137,7 +138,7 @@ async function privateDmBody(reason: string | null): Promise<string> {
     reason,
   );
   expect(created).toHaveLength(1);
-  return created[0];
+  return at(created, 0);
 }
 
 describe('orchestrateMatchesFound — the private route carries the same reasoning', () => {

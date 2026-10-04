@@ -45,8 +45,8 @@ describe('DemoTestDiscoveryCategoriesController (ROK-567)', () => {
       .select()
       .from(schema.discoveryCategorySuggestions);
     expect(rows).toHaveLength(1);
-    expect(rows[0].name).toBe('Smoke Fixture');
-    expect(rows[0].candidateGameIds).toEqual([1, 2, 3]);
+    expect(rows[0]?.name).toBe('Smoke Fixture');
+    expect(rows[0]?.candidateGameIds).toEqual([1, 2, 3]);
   });
 
   it('rejects seed calls when DEMO_MODE is off with 403', async () => {

@@ -44,6 +44,7 @@ import {
   recordLfmRender,
   resolvePollTarget,
 } from './lfm-embed.db-helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -182,10 +183,13 @@ describe('lfg_group_messages — the write paths', () => {
 
     await closeLfmMessage(testApp.db, row!.id, 'converted', 4);
 
-    const [after] = await testApp.db
-      .select()
-      .from(schema.lfgGroupMessages)
-      .where(eq(schema.lfgGroupMessages.id, row!.id));
+    const [after] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.lfgGroupMessages)
+        .where(eq(schema.lfgGroupMessages.id, row!.id)),
+      'after',
+    );
     expect(after).toMatchObject({ state: 'converted', lastMemberCount: 4 });
     expect(after.closedAt).toBeInstanceOf(Date);
   });
@@ -280,23 +284,29 @@ describe('reconcile provenance lookups (D9)', () => {
       testApp.seed.adminUser.id,
       game.id,
     );
-    const [first] = await testApp.db
-      .select({ lineupId: schema.communityLineupMatches.lineupId })
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, firstMatchId));
+    const [first] = nonEmpty(
+      await testApp.db
+        .select({ lineupId: schema.communityLineupMatches.lineupId })
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, firstMatchId)),
+      'first',
+    );
     // `uq_lineup_match_game` is (lineup_id, game_id): the second match on
     // the same lineup must be for a DIFFERENT game.
     const otherGame = await createGame(testApp, 'Valheim');
-    const [second] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: first.lineupId,
-        gameId: otherGame.id,
-        status: 'suggested',
-        thresholdMet: false,
-        voteCount: 0,
-      })
-      .returning();
+    const [second] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: first.lineupId,
+          gameId: otherGame.id,
+          status: 'suggested',
+          thresholdMet: false,
+          voteCount: 0,
+        })
+        .returning(),
+      'second',
+    );
 
     const target = await resolvePollTarget(testApp.db, second.id);
 

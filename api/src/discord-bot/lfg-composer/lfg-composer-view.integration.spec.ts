@@ -23,6 +23,7 @@ import {
 import { SettingsService } from '../../settings/settings.service';
 import { verifyPurposeJwt } from '../../auth/purpose-jwt.helpers';
 import { LfgComposerListener } from './lfg-composer.listener';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 /** The wire id the pinned card sends — the smoke pins the same literal. */
 const VIEW_CUSTOM_ID = 'lfgc:view';
@@ -59,16 +60,19 @@ async function discordUser(
   seq += 1;
   const discordId = `${200_000_000_000_000_000n + BigInt(seq)}`;
   const now = new Date();
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId,
-      username: `viewer${seq}`,
-      role: 'member',
-      deactivatedAt: standing === 'deactivated' ? now : null,
-      bannedAt: standing === 'banned' ? now : null,
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId,
+        username: `viewer${seq}`,
+        role: 'member',
+        deactivatedAt: standing === 'deactivated' ? now : null,
+        bannedAt: standing === 'banned' ? now : null,
+      })
+      .returning(),
+    'user',
+  );
   return { userId: user.id, discordId };
 }
 
@@ -120,7 +124,9 @@ function linkUrls(p: Press): string[] {
 function theLink(p: Press): { path: string; token: string | null } {
   const urls = linkUrls(p);
   expect(urls).toHaveLength(1);
-  const [path, fragment = ''] = urls[0].split('#');
+  const parts = at(urls, 0).split('#');
+  const path = at(parts, 0);
+  const fragment = parts[1] ?? '';
   const token = fragment.startsWith('token=')
     ? decodeURIComponent(fragment.slice('token='.length))
     : null;

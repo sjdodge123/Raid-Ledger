@@ -27,7 +27,7 @@ describe('buildCommunityPlayingCategory', () => {
 describe('buildDiscoverCategories — community-has-been-playing placement', () => {
   it('appears at index 0, before community-wants-to-play', () => {
     const cats = buildDiscoverCategories();
-    expect(cats[0].slug).toBe('community-has-been-playing');
+    expect(cats[0]?.slug).toBe('community-has-been-playing');
     const wantsIdx = cats.findIndex(
       (c) => c.slug === 'community-wants-to-play',
     );
@@ -67,7 +67,7 @@ describe('buildCommunityPlayingMetadata', () => {
   it('parses bigint-as-text total_seconds safely for large numbers', () => {
     const rows = [row(99, 1, 2_000_000_000)];
     const metadata = buildCommunityPlayingMetadata(rows, [99]);
-    expect(metadata['99'].totalSeconds).toBe(2_000_000_000);
-    expect(typeof metadata['99'].totalSeconds).toBe('number');
+    expect(metadata['99']?.totalSeconds).toBe(2_000_000_000);
+    expect(typeof metadata['99']?.totalSeconds).toBe('number');
   });
 });

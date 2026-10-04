@@ -13,6 +13,7 @@ import { LFG_BOARD_EVENTS } from '../discord-bot/lfg-board/lfg-board.constants';
 import { findOpenLfgNowEventId } from '../lfg/lfg-playing.helpers';
 import { setGracePeriodStatus } from '../discord-bot/services/ad-hoc-event.helpers';
 import { readBoardThreadMembers } from './demo-test-lfg-thread-members.helpers';
+import { at } from '../common/testing/narrow';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
 
 jest.mock('../lfg/lfg-playing.helpers', () => ({
@@ -146,7 +147,7 @@ describe('DemoTestLfgController.endLfgSession (ROK-1505 AC10b)', () => {
     // The reaper's order — end first, so the destroy's attendance flush and
     // Scheduled Event re-point see the ended session.
     expect(adHoc.finalizeEvent.mock.invocationCallOrder[0]).toBeLessThan(
-      ephemeralVoice.destroyById.mock.invocationCallOrder[0],
+      at(ephemeralVoice.destroyById.mock.invocationCallOrder, 0),
     );
   });
 

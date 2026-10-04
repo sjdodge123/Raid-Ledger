@@ -22,6 +22,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 const EXPECTED_PUBLIC_KEYS = [
   'title',
@@ -133,14 +134,17 @@ function describePublicLineup() {
   it('returns 404 when lineup is private (visibility=private)', async () => {
     // Need an invitee so the private-lineup refine passes.
     const passwordHash = await bcrypt.hash('Pass1Pass1!', 4);
-    const [invitee] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:priv-invitee@test.local',
-        username: 'priv-invitee',
-        role: 'member',
-      })
-      .returning();
+    const [invitee] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:priv-invitee@test.local',
+          username: 'priv-invitee',
+          role: 'member',
+        })
+        .returning(),
+      'invitee',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'priv-invitee@test.local',
       passwordHash,

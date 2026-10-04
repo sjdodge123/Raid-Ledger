@@ -25,6 +25,7 @@ import {
   writeTiebreakerCohortMemory,
 } from './cohort-memory-write.helpers';
 import { buildCohortSignature } from './cohort-memory-signature.helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 /** ROK-1538: the cohort is the ROSTER, so the creator is always a member. */
 const rosterOf = (adminId: number, ...ids: number[]) => [adminId, ...ids];
@@ -72,16 +73,19 @@ function describeCohortMemoryWrites() {
       .returning();
     games = gameRows.map((g) => g.id);
 
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Cohort lineup',
-        status: 'voting',
-        visibility: 'public',
-        createdBy: adminId,
-        publicSlug: 'cohortslug1',
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Cohort lineup',
+          status: 'voting',
+          visibility: 'public',
+          createdBy: adminId,
+          publicSlug: 'cohortslug1',
+        })
+        .returning(),
+      'lineup',
+    );
     lineupId = lineup.id;
 
     // Roster = {created_by} ∪ invitees ∪ nominators ∪ voters (ROK-1538).
@@ -91,12 +95,14 @@ function describeCohortMemoryWrites() {
       games.map((gameId, i) => ({
         lineupId,
         gameId,
-        nominatedBy: cohort[i],
+        nominatedBy: at(cohort, i),
       })),
     );
     await testApp.db
       .insert(schema.communityLineupVotes)
-      .values(cohort.map((userId) => ({ lineupId, userId, gameId: games[0] })));
+      .values(
+        cohort.map((userId) => ({ lineupId, userId, gameId: at(games, 0) })),
+      );
   });
 
   it('writes a decided row + one match row per match-tier game on voting->decided', async () => {
@@ -119,7 +125,7 @@ function describeCohortMemoryWrites() {
 
     const decided = rows.filter((r) => r.resolution === 'decided');
     expect(decided).toHaveLength(1);
-    expect(decided[0].gameId).toBe(games[0]);
+    expect(decided[0]?.gameId).toBe(games[0]);
 
     const matches = await testApp.db
       .select()
@@ -144,7 +150,7 @@ function describeCohortMemoryWrites() {
     // "Match".
     await testApp.db
       .insert(schema.communityLineupVotes)
-      .values({ lineupId, userId: cohort[0], gameId: games[1] });
+      .values({ lineupId, userId: at(cohort, 0), gameId: at(games, 1) });
 
     await testApp.request
       .patch(`/lineups/${lineupId}/status`)
@@ -166,27 +172,30 @@ function describeCohortMemoryWrites() {
   });
 
   it('writes veto_won for the survivor and veto_lost per vetoed game', async () => {
-    const [tb] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId,
-        mode: 'veto',
-        status: 'active',
-        tiedGameIds: [games[1], games[2]],
-        originalVoteCount: 3,
-      })
-      .returning();
+    const [tb] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId,
+          mode: 'veto',
+          status: 'active',
+          tiedGameIds: [at(games, 1), at(games, 2)],
+          originalVoteCount: 3,
+        })
+        .returning(),
+      'tb',
+    );
 
-    await resolveTiebreaker(testApp.db, tb.id, games[1]);
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 1));
 
     const rows = await memoryRows();
     const won = rows.filter((r) => r.resolution === 'veto_won');
     const lost = rows.filter((r) => r.resolution === 'veto_lost');
     expect(won).toHaveLength(1);
-    expect(won[0].gameId).toBe(games[1]);
+    expect(won[0]?.gameId).toBe(games[1]);
     expect(lost).toHaveLength(1);
-    expect(lost[0].gameId).toBe(games[2]);
-    expect(won[0].participantHash).toBe(
+    expect(lost[0]?.gameId).toBe(games[2]);
+    expect(won[0]?.participantHash).toBe(
       buildCohortSignature(rosterOf(adminId, ...cohort))?.participantHash,
     );
   });
@@ -198,19 +207,24 @@ function describeCohortMemoryWrites() {
     // re-surface a rejected game badged "Match".
     await testApp.db
       .insert(schema.communityLineupVotes)
-      .values(cohort.map((userId) => ({ lineupId, userId, gameId: games[1] })));
+      .values(
+        cohort.map((userId) => ({ lineupId, userId, gameId: at(games, 1) })),
+      );
 
-    const [tb] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId,
-        mode: 'veto',
-        status: 'active',
-        tiedGameIds: [games[0], games[1]],
-        originalVoteCount: 3,
-      })
-      .returning();
-    await resolveTiebreaker(testApp.db, tb.id, games[0]);
+    const [tb] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId,
+          mode: 'veto',
+          status: 'active',
+          tiedGameIds: [at(games, 0), at(games, 1)],
+          originalVoteCount: 3,
+        })
+        .returning(),
+      'tb',
+    );
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 0));
 
     await testApp.request
       .patch(`/lineups/${lineupId}/status`)
@@ -245,17 +259,20 @@ function describeCohortMemoryWrites() {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ status: 'decided', decidedGameId: games[0] })
       .expect(200);
-    const [tb] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId,
-        mode: 'veto',
-        status: 'active',
-        tiedGameIds: [games[1], games[2]],
-        originalVoteCount: 3,
-      })
-      .returning();
-    await resolveTiebreaker(testApp.db, tb.id, games[1]);
+    const [tb] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId,
+          mode: 'veto',
+          status: 'active',
+          tiedGameIds: [at(games, 1), at(games, 2)],
+          originalVoteCount: 3,
+        })
+        .returning(),
+      'tb',
+    );
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 1));
 
     const before = (await memoryRows()).length;
     expect(before).toBeGreaterThan(0);
@@ -266,13 +283,13 @@ function describeCohortMemoryWrites() {
     // `ON CONFLICT DO NOTHING` guard removed (verified — it did). Asserting
     // that nothing was logged is what makes this test non-vacuous.
     const logger = { error: jest.fn() } as unknown as Logger;
-    await resolveTiebreaker(testApp.db, tb.id, games[1]);
+    await resolveTiebreaker(testApp.db, tb.id, at(games, 1));
     await writeDecidedCohortMemory(testApp.db, lineupId, logger);
     await writeTiebreakerCohortMemory(
       testApp.db,
       lineupId,
       tb.id,
-      games[1],
+      at(games, 1),
       logger,
     );
 
@@ -284,17 +301,20 @@ function describeCohortMemoryWrites() {
     // Under the ROK-1309 engaged definition this lineup had NO signature and
     // wrote nothing. The roster definition gives it one immediately, which is
     // the whole point: a group's memory must exist before anyone clicks.
-    const [quiet] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Nobody engaged',
-        status: 'voting',
-        visibility: 'public',
-        createdBy: adminId,
-        publicSlug: 'cohortslug2',
-        decidedGameId: games[0],
-      })
-      .returning();
+    const [quiet] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Nobody engaged',
+          status: 'voting',
+          visibility: 'public',
+          createdBy: adminId,
+          publicSlug: 'cohortslug2',
+          decidedGameId: games[0],
+        })
+        .returning(),
+      'quiet',
+    );
 
     await writeDecidedCohortMemory(testApp.db, quiet.id);
 
@@ -303,9 +323,9 @@ function describeCohortMemoryWrites() {
       .from(schema.communityLineupCohortMemory)
       .where(eq(schema.communityLineupCohortMemory.sourceLineupId, quiet.id));
     expect(rows).toHaveLength(1);
-    expect(rows[0].participantIds).toEqual([adminId]);
-    expect(rows[0].cohortSize).toBe(1);
-    expect(rows[0].participantHash).toBe(
+    expect(rows[0]?.participantIds).toEqual([adminId]);
+    expect(rows[0]?.cohortSize).toBe(1);
+    expect(rows[0]?.participantHash).toBe(
       buildCohortSignature([adminId])?.participantHash,
     );
   });
@@ -315,14 +335,17 @@ function describeCohortMemoryWrites() {
     // nominated and never voted. Under the engaged definition they vanished
     // from the key, so the same group of friends produced a different hash
     // depending on who happened to click.
-    const [bystander] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'cohort-bystander',
-        username: 'bystander',
-        role: 'member' as const,
-      })
-      .returning();
+    const [bystander] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'cohort-bystander',
+          username: 'bystander',
+          role: 'member' as const,
+        })
+        .returning(),
+      'bystander',
+    );
     await testApp.db
       .insert(schema.communityLineupInvitees)
       .values({ lineupId, userId: bystander.id });
