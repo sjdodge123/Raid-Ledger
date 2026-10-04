@@ -17,9 +17,12 @@
  *   AC-T1: quorum met → grace scheduled → elapses → advance fires
  *   AC-T2: quorum met → un-vote → pending_advance_at cleared synchronously,
  *          grace job no-ops
- *   AC-T3: revert (voting → building) → auto_advance_paused_at set, next
- *          nominate does not re-schedule grace
- *   AC-T4: revert + cool-off TTL elapses → next mutation advances normally
+ *   AC-T3: revert (voting → building) → auto_advance_paused_at set; a
+ *          decided → voting revert's pause suppresses the next re-schedule
+ *          even with the voting quorum met
+ *   AC-T4: decided → voting revert + cool-off TTL elapses → re-submission
+ *          advances normally (plus a TDB:449 pin: a reverted BUILDING lineup
+ *          never auto-advances, the target being disarmed)
  *
  * Plus four architect-flagged gap tests:
  *   GAP-A: cancelAllForLineup removes grace jobs during abort
@@ -191,6 +194,55 @@ function describeGrace() {
       .patch(`/lineups/${lineupId}/status`)
       .set('Authorization', `Bearer ${token}`)
       .send({ status: 'building' });
+  }
+
+  /**
+   * A 3-voter (admin + two invitees) private lineup in `voting` where every
+   * voter has cast their single vote for `games[0]` — not yet submitted.
+   */
+  async function createVotedLineup(tag: string) {
+    const v1 = await createMember(`${tag}-v1`);
+    const v2 = await createMember(`${tag}-v2`);
+    const createRes = await createPrivateLineup(
+      adminToken,
+      [v1.userId, v2.userId],
+      1,
+    );
+    expect(createRes.status).toBe(201);
+    const lineupId = createRes.body.id as number;
+    const games = await createGames(2);
+    await nominate(adminToken, lineupId, games[0].id);
+    await nominate(v1.token, lineupId, games[1].id);
+    await advanceToVoting(lineupId, adminToken);
+    const tokens = [adminToken, v1.token, v2.token];
+    for (const t of tokens) await vote(t, lineupId, games[0].id);
+    return { lineupId, games, tokens };
+  }
+
+  /**
+   * Drive a 3-voter private lineup to `decided` by a manual advance, then
+   * revert it `decided → voting`. The revert clears every `votes_submitted_at`
+   * stamp and arms the pause, while the cast votes stay — so one round of
+   * re-submission makes the voting quorum ready again. That is the live
+   * auto-advance path the pause has to gate.
+   */
+  async function revertDecidedToVoting(tag: string) {
+    const { lineupId, games, tokens } = await createVotedLineup(tag);
+    const decide = await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'decided', decidedGameId: games[0].id });
+    expect(decide.status).toBe(200);
+    const revert = await testApp.request
+      .patch(`/lineups/${lineupId}/status`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ status: 'voting' });
+    expect(revert.status).toBe(200);
+    expect(await readStatus(lineupId)).toBe('voting');
+    expect(
+      (await readAdvanceState(lineupId)).autoAdvancePausedAt,
+    ).not.toBeNull();
+    return { lineupId, tokens };
   }
 
   /** Read the persisted status from the DB directly (bypasses caches). */
@@ -420,31 +472,14 @@ function describeGrace() {
 
   // ── AC-T3: revert (voting → building) sets auto_advance_paused_at ──
 
-  it('AC-T3: reverting voting → building sets auto_advance_paused_at and suppresses next auto-advance', async () => {
+  it('AC-T3: reverting voting → building sets auto_advance_paused_at and clears pending_advance_at', async () => {
     await settings.set(graceKey, '500');
     // Long pause TTL so the cool-off does not expire during the test.
     await settings.set(pauseTtlKey, '86400000');
 
-    const v1 = await createMember('act3-v1');
-    const v2 = await createMember('act3-v2');
-
-    const createRes = await createPrivateLineup(
-      adminToken,
-      [v1.userId, v2.userId],
-      1,
-    );
-    const lineupId = createRes.body.id as number;
-    const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
-    await advanceToVoting(lineupId, adminToken);
-
-    // Cast quorum-closing votes so grace is scheduled.
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    const { lineupId, tokens } = await createVotedLineup('act3');
     // ROK-1296: explicit submit closes the per-voter quorum gate.
-    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
+    await submitAllVotes(lineupId, tokens);
     expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
 
     // Operator reverts BEFORE the grace job fires.
@@ -465,27 +500,23 @@ function describeGrace() {
     expect(
       (detail.body as { autoAdvancePausedAt: unknown }).autoAdvancePausedAt,
     ).toEqual(expect.any(String));
+  });
 
-    // The next quorum-affecting mutation must NOT re-schedule the grace
-    // window. Top the nominations up past the floor (default 4) so each
-    // nomination runs the quorum check on a paused lineup — the pause must
-    // keep it put regardless.
-    for (let i = 0; i < 3; i++) {
-      const morePersonal = await createGames(1);
-      await nominate(adminToken, lineupId, morePersonal[0].id);
-    }
+  it('AC-T3: a decided → voting revert pause suppresses the grace re-schedule even when every voter re-submits', async () => {
+    await settings.set(graceKey, '500');
+    // Long pause TTL so the cool-off does not expire during the test.
+    await settings.set(pauseTtlKey, '86400000');
+    const { lineupId, tokens } = await revertDecidedToVoting('act3b');
 
-    // The pause must keep the lineup put.
-    // No grace job should exist; pending_advance_at stays null.
-    const stillPaused = await readAdvanceState(lineupId);
-    expect(stillPaused.pendingAdvanceAt).toBeNull();
-    expect(await readStatus(lineupId)).toBe('building');
+    // Every voter re-submits: the voting quorum is ready again (the votes
+    // survived the revert), so ONLY the active pause can keep grace unclaimed.
+    await submitAllVotes(lineupId, tokens);
 
-    // A paused lineup must NOT have an erroneous grace job queued. Assert its
-    // absence directly instead of sleeping to "let it fire": with no job
-    // scheduled nothing can flip the status, so the lineup stays 'building'.
+    // maybeAutoAdvance runs synchronously inside each submit, so a missing
+    // claim is observable now — no sleep needed.
+    expect((await readAdvanceState(lineupId)).pendingAdvanceAt).toBeNull();
     expect(await getGraceJob(lineupId)).toBeFalsy();
-    expect(await readStatus(lineupId)).toBe('building');
+    expect(await readStatus(lineupId)).toBe('voting');
   });
 
   // ── ROK-1296 (Codex P2): revert clears stale submitted_at stamps ──
@@ -548,32 +579,40 @@ function describeGrace() {
     }
   });
 
-  // ── AC-T4: pause TTL elapse → a reverted lineup still stays put ──
+  // ── AC-T4: pause TTL elapse → next mutation advances normally ──
 
-  it('AC-T4: after pause TTL elapses a reverted building lineup still does NOT auto-advance (target disarmed, submission quorum retired — TDB:449/448)', async () => {
+  it('AC-T4: after a decided → voting revert pause TTL elapses, re-submission re-schedules grace and advances', async () => {
+    await settings.set(graceKey, '500');
+    // Long TTL first so nothing can claim grace before the pause is expired.
+    await settings.set(pauseTtlKey, '86400000');
+    const { lineupId, tokens } = await revertDecidedToVoting('act4');
+
+    // Deterministically expire the pause cool-off: push auto_advance_paused_at
+    // a minute into the past and shrink the TTL, rather than sleeping for it.
+    await settings.set(pauseTtlKey, '50');
+    await writeAdvanceState(
+      lineupId,
+      'auto_advance_paused_at',
+      new Date(Date.now() - 60_000),
+    );
+
+    // The re-submission is the quorum-affecting mutation: with the pause
+    // elapsed it must claim grace, and the grace job then decides the lineup.
+    await submitAllVotes(lineupId, tokens);
+    expect((await readAdvanceState(lineupId)).pendingAdvanceAt).not.toBeNull();
+    await waitForStatus(lineupId, 'decided', 10_000);
+  });
+
+  // ── TDB:449 regression pin: a reverted BUILDING lineup stays put ──
+
+  it('TDB:449 pin: after pause TTL elapses a reverted building lineup still does NOT auto-advance (target disarmed, submission quorum retired)', async () => {
     await settings.set(graceKey, '500');
     // Tiny pause TTL so it expires immediately.
     await settings.set(pauseTtlKey, '50');
 
-    const v1 = await createMember('act4-v1');
-    const v2 = await createMember('act4-v2');
-
-    const createRes = await createPrivateLineup(
-      adminToken,
-      [v1.userId, v2.userId],
-      1,
-    );
-    const lineupId = createRes.body.id as number;
-    const games = await createGames(2);
-    await nominate(adminToken, lineupId, games[0].id);
-    await nominate(v1.token, lineupId, games[1].id);
-    await advanceToVoting(lineupId, adminToken);
-
-    await vote(adminToken, lineupId, games[0].id);
-    await vote(v1.token, lineupId, games[0].id);
-    await vote(v2.token, lineupId, games[0].id);
+    const { lineupId, tokens } = await createVotedLineup('act4-pin');
     // ROK-1296: submit closes the voting-quorum gate so grace is set.
-    await submitAllVotes(lineupId, [adminToken, v1.token, v2.token]);
+    await submitAllVotes(lineupId, tokens);
 
     await revertToBuilding(lineupId, adminToken);
     expect(

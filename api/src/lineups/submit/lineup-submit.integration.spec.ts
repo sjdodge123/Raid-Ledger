@@ -7,7 +7,9 @@
  *
  * Covered:
  *   - AC2b — the write path stamps `votes_submitted_at`.
+ *   - AC5 — re-submitting overwrites the stamp (ON CONFLICT upsert, one row).
  *   - Edge: phase mismatch → 403 for vote-in-building.
+ *   - Edge: private lineup non-invitee → 403 (participation gate).
  *   - TDB:449 — POST /lineups/:id/submit-nominations is retired → 404.
  *
  * ROK-1544 retired the third endpoint (`submit-scheduling`): the scheduling
@@ -193,6 +195,50 @@ function describeLineupSubmit() {
     expect(row?.votes_submitted_at).not.toBeNull();
   });
 
+  // -- AC5 — re-submission overwrites the stamp; one row per (lineup, user) --
+
+  it('re-submitting votes overwrites the existing timestamp with a later one and keeps one row (AC5)', async () => {
+    const voter = await createMember('resubmit-voter');
+    // A second invitee who never submits keeps the voting quorum unmet, so
+    // the lineup stays in voting between the two submits.
+    const idle = await createMember('resubmit-idle');
+    const createRes = await createPrivateLineup(adminToken, [
+      voter.userId,
+      idle.userId,
+    ]);
+    expect(createRes.status).toBe(201);
+    const lineupId = createRes.body.id as number;
+    const games = await createGames(2);
+    for (const g of games) await nominate(adminToken, lineupId, g.id);
+    expect((await advanceToVoting(lineupId, adminToken)).status).toBe(200);
+
+    const submitVotes = () =>
+      testApp.request
+        .post(`/lineups/${lineupId}/submit-votes`)
+        .set('Authorization', `Bearer ${voter.token}`)
+        .send({});
+
+    expect((await submitVotes()).status).toBe(200);
+    // Backdate the first stamp so "later" is deterministic without a sleep.
+    await testApp.db.execute(sql`
+      UPDATE community_lineup_user_submissions
+         SET votes_submitted_at = now() - interval '1 hour'
+       WHERE lineup_id = ${lineupId} AND user_id = ${voter.userId}
+    `);
+    const backdated = await readSubmission(lineupId, voter.userId);
+    const firstMs = new Date(backdated!.votes_submitted_at!).getTime();
+
+    const second = await submitVotes();
+    expect(second.status).toBe(200);
+    const secondTs = second.body.viewerSubmissions.votesSubmittedAt as string;
+    expect(new Date(secondTs).getTime()).toBeGreaterThan(firstMs);
+
+    const rows = await testApp.db.execute<{ c: number }>(
+      sql`SELECT count(*)::int AS c FROM community_lineup_user_submissions WHERE lineup_id = ${lineupId} AND user_id = ${voter.userId}`,
+    );
+    expect(Number(rows[0]?.c ?? 0)).toBe(1);
+  });
+
   // -- Edge: phase mismatch -------------------------------------------------
 
   it('POST /lineups/:id/submit-votes returns 403 when the lineup is still building', async () => {
@@ -207,6 +253,27 @@ function describeLineupSubmit() {
       .send({});
 
     expect(res.status).toBe(403);
+  });
+
+  // -- Edge: private lineup non-invitee -------------------------------------
+
+  it('POST /lineups/:id/submit-votes returns 403 for a non-invitee on a private lineup and writes nothing', async () => {
+    const invitee = await createMember('priv-invitee');
+    const outsider = await createMember('priv-outsider');
+    const createRes = await createPrivateLineup(adminToken, [invitee.userId]);
+    expect(createRes.status).toBe(201);
+    const lineupId = createRes.body.id as number;
+    const games = await createGames(2);
+    for (const g of games) await nominate(adminToken, lineupId, g.id);
+    expect((await advanceToVoting(lineupId, adminToken)).status).toBe(200);
+
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+    expect(await readSubmission(lineupId, outsider.userId)).toBeNull();
   });
 
   // -- TDB:449 — the nominations submit route is retired --------------------
