@@ -46,7 +46,8 @@ async function openAddCharacter(page: Page): Promise<AddCharacter> {
     return {
         dialog,
         game: dialog.getByRole('combobox', { name: 'Game', exact: true }),
-        name: dialog.getByRole('textbox', { name: 'Name', exact: true }),
+        // ROK-1721: WoW: Forever swaps Name for First/Second name; the draft types into First name.
+        name: dialog.getByRole('textbox', { name: 'First name', exact: true }),
         confirm: page.getByRole('dialog', { name: CONFIRM_TITLE }),
     };
 }
