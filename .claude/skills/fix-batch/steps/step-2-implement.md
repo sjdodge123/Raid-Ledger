@@ -57,6 +57,8 @@ cp api/.env ../Raid-Ledger--rok-<num>/api/
 # Viability check — ensure the worktree builds clean
 npx tsc --noEmit -p ../Raid-Ledger--rok-<num>/api/tsconfig.json
 npx tsc --noEmit -p ../Raid-Ledger--rok-<num>/web/tsconfig.app.json
+npx tsc --noEmit -p ../Raid-Ledger--rok-<num>/web/tsconfig.node.json
+npx tsc --noEmit -p ../Raid-Ledger--rok-<num>/web/tsconfig.test.json
 ```
 
 Update state for each story: `status: "queued"` → `"worktree_ready"`

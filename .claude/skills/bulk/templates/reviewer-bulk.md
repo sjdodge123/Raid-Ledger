@@ -20,7 +20,7 @@ Under Agent Teams, you can `SendMessage` the dev teammate directly — the Lead 
 | Severity | Action |
 |----------|--------|
 | `[critical]` / `[high]` — fixable, substantive | `SendMessage({ to: "dev-rok-<num>", message: "fixes needed: <numbered list>. Please apply and reply with new SHA." })`. Wait for reply, re-verify in worktree. Loop if needed. |
-| `[critical]` / `[high]` — trivial (whitespace, import order, obvious rename) | Self-fix in worktree; run `npx tsc --noEmit -p <workspace>/tsconfig.json && npm run lint -w <workspace>` + any relevant tests; commit as `review: auto-fix critical issues (ROK-XXX)`. |
+| `[critical]` / `[high]` — trivial (whitespace, import order, obvious rename) | Self-fix in worktree; run `npx tsc --noEmit -p <workspace>/tsconfig.json && npm run lint -w <workspace>` (for web, use the leaf configs `web/tsconfig.app.json`, `web/tsconfig.node.json` and `web/tsconfig.test.json` — the web root tsconfig.json is solution-style and checks 0 files) + any relevant tests; commit as `review: auto-fix critical issues (ROK-XXX)`. |
 | `[medium]` / `[low]` | Report as tech debt for batch summary. Do NOT fix. |
 | **BLOCKING** (design flaw, scope escalation, not fixable in this worktree) | Do NOT auto-fix. Mark the review task completed with `BLOCKED` verdict; Lead will post a fresh dev task with the blocking list and the dev teammate (still alive) will self-claim it. |
 
