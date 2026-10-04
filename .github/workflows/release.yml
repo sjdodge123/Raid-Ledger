@@ -1,8 +1,15 @@
 name: Release
 
-# Manual release workflow — bumps api/package.json version, commits, tags,
-# and creates a GitHub release. The tag push also triggers docker-publish.yml
-# to build and push new Docker images.
+# Manual release workflow. It computes the next version from the highest
+# existing vX.Y.Z tag (scripts/next-release-version.sh), creates an annotated
+# tag on main's HEAD and pushes ONLY that tag. There is no version-bump commit:
+# protected main refuses a push made with GITHUB_TOKEN.
+#
+# A tag pushed with GITHUB_TOKEN does not fire push-event workflows, so this
+# workflow then dispatches docker-publish.yml ("Publish images") on the new
+# tag. That workflow builds and pushes the images and creates the GitHub
+# release; it is the only release creator. Because the token's tag push never
+# triggers it, the dispatch cannot cause a second build of the same tag.
 
 on:
   workflow_dispatch:
@@ -27,13 +34,24 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
 
     steps:
+      - name: Refuse a non-main ref
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Release must be dispatched from main (got $GITHUB_REF)."
+          exit 1
+
       - name: Checkout code
         uses: actions/checkout@v7
         with:
@@ -67,30 +85,28 @@ jobs:
             echo "last \`v*\` tag. See \`docs/runbooks/releasing.md\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - name: Bump version
-        run: npm version ${{ inputs.version }} --no-git-tag-version -w api
-
-      - name: Read new version
+      - name: Compute next version
         id: version
-        run: echo "VERSION=$(node -p "require('./api/package.json').version")" >> "$GITHUB_OUTPUT"
+        env:
+          BUMP: ${{ inputs.version }}
+        run: |
+          VERSION=$(bash scripts/next-release-version.sh "$BUMP")
+          echo "Next version: v$VERSION"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Commit and tag
+      - name: Tag and push the tag only
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add api/package.json
-          git commit -m "chore: release v${{ steps.version.outputs.VERSION }}"
-          git tag "v${{ steps.version.outputs.VERSION }}"
+          git tag -a "v$VERSION" -m "Release v$VERSION"
+          git push origin "refs/tags/v$VERSION"
 
-      - name: Push commit and tag
-        run: git push origin main --follow-tags
-
-      - name: Create GitHub release
+      - name: Dispatch Publish images on the tag
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release create "v${{ steps.version.outputs.VERSION }}" --generate-notes
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          gh workflow run docker-publish.yml --repo "$GITHUB_REPOSITORY" --ref "v$VERSION"
+          echo "Tagged \`v$VERSION\` and dispatched **Publish images** on it, which builds the images and creates the GitHub release." >> "$GITHUB_STEP_SUMMARY"
