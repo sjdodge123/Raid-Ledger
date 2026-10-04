@@ -844,11 +844,16 @@ body {
    paint, so that paint wins; an opacity-only disabled or loading primary (Button's
    DISABLED is disabled:opacity-50, `loading` sets aria-disabled) keeps this fill and fades. Every .bg-emerald-600 steps — badges, dots and toggle tracks too: the
    darker green keeps or gains contrast on light surfaces. Hover is gated like
-   Tailwind v4's own hover: variant. */
+   Tailwind v4's own hover: variant. Pressed: being unlayered, the base rule also
+   beat every active:bg-* utility, so a primary that asks for a pressed fill gets
+   emerald-900 #064e3b (9.72:1) — darker than both rest and hover, so the press
+   reads on touch and under a hovering pointer alike. Scoped to elements that
+   carry an active:bg-* class, like hover; not hover-gated, like Tailwind's active:. */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]) { background-color: #047857; }
 @media (hover: hover) {
     :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):hover { background-color: #065f46; }
 }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600[class*="active:bg-"]:not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"]):active { background-color: #064e3b; }
 
 /* --- Button brandColor label (ROK-1472, operator ruling 2026-10-04) ---
    data-brand-label is brandLabelFor(fill) — whichever of white / #0f172a has the

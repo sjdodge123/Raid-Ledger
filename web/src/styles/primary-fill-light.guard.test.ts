@@ -4,7 +4,10 @@
  * `--color-success`) so its forced-white label is AA, and its hover goes DARKER
  * (emerald-800) instead of the lighter `hover:bg-emerald-500` (~2.5:1). The
  * hover rule is scoped to elements that ALSO carry `.bg-emerald-600`, so other
- * `hover:bg-emerald-500` uses keep their paint. Dark schemes are untouched.
+ * `hover:bg-emerald-500` uses keep their paint. A primary that asks for a pressed
+ * fill (`active:bg-*`) gets emerald-900, darker than rest and hover: the unlayered
+ * base rule otherwise beats Tailwind's `active:` and the press never shows.
+ * Dark schemes are untouched.
  * Both rules are unlayered, so they beat every Tailwind v4 `@layer utilities`
  * variant: each must skip a disabled / aria-disabled element that carries its
  * own `disabled:bg-*` / `aria-disabled:bg-*` paint, or that button paints
@@ -35,6 +38,7 @@ function fillOf(selector: string): string | undefined {
 const ENABLED = ':not(:disabled[class*="disabled:bg-"], [aria-disabled="true"][class*="aria-disabled:bg-"])';
 const BASE = `${SCOPE} .bg-emerald-600${ENABLED}`;
 const HOVER = `${SCOPE} .bg-emerald-600:is(.hover\\:bg-emerald-500, .hover\\:bg-emerald-700)${ENABLED}:hover`;
+const ACTIVE = `${SCOPE} .bg-emerald-600[class*="active:bg-"]${ENABLED}:active`;
 
 /** Selectors of rules, in ANY scheme, that paint a background onto solid `.bg-emerald-600` (not its `/NN` tints, not `:not(.bg-emerald-600)`). */
 function primaryFillSelectors(): string[] {
@@ -61,9 +65,22 @@ describe('primary fill on the light schemes (ROK-1472)', () => {
         expect(contrastRatio(hover ?? '#ffffff', '#ffffff'), 'white on the light primary hover').toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 
+    it('keeps a pressed state: an active:bg-* primary goes darker than rest AND hover, AA, not hover-gated', () => {
+        const active = fillOf(ACTIVE);
+        expect(active, `missing the scoped pressed rule \`${ACTIVE}\` — the unlayered fill beats active:bg-*`).toBe('#064e3b');
+        expect(luminance(active ?? '#ffffff'), 'pressed must be darker than the hover').toBeLessThan(luminance('#065f46'));
+        expect(contrastRatio(active ?? '#ffffff', '#ffffff'), 'white on the light primary pressed fill').toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+        expect(HOVER_GATED, 'Tailwind active: is not hover-gated').not.toContain(ACTIVE);
+        const button = document.createElement('button');
+        button.className = 'bg-emerald-600 hover:bg-emerald-500';
+        expect(button.matches(ACTIVE.replace(SCOPE, '').replace(/:active$/, '')), 'a primary without active:bg-* keeps its paint').toBe(false);
+        button.classList.add('active:bg-emerald-700');
+        expect(button.matches(ACTIVE.replace(SCOPE, '').replace(/:active$/, '')), 'an active:bg-emerald-700 primary').toBe(true);
+    });
+
     it('no scheme paints a solid primary fill over a disabled or aria-disabled button', () => {
         const sels = primaryFillSelectors();
-        expect(sels, 'expected the light fill + hover and the quest-log gold rules').toEqual(expect.arrayContaining([BASE, HOVER]));
+        expect(sels, 'expected the light fill + hover and the quest-log gold rules').toEqual(expect.arrayContaining([BASE, HOVER, ACTIVE]));
         expect(sels.length, 'quest-log gold fill rules not found').toBeGreaterThanOrEqual(5);
         const leaky = sels.filter((s) => !s.includes(ENABLED));
         expect(leaky, `.bg-emerald-600 fill rules (unlayered or !important) must end in \`${ENABLED}\``).toEqual([]);
@@ -79,7 +96,7 @@ describe('primary fill on the light schemes (ROK-1472)', () => {
         const host = document.createElement('div');
         host.innerHTML = '<div data-scheme="light" data-variant="quest-log"><button></button></div>';
         const button = host.querySelector('button') as HTMLButtonElement;
-        button.className = `bg-emerald-600 hover:bg-emerald-500 ${state.cls}`;
+        button.className = `bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 ${state.cls}`;
         if ('disabled' in state) button.disabled = true;
         if ('aria' in state) button.setAttribute('aria-disabled', 'true');
         for (const sel of primaryFillSelectors()) {

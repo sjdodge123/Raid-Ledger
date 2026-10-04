@@ -136,7 +136,9 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:819-827`)
   and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
   an emerald-800 `#065f46` hover (7.68:1) on any element that also carries `hover:bg-emerald-500` /
-  `hover:bg-emerald-700` (`:837-851`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
+  `hover:bg-emerald-700`, and an emerald-900 `#064e3b` pressed fill (9.72:1) on any element that carries an
+  `active:bg-*` class — the unlayered repaint otherwise beats Tailwind's `active:` and the press never shows
+  (`:837-856`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
   Both rules are unlayered, so they skip a disabled / `aria-disabled` element that carries its own
   `disabled:bg-*` / `aria-disabled:bg-*` — otherwise they beat Tailwind v4's `@layer utilities` variant and
   that button paints enabled-green. An opacity-only disabled or `loading` primary keeps the fill and fades.
@@ -986,7 +988,8 @@ them; do not fix them as scope creep.
     (`:819-827`). The primary `bg-emerald-600` fill is the one light step (operator ruling 2026-10-04,
     ROK-1472): emerald-700 `#047857` (5.48:1 under the white label; emerald-600 was 3.77:1) and, on an
     element that also carries `hover:bg-emerald-500` / `hover:bg-emerald-700`, an emerald-800 `#065f46`
-    hover (7.68:1; the old emerald-500 hover was ~2.5:1) — `:837-843`, guarded by
+    hover (7.68:1; the old emerald-500 hover was ~2.5:1), and on one that carries an `active:bg-*` class an
+    emerald-900 `#064e3b` pressed fill (9.72:1, darker than rest and hover) — `:837-856`, guarded by
     `web/src/styles/primary-fill-light.guard.test.ts`. The `/10 /30 /50` alpha variants keep their own
     washes; quest-log's `!important` gold button wins over all of it. This is still why solid button fills
     were NOT tokenised by ROK-1586 (§2.2). A `Button brandColor` label is NOT forced white: it is white or
