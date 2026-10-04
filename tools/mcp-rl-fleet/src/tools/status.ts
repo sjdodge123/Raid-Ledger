@@ -3,7 +3,7 @@ import { runRl, parseJsonFromStdout } from '../exec.js';
 
 export const TOOL_NAME = 'rl_status';
 export const TOOL_DESCRIPTION =
-  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load (ROK-1568 adds the numeric host.disk_free_gb plus host.disk_pressure, the last gc-sweeper prune-ladder run), live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung. ROK-1568 adds the disk axis: an image build can also park on free DISK (task admission_state `waiting_disk`, then failure_reason `disk_pressure`) — compare host.disk_free_gb against RL_BUILD_MIN_FREE_GB (20 GB) and use rl_fleet_prune to reclaim.';
+  'Snapshot the rl-infra fleet: per-slot claim state (busy/free, agent_id, branch, heartbeat), active envs (slug, slot, ttl, last_touched), host RAM/disk/load (ROK-1568 adds the numeric host.disk_free_gb plus host.disk_pressure, the last gc-sweeper prune-ladder run), live per-runner CPU/memory, and the wait queue (agents queued for a slot, with depth and head). Use this to check whether your slot is still valid, see what envs are spun, gauge queue pressure before claiming, or diagnose resource pressure before spinning a new env. ROK-1470 adds the dynamic-memory admission counters: heavy_running, heavy_waiting, mem_available_mb and heavy_task_min_free_mb — check these when a heavy task (rl_validate_ci, an image build, a jest run) sits in `running` with no output: it is parked waiting for host memory, not hung. ROK-1568 adds the disk axis: an image build can also park on free DISK (task admission_state `waiting_disk`, then failure_reason `disk_pressure`) — compare host.disk_free_gb against RL_BUILD_MIN_FREE_GB (20 GB) and use rl_fleet_prune to reclaim. TDB:1904 adds settings_bundle: bundle.enc age, key count and whether it decrypts, so a stale or undecryptable settings bundle is visible without SSH (never key names or values).';
 
 // ROK-1338 PR-1 — runner sync-state fields.
 //
@@ -62,6 +62,28 @@ export interface BotIdentity {
   configured: boolean;
 }
 
+/**
+ * TDB:1904 — freshness of the VM's encrypted settings bundle
+ * (/srv/rl-infra/settings/bundle.enc), so a stale or undecryptable bundle is
+ * visible without SSH. The orchestrator decrypts it in memory only to count
+ * the keys: this NEVER carries key names or values. `present:false` (every
+ * other field null) means no bundle has been pushed yet. The whole field is
+ * null/absent on an orchestrator that predates the deploy.
+ */
+export interface SettingsBundleFreshness {
+  present: boolean;
+  /** ISO-8601 UTC mtime of bundle.enc; null when absent or unstat-able. */
+  mtime: string | null;
+  /** Age of bundle.enc in hours, one decimal. */
+  age_hours: number | null;
+  /** Number of settings keys; null unless it decrypted. */
+  key_count: number | null;
+  /** True when it decrypted to a JSON object; null when absent. */
+  decrypts: boolean | null;
+  /** Why it did not decrypt (unreadable, key unset, wrong key, not an object). */
+  warning: string | null;
+}
+
 export interface StatusResult {
   ok: boolean;
   generated_at?: string;
@@ -70,6 +92,8 @@ export interface StatusResult {
   // Optional + nullable: the operator's deploy script writes
   // /srv/rl-infra/.deployed_sha on every rsync; absent when not yet wired up.
   deployed_sha?: string | null;
+  /** TDB:1904 — bundle.enc freshness; see SettingsBundleFreshness. */
+  settings_bundle?: SettingsBundleFreshness | null;
   slots?: Array<{
     slot: number;
     claimed: boolean;
