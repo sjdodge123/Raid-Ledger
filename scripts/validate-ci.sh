@@ -742,10 +742,17 @@ run_shell_parse_check() {
 # ROK-1466: shared by BOTH consumers — the Discord smoke step and the render-rule
 # self-test in run_tools_tests. The self-test shipped without it and would have
 # died at import on the first fresh runner.
+#
+# After the install, build the contract when its entry is missing: test-bot
+# imports @raid-ledger/contract, whose main is dist/index.js, and a fresh
+# runner or worktree (or an --only-e2e run) never ran run_build.
 _ensure_test_bot_deps() {
-  bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" tools/test-bot && return 0
-  echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
-  (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
+  if ! bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" tools/test-bot; then
+    echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
+    (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
+  fi
+  [ -f "$REPO_ROOT/packages/contract/dist/index.js" ] \
+    || (cd "$REPO_ROOT" && npm run build -w packages/contract) || return 1
 }
 
 # ROK-1160: `scripts/*.spec.mjs` are plain node:test specs (the restore-drill
