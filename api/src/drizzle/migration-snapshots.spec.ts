@@ -15,6 +15,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { at } from '../common/testing/narrow';
 
 const META_DIR = path.join(__dirname, 'migrations', 'meta');
 
@@ -40,8 +41,8 @@ function readSnapshot(entry: JournalEntry): { id: string; prevId: string } {
 
 describe('drizzle migration HEAD snapshot (ROK-1364)', () => {
   const entries = readJournal();
-  const head = entries[entries.length - 1];
-  const prior = entries[entries.length - 2];
+  const head = at(entries, -1);
+  const prior = at(entries, -2);
 
   it('the latest journal entry has a committed snapshot', () => {
     expect(fs.existsSync(snapshotPath(head))).toBe(true);

@@ -2,6 +2,7 @@ import { Test } from '@nestjs/testing';
 import { OllamaProvider } from './ollama.provider';
 import { SettingsService } from '../../settings/settings.service';
 import * as helpers from './ollama.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 jest.mock('./ollama.helpers', () => ({
   ...jest.requireActual('./ollama.helpers'),
@@ -175,7 +176,7 @@ describe('OllamaProvider (adversarial)', () => {
           },
         ],
       });
-      const [model] = await provider.listModels();
+      const [model] = nonEmpty(await provider.listModels(), 'model');
       expect(model.capabilities).toEqual(['phi3']);
     });
 

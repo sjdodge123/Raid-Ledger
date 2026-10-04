@@ -27,6 +27,7 @@ import {
   createMainCharacter,
   MMO_SLOT_CONFIG,
 } from './signups.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -235,10 +236,13 @@ async function testNoGameEventOmitsClassEmoji() {
 
   // Path B — embed-sync buildEventData (the live re-render path from the report,
   // which applies the main-character class fallback).
-  const [eventRow] = await testApp.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId));
+  const [eventRow] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId)),
+    'eventRow',
+  );
   const channelResolver = testApp.app.get(ChannelResolverService);
   const syncData = await buildEventData(testApp.db, eventRow, channelResolver);
   const syncMention = syncData.signupMentions?.find(

@@ -22,6 +22,7 @@
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, relative } from 'path';
 import { EMBED_COLORS } from '../discord-bot.constants';
+import { defined } from '../../common/testing/narrow';
 
 const SRC_DIR = join(__dirname, '..', '..');
 const EMBEDS_DIR = __dirname;
@@ -486,7 +487,9 @@ function functionBody(source: string, name: string): string | null {
 
 /** `roots` plus every locally-declared function they transitively call. */
 function callClosure(source: string, roots: string[]): Map<string, string> {
-  const local = [...source.matchAll(/function\s+(\w+)\s*\(/g)].map((m) => m[1]);
+  const local = [...source.matchAll(/function\s+(\w+)\s*\(/g)].map((m) =>
+    defined(m[1], 'function name'),
+  );
   const found = new Map<string, string>();
   const queue = [...roots];
   while (queue.length > 0) {

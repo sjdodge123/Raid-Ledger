@@ -180,8 +180,8 @@ describe('IgdbService.searchLocalGames — relevance ranking (ROK-1084)', () => 
     // (events tree, lineup tree) pick the correct gameId. With no
     // sortByRelevance applied, this assertion fails — DB returns
     // "Wrath of the Lich King" at index 0.
-    expect(result.games[0].name).toBe('World of Warcraft');
-    expect(result.games[0].id).toBe(13);
+    expect(result.games[0]?.name).toBe('World of Warcraft');
+    expect(result.games[0]?.id).toBe(13);
   });
 
   it('orders sibling rows by relevance, not insertion order', async () => {

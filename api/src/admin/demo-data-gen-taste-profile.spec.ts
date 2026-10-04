@@ -8,6 +8,7 @@ import {
   type TasteIntensityTier,
 } from './demo-data-gen-taste-profile';
 import { createRng } from './demo-data-rng';
+import { at } from '../common/testing/narrow';
 
 const ALL_TIERS: TasteIntensityTier[] = [
   'Hardcore',
@@ -69,7 +70,7 @@ describe('demo-data-gen-taste-profile (ROK-1083) - generateGameActivityRollups',
     const rng = createRng(11);
     const profiles = generateSignalProfiles(rng, ['only_user']);
     const rollups = generateGameActivityRollups(profiles, NOW);
-    const profile = profiles[0];
+    const profile = at(profiles, 0);
     const weekRows = rollups.filter((r) => r.period === 'week');
     const dayRows = rollups.filter((r) => r.period === 'day');
     expect(weekRows).toHaveLength(profile.favouriteIgdbIds.length);
@@ -83,7 +84,7 @@ describe('demo-data-gen-taste-profile (ROK-1083) - generateGameActivityRollups',
   it('weekly totals match the generated user weeklyHours (within rounding)', () => {
     const rng = createRng(55);
     const profiles = generateSignalProfiles(rng, ['rounding_user']);
-    const profile = profiles[0];
+    const profile = at(profiles, 0);
     const rollups = generateGameActivityRollups(profiles, NOW);
     const weekSeconds = rollups
       .filter((r) => r.period === 'week')
@@ -196,7 +197,7 @@ describe('demo-data-gen-taste-profile (ROK-1083) - generatePlayhistoryInterests'
   it('scales playtimeForever by the tier lifetimeMultiplier', () => {
     const rng = createRng(23);
     const profiles = generateSignalProfiles(rng, ['tier_user']);
-    const profile = profiles[0];
+    const profile = at(profiles, 0);
     const interests = generatePlayhistoryInterests(rng, profiles);
     const weeklyMinutes = profile.weeklyHours * 60;
     const expected = Math.round(

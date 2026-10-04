@@ -181,8 +181,8 @@ describe('findDuplicateGroupsByNormalizedName', () => {
       mockDb as never,
     );
     expect(groups).toHaveLength(1);
-    expect(groups[0].normalizedName).toBe('slay the spire 2');
-    expect(groups[0].rows.map((r) => r.id).sort()).toEqual([1, 2]);
+    expect(groups[0]?.normalizedName).toBe('slay the spire 2');
+    expect(groups[0]?.rows.map((r) => r.id).sort()).toEqual([1, 2]);
     expect(skipped).toEqual([]);
   });
 
@@ -207,7 +207,7 @@ describe('findDuplicateGroupsByNormalizedName', () => {
     );
     expect(groups).toEqual([]);
     expect(skipped).toHaveLength(1);
-    expect(skipped[0].rows.map((r) => r.id).sort()).toEqual([1, 2]);
+    expect(skipped[0]?.rows.map((r) => r.id).sort()).toEqual([1, 2]);
   });
 
   it('keeps groups with one igdbId + nulls (manual/ITAD-only entries)', async () => {

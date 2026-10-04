@@ -74,9 +74,15 @@ export async function nominateGame(
   });
 }
 
-/** Fetch the lightweight banner data for the Games page hero. */
-export async function getLineupBanner(): Promise<LineupBannerResponseDto | null> {
-  return fetchApi('/lineups/banner');
+/**
+ * Fetch the lightweight banner data for the Games page hero. `scope` pins it
+ * to one lineup — a test seam the API honours only in DEMO_MODE.
+ */
+export async function getLineupBanner(
+  scope?: number,
+): Promise<LineupBannerResponseDto | null> {
+  if (scope === undefined) return fetchApi('/lineups/banner');
+  return fetchApi(`/lineups/banner?lineupId=${scope}`);
 }
 
 /** Fetch full lineup detail by ID. */

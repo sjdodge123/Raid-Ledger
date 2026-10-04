@@ -18,6 +18,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { AdHocNotificationService } from './services/ad-hoc-notification.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -46,16 +47,19 @@ async function ensureToken(): Promise<string> {
 /** Create an ad-hoc event directly in DB (system-created). */
 async function createAdHocEvent(title = 'Test Quick Play') {
   const now = new Date();
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId: testApp.seed.adminUser.id,
-      duration: [now, new Date(now.getTime() + 3600000)],
-      isAdHoc: true,
-      adHocStatus: 'live',
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId: testApp.seed.adminUser.id,
+        duration: [now, new Date(now.getTime() + 3600000)],
+        isAdHoc: true,
+        adHocStatus: 'live',
+      })
+      .returning(),
+    'ad-hoc event',
+  );
   return event;
 }
 
@@ -65,42 +69,51 @@ describe('Ad-Hoc Events — field persistence', () => {
   it('should persist isAdHoc, adHocStatus, and channelBindingId on events', async () => {
     const db = testApp.db;
 
-    const [binding] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: '111222333444',
-        channelId: '555666777888',
-        channelType: 'voice',
-        bindingPurpose: 'game-voice-monitor',
-        gameId: testApp.seed.game.id,
-        config: { gracePeriod: 5, minPlayers: 2 },
-      })
-      .returning();
+    const [binding] = nonEmpty(
+      await db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: '111222333444',
+          channelId: '555666777888',
+          channelType: 'voice',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: testApp.seed.game.id,
+          config: { gracePeriod: 5, minPlayers: 2 },
+        })
+        .returning(),
+      'binding',
+    );
 
     const now = new Date();
     const endTime = new Date(now.getTime() + 4 * 60 * 60 * 1000);
-    const [event] = await db
-      .insert(schema.events)
-      .values({
-        title: 'Test Game — Quick Play',
-        creatorId: testApp.seed.adminUser.id,
-        duration: [now, endTime],
-        isAdHoc: true,
-        adHocStatus: 'live',
-        channelBindingId: binding.id,
-        gameId: testApp.seed.game.id,
-      })
-      .returning();
+    const [event] = nonEmpty(
+      await db
+        .insert(schema.events)
+        .values({
+          title: 'Test Game — Quick Play',
+          creatorId: testApp.seed.adminUser.id,
+          duration: [now, endTime],
+          isAdHoc: true,
+          adHocStatus: 'live',
+          channelBindingId: binding.id,
+          gameId: testApp.seed.game.id,
+        })
+        .returning(),
+      'event',
+    );
 
     expect(event.isAdHoc).toBe(true);
     expect(event.adHocStatus).toBe('live');
     expect(event.channelBindingId).toBe(binding.id);
 
-    const [readBack] = await db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, event.id))
-      .limit(1);
+    const [readBack] = nonEmpty(
+      await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id))
+        .limit(1),
+      'readBack',
+    );
 
     expect(readBack.isAdHoc).toBe(true);
     expect(readBack.adHocStatus).toBe('live');
@@ -133,11 +146,14 @@ describe('Ad-Hoc Events — field persistence', () => {
       .set({ adHocStatus: 'ended' })
       .where(eq(schema.events.id, event.id));
 
-    const [updated] = await db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, event.id))
-      .limit(1);
+    const [updated] = nonEmpty(
+      await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id))
+        .limit(1),
+      'updated',
+    );
 
     expect(updated.adHocStatus).toBe('ended');
     expect(updated.isAdHoc).toBe(true);
@@ -158,18 +174,21 @@ describe('Ad-Hoc Events — participant insert', () => {
     const db = testApp.db;
     const now = new Date();
 
-    const [participant] = await db
-      .insert(schema.adHocParticipants)
-      .values({
-        eventId: adHocEventId,
-        userId: testApp.seed.adminUser.id,
-        discordUserId: '123456789',
-        discordUsername: 'TestPlayer',
-        discordAvatarHash: 'abc123hash',
-        joinedAt: now,
-        sessionCount: 1,
-      })
-      .returning();
+    const [participant] = nonEmpty(
+      await db
+        .insert(schema.adHocParticipants)
+        .values({
+          eventId: adHocEventId,
+          userId: testApp.seed.adminUser.id,
+          discordUserId: '123456789',
+          discordUsername: 'TestPlayer',
+          discordAvatarHash: 'abc123hash',
+          joinedAt: now,
+          sessionCount: 1,
+        })
+        .returning(),
+      'participant',
+    );
 
     expect(participant.eventId).toBe(adHocEventId);
     expect(participant.userId).toBe(testApp.seed.adminUser.id);
@@ -204,17 +223,20 @@ describe('Ad-Hoc Events — participant insert', () => {
   it('should track anonymous participants (no userId)', async () => {
     const db = testApp.db;
 
-    const [participant] = await db
-      .insert(schema.adHocParticipants)
-      .values({
-        eventId: adHocEventId,
-        userId: null,
-        discordUserId: '999888777',
-        discordUsername: 'UnlinkedPlayer',
-        discordAvatarHash: null,
-        sessionCount: 1,
-      })
-      .returning();
+    const [participant] = nonEmpty(
+      await db
+        .insert(schema.adHocParticipants)
+        .values({
+          eventId: adHocEventId,
+          userId: null,
+          discordUserId: '999888777',
+          discordUsername: 'UnlinkedPlayer',
+          discordAvatarHash: null,
+          sessionCount: 1,
+        })
+        .returning(),
+      'participant',
+    );
 
     expect(participant.userId).toBeNull();
     expect(participant.discordUserId).toBe('999888777');
@@ -274,16 +296,19 @@ describe('Ad-Hoc Events — participant upsert and rejoin', () => {
         },
       });
 
-    const [row] = await db
-      .select()
-      .from(schema.adHocParticipants)
-      .where(
-        and(
-          eq(schema.adHocParticipants.eventId, adHocEventId),
-          eq(schema.adHocParticipants.discordUserId, '123456789'),
-        ),
-      )
-      .limit(1);
+    const [row] = nonEmpty(
+      await db
+        .select()
+        .from(schema.adHocParticipants)
+        .where(
+          and(
+            eq(schema.adHocParticipants.eventId, adHocEventId),
+            eq(schema.adHocParticipants.discordUserId, '123456789'),
+          ),
+        )
+        .limit(1),
+      'participant row',
+    );
 
     expect(row.sessionCount).toBe(2);
     expect(row.leftAt).toBeNull();
@@ -458,41 +483,49 @@ describe('Ad-Hoc Events — FK cascade', () => {
     const db = testApp.db;
     const now = new Date();
 
-    const [binding] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: '111222333444',
-        channelId: '999888777666',
-        channelType: 'voice',
-        bindingPurpose: 'game-voice-monitor',
-        gameId: null,
-        config: {},
-      })
-      .returning();
+    const [binding] = nonEmpty(
+      await db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: '111222333444',
+          channelId: '999888777666',
+          channelType: 'voice',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: null,
+          config: {},
+        })
+        .returning(),
+      'binding',
+    );
 
-    const [event] = await db
-      .insert(schema.events)
-      .values({
-        title: 'Orphaned Ad-Hoc',
-        creatorId: testApp.seed.adminUser.id,
-        duration: [now, new Date(now.getTime() + 3600000)],
-        isAdHoc: true,
-        adHocStatus: 'ended',
-        channelBindingId: binding.id,
-      })
-      .returning();
+    const [event] = nonEmpty(
+      await db
+        .insert(schema.events)
+        .values({
+          title: 'Orphaned Ad-Hoc',
+          creatorId: testApp.seed.adminUser.id,
+          duration: [now, new Date(now.getTime() + 3600000)],
+          isAdHoc: true,
+          adHocStatus: 'ended',
+          channelBindingId: binding.id,
+        })
+        .returning(),
+      'event',
+    );
 
     await db
       .delete(schema.channelBindings)
       .where(eq(schema.channelBindings.id, binding.id));
 
-    const [updated] = await db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, event.id))
-      .limit(1);
+    const [updated] = nonEmpty(
+      await db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id))
+        .limit(1),
+      'updated event',
+    );
 
-    expect(updated).toBeDefined();
     expect(updated.channelBindingId).toBeNull();
     expect(updated.isAdHoc).toBe(true);
   });
@@ -590,35 +623,41 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
     // (`extractConfigChannel` in ad-hoc-notification.helpers.ts); the drizzle
     // schema's config type is narrower than runtime — cast to satisfy the
     // insert overload without changing column semantics.
-    const [binding] = await db
-      .insert(schema.channelBindings)
-      .values({
-        guildId: 'guild-1243',
-        channelId: 'voice-1243',
-        channelType: 'voice',
-        bindingPurpose: 'game-voice-monitor',
-        gameId: testApp.seed.game.id,
-        config: { notificationChannelId: 'text-1243' } as unknown as {
-          minPlayers?: number;
-          autoClose?: boolean;
-          gracePeriod?: number;
-        },
-      })
-      .returning();
+    const [binding] = nonEmpty(
+      await db
+        .insert(schema.channelBindings)
+        .values({
+          guildId: 'guild-1243',
+          channelId: 'voice-1243',
+          channelType: 'voice',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: testApp.seed.game.id,
+          config: { notificationChannelId: 'text-1243' } as unknown as {
+            minPlayers?: number;
+            autoClose?: boolean;
+            gracePeriod?: number;
+          },
+        })
+        .returning(),
+      'binding',
+    );
 
     const now = new Date();
-    const [event] = await db
-      .insert(schema.events)
-      .values({
-        title: 'Quick Play — ROK-1243',
-        creatorId: testApp.seed.adminUser.id,
-        duration: [now, new Date(now.getTime() + 3600_000)],
-        gameId: testApp.seed.game.id,
-        isAdHoc: true,
-        adHocStatus: 'live',
-        channelBindingId: binding.id,
-      })
-      .returning();
+    const [event] = nonEmpty(
+      await db
+        .insert(schema.events)
+        .values({
+          title: 'Quick Play — ROK-1243',
+          creatorId: testApp.seed.adminUser.id,
+          duration: [now, new Date(now.getTime() + 3600_000)],
+          gameId: testApp.seed.game.id,
+          isAdHoc: true,
+          adHocStatus: 'live',
+          channelBindingId: binding.id,
+        })
+        .returning(),
+      'event',
+    );
 
     try {
       // Three participants ever joined; spawn embed posts with the first.
@@ -690,7 +729,7 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
       );
 
       expect(editSpy).toHaveBeenCalledTimes(1);
-      const editArgs = editSpy.mock.calls[0];
+      const editArgs = at(editSpy.mock.calls, 0);
       // editEmbed(channelId, messageId, embed, row?, content?)
       const embed = editArgs[2] as { data?: { description?: string } };
       const description = embed.data?.description ?? '';

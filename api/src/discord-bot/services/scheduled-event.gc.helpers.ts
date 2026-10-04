@@ -4,6 +4,7 @@ import {
   findLiveRLEventsForDedup,
   type LiveRLEventMatch,
 } from './scheduled-event.db-helpers';
+import { parseEventTimestampUtc } from './scheduled-event.revalidate';
 
 /**
  * Minimal shape of a Discord guild scheduled event used by GC's
@@ -65,7 +66,7 @@ export function findExistingGuildSE(
   name: string,
   startIso: string,
 ): GuildSEShape | null {
-  const startMs = new Date(startIso).getTime();
+  const startMs = parseEventTimestampUtc(startIso).getTime();
   if (Number.isNaN(startMs)) return null;
   const wantKey = seMatchKey(name, startMs);
   for (const se of guildSEs) {
@@ -96,7 +97,7 @@ function indexLiveEvents(
 ): Map<string, LiveEventIndexEntry> {
   const index = new Map<string, LiveEventIndexEntry>();
   for (const row of rows) {
-    const startMs = new Date(row.startIso).getTime();
+    const startMs = parseEventTimestampUtc(row.startIso).getTime();
     if (Number.isNaN(startMs)) continue;
     const key = seMatchKey(row.title, startMs);
     if (index.has(key)) {

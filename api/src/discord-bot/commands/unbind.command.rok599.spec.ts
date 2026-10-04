@@ -3,6 +3,7 @@
  * Covers the handleEventUnbind path: event lookup, permission checks,
  * clearing the override, emitting event.updated, and autocomplete.
  */
+import { at } from '../../common/testing/narrow';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { UnbindCommand } from './unbind.command';
@@ -287,9 +288,10 @@ describe('UnbindCommand ROK-599 — no override present', () => {
       .mockReturnValueOnce(makeSelectChain([mockCreatorUser]));
     const interaction = mockEventUnbindInteraction();
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const replyArg = (
-      interaction.editReply.mock.calls as unknown[][]
-    )[0][0] as string;
+    const replyArg = at(
+      interaction.editReply.mock.calls as unknown[][],
+      0,
+    )[0] as string;
     expect(replyArg).toContain('Raid Night');
   });
 });
@@ -390,26 +392,28 @@ describe('UnbindCommand ROK-599 — clearing the override', () => {
     setupClearOverrideMocks();
     const interaction = mockEventUnbindInteraction();
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const replyArg = (
-      interaction.editReply.mock.calls as unknown[][]
-    )[0][0] as {
+    const replyArg = at(
+      interaction.editReply.mock.calls as unknown[][],
+      0,
+    )[0] as {
       embeds: { data: { title?: string } }[];
     };
-    expect(replyArg.embeds[0].data.title).toBe('Raid Night');
+    expect(replyArg.embeds[0]?.data.title).toBe('Raid Night');
   });
 
   it('mentions fallback to default channel', async () => {
     setupClearOverrideMocks();
     const interaction = mockEventUnbindInteraction();
     await command.handleInteraction(interaction as unknown as HandleParam);
-    const replyArg = (
-      interaction.editReply.mock.calls as unknown[][]
-    )[0][0] as {
+    const replyArg = at(
+      interaction.editReply.mock.calls as unknown[][],
+      0,
+    )[0] as {
       embeds: { data: { description: string } }[];
     };
-    expect((replyArg.embeds[0].data.description ?? '').toLowerCase()).toContain(
-      'default',
-    );
+    expect(
+      (replyArg.embeds[0]?.data.description ?? '').toLowerCase(),
+    ).toContain('default');
   });
 });
 
@@ -568,9 +572,10 @@ describe('UnbindCommand ROK-599 — autocomplete', () => {
     await command.handleAutocomplete(
       interaction as unknown as AutocompleteParam,
     );
-    const respondArg = (
-      interaction.respond.mock.calls as unknown[][]
-    )[0][0] as unknown[];
+    const respondArg = at(
+      interaction.respond.mock.calls as unknown[][],
+      0,
+    )[0] as unknown[];
     expect(respondArg).toHaveLength(2);
   });
 

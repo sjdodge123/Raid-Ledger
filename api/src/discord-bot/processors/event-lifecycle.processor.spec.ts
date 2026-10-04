@@ -116,7 +116,7 @@ describe('EventLifecycleProcessor — happy path', () => {
   let scheduledEventService: jest.Mocked<ScheduledEventService>;
   let embedPoster: jest.Mocked<EmbedPosterService>;
   let gameAffinityService: jest.Mocked<GameAffinityNotificationService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'select', jest.Mock>;
 
   beforeEach(async () => {
     mockDb = {

@@ -136,7 +136,10 @@ function makeSelectChain(overrides: {
 
 function describeLineupsService() {
   let service: LineupsService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<
+    'execute' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  >;
 
   function setupMockDb() {
     mockDb = {
@@ -332,9 +335,9 @@ function describeLineupsService() {
       const result = await service.findActive();
 
       expect(Array.isArray(result)).toBe(true);
-      expect(result[0].id).toBe(1);
-      expect(result[0].status).toBe('building');
-      expect(result[0].visibility).toBe('public');
+      expect(result[0]?.id).toBe(1);
+      expect(result[0]?.status).toBe('building');
+      expect(result[0]?.visibility).toBe('public');
     });
 
     it('returns an empty array when no lineups are active', async () => {
