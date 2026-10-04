@@ -98,23 +98,8 @@ import { withLfgSurface } from '../lfg-surface-lock.js';
 // ROK-1522: the scan windows (and why they are disjoint) live in one place.
 import { boardCandidates } from '../lfg-smoke-scope.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { BOARD_TAGS } from '../lfg-board-tags.js';
 
-/**
- * `LFG_BOARD_TAGS` — the forum's lifecycle tags, verbatim. A hand-copied
- * literal (the companion bot does not depend on the api workspace), so it goes
- * stale when a tag is appended: ROK-1494's `PLAYING NOW` was missing until
- * ROK-1505 appended it together with its own `LOOKING`. Drift now fails loudly
- * in both directions on a freshly created forum (`assertForumTags`).
- */
-const BOARD_TAGS = [
-  'NEEDS PLAYERS',
-  'READY TO SCHEDULE',
-  'SCHEDULED',
-  'EXPIRED',
-  'CLOSED',
-  'PLAYING NOW',
-  'LOOKING',
-];
 /**
  * `LFG_BOARD_TOPIC_SENTINEL`, mirrored from
  * `api/src/discord-bot/lfg-board/lfg-board-permissions.helpers.ts`. U+00B7
