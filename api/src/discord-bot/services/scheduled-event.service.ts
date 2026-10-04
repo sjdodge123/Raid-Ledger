@@ -61,8 +61,12 @@ export class ScheduledEventService {
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
-    @Optional() private readonly eventCache: ActiveEventCacheService | null,
-    @Optional() private readonly embedSyncQueue: EmbedSyncQueueService | null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(EmbedSyncQueueService)
+    private readonly embedSyncQueue: EmbedSyncQueueService | null,
   ) {}
 
   /** Cron: auto-start Discord Scheduled Events whose start time has passed. */

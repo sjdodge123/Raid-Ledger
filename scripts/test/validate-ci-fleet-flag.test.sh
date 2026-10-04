@@ -78,23 +78,26 @@ assert_absent() {
     else pass; fi
 }
 
+# The output helpers feed grep from a here-string, never `printf | grep -q`:
+# grep -q exits on its first match, so on a large output printf hits EPIPE and
+# pipefail turns a MATCH into a miss. A here-string cannot EPIPE.
 assert_out_matches() {
     local pattern="$1" label="$2"
-    if printf '%s' "$INVOKE_OUT" | grep -E -q -e "$pattern"; then pass; else
+    if grep -E -q -e "$pattern" <<<"$INVOKE_OUT"; then pass; else
         fail "$label: output did not match '$pattern'"
     fi
 }
 
 assert_out_absent() {
     local pattern="$1" label="$2"
-    if printf '%s' "$INVOKE_OUT" | grep -E -q -e "$pattern"; then
+    if grep -E -q -e "$pattern" <<<"$INVOKE_OUT"; then
         fail "$label: output must NOT match '$pattern'"
     else pass; fi
 }
 
 assert_err_matches() {
     local pattern="$1" label="$2"
-    if printf '%s' "$INVOKE_ERR" | grep -E -q -e "$pattern"; then pass; else
+    if grep -E -q -e "$pattern" <<<"$INVOKE_ERR"; then pass; else
         fail "$label: expected '$pattern' on STDERR, got: $(printf '%s' "$INVOKE_ERR" | tr '\n' '|')"
     fi
 }
@@ -128,6 +131,9 @@ EOF
 [[ -n "${STUB_NPX_ARGV_FILE:-}" ]] && \
   echo "NODE_OPTIONS=${NODE_OPTIONS:-} BASE_URL=${BASE_URL:-} PLAYWRIGHT_BASE_URL=${PLAYWRIGHT_BASE_URL:-} API_URL=${API_URL:-} PLAYWRIGHT_AUTH_DIR=${PLAYWRIGHT_AUTH_DIR:-} $*" \
   >>"$STUB_NPX_ARGV_FILE"
+if [[ -n "${STUB_NPX_PLAYWRIGHT_RC:-}" && "$*" == *"playwright test"* ]]; then
+  exit "$STUB_NPX_PLAYWRIGHT_RC"
+fi
 exit 0
 EOF
     cat >"$stub_dir/curl" <<'EOF'
@@ -238,6 +244,25 @@ invoke() {
     INVOKE_OUT="${INVOKE_OUT}
 ${INVOKE_ERR}"
 }
+
+# ===== Harness self-check =====
+# The output helpers must give the same verdict whatever the output size. A
+# `printf | grep -q` pipe under pipefail once turned a match into a miss: grep
+# exits on its first match, printf gets EPIPE, and the pipeline reports
+# failure. Each helper runs in a subshell that echoes its pass count back, so
+# its verdict is read without touching this file's own counts.
+CURRENT_TEST_NAME="harness: an early match in a 1 MiB output is still a match"
+INVOKE_OUT="needle-line"$'\n'"$(head -c 1048576 /dev/zero | tr '\0' x)"
+INVOKE_ERR="$INVOKE_OUT"
+for check in assert_out_matches:pass assert_out_absent:fail assert_err_matches:pass; do
+    after=$("${check%%:*}" '^needle-line$' self-check >/dev/null; echo "$TEST_PASS_COUNT")
+    if [ "$after" -gt "$TEST_PASS_COUNT" ]; then verdict=pass; else verdict=fail; fi
+    if [ "$verdict" = "${check#*:}" ]; then pass; else
+        fail "${check%%:*} on a 1 MiB output: expected ${check#*:}, got $verdict"
+    fi
+done
+INVOKE_OUT=""
+INVOKE_ERR=""
 
 # ===== Structural =====
 
@@ -382,6 +407,60 @@ assert_out_matches 'Migration validation' "Migration row"
 assert_out_matches 'Container startup' "Container row"
 assert_out_matches 'Playwright \(desktop \+ mobile\)' "Playwright row"
 assert_out_matches 'Discord smoke \(companion bot\)' "Discord row"
+
+# TDB:1455 — E2E_SCOPE=none was overridden by --fleet's IMPLIED e2e_mode=on, and
+# a Playwright FAIL aborted the gate before the Discord smoke row could report.
+# The Discord row reads SKIPPED without companion-bot creds and PASS (stubbed
+# npx) with them, so these cases assert that it EXISTS, not its value.
+CURRENT_TEST_NAME="TDB:1455: --fleet honours E2E_SCOPE=none"
+export E2E_SCOPE=none
+invoke remote "$ENV_URL" --fleet
+unset E2E_SCOPE
+assert_rc 0 "--fleet with E2E_SCOPE=none"
+assert_absent 'playwright test' "$npx_argv_file" "E2E_SCOPE=none must skip Playwright under --fleet's implied e2e"
+assert_out_matches 'Playwright \(desktop \+ mobile\).*SKIPPED' "the Playwright row must read SKIPPED"
+assert_out_matches 'skipping Playwright under --fleet' "the skip message must name --fleet"
+assert_out_matches 'Discord smoke \(companion bot\)' "the Discord row must still be present"
+
+CURRENT_TEST_NAME="TDB:1455: an explicit --with-e2e still overrides E2E_SCOPE=none under --fleet"
+export E2E_SCOPE=none
+invoke remote "$ENV_URL" --fleet --with-e2e
+unset E2E_SCOPE
+assert_rc 0 "--fleet --with-e2e with E2E_SCOPE=none"
+assert_grep 'playwright test' "$npx_argv_file" "--with-e2e must override E2E_SCOPE=none"
+assert_out_matches 'overridden by --with-e2e' "the override must be announced"
+
+CURRENT_TEST_NAME="TDB:1455: a later --no-e2e cancels an earlier --with-e2e's E2E_SCOPE override"
+export E2E_SCOPE=none
+invoke remote "$ENV_URL" --fleet --with-e2e --no-e2e
+unset E2E_SCOPE
+assert_rc 0 "--fleet --with-e2e --no-e2e with E2E_SCOPE=none"
+assert_absent 'playwright test' "$npx_argv_file" "the later --no-e2e must win"
+assert_out_absent 'overridden by --with-e2e' "a cancelled --with-e2e must not announce an override"
+
+CURRENT_TEST_NAME="TDB:1455: a Playwright FAIL still lets the Discord smoke row report, and fails the gate"
+export STUB_NPX_PLAYWRIGHT_RC=1
+invoke remote "$ENV_URL" --fleet
+unset STUB_NPX_PLAYWRIGHT_RC
+assert_rc 1 "--fleet with a failing Playwright run"
+assert_grep 'playwright test' "$npx_argv_file" "Playwright must have run"
+assert_out_matches 'Playwright \(desktop \+ mobile.*FAIL' "the Playwright row must read FAIL"
+assert_out_matches 'Discord smoke \(companion bot\)' "the Discord row must still be present after a Playwright FAIL"
+# The closing line must repeat the Discord row's RECORDED result: the old
+# "(Discord smoke still ran)" read as a Discord PASS even when it was SKIPPED.
+discord_row=$(printf '%s' "$INVOKE_OUT" | sed $'s/\033\\[[0-9;]*m//g' \
+    | grep -E '^Discord smoke \(companion bot\) +(PASS|FAIL|SKIPPED)$' | awk '{print $NF}' | tail -1)
+assert_out_matches "Playwright FAILED \\(Discord smoke row: ${discord_row:-<no summary row>}\\)" \
+    "the deferred failure must name the Discord row's recorded result"
+assert_out_absent 'All checks passed' "a FAIL row must never end in 'All checks passed!'"
+
+CURRENT_TEST_NAME="TDB:1455: --only-e2e honours E2E_SCOPE=none and still reports Discord smoke"
+export E2E_SCOPE=none
+invoke remote "$ENV_URL" --only-e2e
+unset E2E_SCOPE
+assert_rc 0 "--only-e2e with E2E_SCOPE=none"
+assert_absent 'playwright test' "$npx_argv_file" "--only-e2e must honour E2E_SCOPE=none"
+assert_out_matches 'Discord smoke \(companion bot\)' "the Discord row must be present"
 
 # ROK-1154 review: the node stub used to exit 0 unconditionally, so nothing
 # proved an overrun fails the gate. The checker exits 1 on an overrun; the gate

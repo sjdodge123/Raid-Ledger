@@ -15,6 +15,7 @@ import { test, expect } from './base';
 import { devices, type Locator, type Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
 import { dismissGameTimeCheck, isMobile, isPhoneLayout } from './helpers';
+import { at, defined } from './defined';
 import {
     getAdminToken,
     getInviteeFixture,
@@ -677,7 +678,7 @@ function pickTargetCell(): {
     }
     const nextWeek = new Date(thisWeek);
     nextWeek.setUTCDate(nextWeek.getUTCDate() + 7);
-    const cell = TEMPLATED_GRID_CELLS[0];
+    const cell = at(TEMPLATED_GRID_CELLS, 0);
     return {
         cell,
         start: gridCellInstant(nextWeek, cell),
@@ -729,11 +730,12 @@ async function showPhoneDay(
     page: import('@playwright/test').Page,
     day: number,
 ): Promise<void> {
+    const dayName = defined(FULL_DAY_NAMES[day], `day name ${day}`);
     await page.getByTestId(`phone-week-strip-day-${day}`).click();
     await expect(
         page.getByTestId('phone-day-title'),
-        `phone pager should show ${FULL_DAY_NAMES[day]} after tapping its week-strip column`,
-    ).toHaveText(FULL_DAY_NAMES[day], { timeout: 15_000 });
+        `phone pager should show ${dayName} after tapping its week-strip column`,
+    ).toHaveText(dayName, { timeout: 15_000 });
 }
 
 /**

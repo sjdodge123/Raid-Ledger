@@ -49,7 +49,9 @@ export class EventReminderService {
     @Optional()
     @Inject(VoiceAttendanceService)
     private readonly voiceAttendance: VoiceAttendanceService | null,
-    @Optional() private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   @Cron('20 */1 * * * *', { name: 'EventReminderService_handleReminders' })

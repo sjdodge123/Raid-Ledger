@@ -25,6 +25,7 @@ import {
     pollForCondition,
     claimBannerOwnership,
 } from './api-helpers';
+import { at } from './defined';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -62,7 +63,10 @@ async function fetchGames(token: string, count: number): Promise<Game[]> {
 /** Two games, one vote each, closed by the deadline job → tie hold armed. */
 async function buildDeadlineTie(): Promise<void> {
     const invitee = await getInviteeFixture();
-    const [a, b, c] = await fetchGames(adminToken, 3);
+    const games = await fetchGames(adminToken, 3);
+    const a = at(games, 0);
+    const b = at(games, 1);
+    const c = at(games, 2);
     const { id } = await createLineupOrRetry(
         adminToken,
         {
@@ -158,17 +162,19 @@ test.describe('Tie readiness card (ROK-1374)', () => {
         const card = page.getByRole('region', { name: 'Tie readiness' });
         await expect(card).toBeVisible({ timeout: 15_000 });
 
-        await card.getByRole('button', { name: `Pick ${tied[0].name}`, exact: true }).click();
+        const firstTied = at(tied, 0);
+        const secondTied = at(tied, 1);
+        await card.getByRole('button', { name: `Pick ${firstTied.name}`, exact: true }).click();
         await expect(
-            card.getByText(new RegExp(`picked ${escapeRe(tied[0].name)} · locks in \\d+s`)),
+            card.getByText(new RegExp(`picked ${escapeRe(firstTied.name)} · locks in \\d+s`)),
         ).toBeVisible({ timeout: 10_000 });
-        await expect(card.getByRole('button', { name: `Pick ${tied[1].name}`, exact: true })).toHaveCount(0);
+        await expect(card.getByRole('button', { name: `Pick ${secondTied.name}`, exact: true })).toHaveCount(0);
 
         await card.getByRole('button', { name: 'Undo' }).click();
-        await expect(card.getByRole('button', { name: `Pick ${tied[0].name}`, exact: true })).toBeVisible({
+        await expect(card.getByRole('button', { name: `Pick ${firstTied.name}`, exact: true })).toBeVisible({
             timeout: 10_000,
         });
-        await expect(card.getByRole('button', { name: `Pick ${tied[1].name}`, exact: true })).toBeVisible();
+        await expect(card.getByRole('button', { name: `Pick ${secondTied.name}`, exact: true })).toBeVisible();
     });
 
     test('the game-detail banner names the tie instead of the plain vote banner (AC13)', async ({ page }) => {
@@ -193,7 +199,9 @@ test.describe('Tie readiness card (ROK-1374)', () => {
                 },
                 { existing: lineupId, attempts: 2 },
             );
-            await page.goto(`/games/${tied[0].id}`);
+            // Read after the claim: a re-claim rebuilds the tie and reassigns `tied`.
+            const firstTied = at(tied, 0);
+            await page.goto(`/games/${firstTied.id}`);
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i, {
                 timeout: 10_000,
             });

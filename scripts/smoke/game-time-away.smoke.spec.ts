@@ -18,6 +18,7 @@
 import type { Locator, Page } from '@playwright/test';
 import { test, expect } from './base';
 import { isPhoneLayout } from './helpers';
+import { at } from './defined';
 import { apiDelete, apiGet, apiPost, getAdminToken } from './api-helpers';
 
 interface AbsenceRow { id: number; startDate: string; endDate: string; reason: string | null }
@@ -252,7 +253,7 @@ test.describe('Game Time away panel (phone layout, ROK-1585 AC5)', () => {
 
     test('light scheme: the swap still covers the week and keeps "Add absence" on screen', async ({ page }) => {
         test.skip(!isPhoneLayout(test.info()), 'Phone-layout — desktop gets the D1 card');
-        await page.setViewportSize(PHONE_VIEWPORTS[0]);
+        await page.setViewportSize(at(PHONE_VIEWPORTS, 0));
         await openPhoneGameTime(page);
         // Precedent: events.smoke.spec.ts — the attribute `default-light` sets.
         await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'light'));
