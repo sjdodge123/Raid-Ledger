@@ -100,9 +100,20 @@ assert_version "v1.1.0 + minor -> 1.2.0" "1.2.0"
 run_next "$R" major
 assert_version "v1.1.0 + major -> 2.0.0" "2.0.0"
 
-# --- 2. stdout is exactly the version: one line, no leading v ----------------
+# A non-zero patch must reset on minor, and minor + patch must reset on major.
+R="$(new_repo reset)"
+atag "$R" v1.2.3
 run_next "$R" patch
-if [[ "$OUT" == "1.1.1" && "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" == 1 && -z "$ERR" ]]; then
+assert_version "v1.2.3 + patch -> 1.2.4" "1.2.4"
+run_next "$R" minor
+assert_version "v1.2.3 + minor resets patch -> 1.3.0" "1.3.0"
+run_next "$R" major
+assert_version "v1.2.3 + major resets minor and patch -> 2.0.0" "2.0.0"
+
+# --- 2. stdout is exactly the version: one line, no leading v ----------------
+R="$TMPROOT/basic"
+run_next "$R" patch
+if [[ "$OUT" == "1.1.1" && -z "$ERR" ]]; then
     ok "stdout is exactly '1.1.1' with nothing on stderr"
 else
     bad "stdout is exactly the version (stdout '$OUT', stderr '$ERR')"
