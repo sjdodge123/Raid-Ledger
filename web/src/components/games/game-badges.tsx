@@ -87,7 +87,7 @@ export function OwnerBadge({ count, activate }: {
     activate?: BadgeActivation | undefined;
 }): JSX.Element {
     return (
-        <BadgePill cls={`${BADGE_CLS} bg-emerald-500/90 text-white`} activate={activate}>
+        <BadgePill cls={`${BADGE_CLS} bg-success text-white`} activate={activate}>
             {count} own
         </BadgePill>
     );
@@ -112,7 +112,7 @@ export function YouOwnBadge(): JSX.Element {
 export function WishlistBadge({ count }: { count: number }): JSX.Element | null {
     if (count <= 0) return null;
     return (
-        <span className={`${BADGE_CLS} bg-amber-500/90 text-white`}>
+        <span className={`${BADGE_CLS} bg-warning text-white`}>
             {count} wishlisted
         </span>
     );

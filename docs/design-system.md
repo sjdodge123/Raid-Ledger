@@ -148,6 +148,10 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   what the dark family already paints, and the light fill (`#047857`) is darker than the dark one, so the
   label only gains contrast there (`JourneyHero.tsx:163`). This is the one
   exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
+- **DON'T put `text-white` on a raw `bg-emerald-500` / `bg-amber-500` (any `/NN`) or `bg-cyan-600`.** None is
+  repainted on the light schemes and white measures 2.2–3.6:1 on them (the `/games` "Best Price" chip was
+  2.3:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,
+  `WishlistBadge`, the rating chip); `brand-fill-forced-white.guard.test.ts` fails the pairing.
 - **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
 
 Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components

@@ -112,22 +112,32 @@ describe('index.css forced-dark label — fills white cannot clear (ROK-1472)', 
 
 const SRC = resolve(__dirname, '..');
 
-/** `file:line` of every class string that pairs `bg-cyan-600` with a raw `text-white` label. */
-function cyanFillWhiteLabels(): string[] {
+/*
+ * Mid-tone fills a white label cannot clear on the light schemes, and nothing in
+ * index.css repaints them there: cyan-600 #0092b8 (white 3.62:1), emerald-500
+ * #10b981 (2.53:1; at /90 over a light card #18c289, 2.3:1 — the /games "Best
+ * Price" chip) and amber-500 #f59e0b (2.15:1). A solid status fill is
+ * `bg-success` / `bg-warning` (light #047857 5.48:1, #92400e 7.09:1 under white);
+ * a cyan-600 label is `text-foreground` (the #0f172a rule above).
+ */
+const WHITE_UNSAFE_FILL = /(^|\s)bg-(cyan-600|emerald-500(\/\d+)?|amber-500(\/\d+)?)(\s|$)/;
+
+/** `file:line` of every class string that pairs a white-unsafe fill with a raw `text-white` label. */
+function whiteOnMidFillLabels(): string[] {
     const files = (readdirSync(SRC, { recursive: true }) as string[])
         .map((f) => f.split(sep).join('/'))
         .filter((f) => /\.tsx?$/.test(f) && !/\.(test|spec)\.tsx?$/.test(f));
     return files.sort().flatMap((f) => {
         const code = stripCodeComments(readFileSync(join(SRC, f), 'utf-8'));
         return [...code.matchAll(/(['"`])([^'"`]*)\1/g)]
-            .filter(([, , cls]) => /(^|\s)bg-cyan-600(\s|$)/.test(cls ?? '') && /(^|\s)text-white(\s|$)/.test(cls ?? ''))
+            .filter(([, , cls]) => WHITE_UNSAFE_FILL.test(cls ?? '') && /(^|\s)text-white(\s|$)/.test(cls ?? ''))
             .map((m) => `${f}:${code.slice(0, m.index).split('\n').length}`);
     });
 }
 
-describe('bg-cyan-600 labels use text-foreground, never text-white (ROK-1472)', () => {
-    it('no class string in web/src pairs bg-cyan-600 with text-white', () => {
-        expect(cyanFillWhiteLabels(), 'white is 3.62:1 on cyan-600 on the light schemes — use text-foreground (the #0f172a rule)')
+describe('mid-tone fills never carry a text-white label (ROK-1472)', () => {
+    it('no class string in web/src pairs bg-cyan-600 / bg-emerald-500 / bg-amber-500 with text-white', () => {
+        expect(whiteOnMidFillLabels(), 'white is 2.2–3.6:1 on these fills on the light schemes — use bg-success / bg-warning, or text-foreground on cyan-600')
             .toEqual([]);
     });
 });
