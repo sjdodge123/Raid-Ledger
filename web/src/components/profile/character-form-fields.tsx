@@ -4,6 +4,8 @@ import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
+import { ForeverIdentityFields } from '../characters/forever-identity-fields';
+import type { ForeverIdentity, ForeverIdentityErrors } from '../characters/forever-identity';
 
 interface FormState {
     name: string;
@@ -12,6 +14,8 @@ interface FormState {
     role: CharacterRole | '';
     realm: string;
     isMain: boolean;
+    /** ROK-1721: WoW: Forever identity (used only when `isForever`). */
+    forever: ForeverIdentity;
 }
 
 interface CharacterFormFieldsProps {
@@ -23,6 +27,9 @@ interface CharacterFormFieldsProps {
     hasMainForGame: boolean;
     /** Inline error on the Name field (e.g. 'Character name is required'). */
     nameError?: string | undefined;
+    /** ROK-1721: WoW: Forever swaps Name + Realm for region / ruleset / two-part name. */
+    isForever?: boolean | undefined;
+    foreverErrors?: ForeverIdentityErrors | undefined;
     onUpdateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
 }
 
@@ -88,13 +95,18 @@ function MainCheckbox({ form, isEditing, editingIsMain, hasMainForGame, onUpdate
 }
 
 export function CharacterFormFields({
-    form, showMmoFields, isArmorySynced, isEditing, editingIsMain, hasMainForGame, nameError, onUpdateField,
+    form, showMmoFields, isArmorySynced, isEditing, editingIsMain, hasMainForGame, nameError, isForever, foreverErrors, onUpdateField,
 }: CharacterFormFieldsProps) {
     return (
         <>
             {isArmorySynced && <ArmorySyncBanner />}
-            <SyncableInput label="Name" value={form.name} onChange={(v) => onUpdateField('name', v)}
-                placeholder="Character name" maxLength={100} isArmorySynced={isArmorySynced} required error={nameError} />
+            {isForever ? (
+                <ForeverIdentityFields value={form.forever} onChange={(v) => onUpdateField('forever', v)}
+                    errors={foreverErrors} regionLocked={isEditing} />
+            ) : (
+                <SyncableInput label="Name" value={form.name} onChange={(v) => onUpdateField('name', v)}
+                    placeholder="Character name" maxLength={100} isArmorySynced={isArmorySynced} required error={nameError} />
+            )}
             {showMmoFields && (
                 <>
                     <div className="grid grid-cols-2 gap-3">
@@ -104,8 +116,8 @@ export function CharacterFormFields({
                             placeholder="e.g. Arms" maxLength={50} isArmorySynced={isArmorySynced} />
                     </div>
                     <RoleSelect value={form.role} onChange={(v) => onUpdateField('role', v)} />
-                    <SyncableInput label="Realm/Server" value={form.realm} onChange={(v) => onUpdateField('realm', v)}
-                        placeholder="e.g. Illidan" maxLength={100} isArmorySynced={isArmorySynced} />
+                    {!isForever && <SyncableInput label="Realm/Server" value={form.realm} onChange={(v) => onUpdateField('realm', v)}
+                        placeholder="e.g. Illidan" maxLength={100} isArmorySynced={isArmorySynced} />}
                 </>
             )}
             <MainCheckbox form={form} isEditing={isEditing} editingIsMain={editingIsMain}
