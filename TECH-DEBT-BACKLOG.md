@@ -2278,3 +2278,7 @@ same day (#1278, #1279, #1280).
   Suggested: run `release` from a `cp -p` copy of `bin/` with the fakes swapped in, as `release-preserve-envs.test.sh`'s STRICT case now does.
 - **[nit]** `rl-infra/orchestrator/test/extra-slots-provisioning.test.sh:69`: still tries BSD `stat -f '%p'` before `stat -c`. It works, because each fallback reassigns `m` and drops the failed probe's output, but it does not follow the GNU-first order the exec-bits specs now use.
   Suggested: switch it to GNU-first in a later chore so every stat probe in the suite reads the same way.
+### 2026-10-04 — fix/r3-rlinfra-sweeper-bundle-1004 (review nit left open)
+
+- **[nit]** `rl-infra/gc-sweeper/sweep.sh` (dead-claim reaper §1b and the expired-claim reaper §1d): a slot these reapers free is not handed to a queued waiter promptly. `claim-wait` wakes only on a change to `$RL_LEASE_QUEUE_DIR` (inotifywait close_write/moved_to/delete), and the reapers write `claims.json`, not the queue dir, so the waiter gets the slot only at its next unrelated queue wake or when its wait times out. §1d is hit hardest: it releases only when a waiter exists, and that waiter then sits out its timeout. Behaviour is unchanged from main (the old in-container `lease-advance` call never ran).
+  Suggested: after a reap frees a slot that has waiters, touch a file in that slot's lease-queue dir so `claim-wait` wakes and re-runs `claim`.

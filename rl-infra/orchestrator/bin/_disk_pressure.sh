@@ -10,8 +10,8 @@
 # scoped prune reclaimed nothing and the operator pruned by hand.
 #
 # This file is a SOURCEABLE library, deliberately not an executable: both the
-# sweeper (`gc-sweeper/sweep.sh`, via $ORCHESTRATOR_BIN_DIR, the same mount it
-# already uses for runner-testcontainers-reap) and the orchestrator's build
+# sweeper (`gc-sweeper/sweep.sh`, via the read-only /orchestrator-lib mount it
+# resolves as $DISCORD_SWEEP_LIB_DIR) and the orchestrator's build
 # admission gate (`_admission.sh`) need the identical ladder, and a shared
 # function is safer than a trigger file two processes race on.
 #
