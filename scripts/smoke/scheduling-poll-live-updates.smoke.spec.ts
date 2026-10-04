@@ -59,8 +59,9 @@ async function firstGameId(token: string): Promise<number> {
     });
     if (!res.ok) throw new Error(`games/configured failed: ${res.status}`);
     const body = (await res.json()) as { data: { id: number }[] };
-    if (!body.data?.length) throw new Error('No configured games');
-    return body.data[0].id;
+    const first = body.data?.[0];
+    if (!first) throw new Error('No configured games');
+    return first.id;
 }
 
 /** Poll the poll-page API until the slot shows exactly `votes` voters. */
@@ -166,13 +167,15 @@ async function openMemberContext(
     info: TestInfo,
 ): Promise<{ context: BrowserContext; page: Page }> {
     const { viewport, userAgent, isMobile, hasTouch, deviceScaleFactor } = info.project.use;
+    // Pass only the profile keys the project defines; an omitted key inherits
+    // the same project `use` value. A null viewport is kept (no viewport).
     const context = await browser.newContext({
         storageState: STORAGE_STATE_PATH,
-        viewport,
-        userAgent,
-        isMobile,
-        hasTouch,
-        deviceScaleFactor,
+        ...(viewport === undefined ? {} : { viewport }),
+        ...(userAgent === undefined ? {} : { userAgent }),
+        ...(isMobile === undefined ? {} : { isMobile }),
+        ...(hasTouch === undefined ? {} : { hasTouch }),
+        ...(deviceScaleFactor === undefined ? {} : { deviceScaleFactor }),
     });
     const invitee = await getInviteeFixture();
     await context.addInitScript((t) => {

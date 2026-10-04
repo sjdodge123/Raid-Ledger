@@ -11,15 +11,13 @@
  * `scheduledEndTime` to equal `extendedUntil`.
  *
  * Why no `/admin/test/set-event-times` back-dating: it is a DB-only write with
- * no app event. Today that would work, because `ScheduledEventService` never
- * receives its optional `ActiveEventCacheService` (the `| null` union gives
- * DI an `Object` token, see TECH-DEBT-BACKLOG 2026-10-01), so the
- * `getActiveEvents(now)` short-circuit in `startScheduledEvents` never runs
- * and the start cron reads the DB directly. Once that injection is fixed, the
- * cache would keep the creation-time start until its 5-minute refresh and a
- * back-dated event would not start any sooner. The event therefore starts for
- * real a few minutes out, which holds either way; the Active wait covers a
- * possible cache gate plus one cron tick.
+ * no app event. `ScheduledEventService` receives `ActiveEventCacheService` by
+ * explicit token, and the `getActiveEvents(now)` short-circuit in
+ * `startScheduledEvents` reads that cache, which keeps the creation-time start
+ * until its next refresh (the 5-minute safety net or a lifecycle event). A
+ * back-dated event would therefore not start any sooner. The event starts for
+ * real a few minutes out instead; the Active wait covers the cache gate plus
+ * one cron tick.
  *
  * Needs a real voice connection: gated by SMOKE_SKIP_VOICE_JOIN like the other
  * voice-join tests (CI runners cannot reach Discord voice). Deterministic

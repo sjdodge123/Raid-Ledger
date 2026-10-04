@@ -67,12 +67,13 @@ async function resetWorkerLineups(token: string): Promise<void> {
 async function fetchTwoUserIds(token: string): Promise<[number, number]> {
     const res = await apiGet(token, '/users?limit=10');
     const list = (res?.data ?? []) as { id: number }[];
-    if (list.length < 2) {
+    const [first, second] = list;
+    if (!first || !second) {
         throw new Error(
             `Need at least 2 demo users to drive the carryover flow; found ${list.length}`,
         );
     }
-    return [list[0].id, list[1].id];
+    return [first.id, second.id];
 }
 
 async function fetchTwoGameIds(token: string): Promise<[number, number]> {

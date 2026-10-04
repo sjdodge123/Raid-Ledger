@@ -64,6 +64,8 @@ The `git push` hook in `.claude/settings.json` runs `scripts/smoke/push-gate.sh`
 
 `rl_validate_ci({e2e_scope})` — `auto` (default) / `all` / `none` — forwards `E2E_SCOPE` to `validate-ci.sh`. Under `auto` it runs only the specs `scripts/smoke/scope-specs.sh` maps the branch diff to.
 
+`none` skips the tier in every mode (including `--fleet`) except an explicit `--with-e2e`, and a Playwright FAIL no longer suppresses the Discord smoke row: the FAIL is recorded, Discord smoke still runs, and the gate exits 1.
+
 `scope-specs.sh` maps `git diff --name-only origin/main...HEAD` to the matching `scripts/smoke/*.smoke.spec.ts` files (by page / component / route token) and prints them. It prints `ALL` — run the full suite — when the diff touches a shared surface: `web/src/components/layout/**`, `web/src/components/ui/**`, `web/src/index.css`, `web/src/App.tsx`, `web/src/routes*`, `playwright.config.*`, `scripts/smoke/base.ts`, `scripts/smoke/*helpers*`, or when it cannot map a changed file to any spec.
 
 A scoped PASS is a valid pre-push result for the mapped surfaces; GitHub still blocks the merge on the full suite. Measured 2026-09-14, running the tier on a 5-line web fix cost 15–25 min queued behind two branches and found nothing GitHub's full suite would not have found ~45 min later — hence the "only when `scope-specs.sh` prints `ALL`, or the operator asks" rule in CLAUDE.md.

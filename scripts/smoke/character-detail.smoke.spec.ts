@@ -8,6 +8,7 @@
 import { test, expect } from './base';
 import { resolveApiUrl } from './target';
 import { readTokenFromStorageState } from './storage-state';
+import { defined } from './defined';
 
 const API_BASE = resolveApiUrl();
 
@@ -216,7 +217,10 @@ test.describe('Character detail page', () => {
         ).toBeVisible({ timeout: 10_000 });
 
         // First primary profession name + its skill text render
-        const firstPrimary = profChar!.professions!.primary[0];
+        const firstPrimary = defined(
+            profChar!.professions!.primary[0],
+            'first primary profession',
+        );
         await expect(
             page.getByText(firstPrimary.name, { exact: true }).first(),
         ).toBeVisible({ timeout: 5_000 });
