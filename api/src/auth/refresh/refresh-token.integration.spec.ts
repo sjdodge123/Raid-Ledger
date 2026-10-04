@@ -24,6 +24,7 @@ import * as crypto from 'crypto';
 import { desc, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
+import { defined, nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 // The refresh module does not exist yet — these imports compile-fail until the
 // dev creates them. `RefreshTokenService` is the issue/rotate/revoke service;
@@ -59,7 +60,7 @@ function extractRefreshCookie(res: {
 }): string | null {
   for (const line of setCookieLines(res)) {
     const match = line.match(new RegExp(`${REFRESH_COOKIE_NAME}=([^;]*)`));
-    if (match) return match[1];
+    if (match) return defined(match[1], `${REFRESH_COOKIE_NAME} cookie value`);
   }
   return null;
 }
@@ -109,10 +110,13 @@ async function countActiveRefreshRows(userId: number): Promise<number> {
 }
 
 async function createDiscordMember(username: string) {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId: `discord-${username}`, username, role: 'member' })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId: `discord-${username}`, username, role: 'member' })
+      .returning(),
+    `inserted member ${username}`,
+  );
   return user;
 }
 
@@ -143,12 +147,13 @@ describe('Login mints a refresh cookie (AC9)', () => {
       .where(eq(schema.refreshTokens.userId, adminId))
       .limit(1);
     expect(row).toBeTruthy();
-    expect(row.tokenHash).not.toBe(rawToken);
+    const { tokenHash } = defined(row, 'admin refresh_tokens row');
+    expect(tokenHash).not.toBe(rawToken);
     const expectedHash = crypto
       .createHash('sha256')
       .update(rawToken as string)
       .digest('hex');
-    expect(row.tokenHash).toBe(expectedHash);
+    expect(tokenHash).toBe(expectedHash);
   });
 });
 
@@ -223,7 +228,12 @@ describe('POST /auth/refresh rotation (AC2)', () => {
     const familyRows = await testApp.db
       .select()
       .from(schema.refreshTokens)
-      .where(eq(schema.refreshTokens.familyId, parentRow.familyId));
+      .where(
+        eq(
+          schema.refreshTokens.familyId,
+          defined(parentRow, 'parent refresh_tokens row').familyId,
+        ),
+      );
     const active = familyRows.filter((r) => !r.rotatedAt && !r.revokedAt);
     expect(active).toHaveLength(2);
     expect(familyRows.every((r) => !r.revokedAt)).toBe(true);
@@ -357,7 +367,8 @@ describe('Session length setting (AC5)', () => {
       .orderBy(desc(schema.refreshTokens.createdAt))
       .limit(1);
     expect(row).toBeTruthy();
-    const expiresMs = new Date(row.expiresAt).getTime();
+    const { expiresAt } = defined(row, 'newest admin refresh_tokens row');
+    const expiresMs = new Date(expiresAt).getTime();
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
     // Allow a generous skew window; the point is it tracks the 7-day setting,
     // not the 60-day default (which would be ~52 days larger).
@@ -380,7 +391,7 @@ describe('Access JWT TTL (AC6)', () => {
     const token = res.body.access_token as string;
 
     // Decode the JWT payload (no verification needed — we only read exp/iat).
-    const [, payloadB64] = token.split('.');
+    const payloadB64 = defined(token.split('.')[1], 'JWT payload segment');
     const payload = JSON.parse(
       Buffer.from(payloadB64, 'base64').toString('utf8'),
     ) as { iat: number; exp: number };

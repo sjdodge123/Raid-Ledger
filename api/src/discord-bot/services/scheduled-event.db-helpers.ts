@@ -1,6 +1,19 @@
-import { eq, and, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import {
+  NOW_UTC,
+  utcIsoText,
+  utcWallClock,
+} from '../../drizzle/timestamp-utils';
 
 export interface ScheduledEventRecord {
   discordScheduledEventId: string | null;
@@ -9,6 +22,14 @@ export interface ScheduledEventRecord {
   /** ROK-1352: live ephemeral voice channel (resolver Tier 0). */
   ephemeralVoiceChannelId: string | null;
 }
+
+/**
+ * Effective end: an extension (ROK-490) wins over the scheduled upper bound.
+ * Both are zone-less UTC wall clocks, so every compare below goes through
+ * `utcWallClock` / `NOW_UTC` and every read through `utcIsoText`.
+ */
+const effectiveEnd = (): SQL =>
+  sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))`;
 
 export async function findStartCandidates(
   db: PostgresJsDatabase<typeof schema>,
@@ -27,8 +48,8 @@ export async function findStartCandidates(
         // ROK-1370: skip events with an open reschedule poll — the start scan
         // must not fire on the stale time; it resumes once the poll locks in.
         isNull(schema.events.reschedulingPollId),
-        sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
+        sql`lower(${schema.events.duration}) <= ${utcWallClock(now)}`,
+        sql`${effectiveEnd()} >= ${utcWallClock(now)}`,
       ),
     );
 }
@@ -50,7 +71,7 @@ export async function findCompletionCandidates(
         // ROK-1370: don't auto-complete an event whose reschedule poll is open;
         // the SE is torn down at poll start and recreated at lock-in.
         isNull(schema.events.reschedulingPollId),
-        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) < ${now.toISOString()}::timestamptz`,
+        sql`${effectiveEnd()} < ${utcWallClock(now)}`,
       ),
     );
 }
@@ -188,8 +209,8 @@ export async function findReconciliationCandidates(
       id: schema.events.id,
       title: schema.events.title,
       description: schema.events.description,
-      startTime: sql<string>`lower(${schema.events.duration})::text`,
-      endTime: sql<string>`upper(${schema.events.duration})::text`,
+      startTime: utcIsoText(sql`lower(${schema.events.duration})`),
+      endTime: utcIsoText(sql`upper(${schema.events.duration})`),
       gameId: schema.events.gameId,
       isAdHoc: schema.events.isAdHoc,
       notificationChannelOverride: schema.events.notificationChannelOverride,
@@ -205,11 +226,12 @@ export async function findReconciliationCandidates(
         // must not resurrect it at the old time while the poll is open.
         isNull(schema.events.reschedulingPollId),
         sql`${schema.events.isAdHoc} = false`,
-        sql`lower(${schema.events.duration}) > ${now.toISOString()}::timestamptz`,
+        sql`lower(${schema.events.duration}) > ${utcWallClock(now)}`,
         // ROK-1332: Skip rows currently in capacity-backoff. NULL means never
         // backed off (the common case); a past timestamp means the backoff
-        // window expired and the row is eligible again.
-        sql`(${schema.events.scheduledEventReconcileBackoffUntil} IS NULL OR ${schema.events.scheduledEventReconcileBackoffUntil} <= NOW())`,
+        // window expired and the row is eligible again. The column is zone-less
+        // UTC (written from a JS Date), so compare on the UTC wall clock.
+        sql`(${schema.events.scheduledEventReconcileBackoffUntil} IS NULL OR ${schema.events.scheduledEventReconcileBackoffUntil} <= ${NOW_UTC})`,
       ),
     )
     .limit(RECONCILIATION_BATCH_SIZE);
@@ -221,7 +243,8 @@ export interface RLTrackedSERow {
   discordScheduledEventId: string;
   /** True when the SE should have been cleaned up already: the RL row is
    *  cancelled OR its effective end (extendedUntil ?? upper(duration)) is more
-   *  than 1h in the past. Computed server-side to avoid timezone skew. */
+   *  than 1h in the past. Computed server-side against the UTC wall clock to
+   *  avoid timezone skew. */
   isStale: boolean;
 }
 
@@ -231,10 +254,11 @@ export interface RLTrackedSERow {
  * candidates for stale-deletion vs operator-orphans (ROK-1332).
  *
  * Staleness is computed IN SQL (not JS) for two reasons:
- *   1. The `duration` tsrange and `extended_until` columns are timezone-less;
- *      pulling `upper(duration)` as a string and `new Date()`-parsing it in JS
- *      interprets it as local time → a multi-hour skew on the 1h comparison.
- *   2. It mirrors the sibling reconciliation/completion queries by using
+ *   1. The `duration` tsrange and `extended_until` columns are timezone-less
+ *      UTC wall clocks. The compare uses `NOW() AT TIME ZONE 'UTC'`: a bare
+ *      `NOW()` (a timestamptz) would read the column in the session zone and
+ *      skew the 1h comparison by the session's offset.
+ *   2. It mirrors the sibling completion/dedup queries by using
  *      `COALESCE(extended_until, upper(duration))` so an auto-extended event
  *      that is still live (members in voice past the original end) is NOT
  *      treated as stale and its Discord SE is preserved.
@@ -250,8 +274,8 @@ export async function findRLTrackedSEs(
       discordScheduledEventId: schema.events.discordScheduledEventId,
       isStale: sql<boolean>`(
         ${schema.events.cancelledAt} IS NOT NULL
-        OR COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))
-             < NOW() - INTERVAL '1 hour'
+        OR ${effectiveEnd()}
+             < ${NOW_UTC} - INTERVAL '1 hour'
       )`,
     })
     .from(schema.events)
@@ -273,12 +297,12 @@ export interface LiveRLEventMatch {
   id: number;
   discordScheduledEventId: string | null;
   title: string;
-  /** `lower(duration)` as text — the event's scheduled start. Parsed to epoch
-   *  via `new Date(startIso)` by the matcher. This MUST mirror how the Discord
-   *  SE start was set at create time (`new Date(eventData.startTime)` where
-   *  startTime is the SAME `lower(duration)::text`) so the dedup match key and
-   *  the create-path key collapse identically regardless of session tz — both
-   *  sides apply the identical `new Date(text)` transform (ROK-1347). */
+  /** `lower(duration)` — the event's scheduled start — as ISO-8601 with an
+   *  explicit `Z` (the column holds the UTC wall clock). The matcher parses it
+   *  with `parseEventTimestampUtc`, the same parser the create path applies to
+   *  `eventData.startTime` when it sets the Discord SE start, so the dedup
+   *  match key and the create-path key collapse to the same epoch regardless
+   *  of the DB session or process timezone (ROK-1347). */
   startIso: string;
 }
 
@@ -304,14 +328,14 @@ export async function findLiveRLEventsForDedup(
       id: schema.events.id,
       discordScheduledEventId: schema.events.discordScheduledEventId,
       title: schema.events.title,
-      startIso: sql<string>`lower(${schema.events.duration})::text`,
+      startIso: utcIsoText(sql`lower(${schema.events.duration})`),
     })
     .from(schema.events)
     .where(
       and(
         isNull(schema.events.cancelledAt),
         sql`${schema.events.isAdHoc} = false`,
-        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
+        sql`${effectiveEnd()} >= ${utcWallClock(now)}`,
       ),
     );
 }

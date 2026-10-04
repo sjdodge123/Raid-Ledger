@@ -51,7 +51,7 @@ export interface SignupInteractionMocks {
     getBranding: jest.Mock;
     getDefaultTimezone: jest.Mock;
   };
-  mockDb: Record<string, jest.Mock>;
+  mockDb: Record<'select', jest.Mock>;
   mockEmbed: EmbedBuilder;
   mockRow: ActionRowBuilder<ButtonBuilder>;
 }
@@ -145,6 +145,9 @@ function createSecondaryCoreServiceMocks(
   mockEmbed: EmbedBuilder,
   mockRow: ActionRowBuilder<ButtonBuilder>,
 ) {
+  const mockDb: SignupInteractionMocks['mockDb'] = {
+    select: jest.fn().mockReturnValue(makeChain([])),
+  };
   return {
     mockEventsService: {
       buildEmbedEventData: jest.fn().mockResolvedValue({
@@ -181,10 +184,7 @@ function createSecondaryCoreServiceMocks(
       }),
       getDefaultTimezone: jest.fn().mockResolvedValue(null),
     },
-    mockDb: { select: jest.fn().mockReturnValue(makeChain([])) } as Record<
-      string,
-      jest.Mock
-    >,
+    mockDb,
   };
 }
 

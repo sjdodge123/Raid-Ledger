@@ -36,6 +36,7 @@ import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import { NotificationService } from '../notifications/notification.service';
 import { getAbsentSignedUpPlayers } from '../notifications/live-noshow.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const GUILD = 'guild-1389';
 const SERIES_R = '1389aaaa-1111-2222-3333-444444444444';
@@ -69,30 +70,39 @@ async function seedAgreementFixture(): Promise<{
   gameAId: number;
   gameBId: number;
 }> {
-  const [gameA] = await testApp.db
-    .insert(schema.games)
-    .values({ name: 'Game A 1389', slug: 'game-a-1389', igdbId: null })
-    .returning();
-  const [gameB] = await testApp.db
-    .insert(schema.games)
-    .values({ name: 'Game B 1389', slug: 'game-b-1389', igdbId: null })
-    .returning();
+  const [gameA] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'Game A 1389', slug: 'game-a-1389', igdbId: null })
+      .returning(),
+    'gameA',
+  );
+  const [gameB] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'Game B 1389', slug: 'game-b-1389', igdbId: null })
+      .returning(),
+    'gameB',
+  );
 
   const now = Date.now();
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Series raid 1389',
-      creatorId: testApp.seed.adminUser.id,
-      gameId: gameB.id,
-      recurrenceGroupId: SERIES_R,
-      duration: [
-        new Date(now - 60 * 60 * 1000),
-        new Date(now + 2 * 60 * 60 * 1000),
-      ] as [Date, Date],
-      maxAttendees: 20,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Series raid 1389',
+        creatorId: testApp.seed.adminUser.id,
+        gameId: gameB.id,
+        recurrenceGroupId: SERIES_R,
+        duration: [
+          new Date(now - 60 * 60 * 1000),
+          new Date(now + 2 * 60 * 60 * 1000),
+        ] as [Date, Date],
+        maxAttendees: 20,
+      })
+      .returning(),
+    'event',
+  );
 
   // Series voice binding carries the pre-ROK-1372 shape: game-voice-monitor +
   // stored gameId = A, which differs from this week's instance gameId = B.

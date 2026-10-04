@@ -110,7 +110,10 @@ function makeSelectChain(overrides: {
 
 describe('LineupsService.removeNomination', () => {
   let service: LineupsService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  >;
   let mockActivityLog: { log: jest.Mock };
 
   function mockSelects(...chains: ReturnType<typeof makeSelectChain>[]) {

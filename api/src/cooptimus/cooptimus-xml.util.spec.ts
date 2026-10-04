@@ -56,7 +56,7 @@ describe('cooptimus-xml.util (ROK-1397)', () => {
       url: 'https://www.co-optimus.com/game/9814/PC/palworld.html',
     });
     // Entity decoding in prose fields.
-    expect(entries[0].coopExperience).toContain('friends & go');
+    expect(entries[0]?.coopExperience).toContain('friends & go');
   });
 
   it('treats the literal empty envelope as a positive no-entry signal', () => {

@@ -76,7 +76,7 @@ let mockSignupsService: {
   cancelByDiscordUser: jest.Mock;
   confirmSignup: jest.Mock;
 };
-let mockDb: Record<string, jest.Mock>;
+let mockDb: Record<'select', jest.Mock>;
 let mockEventsService: { buildEmbedEventData: jest.Mock };
 
 const mockEmbed = new EmbedBuilder().setTitle('Test');

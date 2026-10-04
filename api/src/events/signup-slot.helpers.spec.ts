@@ -4,6 +4,7 @@
  */
 import { assignDiscordSignupSlot } from './signup-slot.helpers';
 import { createMockEvent } from '../common/testing/factories';
+import { at } from '../common/testing/narrow';
 
 // ---- mocks ----------------------------------------------------------------
 
@@ -73,7 +74,7 @@ describe('assignDiscordSignupSlot — ROK-548 preferredRoles filtering', () => {
       );
 
       expect(tx.update).toHaveBeenCalled();
-      const setFn = (tx.update as jest.Mock).mock.results[0].value.set;
+      const setFn = at((tx.update as jest.Mock).mock.results, 0).value.set;
       expect(setFn).toHaveBeenCalledWith({ preferredRoles: ['tank'] });
       expect(autoAllocateSignup).toHaveBeenCalled();
     });
@@ -90,7 +91,7 @@ describe('assignDiscordSignupSlot — ROK-548 preferredRoles filtering', () => {
         mockBenchPromo,
       );
 
-      const setFn = (tx.update as jest.Mock).mock.results[0].value.set;
+      const setFn = at((tx.update as jest.Mock).mock.results, 0).value.set;
       expect(setFn).toHaveBeenCalledWith({ preferredRoles: ['healer'] });
     });
 
@@ -106,7 +107,7 @@ describe('assignDiscordSignupSlot — ROK-548 preferredRoles filtering', () => {
         mockBenchPromo,
       );
 
-      const setFn = (tx.update as jest.Mock).mock.results[0].value.set;
+      const setFn = at((tx.update as jest.Mock).mock.results, 0).value.set;
       expect(setFn).toHaveBeenCalledWith({ preferredRoles: ['dps'] });
     });
 

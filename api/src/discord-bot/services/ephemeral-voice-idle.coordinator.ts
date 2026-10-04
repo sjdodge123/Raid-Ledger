@@ -10,6 +10,7 @@ import {
   type EphemeralEventRow,
 } from './ephemeral-voice.db-helpers';
 import { getChannelMemberCount } from './ephemeral-voice.discord-ops';
+import { parseEventTimestampUtc } from './scheduled-event.revalidate';
 
 /**
  * Bridges voice-state leave/join events to the ephemeral idle-delete queue
@@ -52,7 +53,9 @@ export class EphemeralVoiceIdleCoordinator {
   }
 
   private isPastEnd(ev: EphemeralEventRow): boolean {
-    return new Date(ev.endTime).getTime() <= Date.now();
+    // The reader spells the `Z` out; the zone-less fallback keeps a bare
+    // timestamp UTC too, never host-local.
+    return parseEventTimestampUtc(ev.endTime).getTime() <= Date.now();
   }
 
   private channelStillOccupied(channelId: string): boolean {

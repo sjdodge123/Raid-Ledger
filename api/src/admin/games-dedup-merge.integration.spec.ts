@@ -24,6 +24,7 @@ import {
   truncateAllTables,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { at } from '../common/testing/narrow';
 
 const MIGRATION_SQL_PATH = path.join(
   __dirname,
@@ -74,7 +75,11 @@ describe('ROK-1278 games-dedup merge migration', () => {
         { name: 'Test BG 3', slug: 'test-bg-3-alt' }, // dup (exact-name)
       ])
       .returning({ id: schema.games.id });
-    const [slayCanonId, slayDupId, bgCanonId, bgDupId] = games.map((g) => g.id);
+    const gameIds = games.map((g) => g.id);
+    const slayCanonId = at(gameIds, 0);
+    const slayDupId = at(gameIds, 1);
+    const bgCanonId = at(gameIds, 2);
+    const bgDupId = at(gameIds, 3);
 
     const userId = testApp.seed.adminUser.id;
 
@@ -137,7 +142,7 @@ describe('ROK-1278 games-dedup merge migration', () => {
         AND period = 'week' AND period_start = '2026-05-01'
     `);
     expect(
-      (merged as unknown as { total_seconds: number }[])[0].total_seconds,
+      (merged as unknown as { total_seconds: number }[])[0]?.total_seconds,
     ).toBe(36000 + 18000);
 
     // ── Assert: non-colliding dup rollup got repointed (not duplicated) ───
@@ -176,7 +181,7 @@ describe('ROK-1278 games-dedup merge migration', () => {
       SELECT count(*)::int AS count FROM pg_indexes
       WHERE tablename = 'games' AND indexname = 'games_steam_app_id_unique'
     `);
-    expect((idx as { count: number }[])[0].count).toBe(1);
+    expect((idx as { count: number }[])[0]?.count).toBe(1);
   }, 60_000);
 
   it('rejects an INSERT into games that would duplicate steam_app_id (UNIQUE index works)', async () => {

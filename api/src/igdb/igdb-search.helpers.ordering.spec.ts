@@ -12,6 +12,7 @@ import {
   checkLocalDb,
   searchLocalGames,
 } from './igdb-search.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 function chainDb(): {
   db: PostgresJsDatabase<typeof schema>;
@@ -48,7 +49,10 @@ describe('web game search DB ordering (ROK-1602)', () => {
   });
 
   it('buildSearchFilters admits acronym matches for "wow"', () => {
-    const [nameFilter] = buildSearchFilters('wow', false);
+    const [nameFilter] = nonEmpty(
+      buildSearchFilters('wow', false),
+      'nameFilter',
+    );
     expect(render(nameFilter)).toContain('\\1');
   });
 });

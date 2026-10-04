@@ -15,6 +15,7 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { findTrackedMessages } from './embed-sync.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const TEST_GUILD_ID = 'guild-1029';
 const CHANNEL_A = 'channel-a';
@@ -26,15 +27,18 @@ const MESSAGE_B = 'msg-bbb';
 async function insertEvent(testApp: TestApp): Promise<number> {
   const now = new Date();
   const later = new Date(now.getTime() + 3600_000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'ROK-1029 Test Event',
-      duration: [now, later],
-      creatorId: testApp.seed.adminUser.id,
-      gameId: testApp.seed.game.id,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'ROK-1029 Test Event',
+        duration: [now, later],
+        creatorId: testApp.seed.adminUser.id,
+        gameId: testApp.seed.game.id,
+      })
+      .returning(),
+    'event',
+  );
   return event.id;
 }
 
@@ -237,7 +241,7 @@ function describeMultiMessageSync() {
       expect(Array.isArray(result)).toBe(true);
       const records = result as unknown as Array<{ guildId: string }>;
       expect(records.length).toBe(1);
-      expect(records[0].guildId).toBe(TEST_GUILD_ID);
+      expect(records[0]?.guildId).toBe(TEST_GUILD_ID);
     });
   });
 }

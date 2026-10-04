@@ -21,6 +21,7 @@ import {
   type EmbedSurface,
 } from './embed-chrome.helpers';
 import { PERSONALIZED_FIELD_NAMES } from './embed-personalized.helpers';
+import { at } from '../../common/testing/narrow';
 
 const SURFACES: EmbedSurface[] = ['channel', 'dm'];
 
@@ -30,7 +31,7 @@ function firstPersonalizedName(): string {
   if (names.length === 0) {
     throw new Error('PERSONALIZED_FIELD_NAMES must not be empty');
   }
-  return names[0];
+  return at(names, 0);
 }
 
 describe('colorForState (AC1)', () => {

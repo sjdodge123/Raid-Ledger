@@ -13,6 +13,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeLineups() {
   let testApp: TestApp;
@@ -33,14 +34,17 @@ function describeLineups() {
   async function loginAsOperator(): Promise<string> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('OperatorPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:operator@test.local',
-        username: 'operator',
-        role: 'operator',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:operator@test.local',
+          username: 'operator',
+          role: 'operator',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'operator@test.local',
       passwordHash: hash,
@@ -55,14 +59,17 @@ function describeLineups() {
   async function loginAsMember(): Promise<string> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:member@test.local',
-        username: 'member',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:member@test.local',
+          username: 'member',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'member@test.local',
       passwordHash: hash,
@@ -122,7 +129,7 @@ function describeLineups() {
 
       const rows = await testApp.db.select().from(schema.communityLineups);
       expect(rows).toHaveLength(1);
-      expect(rows[0].status).toBe('building');
+      expect(rows[0]?.status).toBe('building');
     });
 
     it('should allow creating a second active lineup (ROK-1065)', async () => {
@@ -390,10 +397,13 @@ function describeLineups() {
       const lineupId = createRes.body.id as number;
 
       // Create a second game not in the lineup
-      const [otherGame] = await testApp.db
-        .insert(schema.games)
-        .values({ name: 'Other Game', slug: 'other-game' })
-        .returning();
+      const [otherGame] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({ name: 'Other Game', slug: 'other-game' })
+          .returning(),
+        'otherGame',
+      );
 
       await addEntry(lineupId, testApp.seed.game.id, testApp.seed.adminUser.id);
       await testApp.request
@@ -653,14 +663,17 @@ function describeLineups() {
     async function seedNUsers(count: number): Promise<number[]> {
       const ids: number[] = [];
       for (let i = 0; i < count; i++) {
-        const [user] = await testApp.db
-          .insert(schema.users)
-          .values({
-            discordId: `local:sv-voter-${i}@test.local`,
-            username: `sv-voter-${i}`,
-            role: 'member',
-          })
-          .returning();
+        const [user] = nonEmpty(
+          await testApp.db
+            .insert(schema.users)
+            .values({
+              discordId: `local:sv-voter-${i}@test.local`,
+              username: `sv-voter-${i}`,
+              role: 'member',
+            })
+            .returning(),
+          'user',
+        );
         ids.push(user.id);
       }
       return ids;

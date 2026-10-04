@@ -40,6 +40,7 @@ import {
   ThreadMirrorService,
   type MirrorReactedMessage,
 } from './thread-mirror.service';
+import { at, defined, nonEmpty } from '../../common/testing/narrow';
 
 const GUILD = 'guild-int-1';
 const THREAD = '1000000000000000001';
@@ -372,7 +373,7 @@ describe('AC5 — GET /discord/threads/:threadId/messages', () => {
     const older = await getThread(
       token,
       THREAD,
-      `surfaceKind=lfg-group&surfaceId=${game.id}&limit=2&before=${first.body.messages[0].messageId}`,
+      `surfaceKind=lfg-group&surfaceId=${game.id}&limit=2&before=${at(first.body.messages, 0).messageId}`,
     );
 
     expect(first.body.messages.map((m) => m.messageId)).toEqual([
@@ -435,18 +436,19 @@ describe('AC2 — ensureBackfilled', () => {
     await seedForumThread(game.id, THREAD);
     mockDiscordThread(THREE.map((id) => message(id)));
     await backfill(game.id);
+    const deletedId = at(THREE, 1);
     await testApp.db
       .update(schema.discordThreadMessages)
       .set({ deletedAt: new Date() })
-      .where(eq(schema.discordThreadMessages.messageId, THREE[1]));
+      .where(eq(schema.discordThreadMessages.messageId, deletedId));
 
     await backfill(game.id);
 
     const rows = await rowsFor(THREAD);
-    const revived = rows.find((r) => r.messageId === THREE[1]);
+    const revived = rows.find((r) => r.messageId === deletedId);
     // MUTATION: make the backfill upsert instead of conflict-do-nothing, or
     // hard-delete instead of soft-delete — the row comes back visible.
-    expect(revived?.deletedAt).not.toBeNull();
+    expect(defined(revived, 'soft-deleted row').deletedAt).not.toBeNull();
     expect(rows).toHaveLength(3);
   });
 
@@ -593,14 +595,14 @@ describe('ROK-1506 — reactions', () => {
     // MUTATION: drop `reactions` from `toThreadMessageDto` — this names the
     // missing field; drop the write in `onReactionChange` — this sees `[]`.
     const added = await getThread(token, THREAD, query);
-    expect(added.body.messages[0].reactions).toEqual([FIRE]);
+    expect(added.body.messages[0]?.reactions).toEqual([FIRE]);
 
     await mirror.onReactionChange(reacted('1000000000000000050', false), {
       cleared: false,
     });
 
     const removed = await getThread(token, THREAD, query);
-    expect(removed.body.messages[0].reactions).toEqual([]);
+    expect(removed.body.messages[0]?.reactions).toEqual([]);
   });
 
   it('ignores a reaction on a message the mirror never stored', async () => {
@@ -614,7 +616,7 @@ describe('ROK-1506 — reactions', () => {
 
     const rows = await rowsFor(THREAD);
     expect(rows.map((r) => r.messageId)).toEqual(['1000000000000000060']);
-    expect(rows[0].reactions).toEqual([]);
+    expect(rows[0]?.reactions).toEqual([]);
   });
 
   it('A5.11 a reaction on a soft-deleted row writes nothing (D9)', async () => {
@@ -625,7 +627,7 @@ describe('ROK-1506 — reactions', () => {
       .update(schema.discordThreadMessages)
       .set({ deletedAt: new Date() })
       .where(eq(schema.discordThreadMessages.messageId, '1000000000000000070'));
-    const [before] = await rowsFor(THREAD);
+    const [before] = nonEmpty(await rowsFor(THREAD), 'before');
 
     await mirror.onReactionChange(reacted('1000000000000000070', true), {
       cleared: false,
@@ -634,7 +636,7 @@ describe('ROK-1506 — reactions', () => {
     // MUTATION: drop the `isNull(deletedAt)` clause in
     // `updateMirroredReactions` — the tombstone gains a 🔥 and a new
     // mirror_updated_at.
-    const [after] = await rowsFor(THREAD);
+    const [after] = nonEmpty(await rowsFor(THREAD), 'after');
     expect(after.reactions).toEqual([]);
     expect(after.mirrorUpdatedAt.toISOString()).toBe(
       before.mirrorUpdatedAt.toISOString(),
@@ -686,7 +688,8 @@ describe('ROK-1506 — reactions', () => {
       `surfaceKind=lfg-group&surfaceId=${game.id}`,
     );
 
-    expect(Object.keys(res.body.messages[0]).sort()).toEqual([
+    const wire = at(res.body.messages, 0);
+    expect(Object.keys(wire).sort()).toEqual([
       'attachments',
       'author',
       'content',
@@ -699,7 +702,7 @@ describe('ROK-1506 — reactions', () => {
     // jsonb round-trips reorder keys (Postgres stores them by length, then
     // alphabetically), so A4.3 pins the SET of wire keys, not their order —
     // the message-level assertion above already sorts for the same reason.
-    expect(Object.keys(res.body.messages[0].reactions[0]).sort()).toEqual([
+    expect(Object.keys(at(wire.reactions, 0)).sort()).toEqual([
       'animated',
       'count',
       'id',
