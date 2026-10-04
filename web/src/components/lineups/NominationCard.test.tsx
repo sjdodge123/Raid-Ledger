@@ -24,6 +24,19 @@ describe('NominationCard — basic rendering', () => {
         expect(screen.getByText('Valheim')).toBeInTheDocument();
     });
 
+    it('puts the white title over the dark art scrim, never a surface fade that goes white on light (ROK-1472)', () => {
+        renderWithProviders(<NominationCard entry={createMockEntry()} onRemove={vi.fn()} />);
+        const title = screen.getByRole('heading', { name: 'Valheim' });
+        expect(title).toHaveClass('text-white');
+        const cover = title.parentElement as HTMLElement;
+        const fades = Array.from(cover.querySelectorAll('[class*="bg-gradient-to-t"]')).map((el) => el.className);
+        expect(fades, 'the title gradient must be the shared from-black/80 GradientOverlay').toEqual([
+            expect.stringContaining('from-black/80'),
+        ]);
+        expect(fades.join(' '), 'a from-surface fade is white on the light schemes (~1.1:1 under a white title)')
+            .not.toMatch(/from-surface/);
+    });
+
     it('renders nominator display name', () => {
         renderWithProviders(
             <NominationCard

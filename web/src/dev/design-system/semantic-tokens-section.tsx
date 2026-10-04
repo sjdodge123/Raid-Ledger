@@ -81,7 +81,8 @@ const BUTTON = 'px-3 py-1 text-xs rounded text-foreground';
 /**
  * Rule D-6: a SOLID button fill stays a raw hue. `index.css:785-790` forces the
  * white label off `.bg-emerald-600.text-foreground` on the six light schemes;
- * `bg-success` is not in that list, so its label goes near-black there.
+ * `bg-success` is not in that list, so its demo carries a raw `text-white` (the
+ * success-fill rule) — `text-foreground` there is #0f172a, 3.26:1 on #047857.
  */
 function ButtonFillComparison(): JSX.Element {
     return (
@@ -92,8 +93,8 @@ function ButtonFillComparison(): JSX.Element {
                 </StateFrame>
             </DoBlock>
             <DontBlock title="tokenise a solid button fill">
-                <StateFrame label="bg-success text-foreground" note="No forced-white rule — dark label on light schemes.">
-                    <button type="button" className={`${BUTTON} bg-success`} data-testid="ds-button-token">Lock in</button>
+                <StateFrame label="bg-success text-white" note="Needs a raw text-white label (text-foreground goes #0f172a on light, 3.26:1), and no hover step reaches it.">
+                    <button type="button" className="px-3 py-1 text-xs rounded bg-success text-white" data-testid="ds-button-token">Lock in</button>
                 </StateFrame>
             </DontBlock>
         </SideBySide>

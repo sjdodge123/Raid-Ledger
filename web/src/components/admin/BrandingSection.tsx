@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useBranding } from '../../hooks/use-branding';
 import { API_BASE_URL } from '../../lib/config';
+import { brandLabelFor } from '../../lib/brand-label';
 import { LOGO_ACCEPT_MIME, LOGO_FORMAT_HINT } from '../../constants/branding';
 import { Button } from '../ui/button';
 import { ColorInput } from '../ui/color-input';
@@ -107,9 +108,9 @@ function BrandingPreview({ nameValue, logoUrl, colorValue }: { nameValue: string
                     </div>
                     <span className="font-bold text-foreground">{nameValue || 'Raid Ledger'}</span>
                 </div>
-                {/* Not a control: a static sample of the accent fill. data-brand-fill + text-foreground is the
-                    index.css forced-white idiom (the Button brandColor precedent), so the label reads light on every scheme. */}
-                <span data-brand-fill="" className="inline-flex px-4 py-2 rounded-lg text-sm font-medium text-foreground" style={{ backgroundColor: colorValue }}>
+                {/* Not a control: a static sample of the accent fill. data-brand-fill + data-brand-label is the
+                    Button brandColor idiom, so the label is whichever of white / dark reads on the fill (ROK-1472). */}
+                <span data-brand-fill="" data-brand-label={brandLabelFor(colorValue)} className="inline-flex px-4 py-2 rounded-lg text-sm font-medium text-foreground" style={{ backgroundColor: colorValue }}>
                     Sample Button
                 </span>
             </div>

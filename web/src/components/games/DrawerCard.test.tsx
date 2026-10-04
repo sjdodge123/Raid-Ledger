@@ -223,7 +223,7 @@ describe('ROK-1525 — badges are unchanged without an activation handler', () =
     it('OwnerBadge renders the same span it always did', () => {
         const { container } = render(<OwnerBadge count={4} />);
         expect(container.innerHTML).toBe(
-            '<span class="px-2 py-0.5 text-xs font-bold rounded bg-emerald-500/90 text-white">4 own</span>',
+            '<span class="px-2 py-0.5 text-xs font-bold rounded bg-success text-white">4 own</span>',
         );
     });
 });

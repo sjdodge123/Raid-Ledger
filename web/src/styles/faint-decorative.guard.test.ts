@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { AA_SMALL_TEXT, contrastRatio, stripComments } from './wcag-contrast';
+import { AA_SMALL_TEXT, contrastRatio, luminance, stripComments } from './wcag-contrast';
 import { lightSchemes } from './light-scheme-css';
 import { stripComments as stripCodeComments } from '../test/form-primitives-count';
 
@@ -15,9 +15,11 @@ import { stripComments as stripCodeComments } from '../test/form-primitives-coun
  * disabled labels, relative times — is `text-dim`, which this guard holds at AA on the
  * default light scheme's surface, panel and overlay.
  *
- * Scope: `quest-log` (a `data-variant` on top of `data-scheme="light"`), `sky`, `dawn`,
- * `holy` and `celestial` each declare their own tinted `--color-dim`; raising those is an
- * open design call, so only the default `light` scheme is pinned here.
+ * The tinted light schemes `sky`, `dawn`, `holy` and `celestial` declare their own
+ * `--color-dim`; operator ruling 2026-10-04 (ROK-1472) darkened each to AA on its own
+ * surface and panel, pinned below. `quest-log` (a `data-variant` on top of
+ * `data-scheme="light"`) darkened BOTH its `--color-dim` and `--color-muted` to AA on its
+ * surface and panel (operator ruling 2026-10-04), dim kept one step lighter than muted.
  *
  * Comments are stripped FIRST (CSS and TSX), so prose naming a class can neither satisfy
  * nor trip a check.
@@ -208,5 +210,54 @@ describe('light --color-dim is readable text (ROK-1472)', () => {
             ratio,
             `light --color-dim ${DIM} is ${ratio}:1 on ${name} (${bg}) — placeholders, disabled and relative-time text need ${AA_SMALL_TEXT}:1`,
         ).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+/** The tinted light schemes that declare their own `--color-dim` (ROK-1472 ruling 2026-10-04). */
+const TINTED = ['sky', 'dawn', 'holy', 'celestial'] as const;
+
+/** `--color-dim` from a scheme's own `[data-scheme="x"] { … }` block. */
+function tintedDim(name: string): string {
+    const block = new RegExp(`\\[data-scheme="${name}"\\]\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
+    return (/--color-dim:\s*(#[0-9a-fA-F]{6})/.exec(block)?.[1] ?? '').toLowerCase();
+}
+
+describe('tinted light schemes: --color-dim is readable text (ROK-1472)', () => {
+    const cases = TINTED.flatMap((name) => {
+        const scheme = lightSchemes(css).find((s) => s.name === name);
+        return (['surface', 'panel'] as const).map((bg) => [name, bg, tintedDim(name), scheme?.[bg] ?? ''] as const);
+    });
+
+    it.each(cases)('%s --color-dim clears AA on its %s', (name, bg, dim, hex) => {
+        expect(dim, `${name} declares no --color-dim`).toMatch(/^#[0-9a-f]{6}$/);
+        expect(hex, `${name} has no resolved ${bg}`).toMatch(/^#[0-9a-f]{6}$/i);
+        const ratio = contrastRatio(dim, hex);
+        expect(ratio, `${name} --color-dim ${dim} is ${ratio}:1 on its ${bg} (${hex}); readable text needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+/** A `--color-{token}` hex from quest-log's own `[data-variant="quest-log"] { … }` token block. */
+function questLogToken(token: string): string {
+    const block = /\[data-variant="quest-log"\]\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    return (new RegExp(`--color-${token}:\\s*(#[0-9a-fA-F]{6})`).exec(block)?.[1] ?? '').toLowerCase();
+}
+
+describe('quest-log: --color-dim and --color-muted are readable text (ROK-1472)', () => {
+    const cases = (['dim', 'muted'] as const).flatMap((text) =>
+        (['surface', 'panel'] as const).map((bg) => [text, bg, questLogToken(text), questLogToken(bg)] as const),
+    );
+
+    it.each(cases)('quest-log --color-%s clears AA on its %s', (text, bg, fg, hex) => {
+        expect(fg, `quest-log declares no --color-${text}`).toMatch(/^#[0-9a-f]{6}$/);
+        expect(hex, `quest-log declares no --color-${bg}`).toMatch(/^#[0-9a-f]{6}$/);
+        const ratio = contrastRatio(fg, hex);
+        expect(ratio, `quest-log --color-${text} ${fg} is ${ratio}:1 on its ${bg} (${hex}); readable text needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+
+    it('keeps dim one step lighter than muted', () => {
+        const [dim, muted] = [questLogToken('dim'), questLogToken('muted')];
+        expect(luminance(dim), `quest-log dim ${dim} must stay lighter than muted ${muted}`).toBeGreaterThan(luminance(muted));
     });
 });

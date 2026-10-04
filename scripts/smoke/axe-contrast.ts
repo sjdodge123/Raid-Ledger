@@ -14,7 +14,9 @@
  *   (web/src/hooks/use-theme-sync.ts), and the smoke user's saved theme is
  *   shared, mutable state, so without the pin a page could re-render in the
  *   dark scheme mid-test.
- * - `expectLightScheme(page)` proves the boot path took effect.
+ * - `gotoWithPinnedPreferences(page, path)` navigates and waits for that pinned
+ *   read; `releaseLightScheme(page)` (afterEach) waits out any late handler.
+ * - `expectLightScheme(page, scheme?)` proves the boot path took effect.
  * - `waitForFiniteAnimations(page)` waits until no finite CSS animation or
  *   transition is mid-flight, so axe never measures a half-faded element.
  * - `expectNoContrastViolations(page)` runs the axe `color-contrast` rule on
@@ -73,6 +75,47 @@ export function pinLightPreferences(body: unknown, lightThemeId: string): unknow
     return { ...body, data: { ...data, themeMode: 'light', lightTheme: lightThemeId } };
 }
 
+/** Whether `response` is the app's own preferences read (the one `useLightScheme` pins). */
+export function isPreferencesRead(url: string, method: string): boolean {
+    return method === 'GET' && new URL(url).pathname.endsWith('/users/me/preferences');
+}
+
+/** How long `gotoWithPinnedPreferences` waits for the pinned preferences read. */
+export const PINNED_PREFERENCES_TIMEOUT_MS = 15_000;
+
+/**
+ * Navigate and wait until the pinned preferences read has been fulfilled. Past
+ * this point the app has applied the server theme (the pinned light one), so a
+ * check made now cannot be overtaken by a late theme sync, and the route
+ * handler is no longer mid-flight.
+ */
+export async function gotoWithPinnedPreferences(
+    page: Page,
+    path: string,
+    schemeId: string,
+    timeout = PINNED_PREFERENCES_TIMEOUT_MS,
+): Promise<void> {
+    const pinned = page
+        .waitForResponse((r) => isPreferencesRead(r.url(), r.request().method()), { timeout })
+        .catch((cause: unknown) => {
+            throw new Error(`preferences GET never arrived while pinning scheme ${schemeId} (${path})`, { cause });
+        });
+    // Promise.all observes both, so a goto that throws first cannot leave the
+    // pinned wait as an unhandled rejection.
+    await Promise.all([pinned, page.goto(path)]);
+}
+
+/**
+ * Call from `afterEach`. Removes the preferences route and WAITS for any handler
+ * still running (a refetch fired late in the test): the handler reads the
+ * fetched body, and once the test's context closes that read throws
+ * `Response has been disposed`. Waiting, not `ignoreErrors`, so a handler that
+ * fails for any other reason still fails the test.
+ */
+export async function releaseLightScheme(page: Page): Promise<void> {
+    await page.unrouteAll({ behavior: 'wait' });
+}
+
 /** Boot every later navigation of `page` in the given light theme. */
 export async function useLightScheme(
     page: Page,
@@ -93,9 +136,13 @@ export async function useLightScheme(
     );
 }
 
-/** Assert the page actually rendered in the light scheme. */
-export async function expectLightScheme(page: Page): Promise<void> {
-    await expect(page.locator('html')).toHaveAttribute('data-scheme', 'light');
+/**
+ * Assert the page actually rendered in the light scheme. `default-light` (and
+ * quest-log) render as `data-scheme="light"`; a tinted light theme renders as
+ * its own id (SUB_THEME_CONFIG in web/src/stores/theme-helpers.ts), so pass it.
+ */
+export async function expectLightScheme(page: Page, scheme = 'light'): Promise<void> {
+    await expect(page.locator('html')).toHaveAttribute('data-scheme', scheme);
 }
 
 /** Wait until every finite animation/transition has finished. */
