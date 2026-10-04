@@ -59,6 +59,7 @@ import {
   assertSlotBelongsToMatch,
   assertNoDuplicateSlot,
   assertCallerMayVote,
+  assertCallerMayViewPoll,
 } from './scheduling-guard.helpers';
 import {
   archiveAndNotifyCancel,
@@ -97,17 +98,17 @@ export class SchedulingService {
     callerRole: string | null = null,
   ): Promise<SchedulePollPageResponseDto> {
     const match = await this.findMatchOrThrow(matchId);
-    if (match.lineupId !== lineupId) {
+    if (match.lineupId !== lineupId)
       throw new NotFoundException('Match not found in this lineup');
-    }
     const { pollMatch, lineup, members, slots, voterCount } =
       await loadSchedulePollInputs(this.db, match, matchId);
+    const viewer = userId === null ? null : { id: userId, role: callerRole };
+    if (lineup) await assertCallerMayViewPoll(this.db, lineup, viewer);
     // ROK-1302: a lineup that opted out of the scheduling phase has no poll —
     // 404 the page (the decided UI already hides the CTA; this guards a
     // hand-crafted URL or the lazy slot-create path).
-    if (lineup && lineup.includeSchedulingPhase === false) {
+    if (lineup && lineup.includeSchedulingPhase === false)
       throw new NotFoundException('Scheduling is disabled for this lineup');
-    }
     return assembleSchedulePollResponse(
       this.db,
       { pollMatch, lineup, members, slots, voterCount },
