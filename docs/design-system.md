@@ -64,7 +64,8 @@ their own roles.
 
 **Contrast guards.** `web/src/styles/semantic-tokens.guard.test.ts` checks semantic token
 contrast; `raw-hue-light.guard.test.ts` checks raw Tailwind hue contrast on the light families;
-`faint-decorative.guard.test.ts` holds light `--color-dim` at AA on surface, panel and overlay and
+`faint-decorative.guard.test.ts` holds light `--color-dim` at AA on surface, panel and overlay (and each tinted
+scheme's own `--color-dim` on its own surface and panel) and
 fails on any `text-faint` / `placeholder-faint` that is not `aria-hidden`. Any colour token change
 MUST keep all three green — a token edit that turns one red is not done, not "acceptable regression."
 
@@ -75,8 +76,8 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-panel` | `bg-panel` | `#1e293b` | `#f1f5f9` | Inset panels, inputs, chips (off) |
 | `--color-overlay` | `bg-overlay` | `#334155` | `#e2e8f0` | Hover fill on panel-level surfaces |
 | `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Decorative only (separators, icons), always `aria-hidden`. Never readable text (1.2–1.9:1 on every light scheme) |
-| `--color-dim` | `text-dim` | `#64748b` | `#5a697f` | Placeholders, disabled text, the quietest readable text (light: 5.58 surface / 5.10 panel / 4.53 overlay) |
-| `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common) |
+| `--color-dim` | `text-dim` | `#64748b` | `#5a697f` | Placeholders, disabled text, the quietest readable text (light: 5.58 surface / 5.10 panel / 4.53 overlay). Tinted light schemes declare their own, darkened to AA on their own surface / panel by operator ruling 2026-10-04 (ROK-1472): sky `#4E6E8B` 5.35 / 4.64, dawn `#8A6045` 4.93 / 4.61, holy `#576E93` 5.18 / 4.62, celestial `#6D5E4B` 5.12 / 4.64, quest-log `#756247` 5.28 / 4.63 (was `#a89070` 2.75 / 2.42; darkened together with its `--color-muted` so dim stays one step lighter) |
+| `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common). quest-log declares its own, `#685640` 6.33 surface / 5.56 panel (was `#8b7355` 4.05 / 3.55; operator ruling 2026-10-04, ROK-1472) |
 | `--color-secondary` | `text-secondary` | `#cbd5e1` | `#334155` | Body text |
 | `--color-foreground` | `text-foreground` | `#ffffff` | `#0f172a` | Primary text, headings |
 | `--color-edge` | `border-edge` | `#334155` | `#cbd5e1` | Default border |
@@ -103,7 +104,7 @@ including `in oklab` — `components/features/game-time/phone/week-strip.fills.t
 
 **Themes.** Fifteen schemes (`web/src/stores/theme-registry.ts`). `data-scheme` on `<html>` swaps every
 value — except `quest-log`, applied via `data-variant` (`theme-helpers.ts:53,76-82`; tokens at
-`index.css:1198`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
+`index.css:1269`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
 block `index.css:106`, plus per-scheme re-overrides `:199` `sky`, `:251` `dawn`, `:303` `holy`, `:355`
 `celestial` — see checklist item 7). Dark family: `default-dark`, `space`, `underwater`, `obsidian`,
 `ember`, `arctic`, `bloodmoon`, `forest`, `fel`. Every colour must be a token or a §2.2 accent hue — a raw
@@ -112,8 +113,8 @@ hex is a bug in 14 of the 15 themes.
 **The two families are not symmetric:** light tokens sit on *unqualified* `[data-scheme=...]` selectors
 and therefore cascade into nested scopes, while the dark tokens are declared on `@theme` (`:32`) and
 `html` (`:96`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
-either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1269`,
-`:1282`) — full list in `docs/design-system-tokens.md` §4.
+either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1339`,
+`:1352`) — full list in `docs/design-system-tokens.md` §4.
 
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
@@ -131,14 +132,27 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
 - **DO** put the opacity modifier on the token (`bg-success/10`, `border-warning/30`): it works at any
   alpha. The raw hues only have light mappings for the alphas hand-listed in `index.css` —
   `bg-amber-500/70` had none; `bg-warning/70` needs none.
-- **DON'T** tokenise a **solid accent button fill.** `bg-emerald-600` / `bg-red-600` stay raw because the
-  forced-white label rule (`index.css:780-787`) is keyed to those class names; the journey hero's CTA keeps
-  `bg-emerald-600` for exactly this reason (`JourneyHero.tsx:173-175`).
+- **DON'T** tokenise a **solid accent button fill.** `bg-emerald-600` / `bg-red-600` stay raw because
+  `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:819-827`)
+  and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
+  an emerald-800 `#065f46` hover (7.68:1) on any element that also carries `hover:bg-emerald-500` /
+  `hover:bg-emerald-700` (`:837-851`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
+  Both rules are unlayered, so they skip a disabled / `aria-disabled` element that carries its own
+  `disabled:bg-*` / `aria-disabled:bg-*` — otherwise they beat Tailwind v4's `@layer utilities` variant and
+  that button paints enabled-green. An opacity-only disabled or `loading` primary keeps the fill and fades.
+  quest-log's `!important` gold rules use the same skip. The hover sits in `@media (hover: hover)`.
+  A token fill gets neither. The journey hero's CTA keeps `bg-emerald-600` for exactly this reason
+  (`JourneyHero.tsx:173-175`).
 - **Text on a `bg-success` fill is `text-white`, not `text-foreground`.** `bg-success` is not in the
   forced-white list, so `text-foreground` would turn `#0f172a` on the six light schemes; `text-white` is
   what the dark family already paints, and the light fill (`#047857`) is darker than the dark one, so the
   label only gains contrast there (`JourneyHero.tsx:163`). This is the one
   exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
+- **DON'T put `text-white` on a raw `bg-emerald-500` / `bg-amber-500` / `bg-cyan-500` (any `/NN`) or `bg-cyan-600`.** None is
+  repainted on the light schemes and white measures 2.2–3.6:1 on them (the `/games` "Best Price" chip was
+  2.3:1, "You own" 2.34:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,
+  `WishlistBadge`, the rating chip); a cyan chip is solid `bg-cyan-500` / `bg-cyan-600` + `text-foreground`
+  (`YouOwnBadge`; `#0f172a` on light, 7.55:1); `brand-fill-forced-white.guard.test.ts` fails the pairing.
 - **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
 
 Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
@@ -153,12 +167,16 @@ Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/s
 | `cyan`, `purple`, `yellow`, `green` | ≤14 each | One-off categorical accents — do not add more |
 
 Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over `bg-panel`, border
-`border-emerald-500/30`. Solid fills (`bg-emerald-600`) are for buttons only.
+`border-emerald-500/30`. Solid fills (`bg-emerald-600`) are mainly buttons; the few badges, dots and toggle
+tracks that use it step to emerald-700 on light with the buttons (§4.12).
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
 text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
-(`:759-773`); solid fills are identical in both with the label forced white on light (`:796-803`), and
-`.badge-overlay` (`:801-813`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
+(`:759-773`); solid fills keep their hue with the label forced white on light (`:819-827`) — except the primary
+`bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
+(`:837-851`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
+`bg-cyan-600` / `bg-cyan-500` (white is 3.62 / 2.37:1 on them), whose `text-foreground` label is forced to `#0f172a` (4.93 / 7.55:1; dawn's own
+foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity
@@ -246,7 +264,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | The lower-level pieces `filter-entry.tsx` composes: `FilterPanel` is the inline collapsible panel ("Filters" + "Clear all", scrolls internally past `max-h-[500px]`) that becomes a `BottomSheet` below `DESKTOP_MQ`, and closes on Escape with focus returned to the trigger (§4.1); `FilterPanelTrigger` is the bare 44px funnel button. Reach for these only when `FilterEntry` doesn't fit. | Building a new filter entry point, or reading how one works | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `onClose`, `children`; trigger: `activeCount`, `isOpen`, `onClick`, `describeCount` |
 | `filter-fab.tsx` → `FilterFab` (+ `fab-position.ts`) | The Filters FAB (§4.1, ROK-1659): 56px round, `right-4` (`md:right-5` from 768px, centred over the feedback button), `lg:hidden`, neutral tone (`bg-surface border-edge-strong`) with the active-filter badge. Portaled to `document.body` so a sticky toolbar's stacking context never traps it. Normally reached through `FilterEntry`, not mounted directly. | Phone/tablet filter entry, below 1024px | `activeCount`, `isOpen`, `onClick`, `stackAboveCreate` (lifts it above a page's create `FAB` — `fab-position.ts`), `describeCount` |
 | `filter-count-badge.tsx` → `FilterCountBadge` | The active-filter count badge shared by `FilterPanelTrigger` and `FilterFab`: solid `bg-success` pill, renders nothing at 0, count re-exposed via `aria-describedby` since both openers are named "Filters". | Never mounted directly — internal to `filter-panel.tsx` / `filter-fab.tsx` | `count`, `id`, `describe` (screen-reader wording override, defaults to `describeActiveFilters` (in `filter-count-badge.helpers.ts`, with the `DescribeFilterCount` type) → "N active filters"; the calendar passes `describeHiddenGames` → "N games hidden"), `offset` (`'fab'` 4px corner inset for the 56px FAB, default; `'trigger'` 6px for the 44px toolbar funnel) |
-| `button.tsx` → `Button` (ROK-1646) | **The** button. Seven variants — `primary` (`bg-emerald-600`), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), and three soft tints of one shape (`/10` tint, token label, `/30` border, `/20` hover): `destructive-soft` (`danger`), `warning-soft` (`warning` — Restore, Pause, Hide) and `success-soft` (`success` — Resume, Run now, Unhide). Tint a button with a variant, never colour classes in `className` — `Button` has no tailwind-merge — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. A row action menu is `role="menuitem"` ghost / `destructive-soft` rows (§4.11). | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), `brandColor` (ROK-1655 — a runtime/provider fill only, §4.11), forwarded ref, all `ButtonHTMLAttributes` |
+| `button.tsx` → `Button` (ROK-1646) | **The** button. Seven variants — `primary` (`bg-emerald-600`; on light `#047857` with a darker `#065f46` hover, §6.10), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), and three soft tints of one shape (`/10` tint, token label, `/30` border, `/20` hover): `destructive-soft` (`danger`), `warning-soft` (`warning` — Restore, Pause, Hide) and `success-soft` (`success` — Resume, Run now, Unhide). Tint a button with a variant, never colour classes in `className` — `Button` has no tailwind-merge — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. A row action menu is `role="menuitem"` ghost / `destructive-soft` rows (§4.11). | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), `brandColor` (ROK-1655 — a runtime/provider fill only; its label is white or `#0f172a`, whichever has the higher contrast on the fill, on every scheme — ROK-1472, §4.11), forwarded ref, all `ButtonHTMLAttributes` |
 | `stretched-action.tsx` → `StretchedAction` (TDB:1949) | The whole-card action of a clickable card that holds its own controls (§4.2): a native `<button type="button">` with no content and no fill, `absolute -inset-px cursor-pointer rounded-lg` + `FOCUS_RING` on `ring-offset-2 ring-offset-surface`. `-inset-px` also covers the frame's 1px border, so a click there fires the action; the offset keeps the focus ring off a frame's own `ring-2` (RosterSlot's current-user glow), where a flush ring would vanish. Not `Button`, whose `relative inline-flex`, 44px minimum, padding and label span fight an invisible overlay. | A card with its own link / Remove button whose frame is also clickable (`RosterSlot`). Render it as the `relative` frame's FIRST child | `label` (the accessible name — keep any visible verb in it, WCAG 2.5.3), `onClick`, every other button attribute except `type` / `className` / `children` / `aria-label` / `aria-labelledby` (`label` is the only accessible name), forwarded ref |
 | `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
 | `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-14` so text clears a 44px button) — on `fieldSize="sm"` both are restated at `lg:` (`lg:pl-10` / `lg:pr-14`), because `sm`'s `lg:px-2` otherwise outranks them from `lg` up and the text runs under the icon, `mono`, forwarded ref. `type` `date` / `time` / `datetime-local` / `month` / `week` also get `min-w-0 appearance-none` + a left-aligned value, so iPadOS's native control can't overflow a grid cell (ROK-1690) |
@@ -402,7 +420,9 @@ click to the action instead, so it keeps the pointer.
 Rendered example: `/dev/design-system` → Overlays and containers → "Stretched-button card".
 
 **Light / Dark** — the frame is tokens and flips; the artwork does not (`GradientOverlay` stays dark so
-white titles stay legible over the *image*; anything on the art needs `.badge-overlay`). Detail:
+white titles stay legible over the *image*; anything on the art needs `.badge-overlay`). The lineup
+`NominationCard` cover uses the same `GradientOverlay` under its white title (ROK-1472 — its old `from-surface`
+fade went white on light, ~1.1:1). Detail:
 `design-system-tokens.md` §3.
 
 ### 4.3 Chips and pills
@@ -648,9 +668,12 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   saved accent), never a theme colour; presets and Reset set `value` and the draft follows.
 - **Brand fills are `Button brandColor`** (ruling 3): a provider's runtime colour (`provider.color`,
   Discord `#5865F2`) as an inline fill. It replaces the variant's classes and adds `data-brand-fill` +
-  `text-foreground`. On the six light schemes the index.css forced-white rule (`:797-805`) sets it to
-  `#fff`; on the dark schemes it stays `text-foreground`, which is already near-white there — so the
-  label reads light on every scheme, but is pure white only on the light ones. Theme colours use the variants: never pass a token or a
+  `text-foreground` + `data-brand-label="light|dark"`. **The label is picked by contrast** (operator ruling
+  2026-10-04, ROK-1472): `brandLabelFor(fill)` (`web/src/lib/brand-label.ts`) returns whichever of white and
+  `#0f172a` has the higher WCAG contrast on the fill, and `index.css:853-857` paints it on EVERY scheme —
+  Discord blurple gets white, a light accent (`#10b981`, `#f59e0b`) gets `#0f172a`. `[data-brand-fill]` is
+  NOT in the forced-white list. A static, non-interactive sample of a runtime fill (BrandingSection's
+  "Sample Button") uses the same two attributes and the same helper. Theme colours use the variants: never pass a token or a
   hand-picked hex to `brandColor`, and never hand-write `bg-[#hex]` on a button.
 - **A segmented filter with an "All" option uses a sentinel value** (ROK-1653, ruling 6). `RadioGroup`
   values are strings, so "no filter" is a reserved value (`'__all__'`) mapped to `null` at the boundary:
@@ -681,10 +704,11 @@ resolves to nothing (§6.3); `SearchInput` replaces it. Don't add a headless com
 the in-house one (operator ruling, ROK-1646).
 
 **Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
-solid `primary`/`destructive` fills are identical in both with the label forced white on light (§6.10).
+solid `primary`/`destructive` fills keep their hue with the label forced white on light, and `primary` steps to
+emerald-700 `#047857` with a darker `#065f46` hover there (§6.10).
 Native control chrome follows root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the
 ROOT, not in a scoped preview (`design-system-tokens.md` §3). A `brandColor` fill is the caller's data and
-does not flip; its label is white in both. Rendered: `/dev/design-system` → *Forms*
+does not flip; its label is white or `#0f172a` by contrast on the fill, the same on every scheme (ROK-1472). Rendered: `/dev/design-system` → *Forms*
 (`web/src/dev/design-system/forms-section.tsx` + `forms-pickers-demo.tsx` + `forms-recipes-demo.tsx` — the
 segmented "All" filter, the row menu and the one-save-at-a-time row lock).
 
@@ -698,8 +722,11 @@ text-xs rounded-full` with a tinted background.
 
 **DON'T** show a zero-count badge — `FilterCountBadge` renders nothing at `count <= 0`.
 
-**Light / Dark** — a solid-fill badge is identical in both by design (§6.10) whether it is a raw hue or,
-as here, the `success` token; a tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
+**Light / Dark** — a solid-fill badge keeps the same fill in both by design (§6.10) whether it is a raw hue or,
+as here, the `success` token — with one exception: every `bg-emerald-600` (buttons, and also badges, dots
+and toggle tracks such as `VetoGameCard`, the healer role colour, `identity-sections`) steps to emerald-700
+`#047857` on the light schemes. That is intended: the darker green keeps or gains contrast on a light
+surface, and a forced-white label on it is 5.48:1 (3.77:1 on `#059669`). A tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
 remap.
 
 ### 4.13 Journey hero — one component, every phase, every width
@@ -728,7 +755,7 @@ once the viewer's part is done, `:163`) → a **4px progress line** (`h-1`, `:54
 control per phase, and everything else goes in Manage.
 
 **DON'T** "fix" the inline CTA's `bg-emerald-600` (`HeroCta`, `:172-178`) to `bg-success`: `index.css`
-forces the white label off that exact class, so the token would ship a dark label on the light schemes
+forces the white label (and the light emerald-700 repaint) off that exact class, so the token would ship a dark label on the light schemes
 (§2.2 D-6). Conversely the ✓ disc's `bg-success text-white` (`:163`) is correct as written.
 
 Rendered: `/dev/design-system` → *Pattern — journey hero* (`web/src/dev/design-system/hero-section.tsx`).
@@ -912,7 +939,7 @@ them; do not fix them as scope creep.
 
 3. ~~**`--color-accent` is referenced but never defined**~~ — **Resolved by ROK-1645.** Every call site
    was replaced rather than the token declared (operator ruling 2026-09-22: "accent" means nothing distinct
-   from `success`): solid fills are `bg-emerald-600 hover:bg-emerald-500 text-white` (forced-white list),
+   from `success`): solid fills are `bg-emerald-600 hover:bg-emerald-500 text-white` (forced-white list; on light `#047857` / hover `#065f46`, ROK-1472),
    tints/text are `*-success`, focus rings `ring-success/80`. The same sweep removed the other undeclared
    utilities — `ring-primary`, `text-primary`, `bg-base`, `bg-bg`, `text-heading`, `bg-panel-hover`,
    `var(--color-border)`. `web/src/styles/undefined-tokens.guard.test.ts` now fails on any colour utility
@@ -955,10 +982,16 @@ them; do not fix them as scope creep.
    `:688-705`, and every repaint is measured on the surface, panel and its own `/10` tint by
    `raw-hue-light.guard.test.ts`.
 
-10. **Solid accent fills are identical in both families** — `bg-emerald-600` buttons and the
-    `bg-emerald-500` count badge do not move, label forced white on light (`:780-787`). Recorded because
-    it reads as a miss: it is deliberate — and it is why solid button fills were NOT tokenised by
-    ROK-1586 (§2.2).
+10. **Solid accent fills keep their hue in both families; the primary fill steps darker on light.**
+    The `bg-emerald-500` count badge and the other solid fills do not move, label forced white on light
+    (`:819-827`). The primary `bg-emerald-600` fill is the one light step (operator ruling 2026-10-04,
+    ROK-1472): emerald-700 `#047857` (5.48:1 under the white label; emerald-600 was 3.77:1) and, on an
+    element that also carries `hover:bg-emerald-500` / `hover:bg-emerald-700`, an emerald-800 `#065f46`
+    hover (7.68:1; the old emerald-500 hover was ~2.5:1) — `:837-843`, guarded by
+    `web/src/styles/primary-fill-light.guard.test.ts`. The `/10 /30 /50` alpha variants keep their own
+    washes; quest-log's `!important` gold button wins over all of it. This is still why solid button fills
+    were NOT tokenised by ROK-1586 (§2.2). A `Button brandColor` label is NOT forced white: it is white or
+    `#0f172a` by contrast on every scheme (§4.11, `brand-fill-forced-white.guard.test.ts`).
 
 11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal-frame.tsx:98`) vs
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both

@@ -24,8 +24,8 @@
  *
  * Colour assertions (D4) are a DELIBERATE exception to TESTING.md
  * anti-pattern #3: AC2 specifies the amber-300 tonal token *because*
- * `bg-amber-500/90` is already double-booked by Wishlist and On Sale
- * (`game-badges.tsx:55`, `PriceBadge.tsx:12`). The token IS the acceptance
+ * `bg-warning` (was `bg-amber-500/90`) is already double-booked by Wishlist and On Sale
+ * (`game-badges.tsx` WishlistBadge, `PriceBadge.tsx`). The token IS the acceptance
  * criterion here, so it is asserted once per state and nowhere else.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -195,6 +195,7 @@ describe('LfgChip — lfg, one looking (AC2)', () => {
         const cls = screen.getByTestId('lfg-chip').className;
         expect(cls).toContain('bg-amber-300/95');
         expect(cls).not.toContain('bg-amber-500/90');
+        expect(cls).not.toContain('bg-warning');
     });
 });
 

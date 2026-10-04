@@ -9,7 +9,7 @@ import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { ConfirmationPill } from '../common/ConfirmationPill';
 import { GameBadgeRow, CarriedOverBadge } from '../games/game-badges';
 import { fromLineupEntry } from '../games/game-badges.helpers';
-import { GenreBadge, RatingBadge } from '../games/game-card-parts';
+import { GenreBadge, GradientOverlay, RatingBadge } from '../games/game-card-parts';
 import { GENRE_MAP } from '../../lib/game-utils';
 import { resolveEffectiveOnlineMax } from './coop-fit';
 import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
@@ -38,7 +38,9 @@ function CardCover({ entry }: { entry: LineupEntryResponseDto }): JSX.Element {
             ) : (
                 <div className="w-full h-full bg-zinc-800" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-t from-surface/90 via-surface/40 to-transparent" />
+            {/* ROK-1472: the shared art scrim — it stays dark on every scheme, so the white title reads over
+                the IMAGE. The old from-surface fade went white on light schemes (~1.1:1 under a white title). */}
+            <GradientOverlay />
 
             {/* Top-left: carried over marker, now the shared badge. */}
             {entry.carriedOver && (

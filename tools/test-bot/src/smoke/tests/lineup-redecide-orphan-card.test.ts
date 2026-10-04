@@ -24,13 +24,23 @@ import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import {
   POLL_OPEN,
-  archiveAllLineups,
   assertPollOpen,
   buildDecidedLineup,
   deleteLineup,
   loadSchedulingMatch,
   resolveLineupChannelId,
 } from './lineup-scheduling-poll-card.test.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
+
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = ['Re-decide Card '] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 /** Messages snapshotted before the lineup exists (a full fetch window). */
 const FENCE_SNAPSHOT_COUNT = 100;
@@ -141,7 +151,7 @@ const redecideDeletesOrphanedCard: SmokeTest = {
   name: 'Lineup re-decide deletes the wiped match poll card and posts a fresh one (TDB:571)',
   category: 'embed',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     const channelId = await resolveLineupChannelId(ctx.api, ctx.defaultChannelId);
     const fresh = await snapshotFence(channelId);
     const lineup = await buildDecidedLineup(ctx.api, `Re-decide Card ${Date.now()}`);

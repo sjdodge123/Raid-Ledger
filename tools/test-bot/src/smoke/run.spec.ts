@@ -1,11 +1,16 @@
 /**
- * Unit tests for isTimeoutError retry helper (ROK-952).
+ * Unit tests for the runner's pure helpers: isTimeoutError (ROK-952) and
+ * partitionTests, the parallel/sequential split (TDB:966).
  *
- * Run: npx tsx --test src/smoke/run.spec.ts
+ * run.ts itself is never imported here: it calls main() at module scope.
+ *
+ * Run: npx tsx src/smoke/run.spec.ts
  */
 import assert from 'node:assert/strict';
 import { SmokeAssertionError } from './assert.js';
 import { isTimeoutError } from './retry.js';
+import { partitionTests } from './test-partition.js';
+import type { SmokeTest } from './types.js';
 
 let passed = 0;
 let failed = 0;
@@ -61,6 +66,70 @@ test('returns false for non-Error values', () => {
 test('returns true when error message contains "timed out" anywhere', () => {
   const err = new Error('Operation XYZ timed out waiting for response');
   assert.equal(isTimeoutError(err), true);
+});
+
+// --- partitionTests tests ---
+
+console.log('\nrun.spec.ts — partitionTests\n');
+
+function smoke(
+  name: string,
+  category: SmokeTest['category'],
+  serial?: true,
+): SmokeTest {
+  const t: SmokeTest = { name, category, run: async () => undefined };
+  return serial ? { ...t, serial } : t;
+}
+
+const names = (tests: SmokeTest[]) => tests.map((t) => t.name);
+
+test('voice and cdp-command tests go to sequential', () => {
+  const { parallel, sequential } = partitionTests([
+    smoke('voice-a', 'voice'),
+    smoke('cdp-a', 'cdp-command'),
+  ]);
+  assert.deepEqual(names(sequential), ['voice-a', 'cdp-a']);
+  assert.deepEqual(names(parallel), []);
+});
+
+test('serial:true dm tests go to sequential', () => {
+  const { parallel, sequential } = partitionTests([
+    smoke('ai-chat-a', 'dm', true),
+    smoke('ai-chat-b', 'dm', true),
+  ]);
+  assert.deepEqual(
+    names(sequential),
+    ['ai-chat-a', 'ai-chat-b'],
+    'a serial-tagged dm test must not join the parallel pool',
+  );
+  assert.deepEqual(names(parallel), []);
+});
+
+test('untagged dm and embed tests go to parallel', () => {
+  const { parallel, sequential } = partitionTests([
+    smoke('dm-a', 'dm'),
+    smoke('embed-a', 'embed'),
+  ]);
+  assert.deepEqual(names(parallel), ['dm-a', 'embed-a']);
+  assert.deepEqual(names(sequential), []);
+});
+
+test('input order is preserved in both lists', () => {
+  const { parallel, sequential } = partitionTests([
+    smoke('p1', 'embed'),
+    smoke('s1', 'dm', true),
+    smoke('p2', 'dm'),
+    smoke('s2', 'voice'),
+    smoke('p3', 'flow'),
+    smoke('s3', 'dm', true),
+    smoke('s4', 'cdp-command'),
+  ]);
+  assert.deepEqual(names(parallel), ['p1', 'p2', 'p3']);
+  assert.deepEqual(names(sequential), ['s1', 's2', 's3', 's4']);
+});
+
+test('an empty input gives empty lists', () => {
+  assert.deepEqual(partitionTests([]), { parallel: [], sequential: [] });
 });
 
 // --- Summary ---

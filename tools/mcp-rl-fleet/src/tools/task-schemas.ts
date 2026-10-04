@@ -75,6 +75,22 @@ export interface ExecuteStatusReturn extends Partial<TaskStatusResult> {
   hint?: string;
   steps: TaskStatusResult['steps'];
   /**
+   * Laptop (`local-…`) task result fields — rl_env_deploy / rl_env_spin persist
+   * them so a terminal status read hands back the env login without log-parsing.
+   * admin_password is redacted by default (see credentials.ts).
+   */
+  url?: string | null;
+  internal_url?: string | null;
+  slot_url?: string | null;
+  admin_email?: string | null;
+  admin_password?: string | null;
+  expected_head?: string | null;
+  synced_head?: string | null;
+  /** rl_env_spin only: 'configured' | 'first-login' | 'none'. */
+  operator_admin?: string | null;
+  /** rl_env_spin only: non-fatal pipeline warnings (e.g. admin_bootstrap_failed). */
+  bootstrap_warnings?: Array<{ code: string; detail: string }> | null;
+  /**
    * Operator ruling 2026-09-12 — set on a TERMINAL validate-ci task whose
    * synced HEAD sha was recorded at dispatch. true means the fleet Playwright
    * tier PASSED and the pre-push sentinel was written for that sha.
