@@ -8,6 +8,8 @@
  * Both rules are unlayered, so they beat every Tailwind v4 `@layer utilities`
  * variant: each must skip `:disabled` and `[aria-disabled="true"]`, or a
  * disabled primary button paints enabled-green over its `disabled:bg-*`.
+ * The same holds for quest-log's `!important` gold `.bg-emerald-600` rules, so the
+ * disabled guard covers every scheme's solid primary fill rule.
  *
  * Comments are stripped first so a rule's own comment cannot satisfy the guard.
  */
@@ -33,13 +35,16 @@ const ENABLED = ':not(:disabled):not([aria-disabled="true"])';
 const BASE = `${SCOPE} .bg-emerald-600${ENABLED}`;
 const HOVER = `${SCOPE} .bg-emerald-600:is(.hover\\:bg-emerald-500, .hover\\:bg-emerald-700)${ENABLED}:hover`;
 
-/** Selectors of light-scope rules that paint a background onto solid `.bg-emerald-600` (not its `/NN` tints). */
-function lightPrimaryFillSelectors(): string[] {
+/** Selectors of rules, in ANY scheme, that paint a background onto solid `.bg-emerald-600` (not its `/NN` tints, not `:not(.bg-emerald-600)`). */
+function primaryFillSelectors(): string[] {
     return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
         .map(([, sel, body]) => [(sel ?? '').trim(), body ?? ''] as const)
-        .filter(([sel, body]) => sel.startsWith(SCOPE) && /\.bg-emerald-600(?!\\)/.test(sel) && /background(-color)?:/.test(body))
+        .filter(([sel, body]) => /(?<!:not\()\.bg-emerald-600(?!\\)/.test(sel) && /(^|[;\s])background(-color)?:/.test(body))
         .map(([sel]) => sel);
 }
+
+/** Selectors of the single rules wrapped in `@media (hover: hover) { … }`. */
+const HOVER_GATED = [...css.matchAll(/@media\s*\(hover:\s*hover\)\s*\{([^{}]+)\{[^{}]*\}\s*\}/g)].map(([, sel]) => (sel ?? '').trim());
 
 describe('primary fill on the light schemes (ROK-1472)', () => {
     it('repaints .bg-emerald-600 emerald-700, AA with the forced-white label', () => {
@@ -55,17 +60,18 @@ describe('primary fill on the light schemes (ROK-1472)', () => {
         expect(contrastRatio(hover ?? '#ffffff', '#ffffff'), 'white on the light primary hover').toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 
-    it('never paints over a disabled or aria-disabled button (its disabled: variant must win)', () => {
-        const sels = lightPrimaryFillSelectors();
-        expect(sels.length, 'no light .bg-emerald-600 fill rules found').toBeGreaterThanOrEqual(2);
+    it('no scheme paints a solid primary fill over a disabled or aria-disabled button', () => {
+        const sels = primaryFillSelectors();
+        expect(sels, 'expected the light fill + hover and the quest-log gold rules').toEqual(expect.arrayContaining([BASE, HOVER]));
+        expect(sels.length, 'quest-log gold fill rules not found').toBeGreaterThanOrEqual(5);
         const leaky = sels.filter((s) => !s.includes(':not(:disabled)') || !s.includes(':not([aria-disabled="true"])'));
-        expect(leaky, 'unlayered light .bg-emerald-600 rules must skip :disabled and [aria-disabled="true"]').toEqual([]);
+        expect(leaky, '.bg-emerald-600 fill rules (unlayered or !important) must skip :disabled and [aria-disabled="true"]').toEqual([]);
     });
 
-    it('gates the hover rule behind @media (hover: hover), like Tailwind v4 hover:', () => {
-        const media = /@media\s*\(hover:\s*hover\)\s*\{([^{}]+)\{[^{}]*\}\s*\}/g;
-        const gated = [...css.matchAll(media)].map(([, sel]) => (sel ?? '').trim());
-        expect(gated, `\`${HOVER}\` must sit inside @media (hover: hover)`).toContain(HOVER);
+    it('gates every primary-fill hover rule behind @media (hover: hover), like Tailwind v4 hover:', () => {
+        const hovers = primaryFillSelectors().filter((s) => s.endsWith(':hover'));
+        expect(hovers, `\`${HOVER}\` is a primary-fill hover rule`).toContain(HOVER);
+        expect(hovers.filter((s) => !HOVER_GATED.includes(s)), 'hover fill rules outside @media (hover: hover)').toEqual([]);
     });
 
     it('never repaints a bare hover:bg-emerald-500 on light', () => {

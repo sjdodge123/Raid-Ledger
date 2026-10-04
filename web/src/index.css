@@ -1435,8 +1435,10 @@ body {
         2px 2px 0 1px rgba(196, 168, 108, 0.4);
 }
 
-/* --- Buttons: fantasy embossed leather/gold aesthetic --- */
-[data-variant="quest-log"] .bg-emerald-600 {
+/* --- Buttons: fantasy embossed leather/gold aesthetic ---
+   Skips :disabled / [aria-disabled="true"]: the !important gold otherwise beats
+   every disabled:bg-* variant and a disabled button reads as enabled. */
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled):not([aria-disabled="true"]) {
     background: linear-gradient(180deg,
             #d4b45c 0%,
             var(--ql-gold) 40%,
@@ -1455,18 +1457,20 @@ body {
     letter-spacing: 0.03em;
 }
 
-[data-variant="quest-log"] .bg-emerald-600:hover {
-    background: linear-gradient(180deg,
-            #dfc066 0%,
-            #d4b45c 40%,
-            var(--ql-gold) 100%) !important;
-    box-shadow:
-        0 3px 12px rgba(201, 168, 76, 0.45),
-        inset 0 1px 0 rgba(255, 230, 140, 0.7),
-        inset 0 -1px 0 rgba(92, 64, 10, 0.25);
+@media (hover: hover) {
+    [data-variant="quest-log"] .bg-emerald-600:not(:disabled):not([aria-disabled="true"]):hover {
+        background: linear-gradient(180deg,
+                #dfc066 0%,
+                #d4b45c 40%,
+                var(--ql-gold) 100%) !important;
+        box-shadow:
+            0 3px 12px rgba(201, 168, 76, 0.45),
+            inset 0 1px 0 rgba(255, 230, 140, 0.7),
+            inset 0 -1px 0 rgba(92, 64, 10, 0.25);
+    }
 }
 
-[data-variant="quest-log"] .bg-emerald-600:active {
+[data-variant="quest-log"] .bg-emerald-600:not(:disabled):not([aria-disabled="true"]):active {
     background: linear-gradient(180deg,
             var(--ql-gold-hover) 0%,
             var(--ql-gold) 100%) !important;
