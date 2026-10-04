@@ -1,4 +1,11 @@
-import { parseTimestampUtc } from './timestamp-utils';
+import { sql } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import {
+  NOW_UTC,
+  parseTimestampUtc,
+  utcIsoText,
+  utcWallClock,
+} from './timestamp-utils';
 
 describe('parseTimestampUtc', () => {
   it('interprets a naïve space-separated string as UTC', () => {
@@ -43,5 +50,33 @@ describe('parseTimestampUtc', () => {
     const input = new Date('2026-06-18T14:30:00.000Z');
     const result = parseTimestampUtc(input);
     expect(result).toBe(input);
+  });
+});
+
+describe('UTC wall-clock SQL fragments', () => {
+  const render = (q: ReturnType<typeof sql>) => {
+    const { sql: text, params } = new PgDialect().sqlToQuery(q);
+    return { sql: text, params };
+  };
+
+  it('utcIsoText renders the expression as ISO-8601 text with a Z', () => {
+    expect(render(utcIsoText(sql`lower(e.duration)`))).toEqual({
+      sql: `to_char(lower(e.duration), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      params: [],
+    });
+  });
+
+  it('utcWallClock binds the instant as ISO and converts it to UTC wall clock', () => {
+    const at = new Date('2026-07-02T22:15:30.123Z');
+    expect(render(utcWallClock(at))).toEqual({
+      sql: `($1::timestamptz AT TIME ZONE 'UTC')`,
+      params: ['2026-07-02T22:15:30.123Z'],
+    });
+  });
+
+  it('NOW_UTC is the database clock as UTC wall clock', () => {
+    expect(render(sql`x <= ${NOW_UTC}`).sql).toBe(
+      `x <= (NOW() AT TIME ZONE 'UTC')`,
+    );
   });
 });

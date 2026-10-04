@@ -2225,6 +2225,16 @@ same day (#1278, #1279, #1280).
 - **[nit]** `web/src/components/admin/BindingConfigForm.tsx:67` (`BindingConfigForm`): 64 lines against the 30-line `max-lines-per-function` budget (ESLint warning, not an error). It was about 80 on main and 87 once the cross-row save lock added the `saveLocked` default and the multi-line `InertHealBanner` block. Moving the purpose-specific fields into `PurposeConfigSections` on this branch brought it to 64. The remainder is the JSX for the title, the inert-heal banner, `PurposeSelect`, `GameField`, the save error and `FormActions`.
   Suggested: split the remainder into a header child (title + `InertHealBanner`) and a footer child (save error + `FormActions`), keeping `handleSubmit` / `handleConvert` in the parent.
 
+### 2026-10-02 — fix/b46-tz-naive-bounds-1002 (TDB:1981 residual scope after the events.duration reader fix)
+
+- **[low]** The branch moved the scheduled-event, ephemeral-voice, LFG-now, recruitment-reminder and game-affinity readers onto shared UTC fragments (`utcIsoText`, `utcWallClock`, `NOW_UTC` in `api/src/drizzle/timestamp-utils.ts`). It also fixed two sites TDB:1981 did not name: the reconcile-backoff compare in `scheduled-event.db-helpers.ts` `findReconciliationCandidates`, and `voice-attendance-ephemeral.helpers.ts` `findActiveEventsByEphemeralChannel`. These TDB:1981 sites still compare the zone-less `events.duration` / `extended_until` with a `timestamptz`, so each window shifts by the DB session's UTC offset on a non-UTC session:
+  - `api/src/discord-bot/services/voice-attendance-flush.helpers.ts:91`/`:92`, `:111`/`:112`, `:151` (`${now.toISOString()}::timestamptz`)
+  - `api/src/lineups/ai-suggestions/voter-activity.helpers.ts:166` (`now() - interval ...`)
+  - `api/src/events/analytics-queries.helpers.ts:30`, `:110`, `:127`, `:179` (`<= NOW()`)
+  - `api/src/notifications/post-event-reminder.service.ts:99` (`BETWEEN (now() - ...) AND (now() - ...)`)
+  
+  Suggested: swap each for `utcWallClock(...)` / `NOW_UTC` from `timestamp-utils`, and add a `SET LOCAL TIME ZONE 'America/New_York'` integration case per reader, as `scheduled-event.db-helpers.tz.integration.spec.ts` does.
+- **[nit]** Inline copies of the ISO-Z `to_char` reader remain in `api/src/lineups/scheduling/scheduling-poll-state.helpers.ts:91`, `scheduling-poll-embed-data.helpers.ts:86`, `scheduling-unanimous.helpers.ts:78` and `scheduling-rally.helpers.ts:213`. Suggested: use `utcIsoText(...)`. For the `proposed_time AT TIME ZONE 'UTC'` pair, pass that expression in as the argument.
 ### 2026-10-02 — fix/b45-lineups-timestamptz-1002 (surfaced during TDB:1980)
 
 - **[low]** `api/src/drizzle/schema/community-lineup-tiebreakers.ts:46`: `round_deadline` is still a zone-less `timestamp`. Found while converting the sibling lineup and match columns to `timestamptz` in migration 0197; deliberately left out of that change. Two places in `api/src/lineups/lineup-tiebreaker-reminder.helpers.ts` read it:
