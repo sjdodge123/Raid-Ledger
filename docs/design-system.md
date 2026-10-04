@@ -76,8 +76,8 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-panel` | `bg-panel` | `#1e293b` | `#f1f5f9` | Inset panels, inputs, chips (off) |
 | `--color-overlay` | `bg-overlay` | `#334155` | `#e2e8f0` | Hover fill on panel-level surfaces |
 | `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Decorative only (separators, icons), always `aria-hidden`. Never readable text (1.2–1.9:1 on every light scheme) |
-| `--color-dim` | `text-dim` | `#64748b` | `#5a697f` | Placeholders, disabled text, the quietest readable text (light: 5.58 surface / 5.10 panel / 4.53 overlay). Tinted light schemes declare their own, darkened to AA on their own surface / panel by operator ruling 2026-10-04 (ROK-1472): sky `#4E6E8B` 5.35 / 4.64, dawn `#8A6045` 4.93 / 4.61, holy `#576E93` 5.18 / 4.62, celestial `#6D5E4B` 5.12 / 4.64. quest-log's `#a89070` is open — its `--color-muted` is sub-AA too |
-| `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common) |
+| `--color-dim` | `text-dim` | `#64748b` | `#5a697f` | Placeholders, disabled text, the quietest readable text (light: 5.58 surface / 5.10 panel / 4.53 overlay). Tinted light schemes declare their own, darkened to AA on their own surface / panel by operator ruling 2026-10-04 (ROK-1472): sky `#4E6E8B` 5.35 / 4.64, dawn `#8A6045` 4.93 / 4.61, holy `#576E93` 5.18 / 4.62, celestial `#6D5E4B` 5.12 / 4.64, quest-log `#756247` 5.28 / 4.63 (was `#a89070` 2.75 / 2.42; darkened together with its `--color-muted` so dim stays one step lighter) |
+| `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common). quest-log declares its own, `#685640` 6.33 surface / 5.56 panel (was `#8b7355` 4.05 / 3.55; operator ruling 2026-10-04, ROK-1472) |
 | `--color-secondary` | `text-secondary` | `#cbd5e1` | `#334155` | Body text |
 | `--color-foreground` | `text-foreground` | `#ffffff` | `#0f172a` | Primary text, headings |
 | `--color-edge` | `border-edge` | `#334155` | `#cbd5e1` | Default border |
@@ -136,7 +136,10 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:819-827`)
   and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
   an emerald-800 `#065f46` hover (7.68:1) on any element that also carries `hover:bg-emerald-500` /
-  `hover:bg-emerald-700` (`:829-835`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
+  `hover:bg-emerald-700` (`:829-843`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
+  Both rules are unlayered, so they skip `:disabled` and `[aria-disabled="true"]` — otherwise they beat
+  Tailwind v4's `@layer utilities` `disabled:bg-*` and a disabled button paints enabled-green — and the
+  hover sits in `@media (hover: hover)` like Tailwind's own `hover:`.
   A token fill gets neither. The journey hero's CTA keeps `bg-emerald-600` for exactly this reason
   (`JourneyHero.tsx:173-175`).
 - **Text on a `bg-success` fill is `text-white`, not `text-foreground`.** `bg-success` is not in the
@@ -164,7 +167,7 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
 (`:759-773`); solid fills keep their hue with the label forced white on light (`:819-827`) — except the primary
 `bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
-(`:829-835`, ROK-1472 ruling 2026-10-04) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
+(`:829-843`, ROK-1472 ruling 2026-10-04; disabled / `aria-disabled` buttons keep their `disabled:bg-*`) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple and indigo repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`); the opacity
@@ -709,8 +712,11 @@ text-xs rounded-full` with a tinted background.
 
 **DON'T** show a zero-count badge — `FilterCountBadge` renders nothing at `count <= 0`.
 
-**Light / Dark** — a solid-fill badge is identical in both by design (§6.10) whether it is a raw hue or,
-as here, the `success` token; a tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
+**Light / Dark** — a solid-fill badge keeps the same fill in both by design (§6.10) whether it is a raw hue or,
+as here, the `success` token — with one exception: every `bg-emerald-600` (buttons, and also badges, dots
+and toggle tracks such as `VetoGameCard`, the healer role colour, `identity-sections`) steps to emerald-700
+`#047857` on the light schemes. That is intended: the darker green keeps or gains contrast on a light
+surface, and a forced-white label on it is 5.48:1 (3.77:1 on `#059669`). A tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
 remap.
 
 ### 4.13 Journey hero — one component, every phase, every width

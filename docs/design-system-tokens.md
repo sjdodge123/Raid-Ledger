@@ -61,7 +61,7 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `hover:bg-amber-500/20` / `hover:bg-amber-500/30` | the raw 20% / 30% hue | `amber-100` at 0.7 / `amber-200` at 0.6 — the `/30` steps to amber-200 so it shows over a `/20` base | `:770-771` |
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha | `:777-789` |
-| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472) | `:829-835`, design-system.md §6.10 |
+| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips `:disabled` / `[aria-disabled="true"]` so `disabled:bg-*` still wins; non-button uses (badges, dots, toggle tracks) step too | `:829-843`, design-system.md §6.10 |
 
 `web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
 `bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule; `bg-amber-500/5`
@@ -139,7 +139,8 @@ to make white title text legible over the *image*, not over the theme surface. A
 layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
 `text-dim` — `#64748b` dark, `#5a697f` light (the same slate, a step darker so it clears AA on
 the light panel and overlay; the tinted schemes' own dims — sky `#4E6E8B`, dawn `#8A6045`, holy `#576E93`,
-celestial `#6D5E4B` — clear AA on their own surface and panel, ROK-1472) — so an image-less tile reads as the same quiet slate in
+celestial `#6D5E4B`, quest-log `#756247` — clear AA on their own surface and panel, ROK-1472; quest-log's
+`--color-muted` moved with it to `#685640`, 6.33 surface / 5.56 panel) — so an image-less tile reads as the same quiet slate in
 either family.
 
 ### Chips (§4.3)

@@ -91,7 +91,7 @@ function TintedSurfaces(): JSX.Element {
     );
 }
 
-/** Solid fills: same fill in both families; `:795-801` forces white label text on light. */
+/** Solid fills keep their hue in both families with a forced-white label on light — except the primary bg-emerald-600, which steps to #047857 (hover #065f46) on light. */
 function SolidFills(): JSX.Element {
     return (
         <div className="flex flex-wrap gap-2">
@@ -125,7 +125,7 @@ export function AccentsSection(): JSX.Element {
                     <TintedSurfaces />
                 </div>
                 <div className="bg-panel/50 border border-edge rounded-lg p-3">
-                    <div className="text-[10px] uppercase tracking-wider text-muted mb-2">Solid fill — identical on both, label forced white</div>
+                    <div className="text-[10px] uppercase tracking-wider text-muted mb-2">Solid fill — label forced white on light; primary steps to #047857</div>
                     <SolidFills />
                 </div>
             </div>
