@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { CreateCharacterDto } from '@raid-ledger/contract';
 import {
   checkRegionClaim,
+  prepareCharacterUpdate,
   prepareCreateDto,
   prepareUpdateDto,
 } from './characters-forever.helpers';
@@ -99,6 +100,30 @@ describe('prepareUpdateDto', () => {
     expect(() => prepareUpdateDto(RETAIL, { ruleset: 'pvp' })).toThrow(
       'Ruleset only applies to WoW: Forever characters',
     );
+  });
+});
+
+describe('prepareCharacterUpdate — legacy Forever row (region NULL)', () => {
+  const legacy = { id: 'c1', gameId: 7, region: null };
+  const db = () => dbReturning([FOREVER as never]);
+
+  it('refuses a ruleset with a clear 400', async () => {
+    const err: unknown = await prepareCharacterUpdate(db(), 1, legacy, {
+      ruleset: 'pvp',
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as Error).message).toBe(
+      'This character has no region, so it cannot take a ruleset. Delete it and add it again to pick a region and ruleset.',
+    );
+  });
+
+  it('keeps its one-word name saveable (e.g. a role change)', async () => {
+    await expect(
+      prepareCharacterUpdate(db(), 1, legacy, {
+        name: 'Thrall',
+        roleOverride: 'tank',
+      }),
+    ).resolves.toEqual({ name: 'Thrall', roleOverride: 'tank' });
   });
 });
 

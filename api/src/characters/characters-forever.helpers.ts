@@ -112,6 +112,19 @@ export async function checkRegionClaim(
 }
 
 /**
+ * A Forever-game row created before regions existed (region NULL) has no
+ * Forever identity: it keeps its old free-form name, and a ruleset is refused
+ * because the identity index only covers rows that carry a region.
+ */
+function prepareLegacyUpdate(dto: UpdateCharacterDto): UpdateCharacterDto {
+  if (dto.ruleset !== undefined)
+    throw new BadRequestException(
+      'This character has no region, so it cannot take a ruleset. Delete it and add it again to pick a region and ruleset.',
+    );
+  return dto;
+}
+
+/**
  * Validate an update against the character's game and, for a Forever rename,
  * run the region claim check. Region itself is rejected by the contract.
  */
@@ -126,6 +139,7 @@ export async function prepareCharacterUpdate(
     .from(schema.games)
     .where(eq(schema.games.id, character.gameId))
     .limit(1);
+  if (isForeverGame(game) && !character.region) return prepareLegacyUpdate(dto);
   const prepared = prepareUpdateDto(game ?? { slug: '' }, dto);
   if (isForeverGame(game) && prepared.name && character.region)
     await checkRegionClaim(db, {
