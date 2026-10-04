@@ -301,24 +301,12 @@ export class ChannelPresenceEmbedService
   }
 
   /**
-   * DEMO_MODE seam (ROK-1692): drop this channel's cached bindings so the next
-   * flush reads the binding that exists NOW.
-   *
-   * Binding writes through ChannelBindingsService now evict the entry via
-   * {@link onBindingChanged}; the seam still calls this so a smoke test never
-   * depends on that event having been delivered first.
-   */
-  forgetBinding(channelId: string): void {
-    this.bindingCache.delete(channelId);
-  }
-
-  /**
    * A binding on this channel was written: drop the 60 s cache entry so the
    * next flush (and its grace re-check) uses the binding that exists now.
    */
   @OnEvent(CHANNEL_BINDING_EVENTS.CHANGED)
   onBindingChanged({ channelId }: ChannelBindingChangedPayload): void {
-    this.forgetBinding(channelId);
+    this.bindingCache.delete(channelId);
   }
 
   /**

@@ -33,7 +33,11 @@ export type GateOutcome =
   | 'no-trigger-user'
   // ROK-1445: a general-lobby game group that did not clear `minPlayers` and
   // was therefore dropped (never folded into another game's roster).
-  | 'group-below-threshold';
+  | 'group-below-threshold'
+  // ROK-1390: a game-binding spawn reached with only bots in the room. Bots
+  // still count toward the threshold (MED-2/AC12) but are never rostered
+  // (ROK-1445 AC9), so the immediate spawn has nobody to mint the event for.
+  | 'no-human-members';
 
 /**
  * Fields rendered into the trace line. `gameId: null` is printed literally —

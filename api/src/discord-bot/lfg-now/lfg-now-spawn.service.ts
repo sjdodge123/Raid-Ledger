@@ -38,6 +38,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { getClientUrl } from '../../settings/settings-bot.helpers';
 import { mayStartGroup } from './lfg-now-manual-start.helpers';
 import { NotificationService } from '../../notifications/notification.service';
+import { ActiveEventCacheService } from '../../events/active-event-cache.service';
 import {
   LFG_NOW_LOG_TAG,
   LFG_NOW_START_NEEDS_INTENT,
@@ -69,6 +70,9 @@ export class LfgNowSpawnService {
     @Optional()
     @Inject(forwardRef(() => NotificationService))
     private readonly notifications: NotificationService | null = null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null = null,
   ) {}
 
   /**
@@ -102,6 +106,7 @@ export class LfgNowSpawnService {
       throw new InternalServerErrorException('Could not start the session');
     }
     if (result.spawned) {
+      await this.refreshEventCache(result.eventId);
       await this.createPublicVoice(result.eventId).catch((err) =>
         this.logger.warn(
           `${LFG_NOW_LOG_TAG} temp voice failed for event ${result.eventId}: ${err}`,
@@ -199,6 +204,7 @@ export class LfgNowSpawnService {
       // exists, `ephemeral_voice_channel_id` simply stays NULL and the surfaces
       // render the event link alone (error matrix / D9's nullable channel id).
       if (result.spawned) {
+        await this.refreshEventCache(result.eventId);
         await this.createPublicVoice(result.eventId).catch((err) =>
           this.logger.warn(
             `${LFG_NOW_LOG_TAG} temp voice failed for event ${result.eventId}: ${err}`,
@@ -210,6 +216,28 @@ export class LfgNowSpawnService {
       // Never rethrow: this handler's stack is POST /lfg.
       this.logger.warn(
         `${LFG_NOW_LOG_TAG} spawn failed for game ${gameId}: ${err}`,
+      );
+    }
+  }
+
+  /**
+   * An LFG-born event is inserted with start = now and emits no CREATED, so
+   * until the next 5-minute safety-net refresh the cache-gated crons (live
+   * ad-hoc auto-extend among them) would treat a lone session as absent.
+   * CREATED is deliberately NOT emitted here: its listener posts
+   * announcements. Runs post-COMMIT, so the refresh can see the row; a failure
+   * only delays that visibility, never the session. Awaited ahead of the temp
+   * voice channel and the GROUP_CHANGED emit on purpose: a member joining that
+   * channel (voice attendance reads this cache) or a listener of that emit
+   * already finds the session cached. The price is one active-window SELECT.
+   */
+  private async refreshEventCache(eventId: number): Promise<void> {
+    if (!this.eventCache) return;
+    try {
+      await this.eventCache.refresh();
+    } catch (err) {
+      this.logger.warn(
+        `${LFG_NOW_LOG_TAG} event-cache refresh failed for event ${eventId}: ${err}`,
       );
     }
   }

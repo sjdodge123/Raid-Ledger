@@ -47,7 +47,7 @@ async function apiPost(token: string, path: string, body?: Record<string, unknow
     const res = await fetch(`${API_BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: body ? JSON.stringify(body) : undefined,
+        ...(body ? { body: JSON.stringify(body) } : {}),
     });
     return res;
 }

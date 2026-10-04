@@ -14,13 +14,18 @@ import { isNotNull, and, lt, sql, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { ItadPriceService } from './itad-price.service';
+import { ItadOverviewFetchError, ItadPriceService } from './itad-price.service';
 import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import type { ItadOverviewGameEntry } from './itad-price.types';
 import { ITAD_BACKGROUND_FETCH } from './itad.constants';
 import { enrichEarlyAccessPhase } from './itad-early-access-sync.helpers';
-import { processPricingChunks } from './itad-price-sync.helpers';
+import {
+  PRICING_BREAKER_THRESHOLD,
+  processPricingChunks,
+  type PricingChunkOutcome,
+  type PricingPhaseResult,
+} from './itad-price-sync.helpers';
 import { perfLog } from '../common/perf-logger';
 import { extractErrorDetail } from '../common/pg-error.helpers';
 
@@ -143,9 +148,13 @@ export class ItadPriceSyncService
   /**
    * Fetch ITAD pricing for all games with an itadGameId and persist to DB.
    * Processes in chunks of 50. Logs errors per chunk and continues; chunks
-   * that failed are retried once at the end of the pricing phase.
+   * that failed are retried once at the end of the pricing phase. After
+   * PRICING_BREAKER_THRESHOLD consecutive exhausted overview fetches the
+   * pricing phase stops early and the earlyAccess phase is skipped; stale
+   * pricing is cleared either way.
    * @returns false if no games need syncing (no-op),
-   *          { degraded: true } if any earlyAccess chunk had failures (ROK-1197).
+   *          { degraded: true } if any pricing or earlyAccess chunk failed
+   *          (ROK-1197, ROK-1103) or the breaker tripped.
    */
   async syncPricing(): Promise<void | false | { degraded: true }> {
     const games = await this.queryGamesWithItadId();
@@ -157,20 +166,23 @@ export class ItadPriceSyncService
     this.logger.log(`Syncing ITAD pricing for ${games.length} games`);
     const chunks = this.chunkArray(games, CHUNK_SIZE);
 
-    const { succeeded, failed, retried } = await processPricingChunks(
-      chunks,
-      (chunk) => this.processChunk(chunk),
+    const pricing = await processPricingChunks(chunks, (chunk) =>
+      this.processChunk(chunk),
     );
     const cleared = await this.clearStalePricing();
     if (cleared > 0) {
       this.logger.log(`Cleared stale pricing for ${cleared} games`);
     }
-    this.logSyncSummary(succeeded, failed, games.length, retried);
+    this.logSyncSummary(pricing, games.length);
+    if (pricing.tripped) {
+      this.logger.warn('ITAD earlyAccess phase skipped: pricing stopped early');
+      return { degraded: true };
+    }
 
     const earlyResult = await this.syncEarlyAccess(games);
-    // A pricing chunk that exhausts ITAD retries (processChunk returns false)
-    // must flag the run degraded too — not just earlyAccess failures (ROK-1103).
-    if (failed > 0 || earlyResult.failed > 0) return { degraded: true };
+    // A pricing chunk that fails both passes must flag the run degraded
+    // too — not just earlyAccess failures (ROK-1103).
+    if (pricing.failed > 0 || earlyResult.failed > 0) return { degraded: true };
   }
 
   /**
@@ -222,7 +234,7 @@ export class ItadPriceSyncService
   /** Process a single chunk: fetch pricing and update DB rows. */
   private async processChunk(
     chunk: { id: number; itadGameId: string }[],
-  ): Promise<boolean> {
+  ): Promise<PricingChunkOutcome> {
     try {
       const itadIds = chunk.map((g) => g.itadGameId);
       // Background (price-sync cron): waits out a 429 pause.
@@ -234,11 +246,11 @@ export class ItadPriceSyncService
 
       await this.updateGamesWithPricing(chunk, entryMap);
       this.logger.debug(`Updated pricing for chunk of ${chunk.length} games`);
-      return true;
+      return 'ok';
     } catch (err) {
       const detail = extractErrorDetail(err);
       this.logger.error(`Failed to process ITAD pricing chunk: ${detail}`);
-      return false;
+      return err instanceof ItadOverviewFetchError ? 'exhausted' : 'failed';
     }
   }
 
@@ -285,14 +297,12 @@ export class ItadPriceSyncService
   }
 
   /** Log pricing-phase completion summary at appropriate level (ROK-1197). */
-  private logSyncSummary(
-    succeeded: number,
-    failed: number,
-    totalGames: number,
-    retried: number,
-  ): void {
-    const msg = `ITAD pricing phase complete: ${succeeded} chunks succeeded, ${failed} failed, ${totalGames} games total (${retried} chunks retried at end of phase)`;
-    if (failed > 0) {
+  private logSyncSummary(r: PricingPhaseResult, totalGames: number): void {
+    const stop = r.tripped
+      ? ` — stopped early after ${PRICING_BREAKER_THRESHOLD} consecutive failed overview fetches`
+      : '';
+    const msg = `ITAD pricing phase complete: ${r.succeeded} chunks succeeded, ${r.failed} failed, ${totalGames} games total (${r.retried} chunks retried at end of phase)${stop}`;
+    if (r.failed > 0) {
       this.logger.warn(msg);
     } else {
       this.logger.log(msg);

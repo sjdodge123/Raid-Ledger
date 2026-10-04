@@ -19,11 +19,8 @@
 import { BadRequestException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import {
-  DEFAULT_CHANNEL_PREFS,
-  NOTIFICATION_TYPES,
-  type ChannelPrefs,
-} from '../drizzle/schema/notification-preferences';
+import type { ChannelPrefs } from '../drizzle/schema/notification-preferences';
+import { buildDiscordDisabledPrefs } from '../notifications/notification-mapping.helpers';
 
 /** Parse the optional `quietDms` body flag; absent → false, non-boolean → 400. */
 export function parseQuietDms(body: unknown): boolean {
@@ -36,13 +33,13 @@ export function parseQuietDms(body: unknown): boolean {
   return value;
 }
 
-/** Default channel matrix with the Discord channel OFF for every type. */
+/**
+ * Default channel matrix with the Discord channel OFF for every type — the
+ * same matrix auto-disable writes for a user with no stored prefs, so the
+ * "Discord off everywhere" shape is defined once (`buildDiscordDisabledPrefs`).
+ */
 export function buildQuietDmChannelPrefs(): ChannelPrefs {
-  const prefs = {} as ChannelPrefs;
-  for (const type of NOTIFICATION_TYPES) {
-    prefs[type] = { ...DEFAULT_CHANNEL_PREFS[type], discord: false };
-  }
-  return prefs;
+  return buildDiscordDisabledPrefs(null);
 }
 
 /** Upsert the user's prefs row so no Discord DM is ever enqueued for them. */

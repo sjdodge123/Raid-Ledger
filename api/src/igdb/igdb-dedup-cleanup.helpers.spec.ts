@@ -4,6 +4,9 @@
  * Tests the one-time cleanup logic that finds duplicate game rows in the DB
  * and merges them by reassigning FK references to the winner row.
  */
+import { Logger } from '@nestjs/common';
+import type { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   findDuplicateGames,
@@ -335,5 +338,217 @@ describe('mergeNameDuplicates — steamAppIdSource carry (ROK-1680)', () => {
     );
     expect(patch).not.toHaveProperty('steamAppIdSource');
     expect(patch).not.toHaveProperty('steamAppId');
+  });
+});
+
+// ─── Binding-change listener: merges announce rewritten bindings ──────────
+
+/** Render a mocked `execute` argument to SQL text ('' when it is not SQL). */
+function renderSql(arg: unknown): { sql: string; params: unknown[] } {
+  if (!arg || typeof arg !== 'object' || !('queryChunks' in arg)) {
+    return { sql: '', params: [] };
+  }
+  return new PgDialect().sqlToQuery(arg as SQL);
+}
+
+/** Every binding-channel read the merge issued, as rendered queries. */
+function bindingReads(mockDb: MockDb): { sql: string; params: unknown[] }[] {
+  return mockDb.execute.mock.calls
+    .map(([arg]: unknown[]) => renderSql(arg))
+    .filter((q) => q.sql.includes('SELECT DISTINCT channel_id'));
+}
+
+/** Make the mock transaction record when it resolves, to assert ordering. */
+function recordTxResolution(mockDb: MockDb, order: string[]): void {
+  mockDb.transaction.mockImplementation(
+    async (cb: (tx: MockDb) => Promise<unknown>) => {
+      const out = await cb(mockDb);
+      order.push('tx-resolved');
+      return out;
+    },
+  );
+}
+
+/** Run the tx body (so the read collects ids), then fail the commit. */
+function failCommit(mockDb: MockDb): void {
+  mockDb.transaction.mockImplementation(
+    async (cb: (tx: MockDb) => Promise<unknown>) => {
+      await cb(mockDb);
+      throw new Error('commit failed');
+    },
+  );
+}
+
+/** A listener that logs each call into `order`. */
+function orderListener(order: string[]): jest.Mock<void, [string[]]> {
+  return jest.fn((ids: string[]) => {
+    order.push(`listener:${ids.join(',')}`);
+  });
+}
+
+describe('mergeAndDeleteDuplicates — binding-change listener', () => {
+  let mockDb: MockDb;
+  let order: string[];
+  let listener: jest.Mock<void, [string[]]>;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    order = [];
+    recordTxResolution(mockDb, order);
+    listener = orderListener(order);
+    // The loser's binding read is the first execute() of its merge.
+    mockDb.execute.mockResolvedValueOnce([
+      { channel_id: 'ch-1' },
+      { channel_id: 'ch-2' },
+    ]);
+  });
+
+  it("announces the loser's bound channels once, after the tx resolved", async () => {
+    const result = await mergeAndDeleteDuplicates(
+      mockDb as never,
+      [makeGroup(1, [2])],
+      listener,
+    );
+
+    expect(result).toEqual({ merged: 1, errors: [] });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(['ch-1', 'ch-2']);
+    expect(order).toEqual(['tx-resolved', 'listener:ch-1,ch-2']);
+    // It read the LOSER's bindings (id 2), not the winner's.
+    expect(bindingReads(mockDb).map((q) => q.params)).toEqual([[2]]);
+  });
+
+  it('never announces when the transaction rejects, and reports the group', async () => {
+    failCommit(mockDb);
+
+    const result = await mergeAndDeleteDuplicates(
+      mockDb as never,
+      [makeGroup(1, [2])],
+      listener,
+    );
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(result.merged).toBe(0);
+    expect(result.errors).toEqual([expect.stringContaining('commit failed')]);
+  });
+
+  it('keeps a committed merge counted when the listener throws', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    listener.mockImplementation(() => {
+      throw new Error('listener blew up');
+    });
+
+    const result = await mergeAndDeleteDuplicates(
+      mockDb as never,
+      [makeGroup(1, [2])],
+      listener,
+    );
+
+    expect(result).toEqual({ merged: 1, errors: [] });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Binding-change listener failed'),
+    );
+    warn.mockRestore();
+  });
+});
+
+describe('mergeAndDeleteDuplicates — a binding read with no row list', () => {
+  it('fails the group loudly instead of announcing nothing', async () => {
+    const mockDb = createDrizzleMock();
+    const listener = jest.fn();
+    // A node-postgres-style envelope, not the row list postgres.js resolves.
+    mockDb.execute.mockResolvedValueOnce({ rows: [{ channel_id: 'ch-1' }] });
+
+    const result = await mergeAndDeleteDuplicates(
+      mockDb as never,
+      [makeGroup(1, [2])],
+      listener,
+    );
+
+    expect(result).toEqual({
+      merged: 0,
+      errors: [expect.stringContaining('winner=1')],
+    });
+    expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+describe('mergeAndDeleteDuplicates — nothing to announce', () => {
+  it('stays silent for a group whose losers hold no bindings', async () => {
+    const listener = jest.fn();
+
+    await mergeAndDeleteDuplicates(
+      createDrizzleMock() as never,
+      [makeGroup(1, [2])],
+      listener,
+    );
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('issues no binding read when no listener is passed', async () => {
+    const mockDb = createDrizzleMock();
+
+    await mergeAndDeleteDuplicates(mockDb as never, [makeGroup(1, [2])]);
+
+    expect(bindingReads(mockDb)).toEqual([]);
+  });
+});
+
+describe('mergeNameDuplicates — binding-change listener', () => {
+  let mockDb: MockDb;
+  let order: string[];
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    order = [];
+    // selectAllRows awaits `.from()`; id 1 carries the igdbId, so it wins.
+    mockDb.from.mockResolvedValueOnce([
+      {
+        id: 1,
+        name: 'Bound Game',
+        igdbId: 10,
+        steamAppId: null,
+        itadGameId: null,
+      },
+      {
+        id: 2,
+        name: 'Bound Game',
+        igdbId: null,
+        steamAppId: null,
+        itadGameId: null,
+      },
+    ]);
+    // Carry reads (loser, then winner) end in `.limit()`; nothing to carry.
+    mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    mockDb.execute.mockResolvedValueOnce([
+      { channel_id: 'ch-9' },
+      { channel_id: 'ch-8' },
+    ]);
+  });
+
+  it("announces the loser's bound channels once, after the tx resolved", async () => {
+    recordTxResolution(mockDb, order);
+    const listener = orderListener(order);
+
+    const result = await mergeNameDuplicates(mockDb as never, listener);
+
+    expect(result.errors).toEqual([]);
+    expect(result.merged).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(['ch-9', 'ch-8']);
+    expect(order).toEqual(['tx-resolved', 'listener:ch-9,ch-8']);
+    expect(bindingReads(mockDb).map((q) => q.params)).toEqual([[2]]);
+  });
+
+  it('never announces when the transaction rejects, and reports the group', async () => {
+    failCommit(mockDb);
+    const listener = orderListener(order);
+
+    const result = await mergeNameDuplicates(mockDb as never, listener);
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(result.merged).toBe(0);
+    expect(result.errors).toEqual([expect.stringContaining('commit failed')]);
   });
 });
