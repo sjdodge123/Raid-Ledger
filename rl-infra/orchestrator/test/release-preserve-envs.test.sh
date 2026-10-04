@@ -203,7 +203,13 @@ test_release_preserves_task_cancel_cascade() {
     local sentinel="$RL_STATE_DIR/task-cancel.invoked"
     local fake_bin_dir
     fake_bin_dir=$(mktemp -d -t rl-fake-bin.XXXXXX)
-    cp -p "$BIN_DIR"/* "$fake_bin_dir"/
+    if ! cp -p "$BIN_DIR"/* "$fake_bin_dir"/; then
+        TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
+        TEST_FAIL_NAMES+=("$CURRENT_TEST_NAME: copying $BIN_DIR into $fake_bin_dir failed")
+        echo "FAIL [$CURRENT_TEST_FILE::$CURRENT_TEST_NAME] bin copy failed"
+        rm -rf "$fake_bin_dir"
+        return
+    fi
     rm -f "$fake_bin_dir/task-cancel" "$fake_bin_dir/lease-advance"
     cat > "$fake_bin_dir/task-cancel" <<EOF
 #!/usr/bin/env bash
@@ -219,8 +225,8 @@ exit 0
 EOF
     chmod +x "$fake_bin_dir/lease-advance"
 
-    # Run the copied release with PATH prefixed so dispatched siblings hit fakes.
-    PATH="$fake_bin_dir:$PATH" bash "$fake_bin_dir/release" --preserve-envs >/dev/null 2>&1 || true
+    # The copy's own dirname is what routes release's sibling calls to the fakes.
+    bash "$fake_bin_dir/release" --preserve-envs >/dev/null 2>&1 || true
 
     if [[ ! -f "$sentinel" ]]; then
         TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
