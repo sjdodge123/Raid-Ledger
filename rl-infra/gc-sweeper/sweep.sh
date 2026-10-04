@@ -349,8 +349,10 @@ for slot in $DEAD_SLOTS; do
     # `if` rather than `[[ … ]] && …`: under `set -e` a false AND-list mid-body
     # would abort the whole sweeper cycle.
     if [[ -n "$SLOT_ENVS" ]]; then sweeper_discord_sweep "$slot"; fi
-    # Queued waiters are not promoted here: claim-wait re-runs `claim` on every
-    # lease-queue wake or timeout, which picks up the slot this freed (TDB:1101).
+    # Queued waiters are not promoted here. claim-wait wakes only on a change
+    # to the lease-queue dir, and this reaper writes claims.json, not that dir,
+    # so a queued waiter picks up the slot this freed on its next queue wake
+    # or, failing that, when its wait times out (TDB:1101).
 done
 
 # 1b'. Hoarded-slot reaper. Claims older than MAX_CLAIM_AGE_SECONDS get

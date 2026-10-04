@@ -9,7 +9,8 @@
 #   4. good 3-key bundle  → present, decrypts, key_count:3, ISO mtime, age
 #   5. NO LEAK: no key name or value from the bundle appears in the output
 #   6. exit 0 in every case (status runs under set -euo pipefail)
-#   7. bin/status actually calls it and emits `settings_bundle:` in its jq
+#   7. a value containing the split sentinel still yields the full key count
+#   8. bin/status actually calls it and emits `settings_bundle:` in its jq
 
 set -uo pipefail
 
@@ -133,6 +134,20 @@ test_no_leak() {
     ssb_teardown
 }
 
+# The probe splits payload from warning on a sentinel. A decrypted VALUE that
+# contains the sentinel must not truncate the JSON before the key count.
+test_sentinel_in_value() {
+    CURRENT_TEST_NAME="TDB:1904: a value containing the split sentinel still counts every key"
+    ssb_setup
+    ssb_write_bundle '{"a":"x__RL_SB_WARN__y","b":"2"}'
+    ssb_probe
+    assert_exit_code "$SSB_RC" 0 "exits 0 when a value contains the sentinel"
+    assert_eq "$(ssb_field decrypts)" "true" "decrypts"
+    assert_eq "$(ssb_field key_count)" "2" "key_count counts both keys despite the sentinel in a value"
+    assert_eq "$(ssb_field warning)" "null" "no warning"
+    ssb_teardown
+}
+
 test_status_wiring() {
     CURRENT_TEST_NAME="TDB:1904: bin/status embeds freshness_json as settings_bundle"
     local code
@@ -147,6 +162,7 @@ run_test "tdb1904-no-key" test_no_key
 run_test "tdb1904-wrong-key" test_wrong_key
 run_test "tdb1904-good" test_good_bundle
 run_test "tdb1904-no-leak" test_no_leak
+run_test "tdb1904-sentinel-in-value" test_sentinel_in_value
 run_test "tdb1904-status-wiring" test_status_wiring
 
 print_test_summary

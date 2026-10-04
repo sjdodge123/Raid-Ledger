@@ -90,7 +90,9 @@ settings_bundle::freshness_json() {
     warn="${probe##*__RL_SB_WARN__}"
     if [[ -z "$warn" ]]; then
         decrypts=true
-        count=$(printf '%s' "${probe%%__RL_SB_WARN__*}" | jq 'keys | length' 2>/dev/null || true)
+        # Cut at the LAST sentinel (shortest suffix): a decrypted value that
+        # itself contains the sentinel must not truncate the JSON.
+        count=$(printf '%s' "${probe%__RL_SB_WARN__*}" | jq 'keys | length' 2>/dev/null || true)
     fi
     probe=""
     [[ "$count" =~ ^[0-9]+$ ]] || count=""
