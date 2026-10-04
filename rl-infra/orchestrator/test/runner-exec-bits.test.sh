@@ -37,10 +37,15 @@ RESTORE_SCRIPT="$WORKTREE_ROOT/rl-infra/runner/restore-exec-bits.sh"
 # apart in a log.
 readonly EXPECTED_FATAL_CODE=97
 
-# Portable octal mode read — BSD stat (macOS laptop) vs GNU stat (runner).
+# Portable octal mode read — GNU stat (runner) FIRST, then BSD stat (macOS
+# laptop). On Linux `stat -f` means --file-system and prints fs stats to stdout
+# before failing, so a BSD-first `||` chain would prefix the mode with that junk.
+# Assigning inside `&&` discards a failed probe's output. Diagnostic text only.
 mode_of() {
-    local path="$1"
-    stat -f '%Lp' "$path" 2>/dev/null || stat -c '%a' "$path" 2>/dev/null
+    local path="$1" m
+    m=$(stat -c '%a' "$path" 2>/dev/null) && { printf '%s\n' "$m"; return 0; }
+    m=$(stat -f '%Lp' "$path" 2>/dev/null) && { printf '%s\n' "$m"; return 0; }
+    return 1
 }
 
 # Build a throwaway tree shaped like the runner's post-sync /workspace: real

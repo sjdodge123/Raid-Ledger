@@ -47,6 +47,8 @@ import { LineupsGateway } from './lineups.gateway';
 import { LineupNotificationService } from './lineup-notification.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { at, defined, nonEmpty } from '../common/testing/narrow';
+import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 
 interface Spies {
   notifyVotingOpen: jest.SpyInstance;
@@ -64,6 +66,7 @@ function describeDeadlineNotify() {
   let gateway: LineupsGateway;
   let notifications: LineupNotificationService;
   let activityLogSvc: ActivityLogService;
+  let settings: SettingsService;
 
   beforeAll(async () => {
     testApp = await getTestApp();
@@ -79,10 +82,12 @@ function describeDeadlineNotify() {
     gateway = testApp.app.get(LineupsGateway);
     notifications = testApp.app.get(LineupNotificationService);
     activityLogSvc = testApp.app.get(ActivityLogService);
+    settings = testApp.app.get(SettingsService);
   });
 
   afterEach(async () => {
     jest.restoreAllMocks();
+    await settings.delete(SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS);
     testApp.seed = await truncateAllTables(testApp.db);
     adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
@@ -140,7 +145,10 @@ function describeDeadlineNotify() {
     return { token: res.body.access_token as string, userId: user.id };
   }
 
-  async function createPrivateLineup(inviteeUserIds: number[]) {
+  async function createPrivateLineup(
+    inviteeUserIds: number[],
+    nominationTargetPct?: number,
+  ) {
     return testApp.request
       .post('/lineups')
       .set('Authorization', `Bearer ${adminToken}`)
@@ -149,6 +157,7 @@ function describeDeadlineNotify() {
         visibility: 'private',
         inviteeUserIds,
         votesPerPlayer: 1,
+        ...(nominationTargetPct === undefined ? {} : { nominationTargetPct }),
       });
   }
 
@@ -481,39 +490,43 @@ function describeDeadlineNotify() {
   // double-notify on the grace trigger.
 
   it('AC5 (pass-by-construction): grace building→voting fires voting-open exactly once (no double-notify)', async () => {
-    // The grace path is exercised through processGraceAdvance; we drive the
-    // building→voting grace flip directly to keep this independent of BullMQ
-    // tick timing. Mark the lineup quorum-ready (submit-nominations) then
-    // invoke the grace branch.
+    // The live building→voting grace trigger is the ROK-1444 nomination count
+    // target (TDB:449 retired the submission quorum). A 25% target of the
+    // 20-entry cap is 5 nominations, which also clears the default floor of 4.
+    // The lineup is created with 0 entries, so the target is armed (below it)
+    // and the 5th nomination is the rising edge that claims the grace window.
+    await settings.set(SETTING_KEYS.LINEUP_AUTO_ADVANCE_GRACE_MS, '300000');
     const v1 = await createMember('ac5-v1');
-    const createRes = await createPrivateLineup([v1.userId]);
+    const createRes = await createPrivateLineup([v1.userId], 25);
+    expect(createRes.status).toBe(201);
     const lineupId = createRes.body.id as number;
-    const games = await createGames(2);
-    await nominate(adminToken, lineupId, at(games, 0).id);
-    await nominate(v1.token, lineupId, at(games, 1).id);
-
-    // Stamp a pending grace window so processGraceAdvance proceeds, and mark
-    // the lineup quorum-ready via submit-nominations.
-    for (const token of [adminToken, v1.token]) {
-      await testApp.request
-        .post(`/lineups/${lineupId}/submit-nominations`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
+    const games = await createGames(5);
+    for (const [i, game] of games.entries()) {
+      const token = i === games.length - 1 ? v1.token : adminToken;
+      expect((await nominate(token, lineupId, game.id)).status).toBe(201);
     }
+    // A long grace window: the crossing claims it without the BullMQ job
+    // firing during the test, so the grace branch is ours to drive.
+    expect((await readLineup(lineupId)).status).toBe('building');
+    expect((await readLineup(lineupId)).pendingAdvanceAt).not.toBeNull();
 
     const spies = installSpies();
-
-    // Drive the grace branch directly.
     const priv = processor as unknown as {
       processGraceAdvance(id: number): Promise<void>;
     };
     await priv.processGraceAdvance(lineupId);
 
-    // If the grace branch advanced (quorum ready), voting-open fired at most
-    // once. If quorum wasn't ready it fired zero times — either way it must
-    // NOT double-fire. The regression we guard against is >1.
-    await new Promise((r) => setTimeout(r, 250));
-    expect(spies.notifyVotingOpen.mock.calls.length).toBeLessThanOrEqual(1);
+    expect((await readLineup(lineupId)).status).toBe('voting');
+    // Fire-and-forget hooks land after the transition returns: wait for the
+    // notify AND the activity-log row before counting, never a fixed sleep.
+    expect(
+      await pollFor(() => spies.notifyVotingOpen.mock.calls.length > 0, 5_000),
+    ).toBe(true);
+    expect(
+      await pollFor(() => latestActivity(lineupId, 'voting_started'), 5_000),
+    ).not.toBeNull();
+    expect(spies.notifyVotingOpen).toHaveBeenCalledTimes(1);
+    expect(await countActivity(lineupId, 'voting_started')).toBe(1);
   });
 }
 

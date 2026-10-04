@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ROK-1331 M5a — lease-advance: promote the next waiter in a slot's queue.
 #
-# Internal binary called by `release` (after clearing the claim) and by
-# `gc-sweeper` after dead-claim / hoarded reaps. Reads the slot's queue
+# Internal binary called only by `release` (after clearing the claim). The
+# gc-sweeper's reap paths never run it (TDB:1101). Reads the slot's queue
 # head, evicts stale entries (last_heartbeat > LEASE_HEAD_TIMEOUT_SECONDS
 # ago), and synchronously grants the slot to the new head.
 #

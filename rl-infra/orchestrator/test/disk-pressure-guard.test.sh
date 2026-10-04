@@ -182,12 +182,13 @@ test_dry_run_lists_without_running() {
 }
 
 # A-f: the library existing is not the fix, and neither is sourcing it from a
-# path that is not mounted. ORCHESTRATOR_BIN_DIR (/orchestrator/bin) is
-# deliberately DEAD inside the gc-sweeper container — the bin dir is mounted at
-# /orchestrator-lib. Resolving the lib under the wrong one made the whole
-# ladder a silent "library not found" no-op in production (review BLOCKER 1),
-# which a grep-only assertion happily passed. So resolve the path the way
-# sweep.sh does, with compose's own value, and prove the mount provides it.
+# path that is not mounted. Inside the gc-sweeper container the orchestrator
+# bin dir is mounted read-only at /orchestrator-lib and nowhere else (the old
+# /orchestrator/bin default was never mounted; TDB:1101 removed it). Resolving
+# the lib under an unmounted path made the whole ladder a silent "library not
+# found" no-op in production (review BLOCKER 1), which a grep-only assertion
+# happily passed. So resolve the path the way sweep.sh does, with compose's own
+# value, and prove the mount provides it.
 test_sweeper_wires_the_ladder() {
     CURRENT_TEST_NAME="A-f: sweep.sh resolves the ladder under the path compose actually mounts"
     local src
@@ -207,9 +208,19 @@ test_sweeper_wires_the_ladder() {
     local assign resolved
     assign=$(grep -m1 '^DISK_PRESSURE_LIB=' "$SWEEP_SCRIPT")
     resolved=$(env -u DISK_PRESSURE_LIB DISCORD_SWEEP_LIB_DIR="$lib_dir_env" \
-        ORCHESTRATOR_BIN_DIR=/orchestrator/bin bash -c "$assign; echo \"\$DISK_PRESSURE_LIB\"")
+        bash -c "$assign; echo \"\$DISK_PRESSURE_LIB\"")
     assert_eq "$resolved" "${container_dir}/_disk_pressure.sh" \
         "the resolved lib path must sit inside the mount compose provides"
+
+    # TDB:1101: with DISCORD_SWEEP_LIB_DIR unset, sweep.sh's own default must
+    # also land on the compose mount, not on the never-mounted /orchestrator/bin.
+    local lib_assign lib_default
+    lib_assign=$(grep -m1 '^DISCORD_SWEEP_LIB_DIR=' "$SWEEP_SCRIPT")
+    assert_neq "$lib_assign" "" "sweep.sh must assign DISCORD_SWEEP_LIB_DIR"
+    lib_default=$(env -u DISCORD_SWEEP_LIB_DIR -u ORCHESTRATOR_BIN_DIR \
+        bash -c "$lib_assign; echo \"\$DISCORD_SWEEP_LIB_DIR\"")
+    assert_eq "$lib_default" "$container_dir" \
+        "DISCORD_SWEEP_LIB_DIR's default must be the dir compose mounts the helpers at"
 
     # ...and the host side of that mount must really contain the file.
     assert_file_exists "$(cd "$TEST_DIR/../../" && pwd)/${host_dir#./}/_disk_pressure.sh" \

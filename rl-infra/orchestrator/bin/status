@@ -8,6 +8,9 @@ source "$(dirname "$0")/_admission.sh"
 # ROK-1469 D2 — per-slot Discord identity on each env row.
 # shellcheck disable=SC1091
 source "$(dirname "$0")/_bot_identity.sh"
+# TDB:1904 — settings-bundle freshness (age, key count, decrypts) without SSH.
+# shellcheck disable=SC1091
+source "$(dirname "$0")/_settings_bundle.sh"
 
 PRETTY=0
 [[ "${1:-}" == "--pretty" ]] && PRETTY=1
@@ -47,6 +50,13 @@ DISK_PRESSURE_FILE="${RL_DISK_STATE_FILE:-${RL_STATE_DIR:-/state}/disk-pressure.
 DISK_PRESSURE=$(jq -c . "$DISK_PRESSURE_FILE" 2>/dev/null || echo null)
 [[ -z "$DISK_PRESSURE" ]] && DISK_PRESSURE=null
 jq -e . >/dev/null 2>&1 <<<"$DISK_PRESSURE" || DISK_PRESSURE=null
+
+# TDB:1904 — bundle.enc freshness. Same `|| echo null` + `jq -e` guard as
+# DISK_PRESSURE above: this must never abort `rl status`. The payload never
+# leaves freshness_json; only counts and the warning text come back.
+SETTINGS_BUNDLE=$(settings_bundle::freshness_json 2>/dev/null || echo null)
+[[ -z "$SETTINGS_BUNDLE" ]] && SETTINGS_BUNDLE=null
+jq -e . >/dev/null 2>&1 <<<"$SETTINGS_BUNDLE" || SETTINGS_BUNDLE=null
 
 # Host resources.
 HOST=$(jq -nc \
@@ -145,7 +155,8 @@ OUT=$(jq -nc \
     --argjson runners "$RUNNER_STATS" \
     --argjson queue "$QUEUE" \
     --argjson deployed_sha "$DEPLOYED_SHA" \
-    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), deployed_sha: $deployed_sha, slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)} + $adm')
+    --argjson settings_bundle "$SETTINGS_BUNDLE" \
+    '{ok: true, generated_at: (now | strftime("%Y-%m-%dT%H:%M:%SZ")), deployed_sha: $deployed_sha, settings_bundle: $settings_bundle, slots: $claims, envs: $envs, runners: $runners, host: $host, queue: $queue, queue_depth: ($queue | length), queue_head: ($queue[0].agent_id // null)} + $adm')
 
 if [[ $PRETTY -eq 1 ]]; then
     echo "=== rl-infra status ==="
@@ -166,6 +177,8 @@ if [[ $PRETTY -eq 1 ]]; then
     fi
     echo
     echo "Admission (ROK-1470): heavy_running=$(jq -r '.heavy_running // 0' <<<"$OUT")  heavy_waiting=$(jq -r '.heavy_waiting // 0' <<<"$OUT")  mem_available=$(jq -r '.mem_available_mb // "?"' <<<"$OUT")MB  floor=$(jq -r '.heavy_task_min_free_mb // "?"' <<<"$OUT")MB"
+    echo
+    echo "Settings bundle: $(jq -r 'if .settings_bundle == null then "unknown" elif .settings_bundle.present then "age=\(.settings_bundle.age_hours // "?")h  keys=\(.settings_bundle.key_count // "?")  decrypts=\(.settings_bundle.decrypts)\(if .settings_bundle.warning then "  WARNING: \(.settings_bundle.warning)" else "" end)" else "absent" end' <<<"$OUT")"
     echo
     echo "Runners (live):"
     jq -r '.runners[] | "  \(.container): cpu=\(.cpu)  mem=\(.mem)"' <<<"$OUT"

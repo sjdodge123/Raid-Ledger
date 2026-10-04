@@ -1,23 +1,13 @@
 /**
  * Lineup submit API client (ROK-1296, U4 SubmitBar).
  *
- * Three POST endpoints — all idempotent re-stampers, all empty bodies.
- * Mirrors `lineups-api.ts::nominateGame` / `::toggleVote` shape so the
- * TanStack hooks at `use-lineup-submit.ts` look familiar to readers of
- * `use-lineups.ts`.
+ * One POST endpoint, `submit-votes` — an idempotent re-stamper with an
+ * empty body. Mirrors `lineups-api.ts::nominateGame` / `::toggleVote`
+ * shape so the TanStack hook at `use-lineup-submit.ts` looks familiar to
+ * readers of `use-lineups.ts`.
  */
 import type { LineupDetailResponseDto } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
-
-/** Submit nominations for the authed user (AC2a). */
-export async function submitNominations(
-  lineupId: number,
-): Promise<LineupDetailResponseDto> {
-  return fetchApi(`/lineups/${lineupId}/submit-nominations`, {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-}
 
 /** Submit votes for the authed user (AC2b). */
 export async function submitVotes(

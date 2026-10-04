@@ -1,18 +1,18 @@
 /**
  * Lineup submit service (ROK-1296, U4 SubmitBar).
  *
- * Two explicit submit endpoints (`submit-nominations`, `submit-votes`) that
- * stamp the corresponding `*_submitted_at` timestamp for the authed user.
- * The third, `submit-scheduling`, is retired by ROK-1544 — the scheduling
+ * One explicit submit endpoint (`submit-votes`) that stamps
+ * `votes_submitted_at` for the authed user. `submit-nominations` is retired
+ * by TDB:449 — building quorum no longer reads `nominations_submitted_at`.
+ * `submit-scheduling` is retired by ROK-1544 — the scheduling
  * surface has no member Submit step; `scheduling_submitted_at` is stamped
  * server-side from the vote (`scheduling/scheduling-submitted-at.helpers.ts`). Re-submission is idempotent and overwrites
- * to `now()`. Each writer triggers `maybeAutoAdvance` so quorum can flip
+ * to `now()`. The writer triggers `maybeAutoAdvance` so quorum can flip
  * the lineup forward without a follow-up action.
  *
- * Phase mismatch is rejected with 403 — `submit-nominations` only valid in
- * `building`, `submit-votes` only valid in `voting`. The eligibility helper
- * is reused so private-lineup invitee gating stays consistent with vote /
- * nominate.
+ * Phase mismatch is rejected with 403 — `submit-votes` is only valid in
+ * `voting`. The eligibility helper is reused so private-lineup invitee
+ * gating stays consistent with vote / nominate.
  */
 import {
   ForbiddenException,
@@ -47,29 +47,6 @@ export class LineupSubmitService {
     private readonly lineupsService: LineupsService,
   ) {}
 
-  /** Submit nominations for the authed user (AC2a). */
-  async submitNominations(
-    lineupId: number,
-    userId: number,
-    callerRole: string | undefined,
-  ): Promise<LineupDetailResponseDto> {
-    const lineup = await this.loadAndGateLineup(
-      lineupId,
-      userId,
-      callerRole,
-      'building',
-    );
-    await upsertSubmission(this.db, lineup.id, userId, 'nominations');
-    await this.activityLog.log(
-      'lineup',
-      lineup.id,
-      'submit_nominations',
-      userId,
-    );
-    await this.runAutoAdvance(lineup.id);
-    return this.lineupsService.findById(lineup.id, userId);
-  }
-
   /** Submit votes for the authed user (AC2b). */
   async submitVotes(
     lineupId: number,
@@ -82,7 +59,7 @@ export class LineupSubmitService {
       callerRole,
       'voting',
     );
-    await upsertSubmission(this.db, lineup.id, userId, 'votes');
+    await upsertVoteSubmission(this.db, lineup.id, userId);
     await this.activityLog.log('lineup', lineup.id, 'submit_votes', userId);
     await this.runAutoAdvance(lineup.id);
     return this.lineupsService.findById(lineup.id, userId);
@@ -122,21 +99,18 @@ export class LineupSubmitService {
   }
 }
 
-/** Upsert the per-user submission row, stamping the requested phase column. */
-async function upsertSubmission(
+/** Upsert the per-user submission row, stamping `votes_submitted_at`. */
+async function upsertVoteSubmission(
   db: Db,
   lineupId: number,
   userId: number,
-  phase: 'nominations' | 'votes',
 ): Promise<void> {
-  const column =
-    phase === 'nominations' ? 'nominations_submitted_at' : 'votes_submitted_at';
   await db.execute(sql`
     INSERT INTO community_lineup_user_submissions
-      (lineup_id, user_id, ${sql.raw(column)}, created_at, updated_at)
+      (lineup_id, user_id, votes_submitted_at, created_at, updated_at)
     VALUES (${lineupId}, ${userId}, now(), now(), now())
     ON CONFLICT (lineup_id, user_id) DO UPDATE
-       SET ${sql.raw(column)} = now(),
+       SET votes_submitted_at = now(),
            updated_at = now()
   `);
 }

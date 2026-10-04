@@ -226,7 +226,11 @@ test_sweeper_emits_cycle_event() {
     source "$TEST_DIR/../bin/_state.sh"
 
     export STATE_DIR="$RL_STATE_DIR"
-    export ORCHESTRATOR_BIN_DIR="$TEST_DIR/../bin"
+    # The sweep runs without the orchestrator helper libs: DISCORD_SWEEP_LIB_DIR
+    # defaults to the container-only /orchestrator-lib, so the ⏰-sweep, env-TTL
+    # and disk-ladder libs are skipped here. This test only pins the perf event;
+    # sourcing those libs is covered by disk-pressure-guard.test.sh (the
+    # resolved lib path) and the gc-sweeper-*.test.sh suites.
 
     bash "$TEST_DIR/../../gc-sweeper/sweep.sh" >/dev/null 2>&1 || true
 
