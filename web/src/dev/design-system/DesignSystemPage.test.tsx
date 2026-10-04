@@ -432,6 +432,9 @@ describe('DesignSystemPage — ROK-1655 form foundation (Forms)', () => {
         const brand = within(forms).queryByRole('button', { name: 'Link Discord' });
         expect(brand, 'a brandColor Button demo must be present').not.toBeNull();
         expect(brand).toHaveAttribute('data-brand-fill');
+        expect(brand, 'white label on Discord blurple').toHaveAttribute('data-brand-label', 'light');
+        const accent = within(forms).queryByRole('button', { name: 'Light accent' });
+        expect(accent, 'a light-accent brandColor demo must show the dark label (ROK-1472)').toHaveAttribute('data-brand-label', 'dark');
     });
 });
 

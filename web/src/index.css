@@ -813,14 +813,28 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
 
 /* --- Solid-color button text: force white on colored backgrounds ---
-   [data-brand-fill] = Button brandColor (ROK-1655): an inline runtime/provider fill. */
+   Button brandColor is NOT listed: its label is picked by contrast below. */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(
     .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
     .bg-red-600, .bg-red-500, .bg-amber-600, .bg-violet-600,
-    .bg-\[\#5865F2\], [data-brand-fill]
+    .bg-\[\#5865F2\]
 ).text-foreground {
     --color-foreground: #ffffff;
 }
+
+/* --- Primary fill on light (ROK-1472, operator ruling 2026-10-04) ---
+   emerald-600 #059669 is 3.77:1 with the forced-white label; emerald-700 #047857
+   (= the light --color-success) is 5.48:1. Its hover goes DARKER, emerald-800
+   #065f46 (7.68:1) — scoped to elements that also carry .bg-emerald-600, so other
+   hover:bg-emerald-500 uses keep their paint. quest-log's !important gold wins. */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600 { background-color: #047857; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600:is(.hover\:bg-emerald-500, .hover\:bg-emerald-700):hover { background-color: #065f46; }
+
+/* --- Button brandColor label (ROK-1472, operator ruling 2026-10-04) ---
+   data-brand-label is brandLabelFor(fill) — whichever of white / #0f172a has the
+   higher WCAG contrast on the runtime fill (lib/brand-label.ts). EVERY scheme. */
+[data-brand-fill][data-brand-label="light"].text-foreground { --color-foreground: #ffffff; }
+[data-brand-fill][data-brand-label="dark"].text-foreground { --color-foreground: #0f172a; }
 
 /* --- Panel/card shadow for light mode panel-on-surface distinction ---
  * In @layer components so Tailwind utilities (focus-visible:ring-*, shadow-*)
