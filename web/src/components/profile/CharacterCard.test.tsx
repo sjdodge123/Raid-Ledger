@@ -33,6 +33,7 @@ const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDt
     lastSyncedAt: null,
     profileUrl: null,
     region: 'us',
+    ruleset: null,
     gameVariant: 'retail',
     equipment: null,
     talents: null,

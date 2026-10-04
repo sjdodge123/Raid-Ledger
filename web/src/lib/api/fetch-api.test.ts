@@ -6,6 +6,7 @@ import { server } from '../../test/mocks/server';
 import { at } from '../../test/defined';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
 import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import { httpStatusOf, isConflictError } from './api-error';
 
 const captureExceptionMock = vi.fn();
 
@@ -111,6 +112,22 @@ describe('fetchApi — schema validation boundary (ROK-1237)', () => {
         expect(extra.endpoint).toBe('/fixture');
         expect(Array.isArray(extra.issues)).toBe(true);
         expect(extra.issues.length).toBeGreaterThan(0);
+    });
+});
+
+describe('fetchApi — error status (ROK-1721)', () => {
+    it('carries the HTTP status on the thrown error so a caller can handle a 409 inline', async () => {
+        server.use(
+            http.post(`${API_BASE}/claim`, () =>
+                HttpResponse.json({ message: 'Ana Forever (US) is already claimed by another player' }, { status: 409 }),
+            ),
+        );
+        const err: unknown = await fetchApi('/claim', { method: 'POST' }).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBe('Ana Forever (US) is already claimed by another player');
+        expect(httpStatusOf(err)).toBe(409);
+        expect(isConflictError(err)).toBe(true);
+        expect(Object.keys(err as object), 'status stays non-enumerable').not.toContain('status');
     });
 });
 

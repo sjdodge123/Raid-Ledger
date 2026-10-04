@@ -41,9 +41,14 @@ async function expectForeverArmoryDisabled(page: Page) {
     await expect(armoryTab, 'Armory tab should be disabled for WoW Forever').toHaveAttribute('aria-disabled', 'true');
     await expect(dialog.getByText(ARMORY_UNAVAILABLE_NOTE)).toBeVisible();
     await expect(armoryTab, 'the note should describe the disabled tab').toHaveAccessibleDescription(ARMORY_UNAVAILABLE_NOTE);
-    // Manual stays the active tab: its form (name field + submit) is rendered.
+    // Manual stays the active tab: its form is rendered. Forever is realmless (ROK-1721), so the
+    // manual form is the Region / Ruleset / First name / Second name identity block, not Name + Realm.
     await expect(dialog.getByRole('button', { name: 'Manual', exact: true })).toBeVisible();
-    await expect(dialog.getByPlaceholder('Character name')).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: 'Region', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('radiogroup', { name: 'Ruleset' })).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'First name', exact: true })).toBeVisible();
+    await expect(dialog.getByRole('textbox', { name: 'Second name', exact: true })).toBeVisible();
+    await expect(dialog.getByPlaceholder('Character name'), 'Forever replaces the single name field').toHaveCount(0);
     await expect(dialog.getByRole('button', { name: 'Add Character' })).toBeVisible();
 }
 

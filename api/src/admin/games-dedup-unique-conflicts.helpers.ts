@@ -8,6 +8,8 @@
  *
  * 9 UNIQUE-constraint tables covered (re-grepped against schema/*.ts):
  *   - characters                       UNIQUE(user_id, game_id, name, realm)
+ *                                      + UNIQUE(game_id, region, lower(name))
+ *                                        WHERE ruleset IS NOT NULL (ROK-1721)
  *   - community_lineup_entries         UNIQUE(lineup_id, game_id)
  *   - community_lineup_matches         UNIQUE(lineup_id, game_id)
  *   - community_lineup_votes           UNIQUE(lineup_id, user_id, game_id)
@@ -32,6 +34,7 @@
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { characterUniqueKeyJoin } from '../characters/characters-unique-keys.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -97,13 +100,16 @@ function assertIntegerIds(input: UniqueConflictInput): void {
 async function countCompositeConflicts(
   db: Db,
   tableName: string,
-  otherCols: string[],
+  otherCols: string[] | ((l: string, r: string) => string),
   input: UniqueConflictInput,
 ): Promise<number> {
   if (input.dupIds.length === 0) return 0;
-  const joinCondition = otherCols
-    .map((col) => `dup.${col} IS NOT DISTINCT FROM canon.${col}`)
-    .join(' AND ');
+  const joinCondition =
+    typeof otherCols === 'function'
+      ? otherCols('dup', 'canon')
+      : otherCols
+          .map((col) => `dup.${col} IS NOT DISTINCT FROM canon.${col}`)
+          .join(' AND ');
   const query = sql.raw(`
     SELECT COUNT(*)::int AS c
     FROM ${tableName} dup
@@ -153,12 +159,7 @@ export async function computeUniqueConflicts(
     interestSuppressions,
     tasteVectors,
   ] = await Promise.all([
-    countCompositeConflicts(
-      db,
-      'characters',
-      ['user_id', 'name', 'realm'],
-      input,
-    ),
+    countCompositeConflicts(db, 'characters', characterUniqueKeyJoin, input),
     countCompositeConflicts(
       db,
       'community_lineup_entries',

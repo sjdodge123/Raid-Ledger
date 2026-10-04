@@ -44,6 +44,7 @@ const createMockCharacter = (
   lastSyncedAt: "2026-02-13T00:00:00Z",
   profileUrl: "https://example.com/profile",
   region: "us",
+  ruleset: null,
   gameVariant: "classic",
   equipment: null,
   talents: null,
