@@ -154,8 +154,9 @@ describe('Button — loading keeps focus and swallows repeat clicks', () => {
 /**
  * ROK-1655 ruling 3 — `brandColor` is runtime/brand data (a provider colour,
  * Discord #5865F2), never a theme colour. The inline fill replaces the
- * variant's paint, so the button carries its own label + hover treatment and a
- * `data-brand-fill` hook for the index.css forced-white rule.
+ * variant's paint, so the button carries its own label + hover treatment, a
+ * `data-brand-fill` hook and a `data-brand-label` — the label with the higher
+ * contrast on the fill (ROK-1472), which index.css paints on every scheme.
  */
 describe('Button — brandColor (runtime brand fill)', () => {
     it('paints an inline fill, carries data-brand-fill and keeps a text-foreground label', () => {
@@ -181,10 +182,21 @@ describe('Button — brandColor (runtime brand fill)', () => {
         expect(btn).toHaveStyle({ backgroundColor: '#5865F2' });
     });
 
+    it.each([
+        ['#5865F2', 'light'],
+        ['#10b981', 'dark'],
+        ['#f59e0b', 'dark'],
+        ['#7c3aed', 'light'],
+    ])('emits data-brand-label by contrast: %s → %s (ROK-1472)', (fill, label) => {
+        render(<Button brandColor={fill}>Brand</Button>);
+        expect(screen.getByRole('button', { name: 'Brand' }), `label on ${fill}`).toHaveAttribute('data-brand-label', label);
+    });
+
     it('without brandColor there is no data-brand-fill and no inline background', () => {
         render(<Button>Save</Button>);
         const btn = screen.getByRole('button', { name: 'Save' });
         expect(btn).not.toHaveAttribute('data-brand-fill');
+        expect(btn).not.toHaveAttribute('data-brand-label');
         expect(btn.style.backgroundColor).toBe('');
     });
 

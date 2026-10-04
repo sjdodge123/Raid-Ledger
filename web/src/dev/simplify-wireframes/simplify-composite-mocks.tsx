@@ -205,7 +205,7 @@ export function SvComposite(): JSX.Element {
               <div className="text-[10px] text-muted">{g.sub}</div>
               <div className="flex items-center gap-2 mt-1"><VoteBar pct={(g.votes / g.max) * 100} /><span className="text-[9px] text-muted">{g.votes}/{g.max}</span></div>
             </div>
-            <div className={`w-5 h-5 rounded-full border-2 ${g.voted ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-edge'} flex items-center justify-center text-[9px]`}>{g.voted ? '✓' : ''}</div>
+            <div className={`w-5 h-5 rounded-full border-2 ${g.voted ? 'bg-success border-emerald-400 text-white' : 'border-edge'} flex items-center justify-center text-[9px]`}>{g.voted ? '✓' : ''}</div>
           </div>
         ))}
       </div>

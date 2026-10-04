@@ -210,6 +210,9 @@ describe('LoginPage on the form primitives (ROK-1648)', () => {
         const gh = screen.getByRole('button', { name: 'Continue with GitHub' });
         expect(gh).toHaveAttribute('data-brand-fill');
         expect(gh).toHaveStyle({ backgroundColor: '#24292F' });
+        // ROK-1472: the label is chosen by contrast — white on both of these dark fills.
+        expect(discord).toHaveAttribute('data-brand-label', 'light');
+        expect(gh).toHaveAttribute('data-brand-label', 'light');
     });
 
     it('marks the provider button busy + aria-disabled while redirecting', () => {

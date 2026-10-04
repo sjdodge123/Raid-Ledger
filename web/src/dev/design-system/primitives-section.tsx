@@ -42,7 +42,7 @@ function BadgeStates(): JSX.Element {
             <StateFrame label="Count badge" note="filter-panel.tsx::FilterBadge — never rendered at zero.">
                 <span className="relative inline-flex px-3 py-2 text-sm text-muted border border-edge rounded-lg">
                     Trigger
-                    <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-emerald-500 rounded-full">7</span>
+                    <span className="absolute -top-1 -right-1 flex items-center justify-center w-5 h-5 text-xs font-bold text-white bg-success rounded-full">7</span>
                 </span>
             </StateFrame>
         </>

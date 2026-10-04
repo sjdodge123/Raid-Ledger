@@ -5,8 +5,8 @@
  *
  * Check both families with the side-by-side toggle: the FilePicker trigger is
  * the secondary Button (tokens), the ColorInput well is `border-edge`, and the
- * brandColor label must stay white on default-light — `data-brand-fill` joins
- * the index.css forced-white rule.
+ * brandColor label is picked by contrast on every scheme (ROK-1472, ruling
+ * 2026-10-04): white on Discord blurple, `#0f172a` on a light accent.
  */
 import { useState, type JSX } from 'react';
 import { Button } from '../../components/ui/button';
@@ -56,9 +56,10 @@ function ColorInputDemo(): JSX.Element {
 
 function BrandButtonDemo(): JSX.Element {
     return (
-        <StateFrame label="Button — brandColor (runtime fill)" note="Provider / brand data only. The inline fill replaces the variant; the label stays white on every scheme.">
+        <StateFrame label="Button — brandColor (runtime fill)" note="Provider / brand data only. The inline fill replaces the variant; the label is white or dark — whichever has the higher contrast on the fill — on every scheme (ROK-1472).">
             <Button brandColor={DISCORD_BRAND}>Link Discord</Button>
             <Button brandColor={DISCORD_BRAND} size="sm">Continue with Discord</Button>
+            <Button brandColor={DEMO_ACCENT}>Light accent</Button>
         </StateFrame>
     );
 }
