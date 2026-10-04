@@ -424,10 +424,15 @@ function callback(p: Provider, state: string, cookie?: string) {
   return cookie ? req.set('Cookie', cookie) : req;
 }
 
-/** Where a callback refused as unbound lands (returnTo defaults to /profile). */
+/**
+ * Where a callback refused as unbound lands: Discord on the Integrations page
+ * (ROK-1630), Steam on its returnTo (defaults to /profile).
+ */
 function callbackExpired(p: Provider): string {
-  const flag = p === 'discord' ? 'linked' : 'steam';
-  return `${clientUrl()}/profile?${flag}=error&message=${EXPIRED_COPY}`;
+  if (p === 'discord') {
+    return `${clientUrl()}/profile/integrations?linked=error&message=${EXPIRED_COPY}`;
+  }
+  return `${clientUrl()}/profile?steam=error&message=${EXPIRED_COPY}`;
 }
 
 describe.each(PROVIDERS)('%s link callback state binding', (p) => {

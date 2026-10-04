@@ -105,16 +105,20 @@ async function hop(ctrl: DiscordAuthController) {
   return { state, set };
 }
 
-describe('DiscordAuthController — link callback is bound to the hop browser (ROK-1366)', () => {
+async function buildWithProviderMocks(): Promise<{
+  ctrl: DiscordAuthController;
+  m: Mocks;
+}> {
+  exchangeMock.mockReset().mockResolvedValue({ access_token: 'at' });
+  profileMock.mockReset().mockResolvedValue({ id: 'victim-d', username: 'v' });
+  return build();
+}
+
+describe('DiscordAuthController — link GET hop binds the browser (ROK-1366)', () => {
   let ctrl: DiscordAuthController;
-  let m: Mocks;
 
   beforeEach(async () => {
-    ({ ctrl, m } = await build());
-    exchangeMock.mockReset().mockResolvedValue({ access_token: 'at' });
-    profileMock
-      .mockReset()
-      .mockResolvedValue({ id: 'victim-d', username: 'v' });
+    ({ ctrl } = await buildWithProviderMocks());
   });
 
   it('the GET hop sets an httpOnly Lax 10-minute cookie of sha256(state.r)', async () => {
@@ -132,6 +136,15 @@ describe('DiscordAuthController — link callback is bound to the hop browser (R
       path: '/',
       maxAge: 600_000,
     });
+  });
+});
+
+describe('DiscordAuthController — link callback is bound to the hop browser (ROK-1366)', () => {
+  let ctrl: DiscordAuthController;
+  let m: Mocks;
+
+  beforeEach(async () => {
+    ({ ctrl, m } = await buildWithProviderMocks());
   });
 
   it.each<[string, Record<string, string> | undefined]>([
