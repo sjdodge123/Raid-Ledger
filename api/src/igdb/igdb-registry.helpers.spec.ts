@@ -71,7 +71,7 @@ describe('listConfiguredGames (ROK-1407 byte stability)', () => {
 
     const result = await listConfiguredGames(mockDb as unknown as Db);
 
-    expect(result.data[0].genres).toEqual([5, 12, 31]);
+    expect(result.data[0]?.genres).toEqual([5, 12, 31]);
   });
 
   it('never mutates the source row while sorting genres', async () => {
@@ -88,7 +88,7 @@ describe('listConfiguredGames (ROK-1407 byte stability)', () => {
 
     const result = await listConfiguredGames(mockDb as unknown as Db);
 
-    expect(result.data[0].genres).toEqual([]);
+    expect(result.data[0]?.genres).toEqual([]);
   });
 
   it('reports the row count in meta.total', async () => {

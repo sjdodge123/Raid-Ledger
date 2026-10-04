@@ -42,9 +42,12 @@ function thenableResult(data: unknown[]): ThenableQuery {
 
 describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
   let service: IgdbService;
-  let mockDb: Record<string, jest.Mock>;
-  let mockRedis: Record<string, jest.Mock>;
-  let mockSettingsService: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select' | 'update', jest.Mock>;
+  let mockRedis: Record<'del' | 'get' | 'keys' | 'setex', jest.Mock>;
+  let mockSettingsService: Record<
+    'get' | 'getIgdbConfig' | 'isIgdbConfigured' | 'set',
+    jest.Mock
+  >;
 
   const mockGame = {
     id: 42,
@@ -403,7 +406,7 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
 
       expect(result.source).toBe('local');
       expect(result.games.length).toBe(1);
-      expect(result.games[0].name).toBe('Visible Game');
+      expect(result.games[0]?.name).toBe('Visible Game');
     });
 
     it('returns empty array when all local games are hidden', async () => {

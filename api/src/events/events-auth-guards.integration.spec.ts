@@ -17,6 +17,7 @@ import {
 } from '../common/testing/integration-helpers';
 import { createFutureEvent } from './signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -36,16 +37,19 @@ afterEach(async () => {
 /** Create a minimal ad-hoc event directly in DB. */
 async function createAdHocEvent() {
   const now = new Date();
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Guard Test Ad-Hoc Event',
-      creatorId: testApp.seed.adminUser.id,
-      duration: [now, new Date(now.getTime() + 3_600_000)] as [Date, Date],
-      isAdHoc: true,
-      adHocStatus: 'live',
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Guard Test Ad-Hoc Event',
+        creatorId: testApp.seed.adminUser.id,
+        duration: [now, new Date(now.getTime() + 3_600_000)] as [Date, Date],
+        isAdHoc: true,
+        adHocStatus: 'live',
+      })
+      .returning(),
+    'ad-hoc event',
+  );
   return event;
 }
 

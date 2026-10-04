@@ -1,6 +1,7 @@
 import { autocompleteGameIds } from './bind.autocomplete';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
 import { parseJoinCustomId } from '../listeners/lfg-join.listener';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /**
  * ROK-1454 D10/D11 — the two smallest pieces of the `/lfg` surface:
@@ -42,7 +43,7 @@ describe('autocompleteGameIds (ROK-1454 D10)', () => {
     const long = 'G'.repeat(140);
     const { db } = dbReturning([{ id: 1, name: long }]);
 
-    const [option] = await autocompleteGameIds(db, 'g');
+    const [option] = nonEmpty(await autocompleteGameIds(db, 'g'), 'option');
 
     expect(option.name).toHaveLength(100);
     expect(option.value).toBe('1');

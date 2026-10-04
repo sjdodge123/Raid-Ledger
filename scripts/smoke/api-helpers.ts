@@ -12,6 +12,7 @@
  */
 
 import { readFile } from 'node:fs/promises';
+import type { BrowserContext, Page } from '@playwright/test';
 import { TOKEN_FILE_PATH } from '../auth-paths';
 import { resolveApiUrl } from './target';
 import { MAX_LOGIN_ATTEMPTS, MAX_TOTAL_WAIT_MS, nextDelayMs } from './login-retry';
@@ -493,100 +494,89 @@ export async function waitForLineupStatus(
 }
 
 // ---------------------------------------------------------------------------
-// Global-banner ownership barrier (ROK-1533)
+// Banner scoping — pin the global lineup banner to one lineup (DEMO_MODE)
 // ---------------------------------------------------------------------------
 
 /**
- * Wait until the GLOBAL Games-page banner resolves to `lineupId`.
- *
- * `GET /lineups/banner` (`lineups-banner.helpers.ts::findBannerLineup`) is
- * `orderBy(desc(createdAt)).limit(1)` — the single most recently CREATED
- * eligible lineup for the whole instance, with no per-lineup scoping. Every
- * component fed by it is therefore a singleton surface: `LineupBanner` on the
- * Games page (which renders `TiebreakerBadge`) and `LineupVoteBanner` on game
- * detail (which returns null unless the banner lineup contains that game).
- *
- * On a shared deployment — the rl-infra fleet serves the desktop AND mobile
- * Playwright projects, plus every other agent's lane, from ONE env — a sibling
- * spec's newer lineup owns the banner, so a page driven by it says nothing
- * about the lineup under test. GitHub CI shards to five separate envs, which
- * is why these assertions are fleet-path-only reds.
- *
- * Call this immediately before navigating to a banner-backed surface. It makes
- * the assertion that follows judge the banner COPY rather than the creation
- * order of unrelated specs, and turns what was a silent 15s selector timeout
- * into a named failure that identifies the thief.
+ * sessionStorage key the web reads to scope `GET /lineups/banner` (DEMO_MODE
+ * only). Must equal `SMOKE_BANNER_SCOPE_KEY` in web/src/hooks/use-lineups.ts —
+ * no import links the two; use-lineups.test.ts pins that they match.
  */
-export async function waitForBannerOwnership(
-    token: string,
-    lineupId: number,
-    opts: { timeoutMs?: number } = {},
-): Promise<void> {
-    let lastOwner: unknown = '(never read)';
-    await pollForCondition(
-        async () => {
-            const banner = (await apiGet(token, '/lineups/banner')) as { id?: number } | null;
-            lastOwner = banner?.id ?? null;
-            return banner?.id === lineupId ? banner : null;
-        },
-        {
-            timeoutMs: opts.timeoutMs ?? 15_000,
-            description:
-                `GET /lineups/banner resolves to lineup ${lineupId} ` +
-                `(global singleton — a sibling spec's newer lineup owns it otherwise)`,
-        },
-    ).catch((err) => {
-        throw new Error(
-            `${(err as Error).message} | banner was last owned by lineup ${String(lastOwner)}`,
-        );
-    });
+const BANNER_SCOPE_KEY = 'rl:smoke-banner-lineup';
+
+/** The lineup each page/context was scoped to — a target is scoped once. */
+const scopedTargets = new WeakMap<Page | BrowserContext, number>();
+
+/** The banner fields a smoke spec reads back from `GET /lineups/banner`. */
+export interface ScopedBanner {
+    id?: number;
+    status?: string;
+    title?: string;
 }
 
 /**
- * Make `lineupId` the owner of the GLOBAL banner, re-creating it if it lost.
+ * Scope every banner-backed surface the page renders to `lineupId`.
  *
- * `waitForBannerOwnership` can only wait; it cannot win. Because
- * `findBannerLineup` orders by `createdAt` desc, a sibling lineup created
- * after ours takes the banner for good — waiting would just burn the timeout.
- * Re-running the fixture makes ours the newest again.
+ * `GET /lineups/banner` is a GLOBAL singleton — the single most recently
+ * created eligible lineup for the whole instance. It feeds `LineupBanner` on
+ * the Games page (which renders `TiebreakerBadge`) and `LineupVoteBanner` on
+ * game detail. On a shared fleet env (desktop + mobile projects plus every
+ * other lane on ONE deployment) a sibling spec's newer lineup owns it, so an
+ * unscoped page says nothing about the lineup under test.
  *
- * Ownership on a shared fleet env is also TRANSIENT: the desktop and mobile
- * projects run the same spec concurrently and steal the banner from each
- * other. So this is the inner half of the pattern — callers wrap the claim
- * AND the page assertions in `expect(...).toPass()`, so that one attempt
- * reads the page inside a window where we still own the banner. Assertions
- * are unchanged; only the window is retried.
+ * Under DEMO_MODE the web reads this session key and passes `?lineupId=` on
+ * its banner request, so the page renders OUR lineup no matter what siblings
+ * create. Outside DEMO_MODE the API ignores the param.
+ *
+ * Call it BEFORE `page.goto`: it registers an init script that runs ahead of
+ * the app on every navigation. Scope each page or context ONCE: Playwright
+ * does not define the order multiple init scripts run in, so a second script
+ * with a different id could lose to the first. A repeat call with the same id
+ * is a no-op; a different id throws (use a fresh page instead).
+ *
+ * @param target - The page (or whole context) to scope.
+ * @param lineupId - The lineup the banner should resolve to.
+ */
+export async function scopeBannerTo(
+    target: Page | BrowserContext,
+    lineupId: number,
+): Promise<void> {
+    const existing = scopedTargets.get(target);
+    if (existing === lineupId) return;
+    if (existing !== undefined) {
+        throw new Error(
+            `scopeBannerTo: target is already scoped to lineup ${existing}; ` +
+                `re-scoping it to ${lineupId} is unsafe (Playwright does not order ` +
+                `init scripts) — scope a fresh page instead`,
+        );
+    }
+    scopedTargets.set(target, lineupId);
+    const script = ({ key, id }: { key: string; id: number }): void => {
+        try {
+            sessionStorage.setItem(key, String(id));
+        } catch {
+            /* about:blank frames throw */
+        }
+    };
+    const arg = { key: BANNER_SCOPE_KEY, id: lineupId };
+    await target.addInitScript(script, arg);
+}
+
+/**
+ * Read `GET /lineups/banner` scoped to `lineupId` — what a page scoped with
+ * `scopeBannerTo` will render.
+ *
+ * The banner is a global singleton; the API honours `?lineupId=` only under
+ * DEMO_MODE, which smoke always runs with. Returns `null` when the lineup is
+ * not banner-eligible (wrong phase, archived), so `?.id === lineupId` is the
+ * precondition a banner assertion needs.
  *
  * @param token - Admin token.
- * @param create - Builds the fixture and resolves to its lineup id.
- * @param opts - `existing` (check this id before rebuilding), `attempts`
- *   (default 2) and per-attempt `timeoutMs` (default 8s).
- * @returns The id of the lineup that owns the banner.
+ * @param lineupId - The lineup to scope the read to.
  */
-export async function claimBannerOwnership(
+export async function getScopedBanner(
     token: string,
-    create: () => Promise<number>,
-    opts: { attempts?: number; timeoutMs?: number; existing?: number | undefined } = {},
-): Promise<number> {
-    const attempts = opts.attempts ?? 2;
-    let lineupId = opts.existing;
-    let lastErr: unknown;
-    for (let attempt = 0; attempt < attempts; attempt++) {
-        if (lineupId === undefined) lineupId = await create();
-        try {
-            await waitForBannerOwnership(token, lineupId, {
-                timeoutMs: opts.timeoutMs ?? 8_000,
-            });
-            return lineupId;
-        } catch (err) {
-            lastErr = err;
-            // Lost the claim — a newer sibling lineup owns it. Only a NEWER
-            // lineup of our own can take it back.
-            lineupId = undefined;
-        }
-    }
-    throw new Error(
-        `claimBannerOwnership: lost the global /lineups/banner claim ${attempts} times ` +
-            `— a sibling spec keeps creating a newer eligible lineup. Last: ${String(lastErr)}`,
-    );
+    lineupId: number,
+): Promise<ScopedBanner | null> {
+    return (await apiGet(token, `/lineups/banner?lineupId=${lineupId}`)) as ScopedBanner | null;
 }

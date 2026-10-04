@@ -12,7 +12,10 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 
 describe('SignupsService — cancel', () => {
   let service: SignupsService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<
+    'delete' | 'insert' | 'select' | 'transaction' | 'update',
+    jest.Mock
+  >;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;

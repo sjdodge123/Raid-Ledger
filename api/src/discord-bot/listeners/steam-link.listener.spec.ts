@@ -15,10 +15,14 @@ import { EventEmitter } from 'events';
 import { SteamLinkListener } from './steam-link.listener';
 import { ChannelType, Events } from 'discord.js';
 import { ITAD_INTERACTIVE_FETCH } from '../../itad/itad.constants';
+import {
+  buildSteamLinkDbMock,
+  type SteamLinkDbMock,
+} from './steam-link.listener.spec-helpers';
 
 let listener: SteamLinkListener;
-let mockClientService: Record<string, jest.Mock>;
-let mockDb: Record<string, jest.Mock>;
+let mockClientService: Record<'getClient', jest.Mock>;
+let mockDb: SteamLinkDbMock;
 let mockDmSend: jest.Mock;
 
 let messageIdCounter = 0;
@@ -28,17 +32,7 @@ function setupSteamLinkModule() {
     getClient: jest.fn(),
   };
 
-  const chain: Record<string, jest.Mock> = {};
-  chain.from = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockReturnValue(chain);
-  chain.limit = jest.fn().mockResolvedValue([]);
-  chain.insert = jest.fn().mockReturnValue(chain);
-  chain.values = jest.fn().mockReturnValue(chain);
-  chain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
-  chain.onConflictDoUpdate = jest.fn().mockResolvedValue(undefined);
-  chain.select = jest.fn().mockReturnValue(chain);
-  chain.orderBy = jest.fn().mockReturnValue(chain);
-  mockDb = chain;
+  mockDb = buildSteamLinkDbMock();
 
   listener = new SteamLinkListener(
     mockDb as never,

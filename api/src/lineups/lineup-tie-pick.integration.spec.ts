@@ -43,6 +43,7 @@ import {
   LINEUP_PHASE_TRANSITION,
 } from './queue/lineup-phase.constants';
 import { LineupPhaseProcessor } from './queue/lineup-phase.processor';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 type Response = { status: number; body: unknown };
@@ -102,13 +103,16 @@ function createPrivateLineup(
 async function createGames(count: number) {
   const games: (typeof schema.games.$inferSelect)[] = [];
   for (let i = 0; i < count; i++) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Tie Pick Game ${i + 1}`,
-        slug: `tie-pick-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Tie Pick Game ${i + 1}`,
+          slug: `tie-pick-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     games.push(game);
   }
   return games;
@@ -229,7 +233,9 @@ async function arrangeTiedVoting(): Promise<TiedFixture> {
     .update(schema.communityLineups)
     .set({ createdBy: creator.userId })
     .where(eq(schema.communityLineups.id, lineupId));
-  const [a, b] = await createGames(2);
+  const games = await createGames(2);
+  const a = at(games, 0);
+  const b = at(games, 1);
   expectOk(await nominate(creator.token, lineupId, a.id), 'nominate game A');
   expectOk(await nominate(voter.token, lineupId, b.id), 'nominate game B');
   expectOk(await advanceToVoting(lineupId, adminToken), 'advance to voting');
@@ -302,7 +308,7 @@ describe('ROK-1374 tie pick — authorisation (AC15)', () => {
 
   it('400s when the chosen game is not one of the tied games', async () => {
     const { lineupId } = await arrangeArmedTieHold();
-    const [outsider] = await createGames(1);
+    const [outsider] = nonEmpty(await createGames(1), 'outsider');
 
     const res = await pick(adminToken, lineupId, outsider.id);
 

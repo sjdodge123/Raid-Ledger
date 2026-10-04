@@ -247,8 +247,8 @@ describe('deduplicateGames', () => {
       const result = deduplicateGames([igdbEntry, itadEntry]);
 
       expect(result).toHaveLength(1);
-      expect(result[0].itadGameId).toBe('itad-uuid-1');
-      expect(result[0].name).toBe('Slay the Spire 2');
+      expect(result[0]?.itadGameId).toBe('itad-uuid-1');
+      expect(result[0]?.name).toBe('Slay the Spire 2');
     });
 
     it('keeps the ITAD entry as winner when deduplicating by name', () => {
@@ -267,7 +267,7 @@ describe('deduplicateGames', () => {
       const result = deduplicateGames([igdbEntry, itadEntry]);
 
       expect(result).toHaveLength(1);
-      expect(result[0].itadGameId).toBe('itad-uuid-1');
+      expect(result[0]?.itadGameId).toBe('itad-uuid-1');
     });
 
     it('uses first-seen when neither entry has itadGameId', () => {
@@ -287,7 +287,7 @@ describe('deduplicateGames', () => {
       const result = deduplicateGames([first, second]);
 
       expect(result).toHaveLength(1);
-      expect(result[0].summary).toBe('First summary');
+      expect(result[0]?.summary).toBe('First summary');
     });
   });
 
@@ -333,13 +333,13 @@ describe('deduplicateGames', () => {
       const result = deduplicateGames([itadWinner, igdbLoser]);
 
       expect(result).toHaveLength(1);
-      expect(result[0].itadGameId).toBe('itad-uuid-1');
-      expect(result[0].igdbId).toBe(12345);
-      expect(result[0].summary).toBe('A great deckbuilder sequel');
-      expect(result[0].genres).toEqual([12, 31]);
-      expect(result[0].rating).toBe(92.5);
-      expect(result[0].screenshots).toEqual(['https://igdb.com/ss1.jpg']);
-      expect(result[0].twitchGameId).toBe('twitch-123');
+      expect(result[0]?.itadGameId).toBe('itad-uuid-1');
+      expect(result[0]?.igdbId).toBe(12345);
+      expect(result[0]?.summary).toBe('A great deckbuilder sequel');
+      expect(result[0]?.genres).toEqual([12, 31]);
+      expect(result[0]?.rating).toBe(92.5);
+      expect(result[0]?.screenshots).toEqual(['https://igdb.com/ss1.jpg']);
+      expect(result[0]?.twitchGameId).toBe('twitch-123');
     });
 
     it('copies ITAD fields from loser into winner', () => {
@@ -369,13 +369,13 @@ describe('deduplicateGames', () => {
       const result = deduplicateGames([igdbWinner, itadLoser]);
 
       expect(result).toHaveLength(1);
-      expect(result[0].itadGameId).toBe('itad-uuid-99');
-      expect(result[0].itadBoxartUrl).toBe(
+      expect(result[0]?.itadGameId).toBe('itad-uuid-99');
+      expect(result[0]?.itadBoxartUrl).toBe(
         'https://itad.example.com/boxart.jpg',
       );
-      expect(result[0].itadTags).toEqual(['rpg', 'indie']);
+      expect(result[0]?.itadTags).toEqual(['rpg', 'indie']);
       // IGDB metadata from the first entry should be preserved
-      expect(result[0].igdbId).toBe(500);
+      expect(result[0]?.igdbId).toBe(500);
     });
 
     it('does not overwrite winner fields that already have values', () => {
@@ -401,8 +401,8 @@ describe('deduplicateGames', () => {
 
       expect(result).toHaveLength(1);
       // Winner already had summary and rating, so they should NOT be overwritten
-      expect(result[0].summary).toBe('Winner summary');
-      expect(result[0].rating).toBe(80);
+      expect(result[0]?.summary).toBe('Winner summary');
+      expect(result[0]?.rating).toBe(80);
     });
   });
 
@@ -496,10 +496,10 @@ describe('deduplicateGames', () => {
       const result = deduplicateGames([first, second, duplicate, third]);
 
       expect(result).toHaveLength(3);
-      expect(result[0].name).toBe('Alpha');
+      expect(result[0]?.name).toBe('Alpha');
       // The ITAD entry should win for position of the deduped pair
-      expect(result[1].itadGameId).toBe('itad-slay');
-      expect(result[2].name).toBe('Zeta');
+      expect(result[1]?.itadGameId).toBe('itad-slay');
+      expect(result[2]?.name).toBe('Zeta');
     });
 
     it('winner occupies the earliest position of the duplicates', () => {
@@ -525,8 +525,8 @@ describe('deduplicateGames', () => {
 
       expect(result).toHaveLength(2);
       // ITAD winner should be at index 0 (earliest position of the pair)
-      expect(result[0].itadGameId).toBe('itad-uuid');
-      expect(result[1].name).toBe('Other Game');
+      expect(result[0]?.itadGameId).toBe('itad-uuid');
+      expect(result[1]?.name).toBe('Other Game');
     });
   });
 
@@ -548,7 +548,7 @@ describe('deduplicateGames', () => {
       const result = deduplicateGames([gameA, gameB]);
 
       expect(result).toHaveLength(1);
-      expect(result[0].itadGameId).toBe('itad-a');
+      expect(result[0]?.itadGameId).toBe('itad-a');
     });
 
     it('matches by steamAppId when igdbIds differ', () => {

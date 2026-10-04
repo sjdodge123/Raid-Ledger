@@ -20,6 +20,7 @@ import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/testing/narrow';
 
 const CACHE_CONTROL = 'private, max-age=300, stale-while-revalidate=3600';
 
@@ -53,7 +54,7 @@ describe('GET /games/configured — byte stability (ROK-1407)', () => {
         ...overrides,
       })
       .returning();
-    return game;
+    return defined(game, 'inserted game');
   }
 
   /** GET the registry, asserting a 200 and returning the response. */
@@ -67,7 +68,7 @@ describe('GET /games/configured — byte stability (ROK-1407)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.etag).toBeDefined();
     return {
-      etag: res.headers.etag,
+      etag: defined(res.headers.etag, 'etag header'),
       text: res.text,
       body: res.body,
       headers: res.headers,

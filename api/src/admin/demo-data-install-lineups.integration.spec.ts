@@ -23,6 +23,7 @@ import {
   installCommunityLineups,
 } from './demo-data-install-lineups.helpers';
 import { buildParticipantsRoster } from '../lineups/lineups-participants.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
@@ -90,10 +91,12 @@ function describeInstall() {
 
     it('public voting lineup carries entries + votes', async () => {
       await freshInstall();
-      const [publicLineup] = await demoLineups(testApp).then((rows) =>
-        rows.filter((l) => l.title === DEMO_LINEUP_TITLES[0]),
+      const [publicLineup] = nonEmpty(
+        await demoLineups(testApp).then((rows) =>
+          rows.filter((l) => l.title === DEMO_LINEUP_TITLES[0]),
+        ),
+        'publicLineup',
       );
-      expect(publicLineup).toBeDefined();
       expect(publicLineup.status).toBe('voting');
 
       const entries = await testApp.db
@@ -110,8 +113,11 @@ function describeInstall() {
 
     it('public roster has >1 participant incl. a voted + a nominated status', async () => {
       await freshInstall();
-      const [publicLineup] = await demoLineups(testApp).then((rows) =>
-        rows.filter((l) => l.title === DEMO_LINEUP_TITLES[0]),
+      const [publicLineup] = nonEmpty(
+        await demoLineups(testApp).then((rows) =>
+          rows.filter((l) => l.title === DEMO_LINEUP_TITLES[0]),
+        ),
+        'publicLineup',
       );
       const roster = await buildParticipantsRoster(testApp.db, publicLineup.id);
       expect(roster.length).toBeGreaterThan(1);
@@ -119,13 +125,16 @@ function describeInstall() {
       expect(statuses).toContain('voted');
       expect(statuses).toContain('nominated');
       // Creator is always present and listed first.
-      expect(roster[0].role).toBe('creator');
+      expect(roster[0]?.role).toBe('creator');
     }, 120_000);
 
     it('private building lineup roster is creator + invitees', async () => {
       await freshInstall();
-      const [privateLineup] = await demoLineups(testApp).then((rows) =>
-        rows.filter((l) => l.title === DEMO_LINEUP_TITLES[1]),
+      const [privateLineup] = nonEmpty(
+        await demoLineups(testApp).then((rows) =>
+          rows.filter((l) => l.title === DEMO_LINEUP_TITLES[1]),
+        ),
+        'privateLineup',
       );
       expect(privateLineup.visibility).toBe('private');
       expect(privateLineup.status).toBe('building');

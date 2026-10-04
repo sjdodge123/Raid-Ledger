@@ -5,6 +5,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { snowflakeToSortKey } from '../discord-bot/thread-mirror/thread-mirror.helpers';
+import { at } from '../common/testing/narrow';
 
 jest.mock('../discord-bot/thread-mirror/thread-mirror.db-helpers', () => ({
   insertMirroredMessages: jest.fn().mockResolvedValue(undefined),
@@ -148,7 +149,7 @@ describe('DemoTestThreadMirrorController', () => {
       );
 
       expect(insertMock).toHaveBeenCalledTimes(1);
-      const [, threadId, values] = insertMock.mock.calls[0];
+      const [, threadId, values] = at(insertMock.mock.calls, 0);
       expect(threadId).toBe(THREAD_ID);
       expect(values).toHaveLength(1);
       expect(values[0]).toEqual(
@@ -179,8 +180,8 @@ describe('DemoTestThreadMirrorController', () => {
         }),
       );
 
-      const [, , values] = insertMock.mock.calls[0];
-      expect(values[0].discordCreatedAt).toEqual(
+      const [, , values] = at(insertMock.mock.calls, 0);
+      expect(values[0]?.discordCreatedAt).toEqual(
         new Date('2026-01-02T03:04:05.000Z'),
       );
     });

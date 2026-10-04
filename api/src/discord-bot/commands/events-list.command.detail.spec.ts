@@ -4,6 +4,7 @@ import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
+import { at } from '../../common/testing/narrow';
 import { colorForState } from '../embeds/embed-chrome.helpers';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 
@@ -114,7 +115,7 @@ async function triggerEventSelect(
 }
 
 function getUpdateEmbedData(updateMock: jest.Mock) {
-  return (updateMock.mock.calls as unknown[][])[0][0] as {
+  return at(at(updateMock.mock.calls as unknown[][], 0), 0) as {
     embeds: {
       data: {
         title?: string;
@@ -163,7 +164,7 @@ describe('EventsListCommand — detail: title', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.title).toBe(
+    expect(getUpdateEmbedData(updateMock).embeds[0]?.data.title).toBe(
       'Dragon Boss Kill',
     );
   });
@@ -203,9 +204,9 @@ describe('EventsListCommand — detail: game name', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'Final Fantasy XIV',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('Final Fantasy XIV');
   });
 
   it('should show "No game" when game is null', async () => {
@@ -219,9 +220,9 @@ describe('EventsListCommand — detail: game name', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'No game',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('No game');
   });
 });
 
@@ -259,7 +260,7 @@ describe('EventsListCommand — detail: thumbnail present', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.thumbnail?.url).toBe(
+    expect(getUpdateEmbedData(updateMock).embeds[0]?.data.thumbnail?.url).toBe(
       'https://cdn.example.com/wow.jpg',
     );
   });
@@ -276,7 +277,7 @@ describe('EventsListCommand — detail: thumbnail present', () => {
       [event],
     );
     expect(
-      getUpdateEmbedData(updateMock).embeds[0].data.thumbnail,
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.thumbnail,
     ).toBeUndefined();
   });
 });
@@ -313,7 +314,7 @@ describe('EventsListCommand — detail: truncation', () => {
       [event],
     );
     const desc =
-      getUpdateEmbedData(updateMock).embeds[0].data.description ?? '';
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.description ?? '';
     expect(desc).toContain('...');
     expect(desc).not.toContain('A'.repeat(1100));
   });
@@ -330,7 +331,7 @@ describe('EventsListCommand — detail: truncation', () => {
       [event],
     );
     const desc =
-      getUpdateEmbedData(updateMock).embeds[0].data.description ?? '';
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.description ?? '';
     expect(desc).toContain('B'.repeat(1024));
     expect(desc).not.toContain('B'.repeat(1024) + '...');
   });
@@ -367,9 +368,9 @@ describe('EventsListCommand — detail: signups with max', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '7/25',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('7/25');
   });
 
   it('should show "4 signed up" when maxAttendees is null', async () => {
@@ -383,9 +384,9 @@ describe('EventsListCommand — detail: signups with max', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '4 signed up',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('4 signed up');
   });
 });
 
@@ -425,7 +426,7 @@ describe('EventsListCommand — detail: duration format', () => {
       [event],
     );
     const desc =
-      getUpdateEmbedData(updateMock).embeds[0].data.description ?? '';
+      at(getUpdateEmbedData(updateMock).embeds, 0).data.description ?? '';
     expect(desc).toContain('1 hour');
     expect(desc).not.toContain('1 hours');
   });
@@ -445,9 +446,9 @@ describe('EventsListCommand — detail: duration format', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '2 hours',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('2 hours');
   });
 
   it('should format fractional duration', async () => {
@@ -465,9 +466,9 @@ describe('EventsListCommand — detail: duration format', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      '1.5 hours',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('1.5 hours');
   });
 });
 
@@ -502,9 +503,9 @@ describe('EventsListCommand — detail: creator & back button', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'RaidLeader',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('RaidLeader');
   });
 
   it('should show "Unknown" when creator is null', async () => {
@@ -518,9 +519,9 @@ describe('EventsListCommand — detail: creator & back button', () => {
       'user-123',
       [event],
     );
-    expect(getUpdateEmbedData(updateMock).embeds[0].data.description).toContain(
-      'Unknown',
-    );
+    expect(
+      getUpdateEmbedData(updateMock).embeds[0]?.data.description,
+    ).toContain('Unknown');
   });
 
   it('should include Back to list button', async () => {
@@ -577,7 +578,7 @@ describe('EventsListCommand — detail: embed color', () => {
       'user-123',
       [event],
     );
-    const { data } = getUpdateEmbedData(updateMock).embeds[0];
+    const { data } = at(getUpdateEmbedData(updateMock).embeds, 0);
     expect(data.color).toBe(colorForState('done'));
     expect(data.author?.name).toBe(COMMAND_REPLY_AUTHORS.EVENT_DETAIL);
   });

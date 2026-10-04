@@ -14,7 +14,7 @@ import {
     apiPatch,
     createLineupOrRetry,
     pollForCondition,
-    claimBannerOwnership,
+    scopeBannerTo,
 } from './api-helpers';
 import type { Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
@@ -45,30 +45,19 @@ let lineupTitle: string;
 
 let adminToken: string;
 let lineupId: number;
-let createdLineup = false;
 
 /**
- * Archive lineups owned by THIS worker (ROK-1147).
- *
- * `/admin/test/reset-lineups` (DEMO_MODE-only) archives every `building`/
- * `voting` lineup whose title starts with the supplied prefix. Each smoke
- * worker uses a unique prefix so sibling workers' lineups are untouched.
- *
- * `id` is ignored (kept for call-site compatibility) — the reset is scoped
- * per-worker via prefix, not by lineup id.
+ * Navigate to /games with the banner scoped to `lineupId` (this worker's own
+ * lineup) and gate on the banner endpoint resolving before the caller asserts
+ * on banner UI. Without the scope, `/games` renders the GLOBAL
+ * `/lineups/banner` singleton, which a sibling worker's newer lineup can own
+ * at any moment. The banner is `useQuery`-backed, so asserting immediately
+ * after goto can race the first (possibly-stale) refetch. The `.catch()` keeps
+ * the call resilient if the response already landed before the listener
+ * attached — the subsequent UI assertion is still authoritative.
  */
-async function archiveLineup(token: string, _id: number): Promise<void> {
-    await apiPost(token, '/admin/test/reset-lineups', { titlePrefix: workerPrefix });
-}
-
-/**
- * Navigate to /games and gate on the banner endpoint resolving before the
- * caller asserts on banner UI. The banner is `useQuery`-backed, so asserting
- * immediately after goto can race the first (possibly-stale) refetch. The
- * `.catch()` keeps the call resilient if the response already landed before
- * the listener attached — the subsequent UI assertion is still authoritative.
- */
-async function gotoGames(page: Page): Promise<void> {
+async function gotoGames(page: Page, lineupId: number): Promise<void> {
+    await scopeBannerTo(page, lineupId);
     const bannerResolved = page
         .waitForResponse(
             (r) => r.url().includes('/lineups/banner') && r.ok(),
@@ -80,58 +69,9 @@ async function gotoGames(page: Page): Promise<void> {
 }
 
 /**
- * Ensure an active lineup exists in building phase, creating one if needed.
- * Returns the lineup ID. Used by beforeEach hooks across describe blocks to
- * guard against cross-worker archival between tests.
- */
-async function ensureActiveLineupInBuildingPhase(token: string): Promise<number> {
-    const banner = await apiGet(token, '/lineups/banner');
-    if (banner && typeof banner.id === 'number' && banner.status === 'building') {
-        return banner.id;
-    }
-    if (banner && typeof banner.id === 'number') {
-        await archiveLineup(token, banner.id);
-    }
-    const lineup = (await apiPost(token, '/lineups', {
-        title: lineupTitle,
-        targetDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-        buildingDurationHours: 720,
-        votingDurationHours: 720,
-        decidedDurationHours: 720,
-    })) as { id?: number };
-    const resolvedId =
-        lineup?.id ??
-        (await (async () => {
-            // 409 race — another worker created one; use it.
-            const reBanner = await apiGet(token, '/lineups/banner');
-            return reBanner && typeof reBanner.id === 'number'
-                ? reBanner.id
-                : lineupId; // fallback to last known
-        })());
-
-    // Close the cross-worker TOCTOU gap: poll the banner endpoint until it
-    // reports our building lineup before returning, so the subsequent UI
-    // navigation can't outrun the server-side state we just created.
-    await pollForCondition(
-        async () => {
-            const b = await apiGet(token, '/lineups/banner');
-            return b &&
-                typeof b.id === 'number' &&
-                b.status === 'building'
-                ? b
-                : null;
-        },
-        { timeoutMs: 10_000, description: '/lineups/banner reports building lineup' },
-    ).catch(() => {});
-
-    return resolvedId;
-}
-
-/**
  * Create a NEW building lineup of this worker's own and return its id. Used by
- * `beforeAll` and as the `create` callback for `claimBannerOwnership`.
- * Unlike `ensureActiveLineupInBuildingPhase`, it never adopts whatever building
- * lineup the banner shows (possibly a sibling's), so the claim can be won.
+ * `beforeAll` and by `ensureActiveLineupInBuildingPhase` when the tracked
+ * lineup has left the building phase.
  */
 async function createOwnBuildingLineup(): Promise<number> {
     const { id } = await createLineupOrRetry(
@@ -150,8 +90,8 @@ async function createOwnBuildingLineup(): Promise<number> {
 
 /**
  * Return `lineupId` when that lineup is still in the building phase, else
- * `undefined` — so `claimBannerOwnership` builds a fresh lineup instead of
- * re-claiming one that has moved on to voting/decided.
+ * `undefined` — so the caller builds a fresh lineup instead of reusing one
+ * that has moved on to voting/decided/archived.
  */
 async function keepIfStillBuilding(
     token: string,
@@ -160,6 +100,17 @@ async function keepIfStillBuilding(
     if (lineupId === undefined) return undefined;
     const detail = (await apiGet(token, `/lineups/${lineupId}`)) as { status?: string } | null;
     return detail?.status === 'building' ? lineupId : undefined;
+}
+
+/**
+ * Return this worker's own building lineup: the tracked `lineupId` while it is
+ * still building, else a freshly created one. Used by beforeEach hooks across
+ * describe blocks. It never reads the global `/lineups/banner` (which may be a
+ * sibling's lineup) and never archives anything, so it cannot adopt or retire
+ * a lineup another describe or worker is holding (TDB:928).
+ */
+async function ensureActiveLineupInBuildingPhase(token: string): Promise<number> {
+    return (await keepIfStillBuilding(token, lineupId)) ?? (await createOwnBuildingLineup());
 }
 
 test.beforeAll(async ({}, testInfo) => {
@@ -174,7 +125,6 @@ test.beforeAll(async ({}, testInfo) => {
     // sibling-worker 409 collision triggers a prefix-scoped reset + retry
     // rather than silently leaking another worker's lineup into our state.
     lineupId = await createOwnBuildingLineup();
-    createdLineup = true;
 });
 
 // NOTE: No afterAll cleanup — archiving the lineup while the other project
@@ -193,7 +143,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('banner shows COMMUNITY LINEUP text and status badge', async ({ page }) => {
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
         // The banner contains the uppercase label "COMMUNITY LINEUP"
@@ -201,7 +151,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('banner shows per-lineup title heading and vote link (ROK-1063)', async ({ page }) => {
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
 
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
         // Per-lineup H2 title (falls back to backfilled "Lineup — <Month YYYY>")
@@ -213,7 +163,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('banner shows nomination count text', async ({ page }) => {
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         // Subtitle shows "X games nominated" (testid: lineup-banner-subtitle)
@@ -221,7 +171,7 @@ test.describe('Community Lineup banner on Games page', () => {
     });
 
     test('Nominate button is visible on the banner', async ({ page }) => {
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         const nominateBtn = page.getByRole('button', { name: 'Nominate' });
@@ -234,18 +184,16 @@ test.describe('Community Lineup banner on Games page', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Nomination modal', () => {
-    // ROK-1286 (FIX 1): the Nominate button only renders while the newest
-    // lineup is in BUILDING phase. A sibling/stale VOTING-phase lineup that is
-    // newer hands `/lineups/banner` to itself (no Nominate CTA), so the click
-    // below times out — deterministic on a persistent DB, cross-worker flake in
-    // CI. Re-assert a building-phase lineup before each test, mirroring the
-    // banner/detail/responsive describes above.
+    // ROK-1286 (FIX 1): the Nominate button only renders while the bannered
+    // lineup is in BUILDING phase. `gotoGames` scopes the banner to this
+    // worker's own lineup; re-assert that lineup is still building before each
+    // test, mirroring the banner/detail/responsive describes.
     test.beforeEach(async () => {
         lineupId = await ensureActiveLineupInBuildingPhase(adminToken);
     });
 
     test('opens when clicking Nominate button on banner', async ({ page }) => {
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         await page.getByRole('button', { name: 'Nominate' }).click();
@@ -259,7 +207,7 @@ test.describe('Nomination modal', () => {
     });
 
     test('search input accepts text and shows results or empty state', async ({ page }) => {
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         await page.getByRole('button', { name: 'Nominate' }).click();
@@ -276,7 +224,7 @@ test.describe('Nomination modal', () => {
     });
 
     test('clicking a search result shows preview card with game name', async ({ page }) => {
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         await page.getByRole('button', { name: 'Nominate' }).click();
@@ -421,7 +369,7 @@ test.describe('Community Lineup detail page', () => {
 
     test('back button navigates away from detail page', async ({ page }) => {
         // Navigate to games first, then to the detail page via the banner link
-        await gotoGames(page);
+        await gotoGames(page, lineupId);
         await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
 
         const viewLink = page.getByRole('link', { name: /View Lineup/i });
@@ -512,31 +460,23 @@ test.describe('Community Lineup responsive layout', () => {
 
     test('banner is visible on mobile viewport', async ({ page }, testInfo) => {
         test.skip(!isMobile(testInfo), 'Mobile-only test -- verifies banner on mobile');
-        // ROK-1533 pattern: `/games` renders the GLOBAL `/lineups/banner`
-        // singleton, and on a shared env a sibling's newer lineup (or one it
-        // advances past building) can own it at any moment. Claim the banner
-        // with a building lineup of our OWN — `lineupId` from `beforeEach` may
-        // be a sibling's, which a claim can never win — and retry the claim
-        // AND the reads together, so one attempt reads the page inside a window
-        // where we own it. The assertions are unchanged; only the window is.
-        test.setTimeout(150_000);
-        let ownLineupId: number | undefined;
+        // beforeEach already ensured this worker's own building lineup, and
+        // siblings no longer adopt or advance it (TDB:928), so the page is
+        // scoped ONCE, to that id: `gotoGames` repeats with the same id are
+        // no-ops. Re-scoping a page to a new id is unsafe because Playwright
+        // does not order init scripts. The toPass only absorbs UI eventual
+        // consistency (banner query refetch, mobile render). The assertions
+        // are unchanged.
+        test.setTimeout(120_000);
+        const ownLineupId = lineupId;
         await expect(async () => {
-            // A sibling can advance our lineup past building between attempts.
-            // Voting/decided lineups still own the banner but render no
-            // Nominate button, so re-claiming the same id would fail every
-            // retry — drop it and claim with a fresh building lineup instead.
-            ownLineupId = await claimBannerOwnership(adminToken, createOwnBuildingLineup, {
-                existing: await keepIfStillBuilding(adminToken, ownLineupId),
-                attempts: 2,
-            });
-            await gotoGames(page);
+            await gotoGames(page, ownLineupId);
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
 
             // Banner should still be visible on mobile
             await expect(page.getByText('COMMUNITY LINEUP')).toBeVisible({ timeout: 15_000 });
             await expect(page.getByRole('button', { name: 'Nominate' })).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 120_000, intervals: [1_000] });
+        }).toPass({ timeout: 60_000, intervals: [1_000] });
     });
 });
 
@@ -555,26 +495,28 @@ function newLineupBody(): Record<string, unknown> {
     };
 }
 
+/** The voting-phase lineup this worker created for the Voting describe. */
+let ownVotingLineupId: number | undefined;
+
 /**
- * ROK-1286 (FIX 1, #26): resolve a lineup we can deterministically drive to
- * voting. Reuses the banner lineup when it's already voting/building; archives
- * THIS worker's rows and re-creates (via createLineupOrRetry, so a sibling 409
- * is loud + retried) when the banner is in a non-advanceable state (decided) or
- * absent because an earlier spec left everything archived.
+ * ROK-1286 (FIX 1, #26): resolve a lineup of this worker's own that we can
+ * deterministically drive to voting. Reuses the tracked `ownVotingLineupId`
+ * only while it is still voting/building; otherwise creates a fresh one (via
+ * createLineupOrRetry, so a sibling 409 is loud + retried). It never reads the
+ * global `/lineups/banner` and never archives, so `seedAndAdvanceToVoting`
+ * cannot nominate into or PATCH a sibling's lineup.
  */
 async function ensureVotingLineup(token: string): Promise<number> {
-    const banner = await apiGet(token, '/lineups/banner');
-    if (
-        banner &&
-        typeof banner.id === 'number' &&
-        (banner.status === 'voting' || banner.status === 'building')
-    ) {
-        return banner.id;
-    }
-    if (banner && typeof banner.id === 'number') {
-        await archiveLineup(token, banner.id);
+    if (ownVotingLineupId !== undefined) {
+        const detail = (await apiGet(token, `/lineups/${ownVotingLineupId}`)) as
+            | { status?: string }
+            | null;
+        if (detail?.status === 'voting' || detail?.status === 'building') {
+            return ownVotingLineupId;
+        }
     }
     const { id } = await createLineupOrRetry(token, newLineupBody(), workerPrefix);
+    ownVotingLineupId = id;
     return id;
 }
 
@@ -605,12 +547,10 @@ async function seedAndAdvanceToVoting(token: string, id: number): Promise<void> 
 }
 
 test.describe('Voting phase', () => {
-    // ROK-1147: this describe reads the global /lineups/banner to find a
-    // voting lineup and also archives the active lineup to assert the
-    // Start Lineup button. Both assumptions break under per-worker
-    // title-prefix isolation because sibling workers can hold concurrent
-    // lineups in mixed phases. Run the block serially so only one worker
-    // manipulates this state at a time.
+    // ROK-1147: this describe drives a lineup of this worker's own
+    // (`ensureVotingLineup`) from building to voting and then asserts on it;
+    // the tests share that state in order (seeded entries, a cast vote).
+    // Run the block serially so the tests see one consistent lineup.
     test.describe.configure({ mode: 'serial' });
 
 

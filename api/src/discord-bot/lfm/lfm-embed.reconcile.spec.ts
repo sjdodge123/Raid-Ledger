@@ -42,7 +42,7 @@ describe('restart reconcile on CONNECTED (D9)', () => {
 
     await service.onConnected();
 
-    expect(client.editEmbed.mock.calls[0][1]).toBe('msg-1');
+    expect(client.editEmbed.mock.calls[0]?.[1]).toBe('msg-1');
     expect(openRow()).toMatchObject({ state: 'open', lastMemberCount: 3 });
   });
 

@@ -13,6 +13,7 @@
 import { JwtService } from '@nestjs/jwt';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { at, nonEmpty } from '../common/testing/narrow';
 import {
   loginAsAdmin,
   truncateAllTables,
@@ -73,24 +74,30 @@ afterAll(() => {
 });
 
 async function seedUser(discordId: string | null): Promise<number> {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({ username: 'quickplayer', discordId, role: 'member' })
-    .returning({ id: schema.users.id });
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ username: 'quickplayer', discordId, role: 'member' })
+      .returning({ id: schema.users.id }),
+    'seeded user',
+  );
   return user.id;
 }
 
 async function seedBinding(purpose: string): Promise<string> {
-  const [binding] = await testApp.db
-    .insert(schema.channelBindings)
-    .values({
-      guildId: 'guild-1390',
-      channelId: VOICE_CHANNEL,
-      channelType: 'voice',
-      bindingPurpose: purpose,
-      gameId: testApp.seed.game.id,
-    })
-    .returning({ id: schema.channelBindings.id });
+  const [binding] = nonEmpty(
+    await testApp.db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: 'guild-1390',
+        channelId: VOICE_CHANNEL,
+        channelType: 'voice',
+        bindingPurpose: purpose,
+        gameId: testApp.seed.game.id,
+      })
+      .returning({ id: schema.channelBindings.id }),
+    'seeded channel binding',
+  );
   return binding.id;
 }
 
@@ -121,14 +128,14 @@ describe('POST /admin/test/quick-play/voice-join', () => {
     expect(res.status).toBe(200);
     const minted = await eventsOf(bindingId);
     expect(minted).toHaveLength(1);
-    expect(res.body).toEqual({ spawned: true, eventId: minted[0].id });
-    expect(minted[0]).toMatchObject({ isAdHoc: true, adHocStatus: 'live' });
+    expect(res.body).toEqual({ spawned: true, eventId: at(minted, 0).id });
+    expect(at(minted, 0)).toMatchObject({ isAdHoc: true, adHocStatus: 'live' });
     const roster = await testApp.db
       .select()
       .from(schema.adHocParticipants)
-      .where(eq(schema.adHocParticipants.eventId, minted[0].id));
+      .where(eq(schema.adHocParticipants.eventId, at(minted, 0).id));
     expect(roster).toHaveLength(1);
-    expect(roster[0]).toMatchObject({ userId, discordUserId: DISCORD_ID });
+    expect(at(roster, 0)).toMatchObject({ userId, discordUserId: DISCORD_ID });
   });
 
   it('spawns nothing while the ad-hoc gate is off', async () => {

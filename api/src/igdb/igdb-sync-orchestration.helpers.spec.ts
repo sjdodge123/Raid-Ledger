@@ -8,6 +8,7 @@ import {
 } from './igdb-sync-orchestration.helpers';
 import { enrichSyncedGamesWithItad } from './igdb-helpers.barrel';
 import { ITAD_BACKGROUND_FETCH } from '../itad/itad.constants';
+import { at } from '../common/testing/narrow';
 
 jest.mock('./igdb-helpers.barrel', () => ({
   refreshExistingGames: jest.fn().mockResolvedValue(0),
@@ -39,8 +40,10 @@ function buildDeps(itadOpts?: SyncAllDeps['itadOpts']) {
 /** Run the sync, then invoke the enrichment phase's ITAD callbacks. */
 async function runEnrichmentCallbacks(deps: SyncAllDeps): Promise<void> {
   await runSyncAllGames(deps);
-  const [, lookup, getInfo] = jest.mocked(enrichSyncedGamesWithItad).mock
-    .calls[0];
+  const [, lookup, getInfo] = at(
+    jest.mocked(enrichSyncedGamesWithItad).mock.calls,
+    0,
+  );
   await lookup(620);
   await getInfo('itad-1');
 }

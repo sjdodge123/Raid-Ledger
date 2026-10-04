@@ -18,6 +18,7 @@ import type {
   CohortGameFrequencyResponseDto,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { at } from '../common/testing/narrow';
 import {
   loginAsAdmin,
   truncateAllTables,
@@ -44,7 +45,7 @@ describe('Cohort game frequency (ROK-1310)', () => {
   let testApp: TestApp;
   let adminToken: string;
   let adminId: number;
-  let gameIds: number[];
+  let gameIds: readonly [number, number, number];
   let lineupA: number;
   let lineupB: number;
 
@@ -72,7 +73,8 @@ describe('Cohort game frequency (ROK-1310)', () => {
     const seed = await truncateAllTables(testApp.db);
     adminId = seed.adminUser.id;
     adminToken = await loginAsAdmin(testApp.request, seed);
-    gameIds = await seedFrequencyGames(testApp.db, 3);
+    const ids = await seedFrequencyGames(testApp.db, 3);
+    gameIds = [at(ids, 0), at(ids, 1), at(ids, 2)];
     lineupA = await seedFrequencyLineup(testApp.db, adminId, 'freq-a');
     lineupB = await seedFrequencyLineup(testApp.db, adminId, 'freq-b');
   });
@@ -94,7 +96,7 @@ describe('Cohort game frequency (ROK-1310)', () => {
       gameId: gameIds[0],
       count: 2,
     });
-    expect(bucket(body, '3')!.entries[0].count).toBe(1);
+    expect(bucket(body, '3')!.entries[0]?.count).toBe(1);
     expect(bucket(body, '6+')!.entries[0]).toMatchObject({
       gameId: gameIds[2],
       count: 1,
@@ -109,7 +111,8 @@ describe('Cohort game frequency (ROK-1310)', () => {
       row(4, gameIds[0], lineupA, 'veto_won'),
     ]);
 
-    const entry = (await fetchFrequency()).buckets[0].entries[0];
+    const body = await fetchFrequency();
+    const entry = at(at(body.buckets, 0).entries, 0);
 
     // Two source lineups -> two occasions, even though they wrote four rows
     // between them (a `voting -> decided` transition writes `decided` AND
@@ -173,7 +176,7 @@ describe('Cohort game frequency (ROK-1310)', () => {
     const entries = bucket(body, '3')!.entries;
     expect(entries.map((e) => e.gameId)).toEqual([gameIds[2], gameIds[1]]);
     expect(entries[0]).toMatchObject({ rank: 1, count: 2 });
-    expect(entries[0].breakdown).toEqual({
+    expect(entries[0]?.breakdown).toEqual({
       decided: 0,
       match: 0,
       vetoWon: 0,

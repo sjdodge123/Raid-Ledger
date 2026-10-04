@@ -11,6 +11,7 @@ import {
   loginAsAdmin,
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/testing/narrow';
 
 /** Insert a dungeon quest directly and return the row. */
 async function insertQuest(
@@ -30,7 +31,7 @@ async function insertQuest(
       ...overrides,
     })
     .returning();
-  return quest;
+  return defined(quest, 'inserted quest');
 }
 
 let testApp: TestApp;

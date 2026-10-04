@@ -14,6 +14,7 @@ import {
 } from '../common/testing/integration-helpers';
 import { SettingsService } from '../settings/settings.service';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
@@ -70,19 +71,22 @@ function describeReset() {
       // the events sequence, so a freshly-installed demo event will
       // collide with the orphan's old id.
       const orphanTitle = 'ORBITALIS-orphan';
-      const [orphan] = await testApp.db
-        .insert(schema.events)
-        .values({
-          title: orphanTitle,
-          duration: [
-            new Date(Date.now() + 60_000),
-            new Date(Date.now() + 120_000),
-          ] as [Date, Date],
-          creatorId: testApp.seed.adminUser.id,
-          gameId: testApp.seed.game.id,
-          maxAttendees: 10,
-        })
-        .returning({ id: schema.events.id });
+      const [orphan] = nonEmpty(
+        await testApp.db
+          .insert(schema.events)
+          .values({
+            title: orphanTitle,
+            duration: [
+              new Date(Date.now() + 60_000),
+              new Date(Date.now() + 120_000),
+            ] as [Date, Date],
+            creatorId: testApp.seed.adminUser.id,
+            gameId: testApp.seed.game.id,
+            maxAttendees: 10,
+          })
+          .returning({ id: schema.events.id }),
+        'orphan',
+      );
       expect(orphan.id).toBeGreaterThan(0);
 
       const res = await testApp.request
@@ -155,19 +159,22 @@ function describeReset() {
       // orphans of our wiped row. Same gotcha noted in the orphan-events
       // test above.
       const orphanTitle = 'wipe-signups-test';
-      const [event] = await testApp.db
-        .insert(schema.events)
-        .values({
-          title: orphanTitle,
-          duration: [
-            new Date(Date.now() + 60_000),
-            new Date(Date.now() + 120_000),
-          ] as [Date, Date],
-          creatorId: testApp.seed.adminUser.id,
-          gameId: testApp.seed.game.id,
-          maxAttendees: 10,
-        })
-        .returning({ id: schema.events.id });
+      const [event] = nonEmpty(
+        await testApp.db
+          .insert(schema.events)
+          .values({
+            title: orphanTitle,
+            duration: [
+              new Date(Date.now() + 60_000),
+              new Date(Date.now() + 120_000),
+            ] as [Date, Date],
+            creatorId: testApp.seed.adminUser.id,
+            gameId: testApp.seed.game.id,
+            maxAttendees: 10,
+          })
+          .returning({ id: schema.events.id }),
+        'event',
+      );
       await testApp.db.insert(schema.eventSignups).values({
         eventId: event.id,
         userId: testApp.seed.adminUser.id,
@@ -200,24 +207,30 @@ function describeReset() {
       // Seed a lineup → match → match member chain. The wipe must clear
       // match members directly (not rely on parent FK CASCADE) so a
       // freshly-installed demo never inherits orphaned match-member rows.
-      const [lineup] = await testApp.db
-        .insert(schema.communityLineups)
-        .values({
-          title: 'match-member-wipe-test',
-          createdBy: testApp.seed.adminUser.id,
-          publicSlug: `mm-wipe-${Date.now().toString(36)}`,
-        })
-        .returning({ id: schema.communityLineups.id });
-      const [match] = await testApp.db
-        .insert(schema.communityLineupMatches)
-        .values({
-          lineupId: lineup.id,
-          gameId: testApp.seed.game.id,
-          status: 'scheduling',
-          thresholdMet: false,
-          voteCount: 0,
-        })
-        .returning({ id: schema.communityLineupMatches.id });
+      const [lineup] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineups)
+          .values({
+            title: 'match-member-wipe-test',
+            createdBy: testApp.seed.adminUser.id,
+            publicSlug: `mm-wipe-${Date.now().toString(36)}`,
+          })
+          .returning({ id: schema.communityLineups.id }),
+        'lineup',
+      );
+      const [match] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineupMatches)
+          .values({
+            lineupId: lineup.id,
+            gameId: testApp.seed.game.id,
+            status: 'scheduling',
+            thresholdMet: false,
+            voteCount: 0,
+          })
+          .returning({ id: schema.communityLineupMatches.id }),
+        'match',
+      );
       await testApp.db.insert(schema.communityLineupMatchMembers).values({
         matchId: match.id,
         userId: testApp.seed.adminUser.id,

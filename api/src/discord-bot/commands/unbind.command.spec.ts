@@ -12,6 +12,7 @@ import {
 import { colorForState } from '../embeds/embed-chrome.helpers';
 import { COMMAND_REPLY_AUTHORS } from './command-reply-chrome.helpers';
 import { EMBED_COLORS } from '../discord-bot.constants';
+import { at } from '../../common/testing/narrow';
 
 /** A Drizzle stub whose `select(...).limit()` resolves the given rows. */
 function makeDb(rows: unknown[]) {
@@ -275,7 +276,7 @@ describe('UnbindCommand — unbind replies', () => {
     bindingsService.unbind.mockResolvedValue([]);
     const interaction = mockInteraction();
     await command.handleInteraction(castInteraction(interaction));
-    const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0];
+    const replyArg = at(interaction.editReply.mock.calls as unknown[][], 0)[0];
     expect(typeof replyArg).toBe('string');
     expect(replyArg as string).toMatch(/No binding found/);
   });
@@ -299,7 +300,7 @@ describe('UnbindCommand — unbind replies', () => {
       },
     });
     await command.handleInteraction(castInteraction(interaction));
-    const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0];
+    const replyArg = at(interaction.editReply.mock.calls as unknown[][], 0)[0];
     expect(replyArg as string).toContain('general');
   });
 });
@@ -322,10 +323,10 @@ describe('UnbindCommand — shared command-reply chrome (ROK-1462 D5/AC2)', () =
   function repliedEmbed(
     interaction: ReturnType<typeof mockInteraction>,
   ): APIEmbed {
-    const arg = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+    const arg = at(interaction.editReply.mock.calls as unknown[][], 0)[0] as {
       embeds: { toJSON(): APIEmbed }[];
     };
-    return arg.embeds[0].toJSON();
+    return at(arg.embeds, 0).toJSON();
   }
 
   it('replies with the slate BINDING REMOVED chrome, not a red title', async () => {
