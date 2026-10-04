@@ -5,14 +5,19 @@
  * naïve strings ("YYYY-MM-DD HH:MM:SS.SSS"). The default `new Date(...)`
  * parses these in the runtime's local TZ, shifting the value by hours.
  * We INSERT JS Dates as UTC, so re-parse with an explicit UTC suffix.
+ *
+ * `timestamp with time zone` columns read through raw `db.execute` come
+ * back as text carrying an offset in Postgres's default short form
+ * ("YYYY-MM-DD HH:MM:SS+00"), which must be passed through untouched.
  */
 
 /**
  * Parse a postgres-js timestamp value as UTC.
  *
  * - A `Date` instance is returned as-is.
- * - A string already carrying a `Z` suffix or an explicit `±HH:MM`
- *   offset is passed straight to `new Date()`.
+ * - A string already carrying a `Z` suffix or a `±HH`, `±HHMM` or
+ *   `±HH:MM` offset (Postgres's default timestamptz text, e.g.
+ *   `'...+00'` / `'...-04'`) is passed straight to `new Date()`.
  * - A naïve string (space-separated, no offset) gets `T...Z` applied so
  *   it is interpreted as UTC rather than local time.
  *
@@ -22,6 +27,6 @@
 export function parseTimestampUtc(value: Date | string): Date {
   if (value instanceof Date) return value;
   const s = String(value);
-  if (s.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(s)) return new Date(s);
+  if (s.endsWith('Z') || /[+-]\d{2}(:?\d{2})?$/.test(s)) return new Date(s);
   return new Date(s.replace(' ', 'T') + 'Z');
 }
