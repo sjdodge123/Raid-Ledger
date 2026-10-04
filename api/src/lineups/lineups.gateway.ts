@@ -58,7 +58,14 @@ export class LineupsGateway
     }
 
     try {
-      this.jwtService.verify(token);
+      const payload = this.jwtService.verify<{ magicLink?: boolean }>(token);
+      // ROK-1366: mirrors JwtStrategy — a legacy JWT_SECRET-signed magic
+      // link is a one-time login, never a socket bearer.
+      if (payload.magicLink) {
+        this.logger.debug(`Client ${client.id} rejected: magic-link token`);
+        client.disconnect(true);
+        return;
+      }
       this.logger.debug(`Client ${client.id} connected with valid token`);
     } catch {
       this.logger.debug(`Client ${client.id} rejected: invalid auth token`);
