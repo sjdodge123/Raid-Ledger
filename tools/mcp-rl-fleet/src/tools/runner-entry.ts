@@ -2,11 +2,14 @@
 //
 // Spawned (detached, unref'd) by spawnLocalRunner as:
 //   npx tsx runner-entry.ts <taskId> <tool> <paramsJson>
-// It runs the rl_env_deploy chain (env-deploy-steps) OR the rl_env_clone_prod
-// chain (runCloneCore) to completion, streaming each step into the laptop task
+// It dispatches on <tool> — rl_env_deploy (env-deploy-steps), rl_env_clone_prod
+// (runCloneCore) or rl_env_spin (env-spin-runner) — and runs that chain to
+// completion, streaming each step into the laptop task
 // JSON (~/.raid-ledger/tasks/<id>.json) so rl_task_status shows per-step
 // progress, then writes a TERMINAL JSON in a finally and exits with the chain's
 // code. A crash before the finally is covered by the PID-liveness check on read.
+// An unrecognised <tool> fails the task loudly — it never falls through to the
+// deploy chain (a spin task must not run a full build + deploy).
 //
 // MUST NOT import ./index.js (that starts the MCP server). Imports only the
 // chain modules + the laptop registry.
@@ -19,6 +22,8 @@ import {
 } from '../local-task.js';
 import { runDeployChain, type ChainCtx } from './env-deploy-steps.js';
 import { runCloneCore } from './env-clone-prod.js';
+import { runSpinTask } from './env-spin-runner.js';
+import type { EnvSpinParams } from './env-spin.js';
 import type { EnvDeployParams } from './env-deploy.js';
 import type { EnvCloneProdParams } from './env-clone-prod.js';
 
@@ -108,6 +113,27 @@ async function runClone(): Promise<number> {
   return cp.ok ? 0 : 1;
 }
 
+async function runSpin(): Promise<number> {
+  const params = JSON.parse(paramsJson) as EnvSpinParams;
+  const res = await runSpinTask(params, current, ctx);
+  finalize(res.ok, { failed_step: res.ok ? null : 'env_spin', error: res.error, message: res.message });
+  return res.ok ? 0 : 1;
+}
+
+async function runTool(): Promise<number> {
+  switch (tool) {
+    case 'rl_env_deploy':
+      return runDeploy();
+    case 'rl_env_clone_prod':
+      return runClone();
+    case 'rl_env_spin':
+      return runSpin();
+    default:
+      finalize(false, { error: 'unknown_tool', message: `unknown tool ${tool}` });
+      return 1;
+  }
+}
+
 // Cancel (SIGTERM from cancelLocalTask) — exit fast; cancelLocalTask owns the
 // terminal `cancelled` write, so do NOT finalize here (would clobber it).
 process.on('SIGTERM', () => process.exit(143));
@@ -115,7 +141,7 @@ process.on('SIGTERM', () => process.exit(143));
 async function main(): Promise<void> {
   let code = 1;
   try {
-    code = tool === 'rl_env_clone_prod' ? await runClone() : await runDeploy();
+    code = await runTool();
   } catch (err) {
     const e = err as Error;
     finalize(false, { error: 'runner_crashed', message: `runner crashed: ${e.message}` });
