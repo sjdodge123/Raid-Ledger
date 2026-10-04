@@ -476,23 +476,15 @@ function describeDeadlineNotify() {
   it('AC5 (pass-by-construction): grace building→voting fires voting-open exactly once (no double-notify)', async () => {
     // The grace path is exercised through processGraceAdvance; we drive the
     // building→voting grace flip directly to keep this independent of BullMQ
-    // tick timing. Mark the lineup quorum-ready (submit-nominations) then
-    // invoke the grace branch.
+    // tick timing. With the submission quorum retired (TDB:449) this lineup
+    // is not quorum-ready, so the grace branch fires zero notifies — the
+    // guard below is that it never fires more than one.
     const v1 = await createMember('ac5-v1');
     const createRes = await createPrivateLineup([v1.userId]);
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
     await nominate(adminToken, lineupId, games[0].id);
     await nominate(v1.token, lineupId, games[1].id);
-
-    // Stamp a pending grace window so processGraceAdvance proceeds, and mark
-    // the lineup quorum-ready via submit-nominations.
-    for (const token of [adminToken, v1.token]) {
-      await testApp.request
-        .post(`/lineups/${lineupId}/submit-nominations`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-    }
 
     const spies = installSpies();
 

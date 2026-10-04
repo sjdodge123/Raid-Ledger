@@ -467,22 +467,15 @@ function describeGrace() {
     ).toEqual(expect.any(String));
 
     // The next quorum-affecting mutation must NOT re-schedule the grace
-    // window. ROK-1296: building quorum is met when every expected voter
-    // calls /submit-nominations. We satisfy that AND ensure the nomination
-    // floor (default 4) is hit so a paused-but-otherwise-ready lineup is
-    // exercised — the pause must suppress advance regardless.
+    // window. Top the nominations up past the floor (default 4) so each
+    // nomination runs the quorum check on a paused lineup — the pause must
+    // keep it put regardless.
     for (let i = 0; i < 3; i++) {
       const morePersonal = await createGames(1);
       await nominate(adminToken, lineupId, morePersonal[0].id);
     }
-    for (const token of [adminToken, v1.token, v2.token]) {
-      await testApp.request
-        .post(`/lineups/${lineupId}/submit-nominations`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-    }
 
-    // Even with quorum technically met, pause must keep the lineup put.
+    // The pause must keep the lineup put.
     // No grace job should exist; pending_advance_at stays null.
     const stillPaused = await readAdvanceState(lineupId);
     expect(stillPaused.pendingAdvanceAt).toBeNull();
@@ -497,7 +490,7 @@ function describeGrace() {
 
   // ── ROK-1296 (Codex P2): revert clears stale submitted_at stamps ──
 
-  it('reverting voting → building clears stale nominations_submitted_at stamps so post-TTL quorum requires re-submit', async () => {
+  it('reverting voting → building clears stale nominations_submitted_at stamps', async () => {
     await settings.set(graceKey, '500');
     await settings.set(pauseTtlKey, '86400000');
 
@@ -514,12 +507,16 @@ function describeGrace() {
     await nominate(v1.token, lineupId, games[1].id);
 
     // Stamp every voter's nominations_submitted_at BEFORE the revert so
-    // there's something to clear.
-    for (const token of [adminToken, v1.token, v2.token]) {
-      await testApp.request
-        .post(`/lineups/${lineupId}/submit-nominations`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
+    // there's something to clear. Written directly: the nominations submit
+    // endpoint is retired (TDB:449), but the revert still clears the column.
+    const voterIds = [testApp.seed.adminUser.id, v1.userId, v2.userId];
+    for (const userId of voterIds) {
+      await testApp.db.execute(sql`
+        INSERT INTO community_lineup_user_submissions
+          (lineup_id, user_id, nominations_submitted_at)
+        VALUES (${lineupId}, ${userId}, now())
+        ON CONFLICT (lineup_id, user_id)
+          DO UPDATE SET nominations_submitted_at = now()`);
     }
 
     const beforeRevert = await testApp.db.execute<{
@@ -551,9 +548,9 @@ function describeGrace() {
     }
   });
 
-  // ── AC-T4: pause TTL elapse → next mutation advances normally ──
+  // ── AC-T4: pause TTL elapse → a reverted lineup still stays put ──
 
-  it('AC-T4: after pause TTL elapses, next mutation re-schedules grace and advances', async () => {
+  it('AC-T4: after pause TTL elapses a reverted building lineup still does NOT auto-advance (target disarmed, submission quorum retired — TDB:449/448)', async () => {
     await settings.set(graceKey, '500');
     // Tiny pause TTL so it expires immediately.
     await settings.set(pauseTtlKey, '50');
@@ -586,30 +583,28 @@ function describeGrace() {
     // Deterministically expire the pause cool-off: push auto_advance_paused_at
     // far enough into the past that the 50ms TTL is guaranteed elapsed, rather
     // than sleeping for it. This puts the row in the exact "TTL elapsed" state
-    // the next mutation must observe to re-schedule grace.
+    // the next mutation observes.
     await writeAdvanceState(
       lineupId,
       'auto_advance_paused_at',
       new Date(Date.now() - 60_000),
     );
 
-    // Top up nominations to satisfy the nomination floor (default 4).
+    // Top up nominations past the nomination floor (default 4). Each one
+    // runs the quorum check with the pause expired.
     for (let i = 0; i < 3; i++) {
       const g = await createGames(1);
       await nominate(adminToken, lineupId, g[0].id);
     }
 
-    // ROK-1296: every voter must submit-nominations for building quorum.
-    for (const token of [adminToken, v1.token, v2.token]) {
-      await testApp.request
-        .post(`/lineups/${lineupId}/submit-nominations`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({});
-    }
-
-    // Once the floor is met AND TTL has elapsed, the next mutation must
-    // schedule grace and (after 500ms) flip to voting.
-    await waitForStatus(lineupId, 'voting', 10_000);
+    // With the submission quorum retired (TDB:449) and the count target
+    // disarmed by the revert (TDB:448), nothing auto-advances building →
+    // voting here: only the phase deadline or a manual advance can. The
+    // quorum check runs synchronously on each nomination, so the absence of
+    // a grace job is observable now — no sleep needed.
+    expect((await readAdvanceState(lineupId)).pendingAdvanceAt).toBeNull();
+    expect(await getGraceJob(lineupId)).toBeFalsy();
+    expect(await readStatus(lineupId)).toBe('building');
   });
 
   // ── GAP-A: cancelAllForLineup removes grace jobs ───────────────
