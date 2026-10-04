@@ -49,7 +49,7 @@ still parallel.
 | `character-detail.smoke.spec.ts` | Self-contained | None | n/a | Read-only baseline demo characters. |
 | `characters.smoke.spec.ts` | Self-contained | None | n/a | Read-only character list. |
 | `community-insights.smoke.spec.ts` | Self-contained | None | n/a | Read-only insights page. |
-| `community-lineup.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1070: switched bare POST `/lineups` to `createLineupOrRetry` to avoid `/lineups/banner` fallback. |
+| `community-lineup.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1070: switched bare POST `/lineups` to `createLineupOrRetry` to avoid `/lineups/banner` fallback. Banner-backed pages are pinned to the spec's own lineup with `scopeBannerTo` before `page.goto`. |
 | `create-event.smoke.spec.ts` | Demo-scoped | `reset-to-seed` once | n/a | ROK-1070: keeps event-creation-redirect test deterministic across runs. |
 | `decided-composite.smoke.spec.ts` | Lineup-scoped | `reset-lineups` + `createLineupOrRetry` | yes | ROK-1517: AC2 matches href against the SET of this lineup's match ids (unordered `/matches` response). |
 | `dynamic-categories.smoke.spec.ts` | Self-contained | `POST /admin/test/seed-discovery-categories` per-test via `seedSuggestion()` | n/a | Established pattern, predates ROK-1070. |
@@ -101,8 +101,13 @@ for the full list and exact body shapes.
 2. If lineup-scoped, set up `workerPrefix = smoke-w${workerIndex}-${FILE_PREFIX}-`
    in a top-level `test.beforeAll(({}, testInfo) => { ... })`.
 3. Use `createLineupOrRetry` (from `api-helpers.ts`) for any `POST /lineups`
-   call so sibling-worker 409 collisions trigger a prefix-scoped reset rather
-   than reusing the banner row.
+   call so sibling-worker 409 collisions trigger a prefix-scoped reset. Never
+   adopt the unscoped banner row: banner-backed pages (`/games` `LineupBanner`,
+   `/games/:id` `LineupVoteBanner`) render the GLOBAL `GET /lineups/banner`
+   singleton, so call `scopeBannerTo(page, ownLineupId)` before `page.goto`
+   and check `getScopedBanner(token, ownLineupId)` for the precondition.
+   Scope a page once: Playwright does not order init scripts, so re-scoping
+   the same page to another id throws — use a fresh page instead.
 4. Add the spec to the table above with its category, reset endpoint, and any
    notes future maintainers need.
 5. If the spec exposes a new state requirement that no existing reset endpoint
