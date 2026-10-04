@@ -133,17 +133,10 @@ function describeAutoAdvance() {
       .send({ status: 'voting' });
   }
 
-  // ROK-1296: quorum per-voter gate is now "did the user explicitly submit?"
-  // not "did the user cast N votes / nominations?" — the original
-  // auto-advance asserts pre-1296 were "cast 3 votes → advance"; post-1296
-  // they're "cast 3 votes AND call /submit-votes → advance".
-  async function submitNominations(token: string, lineupId: number) {
-    return testApp.request
-      .post(`/lineups/${lineupId}/submit-nominations`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({});
-  }
-
+  // ROK-1296: the voting quorum per-voter gate is "did the user explicitly
+  // submit?" not "did the user cast N votes?" — "cast 3 votes AND call
+  // /submit-votes → advance". The building-phase submission quorum is
+  // retired (TDB:449).
   async function submitVotes(token: string, lineupId: number) {
     return testApp.request
       .post(`/lineups/${lineupId}/submit-votes`)
@@ -278,9 +271,11 @@ function describeAutoAdvance() {
 
   // -- AC: building → voting auto-advance for a public lineup ---------------
 
-  it('auto-advances a public lineup from building → voting once each voter hits their per-voter minimum', async () => {
-    // Default per-voter min nominations = 3, default total floor = 4.
-    // With 2 nominators × 3 noms = 6 noms total → both gates pass.
+  it('does not auto-advance a public lineup from building → voting on nomination counts alone (no target; submission quorum retired — TDB:449)', async () => {
+    // 2 nominators × 3 noms = 6 noms, past the total floor (default 4). With
+    // no nomination target set and the submission quorum retired, only the
+    // phase deadline or a manual advance moves building → voting; the
+    // count-target advance is covered by lineup-nomination-target spec.
     const m1 = await createMember('pub-nom-1');
     const m2 = await createMember('pub-nom-2');
 
@@ -305,16 +300,10 @@ function describeAutoAdvance() {
     await nominate(m2.token, lineupId, games[4].id);
     expect(await readStatus(lineupId)).toBe('building');
 
-    // m2's 3rd nomination — pre-1296 this alone advanced; post-1296 the
-    // per-voter gate is submission presence so still 'building' here.
+    // m2's 3rd nomination — every nominator is at 3 and the floor is met,
+    // yet nothing auto-advances: counts alone are not a trigger.
     await nominate(m2.token, lineupId, games[5].id);
     expect(await readStatus(lineupId)).toBe('building');
-
-    // Both nominators submit — the last call closes the quorum.
-    await submitNominations(m1.token, lineupId);
-    expect(await readStatus(lineupId)).toBe('building');
-    await submitNominations(m2.token, lineupId);
-    expect(await readStatus(lineupId)).toBe('voting');
   });
 
   // -- AC: operator manual advance still works (regression guard) -----------

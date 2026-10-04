@@ -64,7 +64,9 @@ export async function applyRevertSideEffects(
  * otherwise auto-advance the lineup once the pause TTL expires.
  *
  * Mapping (per `quorum-check.helpers.ts`):
- *   - building → checkBuildingQuorum reads `nominations_submitted_at`
+ *   - building → no quorum reads a stamp since TDB:449 (checkBuildingQuorum
+ *     uses only the nomination count target); `nominations_submitted_at` is
+ *     still cleared so a legacy stamp never outlives a revert
  *   - voting   → checkVotingQuorum reads `votes_submitted_at`
  *   - decided  → no quorum check (no reversion target writes here today)
  */

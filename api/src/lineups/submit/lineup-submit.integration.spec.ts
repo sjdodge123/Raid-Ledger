@@ -1,21 +1,16 @@
 /**
- * Failing-first integration tests for the U4 SubmitBar write paths (ROK-1296).
+ * Integration tests for the U4 SubmitBar write path (ROK-1296).
  *
- * Endpoints under test (none of these exist yet):
- *   - POST /lineups/:id/submit-nominations
- *   - POST /lineups/:id/submit-votes
+ * Endpoint under test: POST /lineups/:id/submit-votes, which stamps
+ * `votes_submitted_at` on the (lineup, user) `community_lineup_user_submissions`
+ * row.
  *
- * Each writes to the new `community_lineup_user_submissions` row (lineup+user)
- * or to the new `scheduling_submitted_at` column on
- * `community_lineup_match_members`. None of the schema, controller, or service
- * is implemented yet — every assertion MUST fail at commit time so the dev
- * agent has a concrete green-bar target to drive the implementation against.
- *
- * Covered ACs (from planning-artifacts/specs/ROK-1296.md):
- *   - AC2a / AC2b / AC2c — write path stamps the right column.
- *   - AC5 — re-submission overwrites the timestamp to a later value.
- *   - Edge: phase mismatch → 403 for nominate-in-voting / vote-in-building.
- *   - Edge: private lineup non-invitee → 403 on submit-nominations.
+ * Covered:
+ *   - AC2b — the write path stamps `votes_submitted_at`.
+ *   - AC5 — re-submitting overwrites the stamp (ON CONFLICT upsert, one row).
+ *   - Edge: phase mismatch → 403 for vote-in-building.
+ *   - Edge: private lineup non-invitee → 403 (participation gate).
+ *   - TDB:449 — POST /lineups/:id/submit-nominations is retired → 404.
  *
  * ROK-1544 retired the third endpoint (`submit-scheduling`): the scheduling
  * surface has no member Submit step, and `scheduling_submitted_at` is stamped
@@ -164,42 +159,6 @@ function describeLineupSubmit() {
     return rows[0] ?? null;
   }
 
-  // -- AC2a — submit-nominations writes nominations_submitted_at -----------
-
-  it('POST /lineups/:id/submit-nominations writes nominations_submitted_at for the authed user (AC2a)', async () => {
-    const createRes = await createPublicLineup(adminToken);
-    expect(createRes.status).toBe(201);
-    const lineupId = createRes.body.id as number;
-
-    const [game] = await createGames(1);
-    // Nominate something so the user is a participant.
-    await nominate(adminToken, lineupId, game.id);
-
-    const before = await readSubmission(lineupId, testApp.seed.adminUser.id);
-    expect(before?.nominations_submitted_at ?? null).toBeNull();
-
-    const submitRes = await testApp.request
-      .post(`/lineups/${lineupId}/submit-nominations`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
-
-    expect(submitRes.status).toBe(200);
-    expect(submitRes.body.viewerSubmissions).toBeDefined();
-    expect(typeof submitRes.body.viewerSubmissions.nominationsSubmittedAt).toBe(
-      'string',
-    );
-    expect(submitRes.body.viewerSubmissions.votesSubmittedAt).toBeNull();
-    // ISO-shaped timestamp.
-    expect(submitRes.body.viewerSubmissions.nominationsSubmittedAt).toMatch(
-      /^\d{4}-\d{2}-\d{2}T/,
-    );
-
-    const after = await readSubmission(lineupId, testApp.seed.adminUser.id);
-    expect(after).not.toBeNull();
-    expect(after?.nominations_submitted_at).not.toBeNull();
-    expect(after?.votes_submitted_at ?? null).toBeNull();
-  });
-
   // -- AC2b — submit-votes writes votes_submitted_at -----------------------
 
   it('POST /lineups/:id/submit-votes writes votes_submitted_at for the authed user (AC2b)', async () => {
@@ -236,42 +195,46 @@ function describeLineupSubmit() {
     expect(row?.votes_submitted_at).not.toBeNull();
   });
 
-  // -- AC5 — re-submission overwrites the timestamp to a LATER value -------
+  // -- AC5 — re-submission overwrites the stamp; one row per (lineup, user) --
 
-  it('re-submitting nominations overwrites the existing timestamp with a later one (AC5)', async () => {
-    const createRes = await createPublicLineup(adminToken);
+  it('re-submitting votes overwrites the existing timestamp with a later one and keeps one row (AC5)', async () => {
+    const voter = await createMember('resubmit-voter');
+    // A second invitee who never submits keeps the voting quorum unmet, so
+    // the lineup stays in voting between the two submits.
+    const idle = await createMember('resubmit-idle');
+    const createRes = await createPrivateLineup(adminToken, [
+      voter.userId,
+      idle.userId,
+    ]);
+    expect(createRes.status).toBe(201);
     const lineupId = createRes.body.id as number;
-    const [game] = await createGames(1);
-    await nominate(adminToken, lineupId, game.id);
+    const games = await createGames(2);
+    for (const g of games) await nominate(adminToken, lineupId, g.id);
+    expect((await advanceToVoting(lineupId, adminToken)).status).toBe(200);
 
-    const first = await testApp.request
-      .post(`/lineups/${lineupId}/submit-nominations`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
-    expect(first.status).toBe(200);
-    const firstTs = first.body.viewerSubmissions
-      .nominationsSubmittedAt as string;
-    expect(typeof firstTs).toBe('string');
+    const submitVotes = () =>
+      testApp.request
+        .post(`/lineups/${lineupId}/submit-votes`)
+        .set('Authorization', `Bearer ${voter.token}`)
+        .send({});
 
-    // Postgres now() has microsecond resolution; sleep ensures a STRICT >.
-    await new Promise((r) => setTimeout(r, 25));
+    expect((await submitVotes()).status).toBe(200);
+    // Backdate the first stamp so "later" is deterministic without a sleep.
+    await testApp.db.execute(sql`
+      UPDATE community_lineup_user_submissions
+         SET votes_submitted_at = now() - interval '1 hour'
+       WHERE lineup_id = ${lineupId} AND user_id = ${voter.userId}
+    `);
+    const backdated = await readSubmission(lineupId, voter.userId);
+    const firstMs = new Date(backdated!.votes_submitted_at!).getTime();
 
-    const second = await testApp.request
-      .post(`/lineups/${lineupId}/submit-nominations`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({});
+    const second = await submitVotes();
     expect(second.status).toBe(200);
-    const secondTs = second.body.viewerSubmissions
-      .nominationsSubmittedAt as string;
-    expect(typeof secondTs).toBe('string');
+    const secondTs = second.body.viewerSubmissions.votesSubmittedAt as string;
+    expect(new Date(secondTs).getTime()).toBeGreaterThan(firstMs);
 
-    expect(new Date(secondTs).getTime()).toBeGreaterThan(
-      new Date(firstTs).getTime(),
-    );
-
-    // And only one row exists (upsert, not append).
     const rows = await testApp.db.execute<{ c: number }>(
-      sql`SELECT count(*)::int AS c FROM community_lineup_user_submissions WHERE lineup_id = ${lineupId} AND user_id = ${testApp.seed.adminUser.id}`,
+      sql`SELECT count(*)::int AS c FROM community_lineup_user_submissions WHERE lineup_id = ${lineupId} AND user_id = ${voter.userId}`,
     );
     expect(Number(rows[0]?.c ?? 0)).toBe(1);
   });
@@ -292,37 +255,45 @@ function describeLineupSubmit() {
     expect(res.status).toBe(403);
   });
 
-  it('POST /lineups/:id/submit-nominations returns 403 when the lineup is in voting', async () => {
-    const createRes = await createPublicLineup(adminToken);
+  // -- Edge: private lineup non-invitee -------------------------------------
+
+  it('POST /lineups/:id/submit-votes returns 403 for a non-invitee on a private lineup and writes nothing', async () => {
+    const invitee = await createMember('priv-invitee');
+    const outsider = await createMember('priv-outsider');
+    const createRes = await createPrivateLineup(adminToken, [invitee.userId]);
+    expect(createRes.status).toBe(201);
     const lineupId = createRes.body.id as number;
     const games = await createGames(2);
     for (const g of games) await nominate(adminToken, lineupId, g.id);
-    await advanceToVoting(lineupId, adminToken);
+    expect((await advanceToVoting(lineupId, adminToken)).status).toBe(200);
+
+    const res = await testApp.request
+      .post(`/lineups/${lineupId}/submit-votes`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({});
+
+    expect(res.status).toBe(403);
+    expect(await readSubmission(lineupId, outsider.userId)).toBeNull();
+  });
+
+  // -- TDB:449 — the nominations submit route is retired --------------------
+
+  it('POST /lineups/:id/submit-nominations returns 404 and writes nothing (route retired)', async () => {
+    const createRes = await createPublicLineup(adminToken);
+    expect(createRes.status).toBe(201);
+    const lineupId = createRes.body.id as number;
+    const [game] = await createGames(1);
+    await nominate(adminToken, lineupId, game.id);
 
     const res = await testApp.request
       .post(`/lineups/${lineupId}/submit-nominations`)
       .set('Authorization', `Bearer ${adminToken}`)
       .send({});
 
-    expect(res.status).toBe(403);
-  });
-
-  // -- Edge: private lineup non-invitee -------------------------------------
-
-  it('POST /lineups/:id/submit-nominations returns 403 for a non-invitee on a private lineup', async () => {
-    const invitee = await createMember('priv-invitee');
-    const outsider = await createMember('priv-outsider');
-
-    const createRes = await createPrivateLineup(adminToken, [invitee.userId]);
-    expect(createRes.status).toBe(201);
-    const lineupId = createRes.body.id as number;
-
-    const res = await testApp.request
-      .post(`/lineups/${lineupId}/submit-nominations`)
-      .set('Authorization', `Bearer ${outsider.token}`)
-      .send({});
-
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(404);
+    expect(
+      await readSubmission(lineupId, testApp.seed.adminUser.id),
+    ).toBeNull();
   });
 }
 

@@ -2294,3 +2294,9 @@ same day (#1278, #1279, #1280).
 
 - **[nit]** `rl-infra/gc-sweeper/sweep.sh` (dead-claim reaper §1b and the expired-claim reaper §1d): a slot these reapers free is not handed to a queued waiter promptly. `claim-wait` wakes only on a change to `$RL_LEASE_QUEUE_DIR` (inotifywait close_write/moved_to/delete), and the reapers write `claims.json`, not the queue dir, so the waiter gets the slot only at its next unrelated queue wake or when its wait times out. §1d is hit hardest: it releases only when a waiter exists, and that waiter then sits out its timeout. Behaviour is unchanged from main (the old in-container `lease-advance` call never ran).
   Suggested: after a reap frees a slot that has waiters, touch a file in that slot's lease-queue dir so `claim-wait` wakes and re-runs `claim`.
+### 2026-10-04 — fix/r1-lineups-rulings-1004 (review nits left open)
+
+- **[med]** `api/src/lineups/scheduling/scheduling.controller.ts:293-323`: the private-poll read gate (`assertCallerMayViewPoll`, TDB:189) covers only the poll page read. The sibling reads `GET /lineups/:lineupId/schedule/:matchId/availability` and `/other-polls` are ungated, and `getMatchAvailability` ignores `lineupId` entirely, so any signed-in user can read a private lineup match's availability aggregate. Out of scope for the GET-half ruling on this branch.
+  Suggested: apply `assertCallerMayViewPoll` to both reads (resolving the lineup from the match for availability) and add a non-participant 404 case per route.
+- **[nit]** `api/src/lineups/lineup-deadline-transition-notify.integration.spec.ts` (AC4 stale-job test): still waits with a fixed `setTimeout(250)` before asserting the hooks did NOT fire. Pre-existing; the AC5 case on this branch now waits deterministically.
+  Suggested: assert on the synchronous state the early `status !== expectedFrom` return leaves (no activity row, no `scheduleTransition` call) and drop the sleep.

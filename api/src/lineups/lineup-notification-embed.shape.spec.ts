@@ -1,5 +1,5 @@
 /**
- * ROK-1461 (slice C) — TDD pins for the shape of all NINE lineup builders.
+ * ROK-1461 (slice C) — TDD pins for the shape of the lineup builders (nine at the time; the scheduling notice was retired by TDB:576).
  *
  * CONFIRMED FAILING on the branch base: today every builder returns an action
  * `row`, sets the author to the bare community name, and puts an emoji plus a
@@ -18,7 +18,6 @@ import {
   buildMilestoneEmbed,
   buildVotingOpenEmbed,
   buildDecidedEmbed,
-  buildSchedulingEmbed,
   buildEventCreatedEmbed,
   buildTiebreakerStartedEmbed,
   buildTiebreakerReminderEmbed,
@@ -33,7 +32,6 @@ import { at } from '../common/testing/narrow';
 const DIE = '\u{1F3B2}';
 const BALLOT = '\u{1F5F3}';
 const TROPHY = '\u{1F3C6}';
-const CALENDAR = '\u{1F4C5}';
 const SOLID = '●';
 const SWORDS = '⚔\u{FE0F}';
 const DOTTED = '◌';
@@ -53,7 +51,6 @@ const PERSONALIZED_FIELD = personalizedFieldName('owned');
 const COMMUNITY = 'Test Guild';
 const BASE_URL = 'https://raid.example';
 const LINEUP_ID = 1;
-const MATCH_ID = 7;
 const EVENT_ID = 55;
 const TITLE = 'September Lineup';
 const LINEUP_URL = `${BASE_URL}/community-lineup/${LINEUP_ID}`;
@@ -188,15 +185,6 @@ const ROWS: ShapeRow[] = [
     color: SIGNUP_EMERALD,
     footerLabel: 'Matches Decided',
     lastLine: `[View results ${ARROW}](${LINEUP_URL})`,
-  },
-  {
-    name: 'scheduling',
-    build: () =>
-      buildSchedulingEmbed(ctx({ phase: 'decided' }), 'Deep Rock', MATCH_ID),
-    author: `${CALENDAR} SCHEDULING ${SEP} pick a time`,
-    color: ANNOUNCEMENT_CYAN,
-    footerLabel: 'Scheduling',
-    lastLine: `[Vote on a time ${ARROW}](${LINEUP_URL}/schedule/${MATCH_ID})`,
   },
   {
     name: 'tiebreaker started (bracket)',
