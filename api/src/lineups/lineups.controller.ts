@@ -81,10 +81,15 @@ export class LineupsController {
     return this.lineupsService.findActive();
   }
 
-  /** GET /lineups/banner — lightweight banner for Games page. */
+  /**
+   * GET /lineups/banner — lightweight banner for Games page. `lineupId` is a
+   * DEMO_MODE-only test seam (see parseBannerScope); ignored otherwise.
+   */
   @Get('banner')
-  async getBanner(): Promise<LineupBannerResponseDto | null> {
-    return this.lineupsService.findBanner();
+  async getBanner(
+    @Query('lineupId') lineupId?: string,
+  ): Promise<LineupBannerResponseDto | null> {
+    return this.lineupsService.findBanner(lineupId);
   }
 
   /** GET /lineups/common-ground — ownership overlap query. */

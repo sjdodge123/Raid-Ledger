@@ -12,6 +12,7 @@
  * and logs each failure so `freed=0 && orphanCount>0` always carries a reason.
  */
 import { gcStaleRLScheduledEvents } from './scheduled-event.gc';
+import { findExistingGuildSE } from './scheduled-event.gc.helpers';
 import * as dbHelpers from './scheduled-event.db-helpers';
 import * as discordOps from './scheduled-event.discord-ops';
 
@@ -329,5 +330,50 @@ describe('gcStaleRLScheduledEvents — per-orphan failure logging (ROK-1347 inva
     expect(result.deleteFailures).toEqual([
       { eventId: 31, seId: 'dup-1', code: 429 },
     ]);
+  });
+});
+
+// `new Date()` reads a naive string in the HOST zone, so these cases only
+// discriminate on a non-UTC host (CI runs UTC, where the old parse passes too).
+// The CI-visible proof is scheduled-event.db-helpers.tz.integration.spec.ts.
+describe('naive pg start text is read as UTC (create pre-check + gc dedup)', () => {
+  const START = Date.UTC(2026, 6, 2, 22);
+  const NAIVE = '2026-07-02 22:00:00';
+
+  it('findExistingGuildSE matches the guild SE at the UTC instant', () => {
+    const se = {
+      id: 'se-1',
+      name: 'Raid Night',
+      scheduledStartTimestamp: START,
+    };
+    expect(findExistingGuildSE([se], 'Raid Night', NAIVE)).toBe(se);
+  });
+
+  it('reclaims a duplicate keyed from a naive live-event startIso', async () => {
+    const guild = makeGuild([
+      { id: 'bound-se', name: 'Raid Night', scheduledStartTimestamp: START },
+      {
+        id: 'dup-se',
+        name: 'Raid Night',
+        scheduledStartTimestamp: START,
+        description: rlDesc(9),
+      },
+    ]);
+    findRLTrackedSEs.mockResolvedValue([
+      { id: 9, discordScheduledEventId: 'bound-se', isStale: false },
+    ]);
+    findLiveRLEventsForDedup.mockResolvedValue([
+      {
+        id: 9,
+        discordScheduledEventId: 'bound-se',
+        title: 'Raid Night',
+        startIso: NAIVE,
+      },
+    ]);
+
+    const result = await gcStaleRLScheduledEvents(guild, db);
+
+    expect(result.freed).toBe(1);
+    expect(tryDeleteEvent).toHaveBeenCalledWith(guild, 9, 'dup-se');
   });
 });
