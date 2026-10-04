@@ -11,7 +11,10 @@ import {
   demoteDuplicateMains,
   dropCollidingChannelBindings,
 } from './igdb-dedup-partial-index.helpers';
-import { characterUniqueKeyJoin } from '../characters/characters-unique-keys.helpers';
+import {
+  characterUniqueKeyJoin,
+  reportCrossOwnerCharacterDeletes,
+} from '../characters/characters-unique-keys.helpers';
 
 /**
  * The transaction handle Drizzle hands a `db.transaction` callback.
@@ -345,6 +348,9 @@ async function deleteConflictingRows(
   if (!contextCols) return;
 
   const join = buildConflictJoin(contextCols);
+  // ROK-1721: the Forever key spans players — surface any other player's loss.
+  if (table === 'characters')
+    await reportCrossOwnerCharacterDeletes(tx, loserId, winnerId);
 
   const sp = `sp_del_${table}`;
   await tx.execute(sql.raw(`SAVEPOINT ${sp}`));
