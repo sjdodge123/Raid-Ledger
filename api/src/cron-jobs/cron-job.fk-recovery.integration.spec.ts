@@ -20,6 +20,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { CronJobService } from './cron-job.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Insert a test cron job directly into DB and return its ID. */
 async function insertTestJob(
@@ -27,16 +28,19 @@ async function insertTestJob(
   name: string,
   overrides: Partial<typeof schema.cronJobs.$inferInsert> = {},
 ): Promise<number> {
-  const [job] = await testApp.db
-    .insert(schema.cronJobs)
-    .values({
-      name,
-      source: 'core',
-      cronExpression: '0 * * * *',
-      paused: false,
-      ...overrides,
-    })
-    .returning();
+  const [job] = nonEmpty(
+    await testApp.db
+      .insert(schema.cronJobs)
+      .values({
+        name,
+        source: 'core',
+        cronExpression: '0 * * * *',
+        paused: false,
+        ...overrides,
+      })
+      .returning(),
+    'job',
+  );
   return job.id;
 }
 

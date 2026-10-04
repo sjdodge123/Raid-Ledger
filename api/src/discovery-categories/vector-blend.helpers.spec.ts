@@ -1,4 +1,5 @@
 import { blendVectors } from './vector-blend.helpers';
+import { at } from '../common/testing/narrow';
 
 describe('blendVectors', () => {
   const theme = [1, 0, 0.5, -0.25, 0.8, 0.1, 0.0];
@@ -14,8 +15,8 @@ describe('blendVectors', () => {
 
   it('alpha=0.7 produces the weighted interpolation', () => {
     const out = blendVectors(theme, centroid, 0.7);
-    for (let i = 0; i < theme.length; i += 1) {
-      expect(out[i]).toBeCloseTo(0.7 * theme[i] + 0.3 * centroid[i], 10);
+    for (const [i, t] of theme.entries()) {
+      expect(out[i]).toBeCloseTo(0.7 * t + 0.3 * at(centroid, i), 10);
     }
   });
 

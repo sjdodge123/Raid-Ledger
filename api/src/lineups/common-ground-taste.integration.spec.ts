@@ -22,6 +22,7 @@ import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { TIER_DESCRIPTIONS } from '../taste-profile/archetype-copy';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { at, defined, nonEmpty } from '../common/testing/narrow';
 
 /** Default composed archetype for test fixtures (ROK-1083 jsonb shape). */
 const DEFAULT_TEST_ARCHETYPE: ArchetypeDto = {
@@ -52,14 +53,17 @@ function describeCommonGroundTaste() {
   async function createMember(
     suffix: string,
   ): Promise<typeof schema.users.$inferSelect> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `d:${suffix}`,
-        username: `user-${suffix}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `d:${suffix}`,
+          username: `user-${suffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user;
   }
 
@@ -82,16 +86,19 @@ function describeCommonGroundTaste() {
     const slug =
       overrides.slug ??
       `game-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: overrides.name ?? 'Some Game',
-        slug,
-        steamAppId:
-          overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
-        ...overrides,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: overrides.name ?? 'Some Game',
+          slug,
+          steamAppId:
+            overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
+          ...overrides,
+        })
+        .returning(),
+      'game',
+    );
     return game;
   }
 
@@ -169,14 +176,14 @@ function describeCommonGroundTaste() {
     };
     // pgvector(7) uses the 7 core axes: co_op, pvp, rpg, survival, strategy, social, mmo.
     const vector = [
-      dimensions.co_op,
-      dimensions.pvp,
-      dimensions.rpg,
-      dimensions.survival,
-      dimensions.strategy,
-      dimensions.social,
-      dimensions.mmo,
-    ];
+      'co_op',
+      'pvp',
+      'rpg',
+      'survival',
+      'strategy',
+      'social',
+      'mmo',
+    ].map((axis) => defined(dimensions[axis], `${axis} axis score`));
     const archetype: ArchetypeDto = {
       ...DEFAULT_TEST_ARCHETYPE,
       ...(opts.archetype ?? {}),
@@ -260,7 +267,7 @@ function describeCommonGroundTaste() {
       // voter vector leans co_op.
       expect(coopIdx).toBeLessThan(pvpIdx);
 
-      const coopEntry = data[coopIdx];
+      const coopEntry = at(data, coopIdx);
       expect(coopEntry.scoreBreakdown).toBeDefined();
       expect(coopEntry.scoreBreakdown!.tasteScore).toBeGreaterThan(0);
     });

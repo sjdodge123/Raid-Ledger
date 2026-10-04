@@ -11,6 +11,7 @@ import {
 } from './users-query.helpers';
 import { HEART_SOURCES } from '../igdb/igdb-interest.helpers';
 import { inArray, eq, gte, gt } from 'drizzle-orm';
+import { at, defined } from '../common/testing/narrow';
 
 jest.mock('drizzle-orm', () => {
   const actual =
@@ -183,7 +184,7 @@ describe('fetchHeartedGames', () => {
 
     const result = await fetchHeartedGames(db as never, 1, 1, 10);
 
-    expect(result.data[0].playtimeSeconds).toBeNull();
+    expect(at(result.data, 0).playtimeSeconds).toBeNull();
   });
 });
 
@@ -478,18 +479,20 @@ function buildFindAllUsersDb(opts: {
   countRows: { count: number }[];
   dataRows: ReturnType<typeof mockUser>[];
 }) {
-  const db: Record<string, jest.Mock> = {};
-  const chain = ['from', 'orderBy'];
-  for (const m of chain) db[m] = jest.fn().mockReturnThis();
-  db.select = jest.fn().mockReturnThis();
   let whereCallCount = 0;
-  db.where = jest.fn().mockImplementation(() => {
+  const db = {
+    from: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    select: jest.fn().mockReturnThis(),
+    where: jest.fn(),
+    limit: jest.fn().mockReturnThis(),
+    offset: jest.fn().mockResolvedValue(opts.dataRows),
+  };
+  db.where.mockImplementation(() => {
     whereCallCount++;
     if (whereCallCount === 1) return Promise.resolve(opts.countRows);
     return db;
   });
-  db.limit = jest.fn().mockReturnThis();
-  db.offset = jest.fn().mockResolvedValue(opts.dataRows);
   return db;
 }
 
@@ -547,7 +550,8 @@ describe('findAllUsers — role filter (ROK-821)', () => {
       { queryChunks?: unknown[] }
     >;
     expect(columns).toHaveProperty('steamLinked');
-    const chunks = columns.steamLinked.queryChunks ?? [];
+    const chunks =
+      defined(columns.steamLinked, 'steamLinked column').queryChunks ?? [];
     const referencedColumns = chunks
       .filter(
         (c): c is { name: string } =>

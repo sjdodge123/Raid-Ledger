@@ -27,6 +27,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 interface PersonalizedGame {
   gameId: number;
@@ -68,14 +69,17 @@ function describeBadgePersonalization() {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
     const email = `${handle}@test.local`;
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username: handle,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: handle,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -103,16 +107,19 @@ function describeBadgePersonalization() {
   async function insertGame(
     overrides: Partial<typeof schema.games.$inferInsert> = {},
   ): Promise<typeof schema.games.$inferSelect> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'ROK-1314 Badge Game',
-        slug: overrides.slug ?? `rok1314-${Date.now()}-${Math.random()}`,
-        steamAppId:
-          overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
-        ...overrides,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'ROK-1314 Badge Game',
+          slug: overrides.slug ?? `rok1314-${Date.now()}-${Math.random()}`,
+          steamAppId:
+            overrides.steamAppId ?? Math.floor(Math.random() * 900000) + 100000,
+          ...overrides,
+        })
+        .returning(),
+      'inserted game',
+    );
     return game;
   }
 

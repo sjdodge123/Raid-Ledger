@@ -21,6 +21,7 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { at } from '../common/testing/narrow';
 
 const META_DIR = path.join(__dirname, 'migrations', 'meta');
 
@@ -134,7 +135,7 @@ function leadingColumns(table: SnapshotTable): Set<string> {
     ...Object.values(table.compositePrimaryKeys ?? {}),
     ...Object.values(table.uniqueConstraints ?? {}),
   ];
-  for (const key of keys) leads.add(key.columns[0]);
+  for (const key of keys) leads.add(at(key.columns, 0));
   for (const column of Object.values(table.columns)) {
     if (column.primaryKey || column.isUnique) leads.add(column.name);
   }
@@ -147,7 +148,7 @@ function uncoveredFks(snapshot: Snapshot): string[] {
   for (const table of Object.values(snapshot.tables)) {
     const leads = leadingColumns(table);
     for (const fk of Object.values(table.foreignKeys ?? {})) {
-      const column = fk.columnsFrom[0];
+      const column = at(fk.columnsFrom, 0);
       if (!leads.has(column)) uncovered.push(`${table.name}.${column}`);
     }
   }
@@ -163,8 +164,11 @@ function latestSnapshotPrefix(): string {
   const journal = JSON.parse(
     fs.readFileSync(path.join(META_DIR, '_journal.json'), 'utf8'),
   ) as { entries: { idx: number; tag: string }[] };
-  const head = [...journal.entries].sort((a, b) => b.idx - a.idx)[0];
-  return head.tag.split('_')[0];
+  const head = at(
+    [...journal.entries].sort((a, b) => b.idx - a.idx),
+    0,
+  );
+  return at(head.tag.split('_'), 0);
 }
 
 describe('foreign-key index coverage (ROK-1157)', () => {

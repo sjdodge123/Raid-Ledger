@@ -7,6 +7,7 @@ import { RosterNotificationBufferService } from '../notifications/roster-notific
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
+import { at } from '../common/testing/narrow';
 
 /**
  * Build a mock drizzle db whose `.execute()` returns the given snapshot
@@ -308,7 +309,7 @@ describe('DemoTestResetService — roster notification buffer', () => {
 
     expect(rosterBuffer.clearAll).toHaveBeenCalledTimes(1);
     expect(rosterBuffer.clearAll.mock.invocationCallOrder[0]).toBeLessThan(
-      executeMock.mock.invocationCallOrder[0],
+      at(executeMock.mock.invocationCallOrder, 0),
     );
   });
 });

@@ -17,6 +17,7 @@
 import { getTableConfig, PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { lfgGroupMessages } from './lfg-group-messages';
+import { defined } from '../../common/testing/narrow';
 
 const PG_IDENTIFIER_LIMIT = 63;
 
@@ -74,7 +75,7 @@ describe('lfg_group_messages schema (ROK-1454 D4)', () => {
   it('names the games FK explicitly and within the 63-char Postgres limit', () => {
     const [fk] = config.foreignKeys;
     expect(fk).toBeDefined();
-    const name = fk.getName();
+    const name = defined(fk, 'games FK').getName();
     expect(name).toBe('lfg_group_messages_game_id_fk');
     expect(name.length).toBeLessThanOrEqual(PG_IDENTIFIER_LIMIT);
   });

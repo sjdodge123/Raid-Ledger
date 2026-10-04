@@ -27,6 +27,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { validateMigrationState } from '../../scripts/run-migrations-with-sentry';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 const MIGRATIONS_DIR = path.join(__dirname, '../drizzle/migrations');
 const GUILD = 'rok1419-dedup-guild';
@@ -73,7 +74,7 @@ function loadStatements(): Migration0161 {
     ...raw.matchAll(
       /CREATE\s+UNIQUE\s+INDEX(?:\s+IF\s+NOT\s+EXISTS)?\s+"([^"]+)"/gi,
     ),
-  ].map((m) => m[1]);
+  ].map((m) => defined(m[1], 'unique index name'));
   return {
     dedup: chunks.filter((c) => !isCreateIndex(c)),
     createIndexes: chunks.filter(isCreateIndex),
@@ -164,42 +165,51 @@ describe('ROK-1419 (B2-2) audited dedupe — orphan guard + per-loser audit', ()
     const game = testApp.seed.game;
     const admin = testApp.seed.adminUser;
 
-    const [survivor] = await testApp.db
-      .insert(schema.channelBindings)
-      .values(
-        monitorRow(
-          new Date('2026-07-01T00:00:00Z'),
-          new Date('2026-01-01T00:00:00Z'),
-          {
-            minPlayers: 9,
-          },
-        ),
-      )
-      .returning();
-    const [loser1] = await testApp.db
-      .insert(schema.channelBindings)
-      .values(
-        monitorRow(
-          new Date('2026-06-01T00:00:00Z'),
-          new Date('2026-02-01T00:00:00Z'),
-          {
-            minPlayers: 3,
-          },
-        ),
-      )
-      .returning();
-    const [loser2] = await testApp.db
-      .insert(schema.channelBindings)
-      .values(
-        monitorRow(
-          new Date('2026-05-01T00:00:00Z'),
-          new Date('2026-03-01T00:00:00Z'),
-          {
-            autoClose: true,
-          },
-        ),
-      )
-      .returning();
+    const [survivor] = nonEmpty(
+      await testApp.db
+        .insert(schema.channelBindings)
+        .values(
+          monitorRow(
+            new Date('2026-07-01T00:00:00Z'),
+            new Date('2026-01-01T00:00:00Z'),
+            {
+              minPlayers: 9,
+            },
+          ),
+        )
+        .returning(),
+      'survivor',
+    );
+    const [loser1] = nonEmpty(
+      await testApp.db
+        .insert(schema.channelBindings)
+        .values(
+          monitorRow(
+            new Date('2026-06-01T00:00:00Z'),
+            new Date('2026-02-01T00:00:00Z'),
+            {
+              minPlayers: 3,
+            },
+          ),
+        )
+        .returning(),
+      'loser1',
+    );
+    const [loser2] = nonEmpty(
+      await testApp.db
+        .insert(schema.channelBindings)
+        .values(
+          monitorRow(
+            new Date('2026-05-01T00:00:00Z'),
+            new Date('2026-03-01T00:00:00Z'),
+            {
+              autoClose: true,
+            },
+          ),
+        )
+        .returning(),
+      'loser2',
+    );
     // Set gameId AFTER insert so all three share the exact same non-null game
     // (a single dup group). Done in one UPDATE to avoid three separate seeds.
     await testApp.db
@@ -208,29 +218,35 @@ describe('ROK-1419 (B2-2) audited dedupe — orphan guard + per-loser audit', ()
       .where(eq(schema.channelBindings.channelId, CHANNEL));
 
     const now = Date.now();
-    const [liveEvent] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'live ad-hoc',
-        creatorId: admin.id,
-        isAdHoc: true,
-        channelBindingId: loser1.id,
-        duration: [new Date(now - 30 * 60_000), new Date(now + 30 * 60_000)],
-      })
-      .returning();
-    const [historicalEvent] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'historical ad-hoc',
-        creatorId: admin.id,
-        isAdHoc: true,
-        channelBindingId: loser1.id,
-        duration: [
-          new Date(now - 3 * 3_600_000),
-          new Date(now - 2 * 3_600_000),
-        ],
-      })
-      .returning();
+    const [liveEvent] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'live ad-hoc',
+          creatorId: admin.id,
+          isAdHoc: true,
+          channelBindingId: loser1.id,
+          duration: [new Date(now - 30 * 60_000), new Date(now + 30 * 60_000)],
+        })
+        .returning(),
+      'liveEvent',
+    );
+    const [historicalEvent] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'historical ad-hoc',
+          creatorId: admin.id,
+          isAdHoc: true,
+          channelBindingId: loser1.id,
+          duration: [
+            new Date(now - 3 * 3_600_000),
+            new Date(now - 2 * 3_600_000),
+          ],
+        })
+        .returning(),
+      'historicalEvent',
+    );
 
     await runDedupe();
 
@@ -240,22 +256,28 @@ describe('ROK-1419 (B2-2) audited dedupe — orphan guard + per-loser audit', ()
       .from(schema.channelBindings)
       .where(eq(schema.channelBindings.channelId, CHANNEL));
     expect(remaining).toHaveLength(1);
-    expect(remaining[0].id).toBe(survivor.id);
+    expect(remaining[0]?.id).toBe(survivor.id);
 
     // THE orphan guard (the single most important assertion in this story):
     // the live event is repointed to the survivor and is NEVER left NULL.
-    const [liveAfter] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, liveEvent.id));
+    const [liveAfter] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, liveEvent.id)),
+      'liveAfter',
+    );
     expect(liveAfter.channelBindingId).toBe(survivor.id);
     expect(liveAfter.channelBindingId).not.toBeNull();
 
     // The historical event took the FK ON DELETE SET NULL.
-    const [histAfter] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, historicalEvent.id));
+    const [histAfter] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, historicalEvent.id)),
+      'histAfter',
+    );
     expect(histAfter.channelBindingId).toBeNull();
 
     // Per-loser audit rows: two losers, both loser_row payloads captured,
@@ -301,11 +323,14 @@ describe('ROK-1419 (B2-2) audited dedupe — orphan guard + per-loser audit', ()
       .from(schema.channelBindings)
       .where(eq(schema.channelBindings.channelId, CHANNEL));
     expect(afterRerun).toHaveLength(1);
-    const [{ c: auditCount }] = [
-      ...(await testApp.db.execute<{ c: number }>(
-        sql`SELECT count(*)::int AS c FROM channel_bindings_dedup_audit`,
-      )),
-    ];
+    const [{ c: auditCount }] = nonEmpty(
+      [
+        ...(await testApp.db.execute<{ c: number }>(
+          sql`SELECT count(*)::int AS c FROM channel_bindings_dedup_audit`,
+        )),
+      ],
+      'audit count row',
+    );
     expect(Number(auditCount)).toBe(2);
   });
 });
@@ -316,43 +341,52 @@ describe('ROK-1419 (B2-3) restore path — rebuild loser + re-link the moved eve
     const game = testApp.seed.game;
     const admin = testApp.seed.adminUser;
 
-    const [survivor] = await testApp.db
-      .insert(schema.channelBindings)
-      .values(
-        monitorRow(
-          new Date('2026-07-01T00:00:00Z'),
-          new Date('2026-01-01T00:00:00Z'),
-        ),
-      )
-      .returning();
-    const [loser] = await testApp.db
-      .insert(schema.channelBindings)
-      .values(
-        monitorRow(
-          new Date('2026-06-01T00:00:00Z'),
-          new Date('2026-02-01T00:00:00Z'),
-          {
-            minPlayers: 3,
-          },
-        ),
-      )
-      .returning();
+    const [survivor] = nonEmpty(
+      await testApp.db
+        .insert(schema.channelBindings)
+        .values(
+          monitorRow(
+            new Date('2026-07-01T00:00:00Z'),
+            new Date('2026-01-01T00:00:00Z'),
+          ),
+        )
+        .returning(),
+      'survivor',
+    );
+    const [loser] = nonEmpty(
+      await testApp.db
+        .insert(schema.channelBindings)
+        .values(
+          monitorRow(
+            new Date('2026-06-01T00:00:00Z'),
+            new Date('2026-02-01T00:00:00Z'),
+            {
+              minPlayers: 3,
+            },
+          ),
+        )
+        .returning(),
+      'loser',
+    );
     await testApp.db
       .update(schema.channelBindings)
       .set({ gameId: game.id })
       .where(eq(schema.channelBindings.channelId, CHANNEL));
 
     const now = Date.now();
-    const [liveEvent] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'live ad-hoc',
-        creatorId: admin.id,
-        isAdHoc: true,
-        channelBindingId: loser.id,
-        duration: [new Date(now - 30 * 60_000), new Date(now + 30 * 60_000)],
-      })
-      .returning();
+    const [liveEvent] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'live ad-hoc',
+          creatorId: admin.id,
+          isAdHoc: true,
+          channelBindingId: loser.id,
+          duration: [new Date(now - 30 * 60_000), new Date(now + 30 * 60_000)],
+        })
+        .returning(),
+      'liveEvent',
+    );
 
     await runDedupe();
 
@@ -362,10 +396,13 @@ describe('ROK-1419 (B2-3) restore path — rebuild loser + re-link the moved eve
       .from(schema.channelBindings)
       .where(eq(schema.channelBindings.id, loser.id));
     expect(gone).toHaveLength(0);
-    const [movedLive] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, liveEvent.id));
+    const [movedLive] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, liveEvent.id)),
+      'movedLive',
+    );
     expect(movedLive.channelBindingId).toBe(survivor.id);
 
     // Run the operator restore runbook exactly as documented in the header.
@@ -374,21 +411,26 @@ describe('ROK-1419 (B2-3) restore path — rebuild loser + re-link the moved eve
     await testApp.db.execute(sql.raw(restore.restoreLinkage));
 
     // Binding returns with its ORIGINAL id, config and created_at.
-    const [loserBack] = await testApp.db
-      .select()
-      .from(schema.channelBindings)
-      .where(eq(schema.channelBindings.id, loser.id));
-    expect(loserBack).toBeDefined();
+    const [loserBack] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.channelBindings)
+        .where(eq(schema.channelBindings.id, loser.id)),
+      'loserBack',
+    );
     expect(loserBack.config).toMatchObject({ minPlayers: 3 });
     expect(
       Math.abs(loserBack.createdAt.getTime() - loser.createdAt.getTime()),
     ).toBeLessThan(1000);
 
     // moved_events × loser_binding_id re-points the live event back to the loser.
-    const [liveRestored] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, liveEvent.id));
+    const [liveRestored] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, liveEvent.id)),
+      'liveRestored',
+    );
     expect(liveRestored.channelBindingId).toBe(loser.id);
   });
 });

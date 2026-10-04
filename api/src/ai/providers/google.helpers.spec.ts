@@ -193,7 +193,7 @@ describe('google.helpers (adversarial)', () => {
       const result = mapGeminiMessages([
         { role: 'assistant', content: 'response' },
       ]);
-      expect(result.contents[0].role).toBe('model');
+      expect(result.contents[0]?.role).toBe('model');
     });
   });
 });

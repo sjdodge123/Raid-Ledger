@@ -9,6 +9,7 @@ import {
   generateRecurringDates,
   MAX_RECURRENCE_INSTANCES,
 } from './recurrence.util';
+import { at } from '../common/testing/narrow';
 
 // Helper: create UTC date from ISO string
 const utc = (iso: string) => new Date(iso);
@@ -21,11 +22,11 @@ function testWeeklyDates() {
   const dates = generateRecurringDates(start, 'weekly', until);
 
   expect(dates).toHaveLength(5);
-  expect(dates[0].toISOString()).toBe('2026-03-01T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-03-08T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-03-15T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-03-22T19:00:00.000Z');
-  expect(dates[4].toISOString()).toBe('2026-03-29T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-03-01T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-03-08T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-03-15T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-03-22T19:00:00.000Z');
+  expect(dates[4]?.toISOString()).toBe('2026-03-29T19:00:00.000Z');
 }
 
 function testWeeklyStopsAtUntil() {
@@ -40,7 +41,7 @@ function testWeeklyOnlyStartWhenShortRange() {
   const until = utc('2026-03-05T23:59:59Z');
   const dates = generateRecurringDates(start, 'weekly', until);
   expect(dates).toHaveLength(1);
-  expect(dates[0].toISOString()).toBe('2026-03-01T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-03-01T19:00:00.000Z');
 }
 
 // ─── Biweekly ───────────────────────────────────────────────────────────────
@@ -51,11 +52,11 @@ function testBiweeklyDates() {
   const dates = generateRecurringDates(start, 'biweekly', until);
 
   expect(dates).toHaveLength(5);
-  expect(dates[0].toISOString()).toBe('2026-01-05T20:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-01-19T20:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-02-02T20:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-02-16T20:00:00.000Z');
-  expect(dates[4].toISOString()).toBe('2026-03-02T20:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-01-05T20:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-01-19T20:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-02-02T20:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-02-16T20:00:00.000Z');
+  expect(dates[4]?.toISOString()).toBe('2026-03-02T20:00:00.000Z');
 }
 
 // ─── Monthly ────────────────────────────────────────────────────────────────
@@ -66,10 +67,10 @@ function testMonthlyMidMonth() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(4);
-  expect(dates[0].toISOString()).toBe('2026-01-15T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-02-15T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-03-15T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-04-15T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-01-15T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-02-15T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-03-15T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-04-15T19:00:00.000Z');
 }
 
 function testMonthlyJan31NonLeap() {
@@ -78,11 +79,11 @@ function testMonthlyJan31NonLeap() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(5);
-  expect(dates[0].toISOString()).toBe('2026-01-31T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-02-28T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-03-31T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-04-30T19:00:00.000Z');
-  expect(dates[4].toISOString()).toBe('2026-05-31T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-01-31T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-02-28T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-03-31T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-04-30T19:00:00.000Z');
+  expect(dates[4]?.toISOString()).toBe('2026-05-31T19:00:00.000Z');
 }
 
 function testMonthlyJan31Leap() {
@@ -91,9 +92,9 @@ function testMonthlyJan31Leap() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(3);
-  expect(dates[0].toISOString()).toBe('2028-01-31T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2028-02-29T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2028-03-31T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2028-01-31T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2028-02-29T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2028-03-31T19:00:00.000Z');
 }
 
 function testMonthlyJan30() {
@@ -102,9 +103,9 @@ function testMonthlyJan30() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(3);
-  expect(dates[0].toISOString()).toBe('2026-01-30T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-02-28T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-03-30T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-01-30T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-02-28T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-03-30T19:00:00.000Z');
 }
 
 function testMonthly29th() {
@@ -113,10 +114,10 @@ function testMonthly29th() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(4);
-  expect(dates[0].toISOString()).toBe('2026-01-29T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-02-28T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-03-29T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-04-29T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-01-29T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-02-28T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-03-29T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-04-29T19:00:00.000Z');
 }
 
 // ─── Edge cases ─────────────────────────────────────────────────────────────
@@ -194,10 +195,10 @@ function testMonthlyAcrossYearBoundary() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(4);
-  expect(dates[0].toISOString()).toBe('2026-11-15T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-12-15T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2027-01-15T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2027-02-15T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-11-15T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-12-15T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2027-01-15T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2027-02-15T19:00:00.000Z');
 }
 
 function testWeeklyAcrossYearBoundary() {
@@ -206,10 +207,10 @@ function testWeeklyAcrossYearBoundary() {
   const dates = generateRecurringDates(start, 'weekly', until);
 
   expect(dates).toHaveLength(4);
-  expect(dates[0].toISOString()).toBe('2026-12-28T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2027-01-04T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2027-01-11T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2027-01-18T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-12-28T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2027-01-04T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2027-01-11T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2027-01-18T19:00:00.000Z');
 }
 
 // ─── Adversarial edge cases ─────────────────────────────────────────────────
@@ -219,7 +220,7 @@ function testUntilBeforeStartWeekly() {
   const until = utc('2026-06-01T00:00:00Z');
   const dates = generateRecurringDates(start, 'weekly', until);
   expect(dates).toHaveLength(1);
-  expect(dates[0].toISOString()).toBe('2026-06-15T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-06-15T19:00:00.000Z');
 }
 
 function testUntilBeforeStartMonthly() {
@@ -227,7 +228,7 @@ function testUntilBeforeStartMonthly() {
   const until = utc('2026-05-01T00:00:00Z');
   const dates = generateRecurringDates(start, 'monthly', until);
   expect(dates).toHaveLength(1);
-  expect(dates[0].toISOString()).toBe('2026-06-15T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-06-15T19:00:00.000Z');
 }
 
 function testCapsBiweeklyAtMax() {
@@ -244,10 +245,10 @@ function testDec31MonthlyChain() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(4);
-  expect(dates[0].toISOString()).toBe('2025-12-31T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-01-31T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-02-28T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-03-31T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2025-12-31T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-01-31T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-02-28T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-03-31T19:00:00.000Z');
 }
 
 function testDriftPreventionJan31Chain() {
@@ -256,13 +257,13 @@ function testDriftPreventionJan31Chain() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(7);
-  expect(dates[0].toISOString()).toBe('2026-01-31T12:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-02-28T12:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-03-31T12:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-04-30T12:00:00.000Z');
-  expect(dates[4].toISOString()).toBe('2026-05-31T12:00:00.000Z');
-  expect(dates[5].toISOString()).toBe('2026-06-30T12:00:00.000Z');
-  expect(dates[6].toISOString()).toBe('2026-07-31T12:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-01-31T12:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-02-28T12:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-03-31T12:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-04-30T12:00:00.000Z');
+  expect(dates[4]?.toISOString()).toBe('2026-05-31T12:00:00.000Z');
+  expect(dates[5]?.toISOString()).toBe('2026-06-30T12:00:00.000Z');
+  expect(dates[6]?.toISOString()).toBe('2026-07-31T12:00:00.000Z');
 }
 
 function testFeb28NoClamping() {
@@ -271,10 +272,10 @@ function testFeb28NoClamping() {
   const dates = generateRecurringDates(start, 'monthly', until);
 
   expect(dates).toHaveLength(4);
-  expect(dates[0].toISOString()).toBe('2026-02-28T19:00:00.000Z');
-  expect(dates[1].toISOString()).toBe('2026-03-28T19:00:00.000Z');
-  expect(dates[2].toISOString()).toBe('2026-04-28T19:00:00.000Z');
-  expect(dates[3].toISOString()).toBe('2026-05-28T19:00:00.000Z');
+  expect(dates[0]?.toISOString()).toBe('2026-02-28T19:00:00.000Z');
+  expect(dates[1]?.toISOString()).toBe('2026-03-28T19:00:00.000Z');
+  expect(dates[2]?.toISOString()).toBe('2026-04-28T19:00:00.000Z');
+  expect(dates[3]?.toISOString()).toBe('2026-05-28T19:00:00.000Z');
 }
 
 function test52ndInstanceInclusiveBoundary() {
@@ -286,7 +287,7 @@ function test52ndInstanceInclusiveBoundary() {
   const dates = generateRecurringDates(start, 'weekly', until);
 
   expect(dates).toHaveLength(MAX_RECURRENCE_INSTANCES);
-  expect(dates[51].toISOString()).toBe(fiftySecondDate.toISOString());
+  expect(at(dates, 51).toISOString()).toBe(fiftySecondDate.toISOString());
 }
 
 function testNeverExceeds52() {
@@ -309,14 +310,14 @@ function testStartAlwaysFirst() {
     'weekly',
     utc('2020-01-01T00:00:00Z'),
   );
-  expect(d1[0].toISOString()).toBe('2026-03-15T10:00:00.000Z');
+  expect(d1[0]?.toISOString()).toBe('2026-03-15T10:00:00.000Z');
 
   const d2 = generateRecurringDates(
     start,
     'monthly',
     utc('2026-03-15T10:00:00Z'),
   );
-  expect(d2[0].toISOString()).toBe('2026-03-15T10:00:00.000Z');
+  expect(d2[0]?.toISOString()).toBe('2026-03-15T10:00:00.000Z');
 }
 
 function testDstStability() {
