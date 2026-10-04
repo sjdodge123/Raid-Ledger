@@ -366,7 +366,7 @@ export async function recoverOrphanScheduledEvents(
 
 /** Re-enable Discord scheduled event creation for SE tests (ROK-969). */
 export async function enableScheduledEvents(api: ApiClient): Promise<void> {
-  await api.post("/admin/test/enable-scheduled-events", {}).catch(() => null);
+  await api.post("/admin/test/enable-scheduled-events", {});
 }
 
 /**

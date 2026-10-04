@@ -6,11 +6,19 @@
  * This function distributes embed tests across a pool of channels to avoid
  * message collisions in the default notification channel.
  *
- * Run: npx tsx src/smoke/fixtures.spec.ts
+ * Also covers enableScheduledEvents surfacing a failed POST (TDB:2001).
+ *
+ * Run: TEST_BOT_TOKEN=unit-spec-placeholder TEST_GUILD_ID=0 \
+ *   npx tsx src/smoke/fixtures.spec.ts
  */
 import assert from 'node:assert/strict';
 
-import { channelForTest, channelForGame } from './fixtures.js';
+import type { ApiClient } from './api.js';
+import {
+  channelForTest,
+  channelForGame,
+  enableScheduledEvents,
+} from './fixtures.js';
 import type { ChannelSlot } from './types.js';
 
 let passed = 0;
@@ -19,6 +27,19 @@ let failed = 0;
 function test(name: string, fn: () => void) {
   try {
     fn();
+    passed++;
+    console.log(`  PASS  ${name}`);
+  } catch (err) {
+    failed++;
+    const msg = err instanceof Error ? err.message : String(err);
+    console.log(`  FAIL  ${name}`);
+    console.log(`        ${msg}`);
+  }
+}
+
+async function testAsync(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
     passed++;
     console.log(`  PASS  ${name}`);
   } catch (err) {
@@ -143,6 +164,25 @@ test('returns defaultChannelId when game is not in pool', () => {
     channelPool: [{ gameId: 10, channelId: 'ch-10', bindingId: 'b10' }],
   };
   assert.equal(channelForGame(ctx, 99), 'ch-def');
+});
+
+// --- enableScheduledEvents tests (TDB:2001) ---
+
+console.log('\nfixtures.spec.ts — enableScheduledEvents\n');
+
+await testAsync('rejects when the enable POST fails', async () => {
+  const api = {
+    post: async () => {
+      throw new Error('boom');
+    },
+  } as unknown as ApiClient;
+  // A swallowed failure would leave scheduled events OFF while the toggle
+  // refcount counts a hold, so every SE test that follows would time out.
+  await assert.rejects(
+    enableScheduledEvents(api),
+    /boom/,
+    'enableScheduledEvents must surface a failed POST, not swallow it',
+  );
 });
 
 // --- Summary ---
