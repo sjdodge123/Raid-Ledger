@@ -8,8 +8,9 @@
 #         the one reachable from HEAD, so a cut can never collide with an
 #         existing version. Pre-release (v2.0.0-rc1) and non-semver tags are
 #         ignored.
-# Exit:   0 ok; 1 if tag vNEW already exists; 2 on a missing/invalid argument,
-#         outside a git repo, or when no matching tag exists (message on stderr).
+# Exit:   0 ok; 2 on a missing/invalid argument, outside a git repo, or when
+#         no matching tag exists (message on stderr). 1 if tag vNEW already
+#         exists, a defensive check with no expected trigger (see below).
 #
 # bash 3.2 safe: no mapfile, no ${var,,}, no associative arrays.
 set -euo pipefail
@@ -51,6 +52,9 @@ case "$BUMP" in
 esac
 NEW="$MAJOR.$MINOR.$PATCH"
 
+# Belt and braces: NEW is strictly greater than the global highest vX.Y.Z,
+# so it cannot collide with a matching tag. The derivation above is the real
+# guarantee; this only catches a sort-order surprise (e.g. zero-padded tags).
 if git rev-parse -q --verify "refs/tags/v$NEW" >/dev/null; then
     die "tag v$NEW already exists (base $BASE)" 1
 fi

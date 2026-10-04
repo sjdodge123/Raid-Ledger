@@ -108,5 +108,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          gh workflow run docker-publish.yml --repo "$GITHUB_REPOSITORY" --ref "v$VERSION"
+          # The tag is already public here. Re-running Release would bump past
+          # it, so a failed dispatch is recovered by dispatching by hand.
+          if ! gh workflow run docker-publish.yml --repo "$GITHUB_REPOSITORY" --ref "v$VERSION"; then
+            {
+              echo "Tagged \`v$VERSION\` but the **Publish images** dispatch failed, so the tag has no images and no release."
+              echo "Recover with \`gh workflow run docker-publish.yml --ref v$VERSION\` (or Actions → Publish images → Run workflow on the tag). Do not re-run Release."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::Publish images dispatch failed for v$VERSION; run: gh workflow run docker-publish.yml --ref v$VERSION"
+            exit 1
+          fi
           echo "Tagged \`v$VERSION\` and dispatched **Publish images** on it, which builds the images and creates the GitHub release." >> "$GITHUB_STEP_SUMMARY"

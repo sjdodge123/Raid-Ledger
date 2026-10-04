@@ -105,8 +105,9 @@ history, so the script **exits 2** naming `fetch-depth: 0` rather than degrading
    fails at its first step.
 3. The pre-flight runs *before* anything is tagged or pushed — a failure there leaves no tag and
    nothing to clean up. The workflow then derives the version from tags, not from a file:
-   `scripts/next-release-version.sh` bumps the highest existing `vX.Y.Z` tag (pre-release and other
-   tags are ignored) and refuses a version whose tag already exists. It creates an annotated tag on
+   `scripts/next-release-version.sh` bumps the highest existing `vX.Y.Z` tag across the whole repo,
+   reachable from HEAD or not (pre-release and other tags are ignored), so the new version is greater
+   than every release tag and cannot collide with one. It creates an annotated tag on
    `main`'s HEAD and pushes **only the tag** — there is no version-bump commit, because protected
    `main` refuses a push made with `GITHUB_TOKEN`. A published image reports its version from the
    `APP_VERSION` build arg baked from the tag; `api/package.json` is only the local-dev fallback.
@@ -115,6 +116,15 @@ history, so the script **exits 2** naming `fetch-depth: 0` rather than degrading
    the tagged images and creates the GitHub release. Its warn-only notice re-checks the span. A tag
    pushed **by hand** with your own credentials (bypassing `release.yml`) still triggers Publish
    images through its `push` trigger, so it too gets images, a release and a visible annotation.
+   **If the dispatch step fails** after the tag push, the tag exists with no images and no release.
+   Run `gh workflow run docker-publish.yml --ref vX.Y.Z` (or Actions → Publish images → Run workflow
+   on the tag); the failed step's summary prints that command. **Do not re-run Release** for it: it
+   would bump past the orphaned tag, and the no-feature pre-flight refuses because HEAD is now tagged.
+
+The version base and the pre-flight span start from different tags. The version bumps the global
+highest `vX.Y.Z`; the span (`check-feat-since-tag.sh`) starts at `git describe --match 'v*'`, the
+nearest tag reachable from HEAD, which may be a pre-release. With only plain release tags on `main`
+the two agree.
 
 **Publish images** (`softprops/action-gh-release`) is the only creator of the GitHub release: the
 Quick Deploy body first, then the generated notes.

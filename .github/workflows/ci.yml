@@ -234,9 +234,8 @@ jobs:
 
       # Shell parse-lint: bash-3.2 parse breaks have shipped before
       # (sync-local-to-env.sh) because shell scripts are never syntax-checked.
-      # `bash -n` parses each scripts/*.sh without executing it. This step's
-      # scope is scripts/*.sh only — rl-infra/** shell is a larger surface,
-      # out of scope for the parse check.
+      # `bash -n` parses each scripts/*.sh without executing it. Scope is
+      # scripts/*.sh only — rl-infra/** is a larger surface, out of scope here.
       - name: Shell parse check (bash -n on scripts/*.sh)
         run: |
           for f in scripts/*.sh; do
@@ -257,7 +256,9 @@ jobs:
       - name: Script node:test specs (scripts/*.spec.mjs)
         run: node --test scripts/*.spec.mjs
 
-      # OP-rl-infra-dashboard-ci (2026-10-04): the rl-infra dashboard suite ran in no CI job. Pass the glob, not the directory: Node >=21 reads `node --test <dir>` as a module path and fails with MODULE_NOT_FOUND.
+      # 2026-10-04: the rl-infra dashboard suite ran in no CI job. Pass the
+      # glob, not the directory: Node >=21 reads `node --test <dir>` as a
+      # module path and fails with MODULE_NOT_FOUND.
       - name: rl-infra dashboard node:test specs
         run: node --test rl-infra/dashboard/test/*.test.js
 
