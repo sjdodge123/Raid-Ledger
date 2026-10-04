@@ -21,6 +21,7 @@ import { ChannelPresenceEmbedService } from './services/channel-presence-embed.s
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { createDrizzleMock, MockDb } from '../common/testing/drizzle-mock';
+import { at } from '../common/testing/narrow';
 
 const VOICE_CHANNEL = 'voice-123';
 
@@ -161,7 +162,7 @@ describe('DemoTestLobbyPresenceController (ROK-1446 D12)', () => {
         string,
         { members: Record<string, unknown>[] },
       ];
-      expect(Object.keys(snapshot.members[0]).sort()).toEqual([
+      expect(Object.keys(at(snapshot.members, 0)).sort()).toEqual([
         'discordUserId',
         'displayName',
         'gameId',

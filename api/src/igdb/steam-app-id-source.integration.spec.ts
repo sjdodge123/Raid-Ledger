@@ -12,6 +12,7 @@ import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 const MIGRATION_SQL_PATH = path.join(
   __dirname,
@@ -42,7 +43,7 @@ function loadBackfillStatement(): string {
       `expected exactly one 'manual' backfill statement in 0192, found ${chunks.length}`,
     );
   }
-  return chunks[0];
+  return at(chunks, 0);
 }
 
 let testApp: TestApp;
@@ -60,10 +61,13 @@ async function insertGame(
   values: Partial<typeof schema.games.$inferInsert>,
 ): Promise<typeof schema.games.$inferSelect> {
   slugSeq += 1;
-  const [row] = await testApp.db
-    .insert(schema.games)
-    .values({ name: 'Source Test', slug: `rok-1680-${slugSeq}`, ...values })
-    .returning();
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'Source Test', slug: `rok-1680-${slugSeq}`, ...values })
+      .returning(),
+    'inserted game',
+  );
   return row;
 }
 
@@ -71,11 +75,14 @@ async function updateGame(
   id: number,
   set: Partial<typeof schema.games.$inferInsert>,
 ): Promise<typeof schema.games.$inferSelect> {
-  const [row] = await testApp.db
-    .update(schema.games)
-    .set(set)
-    .where(eq(schema.games.id, id))
-    .returning();
+  const [row] = nonEmpty(
+    await testApp.db
+      .update(schema.games)
+      .set(set)
+      .where(eq(schema.games.id, id))
+      .returning(),
+    'updated game',
+  );
   return row;
 }
 

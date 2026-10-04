@@ -48,7 +48,7 @@ describe('callAndParseCategoryProposals', () => {
       BASE_OPTIONS,
     );
     expect(out).toHaveLength(1);
-    expect(out[0].name).toBe('Co-op Pals');
+    expect(out[0]?.name).toBe('Co-op Pals');
     expect(chat).toHaveBeenCalledTimes(1);
   });
 
@@ -143,7 +143,7 @@ describe('callAndParseCategoryProposals', () => {
       );
 
       expect(out).toHaveLength(1);
-      expect(out[0].name).toBe('Co-op Pals');
+      expect(out[0]?.name).toBe('Co-op Pals');
       expect(chat).toHaveBeenCalledTimes(1);
     });
 
@@ -190,7 +190,7 @@ describe('callAndParseCategoryProposals', () => {
       BASE_OPTIONS,
     );
 
-    expect(out[0].filter_criteria).toEqual({ genre_tags: ['co-op'] });
+    expect(out[0]?.filter_criteria).toEqual({ genre_tags: ['co-op'] });
   });
 
   it('retries once on malformed output, then returns parsed proposals', async () => {
@@ -208,7 +208,7 @@ describe('callAndParseCategoryProposals', () => {
     expect(out).toHaveLength(1);
     expect(chat).toHaveBeenCalledTimes(2);
     const retryMessages = (chat.mock.calls[1][0] as LlmChatOptions).messages;
-    expect(retryMessages[retryMessages.length - 1].content).toMatch(
+    expect(retryMessages[retryMessages.length - 1]?.content).toMatch(
       /Respond ONLY with a single JSON array/,
     );
   });
@@ -250,6 +250,6 @@ describe('callAndParseCategoryProposals', () => {
       BASE_OPTIONS,
     );
     expect(out).toHaveLength(1);
-    expect(out[0].name).toBe('Co-op Pals');
+    expect(out[0]?.name).toBe('Co-op Pals');
   });
 });

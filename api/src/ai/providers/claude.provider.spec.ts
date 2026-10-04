@@ -55,8 +55,8 @@ describe('ClaudeProvider', () => {
     it('returns hardcoded Claude models', async () => {
       const models = await provider.listModels();
       expect(models).toHaveLength(2);
-      expect(models[0].id).toBe('claude-sonnet-4-20250514');
-      expect(models[1].id).toBe('claude-3-5-haiku-20241022');
+      expect(models[0]?.id).toBe('claude-sonnet-4-20250514');
+      expect(models[1]?.id).toBe('claude-3-5-haiku-20241022');
     });
   });
 

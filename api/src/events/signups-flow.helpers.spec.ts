@@ -268,7 +268,7 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
         (call) => 'preferredRoles' in call,
       );
       expect(prefRolesOverwrites.length).toBeGreaterThan(0);
-      expect(prefRolesOverwrites[0].preferredRoles).toEqual(['healer']);
+      expect(prefRolesOverwrites[0]?.preferredRoles).toEqual(['healer']);
     });
   });
 
@@ -684,8 +684,8 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
         (call) => 'characterId' in call,
       );
       expect(charUpdates.length).toBeGreaterThan(0);
-      expect(charUpdates[0].characterId).toBe('char-abc');
-      expect(charUpdates[0].confirmationStatus).toBe('confirmed');
+      expect(charUpdates[0]?.characterId).toBe('char-abc');
+      expect(charUpdates[0]?.confirmationStatus).toBe('confirmed');
     });
 
     it('updates characterId when dto provides different character', async () => {
@@ -709,7 +709,7 @@ describe('Regression: ROK-739 — role preference preservation during signup', (
         (call) => 'characterId' in call,
       );
       expect(charUpdates.length).toBeGreaterThan(0);
-      expect(charUpdates[0].characterId).toBe('char-new');
+      expect(charUpdates[0]?.characterId).toBe('char-new');
     });
 
     it('does NOT clear characterId when dto has no characterId', async () => {

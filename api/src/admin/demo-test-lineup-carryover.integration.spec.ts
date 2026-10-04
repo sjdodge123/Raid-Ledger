@@ -20,6 +20,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { carryOverFromLastDecided } from '../lineups/lineups-carryover.helpers';
 import { recarryLineupFromForTest } from './demo-test-lineup-edge.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -30,17 +31,20 @@ async function insertLineup(
   status: 'building' | 'archived',
   createdAt: Date,
 ): Promise<number> {
-  const [row] = await testApp.db
-    .insert(schema.communityLineups)
-    .values({
-      title,
-      status,
-      visibility: 'public',
-      createdBy: testApp.seed.adminUser.id,
-      publicSlug: `co-${Math.random().toString(36).slice(2, 10)}`,
-      createdAt,
-    })
-    .returning({ id: schema.communityLineups.id });
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title,
+        status,
+        visibility: 'public',
+        createdBy: testApp.seed.adminUser.id,
+        publicSlug: `co-${Math.random().toString(36).slice(2, 10)}`,
+        createdAt,
+      })
+      .returning({ id: schema.communityLineups.id }),
+    'row',
+  );
   return row.id;
 }
 
@@ -72,10 +76,13 @@ async function seedSourceAndSibling(): Promise<{
     'archived',
     new Date(now - HOUR_MS),
   );
-  const [stray] = await testApp.db
-    .insert(schema.games)
-    .values({ name: 'Carryover Stray Game', slug: 'carryover-stray-game' })
-    .returning({ id: schema.games.id });
+  const [stray] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'Carryover Stray Game', slug: 'carryover-stray-game' })
+      .returning({ id: schema.games.id }),
+    'stray',
+  );
   return { sourceId, siblingId, strayGameId: stray.id };
 }
 

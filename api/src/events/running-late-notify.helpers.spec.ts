@@ -6,6 +6,7 @@ import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import type { MockDb } from '../common/testing/drizzle-mock';
 import * as schema from '../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { at } from '../common/testing/narrow';
 
 const EVENT = {
   id: 239,
@@ -59,9 +60,9 @@ describe('notifyAttendeeRunningLate', () => {
       payload: Record<string, unknown>;
     }>;
     expect(created.map((n) => n.userId).sort()).toEqual([1, 109]);
-    expect(created[0].type).toBe('running_late');
-    expect(created[0].title).toBe('Running Late');
-    expect(created[0].message).toBe(
+    expect(created[0]?.type).toBe('running_late');
+    expect(created[0]?.title).toBe('Running Late');
+    expect(created[0]?.message).toBe(
       'hiphoptobop is running late to "D&d night".',
     );
   });
@@ -81,12 +82,12 @@ describe('notifyAttendeeRunningLate', () => {
     const created = notificationService.createMany.mock.calls[0][0] as Array<{
       payload: Record<string, unknown>;
     }>;
-    expect(created[0].payload).toMatchObject({
+    expect(created[0]?.payload).toMatchObject({
       eventId: 239,
       lateUserId: LATE_USER_ID,
       lateUsername: 'hiphoptobop',
       subtype: `late-${LATE_USER_ID}`,
-      startTime: EVENT.duration[0].toISOString(),
+      startTime: at(EVENT.duration, 0).toISOString(),
       discordUrl: 'https://discord/msg',
       voiceChannelId: 'voice-1',
     });

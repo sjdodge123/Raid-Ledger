@@ -226,7 +226,7 @@ describe('findOldestTentativeOccupant', () => {
     ]);
     const result = findOldestTentativeOccupant(assignments, 'tank', signupById);
     expect(result).not.toBeNull();
-    expect(result.signupId).toBe(10);
+    expect(result?.signupId).toBe(10);
   });
 
   it('returns the oldest tentative occupant when multiple exist', () => {
@@ -253,7 +253,7 @@ describe('findOldestTentativeOccupant', () => {
       [20, { status: 'tentative', signedUpAt: new Date('2026-01-01') }],
     ]);
     const result = findOldestTentativeOccupant(assignments, 'tank', signupById);
-    expect(result.signupId).toBe(20);
+    expect(result?.signupId).toBe(20);
   });
 
   it('ignores assignments for different roles', () => {
@@ -322,8 +322,8 @@ describe('findRoleChanges', () => {
     const after = [{ id: 1, signupId: 10, role: 'tank', position: 1 }];
     const changes = findRoleChanges(before, after, 0);
     expect(changes).toHaveLength(1);
-    expect(changes[0].fromRole).toBe('unknown');
-    expect(changes[0].toRole).toBe('tank');
+    expect(changes[0]?.fromRole).toBe('unknown');
+    expect(changes[0]?.toRole).toBe('tank');
   });
 
   it('ignores signups not present in before snapshot', () => {

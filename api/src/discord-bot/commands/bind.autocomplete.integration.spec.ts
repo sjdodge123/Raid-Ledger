@@ -53,7 +53,7 @@ describe('game autocomplete relevance ranking (ROK-1531)', () => {
     const options = await autocompleteGameIds(testApp.db, 'peak');
 
     expect(options).toHaveLength(25);
-    expect(options[0].name).toBe('PEAK');
+    expect(options[0]?.name).toBe('PEAK');
   });
 
   it('ranks a prefix match above an infix match', async () => {
@@ -93,6 +93,6 @@ describe('game autocomplete relevance ranking (ROK-1531)', () => {
       'Peak & Valley Chronicles',
     );
 
-    expect(options[0].name).toBe('Peak & Valley Chronicles');
+    expect(options[0]?.name).toBe('Peak & Valley Chronicles');
   });
 });

@@ -17,6 +17,7 @@ import type { EventEmitter2 } from '@nestjs/event-emitter';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
+import { at } from '../common/testing/narrow';
 import type { TokenBlocklistService } from './token-blocklist.service';
 import * as schema from '../drizzle/schema';
 import { clearAuthUserCache } from './auth-user-cache';
@@ -118,7 +119,7 @@ describe('ROK-1537 AC1 — first Discord login in a fleet env becomes admin', ()
   it('scopes the UPDATE to the caller row and gates it on no real Discord admin', async () => {
     const m = makeDb([{ id: 5 }]);
     await makeService(m.db).validateDiscordUser(DISCORD_ID, 'op');
-    const { sql, params } = render(m.whereArgs[0]);
+    const { sql, params } = render(at(m.whereArgs, 0));
     expect(sql).toContain('"users"."id" = $1');
     expect(params).toEqual([5]);
     expect(sql).toMatch(/NOT EXISTS \(\s*SELECT 1 FROM users AS fleet_admin/);
@@ -129,7 +130,7 @@ describe('ROK-1537 AC1 — first Discord login in a fleet env becomes admin', ()
   it('does not count placeholder admins (admin@local `local:`, `unlinked:`)', async () => {
     const m = makeDb([{ id: 5 }]);
     await makeService(m.db).validateDiscordUser(DISCORD_ID, 'op');
-    const { sql } = render(m.whereArgs[0]);
+    const { sql } = render(at(m.whereArgs, 0));
     expect(sql).toContain("fleet_admin.discord_id NOT LIKE 'local:%'");
     expect(sql).toContain("fleet_admin.discord_id NOT LIKE 'unlinked:%'");
   });

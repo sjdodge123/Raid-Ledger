@@ -47,6 +47,7 @@ import {
   recomputeGameVector,
   runAggregateGameVectors,
 } from './aggregate-game-vectors';
+import { at } from '../../common/testing/narrow';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -203,7 +204,7 @@ describe('recomputeGameVector target-game freshness (ROK-1102 #2)', () => {
     await recomputeGameVector(db, 1);
 
     expect(upserts).toHaveLength(2);
-    expect(upserts[1].signalHash).not.toEqual(upserts[0].signalHash);
+    expect(at(upserts, 1).signalHash).not.toEqual(at(upserts, 0).signalHash);
     // ...and the corpus was still only scanned once.
     expect(mockLoadGameMetadata).toHaveBeenCalledTimes(1);
     expect(mockLoadGameSignals).toHaveBeenCalledTimes(1);

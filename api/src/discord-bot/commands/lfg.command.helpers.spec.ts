@@ -1,3 +1,4 @@
+import { at } from '../../common/testing/narrow';
 import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
 import { colorForState } from '../embeds/embed-chrome.helpers';
 import { LFG_BUTTON_IDS } from '../discord-bot.constants';
@@ -203,13 +204,13 @@ describe('buildListReply (ROK-1454 D11 / AC7)', () => {
       ],
       CTX,
     );
-    const names = (embeds[0].toJSON().fields ?? []).map((f) => f.name);
+    const names = (at(embeds, 0).toJSON().fields ?? []).map((f) => f.name);
     expect(names).toEqual(['Mine']);
   });
 
   it('shows the count and expiry per game, and one withdraw button each', () => {
     const { embeds, components } = buildListReply(own(2), CTX);
-    const data = embeds[0].toJSON();
+    const data = at(embeds, 0).toJSON();
     expect(data.author?.name).toBe('📋 YOUR GROUPS · 2');
     expect(data.fields?.[0]).toMatchObject({
       name: 'Game 1',
@@ -241,14 +242,14 @@ describe('buildListReply (ROK-1454 D11 / AC7)', () => {
     );
     expect(buttonCount).toBe(LFG_MAX_WITHDRAW_BUTTONS - 1);
     expect(components).toHaveLength(5);
-    const fields = embeds[0].toJSON().fields ?? [];
+    const fields = at(embeds, 0).toJSON().fields ?? [];
     expect(fields).toHaveLength(LFG_MAX_WITHDRAW_BUTTONS);
     expect(fields.map((f) => f.value)).toContain('+4 more on the site');
   });
 
   it('uses every one of the 25 fields when nothing overflows', () => {
     const { embeds, components } = buildListReply(own(25), CTX);
-    expect(embeds[0].toJSON().fields).toHaveLength(25);
+    expect(embeds[0]?.toJSON().fields).toHaveLength(25);
     const buttonCount = components.reduce(
       (n, row) => n + row.toJSON().components.length,
       0,
@@ -258,7 +259,7 @@ describe('buildListReply (ROK-1454 D11 / AC7)', () => {
 
   it('tells an empty list how to start one, with no buttons', () => {
     const { embeds, components } = buildListReply([], CTX);
-    expect(embeds[0].toJSON().description).toContain(
+    expect(embeds[0]?.toJSON().description).toContain(
       "You're not looking for anything right now",
     );
     expect(components).toHaveLength(0);
@@ -350,11 +351,11 @@ describe('the forum post link (ROK-1471 D8 / AC9)', () => {
       new Map([[1, POST]]),
     );
 
-    const fields = embeds[0].toJSON().fields ?? [];
-    expect(fields[0].value).toBe(
+    const fields = at(embeds, 0).toJSON().fields ?? [];
+    expect(fields[0]?.value).toBe(
       '2 looking · expires 17 Sep\n[Open the post ↗](https://discord.com/channels/guild-1/thread-9)',
     );
-    expect(fields[1].value).toBe('2 looking · expires 17 Sep');
+    expect(fields[1]?.value).toBe('2 looking · expires 17 Sep');
   });
 
   it('renders the 1454 rows unchanged when no post links are passed at all', () => {
@@ -363,7 +364,7 @@ describe('the forum post link (ROK-1471 D8 / AC9)', () => {
       CTX,
     );
 
-    expect((embeds[0].toJSON().fields ?? [])[0].value).toBe(
+    expect((embeds[0]?.toJSON().fields ?? [])[0]?.value).toBe(
       '2 looking · expires 17 Sep',
     );
   });
@@ -497,14 +498,14 @@ describe('buildListReply — ROK-1479 urgency (D9)', () => {
       [group({ nowCount: 2, soonestNowExpiresAt: NOW_ISO })],
       CTX,
     );
-    expect(embeds[0].toJSON().fields?.[0].value).toBe(
+    expect(embeds[0]?.toJSON().fields?.[0]?.value).toBe(
       `🔥 2 looking · until ${NOW_EPOCH_T}`,
     );
   });
 
   it('leaves a weekly row on the plain dated label', () => {
     const { embeds } = buildListReply([group()], CTX);
-    expect(embeds[0].toJSON().fields?.[0].value).toBe(
+    expect(embeds[0]?.toJSON().fields?.[0]?.value).toBe(
       '2 looking · expires 17 Sep',
     );
   });

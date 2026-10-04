@@ -8,6 +8,7 @@ import { runBootMigrations } from '../../scripts/run-migrations-with-sentry';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
+import { at } from '../common/testing/narrow';
 
 jest.mock('node:fs');
 jest.mock('node:child_process');
@@ -71,9 +72,9 @@ function twelveSnapshotFixture(): string[] {
   ];
   mockMigrationDir([...extras, ...[...names].reverse()], (n) => {
     const i = names.indexOf(n);
-    return i < 0 ? minutes(-1440) : minutes(ranks[i]);
+    return i < 0 ? minutes(-1440) : minutes(at(ranks, i));
   });
-  return [names[6], names[2]].map(migrationPath).sort();
+  return [at(names, 6), at(names, 2)].map(migrationPath).sort();
 }
 
 const unlinkedPaths = (): string[] =>
@@ -285,7 +286,7 @@ function describeBackupService() {
       );
       expect(dirsRead).toEqual([MIGRATION_DIR]);
       expect(unlinkedPaths()).toEqual(
-        [names[0], names[1]].map(migrationPath).sort(),
+        [at(names, 0), at(names, 1)].map(migrationPath).sort(),
       );
     });
 
@@ -295,7 +296,7 @@ function describeBackupService() {
         jest.clearAllMocks();
         mockMigrationDir(order, () => minutes(0));
         service.rotateMigrationSnapshots();
-        expect(unlinkedPaths()).toEqual([migrationPath(names[0])]);
+        expect(unlinkedPaths()).toEqual([migrationPath(at(names, 0))]);
       }
     });
 
@@ -317,12 +318,13 @@ function describeBackupService() {
       mockMigrationDir(names, (n) => minutes(names.indexOf(n)));
       const lstat = (mockFs.lstatSync as jest.Mock).getMockImplementation()!;
       (mockFs.lstatSync as jest.Mock).mockImplementation((p: string) => {
-        if (p === migrationPath(names[0])) throw new Error('ENOENT: vanished');
+        if (p === migrationPath(at(names, 0)))
+          throw new Error('ENOENT: vanished');
         return lstat(p);
       });
       // The unstat-able file is neither counted nor deleted: 11 left, 1 pruned.
       expect(service.rotateMigrationSnapshots()).toBe(1);
-      expect(unlinkedPaths()).toEqual([migrationPath(names[1])]);
+      expect(unlinkedPaths()).toEqual([migrationPath(at(names, 1))]);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('ENOENT: vanished'),
       );
@@ -361,10 +363,10 @@ function describeBackupService() {
 
       const result = service.listBackups();
       expect(result).toHaveLength(2);
-      expect(result[0].filename).toBe('new.dump');
-      expect(result[0].type).toBe('migration');
-      expect(result[1].filename).toBe('old.dump');
-      expect(result[1].type).toBe('daily');
+      expect(result[0]?.filename).toBe('new.dump');
+      expect(result[0]?.type).toBe('migration');
+      expect(result[1]?.filename).toBe('old.dump');
+      expect(result[1]?.type).toBe('daily');
     });
   });
 
