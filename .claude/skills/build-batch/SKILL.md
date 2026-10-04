@@ -41,7 +41,7 @@ If any of the above are missing → STOP, ask, do not start fan-out.
 Pre-flight: Read plan, verify decisions, compute wave structure
 
 Setup:    ONE worktree + ONE branch + ONE team (per-batch)
-          Copy .env, npm install, deploy_dev.sh --ci if needed
+          Copy .env, npm install, build contract, deploy_dev.sh --ci if needed
           Initialize <worktree>/build-state.yaml
           Linear → In Progress
 
