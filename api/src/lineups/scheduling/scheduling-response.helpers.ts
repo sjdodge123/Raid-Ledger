@@ -9,6 +9,7 @@ import type {
 } from '@raid-ledger/contract';
 import type { MatchMemberRow } from '../lineups-match-query.helpers';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
+import { isYesStance } from './scheduling-stance.helpers';
 
 type SlotRow = {
   id: number;
@@ -121,7 +122,7 @@ function mapSlotsWithVotes(
       overlapScore: slot.overlapScore ? Number(slot.overlapScore) : null,
       suggestedBy: slot.suggestedBy as 'system' | 'user',
       createdAt: slot.createdAt.toISOString(),
-      votes: onSlot.filter((v) => (v.stance ?? 'yes') === 'yes').map(toVoter),
+      votes: onSlot.filter((v) => isYesStance(v.stance)).map(toVoter),
       noVotes: onSlot.filter((v) => v.stance === 'no').map(toVoter),
     };
   });

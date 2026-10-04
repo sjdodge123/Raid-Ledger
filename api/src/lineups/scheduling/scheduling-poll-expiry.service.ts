@@ -37,7 +37,7 @@ import {
   findPollLeaderOutcome,
   isInWarnWindow,
   type ExpiryWarnCandidate,
-  type LeadingSlot,
+  type SlotWithYesCount,
 } from './scheduling-poll-expiry.helpers';
 
 const JOB_NAME = 'SchedulingPollExpiryService_runSweep';
@@ -180,7 +180,7 @@ export class SchedulingPollExpiryService {
    */
   private async sendWarning(
     poll: ExpiryWarnCandidate,
-    leader: LeadingSlot | null,
+    leader: SlotWithYesCount | null,
     timeZone: string,
   ): Promise<void> {
     const copy: WarnCopy = leader
@@ -237,7 +237,10 @@ export class SchedulingPollExpiryService {
  * @param leader - The leading future slot, or null when none clears the floor
  * @returns The leader key, or its `:no-leader` sibling for "no time worked"
  */
-function warnDedupKey(matchId: number, leader: LeadingSlot | null): string {
+function warnDedupKey(
+  matchId: number,
+  leader: SlotWithYesCount | null,
+): string {
   const base = `sched-poll-expiry-warn:${matchId}`;
   return leader ? base : `${base}:no-leader`;
 }
@@ -259,7 +262,7 @@ function warnDedupKey(matchId: number, leader: LeadingSlot | null): string {
  */
 function warnReminderWindow(
   matchId: number,
-  leader: LeadingSlot | null,
+  leader: SlotWithYesCount | null,
 ): string {
   return leader ? `expiry-${matchId}` : `expiry-noleader-${matchId}`;
 }

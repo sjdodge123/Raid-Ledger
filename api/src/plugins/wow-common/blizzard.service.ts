@@ -22,6 +22,7 @@ import * as profH from './blizzard-professions.helpers';
 import * as specH from './blizzard-spec.helpers';
 import * as instH from './blizzard-instance.helpers';
 import * as instFetch from './blizzard-instance.fetch';
+import { isNamespaceRefusal } from './blizzard-upstream-error';
 import type { ExternalCharacterProfessions } from '../plugin-host/extension-types';
 
 // Re-export types for backward compatibility
@@ -35,10 +36,25 @@ export type {
   WowInstanceDetail,
 } from './blizzard.constants';
 
+/**
+ * How long a namespace refusal (Blizzard 403 on the realm index) is remembered
+ * (TDB:1786). The public realm route would otherwise re-hit Blizzard and send
+ * another Sentry 502 on every call for a variant it never serves. Within the
+ * window the original exception is rethrown, so Sentry reports it once (its
+ * already-captured check skips the repeats); the next real 403 after expiry
+ * reports again, which keeps a bad namespace constant visible.
+ */
+const REALM_REFUSAL_TTL_MS = 10 * 60 * 1000;
+
 @Injectable()
 export class BlizzardService {
   private readonly logger = new Logger(BlizzardService.name);
   private realmCache = new Map<string, RealmCacheEntry>();
+  /** Realm cache key -> the 403 to rethrow, and the epoch ms it expires at. */
+  private readonly realmRefusals = new Map<
+    string,
+    { error: unknown; until: number }
+  >();
   private instanceListCache = new Map<string, InstanceListCacheEntry>();
   private instanceDetailCache = new Map<string, InstanceDetailCacheEntry>();
 
@@ -136,20 +152,52 @@ export class BlizzardService {
     apiNamespacePrefix: string | null = null,
   ): Promise<WowRealm[]> {
     const cacheKey = `${region}:${apiNamespacePrefix ?? 'retail'}`;
-    return memorySwr({
-      cache: this.realmCache,
-      key: cacheKey,
-      ttlMs: REALM_CACHE_TTL,
-      fetcher: async () => {
-        const token = await this.auth.getAccessToken(region);
-        return instH.fetchRealmListFromApi(
-          region,
-          apiNamespacePrefix,
-          token,
-          this.logger,
-        );
-      },
+    this.throwIfRealmRefused(cacheKey);
+    try {
+      const realms = await memorySwr({
+        cache: this.realmCache,
+        key: cacheKey,
+        ttlMs: REALM_CACHE_TTL,
+        // Never record a refusal in here: a stale hit runs this fetcher as a
+        // background refresh whose failure memorySwr swallows.
+        fetcher: async () => {
+          const token = await this.auth.getAccessToken(region);
+          return instH.fetchRealmListFromApi(
+            region,
+            apiNamespacePrefix,
+            token,
+            this.logger,
+          );
+        },
+      });
+      this.realmRefusals.delete(cacheKey);
+      return realms;
+    } catch (err) {
+      if (isNamespaceRefusal(err)) this.rememberRealmRefusal(cacheKey, err);
+      throw err;
+    }
+  }
+
+  /** Keep a 403 so the next calls in the window rethrow this same object. */
+  private rememberRealmRefusal(cacheKey: string, error: unknown): void {
+    this.realmRefusals.set(cacheKey, {
+      error,
+      until: Date.now() + REALM_REFUSAL_TTL_MS,
     });
+  }
+
+  /**
+   * Answer a remembered 403 without calling Blizzard. A live cached realm list
+   * always wins. Rethrows the original instance on purpose: Sentry skips an
+   * exception object it has already captured, so the repeats stay out of it.
+   */
+  private throwIfRealmRefused(cacheKey: string): void {
+    const now = Date.now();
+    const cached = this.realmCache.get(cacheKey);
+    if (cached && now < cached.expiresAt) return;
+    const refusal = this.realmRefusals.get(cacheKey);
+    if (refusal === undefined || now >= refusal.until) return;
+    throw refusal.error;
   }
 
   async fetchAllInstances(

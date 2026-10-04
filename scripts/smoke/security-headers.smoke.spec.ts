@@ -59,9 +59,10 @@ async function assertSecurityHeaders(headers: Record<string, string>) {
 
 async function extractFirstBundleUrl(html: string): Promise<string | null> {
     const scriptMatch = html.match(/<script[^>]+src=["']([^"']*\/assets\/[^"']+\.js)["']/);
-    if (scriptMatch) return scriptMatch[1];
+    const src = scriptMatch?.[1];
+    if (src !== undefined) return src;
     const moduleMatch = html.match(/["'](\/assets\/[A-Za-z0-9._-]+\.js)["']/);
-    return moduleMatch ? moduleMatch[1] : null;
+    return moduleMatch?.[1] ?? null;
 }
 
 test.describe('Security headers on /', () => {

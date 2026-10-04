@@ -2,6 +2,7 @@
  * Pure helpers for scheduling poll embed data (ROK-1014).
  */
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
+import { isYesStance } from './scheduling-stance.helpers';
 import type { SchedulingPollStatus } from '../../discord-bot/services/discord-embed-scheduling.types';
 
 interface SlotRow {
@@ -118,17 +119,18 @@ export function buildPollUrl(
  * ROK-1617: the rows are mixed-stance now, so `voteCount` and `voterNames`
  * are the YES side only — a `no` used to be counted and named as support for
  * the very time its voter rejected. `noCount` rides along for the shared
- * net-score comparator.
+ * net-score comparator. Like `tallyStancesBySlot`, only an explicit `'no'` is
+ * an anti-vote; a stance outside the schema counts as neither.
  */
 export function buildEmbedSlots(slots: SlotRow[], votes: ScheduleVoteRow[]) {
   return slots.map((slot) => {
     const onSlot = votes.filter((v) => v.slotId === slot.id);
-    const yes = onSlot.filter((v) => (v.stance ?? 'yes') === 'yes');
+    const yes = onSlot.filter((v) => isYesStance(v.stance));
     return {
       id: slot.id,
       proposedTime: slot.proposedTime.toISOString(),
       voteCount: yes.length,
-      noCount: onSlot.length - yes.length,
+      noCount: onSlot.filter((v) => v.stance === 'no').length,
       voterNames: yes.map((v) => v.displayName),
     };
   });

@@ -65,6 +65,25 @@ export interface StanceVoteRef {
 }
 
 /**
+ * Whether a stance counts as support for a slot — THE yes predicate.
+ *
+ * The column is `NOT NULL DEFAULT 'yes'` and `cl_schedule_votes_stance_check`
+ * holds it to `IN ('yes', 'no')` (migration 0189), so an absent stance means
+ * `'yes'` and anything else should be impossible. Should a value outside that
+ * pair ever appear, it is NOT support: a yes is exactly `'yes'`, never
+ * "anything that is not `'no'`". The SQL tallies keep the literal
+ * `stance = 'yes'` as this predicate's twin — `findSlotInMatch`
+ * (scheduling-rally.helpers), scheduling-unanimous.helpers and
+ * notifications/scheduling-threshold.service.
+ *
+ * @param stance - The row's stance; absent or null reads as the default.
+ * @returns True only for `'yes'` or an absent stance.
+ */
+export function isYesStance(stance?: ScheduleVoteStance | null): boolean {
+  return (stance ?? 'yes') === 'yes';
+}
+
+/**
  * Drop the anti-votes from a vote list (ROK-1617).
  *
  * Every consumer that acts ON BEHALF of a voter — auto-signup, auto-heart,
@@ -79,7 +98,7 @@ export interface StanceVoteRef {
 export function yesVotesOnly<T extends { stance?: ScheduleVoteStance | null }>(
   votes: readonly T[],
 ): T[] {
-  return votes.filter((vote) => (vote.stance ?? 'yes') === 'yes');
+  return votes.filter((vote) => isYesStance(vote.stance));
 }
 
 /** Yes/no counts for one slot, in the shape the shared comparator orders. */
@@ -101,6 +120,10 @@ const NO_ANSWERS: SlotStanceTally = { voteCount: 0, noCount: 0 };
  * vote FOR the slot — the exact inversion the anti-vote exists to prevent. One
  * tally, used by every call site, is how that cannot drift back.
  *
+ * A stance that is neither `'no'` nor a yes per {@link isYesStance} (only
+ * possible if the CHECK constraint were bypassed) counts as NEITHER: it adds
+ * to no total, though its slot still appears in the map.
+ *
  * @param votes - Vote rows across any number of slots.
  * @returns Slot id to its yes/no counts. Slots with no rows are absent.
  */
@@ -110,8 +133,8 @@ export function tallyStancesBySlot(
   const tallies = new Map<number, SlotStanceTally>();
   for (const vote of votes) {
     const tally = tallies.get(vote.slotId) ?? { voteCount: 0, noCount: 0 };
-    if ((vote.stance ?? 'yes') === 'no') tally.noCount += 1;
-    else tally.voteCount += 1;
+    if (vote.stance === 'no') tally.noCount += 1;
+    else if (isYesStance(vote.stance)) tally.voteCount += 1;
     tallies.set(vote.slotId, tally);
   }
   return tallies;
