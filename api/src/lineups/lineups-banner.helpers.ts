@@ -2,7 +2,7 @@
  * Banner helpers for the lineup Games-page banner (ROK-935).
  * Builds lightweight banner data for building/voting/decided lineups.
  */
-import { and, desc, inArray, or, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, or, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { LineupBannerResponseDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
@@ -49,11 +49,53 @@ interface BannerLineup {
   includeSchedulingPhase?: boolean;
 }
 
+/** Largest id a Postgres int4 column can hold; a bigger value would 500. */
+const MAX_INT4 = 2147483647;
+
+/** The one SettingsService read the banner scope gate needs. */
+export interface DemoModeReader {
+  getDemoMode(): Promise<boolean>;
+}
+
+/**
+ * Parse the `?lineupId=` banner scope (a smoke-test seam that pins the banner
+ * to one spec's lineup). Returns undefined — i.e. the normal global banner —
+ * unless env DEMO_MODE is 'true' and `raw` is a positive int4. This is only
+ * the env half of the demo gate; `resolveBannerScope` adds the settings half.
+ */
+export function parseBannerScope(
+  raw: unknown,
+  demoMode: string | undefined = process.env.DEMO_MODE,
+): number | undefined {
+  if (demoMode !== 'true' || typeof raw !== 'string') return undefined;
+  if (!/^\d+$/.test(raw)) return undefined;
+  const n = Number(raw);
+  return n > 0 && n <= MAX_INT4 ? n : undefined;
+}
+
+/**
+ * Resolve the banner scope behind the same two-key demo gate every demo-only
+ * endpoint uses: env DEMO_MODE AND the `demo_mode` app setting. The settings
+ * read (cached by SettingsService) only happens when a valid scope was sent,
+ * so the normal unscoped banner request pays nothing for it.
+ */
+export async function resolveBannerScope(
+  raw: unknown,
+  settings: DemoModeReader,
+  envDemoMode: string | undefined = process.env.DEMO_MODE,
+): Promise<number | undefined> {
+  const scope = parseBannerScope(raw, envDemoMode);
+  if (scope === undefined) return undefined;
+  return (await settings.getDemoMode()) ? scope : undefined;
+}
+
 /**
  * Find the most recent community lineup eligible for the banner.
  * Excludes standalone scheduling poll lineups (phaseDurationOverride.standalone).
+ * A `scope` narrows to that one lineup: archived, standalone or missing
+ * yields no row — it never falls back to the global banner.
  */
-export function findBannerLineup(db: Db) {
+export function findBannerLineup(db: Db, scope?: number) {
   return db
     .select()
     .from(schema.communityLineups)
@@ -64,6 +106,7 @@ export function findBannerLineup(db: Db) {
           isNull(schema.communityLineups.phaseDurationOverride),
           sql`${schema.communityLineups.phaseDurationOverride}->>'standalone' IS NULL`,
         ),
+        scope !== undefined ? eq(schema.communityLineups.id, scope) : undefined,
       ),
     )
     .orderBy(desc(schema.communityLineups.createdAt))
@@ -173,8 +216,11 @@ export function buildBannerResponse(
  */
 export async function loadGamesPageBanner(
   db: Db,
+  rawScope: unknown,
+  settings: DemoModeReader,
 ): Promise<LineupBannerResponseDto | null> {
-  const [lineup] = await findBannerLineup(db);
+  const scope = await resolveBannerScope(rawScope, settings);
+  const [lineup] = await findBannerLineup(db, scope);
   if (!lineup) return null;
   return buildBannerData(db, lineup);
 }
