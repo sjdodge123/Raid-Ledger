@@ -124,4 +124,17 @@ describe('AddCharacterModal — WoW: Forever edit', () => {
         expect(dto).not.toHaveProperty('region');
         expect(dto.realm).toBeUndefined();
     });
+
+    it('a legacy row (no region, one-word name) keeps Name + Realm and saves a role change without a ruleset', () => {
+        renderModal(7, { ...foreverChar, name: 'Thrall', region: null, ruleset: null, realm: 'Faerlina' });
+        expect(screen.queryByTestId('forever-identity-fields')).not.toBeInTheDocument();
+        expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('Thrall');
+        expect(screen.getByRole('textbox', { name: 'Realm/Server' })).toHaveValue('Faerlina');
+        fireEvent.change(screen.getByRole('combobox', { name: 'Role' }), { target: { value: 'tank' } });
+        submit(/save changes/i);
+        const { dto } = updateMutate.mock.calls[0]?.[0] as { dto: Record<string, unknown> };
+        expect(dto).toMatchObject({ name: 'Thrall', roleOverride: 'tank', realm: 'Faerlina' });
+        expect(dto).not.toHaveProperty('ruleset');
+        expect(dto).not.toHaveProperty('region');
+    });
 });

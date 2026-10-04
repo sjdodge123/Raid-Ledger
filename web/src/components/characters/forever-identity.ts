@@ -17,6 +17,15 @@ export function isWowForeverSlug(slug: string | null | undefined): boolean {
     return slug === WOW_FOREVER_GAME_SLUG;
 }
 
+/**
+ * Whether a form shows the Forever identity block. A Forever-game character
+ * saved before regions existed (region NULL) has no Forever identity, so its
+ * edit form keeps the legacy Name + Realm fields and never sends a ruleset.
+ */
+export function usesForeverIdentity(slug: string | null | undefined, editing?: { region?: string | null } | null): boolean {
+    return isWowForeverSlug(slug) && (!editing || !!editing.region);
+}
+
 export interface ForeverIdentity {
     region: WowRegion;
     /** Hardcore is stored-capable but not pickable; an existing Hardcore value is kept as-is. */
@@ -45,6 +54,11 @@ export function foreverIdentityFromCharacter(char: { name: string; region?: stri
         ruleset: ruleset.success ? ruleset.data : 'normal',
         first, second: rest.join(' '),
     };
+}
+
+/** Value equality — the dirty check must not flag a new object holding the same identity. */
+export function sameForeverIdentity(a: ForeverIdentity, b: ForeverIdentity): boolean {
+    return a.region === b.region && a.ruleset === b.ruleset && a.first === b.first && a.second === b.second;
 }
 
 /** Null when valid; otherwise the inline messages for the name row. */

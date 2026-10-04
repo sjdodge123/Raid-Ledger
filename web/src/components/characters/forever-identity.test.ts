@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { foreverIdentityFromCharacter, formatForeverRuleset, foreverUpdateFields } from './forever-identity';
+import { foreverIdentityFromCharacter, formatForeverRuleset, foreverUpdateFields, sameForeverIdentity, usesForeverIdentity } from './forever-identity';
 
 describe('forever-identity helpers (ROK-1721)', () => {
     it('formats the ruleset label with the region for the detail page and invite card', () => {
@@ -16,5 +16,19 @@ describe('forever-identity helpers (ROK-1721)', () => {
     it('never writes Hardcore back (not accepted on update until enabled)', () => {
         expect(foreverUpdateFields({ region: 'us', ruleset: 'hardcore', first: 'Ana', second: 'Forever' }))
             .toEqual({ name: 'Ana Forever' });
+    });
+
+    it('compares identities by value, not by reference', () => {
+        const a = { region: 'us', ruleset: 'pvp', first: 'Ana', second: 'Forever' } as const;
+        expect(sameForeverIdentity(a, { ...a })).toBe(true);
+        expect(sameForeverIdentity(a, { ...a, ruleset: 'normal' })).toBe(false);
+    });
+
+    it('a region-less (legacy) Forever character edits with the legacy fields', () => {
+        const slug = 'world-of-warcraft-forever';
+        expect(usesForeverIdentity(slug, null)).toBe(true);
+        expect(usesForeverIdentity(slug, { region: 'eu' })).toBe(true);
+        expect(usesForeverIdentity(slug, { region: null })).toBe(false);
+        expect(usesForeverIdentity('world-of-warcraft', null)).toBe(false);
     });
 });

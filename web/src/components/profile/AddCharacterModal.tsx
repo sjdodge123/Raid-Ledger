@@ -10,7 +10,7 @@ import { GameSearchInput } from '../events/game-search-input';
 import { PluginSlot } from '../../plugins';
 import { CharacterFormFields } from './character-form-fields';
 import {
-    foreverCreateFields, foreverIdentityFromCharacter, foreverUpdateFields, isWowForeverSlug, validateForeverIdentity,
+    foreverCreateFields, foreverIdentityFromCharacter, foreverUpdateFields, sameForeverIdentity, usesForeverIdentity, validateForeverIdentity,
     type ForeverIdentity, type ForeverIdentityErrors,
 } from '../characters/forever-identity';
 
@@ -48,7 +48,8 @@ const getInitialFormState = (char?: CharacterDto | null): FormState => ({
  * A search query alone never reaches here, so it is not dirty.
  */
 function isCharacterFormDirty(form: FormState, baseline: FormState, pickedGameSlug: string | undefined, preselectedSlug: string | undefined): boolean {
-    const changed = (Object.keys(baseline) as (keyof FormState)[]).some((k) => form[k] !== baseline[k]);
+    const changed = (Object.keys(baseline) as (keyof FormState)[])
+        .some((k) => (k === 'forever' ? !sameForeverIdentity(form.forever, baseline.forever) : form[k] !== baseline[k]));
     return changed || (pickedGameSlug !== undefined && pickedGameSlug !== preselectedSlug);
 }
 
@@ -164,8 +165,8 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const isEditing = !!editingCharacter;
     const effectiveRegistryGame = isEditing ? preselectedRegistryGame : registryGame;
     const effectiveGameId = effectiveRegistryGame?.id ?? preselectedGameId;
-    // ROK-1721: Forever is detected by the picked (or edited) game's slug.
-    const isForever = isWowForeverSlug(effectiveRegistryGame?.slug ?? selectedIgdbGame?.slug);
+    // ROK-1721: Forever is detected by the picked (or edited) game's slug; a region-less legacy row edits as before.
+    const isForever = usesForeverIdentity(effectiveRegistryGame?.slug ?? selectedIgdbGame?.slug, editingCharacter);
     const showMmoFields = effectiveRegistryGame?.hasRoles ?? (selectedIgdbGame ? false : true);
     const { data: gameCharsData } = useMyCharacters(effectiveGameId, !!effectiveGameId);
     const gameChars = gameCharsData?.data ?? [];
