@@ -61,13 +61,25 @@ export function sameForeverIdentity(a: ForeverIdentity, b: ForeverIdentity): boo
     return a.region === b.region && a.ruleset === b.ruleset && a.first === b.first && a.second === b.second;
 }
 
-/** Null when valid; otherwise the inline messages for the name row. */
+/** The per-part message for a non-empty part that is not letters-only 2–24; an empty part is the pair message's job. */
+function partError(part: string): string | undefined {
+    if (!part.trim()) return undefined;
+    return WowForeverNamePartSchema.safeParse(part).success ? undefined : FOREVER_PART_INVALID;
+}
+
+/**
+ * Null when valid; otherwise the inline messages for the name row: a per-part
+ * hint under each invalid non-empty part AND the pair message when a part is
+ * missing — "J4" + empty shows both.
+ */
 export function validateForeverIdentity(id: ForeverIdentity): ForeverIdentityErrors | null {
-    if (!id.first.trim() || !id.second.trim()) return { name: FOREVER_NAME_REQUIRED };
     const errs: ForeverIdentityErrors = {};
-    if (!WowForeverNamePartSchema.safeParse(id.first).success) errs.first = FOREVER_PART_INVALID;
-    if (!WowForeverNamePartSchema.safeParse(id.second).success) errs.second = FOREVER_PART_INVALID;
-    return errs.first || errs.second ? errs : null;
+    const first = partError(id.first);
+    const second = partError(id.second);
+    if (first) errs.first = first;
+    if (second) errs.second = second;
+    if (!id.first.trim() || !id.second.trim()) errs.name = FOREVER_NAME_REQUIRED;
+    return errs.first || errs.second || errs.name ? errs : null;
 }
 
 export function foreverFullName(id: ForeverIdentity): string {

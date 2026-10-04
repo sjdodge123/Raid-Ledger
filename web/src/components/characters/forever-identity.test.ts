@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { foreverIdentityFromCharacter, formatForeverRuleset, foreverUpdateFields, sameForeverIdentity, usesForeverIdentity } from './forever-identity';
+import {
+    FOREVER_NAME_REQUIRED, FOREVER_PART_INVALID, foreverIdentityFromCharacter, formatForeverRuleset,
+    foreverUpdateFields, sameForeverIdentity, usesForeverIdentity, validateForeverIdentity,
+} from './forever-identity';
 
 describe('forever-identity helpers (ROK-1721)', () => {
     it('formats the ruleset label with the region for the detail page and invite card', () => {
@@ -30,5 +33,23 @@ describe('forever-identity helpers (ROK-1721)', () => {
         expect(usesForeverIdentity(slug, { region: 'eu' })).toBe(true);
         expect(usesForeverIdentity(slug, { region: null })).toBe(false);
         expect(usesForeverIdentity('world-of-warcraft', null)).toBe(false);
+    });
+
+    describe('validateForeverIdentity', () => {
+        const id = (first: string, second: string) => ({ region: 'us', ruleset: 'normal', first, second } as const);
+
+        it('an invalid first part with an empty second shows the per-part hint AND the pair message', () => {
+            expect(validateForeverIdentity(id('J4', ''))).toEqual({ first: FOREVER_PART_INVALID, name: FOREVER_NAME_REQUIRED });
+        });
+
+        it('an empty part alone shows only the pair message (no per-part hint for an empty part)', () => {
+            expect(validateForeverIdentity(id('Ana', ''))).toEqual({ name: FOREVER_NAME_REQUIRED });
+            expect(validateForeverIdentity(id('', ''))).toEqual({ name: FOREVER_NAME_REQUIRED });
+        });
+
+        it('flags each invalid filled part and passes a valid pair', () => {
+            expect(validateForeverIdentity(id('Ana', 'F0rever'))).toEqual({ second: FOREVER_PART_INVALID });
+            expect(validateForeverIdentity(id('Ana', 'Forever'))).toBeNull();
+        });
     });
 });
