@@ -76,9 +76,10 @@ function detectGenreShift(
   if (!topAxis) return null;
   const byWeek = groupDriftByWeek(radar.driftSeries);
   const weeks = Array.from(byWeek.keys()).sort();
-  if (weeks.length < 2) return null;
-  const prev = byWeek.get(weeks[weeks.length - 2]) ?? new Map<string, number>();
-  const now = byWeek.get(weeks[weeks.length - 1]) ?? new Map<string, number>();
+  const [prevWeek, nowWeek] = weeks.slice(-2);
+  if (prevWeek === undefined || nowWeek === undefined) return null;
+  const prev = byWeek.get(prevWeek) ?? new Map<string, number>();
+  const now = byWeek.get(nowWeek) ?? new Map<string, number>();
   const prevScore = prev.get(topAxis.axis) ?? 0;
   const nowScore = now.get(topAxis.axis) ?? topAxis.meanScore;
   if (prevScore === 0) return null;
@@ -155,12 +156,13 @@ function detectEngagementPeak(
   engagement: CommunityEngagementResponseDto,
 ): KeyInsightDto | null {
   const series = engagement.weeklyActiveUsers;
-  if (series.length === 0) return null;
+  const [first] = series;
+  const latest = series[series.length - 1];
+  if (first === undefined || latest === undefined) return null;
   const max = series.reduce(
     (m, p) => (p.activeUsers > m.activeUsers ? p : m),
-    series[0],
+    first,
   );
-  const latest = series[series.length - 1];
   if (latest.activeUsers < max.activeUsers) return null;
   return {
     kind: 'engagement-peak',

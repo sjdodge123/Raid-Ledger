@@ -28,6 +28,7 @@ import type {
   ChannelType,
   ChannelBindingConfig,
 } from '@raid-ledger/contract';
+import { defined } from '../../common/defined.helpers';
 
 export interface BindingRecord {
   id: string;
@@ -142,7 +143,7 @@ export class ChannelBindingsService {
           .where(eq(schema.channelBindings.id, existing.id))
           .returning(),
       );
-      return result;
+      return defined(result, 'updated channel binding');
     }
     const [result] = await mappingConflicts(() =>
       this.db
@@ -158,7 +159,7 @@ export class ChannelBindingsService {
         })
         .returning(),
     );
-    return result;
+    return defined(result, 'inserted channel binding');
   }
 
   /**

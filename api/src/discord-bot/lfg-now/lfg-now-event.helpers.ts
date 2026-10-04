@@ -12,6 +12,7 @@
  *     and the per-event row an admin already sees is Q2's "reason in the event",
  *   the title suffix.
  */
+import { defined } from '../../common/defined.helpers';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -99,5 +100,5 @@ export async function createLfgNowEventRow(
     .insert(schema.events)
     .values(buildLfgNowEventValues(title, gameId, creatorId, now))
     .returning({ id: schema.events.id });
-  return event.id;
+  return defined(event, 'inserted LFG-now event').id;
 }

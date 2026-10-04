@@ -8,6 +8,7 @@ import {
   INITIAL_CHECK_DELAY_MS,
   VersionCheckService,
 } from './version-check.service';
+import { at } from '../common/testing/narrow';
 
 type Ctor = ConstructorParameters<typeof VersionCheckService>;
 
@@ -51,7 +52,7 @@ describe('VersionCheckService — startup timer lifecycle (ROK-1527)', () => {
     const service = createService();
     const spy = jest.spyOn(global, 'setTimeout');
     service.onModuleInit();
-    const handle: NodeJS.Timeout = spy.mock.results[0].value;
+    const handle: NodeJS.Timeout = at(spy.mock.results, 0).value;
     spy.mockRestore();
     // Read before destroy: how Node reports a CLEARED timer varies by version.
     expect(handle.hasRef()).toBe(false);

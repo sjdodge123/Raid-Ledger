@@ -113,7 +113,7 @@ function loginButton(page: Page) {
 
 /** Open the link in a fresh, unauthenticated context; return the page + its redeem response. */
 async function openLinkInFreshContext(browser: Browser, target: string) {
-    const context = await browser.newContext({ storageState: undefined });
+    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
     try {
         const page = await context.newPage();
         const redeem = page.waitForResponse(isRedeem, { timeout: 15_000 });

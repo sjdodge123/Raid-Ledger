@@ -34,7 +34,7 @@ function setClipboard(clipboard: unknown): void {
 function stubExecCommand(returnValue: boolean): ReturnType<typeof vi.fn> {
     const fn = vi.fn(() => {
         // Capture the text that would have been copied at call time.
-        (fn as unknown as { copied?: string }).copied =
+        (fn as unknown as { copied?: string | undefined }).copied =
             document.querySelector('textarea')?.value;
         return returnValue;
     });

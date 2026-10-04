@@ -6,6 +6,7 @@ import { eq } from 'drizzle-orm';
 import { BadRequestException } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { defined } from '../../common/defined.helpers';
 import { findVetoes, findUserVeto } from './tiebreaker-query.helpers';
 import { loadVetoGameBadges, vetoBadgesFor } from './tiebreaker-badges.helpers';
 
@@ -76,7 +77,7 @@ export function findSurvivor(
 
   // Sort by veto count ascending (fewest vetoes = survivor)
   const sorted = [...vetoCounts.entries()].sort((a, b) => a[1] - b[1]);
-  return sorted[0][0];
+  return defined(sorted[0], 'veto survivor')[0];
 }
 
 /** Build veto status for the response. */

@@ -16,9 +16,8 @@ export async function fetchGameEventTypes(
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
     .limit(1);
-  if (gameRows.length === 0) throw new NotFoundException('Game not found');
-
   const game = gameRows[0];
+  if (game === undefined) throw new NotFoundException('Game not found');
   const types = await db
     .select()
     .from(schema.eventTypes)

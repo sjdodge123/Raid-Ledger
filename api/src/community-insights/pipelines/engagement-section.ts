@@ -5,6 +5,7 @@ import type {
   IntensityHistogramBucketDto,
   WeeklyActiveUsersPointDto,
 } from '@raid-ledger/contract';
+import { defined } from '../../common/defined.helpers';
 import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -62,7 +63,7 @@ async function computeHistogram(
   for (const r of rows) {
     const hrs = Number(r.totalHours);
     const idx = bucketIndex(hrs);
-    buckets[idx].userCount += 1;
+    defined(buckets[idx], 'histogram bucket').userCount += 1;
   }
   return buckets;
 }

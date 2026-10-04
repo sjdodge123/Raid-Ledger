@@ -37,8 +37,10 @@ export class AdHocParticipantService {
     member: VoiceMemberInfo,
   ): Promise<void> {
     const inserted = await this.upsertParticipant(eventId, member);
-    // ROK-1451 AC7: generic seam so LFG can OFFER to clear a matching intent.
-    // Signal only — nothing downstream may mutate the participant or the event.
+    // ROK-1451 AC7: generic seam for LFG. On a Quick Play session it is a
+    // signal only (LFG may OFFER to clear a matching intent); on the game's
+    // LFG-born session (ROK-1625) the joiner's own hand converts into it.
+    // Nothing downstream may mutate the participant or the event.
     //
     // ROK-1451 M5: announce a genuinely NEW participation only. A voice
     // re-join updates the existing row, and re-announcing it would make

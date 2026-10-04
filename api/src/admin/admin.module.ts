@@ -12,6 +12,7 @@ import { DISCORD_NOTIFICATION_QUEUE } from '../notifications/discord-notificatio
 import { DemoTestVoiceController } from './demo-test-voice.controller';
 import { DemoTestLfgController } from './demo-test-lfg.controller';
 import { DemoTestLfgNowVoiceController } from './demo-test-lfg-now-voice.controller';
+import { DemoTestQuickPlayVoiceController } from './demo-test-quick-play-voice.controller';
 import { DemoTestThreadMirrorController } from './demo-test-thread-mirror.controller';
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
@@ -26,6 +27,7 @@ import { DemoTestStandalonePollController } from './demo-test-standalone-poll.co
 import { DemoTestRecruitmentController } from './demo-test-recruitment.controller';
 import { DemoTestWeeklyDigestController } from './demo-test-weekly-digest.controller';
 import { DemoTestRenderDmEmbedController } from './demo-test-render-dm-embed.controller';
+import { DemoTestRenderPugInviteEmbedController } from './demo-test-render-pug-invite-embed.controller';
 import { DemoTestBackupController } from './demo-test-backup.controller';
 import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
@@ -106,6 +108,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestVoiceController,
     DemoTestLfgController,
     DemoTestLfgNowVoiceController,
+    DemoTestQuickPlayVoiceController,
     DemoTestThreadMirrorController,
     DemoTestScheduledEventsController,
     DemoTestSignupsController,
@@ -120,6 +123,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestRecruitmentController,
     DemoTestWeeklyDigestController,
     DemoTestRenderDmEmbedController,
+    DemoTestRenderPugInviteEmbedController,
     DemoTestBackupController,
     DemoTestSignInLinkController,
     AiChatTestController,

@@ -27,6 +27,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
 import {
@@ -82,16 +83,22 @@ export class DemoTestDeactivationController {
     // projects seed in the same millisecond — two members then share a name
     // and the moderation smoke's `.first()` row can be the OTHER project's
     // (already kicked) member. Reuse the snowflake: it carries a random tail.
-    const [user] = await this.db
-      .insert(schema.users)
-      .values({
-        discordId: snowflake,
-        username: `non-guild-${snowflake}`,
-        role: 'member',
-      })
-      .returning({ id: schema.users.id });
-    if (quietDms) await muteDiscordDms(this.db, user.id);
-    return { userId: user.id, discordId: snowflake, quietDms };
+    // TDB:1960: the user and its Discord-off prefs commit together, so a
+    // live-bot fan-out can never DM the member in between.
+    const userId = await this.db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(schema.users)
+        .values({
+          discordId: snowflake,
+          username: `non-guild-${snowflake}`,
+          role: 'member',
+        })
+        .returning({ id: schema.users.id });
+      const user = defined(inserted, 'non-guild user row');
+      if (quietDms) await muteDiscordDms(tx, user.id);
+      return user.id;
+    });
+    return { userId, discordId: snowflake, quietDms };
   }
 
   /**
@@ -166,7 +173,7 @@ export class DemoTestDeactivationController {
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (!u) throw new BadRequestException(`User ${userId} not found`);
-    const [{ count }] = await this.db
+    const [countRow] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.notifications)
       .where(
@@ -175,6 +182,7 @@ export class DemoTestDeactivationController {
           sql`(payload->>'deactivatedUserId')::int = ${userId}`,
         ),
       );
+    const { count } = defined(countRow, 'deactivation notification count');
     return {
       id: u.id,
       deactivatedAt: u.deactivatedAt ? u.deactivatedAt.toISOString() : null,

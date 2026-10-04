@@ -34,7 +34,7 @@ import * as schema from '../../drizzle/schema';
 import type { NotificationService } from '../../notifications/notification.service';
 import type { NotificationDedupService } from '../../notifications/notification-dedup.service';
 import { POLL_RALLY_COOLDOWN_SECONDS } from '../lineup-notification.constants';
-import type { LeadingSlot } from './scheduling-poll-expiry.helpers';
+import type { SlotWithYesCount } from './scheduling-poll-expiry.helpers';
 import type { NudgePoll } from './scheduling-poll-nudge.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -141,7 +141,8 @@ export async function countPollMembers(
     JOIN users u ON u.id = lmm.user_id
     WHERE lmm.match_id = ${matchId}
   `)) as unknown as Array<{ count: number }>;
-  return rows.length > 0 ? Number(rows[0].count) : 0;
+  const [row] = rows;
+  return row === undefined ? 0 : Number(row.count);
 }
 
 /** Unix seconds for a Discord `<t:…>` token. */
@@ -190,7 +191,7 @@ export function buildRallyCopy(
  * ROK-1635: the organiser may rally ANY time card, so the slot is named by the
  * client and must be proved to belong to this match here — a slot id from
  * another poll is a 404, never a DM. `voteCount` is the YES tally the DM's
- * copy reports, matching what `pickLeadingFutureSlot` puts in a `LeadingSlot`.
+ * copy reports, matching what `pickLeadingFutureSlot` puts in a `SlotWithYesCount`.
  *
  * @param db - Drizzle database handle.
  * @param matchId - Match the slot must belong to.
@@ -201,7 +202,7 @@ export async function findSlotInMatch(
   db: Db,
   matchId: number,
   slotId: number,
-): Promise<LeadingSlot | null> {
+): Promise<SlotWithYesCount | null> {
   // `proposed_time` is a `timestamptz` (TDB:1489). A raw `execute` hands it
   // back as text in the DB SESSION's zone, and a bare zone-less string is read
   // by `new Date()` as LOCAL time — either way off by an offset, so a passed
@@ -214,6 +215,7 @@ export async function findSlotInMatch(
            (
              SELECT count(*)::int
              FROM community_lineup_schedule_votes v
+             -- Literal kept on purpose; TS twin: isYesStance (scheduling-stance.helpers).
              WHERE v.slot_id = s.id AND v.stance = 'yes'
            ) AS "voteCount"
     FROM community_lineup_schedule_slots s
@@ -223,8 +225,8 @@ export async function findSlotInMatch(
     proposedTime: string;
     voteCount: number;
   }>;
-  if (rows.length === 0) return null;
   const [row] = rows;
+  if (row === undefined) return null;
   return {
     slotId: Number(row.slotId),
     proposedTime: new Date(row.proposedTime).toISOString(),
@@ -295,7 +297,7 @@ function rallyPayload(
 export async function sendRallyDm(
   deps: RallyDeps,
   poll: NudgePoll,
-  target: LeadingSlot,
+  target: SlotWithYesCount,
   memberCount: number,
   userId: number,
 ): Promise<RallyDmResult> {

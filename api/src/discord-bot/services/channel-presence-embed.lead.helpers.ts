@@ -94,6 +94,7 @@ function leadDescription(room: ResolvedRoom): string | null {
   if (
     room.groups.length === 1 &&
     room.undetectedNames.length === 0 &&
+    only !== undefined &&
     only.gameId !== null
   ) {
     return 'Everyone here is on the same game.';

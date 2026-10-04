@@ -53,14 +53,14 @@ export const communityLineups = pgTable(
     })
       .default('public')
       .notNull(),
-    targetDate: timestamp('target_date'),
+    targetDate: timestamp('target_date', { withTimezone: true }),
     decidedGameId: integer('decided_game_id').references(() => games.id),
     linkedEventId: integer('linked_event_id').references(() => events.id),
     createdBy: integer('created_by')
       .references(() => users.id)
       .notNull(),
-    votingDeadline: timestamp('voting_deadline'),
-    phaseDeadline: timestamp('phase_deadline'),
+    votingDeadline: timestamp('voting_deadline', { withTimezone: true }),
+    phaseDeadline: timestamp('phase_deadline', { withTimezone: true }),
     /**
      * ROK-1253: Set when an operator reverts a lineup backwards (voting→building
      * or decided→voting). Auto-advance evaluation early-returns while the stamp
@@ -68,14 +68,16 @@ export const communityLineups = pgTable(
      * immediately re-advance through quorum. Cleared lazily on next mutation
      * once TTL elapses, or eagerly on any forward transition.
      */
-    autoAdvancePausedAt: timestamp('auto_advance_paused_at'),
+    autoAdvancePausedAt: timestamp('auto_advance_paused_at', {
+      withTimezone: true,
+    }),
     /**
      * ROK-1253: Set when quorum first goes ready; the value is the wall-clock
      * time the BullMQ grace-advance job will re-evaluate quorum and either flip
      * the row to the next phase or null this column. Always paired with a
      * `lineup-grace-<id>` job in the lineup-phase queue.
      */
-    pendingAdvanceAt: timestamp('pending_advance_at'),
+    pendingAdvanceAt: timestamp('pending_advance_at', { withTimezone: true }),
     phaseDurationOverride: jsonb('phase_duration_override').$type<{
       building?: number;
       voting?: number;
@@ -163,7 +165,9 @@ export const communityLineups = pgTable(
      * denominator itself moves when the nominator count grows. Without this
      * latch such a lineup would advance out of building on its first mutation.
      */
-    nominationTargetBelowSeenAt: timestamp('nomination_target_below_seen_at'),
+    nominationTargetBelowSeenAt: timestamp('nomination_target_below_seen_at', {
+      withTimezone: true,
+    }),
     /**
      * ROK-1444 (sticky disarm — THE revert trap guard). Stamped when an operator
      * reverts `voting -> building`, and never cleared automatically.
@@ -180,7 +184,9 @@ export const communityLineups = pgTable(
      * Consequence, by design: a lineup reverted out of voting stays manually
      * controlled for the rest of its life. Forward transitions do NOT clear it.
      */
-    nominationTargetDisarmedAt: timestamp('nomination_target_disarmed_at'),
+    nominationTargetDisarmedAt: timestamp('nomination_target_disarmed_at', {
+      withTimezone: true,
+    }),
     // ==========================================================================
     // ROK-1374 tie hold (D2). A completed vote that produced no decidable
     // winner parks the lineup HERE rather than in `community_lineup_tiebreakers`
@@ -195,7 +201,7 @@ export const communityLineups = pgTable(
      * `openTieHold`, so re-entry refreshes the payload columns below but never
      * re-stamps this one. Null = no tie hold.
      */
-    tieDetectedAt: timestamp('tie_detected_at'),
+    tieDetectedAt: timestamp('tie_detected_at', { withTimezone: true }),
     /** Tied game ids at detection; refreshed on re-entry. */
     tieGameIds: jsonb('tie_game_ids').$type<number[] | null>(),
     /** The vote count the tied games share. */
@@ -205,9 +211,9 @@ export const communityLineups = pgTable(
      * back to `tieDetectedAt + 7 days` when the lineup has no phase deadline.
      * Set once with `tieDetectedAt` and never moved by re-entry.
      */
-    tieExpiresAt: timestamp('tie_expires_at'),
+    tieExpiresAt: timestamp('tie_expires_at', { withTimezone: true }),
     /** Stamped by the expiry sweep. Expiry archives; it never picks a winner. */
-    tieExpiredAt: timestamp('tie_expired_at'),
+    tieExpiredAt: timestamp('tie_expired_at', { withTimezone: true }),
     /**
      * The GAME the creator/operator picked off the readiness card (the issue's
      * `[ Pick Deep Rock ] [ Pick Valheim ]`). Reversible while the grace claim
@@ -215,7 +221,7 @@ export const communityLineups = pgTable(
      */
     tiePickGameId: integer('tie_pick_game_id').references(() => games.id),
     /** D5: when the pick was made; the grace window runs from here. */
-    tiePickAt: timestamp('tie_pick_at'),
+    tiePickAt: timestamp('tie_pick_at', { withTimezone: true }),
     /** D5: who picked — creator or operator/admin. Audit trail + UI copy. */
     tiePickBy: integer('tie_pick_by').references(() => users.id, {
       onDelete: 'set null',

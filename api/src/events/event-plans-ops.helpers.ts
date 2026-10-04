@@ -30,6 +30,7 @@ import {
   regenerateLabels,
 } from './event-plans-crud.helpers';
 import { handleRepoll, type RepollDeps } from './event-plans-time.helpers';
+import { defined } from '../common/defined.helpers';
 
 const logger = new Logger('EventPlansOps');
 type PlanRow = typeof schema.eventPlans.$inferSelect;
@@ -110,7 +111,7 @@ async function persistRestart(
     .where(eq(schema.eventPlans.id, plan.id))
     .returning();
   await deps.schedulePollClose(plan.id, plan.pollDurationHours * 3600 * 1000);
-  return updated;
+  return defined(updated, 'restarted event plan row');
 }
 
 /** Restarts a plan by posting a new poll and updating DB state. */

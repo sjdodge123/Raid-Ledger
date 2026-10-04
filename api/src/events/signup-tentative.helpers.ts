@@ -180,7 +180,7 @@ async function tryRearrangeVictim(
 
   for (const altRole of alternatives) {
     const filled = currentAssignments.filter((a) => a.role === altRole).length;
-    if (filled >= roleCapacity[altRole]) continue;
+    if (filled >= (roleCapacity[altRole] ?? Infinity)) continue;
 
     const newPos = findPos(altRole);
     await tx

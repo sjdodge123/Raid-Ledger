@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { defined } from '../common/defined.helpers';
 import { getEventsDefinitions } from './demo-data.constants';
 import * as coreH from './demo-data-install-core.helpers';
 import * as signupsH from './demo-data-install-signups.helpers';
@@ -76,7 +77,7 @@ async function installEventsAndCharacters(
   const gamesBySlug = new Map(ctx.allGames.map((g) => [g.slug, g]));
   const ev = await coreH.installEvents(
     ctx.batchInsertReturning,
-    ctx.allUsers[0].id,
+    defined(ctx.allUsers[0], 'seed admin user').id,
     ctx.allGames,
     ctx.gen.events,
   );

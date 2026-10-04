@@ -16,6 +16,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { refreshDedupAudit } from '../../scripts/run-migrations-with-sentry';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 describe('ROK-1281 boot-time refreshDedupAudit', () => {
   let testApp: TestApp;
@@ -56,7 +57,7 @@ describe('ROK-1281 boot-time refreshDedupAudit', () => {
         match_type, match_key, canonical_game_id, dup_game_ids,
         group_size, downstream_counts, unique_conflicts, snapshot_at
       ) VALUES (
-        'name', 'stale', ${games[0].id}, ARRAY[${games[1].id}]::int[],
+        'name', 'stale', ${at(games, 0).id}, ARRAY[${at(games, 1).id}]::int[],
         2, '{}'::jsonb, '{}'::jsonb, NOW()
       )
     `);
@@ -65,7 +66,7 @@ describe('ROK-1281 boot-time refreshDedupAudit', () => {
     const before = (await testApp.db.execute(
       sql`SELECT COUNT(*)::int AS c FROM games_dedup_audit`,
     )) as unknown as Array<{ c: number }>;
-    expect(before[0].c).toBe(1);
+    expect(before[0]?.c).toBe(1);
 
     const inserted = await refreshDedupAudit(client);
 
@@ -91,10 +92,13 @@ describe('ROK-1281 boot-time refreshDedupAudit', () => {
   it('truncates the audit when no dups exist', async () => {
     // Seed a stale audit row pointing at non-existent games (ON DELETE
     // shouldn't fire here — we just want a row to verify TRUNCATE).
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name: 'Test Solo', slug: 'test-solo' })
-      .returning({ id: schema.games.id });
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Test Solo', slug: 'test-solo' })
+        .returning({ id: schema.games.id }),
+      'game',
+    );
     await testApp.db.execute(sql`
       INSERT INTO games_dedup_audit (
         match_type, match_key, canonical_game_id, dup_game_ids,
@@ -111,7 +115,7 @@ describe('ROK-1281 boot-time refreshDedupAudit', () => {
     const after = (await testApp.db.execute(
       sql`SELECT COUNT(*)::int AS c FROM games_dedup_audit`,
     )) as unknown as Array<{ c: number }>;
-    expect(after[0].c).toBe(0);
+    expect(after[0]?.c).toBe(0);
   });
 
   it('is idempotent across repeated calls', async () => {
@@ -128,6 +132,6 @@ describe('ROK-1281 boot-time refreshDedupAudit', () => {
     const rows = (await testApp.db.execute(
       sql`SELECT COUNT(*)::int AS c FROM games_dedup_audit`,
     )) as unknown as Array<{ c: number }>;
-    expect(rows[0].c).toBe(1);
+    expect(rows[0]?.c).toBe(1);
   });
 });

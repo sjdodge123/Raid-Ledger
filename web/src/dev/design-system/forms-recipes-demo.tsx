@@ -9,6 +9,9 @@
  *   destructive-soft, left-aligned by widening the label span (as
  *   `components/admin/UserManagementRow.tsx::ActionMenuList` does). Shown open
  *   and static here; the real one is a popover.
+ * - One save at a time across rows — the saving row's Save is `loading`, a
+ *   sibling row's Save is native `disabled` until it settles (as
+ *   `components/admin/ChannelBindingList.tsx` does). Shown frozen mid-save.
  *
  * Check both families with the side-by-side toggle: the segmented ON state is
  * `bg-overlay`, and the destructive-soft rows are `danger` tints — tokens only.
@@ -68,12 +71,31 @@ function RowMenuDemo(): JSX.Element {
     );
 }
 
-/** The segmented "All" filter and the row-menu recipe, for the Forms section grid. */
+const LOCK_ROWS = [{ name: '#lobby-a', saving: true }, { name: '#lobby-b', saving: false }];
+
+function CrossRowSaveLockDemo(): JSX.Element {
+    return (
+        <StateFrame label="Button — one save at a time across rows" note="#lobby-a's save is in flight: its Save is loading (aria-busy, stays focusable); #lobby-b's Save is native disabled until it settles. Never both on one button.">
+            <div role="group" aria-label="Rows sharing one save" className="w-full flex flex-col gap-2">
+                {LOCK_ROWS.map((row) => (
+                    <div key={row.name} className="flex items-center justify-between gap-2 bg-panel border border-edge rounded-lg p-2">
+                        <span className="text-sm text-foreground">{row.name}</span>
+                        <Button size="sm" loading={row.saving} loadingLabel="Saving..." disabled={!row.saving}
+                            aria-label={`Save ${row.name}`}>Save</Button>
+                    </div>
+                ))}
+            </div>
+        </StateFrame>
+    );
+}
+
+/** The segmented "All" filter, the row-menu and the cross-row save-lock recipes, for the Forms section grid. */
 export function RecipeStates(): JSX.Element {
     return (
         <>
             <SegmentedAllFilterDemo />
             <RowMenuDemo />
+            <CrossRowSaveLockDemo />
         </>
     );
 }

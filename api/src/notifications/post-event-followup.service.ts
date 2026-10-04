@@ -33,7 +33,9 @@ export class PostEventFollowupService {
     private readonly clientService: DiscordBotClientService,
     private readonly cronJobService: CronJobService,
     private readonly promptService: PostEventFollowupPromptService,
-    @Optional() private readonly eventCache: ActiveEventCacheService | null,
+    @Optional()
+    @Inject(ActiveEventCacheService)
+    private readonly eventCache: ActiveEventCacheService | null,
   ) {}
 
   /** Cron: DM organizers a follow-up prompt ~15 min after a scheduled event ends. */

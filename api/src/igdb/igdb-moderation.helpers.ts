@@ -56,17 +56,18 @@ export async function toggleGameVisibility(
   action: string,
 ): Promise<ModerationResult> {
   const existing = await findGameById(db, id);
-  if (existing.length === 0) {
+  const game = existing[0];
+  if (game === undefined) {
     return { success: false, message: 'Game not found', name: '' };
   }
 
   await db.update(schema.games).set({ hidden }).where(eq(schema.games.id, id));
-  logger.log(`Game "${existing[0].name}" (id=${id}) ${action} via admin UI`);
+  logger.log(`Game "${game.name}" (id=${id}) ${action} via admin UI`);
 
   const msg = hidden
-    ? `Game "${existing[0].name}" hidden from users.`
-    : `Game "${existing[0].name}" is now visible to users.`;
-  return { success: true, message: msg, name: existing[0].name };
+    ? `Game "${game.name}" hidden from users.`
+    : `Game "${game.name}" is now visible to users.`;
+  return { success: true, message: msg, name: game.name };
 }
 
 /**
@@ -80,7 +81,8 @@ export async function banGame(
   id: number,
 ): Promise<ModerationResult> {
   const existing = await findGameById(db, id);
-  if (existing.length === 0) {
+  const game = existing[0];
+  if (game === undefined) {
     return { success: false, message: 'Game not found', name: '' };
   }
 
@@ -89,11 +91,11 @@ export async function banGame(
     .set({ banned: true, hidden: true })
     .where(eq(schema.games.id, id));
 
-  logger.log(`Game "${existing[0].name}" (id=${id}) banned via admin UI`);
+  logger.log(`Game "${game.name}" (id=${id}) banned via admin UI`);
   return {
     success: true,
-    message: `Game "${existing[0].name}" has been banned.`,
-    name: existing[0].name,
+    message: `Game "${game.name}" has been banned.`,
+    name: game.name,
   };
 }
 
@@ -108,7 +110,8 @@ export async function unbanGame(
   id: number,
 ): Promise<ModerationResult & { igdbId: number | null }> {
   const existing = await findGameByIdWithIgdb(db, id);
-  if (existing.length === 0) {
+  const game = existing[0];
+  if (game === undefined) {
     return {
       success: false,
       message: 'Game not found',
@@ -122,7 +125,6 @@ export async function unbanGame(
     .set({ banned: false, hidden: false })
     .where(eq(schema.games.id, id));
 
-  const game = existing[0];
   logger.log(`Game "${game.name}" (id=${id}) unbanned via admin UI`);
   return {
     success: true,

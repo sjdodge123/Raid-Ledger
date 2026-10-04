@@ -79,11 +79,12 @@ export function parseRunningLateButton(
   const parts = customId.split(':');
   if (parts.length < 2 || parts.length > 3) return null;
   const [action, eventIdStr, minutesStr] = parts;
+  if (action === undefined || eventIdStr === undefined) return null;
   if (!isRunningLateAction(action)) return null;
   const eventId = parseInt(eventIdStr, 10);
   if (isNaN(eventId)) return null;
   if (action === RUNNING_LATE_BUTTON_IDS.DELAY) {
-    if (parts.length !== 3) return null;
+    if (parts.length !== 3 || minutesStr === undefined) return null;
     const minutes = parseInt(minutesStr, 10);
     if (isNaN(minutes)) return null;
     return { action, eventId, minutes };

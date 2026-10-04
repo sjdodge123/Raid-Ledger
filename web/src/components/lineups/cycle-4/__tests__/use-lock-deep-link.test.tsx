@@ -56,7 +56,12 @@ function setup(
     );
     const hook = renderHook(
         ({ u, loading: authLoading }: Props) => {
-            useLockDeepLink({ poll: p, lock: { requestLock }, user: u, authLoading });
+            useLockDeepLink({
+                poll: p,
+                lock: { requestLock },
+                user: u,
+                ...(authLoading === undefined ? {} : { authLoading }),
+            });
             loc.search = useLocation().search;
         },
         { wrapper, initialProps: { u: user, loading } as Props },

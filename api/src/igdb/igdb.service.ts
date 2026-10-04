@@ -317,11 +317,11 @@ export class IgdbService {
   }
   private async refreshSingleGame(igdbId: number) {
     try {
-      const g = await this.queryIgdb(
+      const [first] = await this.queryIgdb(
         `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = ${igdbId}; limit 1;`,
       );
-      if (g.length > 0)
-        await upsertSingleGameRow(this.db, mapApiGameToDbRow(g[0]), (gameId) =>
+      if (first !== undefined)
+        await upsertSingleGameRow(this.db, mapApiGameToDbRow(first), (gameId) =>
           this.enqueueTasteRecompute(gameId),
         );
     } catch {

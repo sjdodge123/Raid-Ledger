@@ -20,6 +20,7 @@ export async function handleSelectMenuInteraction(
   if (parts.length < 2 || parts.length > 4) return;
 
   const [action, eventIdStr] = parts;
+  if (action === undefined || eventIdStr === undefined) return;
   const eventId = parseInt(eventIdStr, 10);
   if (isNaN(eventId)) return;
 

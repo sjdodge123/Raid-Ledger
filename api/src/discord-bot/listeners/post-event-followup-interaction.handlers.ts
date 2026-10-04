@@ -51,6 +51,7 @@ export function parsePostEventFollowupButton(
     action !== POST_EVENT_FOLLOWUP_BUTTON_IDS.POLL
   )
     return null;
+  if (idStr === undefined) return null;
   const endedEventId = parseInt(idStr, 10);
   if (isNaN(endedEventId)) return null;
   return { action, endedEventId };

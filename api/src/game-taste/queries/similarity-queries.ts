@@ -4,6 +4,7 @@ import type {
   SimilarGameDto,
   SimilarGamesRequestDto,
 } from '@raid-ledger/contract';
+import { defined } from '../../common/defined.helpers';
 import * as schema from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -77,8 +78,8 @@ async function loadPlayerVector(
     .from(schema.playerTasteVectors)
     .where(sql`${schema.playerTasteVectors.userId} = ${userId}`)
     .limit(1);
-  if (rows.length === 0) return null;
-  return rows[0].vector;
+  const [row] = rows;
+  return row === undefined ? null : row.vector;
 }
 
 async function loadPlayerVectorCentroid(
@@ -103,19 +104,22 @@ async function loadGameVector(
     .from(schema.gameTasteVectors)
     .where(sql`${schema.gameTasteVectors.gameId} = ${gameId}`)
     .limit(1);
-  if (rows.length === 0) return null;
-  return rows[0].vector;
+  const [row] = rows;
+  return row === undefined ? null : row.vector;
 }
 
 export function elementwiseMean(vectors: number[][]): number[] {
-  const width = vectors[0].length;
-  const out = new Array<number>(width).fill(0);
-  for (const v of vectors) {
-    for (let i = 0; i < width; i += 1) out[i] += v[i];
-  }
+  const width = defined(vectors[0], 'first vector').length;
   const n = vectors.length;
-  for (let i = 0; i < width; i += 1) out[i] /= n;
-  return out;
+  return Array.from({ length: width }, (_, i) => {
+    let sum = 0;
+    for (const v of vectors) {
+      const x = v[i];
+      // A shorter vector's missing axis sums to NaN, exactly as before.
+      sum += x === undefined ? Number.NaN : x;
+    }
+    return sum / n;
+  });
 }
 
 export async function executeSimilarityQuery(

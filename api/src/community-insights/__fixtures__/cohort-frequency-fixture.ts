@@ -6,6 +6,7 @@
  * write it, and hand-seeding keeps the cohort sizes/resolutions explicit.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { defined } from '../../common/defined.helpers';
 import * as schema from '../../drizzle/schema';
 import type { CohortMemoryResolution } from '../../drizzle/schema/community-lineup-cohort-memory';
 
@@ -55,7 +56,7 @@ export async function seedFrequencyLineup(
       publicSlug: slug,
     })
     .returning();
-  return lineup.id;
+  return defined(lineup, 'inserted lineup').id;
 }
 
 /**

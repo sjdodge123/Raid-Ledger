@@ -31,11 +31,7 @@ import {
   findMatchups,
   countDistinctMatchupVoters,
 } from './tiebreaker-query.helpers';
-import {
-  buildBracket,
-  advanceBracket,
-  getCurrentRound,
-} from './tiebreaker-bracket.helpers';
+import { advanceBracket, getCurrentRound } from './tiebreaker-bracket.helpers';
 import { countDistinctVoters } from '../lineups-query.helpers';
 import { decideLineupFromTiebreaker } from './tiebreaker-decide.helpers';
 import {
@@ -54,14 +50,14 @@ import {
 } from './tie-pick.helpers';
 import type { TieHoldState } from './tie-hold.helpers';
 import { findLineupById } from '../lineups-query.helpers';
+import { defined } from '../../common/defined.helpers';
 import { SettingsService } from '../../settings/settings.service';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
 import {
   assertNoActiveTiebreaker,
   clearActiveTiebreaker,
+  createActiveTiebreaker,
   findAndValidateLineup,
-  insertTiebreaker,
-  linkTiebreakerToLineup,
   resolveTiebreaker,
   updateTiebreakerStatus,
 } from './tiebreaker-lifecycle.helpers';
@@ -119,20 +115,12 @@ export class TiebreakerService {
       throw new BadRequestException('No ties detected in this lineup');
     }
 
-    const [tiebreaker] = await insertTiebreaker(
-      this.db,
-      lineupId,
-      dto,
-      ties.tiedGameIds,
-      ties.voteCount,
+    // TDB:920: insert + link + bracket commit together or not at all. Logging
+    // and the open dispatch stay AFTER the commit, so a rolled-back start
+    // never announces a tiebreaker that does not exist.
+    const tiebreaker = await this.db.transaction((tx) =>
+      createActiveTiebreaker(tx, lineupId, dto, ties),
     );
-    await linkTiebreakerToLineup(this.db, lineupId, tiebreaker.id);
-
-    if (dto.mode === 'bracket') {
-      await buildBracket(this.db, tiebreaker.id, ties.tiedGameIds);
-    }
-
-    await updateTiebreakerStatus(this.db, tiebreaker.id, 'active');
     this.logger.log(
       `Tiebreaker ${tiebreaker.id} started (${dto.mode}) for lineup ${lineupId}`,
     );
@@ -143,7 +131,7 @@ export class TiebreakerService {
       dto.mode,
       tiebreaker.roundDeadline,
     );
-    return buildTiebreakerDetail(this.db, { ...tiebreaker, status: 'active' });
+    return buildTiebreakerDetail(this.db, tiebreaker);
   }
 
   private async dispatchOpen(
@@ -345,7 +333,7 @@ export class TiebreakerService {
       // If bracket isn't done, pick highest-seeded remaining
       const matchups = await findMatchups(this.db, tb.id);
       const final = matchups.find((m) => m.winnerGameId);
-      return final?.winnerGameId ?? tiedGameIds[0];
+      return final?.winnerGameId ?? defined(tiedGameIds[0], 'top tied game');
     }
 
     // Veto mode: reveal and find survivor

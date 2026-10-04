@@ -33,6 +33,7 @@ import {
   hasRecentlyProcessed,
   markRecentlyProcessed,
 } from './event-link.dedup';
+import { defined } from '../../common/defined.helpers';
 
 const MAX_UNFURLS_PER_MESSAGE = 3;
 
@@ -296,7 +297,7 @@ function extractUniqueMatches<T>(
   const results: T[] = [];
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(content)) !== null) {
-    const val = transform(match[1]);
+    const val = transform(defined(match[1], 'link capture group'));
     if (!results.includes(val)) results.push(val);
     if (results.length >= MAX_UNFURLS_PER_MESSAGE) break;
   }

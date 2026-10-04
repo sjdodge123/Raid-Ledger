@@ -7,6 +7,7 @@
  * `LFM_REACHED` only: `GROUP_CHANGED` is every later shape change and DMing
  * on it would spam a group as it churns.
  */
+import { defined } from '../common/defined.helpers';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as Sentry from '@sentry/nestjs';
@@ -318,7 +319,9 @@ export class LfgAffinityDmService {
         this.notificationService.create({ userId, ...body }),
       ),
     );
-    const failed = userIds.filter((_, i) => results[i].status === 'rejected');
+    const failed = userIds.filter(
+      (_, i) => defined(results[i], 'invite result').status === 'rejected',
+    );
     this.logger.log(
       `LFG invites for game ${payload.gameId}: ${results.length - failed.length} sent, ${failed.length} failed`,
     );

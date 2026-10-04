@@ -14,6 +14,7 @@ import type {
   TemplateResponseDto,
   TemplateListResponseDto,
 } from '@raid-ledger/contract';
+import { defined } from '../common/defined.helpers';
 
 @Injectable()
 export class TemplatesService {
@@ -28,7 +29,7 @@ export class TemplatesService {
     userId: number,
     dto: CreateTemplateDto,
   ): Promise<TemplateResponseDto> {
-    const [template] = await this.db
+    const [inserted] = await this.db
       .insert(schema.eventTemplates)
       .values({
         userId,
@@ -36,6 +37,7 @@ export class TemplatesService {
         config: dto.config,
       })
       .returning();
+    const template = defined(inserted, 'inserted template row');
 
     this.logger.log(`Template created: ${template.id} by user ${userId}`);
     return this.mapToResponse(template);

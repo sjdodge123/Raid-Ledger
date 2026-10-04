@@ -152,7 +152,7 @@ describe('ItadPriceService.getOverviewBatch', () => {
 
       const result = await service.getOverviewBatch(['itad-a']);
 
-      expect(result[0].id).toBe('itad-a');
+      expect(result[0]?.id).toBe('itad-a');
     });
   });
 
@@ -266,7 +266,7 @@ describe('ItadPriceService.getOverviewBatch', () => {
       const result = await service.getOverviewBatch(['itad-a']);
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('itad-a');
+      expect(result[0]?.id).toBe('itad-a');
     });
 
     it('handles a single ID correctly when not cached', async () => {
@@ -277,7 +277,7 @@ describe('ItadPriceService.getOverviewBatch', () => {
       const result = await service.getOverviewBatch(['itad-a']);
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('itad-a');
+      expect(result[0]?.id).toBe('itad-a');
     });
   });
 });

@@ -23,7 +23,7 @@ The reviewer has requested changes on this story. Address ALL of the following f
 ### Workflow
 1. You are already on branch `rok-<num>-<short-name>` in your worktree
 2. Make changes to address ALL feedback items
-3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json`
+3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json`
 4. Commit with message: `fix: <description> (ROK-XXX)`
 5. **STOP HERE — do NOT push, create PRs, or switch branches.**
 6. Message the lead with: branch name, commit SHA, files changed, what was done.

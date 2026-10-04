@@ -47,6 +47,8 @@
 #   ./scripts/validate-ci.sh --with-e2e  # Force Playwright + Discord smoke
 #                                        # even if no triggering files changed
 #                                        # (e.g. paranoid pre-push pass).
+#                                        # The only flag that overrides an
+#                                        # ambient E2E_SCOPE=none.
 #   ./scripts/validate-ci.sh --only-e2e  # Skip build/typecheck/lint/tests and
 #                                        # run only the diff-gated e2e steps.
 #                                        # Use in post-deploy gates where the
@@ -75,6 +77,9 @@
 #                                        # (--static, --only-unit --no-coverage,
 #                                        # --only-integration) with one run
 #                                        # whose summary lists every step.
+#                                        # E2E_SCOPE=none skips Playwright
+#                                        # here too; only an explicit
+#                                        # --with-e2e overrides it.
 #                                        # Example:
 #                                        #   BASE_URL=http://rl-env-<slug>-allinone \
 #                                        #     ./scripts/validate-ci.sh --fleet --with-e2e
@@ -107,6 +112,10 @@
 #   * Either step SKIPS with a clear message if scope is empty or env is down.
 #     "Env down" means you skipped the deploy; re-run after deploy_dev.sh if
 #     you need that coverage.
+#   * A Playwright FAIL does not stop the gate on the spot: it is recorded,
+#     the Discord smoke step still runs and reports its row, and the gate then
+#     exits 1. This holds wherever the e2e steps run: the default/--full
+#     gate, --fleet and --only-e2e.
 # =============================================================================
 
 set -euo pipefail
@@ -174,6 +183,14 @@ discord_smoke_relevant=false
 ci_mode=false
 # e2e_mode: auto (default — diff + env gated) | off (--no-e2e) | on (--with-e2e)
 e2e_mode="auto"
+# e2e_explicit: true ONLY when --with-e2e was passed. --fleet also sets
+# e2e_mode=on, but that is implied, so it must not override E2E_SCOPE=none.
+e2e_explicit=false
+# RUN_STEP_DEFER_FAIL: set around the Playwright step only. Its FAIL is recorded
+# and the run continues so the Discord smoke row still reports; the gate then
+# exits 1 via _exit_if_deferred_fail. Every other step stays fail-fast.
+RUN_STEP_DEFER_FAIL=0
+GATE_DEFERRED_FAIL=0
 # ROK-1565 — the Playwright tier's SIZE, independent of whether it runs at all.
 # Set from the environment (rl_validate_ci forwards E2E_SCOPE); resolved once by
 # _prepare_playwright_scope into these two globals.
@@ -353,6 +370,10 @@ print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_co
   else
     echo -e "${RED}$name: FAIL${NC}"
     record_result "$name" "FAIL"
+    if [ "${RUN_STEP_DEFER_FAIL:-0}" = 1 ]; then
+      GATE_DEFERRED_FAIL=1
+      return 0
+    fi
     print_summary
     echo -e "${RED}Stopping on first failure.${NC}"
     exit 1
@@ -641,7 +662,14 @@ run_typecheck() {
   # code of the LAST command only. With this missing, api/ TS2741 errors
   # printed to stderr but the step's outer `$?` capture (run_step:195) saw
   # rc=0 from the web/ check and stamped "TypeScript (all): PASS".
-  if [ "$effective_scope" != "web" ]; then npx tsc --noEmit -p api/tsconfig.json || return $?; fi
+  if [ "$effective_scope" != "web" ]; then
+    npx tsc --noEmit -p api/tsconfig.json || return $?
+    # ROK-1161 phase 8 ratchet: api/tsconfig.json keeps noUncheckedIndexedAccess
+    # OFF for specs + test infra until the flip; this typechecks the spec dirs
+    # already clean with it ON (exclude = dirs still to convert). Mirrors the
+    # CI lint job's "Typecheck (api specs, noUncheckedIndexedAccess ratchet)".
+    npx tsc --noEmit -p api/tsconfig.spec-nuia.json || return $?
+  fi
   # web/tsconfig.json is a solution-style config (`files: []` + references):
   # `tsc -p` on it compiles an empty file list and exits 0 without following
   # the references, so the web half of this step checked nothing. Point at the
@@ -701,21 +729,23 @@ run_shell_parse_check() {
 # coverage is the Discord smoke suite, gated separately).
 # tools/test-bot is a standalone package, NOT an npm workspace, so the root
 # `npm install` (and the fleet runner image's baked install) does NOT cover it.
-# On a fresh fleet runner its node_modules are absent and anything that imports
-# from it dies at load (ERR_MODULE_NOT_FOUND: @discordjs/voice). NO-OP when
-# node_modules already exists (laptop runs and warm runners pay nothing).
-# Prefer `npm ci` (lockfile-exact); fall back to `npm install` on lockfile drift.
+# Without its node_modules anything that imports from it dies at load
+# (ERR_MODULE_NOT_FOUND: @discordjs/voice). scripts/ci/ensure-runner-deps.sh
+# with SUBDIR tools/test-bot installs it under the same lock as the root
+# install: on a laptop only when node_modules is missing; on a fleet runner
+# (where node_modules survives between claims) also whenever its
+# package-lock.json changed since the last install. Never wrap that call in a
+# second flock: the helper takes the shared lock itself. If `npm ci` fails
+# (lockfile drift) we fall back to `npm install` here, outside the helper, and
+# write no marker, so the next run retries until the lockfile is fixed.
 #
 # ROK-1466: shared by BOTH consumers — the Discord smoke step and the render-rule
 # self-test in run_tools_tests. The self-test shipped without it and would have
 # died at import on the first fresh runner.
 _ensure_test_bot_deps() {
-  [[ -d "$REPO_ROOT/tools/test-bot/node_modules" ]] && return 0
-  echo -e "${YELLOW}tools/test-bot/node_modules missing — installing companion-bot deps...${NC}"
-  if ! (cd "$REPO_ROOT/tools/test-bot" && npm ci); then
-    echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
-    (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
-  fi
+  bash "$REPO_ROOT/scripts/ci/ensure-runner-deps.sh" "$REPO_ROOT" tools/test-bot && return 0
+  echo -e "${YELLOW}npm ci failed (likely lockfile drift) — retrying with npm install...${NC}"
+  (cd "$REPO_ROOT/tools/test-bot" && npm install) || return 1
 }
 
 # ROK-1160: `scripts/*.spec.mjs` are plain node:test specs (the restore-drill
@@ -1030,6 +1060,12 @@ run_integration_tests() {
   # deploy_dev.sh already manages Redis on localhost:6379.
   _spawn_redis_sidecar_if_remote || return $?
 
+  # TDB:330 — every shard's output is teed here so a failed run can name the
+  # specs that never reported a result. Outside the worktree; removed on both
+  # return paths below (no trap: validate-ci keeps exactly one EXIT trap).
+  local tmp
+  tmp=$(mktemp "${TMPDIR:-/tmp}/rl-integration-out.XXXXXX") || return $?
+
   # ROK-1331 M5b — when validate-ci runs inside the fleet runner, surface
   # per-test progress via jest --verbose. Otherwise a 12-min silent
   # window during the integration suite looks like the run is hung
@@ -1078,7 +1114,8 @@ run_integration_tests() {
       if (cd api && NODE_OPTIONS="--max-old-space-size=4096" \
          JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
          npx jest --config ./jest.integration.config.js \
-                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}"); then
+                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}" \
+                  2>&1 | tee -a "$tmp"); then
         shard_results+=("PASS")
       else
         shard_results+=("FAIL")
@@ -1089,9 +1126,42 @@ run_integration_tests() {
     echo "=== Shard results: ${shard_results[*]} ==="
     local r
     for r in "${shard_results[@]}"; do
-      if [ "$r" = "FAIL" ]; then return 1; fi
+      if [ "$r" = "FAIL" ]; then
+        _report_unrun_integration_specs "$tmp"
+        rm -f "$tmp"
+        return 1
+      fi
     done
+    rm -f "$tmp"
   }
+}
+
+# TDB:330 — after a failed shard, list the integration specs that never printed
+# a PASS/FAIL line: killed mid-run (OOM), or in a shard the fast-fail break
+# skipped. Expected set mirrors jest.integration.config.js (rootDir src,
+# *.integration.spec.ts). ANSI is stripped first: jest colours the path itself.
+_report_unrun_integration_specs() {
+  local out_file="$1" expected ran missing n_missing
+  expected=$( (cd api && find src -name '*.integration.spec.ts') | LC_ALL=C sort -u)
+  ran=$(sed $'s/\033\\[[0-9;]*m//g' "$out_file" \
+    | grep -E '^[[:space:]]*(PASS|FAIL)[[:space:]]+src/[^ ]+\.integration\.spec\.ts' \
+    | sed -E 's/^[[:space:]]*(PASS|FAIL)[[:space:]]+//; s/[[:space:]].*$//' \
+    | LC_ALL=C sort -u || true)
+  missing=$(LC_ALL=C comm -23 <(printf '%s\n' "$expected") <(printf '%s\n' "$ran") | grep . || true)
+  n_missing=$(printf '%s\n' "$missing" | grep -c . || true)
+  if [ "$n_missing" -eq 0 ]; then
+    echo "all $(printf '%s\n' "$expected" | grep -c . || true) spec(s) reported a result"
+    return 0
+  fi
+  echo "${n_missing} spec(s) never ran or did not finish:"
+  if [ -z "$ran" ]; then
+    echo "  no spec reported a result: setup failure?"
+    return 0
+  fi
+  printf '%s\n' "$missing" | sed -n '1,40s/^/  /p'
+  if [ "$n_missing" -gt 40 ]; then
+    echo "  ... and $((n_missing - 40)) more"
+  fi
 }
 
 # A3 fleet-gaps (2026-09-03) — per-RUN sidecar bookkeeping.
@@ -1654,10 +1724,15 @@ _prepare_playwright_scope() {
 run_playwright_e2e() {
   _resolve_e2e_scope >/dev/null
   if [ "$E2E_SCOPE_RESOLVED" = "none" ]; then
-    if [ "$e2e_mode" = "on" ]; then
+    if [ "${e2e_explicit:-false}" = true ]; then
       # --with-e2e is an explicit request from the invoking human/agent;
       # E2E_SCOPE is ambient. The flag wins, loudly.
       echo -e "${YELLOW}E2E_SCOPE=none is overridden by --with-e2e — running the full Playwright suite${NC}"
+    elif [ "$e2e_mode" = "on" ]; then
+      # --fleet turns e2e on by implication only; an explicit none still wins.
+      echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright under --fleet (pass --with-e2e to force it; GitHub CI still runs the full suite)${NC}"
+      skip_step
+      return 0
     else
       echo -e "${YELLOW}E2E_SCOPE=none — skipping Playwright (GitHub CI still runs the full suite)${NC}"
       skip_step
@@ -1989,9 +2064,35 @@ run_default_gate() {
   # In --static mode they're skipped entirely (deferred to GitHub CI).
   if ! $static_mode; then
     _prepare_playwright_scope
+    RUN_STEP_DEFER_FAIL=1
     run_step "$PLAYWRIGHT_STEP_LABEL" run_playwright_e2e
+    RUN_STEP_DEFER_FAIL=0
     run_step "Discord smoke (companion bot)" run_discord_smoke
+    _exit_if_deferred_fail
   fi
+}
+
+# A Playwright FAIL is deferred (see RUN_STEP_DEFER_FAIL) so the Discord smoke
+# row still reports. Nothing may print "All checks passed!" after it.
+_exit_if_deferred_fail() {
+  if [ "${GATE_DEFERRED_FAIL:-0}" = 1 ]; then
+    print_summary
+    echo -e "${RED}Playwright FAILED (Discord smoke row: $(_recorded_result "Discord smoke (companion bot)")).${NC}"
+    exit 1
+  fi
+}
+
+# _recorded_result <step name>: the last result record_result stored for that
+# step, or "not reported" when the step never recorded one.
+_recorded_result() {
+  local i
+  for ((i = ${#CHECK_NAMES[@]} - 1; i >= 0; i--)); do
+    if [ "${CHECK_NAMES[$i]}" = "$1" ]; then
+      echo "${CHECK_RESULTS[$i]}"
+      return 0
+    fi
+  done
+  echo "not reported"
 }
 
 main() {
@@ -2004,8 +2105,8 @@ main() {
       --static) static_mode=true; shift ;;
       --scope=*) scope_mode="${1#--scope=}"; shift ;;
       --ci) ci_mode=true; shift ;;
-      --no-e2e) e2e_mode="off"; shift ;;
-      --with-e2e) e2e_mode="on"; shift ;;
+      --no-e2e) e2e_mode="off"; e2e_explicit=false; shift ;;
+      --with-e2e) e2e_mode="on"; e2e_explicit=true; shift ;;
       --only-e2e) _set_only_mode e2e; shift ;;
       --only-integration) _set_only_mode integration; shift ;;
       --only-unit) _set_only_mode unit; shift ;;
@@ -2128,6 +2229,7 @@ print(json.dumps({'duration_ms': int(sys.argv[1]), 'exit_code': int(sys.argv[2])
     *) run_default_gate ;;
   esac
 
+  _exit_if_deferred_fail
   print_summary
   echo -e "${GREEN}All checks passed!${NC}"
 }

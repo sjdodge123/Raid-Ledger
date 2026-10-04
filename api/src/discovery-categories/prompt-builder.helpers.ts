@@ -2,6 +2,7 @@ import type {
   LlmChatMessage,
   LlmChatOptions,
 } from '../ai/llm-provider.interface';
+import { defined } from '../common/defined.helpers';
 
 /**
  * Cap LLM response tokens. Each proposal is ~350-500 tokens under the
@@ -128,7 +129,9 @@ function describeCentroid(centroid: number[] | null): string {
   if (centroid.length !== AXIS_KEYS.length) {
     return `Community centroid: malformed (length ${centroid.length}, expected ${AXIS_KEYS.length}).`;
   }
-  const parts = AXIS_KEYS.map((axis, i) => `${axis}=${centroid[i].toFixed(2)}`);
+  const parts = AXIS_KEYS.map(
+    (axis, i) => `${axis}=${defined(centroid[i], 'centroid axis').toFixed(2)}`,
+  );
   return `Community centroid (7-axis taste average across active players): ${parts.join(', ')}`;
 }
 

@@ -12,6 +12,7 @@
  * An unranked horizon sorts last rather than throwing: a vocabulary this file
  * has never heard of must still render three pressable buttons.
  */
+import { defined } from '../../common/defined.helpers';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import {
   buildGoCustomId,
@@ -32,7 +33,7 @@ export interface UrgencyChoice {
 
 /** The horizon half of a choice value — `now:30` -> `now`. */
 export function horizonOf(value: string): string {
-  return value.split(':')[0];
+  return defined(value.split(':')[0], 'horizon');
 }
 
 /** Rank by horizon; unknown horizons fall to the end in declaration order. */

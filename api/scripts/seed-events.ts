@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { defined } from '../src/common/defined.helpers';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { DrizzleModule, DrizzleAsyncProvider } from '../src/drizzle/drizzle.module';
@@ -46,7 +47,7 @@ async function bootstrap() {
                     role: 'admin',
                 })
                 .returning();
-            seedUser = newUser;
+            seedUser = defined(newUser, 'inserted seed user');
             console.log('  ✅ Created seed user: SeedAdmin');
         } else {
             console.log('  ⏭️  Using existing user: SeedAdmin');

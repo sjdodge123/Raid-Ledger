@@ -14,7 +14,7 @@ import {
   ItadPriceSyncService,
   buildUpdateData,
 } from './itad-price-sync.service';
-import { ItadPriceService } from './itad-price.service';
+import { ItadOverviewFetchError, ItadPriceService } from './itad-price.service';
 import { ItadService } from './itad.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -22,6 +22,7 @@ import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { perfLog } from '../common/perf-logger';
 import type { ItadOverviewGameEntry } from './itad-price.types';
 import { ITAD_BACKGROUND_FETCH } from './itad.constants';
+import { at } from '../common/testing/narrow';
 
 describe('ItadPriceSyncService', () => {
   let service: ItadPriceSyncService;
@@ -106,7 +107,7 @@ describe('ItadPriceSyncService', () => {
       expect(mockDb.execute).toHaveBeenCalled();
 
       // Verify buildUpdateData produces the correct pricing shape
-      const data = buildUpdateData(entries[0], new Date());
+      const data = buildUpdateData(at(entries, 0), new Date());
       expect(data).toMatchObject({
         itadCurrentPrice: '9.99',
         itadCurrentCut: 75,
@@ -355,16 +356,16 @@ describe('ItadPriceSyncService', () => {
   });
 
   // ─── End-of-phase retries (ITAD 429 bursts) + cron slot ──────────────────
-  describe('end-of-phase retries', () => {
-    function seedGames(count: number): void {
-      const games = Array.from({ length: count }, (_, i) => ({
-        id: i + 1,
-        itadGameId: `game-uuid-${i + 1}`,
-      }));
-      mockDb.where.mockResolvedValueOnce(games);
-      mockDb.returning.mockResolvedValue([]);
-    }
+  function seedGames(count: number): void {
+    const games = Array.from({ length: count }, (_, i) => ({
+      id: i + 1,
+      itadGameId: `game-uuid-${i + 1}`,
+    }));
+    mockDb.where.mockResolvedValueOnce(games);
+    mockDb.returning.mockResolvedValue([]);
+  }
 
+  describe('end-of-phase retries', () => {
     function infoCallsFor(id: string): unknown[][] {
       return mockItadService.getGameInfo.mock.calls.filter((c) => c[0] === id);
     }
@@ -415,6 +416,29 @@ describe('ItadPriceSyncService', () => {
 
       expect(infoCallsFor('game-uuid-3')).toHaveLength(2);
       expect(result).toEqual({ degraded: true });
+    });
+  });
+
+  describe('pricing breaker', () => {
+    it('stops pricing after 3 consecutive exhausted overview fetches, still clears stale pricing, and skips earlyAccess', async () => {
+      seedGames(200); // 4 chunks of CHUNK_SIZE
+      mockItadPriceService.getOverviewBatch.mockRejectedValue(
+        new ItadOverviewFetchError(50),
+      );
+      const warnSpy = jest.spyOn(service['logger'], 'warn');
+
+      const result = await service.syncPricing();
+
+      expect(result).toEqual({ degraded: true });
+      expect(mockItadPriceService.getOverviewBatch).toHaveBeenCalledTimes(3);
+      expect(mockDb.update).toHaveBeenCalled(); // clearStalePricing
+      expect(mockItadService.getGameInfo).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        'ITAD pricing phase complete: 0 chunks succeeded, 4 failed, 200 games total (0 chunks retried at end of phase) — stopped early after 3 consecutive failed overview fetches',
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('earlyAccess phase skipped'),
+      );
     });
   });
 

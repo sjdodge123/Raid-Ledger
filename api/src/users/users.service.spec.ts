@@ -326,6 +326,25 @@ function describeUsersService() {
     });
   });
 
+  describe('single-row writes with no returned row', () => {
+    beforeEach(() => mockDb.returning.mockResolvedValue([]));
+
+    it.each([
+      ['setRole', () => service.setRole(1, 'member')],
+      ['setDisplayName', () => service.setDisplayName(1, 'Name')],
+      ['completeOnboarding', () => service.completeOnboarding(1)],
+    ])('%s rejects instead of resolving undefined', async (_name, call) => {
+      await expect(call()).rejects.toThrow(/^Expected .+ to be defined$/);
+    });
+
+    it('createOrUpdate rejects when the insert returns no row', async () => {
+      (mockDb.query.users.findFirst as jest.Mock).mockResolvedValue(undefined);
+      await expect(
+        service.createOrUpdate({ discordId: 'd-1', username: 'NewUser' }),
+      ).rejects.toThrow(/^Expected .+ to be defined$/);
+    });
+  });
+
   describe('constants', () => {
     it('should export RECENT_MEMBER_DAYS as 30', () => {
       expect(RECENT_MEMBER_DAYS).toBe(30);

@@ -9,6 +9,7 @@ import type {
   BfsEntryType,
   BfsSignupType,
 } from './signups.service.types';
+import { defined } from '../common/defined.helpers';
 
 /** Context for auto-allocation algorithm. */
 export interface AllocationContext {
@@ -86,7 +87,8 @@ export function countFilledPerRole(
 ): Record<string, number> {
   const filled: Record<string, number> = { tank: 0, healer: 0, dps: 0 };
   for (const a of assignments) {
-    if (a.role && a.role in filled) filled[a.role]++;
+    if (a.role && a.role in filled)
+      filled[a.role] = defined(filled[a.role], `filled[${a.role}]`) + 1;
   }
   return filled;
 }
@@ -100,7 +102,8 @@ export function buildOccupiedPositions(
     dps: new Set(),
   };
   for (const a of assignments) {
-    if (a.role && a.role in occupied) occupied[a.role].add(a.position);
+    if (a.role && a.role in occupied)
+      defined(occupied[a.role], `occupied[${a.role}]`).add(a.position);
   }
   return occupied;
 }
@@ -282,15 +285,11 @@ function tryOccupantMoves(
 
     const move = buildChainMove(occupant, entry.roleToFree, altRole);
     const newMoves = [...entry.moves, move];
-    const netFilled = computeNetFilled(
-      newMoves,
-      altRole,
-      filledPerRole[altRole],
-    );
-
-    if (netFilled <= roleCapacity[altRole]) {
+    if (fitsRoleCapacity(newMoves, altRole, roleCapacity, filledPerRole)) {
       const freedRole =
-        entry.moves.length === 0 ? entry.roleToFree : entry.moves[0].fromRole;
+        entry.moves.length === 0
+          ? entry.roleToFree
+          : defined(entry.moves[0], 'first chain move').fromRole;
       return { freedRole, moves: newMoves };
     }
 
@@ -316,6 +315,20 @@ function buildChainMove(
     toRole,
     position: occupant.position,
   };
+}
+
+/** `netFilled <= capacity`; a role missing from either map never fits
+ *  (the comparison against `undefined`/`NaN` was always false). */
+function fitsRoleCapacity(
+  moves: ChainMoveEntryType[],
+  altRole: string,
+  roleCapacity: Record<string, number>,
+  filledPerRole: Record<string, number>,
+): boolean {
+  const capacity = roleCapacity[altRole];
+  const baseFilled = filledPerRole[altRole];
+  if (capacity === undefined || baseFilled === undefined) return false;
+  return computeNetFilled(moves, altRole, baseFilled) <= capacity;
 }
 
 function computeNetFilled(

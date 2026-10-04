@@ -12,6 +12,7 @@ import type {
 } from '@raid-ledger/contract';
 import { getSignupsPreviewForEvents } from './event-response.helpers';
 import { buildFilterConditions } from './event-query-filters.helpers';
+import { defined } from '../common/defined.helpers';
 
 const EVENTS_CONFIG = { DEFAULT_PAGE_SIZE: 20, MAX_PAGE_SIZE: 100 } as const;
 
@@ -63,7 +64,7 @@ async function countEvents(
   const countResult = whereCondition
     ? await countQuery.where(whereCondition)
     : await countQuery;
-  return Number(countResult[0].count);
+  return Number(defined(countResult[0], 'event count row').count);
 }
 
 /** Fetches events with joins, applying optional where/sort/limit/offset. */
@@ -227,7 +228,7 @@ export async function queryUpcomingByUser(
     .select({ count: sql<number>`count(*)` })
     .from(schema.events)
     .where(and(...conditions));
-  const total = Number(countResult[0].count);
+  const total = Number(defined(countResult[0], 'event count row').count);
   const sq = buildSignupCountSubquery(db);
   const events = await db
     .select({

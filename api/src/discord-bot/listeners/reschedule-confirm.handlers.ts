@@ -9,6 +9,7 @@ import {
 import type { CharacterDto } from '@raid-ledger/contract';
 import type { EventRow, RescheduleDeps } from './reschedule-response.helpers';
 import { reconfirmSignup } from './reschedule-roster.handlers';
+import { defined } from '../../common/defined.helpers';
 
 /** Context for a confirm/tentative button handler. */
 interface ConfirmCtx {
@@ -39,7 +40,7 @@ export async function handleLinkedConfirm(
     await finalizeSingleChar(
       ctx,
       linkedUser.id,
-      chars.characters[0],
+      defined(chars.characters[0], 'the only character'),
       'signed_up',
     );
     return;
@@ -84,7 +85,7 @@ export async function handleLinkedTentative(
     await finalizeSingleChar(
       ctx,
       linkedUser.id,
-      chars.characters[0],
+      defined(chars.characters[0], 'the only character'),
       'tentative',
     );
     return;

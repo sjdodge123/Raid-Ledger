@@ -14,6 +14,7 @@ import type {
 } from './reschedule-response.helpers';
 import { logDiscordAck } from './reschedule-response.helpers';
 import { ensureRosterAssignment } from './reschedule-slot.handlers';
+import { defined } from '../../common/defined.helpers';
 
 export type { RescheduleDeps, ReconfirmOptions };
 
@@ -54,10 +55,10 @@ export async function handleCharacterSelect(
   ctx: SelectCtx,
   signupStatus: 'tentative' | undefined,
 ): Promise<void> {
-  const characterId = ctx.interaction.values[0];
   const validated = await validateSelectCtx(ctx);
   if (!validated) return;
   const { linkedUser, event } = validated;
+  const characterId = defined(ctx.interaction.values[0], 'selected character');
   const sc = event.slotConfig as Record<string, unknown> | null;
   if (sc?.type === 'mmo') {
     await showMmoRoleForChar(

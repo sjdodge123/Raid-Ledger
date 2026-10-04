@@ -29,7 +29,7 @@ Do NOT attempt to implement a full-scope change.
 1. You are already on branch `fix/rok-<num>` in your worktree
 2. Implement the fix (or improvement) as described in the spec
 3. **Write a regression test** (Bug label only — see below)
-4. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json` (whichever workspaces you touched)
+4. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json` (whichever workspaces you touched)
 5. Run `npm run lint -w api` and/or `npm run lint -w web` — fix any issues in files you touched
 6. Run relevant tests: `npm run test -w api` and/or `npm run test -w web`
 7. Commit: `fix: <description> (ROK-XXX)`

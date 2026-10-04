@@ -80,9 +80,9 @@ async function buildModule(): Promise<SyncCtx> {
   }).compile();
 
   const service = module.get(EventAutoExtendService);
-  // `@Optional() eventCache: ActiveEventCacheService | null` emits `Object`
-  // as its design type, so DI cannot resolve it by class token. Set the
-  // field directly, as scheduled-event.service.spec-helpers.ts does.
+  // The test module does not provide ActiveEventCacheService, so the
+  // `@Optional() @Inject(...)` param resolves empty. Set the field directly,
+  // as scheduled-event.service.spec-helpers.ts does.
   (service as unknown as { eventCache: unknown }).eventCache = eventCache;
   return {
     service,

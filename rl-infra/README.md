@@ -441,13 +441,43 @@ Runner containers (per slot) auto-install these via `rl-infra/runner/Dockerfile`
   `gnupg`, `ca-certificates`.
 
 After changing `rl-infra/runner/Dockerfile`, rebuild the runner image on
-the VM:
+the VM in two steps:
 
-```bash
-cd /srv/rl-infra
-docker compose build runner-1 runner-2
-docker compose up -d
-```
+1. From the laptop, sync the change to the VM: `./rl-infra/deploy.sh`. It
+   rsyncs `rl-infra/` to `/srv/rl-infra` and does NOT rebuild the runners
+   (it only rebuilds and restarts `gc-sweeper`).
+2. On the VM, and only when `rl status` shows no claims and
+   `heavy_running=0`, rebuild the image and restart the runners this VM
+   runs. On the default two-slot VM (`RUNNER_SLOTS=2` in `.env`):
+
+   ```bash
+   cd /srv/rl-infra && docker compose build runner-1 && docker compose up -d runner-1 runner-2
+   ```
+
+   Only on a VM whose extra slots are enabled (`RUNNER_SLOTS=4` in `.env`;
+   see the comment above `runner-3` in `docker-compose.yml`):
+
+   ```bash
+   cd /srv/rl-infra && docker compose build runner-1 && docker compose up -d runner-1 runner-2 runner-3 runner-4
+   ```
+
+   Never run the four-slot command on a two-slot VM. It starts `runner-3`
+   and `runner-4`, which the default 16 GB sizing does not budget for and
+   which the orchestrator has no claim rows for.
+
+All four runners share the image `rl-infra/runner:latest` (the
+`x-runner-base` anchor in `docker-compose.yml`), so building `runner-1`
+builds it for all of them. A bare `docker compose up -d` skips services
+behind a profile (`runner-3`/`runner-4` use `profiles: ["extra-slots"]`),
+which is why each command names its runners. Compose v2 starts a profiled
+service that is named on the command line, so no `--profile` flag is needed.
+
+A Playwright bump, from dependabot or by hand, moves `package-lock.json`.
+`scripts/test/runner-playwright-pin.test.sh` then fails the PR's lint job
+until the same PR edits the `FROM` line in `rl-infra/runner/Dockerfile` to
+the matching `vX.Y.Z-jammy` tag. Dependabot never touches that file, so push
+the `FROM` bump onto its branch by hand, then rebuild the runners as above
+once it merges.
 
 (This is an operator-action: agents don't have permission to restart
 compose-managed services.)

@@ -31,6 +31,7 @@ import {
 } from './characters-mapping.helpers';
 import * as importH from './characters-import.helpers';
 import * as crudH from './characters-crud.helpers';
+import { defined } from '../common/defined.helpers';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -131,7 +132,7 @@ export class CharactersService {
       .where(eq(schema.characters.id, characterId))
       .returning();
     this.logger.log(`User ${userId} updated character ${characterId}`);
-    return mapCharacterToDto(updated);
+    return mapCharacterToDto(defined(updated, 'updated character row'));
   }
 
   async delete(userId: number, characterId: string): Promise<void> {
@@ -160,7 +161,7 @@ export class CharactersService {
       this.logger.log(
         `User ${userId} set character ${characterId} as main for game ${character.gameId}`,
       );
-      return mapCharacterToDto(updated);
+      return mapCharacterToDto(defined(updated, 'updated character row'));
     });
   }
 

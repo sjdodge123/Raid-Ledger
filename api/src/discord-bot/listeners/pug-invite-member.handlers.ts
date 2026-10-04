@@ -28,6 +28,7 @@ export async function handleMemberInviteButton(
   const parts = interaction.customId.split(':');
   if (parts.length < 3) return;
   const [action, eventIdStr] = parts;
+  if (eventIdStr === undefined) return;
   const eventId = parseInt(eventIdStr, 10);
   if (!(await safeDeferReply(interaction, deps.logger))) return;
   try {
