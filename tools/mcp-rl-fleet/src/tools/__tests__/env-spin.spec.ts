@@ -101,9 +101,11 @@ describe('rl_env_spin execute() — async by default', () => {
 
   it('include_credentials adds a credentials_hint naming the rl_task_status route', async () => {
     const res = (await execute({ slug: 'rok-x', include_credentials: true })) as { credentials_hint?: string };
-    expect(res.credentials_hint).toContain(
-      "rl_task_status({task_id: 'local-abc12345abcd', include_credentials: true})",
-    );
+    expect(res).toMatchObject({
+      credentials_hint: expect.stringContaining(
+        "rl_task_status({task_id: 'local-abc12345abcd', include_credentials: true})",
+      ),
+    });
   });
 
   it('include_credentials with wait:true adds the hint to the wait payload too', async () => {
@@ -112,8 +114,10 @@ describe('rl_env_spin execute() — async by default', () => {
       credentials_hint?: string;
       mcp_runtime_status?: string;
     };
-    expect(res.mcp_runtime_status).toBe('succeeded');
-    expect(res.credentials_hint).toContain('include_credentials: true');
+    expect(res).toMatchObject({
+      mcp_runtime_status: 'succeeded',
+      credentials_hint: expect.stringContaining('include_credentials: true'),
+    });
   });
 
   it('no credentials_hint when include_credentials is not set', async () => {
