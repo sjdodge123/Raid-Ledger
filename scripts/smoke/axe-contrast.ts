@@ -14,7 +14,7 @@
  *   (web/src/hooks/use-theme-sync.ts), and the smoke user's saved theme is
  *   shared, mutable state, so without the pin a page could re-render in the
  *   dark scheme mid-test.
- * - `expectLightScheme(page)` proves the boot path took effect.
+ * - `expectLightScheme(page, scheme?)` proves the boot path took effect.
  * - `waitForFiniteAnimations(page)` waits until no finite CSS animation or
  *   transition is mid-flight, so axe never measures a half-faded element.
  * - `expectNoContrastViolations(page)` runs the axe `color-contrast` rule on
@@ -93,9 +93,13 @@ export async function useLightScheme(
     );
 }
 
-/** Assert the page actually rendered in the light scheme. */
-export async function expectLightScheme(page: Page): Promise<void> {
-    await expect(page.locator('html')).toHaveAttribute('data-scheme', 'light');
+/**
+ * Assert the page actually rendered in the light scheme. `default-light` (and
+ * quest-log) render as `data-scheme="light"`; a tinted light theme renders as
+ * its own id (SUB_THEME_CONFIG in web/src/stores/theme-helpers.ts), so pass it.
+ */
+export async function expectLightScheme(page: Page, scheme = 'light'): Promise<void> {
+    await expect(page.locator('html')).toHaveAttribute('data-scheme', scheme);
 }
 
 /** Wait until every finite animation/transition has finished. */
