@@ -155,12 +155,18 @@ export class StandalonePollReminderService {
     }));
   }
 
-  /** Match members who haven't voted on any schedule slot for this match. */
+  /**
+   * Match members who haven't voted on any schedule slot for this match.
+   * 'bandwagon' rows are slot-voter self-enrolments (ensureMatchMember), so a
+   * non-invitee who retracted every vote is skipped; invitees ('voted') and
+   * creator-added members ('added') are still reminded.
+   */
   private async findNonVoters(matchId: number): Promise<StandaloneNonVoter[]> {
     return (await this.db.execute(sql`
       SELECT lmm.user_id AS "userId"
       FROM community_lineup_match_members lmm
       WHERE lmm.match_id = ${matchId}
+        AND lmm.source <> 'bandwagon'
         AND NOT EXISTS (
           SELECT 1
           FROM community_lineup_schedule_votes csv

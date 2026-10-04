@@ -23,6 +23,7 @@
  *      future-of-now has an archive job queued after boot.
  */
 import { eq, sql } from 'drizzle-orm';
+import * as bcrypt from 'bcrypt';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -215,6 +216,23 @@ function describeStandalonePollReminders() {
     return out;
   }
 
+  /** A member with local creds, logged in — for driving the real vote API. */
+  async function createLoggedInMember(
+    tag: string,
+  ): Promise<{ id: number; token: string }> {
+    const id = await createMember(tag);
+    const email = `standalone-${tag}@test.local`;
+    await testApp.db.insert(schema.localCredentials).values({
+      email,
+      passwordHash: await bcrypt.hash('StandalonePass1!', 4),
+      userId: id,
+    });
+    const res = await testApp.request
+      .post('/auth/local')
+      .send({ email, password: 'StandalonePass1!' });
+    return { id, token: res.body.access_token as string };
+  }
+
   // ── AC #2 / Test 1: 24h reminder fires for non-voters ────────────
 
   it('fires 24h DM with subtype standalone_scheduling_poll_reminder for non-voters', async () => {
@@ -295,6 +313,44 @@ function describeStandalonePollReminders() {
   });
 
   // ── AC #5 / Test 4: dedup — 2nd cron tick = no second DM ─────────
+
+  it('does NOT remind a non-invitee who voted a slot and then retracted every vote', async () => {
+    const { lineupId, matchId, memberIds } = await setupStandalonePoll(
+      'retract',
+      20, // 24h window
+      1,
+    );
+    const [inviteeId] = memberIds;
+    const outsider = await createLoggedInMember('retract-outsider');
+    const [slot] = await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({
+        matchId,
+        proposedTime: new Date(Date.now() + 7 * 24 * HOUR_MS),
+        suggestedBy: 'user',
+      })
+      .returning();
+    const base = `/lineups/${lineupId}/schedule/${matchId}`;
+    const vote = await testApp.request
+      .post(`${base}/vote`)
+      .set('Authorization', `Bearer ${outsider.token}`)
+      .send({ slotId: slot.id });
+    expect(vote.status).toBe(200);
+    const retract = await testApp.request
+      .delete(`${base}/votes`)
+      .set('Authorization', `Bearer ${outsider.token}`);
+    expect(retract.status).toBe(204);
+    const [row] = await testApp.db
+      .select({ source: schema.communityLineupMatchMembers.source })
+      .from(schema.communityLineupMatchMembers)
+      .where(eq(schema.communityLineupMatchMembers.userId, outsider.id));
+    expect(row?.source).toBe('bandwagon');
+
+    await reminderService.runReminders();
+
+    expect(dmsForUser(outsider.id)).toHaveLength(0);
+    expect(dmsForUser(inviteeId)).toHaveLength(1);
+  });
 
   it('dedup key prevents double-fire when cron runs twice in the same window', async () => {
     const { memberIds } = await setupStandalonePoll('dedup', 20, 1);
