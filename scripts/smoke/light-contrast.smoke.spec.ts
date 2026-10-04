@@ -22,6 +22,8 @@ import {
     type KnownContrastViolation,
     expectLightScheme,
     expectNoContrastViolations,
+    gotoWithPinnedPreferences,
+    releaseLightScheme,
     useLightScheme,
     waitForFiniteAnimations,
 } from './axe-contrast';
@@ -92,7 +94,7 @@ const TINTED_LIGHT_SCHEMES = ['sky', 'holy', 'dawn', 'celestial'] as const;
 const DIM_BACKGROUNDS = ['--color-surface', '--color-panel'];
 
 async function scanRoute(page: Page, route: LightRoute, scheme: string): Promise<void> {
-    await page.goto(route.path);
+    await gotoWithPinnedPreferences(page, route.path);
     await expectLightScheme(page, scheme);
     await route.ready(page);
     await waitForFiniteAnimations(page);
@@ -100,6 +102,11 @@ async function scanRoute(page: Page, route: LightRoute, scheme: string): Promise
     await expectLightScheme(page, scheme);
     await expectNoContrastViolations(page, route.known);
 }
+
+// Every test pins the preferences read; let a late handler finish before teardown.
+test.afterEach(async ({ page }) => {
+    await releaseLightScheme(page);
+});
 
 test.describe('Light scheme colour contrast (default-light)', () => {
     // axe walks every text node on the page; /games renders hundreds of cards.
@@ -128,7 +135,7 @@ for (const scheme of TINTED_LIGHT_SCHEMES) {
         // Token-level, so it fails even where no scanned route renders dim text.
         // Never allow-list a --color-dim miss: fix the scheme's token instead.
         test('--color-dim reaches 4.5:1 on surface and panel', async ({ page }) => {
-            await page.goto('/players');
+            await gotoWithPinnedPreferences(page, '/players');
             await expectLightScheme(page, scheme);
             await expectTokenContrast(page, '--color-dim', DIM_BACKGROUNDS);
         });
@@ -154,7 +161,7 @@ test.describe('Light scheme colour contrast (quest-log tokens)', () => {
 
     for (const text of ['--color-dim', '--color-muted']) {
         test(`${text} reaches 4.5:1 on surface and panel`, async ({ page }) => {
-            await page.goto('/players');
+            await gotoWithPinnedPreferences(page, '/players');
             await expectLightScheme(page, 'light');
             await expect(page.locator('html')).toHaveAttribute('data-variant', 'quest-log');
             await expectTokenContrast(page, text, DIM_BACKGROUNDS);

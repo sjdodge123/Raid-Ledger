@@ -11,9 +11,11 @@ vi.mock('@axe-core/playwright', () => ({ default: class {} }));
 
 import {
     formatContrastViolations,
+    isPreferencesRead,
     knownMatcherFrom,
     matchKnownSelectors,
     pinLightPreferences,
+    releaseLightScheme,
     reportedTargets,
     withoutKnownViolations,
 } from './axe-contrast';
@@ -124,5 +126,22 @@ describe('pinLightPreferences', () => {
     it('passes a body without a data object through unchanged', () => {
         expect(pinLightPreferences({ error: 'nope' }, 'default-light')).toEqual({ error: 'nope' });
         expect(pinLightPreferences(null, 'default-light')).toBeNull();
+    });
+});
+
+describe('isPreferencesRead', () => {
+    it('matches only the GET of /users/me/preferences, however the API is mounted', () => {
+        expect(isPreferencesRead('https://slot-1.example/api/users/me/preferences', 'GET')).toBe(true);
+        expect(isPreferencesRead('http://localhost:3000/users/me/preferences?x=1', 'GET')).toBe(true);
+        expect(isPreferencesRead('https://slot-1.example/api/users/me/preferences', 'PATCH')).toBe(false);
+        expect(isPreferencesRead('https://slot-1.example/api/users/me/preferences/extra', 'GET')).toBe(false);
+    });
+});
+
+describe('releaseLightScheme', () => {
+    it('waits for running route handlers instead of ignoring their errors', async () => {
+        const unrouteAll = vi.fn().mockResolvedValue(undefined);
+        await releaseLightScheme({ unrouteAll } as unknown as Parameters<typeof releaseLightScheme>[0]);
+        expect(unrouteAll).toHaveBeenCalledWith({ behavior: 'wait' });
     });
 });

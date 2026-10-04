@@ -14,6 +14,8 @@
  *   (web/src/hooks/use-theme-sync.ts), and the smoke user's saved theme is
  *   shared, mutable state, so without the pin a page could re-render in the
  *   dark scheme mid-test.
+ * - `gotoWithPinnedPreferences(page, path)` navigates and waits for that pinned
+ *   read; `releaseLightScheme(page)` (afterEach) waits out any late handler.
  * - `expectLightScheme(page, scheme?)` proves the boot path took effect.
  * - `waitForFiniteAnimations(page)` waits until no finite CSS animation or
  *   transition is mid-flight, so axe never measures a half-faded element.
@@ -71,6 +73,34 @@ export function pinLightPreferences(body: unknown, lightThemeId: string): unknow
     const data = (body as { data?: unknown }).data;
     if (typeof data !== 'object' || data === null) return body;
     return { ...body, data: { ...data, themeMode: 'light', lightTheme: lightThemeId } };
+}
+
+/** Whether `response` is the app's own preferences read (the one `useLightScheme` pins). */
+export function isPreferencesRead(url: string, method: string): boolean {
+    return method === 'GET' && new URL(url).pathname.endsWith('/users/me/preferences');
+}
+
+/**
+ * Navigate and wait until the pinned preferences read has been fulfilled. Past
+ * this point the app has applied the server theme (the pinned light one), so a
+ * check made now cannot be overtaken by a late theme sync, and the route
+ * handler is no longer mid-flight.
+ */
+export async function gotoWithPinnedPreferences(page: Page, path: string): Promise<void> {
+    const pinned = page.waitForResponse((r) => isPreferencesRead(r.url(), r.request().method()));
+    await page.goto(path);
+    await pinned;
+}
+
+/**
+ * Call from `afterEach`. Removes the preferences route and WAITS for any handler
+ * still running (a refetch fired late in the test): the handler reads the
+ * fetched body, and once the test's context closes that read throws
+ * `Response has been disposed`. Waiting, not `ignoreErrors`, so a handler that
+ * fails for any other reason still fails the test.
+ */
+export async function releaseLightScheme(page: Page): Promise<void> {
+    await page.unrouteAll({ behavior: 'wait' });
 }
 
 /** Boot every later navigation of `page` in the given light theme. */
