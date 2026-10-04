@@ -31,6 +31,17 @@ export function foreverLabel(name: string, region: string): string {
   return `${name} (${region.toUpperCase()})`;
 }
 
+/**
+ * Title-case a two-part name ("ana forever" -> "Ana Forever") for a conflict
+ * message when the stored row's own casing is not at hand (lost-race path).
+ */
+export function titleForeverName(name: string): string {
+  return name
+    .split(' ')
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(' ');
+}
+
 function parseForeverName(name: string): string {
   const parsed = WowForeverNameSchema.safeParse(name);
   if (!parsed.success)
@@ -98,12 +109,13 @@ export async function checkRegionClaim(
   ];
   if (args.excludeId) conditions.push(ne(schema.characters.id, args.excludeId));
   const [existing] = await tx
-    .select({ userId: schema.characters.userId })
+    .select({ userId: schema.characters.userId, name: schema.characters.name })
     .from(schema.characters)
     .where(and(...conditions))
     .limit(1);
   if (!existing) return;
-  const label = foreverLabel(args.name, args.region);
+  // Name the character as stored, not as the request typed it.
+  const label = foreverLabel(existing.name, args.region);
   throw new ConflictException(
     existing.userId === args.userId
       ? `${label} is already on your character list`

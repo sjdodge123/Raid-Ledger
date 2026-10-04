@@ -24,7 +24,7 @@ function createDto(over: Partial<CreateCharacterDto> = {}): CreateCharacterDto {
 }
 
 /** Minimal select().from().where().limit() chain resolving to `rows`. */
-function dbReturning(rows: Array<{ userId: number }>) {
+function dbReturning(rows: Array<{ userId: number; name?: string }>) {
   const chain = {
     select: () => chain,
     from: () => chain,
@@ -132,13 +132,26 @@ describe('checkRegionClaim', () => {
 
   it('409s with the claimed-by-another-player message', async () => {
     await expect(
-      checkRegionClaim(dbReturning([{ userId: 2 }]), args),
+      checkRegionClaim(dbReturning([{ userId: 2, name: 'Ana Forever' }]), args),
     ).rejects.toThrow('Ana Forever (US) is already claimed by another player');
+  });
+
+  it("names the stored character, not the request's casing", async () => {
+    await expect(
+      checkRegionClaim(dbReturning([{ userId: 2, name: 'Ana Forever' }]), {
+        ...args,
+        name: 'ana forever',
+      }),
+    ).rejects.toThrow(
+      new ConflictException(
+        'Ana Forever (US) is already claimed by another player',
+      ),
+    );
   });
 
   it('409s with an own-list message for the same user', async () => {
     await expect(
-      checkRegionClaim(dbReturning([{ userId: 1 }]), args),
+      checkRegionClaim(dbReturning([{ userId: 1, name: 'Ana Forever' }]), args),
     ).rejects.toThrow('Ana Forever (US) is already on your character list');
   });
 
@@ -157,6 +170,16 @@ describe('rethrowForeverViolation', () => {
   it('maps the Forever index violation to the claim 409', () => {
     expect(() =>
       rethrowForeverViolation(violation, 'Ana Forever', 'eu'),
+    ).toThrow(
+      new ConflictException(
+        'Ana Forever (EU) is already claimed by another player',
+      ),
+    );
+  });
+
+  it('title-cases the submitted name when the stored row is not at hand', () => {
+    expect(() =>
+      rethrowForeverViolation(violation, 'ana FOREVER', 'eu'),
     ).toThrow(
       new ConflictException(
         'Ana Forever (EU) is already claimed by another player',

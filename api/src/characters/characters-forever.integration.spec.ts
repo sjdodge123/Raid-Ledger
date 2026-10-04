@@ -110,7 +110,7 @@ describe('WoW: Forever manual characters (integration)', () => {
     });
     expect(res.status).toBe(409);
     expect(res.body.message).toBe(
-      'ana forever (US) is already claimed by another player',
+      'Ana Forever (US) is already claimed by another player',
     );
     const other = await create(b.token, {
       name: 'Ana Forever',
@@ -159,7 +159,7 @@ describe('WoW: Forever manual characters (integration)', () => {
       .send({ name: 'ana forever' });
     expect(res.status).toBe(409);
     expect(res.body.message).toBe(
-      'ana forever (US) is already claimed by another player',
+      'Ana Forever (US) is already claimed by another player',
     );
   });
 

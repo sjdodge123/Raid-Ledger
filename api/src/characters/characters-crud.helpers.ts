@@ -31,6 +31,7 @@ import { checkDuplicateClaim } from './characters-import.helpers';
 import {
   FOREVER_IDENTITY_INDEX,
   foreverLabel,
+  titleForeverName,
 } from './characters-forever.helpers';
 import { defined } from '../common/defined.helpers';
 
@@ -304,6 +305,6 @@ export function rethrowForeverViolation(
 ): void {
   if (region && isUniqueViolation(error, FOREVER_IDENTITY_INDEX))
     throw new ConflictException(
-      `${foreverLabel(name, region)} is already claimed by another player`,
+      `${foreverLabel(titleForeverName(name), region)} is already claimed by another player`,
     );
 }
