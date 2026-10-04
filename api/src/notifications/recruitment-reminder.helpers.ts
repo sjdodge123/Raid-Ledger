@@ -6,6 +6,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../drizzle/schema';
+import { NOW_UTC, utcIsoText, utcWallClock } from '../drizzle/timestamp-utils';
 import type { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import {
   createChannelEmbed,
@@ -81,8 +82,8 @@ export async function findEligibleEvents(
   const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
   const rows = await db.execute<EligibleEventRow>(sql`
-    SELECT e.id, e.title, e.game_id, g.name AS game_name, e.creator_id,
-      lower(e.duration)::text AS start_time, e.max_attendees, e.created_at::text AS created_at,
+    SELECT e.id, e.title, e.game_id, g.name AS game_name, e.creator_id, e.max_attendees,
+      ${utcIsoText(sql`lower(e.duration)`)} AS start_time, ${utcIsoText(sql`e.created_at`)} AS created_at,
       e.recurrence_group_id::text AS recurrence_group_id,
       e.notification_channel_override,
       (SELECT count(*) FROM event_signups es WHERE es.event_id = e.id AND es.status NOT IN ('roached_out', 'departed', 'declined'))::text AS signup_count,
@@ -92,8 +93,8 @@ export async function findEligibleEvents(
     INNER JOIN discord_event_messages dem ON dem.event_id = e.id
     WHERE e.cancelled_at IS NULL
       AND e.rescheduling_poll_id IS NULL
-      AND lower(e.duration) >= ${now.toISOString()}::timestamptz
-      AND lower(e.duration) <= ${in48h.toISOString()}::timestamptz
+      AND lower(e.duration) >= ${utcWallClock(now)}
+      AND lower(e.duration) <= ${utcWallClock(in48h)}
       AND dem.embed_state != 'full' AND e.game_id IS NOT NULL
       AND (SELECT count(*) FROM event_signups es2 WHERE es2.event_id = e.id AND es2.status NOT IN ('roached_out', 'departed', 'declined'))
         < COALESCE(
@@ -106,7 +107,11 @@ export async function findEligibleEvents(
   return rows.map(mapEligibleRow);
 }
 
-/** Find users with game affinity who have no signup record for this event. */
+/**
+ * Find users with game affinity who have no signup record for this event.
+ * "Past event" compares against the UTC wall clock, not `NOW()::timestamp`
+ * (the session zone's wall clock).
+ */
 export async function findRecipients(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
@@ -118,7 +123,7 @@ export async function findRecipients(
     WHERE u.id != ${creatorId}
       AND (u.id IN (SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId})
         OR u.id IN (SELECT es.user_id FROM event_signups es INNER JOIN events e ON e.id = es.event_id
-          WHERE e.game_id = ${gameId} AND upper(e.duration) < NOW()::timestamp AND es.status = 'signed_up' AND e.cancelled_at IS NULL AND es.user_id IS NOT NULL))
+          WHERE e.game_id = ${gameId} AND upper(e.duration) < ${NOW_UTC} AND es.status = 'signed_up' AND e.cancelled_at IS NULL AND es.user_id IS NOT NULL))
       AND u.id NOT IN (SELECT es.user_id FROM event_signups es WHERE es.event_id = ${eventId} AND es.user_id IS NOT NULL)
   `);
   return rows.map((r) => r.id);

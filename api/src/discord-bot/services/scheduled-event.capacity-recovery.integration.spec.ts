@@ -15,7 +15,7 @@
  *      bubbles up unhandled and the retry call never fires.
  */
 import { DiscordAPIError } from 'discord.js';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   truncateAllTables,
@@ -415,15 +415,10 @@ describe('ROK-1332 — capacity-recovery integration', () => {
 
     // Guild shows: the bound SE, an unbound DUPLICATE (same title+start, the
     // timeout-after-success orphan), and a genuine operator SE. The guild SE
-    // start mirrors how Discord stores it in prod: new Date(lower(duration)
-    // ::text) — the SAME transform the matcher applies — so the key collapses
-    // regardless of the test container's session tz.
-    const [startRow] = await testApp.db
-      .select({ startIso: sql<string>`lower(${schema.events.duration})::text` })
-      .from(schema.events)
-      .where(eq(schema.events.id, evt.id))
-      .limit(1);
-    const startMs = new Date(startRow.startIso).getTime();
+    // start is the seeded instant itself — what Discord holds after the create
+    // path sets it — so the match only holds if the dedup reader hands back
+    // that exact instant, independent of the DB session or process timezone.
+    const startMs = futureStart.getTime();
     mockGuild.scheduledEvents.fetch.mockResolvedValue(
       new Map<string, { id: string }>([
         [
