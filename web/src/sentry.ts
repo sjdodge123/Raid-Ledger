@@ -2,8 +2,21 @@
  * Sentry initialization for the React frontend.
  * MUST be imported FIRST in main.tsx — before any other imports.
  * ROK-306: Maintainer telemetry — hardcoded DSN, opt-out via VITE_DISABLE_TELEMETRY.
+ *
+ * ROK-1366: the magic-link fragment strip is this module's FIRST import. ES
+ * module evaluation runs an importer's dependencies before its body, so the
+ * token leaves the address bar before `Sentry.init` below — whichever chunk
+ * the bundler puts this file in (main.tsx's import order alone did not survive
+ * chunking). magic-link-capture.test.ts pins it.
  */
+import './lib/magic-link-capture';
 import * as Sentry from '@sentry/react';
+import { scrubBreadcrumb, scrubTokenFromUrl } from './lib/sentry-scrub';
+import {
+    scrubRecordingEvent,
+    scrubReplayEventUrls,
+    scrubTransactionEvent,
+} from './lib/sentry-scrub-events';
 
 const SENTRY_DSN =
     'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
@@ -25,9 +38,13 @@ if (!telemetryDisabled) {
         tracesSampleRate: isProduction ? 0.1 : 1.0,
         replaysSessionSampleRate: 0,
         replaysOnErrorSampleRate: isProduction ? 1.0 : 0,
+        // ROK-1366: the navigation PerformanceEntry keeps the pre-strip URL
+        // (fragment included) — scrub it from spans, replay and replay urls.
+        beforeSendTransaction: (event) => scrubTransactionEvent(event),
         integrations: [
             Sentry.browserTracingIntegration(),
-            Sentry.replayIntegration(),
+            Sentry.replayIntegration({ beforeAddRecordingEvent: scrubRecordingEvent }),
+            { name: 'ScrubReplayUrls', processEvent: scrubReplayEventUrls },
         ],
         // ROK-1162: drop AbortError noise (TanStack Query cancels in-flight
         // fetches on unmount / refetch; the cancellation surfaces as
@@ -43,8 +60,16 @@ if (!telemetryDisabled) {
             ) {
                 return null;
             }
+            // ROK-1366 backstop: scrub a `token=` from the error event's
+            // request.url. This covers request.url only. The join page's
+            // intent `?token=` stays in the address bar, so it still reaches
+            // the Replay Meta href (TECH-DEBT-BACKLOG.md, 2026-09-27).
+            if (event.request?.url) {
+                event.request.url = scrubTokenFromUrl(event.request.url);
+            }
             return event;
         },
+        beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
         initialScope: {
             tags: {
                 app_version: (window as unknown as { __APP_VERSION__?: string })

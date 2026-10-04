@@ -2,6 +2,7 @@
 //
 // rl_env_deploy + rl_env_clone_prod run on the OPERATOR LAPTOP (step 4
 // sync-settings reads the operator's local DB), so they cannot be VM tasks.
+// rl_env_spin rides the same registry so its spin outlives the 120s MCP cap.
 // This module mirrors the VM task JSON shape under ~/.raid-ledger/tasks/ so a
 // single status/wait/cancel surface renders both. `local-<12 hex>` ids are the
 // namespace router: task.ts routes them here, everything else to SSH.
@@ -43,7 +44,7 @@ export const isLocalTaskId = (id: string): boolean => LOCAL_TASK_ID_RE.test(id);
 
 export const LocalTaskJsonSchema = z.object({
   task_id: z.string().regex(LOCAL_TASK_ID_RE),
-  tool: z.enum(['rl_env_deploy', 'rl_env_clone_prod']),
+  tool: z.enum(['rl_env_deploy', 'rl_env_clone_prod', 'rl_env_spin']),
   slot: z.number().int().nullable(),
   args_summary: z.string(),
   started_at: z.string(),
@@ -67,6 +68,15 @@ export const LocalTaskJsonSchema = z.object({
   admin_password: z.string().nullable().optional(),
   expected_head: z.string().nullable().optional(),
   synced_head: z.string().nullable().optional(),
+  // rl_env_spin result fields — declared so zod does not strip the runner's
+  // writes. Unset for deploy/clone tasks.
+  operator_admin: z.string().nullable().optional(),
+  bootstrap_warnings: z
+    .array(z.object({ code: z.string(), detail: z.string() }))
+    .nullable()
+    .optional(),
+  // rl_env_spin failure remediation pointer (orchestrator `hint`).
+  hint: z.string().optional(),
 });
 export type LocalTaskJson = z.infer<typeof LocalTaskJsonSchema>;
 
@@ -186,6 +196,9 @@ function toStatusReturn(
     admin_password: raw.admin_password,
     expected_head: raw.expected_head,
     synced_head: raw.synced_head,
+    operator_admin: raw.operator_admin,
+    bootstrap_warnings: raw.bootstrap_warnings,
+    hint: raw.hint,
   } as ExecuteStatusReturn;
 }
 
@@ -331,7 +344,7 @@ export interface SpawnLocalRunnerResult {
  */
 export function spawnLocalRunner(
   taskId: string,
-  tool: 'rl_env_deploy' | 'rl_env_clone_prod',
+  tool: LocalTaskJson['tool'],
   params: unknown,
   argsSummary: string,
 ): SpawnLocalRunnerResult {

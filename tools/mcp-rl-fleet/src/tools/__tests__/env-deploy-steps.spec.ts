@@ -11,7 +11,7 @@ const buildImageExecute = vi.fn();
 vi.mock('../env-build-image.js', () => ({ execute: (...a: unknown[]) => buildImageExecute(...a) }));
 
 const envSpinExecute = vi.fn();
-vi.mock('../env-spin.js', () => ({ execute: (...a: unknown[]) => envSpinExecute(...a) }));
+vi.mock('../env-spin.js', () => ({ spinEnv: (...a: unknown[]) => envSpinExecute(...a) }));
 
 const envSyncExecute = vi.fn();
 vi.mock('../env-sync.js', () => ({ execute: (...a: unknown[]) => envSyncExecute(...a) }));

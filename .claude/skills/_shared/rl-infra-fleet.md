@@ -151,7 +151,7 @@ in CLAUDE.md under "`mcp-rl-fleet`". Common flows:
 | Task | MCP tool |
 | ---- | -------- |
 | Start session, claim a runner (may enqueue — `rl_claim_wait` blocks on queue head) | `rl_claim` |
-| Spin a prod-like env for testing | `rl_env_spin` (slug=foo) |
+| Spin a prod-like env for testing | `rl_env_spin` (slug=foo) (async: returns local- task_id; url in terminal rl_task_status) |
 | Seed API keys/config into the env | `rl_env_sync_from_local` (slug, mode='settings') |
 | Realistic prod-shaped data | `rl_env_clone_prod` (slug) |
 | Run build/test inside the runner | `rl_run_on_runner` (command='npm test') |
