@@ -74,6 +74,7 @@ function makeCharacter(
         lastSyncedAt: '2026-04-28T00:00:00.000Z',
         profileUrl: null,
         region: 'us',
+        ruleset: null,
         gameVariant: 'retail',
         equipment: null,
         talents: null,

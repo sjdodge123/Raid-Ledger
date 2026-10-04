@@ -107,7 +107,9 @@ describe('AddCharacterModal — WoW: Forever fields', () => {
         submit(/add character/i);
         expect(screen.getByRole('alert')).toHaveTextContent('Ana Forever (US) is already claimed by another player');
     });
+});
 
+describe('AddCharacterModal — WoW: Forever edit', () => {
     it('edit mode: region is read-only and the update never sends a region', () => {
         renderModal(7, foreverChar);
         const region = screen.getByRole('combobox', { name: 'Region' });

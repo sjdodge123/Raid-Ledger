@@ -90,22 +90,21 @@ function InlineFormFooter({ onCancel, isPending }: { onCancel?: (() => void) | u
     );
 }
 
-function useInlineFields() {
+/** ROK-1721: WoW: Forever (by game slug) swaps Name + Realm for the Forever identity fields. */
+function useInlineFields(gameSlug: string | undefined) {
     const [name, setName] = useState('');
     const [charClass, setCharClass] = useState('');
     const [spec, setSpec] = useState('');
     const [role, setRole] = useState<CharacterRole | ''>('');
     const [realm, setRealm] = useState('');
     const [forever, setForever] = useState<ForeverIdentity>(emptyForeverIdentity);
-    return { name, setName, charClass, setCharClass, spec, setSpec, role, setRole, realm, setRealm, forever, setForever };
+    return { name, setName, charClass, setCharClass, spec, setSpec, role, setRole, realm, setRealm, forever, setForever, isForever: isWowForeverSlug(gameSlug) };
 }
 
 export function InlineCharacterForm({ gameId, hasRoles = true, gameSlug, eventId, onCharacterCreated, onCancel }: InlineCharacterFormProps) {
     const createMutation = useCreateCharacter();
-    const { name, setName, charClass, setCharClass, spec, setSpec, role, setRole, realm, setRealm, forever, setForever } = useInlineFields();
+    const { name, setName, charClass, setCharClass, spec, setSpec, role, setRole, realm, setRealm, forever, setForever, isForever } = useInlineFields(gameSlug);
     const [errors, setErrors] = useState<InlineErrors>({});
-    // ROK-1721: WoW: Forever (by game slug) swaps Name + Realm for the Forever identity fields.
-    const isForever = isWowForeverSlug(gameSlug);
     const [pluginImportActive, setPluginImportActive] = useState(false);
     const handleModeChange = useCallback((mode: 'import' | 'manual') => { setPluginImportActive(mode === 'import'); }, []);
 
