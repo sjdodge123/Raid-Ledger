@@ -154,7 +154,6 @@ _run_sweep() {
         STATE_DIR="$state_dir" \
         TASKS_DIR="$tasks_dir" \
         CLAIM_HEARTBEAT_TIMEOUT_SECONDS="$HB_TIMEOUT" \
-        ORCHESTRATOR_BIN_DIR="$state_dir/no-such-bin" \
         bash "$SWEEP_SCRIPT" >/dev/null 2>&1 || true
     [[ -f "$reap_log" ]] || : > "$reap_log"
 }

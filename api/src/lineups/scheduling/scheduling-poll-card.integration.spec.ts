@@ -194,8 +194,9 @@ function describeSchedulingPollCard() {
   }
 
   /**
-   * The legacy scheduling notices: they link the poll but are NOT the card.
-   * Asserted explicitly so the two surfaces stay distinguishable on purpose.
+   * Any non-card embed linking the poll. The legacy scheduling notice was
+   * retired (TDB:576), so this must stay empty — asserted explicitly so a
+   * reintroduced second channel surface fails here.
    */
   function pollNoticeSends(lineupId: number, matchId: number): string[] {
     return sendsLinkingPoll(lineupId, matchId)
@@ -333,13 +334,12 @@ function describeSchedulingPollCard() {
       return row?.embedMessageId ? row : null;
     }, `poll card stored for bandwagon match ${match.id}`);
     expect(stored.embedChannelId).toBe(CHANNEL);
-    // Exactly ONE poll card. The legacy "enough players — Vote on a time ↗"
-    // notice fires on the same promote (fire-and-forget beside the card) and is
-    // suppressed by `hasExistingPollEmbed` when the card lands first, so it is
-    // 0 or 1 depending on which write wins — never 2 (see TECH-DEBT 2026-09-03,
-    // ROK-1473 notice/card race).
+    // Exactly ONE poll card and NO notice. The legacy "enough players — Vote
+    // on a time ↗" channel notice used to fire on the same promote and race
+    // the card; it is retired, so the card is the only channel surface for a
+    // match entering scheduling (TDB:576). Members still get the DM.
     expect(pollCardSends(lineup.id, match.id)).toHaveLength(1);
-    expect(pollNoticeSends(lineup.id, match.id).length).toBeLessThanOrEqual(1);
+    expect(pollNoticeSends(lineup.id, match.id)).toHaveLength(0);
   });
 }
 

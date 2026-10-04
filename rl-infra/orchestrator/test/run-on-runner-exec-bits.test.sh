@@ -65,9 +65,17 @@ readonly CANARY_REL="rl-infra/orchestrator/bin/task-cancel"
 # Fixtures
 # ---------------------------------------------------------------------------
 
-# Portable mode read (BSD stat on macOS, GNU stat on the runner).
+# Portable mode read, GNU stat FIRST (the runner), then BSD stat (the macOS
+# laptop). Never BSD-first: on Linux `stat -f` means --file-system, so it prints
+# filesystem stats to STDOUT and exits 1, and a `stat -f ... || stat -c ...`
+# chain captures that junk ahead of the mode. Assigning inside `&&` discards a
+# failed probe's stdout (same shape as rl-infra/runner/ensure-runner-dirs.sh).
+# Prints the bare mode ("644"/"755"), which is what the cases compare against.
 _mode_of() {
-    stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1" 2>/dev/null || echo "?"
+    local m
+    m=$(stat -c '%a' "$1" 2>/dev/null) && { printf '%s\n' "$m"; return 0; }
+    m=$(stat -f '%Lp' "$1" 2>/dev/null) && { printf '%s\n' "$m"; return 0; }
+    echo "?"
 }
 
 # Build a fake /workspace: a handful of real manifest-matching scripts plus the
@@ -167,7 +175,9 @@ _seed_claim() {
 # The command we hand to run-on-runner: it REPORTS the canary's mode from inside
 # the container, at the exact moment it is dispatched. That is what makes the
 # ordering observable — a repair that ran afterwards would report 644.
-_probe_cmd=(bash -c 'printf "canary_mode=%s\n" "$(stat -f "%Lp" /workspace/rl-infra/orchestrator/bin/task-cancel 2>/dev/null || stat -c "%a" /workspace/rl-infra/orchestrator/bin/task-cancel 2>/dev/null || echo "?")"')
+# GNU stat first, each probe REASSIGNING m, so a failed `stat -f` (Linux reads it
+# as --file-system and dumps fs stats to stdout) is thrown away, not concatenated.
+_probe_cmd=(bash -c 'f=/workspace/rl-infra/orchestrator/bin/task-cancel; m=$(stat -c "%a" "$f" 2>/dev/null) || m=$(stat -f "%Lp" "$f" 2>/dev/null) || m="?"; printf "canary_mode=%s\n" "$m"')
 
 # ---------------------------------------------------------------------------
 # Cases

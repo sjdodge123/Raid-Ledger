@@ -22,7 +22,12 @@ vi.mock('node:child_process', () => ({
   },
 }));
 
-import { execute, type StatusResult, type RunnerStat } from '../status.js';
+import {
+  execute,
+  type StatusResult,
+  type RunnerStat,
+  type SettingsBundleFreshness,
+} from '../status.js';
 
 function execFileOk(stdout: string): void {
   mockExecFile.mockImplementationOnce(
@@ -208,5 +213,35 @@ describe('rl_status — ROK-1338 PR-1 schema extensions', () => {
     const result: StatusResult = await execute();
     expect(result.runners?.[0].worktree_head).toBe('fff0000');
     expect(result.runners?.[1].worktree_head).toBeNull();
+  });
+});
+
+describe('rl_status — TDB:1904 settings_bundle freshness', () => {
+  it('passes a populated settings_bundle through verbatim', async () => {
+    const bundle: SettingsBundleFreshness = {
+      present: true,
+      mtime: '2026-10-01T12:00:00Z',
+      age_hours: 72.5,
+      key_count: 12,
+      decrypts: true,
+      warning: null,
+    };
+    execFileOk(JSON.stringify({ ...BASE_SHAPE, settings_bundle: bundle }));
+    const result: StatusResult = await execute();
+    expect(result.settings_bundle).toEqual(bundle);
+  });
+
+  it('accepts settings_bundle: null', async () => {
+    execFileOk(JSON.stringify({ ...BASE_SHAPE, settings_bundle: null }));
+    const result: StatusResult = await execute();
+    expect(result.ok).toBe(true);
+    expect(result.settings_bundle).toBeNull();
+  });
+
+  it('leaves settings_bundle undefined on an orchestrator that predates it', async () => {
+    execFileOk(JSON.stringify(BASE_SHAPE));
+    const result: StatusResult = await execute();
+    expect(result.ok).toBe(true);
+    expect(result.settings_bundle).toBeUndefined();
   });
 });

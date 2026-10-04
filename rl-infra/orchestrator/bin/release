@@ -178,8 +178,11 @@ fi
 # After killing the runner-side jest, also reap any postgres/redis
 # testcontainers that jest started. ryuk normally handles this, but in
 # practice we see leaks when jest dies abruptly (OOM, kill -9, CI cancel)
-# or when ryuk's session-id tracker desyncs. Scoped to this slot — the
-# gc-sweeper's periodic `all` pass mops up anything we miss.
+# or when ryuk's session-id tracker desyncs. Scoped to this slot. This is
+# the ONLY testcontainers reaper: the gc-sweeper has no fleet-wide `all`
+# pass (it never ran in that container and was removed), so containers
+# leaked by a slot that is never released are not reaped until that
+# slot's next release.
 # Best-effort; never fails release.
 # =========================================================================
 "$(dirname "$0")/runner-testcontainers-reap" "$SLOT" >/dev/null 2>&1 || true

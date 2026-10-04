@@ -73,6 +73,8 @@ else
         "$TEST_DIR/env-spin-bot-identity.test.sh"
         "$TEST_DIR/bot-identity-visibility.test.sh"
         "$TEST_DIR/settings-bundle.test.sh"
+        # `rl status` settings_bundle freshness (age, key count, decrypts; no leak).
+        "$TEST_DIR/status-settings-bundle.test.sh"
         "$TEST_DIR/cli-settings-push.test.sh"
         # A3 fix 2 — task-cancel kills the runner-side child tree by RL_TASK_ID
         # marker (docker exec's in-container process outlives the exec client).
@@ -80,6 +82,9 @@ else
         # A3-B P1 — gc-sweeper must not reap a slot whose own task is still
         # running (lease heartbeats the agent, not the work).
         "$TEST_DIR/sweeper-running-task-guard.test.sh"
+        # release's per-slot testcontainers reap, plus the guard that the
+        # gc-sweeper runs no orchestrator executable (release is the only reaper).
+        "$TEST_DIR/runner-testcontainers-reap.test.sh"
         # A3-B P2 — post-sync exec-bit restore (Mutagen's manual permissions
         # mode lands every synced script 0644 → bare exit 126 on the runner).
         "$TEST_DIR/runner-exec-bits.test.sh"

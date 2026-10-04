@@ -289,12 +289,11 @@ services:
       # restart picks them up) without rebuilding the image. The
       # Dockerfile still COPY's it as a fresh-deploy fallback.
       - ./gc-sweeper/sweep.sh:/usr/local/bin/sweep:ro
-      # ROK-1515 — sweep.sh sources _bot_identity.sh + _discord_sweep.sh from
-      # here for the ⏰ voice sweep. Deliberately NOT mounted at
-      # /orchestrator/bin (sweep.sh's ORCHESTRATOR_BIN_DIR default): that path
-      # would also switch on lease-advance + runner-testcontainers-reap inside
-      # this container, both of which source _state.sh (docker-socket probe,
-      # env-spin cascade) — a behaviour change outside this story's scope.
+      # ROK-1515 — the orchestrator bin dir, mounted read-only at
+      # /orchestrator-lib for its sourceable helper libraries only
+      # (_bot_identity.sh, _discord_sweep.sh, _disk_pressure.sh, _env_ttl.sh).
+      # sweep.sh runs none of the orchestrator's executables from here:
+      # release owns lease-advance and the per-slot testcontainers reap.
       - ./orchestrator/bin:/orchestrator-lib:ro
       # Mount traefik/conf.d so the sweeper can remove env-{slug}.yml route
       # files when it prunes orphan envs (otherwise Traefik keeps a stale
@@ -342,11 +341,6 @@ services:
       PERF_LOG: /state/perf.log
       QUEUE_TTL_SECONDS: "1800"        # 30min — stale lease-queue waiters
       MAX_CLAIM_AGE_SECONDS: "28800"   # 8h — slot-hoarding cap (§1b')
-      # Pinned to sweep.sh's default, NOT to /orchestrator-lib: that path is the
-      # read-only helper mount for the ⏰ sweep only. Redirecting this would also
-      # switch on lease-advance + runner-testcontainers-reap in this container —
-      # see the volume comment above.
-      ORCHESTRATOR_BIN_DIR: /orchestrator/bin
       # Never let .env redirect the sweeper off the mounted /var/run/docker.sock.
       DOCKER_HOST: ""
     labels:
