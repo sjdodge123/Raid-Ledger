@@ -218,12 +218,16 @@ test.describe('WoW: Forever manual characters (ROK-1721)', () => {
     });
 });
 
-/** Open Edit for the card named `fullName` (kebab menu on phones, inline button wider). */
+/**
+ * Open Edit for the card named `fullName` (kebab menu on phones, inline button wider).
+ * The kebab is `md:hidden` and the inline actions `hidden md:flex`, and role locators skip
+ * display:none, so the card is anchored on whichever of the two this breakpoint renders.
+ */
 async function openEdit(page: Page, fullName: string): Promise<Form> {
     await page.goto('/profile/gaming/characters');
     const card = page.locator('div')
         .filter({ has: page.getByText(fullName, { exact: true }) })
-        .filter({ has: page.getByRole('button', { name: 'Character actions' }) })
+        .filter({ has: page.getByRole('button', { name: /^(Character actions|Edit)$/ }) })
         .last();
     await expect(card, `the "${fullName}" card should be listed`).toBeVisible({ timeout: 15_000 });
     const kebab = card.getByRole('button', { name: 'Character actions' });
