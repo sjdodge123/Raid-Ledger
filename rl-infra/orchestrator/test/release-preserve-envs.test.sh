@@ -195,9 +195,16 @@ test_release_preserves_task_cancel_cascade() {
     ' > "$RL_STATE_DIR/tasks/runningtask01.json"
 
     # Install a fake task-cancel that records its invocation.
+    # release resolves its siblings via "$(dirname "$0")", so run a throwaway
+    # COPY of the whole bin dir with the two fakes swapped in. Never shim into
+    # the real $BIN_DIR: on a runner it is a live Mutagen-synced tree, and
+    # moving lease-advance aside there made Mutagen rewrite it mid-suite, so the
+    # TOCTOU case's extraction below intermittently found the file missing.
     local sentinel="$RL_STATE_DIR/task-cancel.invoked"
     local fake_bin_dir
     fake_bin_dir=$(mktemp -d -t rl-fake-bin.XXXXXX)
+    cp -p "$BIN_DIR"/* "$fake_bin_dir"/
+    rm -f "$fake_bin_dir/task-cancel" "$fake_bin_dir/lease-advance"
     cat > "$fake_bin_dir/task-cancel" <<EOF
 #!/usr/bin/env bash
 echo "task-cancel called with: \$*" >> "$sentinel"
@@ -212,32 +219,8 @@ exit 0
 EOF
     chmod +x "$fake_bin_dir/lease-advance"
 
-    # Run release with PATH prefixed so dispatched siblings hit fakes.
-    # release calls "$(dirname "$0")/lease-advance" so we also need to shim into BIN_DIR.
-    # Use a temporary symlink in BIN_DIR if missing; otherwise we rely on the
-    # implementation discovery — for the TDD red phase, the SENTINEL just needs
-    # to be reachable. Symlink the fakes alongside release so dirname resolution
-    # finds them.
-    local link_lc="$BIN_DIR/task-cancel"
-    local link_la="$BIN_DIR/lease-advance"
-    local restore_lc="" restore_la=""
-    if [[ -e "$link_lc" || -L "$link_lc" ]]; then
-        restore_lc="$(mktemp -u "${link_lc}.backup.XXXX")"
-        mv "$link_lc" "$restore_lc"
-    fi
-    if [[ -e "$link_la" || -L "$link_la" ]]; then
-        restore_la="$(mktemp -u "${link_la}.backup.XXXX")"
-        mv "$link_la" "$restore_la"
-    fi
-    ln -s "$fake_bin_dir/task-cancel" "$link_lc"
-    ln -s "$fake_bin_dir/lease-advance" "$link_la"
-
-    PATH="$fake_bin_dir:$PATH" bash "$BIN_DIR/release" --preserve-envs >/dev/null 2>&1 || true
-
-    # Cleanup symlinks before assertions (don't leave artifacts on failure).
-    rm -f "$link_lc" "$link_la"
-    [[ -n "$restore_lc" && -f "$restore_lc" ]] && mv "$restore_lc" "$link_lc"
-    [[ -n "$restore_la" && -f "$restore_la" ]] && mv "$restore_la" "$link_la"
+    # Run the copied release with PATH prefixed so dispatched siblings hit fakes.
+    PATH="$fake_bin_dir:$PATH" bash "$fake_bin_dir/release" --preserve-envs >/dev/null 2>&1 || true
 
     if [[ ! -f "$sentinel" ]]; then
         TEST_FAIL_COUNT=$((TEST_FAIL_COUNT + 1))
