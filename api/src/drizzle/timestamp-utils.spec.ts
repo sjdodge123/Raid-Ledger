@@ -1,4 +1,11 @@
-import { parseTimestampUtc } from './timestamp-utils';
+import { sql } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import {
+  NOW_UTC,
+  parseTimestampUtc,
+  utcIsoText,
+  utcWallClock,
+} from './timestamp-utils';
 
 describe('parseTimestampUtc', () => {
   it('interprets a naïve space-separated string as UTC', () => {
@@ -21,9 +28,55 @@ describe('parseTimestampUtc', () => {
     expect(result.toISOString()).toBe('2026-06-18T19:30:00.000Z');
   });
 
+  it('passes through a Postgres short "+00" timestamptz offset', () => {
+    const result = parseTimestampUtc('2026-10-02 12:00:00+00');
+    expect(result.getTime()).toBe(Date.UTC(2026, 9, 2, 12, 0, 0));
+    expect(result.toISOString()).toBe('2026-10-02T12:00:00.000Z');
+  });
+
+  it('passes through a Postgres short "-04" offset with fractional seconds', () => {
+    const result = parseTimestampUtc('2026-10-02 12:00:00.5-04');
+    expect(result.getTime()).toBe(Date.UTC(2026, 9, 2, 16, 0, 0, 500));
+    expect(result.toISOString()).toBe('2026-10-02T16:00:00.500Z');
+  });
+
+  it('reads a bare date as UTC midnight', () => {
+    const result = parseTimestampUtc('2026-10-02');
+    expect(result.getTime()).toBe(Date.UTC(2026, 9, 2));
+    expect(result.toISOString()).toBe('2026-10-02T00:00:00.000Z');
+  });
+
   it('returns a Date instance as-is', () => {
     const input = new Date('2026-06-18T14:30:00.000Z');
     const result = parseTimestampUtc(input);
     expect(result).toBe(input);
+  });
+});
+
+describe('UTC wall-clock SQL fragments', () => {
+  const render = (q: ReturnType<typeof sql>) => {
+    const { sql: text, params } = new PgDialect().sqlToQuery(q);
+    return { sql: text, params };
+  };
+
+  it('utcIsoText renders the expression as ISO-8601 text with a Z', () => {
+    expect(render(utcIsoText(sql`lower(e.duration)`))).toEqual({
+      sql: `to_char(lower(e.duration), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      params: [],
+    });
+  });
+
+  it('utcWallClock binds the instant as ISO and converts it to UTC wall clock', () => {
+    const at = new Date('2026-07-02T22:15:30.123Z');
+    expect(render(utcWallClock(at))).toEqual({
+      sql: `($1::timestamptz AT TIME ZONE 'UTC')`,
+      params: ['2026-07-02T22:15:30.123Z'],
+    });
+  });
+
+  it('NOW_UTC is the database clock as UTC wall clock', () => {
+    expect(render(sql`x <= ${NOW_UTC}`).sql).toBe(
+      `x <= (NOW() AT TIME ZONE 'UTC')`,
+    );
   });
 });

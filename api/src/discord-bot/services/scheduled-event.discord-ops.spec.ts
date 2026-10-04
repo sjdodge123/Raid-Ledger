@@ -180,3 +180,28 @@ describe('tryEditFullEvent — SE name reflects the game (ROK-1350 AC1/AC2)', ()
     expect(edit.mock.calls[0][1]).toMatchObject({ name: 'HELLCARD night' });
   });
 });
+
+// `new Date()` reads a naive string in the HOST zone, so these cases only
+// discriminate on a non-UTC host (CI runs UTC, where the old parse passes too).
+// The CI-visible proof is scheduled-event.db-helpers.tz.integration.spec.ts.
+describe('tryCreateNewEvent / tryEditFullEvent — naive pg text is UTC', () => {
+  it('sends the UTC instant of a naive start/end to create and edit', async () => {
+    const create = jest.fn().mockResolvedValue({ id: 'se-1' });
+    const edit = jest.fn().mockResolvedValue(undefined);
+    const guild = makeCreateEditGuild(create, edit);
+    const data = makeEventData({
+      startTime: '2026-07-02 22:00:00',
+      endTime: '2026-07-03 01:00:00',
+    });
+    const want = {
+      scheduledStartTime: new Date('2026-07-02T22:00:00.000Z'),
+      scheduledEndTime: new Date('2026-07-03T01:00:00.000Z'),
+    };
+
+    await tryCreateNewEvent(guild, 42, data, 'voice-1', 'desc');
+    await tryEditFullEvent(guild, 42, 'se-1', data, 'desc', null);
+
+    expect(create.mock.calls[0]?.[0]).toMatchObject(want);
+    expect(edit.mock.calls[0]?.[1]).toMatchObject(want);
+  });
+});

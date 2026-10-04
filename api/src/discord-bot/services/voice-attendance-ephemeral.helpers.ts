@@ -10,6 +10,7 @@
 import { eq, and, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { utcWallClock } from '../../drizzle/timestamp-utils';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -17,7 +18,9 @@ type Db = PostgresJsDatabase<typeof schema>;
  * Resolve the event that owns `channelId` as its live ephemeral voice channel,
  * if any, scoped to events that are currently active (started, not past their
  * effective end, not cancelled). Returns [] when the channel is not an
- * ephemeral channel for an active event.
+ * ephemeral channel for an active event. The bounds are zone-less UTC, so the
+ * compares run on the UTC wall clock: a `::timestamptz` param would make
+ * Postgres read them in the session zone and skew the window by its offset.
  */
 export async function findActiveEventsByEphemeralChannel(
   db: Db,
@@ -31,8 +34,8 @@ export async function findActiveEventsByEphemeralChannel(
       and(
         eq(schema.events.ephemeralVoiceChannelId, channelId),
         sql`${schema.events.cancelledAt} IS NULL`,
-        sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
+        sql`lower(${schema.events.duration}) <= ${utcWallClock(now)}`,
+        sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${utcWallClock(now)}`,
       ),
     );
   return rows.map((e) => ({ eventId: e.id, gameId: e.gameId }));
