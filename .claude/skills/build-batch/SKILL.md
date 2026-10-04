@@ -85,7 +85,7 @@ Push → 1 PR with all milestones → enable auto-merge LAST → Linear → Done
 5. **Lead audits between waves.** After each dev wave, Lead:
    - Reads `git log --oneline -<N>` to see what each agent committed
    - Spot-checks file diffs for shape (don't deep-review yet — that's reviewer's job)
-   - Verifies sanity: `npm run lint -w <touched-workspace>`, `npx tsc --noEmit -p <touched>` if scope is meaningful
+   - Verifies sanity: `npm run lint -w <touched-workspace>`, `npx tsc --noEmit -p <touched>` if scope is meaningful (for web, the leaf configs `web/tsconfig.app.json`, `web/tsconfig.node.json` and `web/tsconfig.test.json` — the web root tsconfig.json is solution-style and checks 0 files)
    - Verifies wait:true backcompat (if the story touches /push surface): run a stubbed CLI invocation to confirm sync path still works
    - Updates build-state.yaml `next_action` to spawn the next wave
    - DO NOT proceed if a previous wave's agent reported FAIL or returned silent

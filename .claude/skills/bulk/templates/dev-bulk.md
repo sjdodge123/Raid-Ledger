@@ -21,7 +21,7 @@ Bulk stories are small-scope. Pick the narrowest scope:
 |---------|------------|----------|
 | Both `api/` and `web/` | `both` | `tsc` + `lint` + `test` for both workspaces |
 | `api/` only | `api` | `npx tsc --noEmit -p api/tsconfig.json && npm run lint -w api && npm run test -w api` |
-| `web/` only | `web` | `npx tsc --noEmit -p web/tsconfig.json && npm run lint -w web && npm run test -w web` |
+| `web/` only | `web` | `npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json && npm run lint -w web && npm run test -w web` |
 | Test files only | `tests` | `npm run test -w <workspace>` |
 
 ## Commit + completion

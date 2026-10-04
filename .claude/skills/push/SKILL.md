@@ -247,7 +247,16 @@ Run Codex as a second-opinion reviewer against `main`. Different model = catches
 ```bash
 which codex >/dev/null 2>&1 && [ -z "$NO_CODEX" ] && [ "$SCOPE" != "docs-only" ] && {
   echo "Running Codex pre-push review (this takes ~30-90s)..."
-  codex review --base main 2>&1 | tee /tmp/codex-review-$(git rev-parse --short HEAD).txt
+  # Read-only sandbox + no approvals: the same -c flags as
+  # security-review/SKILL.md:79-81 (ROK-1468), so Codex reads the diff
+  # instead of running suites on the laptop.
+  OUT=/tmp/codex-review-$(git rev-parse --short HEAD).txt
+  # The Bash tool's shell is zsh (no PIPESTATUS) and `| tee` hides codex's
+  # exit code, so redirect to the file and capture rc directly.
+  codex review --base main -c 'sandbox_mode="read-only"' -c 'approval_policy="never"' >"$OUT" 2>&1; rc=$?
+  echo "codex exit: $rc"
+  # The verdict line: last non-empty line, minus models-manager noise.
+  grep -v codex_models_manager "$OUT" | awk 'NF' | tail -1
 }
 ```
 
@@ -269,11 +278,17 @@ custom prompt isn't needed. Two quirks when reading the output:
 
 **Verdict handling:**
 
-- Output starts with "No blockers" or equivalent → proceed to Step 9.
+- The verdict line (the last non-empty line, printed above) says "No blockers" or equivalent → proceed to Step 9.
 - Output lists BLOCKERS → **STOP**, present them to the operator with the question: "Codex flagged N blockers — fix before pushing, or override and continue?" Wait for operator decision.
-- Codex CLI errors out (network, auth) → log and proceed (don't block push on tooling failure). Note in Step 12 report.
+- Codex CLI errors out (network, auth, non-zero exit) or prints no verdict line → record `ran-no-verdict (exit <rc>)` and proceed (don't block the push on tooling failure); never print ✓ for Codex in Step 12.
 
-The custom prompt is critical: without it Codex returns broad style feedback that adds noise. Keeping it scoped to "critical only" makes the second opinion actionable.
+**Record the Codex outcome for Step 12.** Before moving on, record exactly one of these values and carry it into the Step 12 report's `Codex review` row:
+
+- `not-run (<reason>)` — a skip condition above matched (`docs-only` scope, `--no-codex`, or no `codex` CLI on PATH).
+- `ran-no-verdict (exit <rc>)` — Codex exited non-zero or printed no verdict line.
+- `verdict: no blockers` or `verdict: N blockers (fixed/overridden)` — Codex returned a verdict.
+
+Optionally also write it to `/tmp/codex-review-<sha>.status`. Do not hand it to a later step as a shell variable: Bash tool state does not persist between calls, and `$SCOPE` / `$NO_CODEX` above stand for your own reading of Step 1.5 and the flags, not real environment variables.
 
 ---
 
@@ -370,6 +385,9 @@ Print a summary showing which checks ran and which were skipped (with reason):
 | Migration validation | ✓ / skipped | no migration files changed |
 | Container startup | ✓ / skipped | no Dockerfile changes |
 | Playwright | ✓ / skipped | <reason if skipped> |
+| Codex review | verdict: no blockers / N blockers (fixed/overridden) / ran-no-verdict / not-run | <skip reason or exit code> |
 | Push | ✓ origin/<branch> | |
 | PR | #<number> / existing / skipped | |
 ```
+
+The Codex row is never blank: a docs-only push (Step 1.5 → Step 9) prints `not-run | docs-only scope`.
