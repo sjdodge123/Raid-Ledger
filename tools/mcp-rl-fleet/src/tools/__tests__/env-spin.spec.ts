@@ -87,6 +87,40 @@ describe('rl_env_spin execute() — async by default', () => {
     expect(JSON.stringify(res)).not.toContain(SECRET);
   });
 
+  it('an omitted worktree_path defaults to the server cwd so RL_AGENT_ID hashes the session folder', async () => {
+    await execute({ slug: 'rok-x' });
+    const params = spawnLocalRunner.mock.calls[0][2] as { worktree_path?: string };
+    expect(params.worktree_path).toBe(process.cwd());
+  });
+
+  it('an explicit worktree_path is passed through unchanged', async () => {
+    await execute({ slug: 'rok-x', worktree_path: '/wt' });
+    const params = spawnLocalRunner.mock.calls[0][2] as { worktree_path?: string };
+    expect(params.worktree_path).toBe('/wt');
+  });
+
+  it('include_credentials adds a credentials_hint naming the rl_task_status route', async () => {
+    const res = (await execute({ slug: 'rok-x', include_credentials: true })) as { credentials_hint?: string };
+    expect(res.credentials_hint).toContain(
+      "rl_task_status({task_id: 'local-abc12345abcd', include_credentials: true})",
+    );
+  });
+
+  it('include_credentials with wait:true adds the hint to the wait payload too', async () => {
+    waitLocalTask.mockResolvedValue({ ok: true, mcp_runtime_status: 'succeeded', steps: [] });
+    const res = (await execute({ slug: 'rok-x', include_credentials: true, wait: true })) as {
+      credentials_hint?: string;
+      mcp_runtime_status?: string;
+    };
+    expect(res.mcp_runtime_status).toBe('succeeded');
+    expect(res.credentials_hint).toContain('include_credentials: true');
+  });
+
+  it('no credentials_hint when include_credentials is not set', async () => {
+    const res = await execute({ slug: 'rok-x' });
+    expect(res).not.toHaveProperty('credentials_hint');
+  });
+
   it('TOOL_DESCRIPTION documents the async contract and the url field', () => {
     expect(TOOL_DESCRIPTION).toMatch(/ASYNC BY DEFAULT/);
     expect(TOOL_DESCRIPTION).toMatch(/120s/);
@@ -156,6 +190,25 @@ describe('runSpinTask() — the detached runner step', () => {
     expect(out.message).toContain('boom');
     expect(current.url).toBeNull();
   });
+
+  it('a structured spin failure keeps hint, phase and exit_code in the task JSON', async () => {
+    const failure = {
+      ok: false,
+      error: 'env_spin_aborted_unexpectedly',
+      message: 'aborted',
+      phase: 'register_new',
+      exit_code: 3,
+      hint: 'run bash -x env-spin',
+    };
+    runRl.mockResolvedValue({ stdout: JSON.stringify(failure), stderr: '', exitCode: 1 });
+    const current = freshTask();
+    const out = await runSpinTask({ slug: 'rok-x' }, current, { setCurrent: vi.fn(), recordStep: vi.fn() });
+    expect(out.error).toBe('env_spin_aborted_unexpectedly');
+    expect(out.message).toBe(
+      'env spin failed for rok-x: aborted (phase=register_new, exit_code=3) — hint: run bash -x env-spin',
+    );
+    expect(current.hint).toBe('run bash -x env-spin');
+  });
 });
 
 describe('LocalTaskJsonSchema — spin task fields survive validation', () => {
@@ -165,8 +218,10 @@ describe('LocalTaskJsonSchema — spin task fields survive validation', () => {
       ...freshTask(),
       operator_admin: 'first-login',
       bootstrap_warnings: [{ code: 'c', detail: 'd' }],
+      hint: 'h',
     });
     expect(parsed.success).toBe(true);
+    expect(parsed.data?.hint).toBe('h');
     expect(parsed.data).toMatchObject({
       tool: 'rl_env_spin',
       operator_admin: 'first-login',
