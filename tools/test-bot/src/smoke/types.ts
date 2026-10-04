@@ -53,6 +53,8 @@ export interface SmokeTest {
   name: string;
   category: 'embed' | 'dm' | 'voice' | 'flow' | 'command' | 'cdp-command';
   run: (ctx: TestContext) => Promise<void>;
+  /** Run after the parallel pool, one at a time, in array order (TDB:966). */
+  serial?: true;
 }
 
 export interface TestResult {

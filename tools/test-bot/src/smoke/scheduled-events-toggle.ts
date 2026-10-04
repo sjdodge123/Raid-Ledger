@@ -57,11 +57,12 @@ export function createToggleRefcount<A>(ops: ToggleOps<A>): ToggleRefcount<A> {
     try {
       await ops.enable(arg);
     } catch (err) {
-      // A rejected acquire is not a hold: its caller never reaches the
-      // `finally` that would release it. The production `enable`
-      // (`enableScheduledEvents`) swallows every error today, so only an
-      // injected `enable` reaches this branch; it is kept so the refcount
-      // stays correct if that swallow is ever removed.
+      // A rejected acquire is not a hold, so roll the count back. Every
+      // caller awaits acquire before the `try` whose `finally` releases it
+      // (or covers the gap with `releaseScheduledEventsAndRethrow`), so a
+      // rejection never reaches a release. This branch is live: the
+      // production `enable` (`enableScheduledEvents`) rejects when its POST
+      // fails, because ApiClient.request throws on a non-2xx response.
       count -= 1;
       throw err;
     }

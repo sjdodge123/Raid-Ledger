@@ -20,6 +20,7 @@ import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import type { ApiClient } from '../api.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
 interface LineupPayload {
   id: number;
@@ -28,19 +29,15 @@ interface LineupPayload {
   [k: string]: unknown;
 }
 
-async function archiveAllLineups(api: ApiClient): Promise<void> {
-  // Best effort — if an active lineup exists, archive it so we can create a new one.
-  try {
-    const active = await api.get<{ id: number }>('/lineups/active');
-    if (active?.id) {
-      await api
-        .patch(`/lineups/${active.id}/status`, { status: 'archived' })
-        .catch(() => null);
-    }
-  } catch {
-    // No active lineup — nothing to archive.
-  }
-}
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = ['Smoke Lineup '] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
@@ -126,7 +123,7 @@ const lineupTitleInEmbed: SmokeTest = {
   name: 'Lineup embed shows per-lineup title + description (ROK-1063)',
   category: 'embed',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Smoke Lineup ${Date.now()}`;
     const description =

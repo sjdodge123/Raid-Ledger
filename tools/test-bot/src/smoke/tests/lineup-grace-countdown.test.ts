@@ -35,6 +35,7 @@ import { pollForCondition } from '../../helpers/polling.js';
 import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
 const GRACE_KEY = 'lineup_auto_advance_grace_ms';
 const GRACE_MS = 3000;
@@ -50,28 +51,15 @@ interface LineupPayload {
   [k: string]: unknown;
 }
 
-/** Best-effort archival of THIS test's leftover lineups (see the loop note). */
-async function archiveAllLineups(api: ApiClient): Promise<void> {
-  try {
-    const res = await api.get<
-      { id: number; title?: string }[] | { id: number; title?: string } | null
-    >('/lineups/active');
-    const list = Array.isArray(res) ? res : res ? [res] : [];
-    // ROK-1545: multiple lineups are active at once (ROK-1065), and other
-    // smoke tests' polls read their PARENT lineup's status — archiving a
-    // lineup this test did not create flips a concurrent test's open poll
-    // card to POLL CLOSED. Only retire this test's own leftovers.
-    for (const row of list) {
-      if (!row?.id) continue;
-      if (!(row.title ?? '').startsWith('Grace Countdown ')) continue;
-      await api
-        .patch(`/lineups/${row.id}/status`, { status: 'archived' })
-        .catch(() => null);
-    }
-  } catch {
-    /* no active lineups */
-  }
-}
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = ['Grace Countdown '] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
@@ -106,7 +94,7 @@ const graceCountdown: SmokeTest = {
   name: 'Grace countdown surfaces, clears on un-vote, advances after re-vote (ROK-1253)',
   category: 'flow',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     await setSetting(ctx.api, GRACE_KEY, String(GRACE_MS));
 
     // Three-person private lineup. The companion bot's user is one

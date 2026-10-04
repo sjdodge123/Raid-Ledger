@@ -21,6 +21,7 @@ import { pollForEmbed } from '../../helpers/polling.js';
 import { awaitProcessing, flushEmbedQueue } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
 interface LineupPayload {
   id: number;
@@ -32,27 +33,15 @@ interface LineupPayload {
 // resolver's `hasPostPermissions` check to return false.
 const BAD_CHANNEL_ID = '999999999999999999';
 
-async function archiveAllLineups(api: ApiClient): Promise<void> {
-  try {
-    const res = await api.get<
-      { id: number; title?: string }[] | { id: number; title?: string } | null
-    >('/lineups/active');
-    const list = Array.isArray(res) ? res : res ? [res] : [];
-    // ROK-1545: multiple lineups are active at once (ROK-1065), and other
-    // smoke tests' polls read their PARENT lineup's status — archiving a
-    // lineup this test did not create flips a concurrent test's open poll
-    // card to POLL CLOSED. Only retire this test's own leftovers.
-    for (const row of list) {
-      if (!row?.id) continue;
-      if (!(row.title ?? '').startsWith('Override Fallback ')) continue;
-      await api
-        .patch(`/lineups/${row.id}/status`, { status: 'archived' })
-        .catch(() => null);
-    }
-  } catch {
-    /* no active lineups */
-  }
-}
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = ['Override Fallback '] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
@@ -66,7 +55,7 @@ const inaccessibleOverrideFallsBackToDefault: SmokeTest = {
   name: 'Inaccessible channelOverrideId falls back to bound channel for lineup embed (ROK-1069)',
   category: 'embed',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Override Fallback ${Date.now()}`;
     const lineup = await ctx.api.post<LineupPayload>('/lineups', {

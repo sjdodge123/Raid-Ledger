@@ -25,7 +25,8 @@ import {
   assertConditionNeverMet,
 } from '../fixtures.js';
 import { pollForCondition } from '../../helpers/polling.js';
-import { isLeftoverLineup, isMilestoneCardFor } from '../lineup-milestone-match.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
+import { isMilestoneCardFor } from '../lineup-milestone-match.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { ApiClient } from '../api.js';
 import type { SimpleMessage } from '../../helpers/messages.js';
@@ -60,29 +61,6 @@ const OWN_TITLE_PREFIXES = [
 /** Lineups stamped at or after this instant belong to the current run; never archived here. */
 const RUN_STARTED_AT = Date.now();
 
-
-/**
- * Best-effort archival of this file's leftover active lineups. Scoped, not
- * global: multiple active lineups have been allowed since ROK-1065, and a
- * global archive here aborted other tests' lineups mid-run (TDB:1071).
- */
-async function archiveOwnLeftoverLineups(api: ApiClient): Promise<void> {
-  try {
-    const res = await api.get<
-      { id: number; title?: string }[] | { id: number; title?: string } | null
-    >('/lineups/active');
-    const list = Array.isArray(res) ? res : res ? [res] : [];
-    for (const row of list) {
-      if (!row?.id) continue;
-      if (!isLeftoverLineup(row.title, OWN_TITLE_PREFIXES, RUN_STARTED_AT)) continue;
-      await api
-        .patch(`/lineups/${row.id}/status`, { status: 'archived' })
-        .catch(() => null);
-    }
-  } catch {
-    /* no active lineups */
-  }
-}
 
 async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
@@ -151,7 +129,7 @@ const privateLineupDmsInviteeNoChannelEmbed: SmokeTest = {
   name: 'Private lineup creation DMs invitee and suppresses channel embed (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveOwnLeftoverLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Private Smoke ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
@@ -208,7 +186,7 @@ const privateLineupPhaseTransitionSuppressesChannel: SmokeTest = {
   name: 'Private lineup building→voting DMs invitee and suppresses channel embed (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveOwnLeftoverLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Private Phase ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
@@ -259,7 +237,7 @@ const privateLineupResponseIncludesInvitees: SmokeTest = {
   name: 'Private lineup create response includes invitees array (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveOwnLeftoverLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Private Invitees ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
@@ -294,7 +272,7 @@ const multipleConcurrentLineupsAllowed: SmokeTest = {
   name: 'Multiple concurrent active lineups permitted — no 409 (ROK-1065)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveOwnLeftoverLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const firstTitle = `Concurrent A ${Date.now()}`;
     const secondTitle = `Concurrent B ${Date.now()}`;
@@ -344,7 +322,7 @@ const privateLineupMilestoneSuppressesChannel: SmokeTest = {
   name: 'Private lineup nomination milestone DMs invitee and suppresses channel embed (ROK-1115)',
   category: 'dm',
   async run(ctx: TestContext) {
-    await archiveOwnLeftoverLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
 
     const title = `Private MS-check ${Date.now()}`;
     const lineup = await createPrivateLineup(ctx, title);
