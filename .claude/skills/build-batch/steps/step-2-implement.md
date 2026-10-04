@@ -202,7 +202,7 @@ done
 
 # 3. Sanity check the combined diff
 npx tsc --noEmit -p api/tsconfig.json    # if api touched
-npx tsc --noEmit -p web/tsconfig.json    # if web touched
+npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json    # if web touched
 npm run lint -w <touched workspace>
 
 # 4. wait:true backcompat check (if story touches MCP/CLI surface used by /push)

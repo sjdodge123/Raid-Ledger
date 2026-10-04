@@ -30,7 +30,7 @@ Implement this story from the spec below.
 ### Workflow
 1. You are already on branch `rok-<num>-<short-name>` in your worktree
 2. Implement all acceptance criteria
-3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json`
+3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.app.json && npx tsc --noEmit -p web/tsconfig.node.json && npx tsc --noEmit -p web/tsconfig.test.json`
 4. Run `npm run lint -w api` and/or `npm run lint -w web` — fix any issues in files you touched
 5. Commit with message: `feat: <description> (ROK-XXX)` (or `fix:` for bug fixes)
 6. **STOP HERE — do NOT push, create PRs, or switch branches.**

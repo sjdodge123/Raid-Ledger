@@ -93,7 +93,10 @@ cat "$OUTPUT"
 **Reporting rule.** The gate table gets one of exactly three Codex outcomes:
 `findings` (list them), `clean` (ran to completion, nothing found), or
 `codex unavailable` (hit the cap or exited with no output). Never leave the row
-blank and never block a ship on `codex unavailable`.
+blank and never block a ship on `codex unavailable`. A build, tsc or test
+failure Codex hit while self-verifying (for example `unknown option '--noEmit'`
+or `Cannot find name 'it'`) is not a branch finding — the repo gate is
+`./scripts/validate-ci.sh`; report only Codex's review findings.
 
 ---
 
