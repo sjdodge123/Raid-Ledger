@@ -2225,3 +2225,8 @@ same day (#1278, #1279, #1280).
   Suggested: convert the column like 0197 (`USING "round_deadline" AT TIME ZONE 'UTC'`), switch the `:94` cast to `::timestamptz`, and parse at `:107` with `parseTimestampUtc` (`api/src/drizzle/timestamp-utils.ts`), all in one PR.
 - **[nit]** `api/src/discord-bot/services/scheduled-event.revalidate.ts:48-53` (`parseEventTimestampUtc`): now that `parseTimestampUtc` (`api/src/drizzle/timestamp-utils.ts:27`) accepts the same short offsets (`/[+-]\d{2}(:?\d{2})?$/`), the two helpers are near-duplicates. The only differences are that `parseEventTimestampUtc` trims its input and maps `null`/empty to an Invalid Date.
   Suggested: make `parseEventTimestampUtc` a thin wrapper (trim + null/empty guard) over `parseTimestampUtc`, and keep its existing unit cases.
+
+### 2026-10-04 — fix/r3-rlinfra-sweeper-bundle-1004 (review nit left open)
+
+- **[nit]** `rl-infra/gc-sweeper/sweep.sh` (dead-claim reaper §1b and the expired-claim reaper §1d): a slot these reapers free is not handed to a queued waiter promptly. `claim-wait` wakes only on a change to `$RL_LEASE_QUEUE_DIR` (inotifywait close_write/moved_to/delete), and the reapers write `claims.json`, not the queue dir, so the waiter gets the slot only at its next unrelated queue wake or when its wait times out. §1d is hit hardest: it releases only when a waiter exists, and that waiter then sits out its timeout. Behaviour is unchanged from main (the old in-container `lease-advance` call never ran).
+  Suggested: after a reap frees a slot that has waiters, touch a file in that slot's lease-queue dir so `claim-wait` wakes and re-runs `claim`.
