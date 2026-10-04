@@ -19,6 +19,7 @@ import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
 import type { SimpleEmbed } from '../../helpers/messages.js';
 import type { ApiClient } from '../api.js';
+import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
 interface LineupPayload {
   id: number;
@@ -52,19 +53,15 @@ export async function resolveLineupChannelId(
   return res?.channelId ?? fallback;
 }
 
-/** Archive any active lineup so a fresh one can be created. */
-export async function archiveAllLineups(api: ApiClient): Promise<void> {
-  try {
-    const active = await api.get<{ id: number }>('/lineups/active');
-    if (active?.id) {
-      await api
-        .patch(`/lineups/${active.id}/status`, { status: 'archived' })
-        .catch(() => null);
-    }
-  } catch {
-    // No active lineup — nothing to archive.
-  }
-}
+/**
+ * Title prefixes of the lineups this file creates. Each title is exactly
+ * `<prefix>${Date.now()}`; only those stamped before RUN_STARTED_AT are
+ * archived as leftovers of an earlier run (lineup-leftovers.ts).
+ */
+const OWN_TITLE_PREFIXES = ['Poll Card '] as const;
+
+/** Lineups stamped at or after this instant belong to the current run. */
+const RUN_STARTED_AT = Date.now();
 
 export async function deleteLineup(api: ApiClient, id: number): Promise<void> {
   await api.delete(`/lineups/${id}`).catch(() => {
@@ -228,7 +225,7 @@ const schedulingPollCardPosted: SmokeTest = {
   name: 'Lineup match entering scheduling posts its poll card (ROK-1473)',
   category: 'embed',
   async run(ctx: TestContext) {
-    await archiveAllLineups(ctx.api);
+    await archiveOwnLeftoverLineups(ctx.api, OWN_TITLE_PREFIXES, RUN_STARTED_AT);
     // Fence the channel BEFORE the lineup exists: CI reseeds the same
     // lineup/match ids, so a prior run's card can carry this run's exact
     // href, and the oldest match would win (TDB:1459).
