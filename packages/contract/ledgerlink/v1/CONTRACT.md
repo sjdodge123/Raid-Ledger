@@ -128,17 +128,23 @@ payload are unchanged — this only widens what one paste may contain.
   guild page missing → `PAGES_INCOMPLETE` (`invalid/mixed-guild-incomplete`).
 - At most `ADDON_IMPORT_MAX_TOKENS` (10 = 8 guild pages + 1 char + 1 raid)
   tokens → else `PAGES_INCOMPLETE` (`invalid/mixed-11-tokens`).
-- **Same exporter:** every section must carry the same `who.guid`, and the
-  sections' `exportedAt` may differ by at most
+- **Same exporter:** every section must carry the same `who.guid`, the
+  same `client.region` and the same exporter name (the realm-less name the
+  binding resolves from `who`, compared case-insensitively) → else
+  `INVALID_PAYLOAD` "These strings come from different characters."
+  (`invalid/mixed-different-exporters`, `invalid/mixed-different-region`);
+  and the sections' `exportedAt` may differ by at most
   `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS` (600 s) → else
-  `INVALID_PAYLOAD` (`invalid/mixed-different-exporters`). "Export all"
+  `INVALID_PAYLOAD`. "Export all"
   stamps every section within a second; 10 minutes still admits sections
   exported one by one in the same sitting, and rejects a stale string from an
   earlier session pasted beside fresh ones.
 - **All-or-nothing:** each section is decoded and validated exactly as if it
   were pasted alone; if any section fails, the whole paste is rejected and
   the error `message` is prefixed with the section (`Raid export: …`).
-  Nothing is partially imported.
+  Nothing is partially imported. The character binding (game, region,
+  name, ruleset, GUID) runs against **every** section, not just the first;
+  any section's binding reject rejects the whole paste.
 - Each section keeps its own identity: its sha256 (re-pasting one section
   alone is recognised as the same import) and page count.
 - A mixed paste changes **no per-section rule** — e.g. `client.region` is

@@ -2,7 +2,9 @@ import {
   ADDON_IMPORT_MAX_TOKENS,
   ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS,
   type AddonExportSection,
+  type AddonWho,
 } from '@raid-ledger/contract';
+import { resolveExportName, sameName } from './addon-import.binding-name';
 import { AddonImportError } from './addon-import.errors';
 import {
   assertPageSet,
@@ -81,19 +83,32 @@ export function parsePaste(input: string): AddonSectionGroup[] {
 }
 
 interface ExporterStamp {
-  who: { guid: string };
+  client: { region: number };
+  who: AddonWho;
   exportedAt: number;
 }
 
+/** Same GUID, same client region, same (realm-less) exporter name. */
+function sameIdentity(a: ExporterStamp, b: ExporterStamp): boolean {
+  return (
+    a.who.guid === b.who.guid &&
+    a.client.region === b.client.region &&
+    sameName(resolveExportName(a.who), resolveExportName(b.who))
+  );
+}
+
 /**
- * Every section of a mixed paste must come from the same character
- * (`who.guid`) and the same sitting (`exportedAt` spread ≤
- * `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS`). A single section passes.
+ * Every section of a mixed paste must come from the same character — the
+ * same `who.guid`, `client.region` and realm-less exporter name, i.e. every
+ * identity field the binding checks (Codex P2: a section must never land
+ * under an identity only the first section proved) — and the same sitting
+ * (`exportedAt` spread ≤ `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS`).
+ * A single section passes.
  */
 export function assertSameExporter(payloads: ExporterStamp[]): void {
   const [first] = payloads;
   if (!first || payloads.length < 2) return;
-  if (payloads.some((p) => p.who.guid !== first.who.guid)) {
+  if (payloads.some((p) => !sameIdentity(first, p))) {
     throw new AddonImportError(
       'INVALID_PAYLOAD',
       'These strings come from different characters.',

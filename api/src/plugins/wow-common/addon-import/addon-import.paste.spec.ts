@@ -142,6 +142,22 @@ describe('decodeImportPaste — rejected mixed pastes', () => {
     });
   });
 
+  it.each([
+    ['client region', { client: { ...buildRaidPayload().client, region: 3 } }],
+    ['exporter name', { who: buildWho({ fullName: 'Bea Forever' }) }],
+  ])('rejects sections that share a GUID but differ in %s', (_label, over) => {
+    expect(rejectBody(`${charStr()} ${raidStr(over)}`)).toEqual({
+      code: 'INVALID_PAYLOAD',
+      message: 'These strings come from different characters.',
+    });
+  });
+
+  it('accepts a realm suffix / case difference in the exporter name', () => {
+    const who = buildWho({ fullName: 'ana forever-Doomhowl' });
+    const paste = decodeImportPaste(`${charStr()} ${raidStr({ who })}`);
+    expect(paste.order).toEqual(['char', 'raid']);
+  });
+
   it('rejects sections exported more than the window apart', () => {
     const late =
       FIXTURE_EXPORTED_AT + ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS + 1;

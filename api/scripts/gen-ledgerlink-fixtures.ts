@@ -135,6 +135,13 @@ function mixedDifferentExporters(): string {
   return [buildCharPayload(), raid].map((p) => buildImportString(p)).join('\n');
 }
 
+/** Same GUID + name, but the raid section claims another client region. */
+function mixedDifferentRegion(): string {
+  const base = buildRaidPayload();
+  const raid = { ...base, client: { ...base.client, region: 3 } };
+  return [buildCharPayload(), raid].map((p) => buildImportString(p)).join('\n');
+}
+
 function mixed11Tokens(): string {
   const pages = buildGuildPages(buildGuildPayload(roster(2000)), 8);
   return [...pages, ...mixedCharRaid(), mixedCharRaid()[1]].join('\n');
@@ -196,6 +203,7 @@ const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
   ],
   'mixed-guild-incomplete': ['PAGES_INCOMPLETE', mixedGuildIncomplete],
   'mixed-different-exporters': ['INVALID_PAYLOAD', mixedDifferentExporters],
+  'mixed-different-region': ['INVALID_PAYLOAD', mixedDifferentRegion],
   'mixed-11-tokens': ['PAGES_INCOMPLETE', mixed11Tokens],
 };
 
