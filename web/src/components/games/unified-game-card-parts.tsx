@@ -30,6 +30,8 @@ export interface GameProps {
     name: string;
     slug: string;
     coverUrl: string | null;
+    /** ROK-1715: ITAD boxart, the cover fallback when IGDB has none. */
+    itadBoxartUrl?: string | null | undefined;
     genres?: number[];
     aggregatedRating?: number | null;
     rating?: number | null;
@@ -148,9 +150,10 @@ export function CardLfgChip({ game }: { game: GameProps }): JSX.Element | null {
     );
 }
 
-/** Cover image or placeholder. */
+/** Cover image, else ITAD boxart (ROK-1715, as GameBanner), else placeholder. */
 function CardCover({ game }: { game: GameProps }): JSX.Element {
-    if (game.coverUrl) return <CoverImage src={game.coverUrl} alt={game.name} />;
+    const src = game.coverUrl || game.itadBoxartUrl;
+    if (src) return <CoverImage src={src} alt={game.name} />;
     return <CoverPlaceholder />;
 }
 
