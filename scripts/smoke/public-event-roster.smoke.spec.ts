@@ -13,14 +13,19 @@
  * Fixture: the spec builds its own. The demo seed's gamers carry an avatar
  * hash but no Discord id, so `beforeAll` links the seeded gamer
  * `FIXTURE_USERNAME` to a fixed fake snowflake via `/admin/test/link-discord`
- * (idempotent — same user + snowflake on every project/run), creates a
+ * (idempotent — same user + snowflake on every project/run) AFTER muting the
+ * gamer's Discord DM channel (impersonate → PATCH /notifications/preferences):
+ * a DM to the fake snowflake gets 10013 and the DM processor DEACTIVATES the
+ * user (observed on the fleet — seed gamers receive subscribed_game/reminder
+ * notifications within seconds), which would cancel the signup and hide the
+ * gamer from every later spec. It then creates a
  * future event, and signs the gamer up via `/admin/test/signup`. `afterAll`
  * deletes the event. The link itself has no DEMO_MODE undo (DELETE
  * /users/me/discord would also wipe the seeded avatar), so it stays until the
  * next `reset-to-seed`; no other smoke spec references this gamer.
  */
 import { test, expect } from './base';
-import { getAdminToken, apiGet, apiPost, apiDelete, pollForCondition, API_BASE } from './api-helpers';
+import { getAdminToken, apiGet, apiPost, apiPatch, apiDelete, pollForCondition, API_BASE } from './api-helpers';
 import { fetchWithRetry } from './fetch-retry';
 
 const DISCORD_KEYS = new Set(['discordId', 'discordUserId', 'discordAvatarHash']);
@@ -52,7 +57,7 @@ function cdnAvatarUrl(user: RosterUser): string | null {
 }
 
 /** A demo-seed gamer (`ORIGINAL_GAMERS` in api/src/admin/demo-data.constants.ts) with a fixed avatar hash. */
-const FIXTURE_USERNAME = 'ShadowMage';
+const FIXTURE_USERNAME = 'DragonSlayer99';
 /** Fake but well-formed snowflake (link-discord requires 17–20 digits); never a real Discord account. */
 const FIXTURE_SNOWFLAKE = '162900000000000001';
 
@@ -64,6 +69,21 @@ async function findFixtureUserId(token: string): Promise<number> {
     const user = list?.data.find((u) => u.username === FIXTURE_USERNAME);
     if (!user) throw new Error(`demo seed user ${FIXTURE_USERNAME} not found: ${JSON.stringify(list).slice(0, 200)}`);
     return user.id;
+}
+
+type Prefs = { channelPrefs: Record<string, Record<string, boolean>> };
+
+/** Turn off every Discord DM for the gamer, as the gamer, and assert none is left on. */
+async function muteDiscordDms(adminToken: string, userId: number): Promise<void> {
+    const imp = (await apiPost(adminToken, `/auth/impersonate/${userId}`)) as { access_token?: string };
+    if (!imp.access_token) throw new Error(`impersonate ${userId} returned no token: ${JSON.stringify(imp).slice(0, 200)}`);
+    const before = (await apiGet(imp.access_token, '/notifications/preferences')) as Prefs | null;
+    const channelPrefs = Object.fromEntries(Object.keys(before?.channelPrefs ?? {}).map((t) => [t, { discord: false }]));
+    const after = (await apiPatch(imp.access_token, '/notifications/preferences', { channelPrefs })) as Prefs | null;
+    const stillOn = Object.entries(after?.channelPrefs ?? {}).filter(([, c]) => c.discord).map(([t]) => t);
+    if (!after || Object.keys(channelPrefs).length === 0 || stillOn.length > 0) {
+        throw new Error(`Discord DMs not muted for user ${userId}; still on: ${stillOn.join(',') || '(no prefs returned)'}`);
+    }
 }
 
 /** Discord-link the seeded gamer (keeps its seeded avatar hash) and assert the link landed. */
@@ -105,6 +125,7 @@ let fixtureEventId: number | null = null;
 test.beforeAll(async ({}, testInfo) => {
     const token = await getAdminToken();
     const userId = await findFixtureUserId(token);
+    await muteDiscordDms(token, userId); // BEFORE the link — see header
     await linkFixtureUser(token, userId);
     fixtureEventId = await createFixtureEvent(token, testInfo.project.name); // claimed before any assertion
     await apiPost(token, '/admin/test/signup', { eventId: fixtureEventId, userId });
