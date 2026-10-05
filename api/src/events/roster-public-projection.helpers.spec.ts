@@ -373,6 +373,28 @@ describe('Public* schemas are strict', () => {
     ).toThrow(/discordId/);
   });
 
+  // Lead directive: keys are strict, VALUES are not — legitimate DB data the
+  // member enums/uuid regex do not know must not turn a public route into a 500.
+  it('accept DB values the member schema would reject (non-RFC uuid, unknown varchar)', () => {
+    const odd = '11111111-1111-1111-1111-111111111111'; // zod v4 .uuid() rejects
+    const base = memberSignup();
+    const signup = {
+      ...base,
+      characterId: odd,
+      character: base.character && { ...base.character, id: odd },
+      status: 'legacy_status',
+      confirmationStatus: 'legacy',
+      preferredRoles: ['flex'],
+      signedUpAt: '2026-10-04 18:00:00+00',
+    } as unknown as SignupResponseDto;
+    expect(toPublicSignup(signup).characterId).toBe(odd);
+    const a = { ...assignment(), slot: 'raider', signupStatus: 'legacy' };
+    const pubA = toPublicRosterAssignment(
+      a as unknown as RosterAssignmentResponse,
+    );
+    expect(pubA.slot).toBe('raider');
+  });
+
   it('toPublicRoster / toPublicRosterWithAssignments produce schema-valid output', () => {
     expect(toPublicRoster(roster()).count).toBe(2);
     expect(

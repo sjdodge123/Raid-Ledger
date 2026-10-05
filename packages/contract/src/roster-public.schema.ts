@@ -1,13 +1,21 @@
 import { z } from 'zod';
-import { SignupUserSchema, SignupResponseSchema } from './signups.schema.js';
+import {
+    SignupUserSchema,
+    SignupResponseSchema,
+    SignupCharacterSchema,
+    type SignupResponseDto,
+} from './signups.schema.js';
 import {
     RosterAssignmentResponseSchema,
     RosterWithAssignmentsSchema,
+    type RosterAssignmentResponse,
+    type RosterWithAssignments,
 } from './roster.schema.js';
 import {
     EventCreatorSchema,
     EventResponseSchema,
     EventDetailResponseSchema,
+    type EventDetailResponseDto,
 } from './events.schema.js';
 
 // ============================================================
@@ -19,7 +27,23 @@ import {
 // from the member shape (`.omit` / `.extend`) so the two cannot drift, and the
 // identity-bearing objects are `.strict()` so a new key fails the API-side
 // parse instead of leaking silently.
+//
+// KEY strictness is the security property; VALUE checks are not. Fields read
+// from unconstrained DB columns (varchar enums, uuid, timestamps) are re-typed
+// loosely below so legitimate-but-unexpected data (a non-RFC uuid, an unknown
+// varchar status) cannot turn a public route into a 500. The exported TS types
+// stay derived from the member DTOs, so consumers see the same shapes.
 // ============================================================
+
+const looseRoles = z.array(z.string()).nullable().optional();
+
+/** Signup character, value-loose (uuid / role / faction are DB varchar/uuid). */
+const PublicSignupCharacterSchema = SignupCharacterSchema.extend({
+    id: z.string(),
+    role: z.string().nullable(),
+    faction: z.string().nullable().optional(),
+    professions: z.unknown().optional(),
+});
 
 /** Roster member identity for anonymous viewers. `avatar` is an absolute URL or null (server-built). */
 export const PublicSignupUserSchema = SignupUserSchema.omit({
@@ -38,9 +62,29 @@ export const PublicSignupResponseSchema = SignupResponseSchema.omit({
     runningLateAt: true,
     lateMinutes: true,
 })
-    .extend({ user: PublicSignupUserSchema })
+    .extend({
+        user: PublicSignupUserSchema,
+        signedUpAt: z.string(),
+        characterId: z.string().nullable(),
+        character: PublicSignupCharacterSchema.nullable(),
+        confirmationStatus: z.string(),
+        status: z.string(),
+        preferredRoles: looseRoles,
+        assignedSlot: z.string().nullable().optional(),
+    })
     .strict();
-export type PublicSignupResponseDto = z.infer<typeof PublicSignupResponseSchema>;
+export type PublicSignupResponseDto = Omit<
+    SignupResponseDto,
+    | 'user'
+    | 'discordUserId'
+    | 'discordAvatarHash'
+    | 'note'
+    | 'attendanceStatus'
+    | 'attendanceRecordedAt'
+    | 'runningLate'
+    | 'runningLateAt'
+    | 'lateMinutes'
+> & { user: PublicSignupUserDto };
 
 export const PublicEventRosterSchema = z
     .object({
@@ -49,7 +93,11 @@ export const PublicEventRosterSchema = z
         count: z.number(),
     })
     .strict();
-export type PublicEventRosterDto = z.infer<typeof PublicEventRosterSchema>;
+export type PublicEventRosterDto = {
+    eventId: number;
+    signups: PublicSignupResponseDto[];
+    count: number;
+};
 
 /** Roster slot assignment for anonymous viewers. `avatar` is an absolute URL or null. */
 export const PublicRosterAssignmentResponseSchema =
@@ -57,9 +105,20 @@ export const PublicRosterAssignmentResponseSchema =
         discordId: true,
         runningLate: true,
         lateMinutes: true,
-    }).strict();
-export type PublicRosterAssignmentResponse = z.infer<
-    typeof PublicRosterAssignmentResponseSchema
+    })
+        .extend({
+            character: RosterAssignmentResponseSchema.shape.character
+                .unwrap()
+                .extend({ id: z.string() })
+                .nullable(),
+            slot: z.string().nullable(),
+            preferredRoles: looseRoles,
+            signupStatus: z.string().optional(),
+        })
+        .strict();
+export type PublicRosterAssignmentResponse = Omit<
+    RosterAssignmentResponse,
+    'discordId' | 'runningLate' | 'lateMinutes'
 >;
 
 export const PublicRosterWithAssignmentsSchema =
@@ -67,9 +126,13 @@ export const PublicRosterWithAssignmentsSchema =
         pool: z.array(PublicRosterAssignmentResponseSchema),
         assignments: z.array(PublicRosterAssignmentResponseSchema),
     }).strict();
-export type PublicRosterWithAssignments = z.infer<
-    typeof PublicRosterWithAssignmentsSchema
->;
+export type PublicRosterWithAssignments = Omit<
+    RosterWithAssignments,
+    'pool' | 'assignments'
+> & {
+    pool: PublicRosterAssignmentResponse[];
+    assignments: PublicRosterAssignmentResponse[];
+};
 
 /** Event creator for anonymous viewers. `avatar` is an absolute URL or null. */
 export const PublicEventCreatorSchema = EventCreatorSchema.omit({
@@ -90,6 +153,11 @@ export const PublicEventDetailResponseSchema = EventDetailResponseSchema.extend(
     roster: PublicEventRosterSchema,
     rosterAssignments: PublicRosterWithAssignmentsSchema,
 });
-export type PublicEventDetailResponseDto = z.infer<
-    typeof PublicEventDetailResponseSchema
->;
+export type PublicEventDetailResponseDto = Omit<
+    EventDetailResponseDto,
+    'event' | 'roster' | 'rosterAssignments'
+> & {
+    event: PublicEventResponseDto;
+    roster: PublicEventRosterDto;
+    rosterAssignments: PublicRosterWithAssignments;
+};

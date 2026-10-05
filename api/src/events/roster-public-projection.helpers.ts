@@ -10,7 +10,10 @@
  * keep the full shape for internal callers (Discord embeds, PATCH responses).
  *
  * Each `toPublic*` builds its output from an explicit whitelist and ends with
- * the strict `Public*Schema.parse`, so a new key cannot leak silently.
+ * the strict `Public*Schema.parse`, so a new key cannot leak silently. The
+ * public schemas check KEYS strictly but VALUES loosely (a DB varchar/uuid the
+ * member enum does not know must not 500 a public route), so the parse result
+ * is narrowed back to the DTO type its enum-typed input already guarantees.
  */
 import {
   PublicSignupUserSchema,
@@ -79,7 +82,7 @@ export function toPublicSignup(
     isAnonymous: signup.isAnonymous,
     discordUsername: signup.discordUsername,
     assignedSlot: signup.assignedSlot,
-  });
+  }) as PublicSignupResponseDto;
 }
 
 export function toPublicRoster(roster: EventRosterDto): PublicEventRosterDto {
@@ -87,7 +90,7 @@ export function toPublicRoster(roster: EventRosterDto): PublicEventRosterDto {
     eventId: roster.eventId,
     signups: roster.signups.map(toPublicSignup),
     count: roster.count,
-  });
+  }) as PublicEventRosterDto;
 }
 
 export function toPublicRosterAssignment(
@@ -106,7 +109,7 @@ export function toPublicRosterAssignment(
     character: a.character,
     preferredRoles: a.preferredRoles,
     signupStatus: a.signupStatus,
-  });
+  }) as PublicRosterAssignmentResponse;
 }
 
 export function toPublicRosterWithAssignments(
@@ -117,7 +120,7 @@ export function toPublicRosterWithAssignments(
     pool: r.pool.map(toPublicRosterAssignment),
     assignments: r.assignments.map(toPublicRosterAssignment),
     slots: r.slots,
-  });
+  }) as PublicRosterWithAssignments;
 }
 
 export function toPublicCreator(c: EventCreatorDto): PublicEventCreatorDto {
