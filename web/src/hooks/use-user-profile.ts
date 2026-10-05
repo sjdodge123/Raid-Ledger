@@ -8,6 +8,7 @@ import {
   getUserActivity,
 } from "../lib/api-client";
 import { useInfiniteList } from "./use-infinite-list";
+import { useViewerCacheScope } from "./use-auth";
 import type {
   UserProfileDto,
   UserHeartedGamesResponseDto,
@@ -24,8 +25,10 @@ const PREVIEW_LIMIT = 10;
  * Fetch a user's public profile by ID (ROK-181).
  */
 export function useUserProfile(userId: number | undefined) {
+  // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+  const viewer = useViewerCacheScope();
   return useQuery<UserProfileDto>({
-    queryKey: ["userProfile", userId],
+    queryKey: ["userProfile", userId, viewer],
     queryFn: async () => {
       if (!userId) throw new Error("User ID required");
       return getUserProfile(userId);

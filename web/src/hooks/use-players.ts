@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getPlayers, getRecentPlayers } from '../lib/api-client';
 import { useInfiniteList } from './use-infinite-list';
+import { useViewerCacheScope } from './use-auth';
 import type { UserPreviewDto } from '@raid-ledger/contract';
 
 /**
@@ -8,8 +9,10 @@ import type { UserPreviewDto } from '@raid-ledger/contract';
  * ROK-282: Optional gameId filter.
  */
 export function usePlayers(page: number, search: string, gameId?: number) {
+    // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+    const viewer = useViewerCacheScope();
     return useQuery({
-        queryKey: ['players', page, search, gameId],
+        queryKey: ['players', page, search, gameId, viewer],
         queryFn: () =>
             getPlayers({
                 page,
@@ -33,8 +36,10 @@ export interface InfinitePlayersParams {
  * Infinite-scroll variant of usePlayers (ROK-361, ROK-821: params object).
  */
 export function useInfinitePlayers(search: string, params?: InfinitePlayersParams) {
+    // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+    const viewer = useViewerCacheScope();
     return useInfiniteList<UserPreviewDto>({
-        queryKey: ['players', 'infinite', search, params],
+        queryKey: ['players', 'infinite', search, params, viewer],
         queryFn: (page) =>
             getPlayers({
                 page,
@@ -49,8 +54,10 @@ export function useInfinitePlayers(search: string, params?: InfinitePlayersParam
  * Returns up to 10 players who joined in the last 30 days.
  */
 export function useRecentPlayers() {
+    // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+    const viewer = useViewerCacheScope();
     return useQuery({
-        queryKey: ['players', 'recent'],
+        queryKey: ['players', 'recent', viewer],
         queryFn: getRecentPlayers,
         staleTime: 5 * 60 * 1000, // 5 minutes
     });
