@@ -10,12 +10,17 @@
  *  - signed-in: the event detail page still renders roster names and avatars
  *    from the member payload (intercepted with `page.waitForResponse`).
  *
- * Seed: the demo seed installed by global setup (`reset-to-seed`) — the spec
- * picks the first upcoming event whose roster has a Discord-linked member
- * with an avatar hash, so it mutates nothing.
+ * Fixture: the spec builds its own. The demo seed's gamers carry an avatar
+ * hash but no Discord id, so `beforeAll` links the seeded gamer
+ * `FIXTURE_USERNAME` to a fixed fake snowflake via `/admin/test/link-discord`
+ * (idempotent — same user + snowflake on every project/run), creates a
+ * future event, and signs the gamer up via `/admin/test/signup`. `afterAll`
+ * deletes the event. The link itself has no DEMO_MODE undo (DELETE
+ * /users/me/discord would also wipe the seeded avatar), so it stays until the
+ * next `reset-to-seed`; no other smoke spec references this gamer.
  */
 import { test, expect } from './base';
-import { getAdminToken, apiGet, API_BASE } from './api-helpers';
+import { getAdminToken, apiGet, apiPost, apiDelete, pollForCondition, API_BASE } from './api-helpers';
 import { fetchWithRetry } from './fetch-retry';
 
 const DISCORD_KEYS = new Set(['discordId', 'discordUserId', 'discordAvatarHash']);
@@ -46,21 +51,68 @@ function cdnAvatarUrl(user: RosterUser): string | null {
     return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`;
 }
 
-/** First upcoming demo event with a Discord-linked roster member who has an avatar. */
-async function findSeededEvent(token: string): Promise<{ eventId: number; member: RosterUser; detail: Detail }> {
-    const list = (await apiGet(token, '/events?upcoming=true&limit=50')) as { data: Array<{ id: number }> } | null;
-    for (const { id } of list?.data ?? []) {
-        const detail = (await apiGet(token, `/events/${id}/detail`)) as Detail | null;
-        const signup = detail?.roster.signups.find((s) => s.user.id > 0 && cdnAvatarUrl(s.user));
-        if (detail && signup) return { eventId: id, member: signup.user, detail };
-    }
-    throw new Error('demo seed has no upcoming event with a Discord-linked, avatar-bearing roster member');
+/** A demo-seed gamer (`ORIGINAL_GAMERS` in api/src/admin/demo-data.constants.ts) with a fixed avatar hash. */
+const FIXTURE_USERNAME = 'ShadowMage';
+/** Fake but well-formed snowflake (link-discord requires 17–20 digits); never a real Discord account. */
+const FIXTURE_SNOWFLAKE = '162900000000000001';
+
+type Seeded = { eventId: number; member: RosterUser; detail: Detail };
+
+async function findFixtureUserId(token: string): Promise<number> {
+    const list = (await apiGet(token, `/users?search=${FIXTURE_USERNAME}&limit=20`)) as
+        { data: Array<{ id: number; username: string }> } | null;
+    const user = list?.data.find((u) => u.username === FIXTURE_USERNAME);
+    if (!user) throw new Error(`demo seed user ${FIXTURE_USERNAME} not found: ${JSON.stringify(list).slice(0, 200)}`);
+    return user.id;
 }
 
-let seeded: { eventId: number; member: RosterUser; detail: Detail };
+/** Discord-link the seeded gamer (keeps its seeded avatar hash) and assert the link landed. */
+async function linkFixtureUser(token: string, userId: number): Promise<void> {
+    await apiPost(token, '/admin/test/link-discord', {
+        userId, discordId: FIXTURE_SNOWFLAKE, username: FIXTURE_USERNAME,
+    });
+    const profile = (await apiGet(token, `/users/${userId}/profile`)) as
+        { data: { discordId: string | null; avatar: string | null } } | null;
+    if (profile?.data.discordId !== FIXTURE_SNOWFLAKE || !profile.data.avatar) {
+        throw new Error(`link-discord did not yield a linked, avatar-bearing user: ${JSON.stringify(profile?.data)}`);
+    }
+}
 
-test.beforeAll(async () => {
-    seeded = await findSeededEvent(await getAdminToken());
+async function createFixtureEvent(token: string, project: string): Promise<number> {
+    const start = new Date(Date.now() + 30 * 86_400_000);
+    const event = (await apiPost(token, '/events', {
+        title: `smoke-rok-1629-public-roster-${project}-${Date.now()}`,
+        startTime: start.toISOString(),
+        endTime: new Date(start.getTime() + 2 * 3_600_000).toISOString(),
+        maxAttendees: 10,
+    })) as { id?: number };
+    if (!event.id) throw new Error(`POST /events returned no id: ${JSON.stringify(event)}`);
+    return event.id;
+}
+
+/** The member payload's roster entry for the fixture user, once the signup is visible. */
+async function awaitRosterMember(token: string, eventId: number, userId: number): Promise<Seeded> {
+    return pollForCondition(async () => {
+        const detail = (await apiGet(token, `/events/${eventId}/detail`)) as Detail | null;
+        const member = detail?.roster.signups.find((s) => s.user.id === userId)?.user;
+        return detail && member && cdnAvatarUrl(member) ? { eventId, member, detail } : null;
+    }, { description: `fixture user ${userId} on event ${eventId} roster with a CDN avatar` });
+}
+
+let seeded: Seeded;
+let fixtureEventId: number | null = null;
+
+test.beforeAll(async ({}, testInfo) => {
+    const token = await getAdminToken();
+    const userId = await findFixtureUserId(token);
+    await linkFixtureUser(token, userId);
+    fixtureEventId = await createFixtureEvent(token, testInfo.project.name); // claimed before any assertion
+    await apiPost(token, '/admin/test/signup', { eventId: fixtureEventId, userId });
+    seeded = await awaitRosterMember(token, fixtureEventId, userId);
+});
+
+test.afterAll(async () => {
+    if (fixtureEventId !== null) await apiDelete(await getAdminToken(), `/events/${fixtureEventId}`);
 });
 
 test.describe('Public event roster — anonymous API caller (ROK-1629)', () => {
