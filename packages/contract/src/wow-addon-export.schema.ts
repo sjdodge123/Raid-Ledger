@@ -2,7 +2,7 @@ import { z } from 'zod';
 // Via the barrel, never by file path: ROK-1733 moves the Forever schemas
 // between files under the same export names. ESM live bindings make the
 // cycle safe — index.ts exports characters/blizzard before this file.
-import { WowForeverRulesetSchema } from './index.js';
+import { WowForeverRulesetSchema } from './characters.schema.js';
 
 // ============================================================
 // WoW: Forever addon export payload (ROK-1724)
