@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { formatRole } from '../../lib/role-colors';
-import { formatForeverRuleset } from '../../plugins/wow/lib/forever-identity';
+import { useCharacterLocationLabel } from '../../plugins/character-identity';
 
 function StepDot({ stepNum, isActive, isCompleted, label }: { stepNum: number; isActive: boolean; isCompleted: boolean; label: string }) {
     const circleClass = isActive ? 'bg-emerald-600 text-white' : isCompleted ? 'bg-emerald-600/30 text-emerald-400' : 'bg-panel text-muted border border-edge';
@@ -36,12 +36,14 @@ export function StepIndicator({ current, total, labels }: { current: number; tot
 
 function CharacterCardContent({ character, isSelected }: { character: CharacterDto; isSelected: boolean }) {
     const role = character.effectiveRole ?? character.roleOverride ?? character.role;
+    // ROK-1733: a realmless character shows its plugin's location label (e.g. "PvP (US)").
+    const locationLabel = useCharacterLocationLabel();
     return (
         <>
             <CharacterAvatar name={character.name} avatarUrl={character.avatarUrl ?? null} />
             <div className="flex-1 min-w-0">
                 <div className="font-medium text-foreground text-sm truncate">{character.name}</div>
-                <div className="text-xs text-muted truncate">{[character.realm || formatForeverRuleset(character.ruleset, character.region), character.class, character.spec].filter(Boolean).join(' - ')}</div>
+                <div className="text-xs text-muted truncate">{[character.realm || locationLabel(character), character.class, character.spec].filter(Boolean).join(' - ')}</div>
             </div>
             {role && <span className={`text-xs font-medium px-2 py-0.5 rounded ${isSelected ? 'bg-emerald-600/20 text-emerald-400' : 'bg-surface text-muted'}`}>{formatRole(role)}</span>}
         </>
