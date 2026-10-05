@@ -41,13 +41,17 @@ export class EventDetailService {
   /**
    * ROK-1629: the bundle embeds the roster + assignments, so it carries the
    * same per-viewer projection as the standalone routes (deactivated = anon).
+   * A deactivated viewer is built as anonymous too, so the PUG, voice and
+   * conflict branches never see their id.
    */
   async findDetail(
     id: number,
     viewer: DetailViewer,
   ): Promise<EventDetailResponseDto | PublicEventDetailResponseDto> {
-    const detail = await this.buildDetail(id, viewer?.id ?? null);
-    return projectEventDetailForViewer(detail, isMemberViewer(viewer));
+    const isMember = isMemberViewer(viewer);
+    const memberId = isMember && viewer ? viewer.id : null;
+    const detail = await this.buildDetail(id, memberId);
+    return projectEventDetailForViewer(detail, isMember);
   }
 
   /** The full member-shape bundle; never returned to a caller unprojected. */

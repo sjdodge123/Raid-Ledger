@@ -7,6 +7,8 @@
  */
 import type { PugSlotResponseDto } from '@raid-ledger/contract';
 import { EventDetailService } from './event-detail.service';
+import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
+import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
 
 jest.mock('./voice-channel-resolver.helpers', () => ({
   resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
@@ -84,5 +86,38 @@ describe('EventDetailService — PUG slot visibility (ROK-1626)', () => {
     const { pugs } = await buildService().findDetail(7, { id: 42 });
 
     expect(pugs[0]).toEqual(PUG);
+  });
+});
+
+describe('EventDetailService — deactivated viewer is anonymous (ROK-1629)', () => {
+  const DEACTIVATED = { id: 42, deactivatedAt: '2026-09-30T00:00:00.000Z' };
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('blanks the member-only PUG fields for a signed-in deactivated viewer', async () => {
+    const { pugs } = await buildService().findDetail(7, DEACTIVATED);
+
+    expect(pugs[0]?.inviteCode).toBeNull();
+    expect(pugs[0]?.serverInviteUrl).toBeNull();
+    expect(pugs[0]?.discordUserId).toBeNull();
+    expect(pugs[0]?.discordAvatarHash).toBeNull();
+  });
+
+  it('resolves voice as unauthenticated and skips conflicts for a deactivated viewer', async () => {
+    await buildService().findDetail(7, DEACTIVATED);
+
+    expect(jest.mocked(resolveVoiceChannelForEvent).mock.calls[0]?.[2]).toBe(
+      false,
+    );
+    expect(jest.mocked(enrichEventWithConflicts).mock.calls[0]?.[1]).toBeNull();
+  });
+
+  it('resolves voice as authenticated and checks conflicts for a member', async () => {
+    await buildService().findDetail(7, { id: 42, deactivatedAt: null });
+
+    expect(jest.mocked(resolveVoiceChannelForEvent).mock.calls[0]?.[2]).toBe(
+      true,
+    );
+    expect(jest.mocked(enrichEventWithConflicts).mock.calls[0]?.[1]).toBe(42);
   });
 });
