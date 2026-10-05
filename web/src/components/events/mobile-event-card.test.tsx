@@ -131,3 +131,15 @@ describe('MobileEventCard — series badge (ROK-429)', () => {
     });
 });
 
+describe('MobileEventCard — dead avatar (ROK-1714)', () => {
+    it('swaps a broken avatar image for the "?" placeholder', () => {
+        const event = createMockEvent({ signupsPreview: [{ id: 1, discordId: '111', username: 'A', avatar: 'deadhash' }] });
+        render(<MobileEventCard event={event} signupCount={1} />);
+        const stack = screen.getByTestId('mobile-event-avatars');
+
+        fireEvent.error(stack.querySelector('img')!);
+
+        expect(stack.querySelector('img'), 'broken img should be replaced').toBeNull();
+        expect(stack.textContent, 'placeholder should render after the img error').toBe('?');
+    });
+});

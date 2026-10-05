@@ -6,7 +6,7 @@
  * Note: AdHocRoster is now a re-export of VoiceRoster for backwards compatibility.
  */
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { VoiceRoster } from './VoiceRoster';
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
 
@@ -285,4 +285,16 @@ describe('VoiceRoster — part 4', () => {
     expect(screen.getByText(/Left \(10\)/)).toBeInTheDocument();
   });
 
+});
+
+describe('VoiceRoster — dead avatar (ROK-1714)', () => {
+  it('swaps a broken avatar image for the initial', () => {
+    const stale = createParticipant({ discordAvatarHash: 'deadhash', discordUserId: 'd1', discordUsername: 'Halfdead' });
+    const { container } = render(<VoiceRoster participants={[stale]} activeCount={1} />);
+
+    fireEvent.error(container.querySelector('img')!);
+
+    expect(container.querySelector('img'), 'broken img should be replaced').toBeNull();
+    expect(screen.queryByText('H'), 'initial fallback should render after the img error').not.toBeNull();
+  });
 });
