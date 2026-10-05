@@ -113,9 +113,8 @@ async function countNew(
         ),
       ),
     );
-  const keys = new Set(stored.map((r) => pullKey(r.e, r.s.getTime())));
-  return pulls.filter((p) => keys.has(pullKey(p.encounterId, p.startAt * 1000)))
-    .length;
+  const storedKeys = stored.map((r) => pullKey(r.e, r.s.getTime()));
+  return countNewPulls(pulls, new Set(storedKeys));
 }
 
 /** Dry run: how many pulls would be new vs already reported. No writes. */
@@ -123,11 +122,10 @@ export async function previewRaid(
   ctx: AddonApplyContext,
   payload: AddonRaidExport,
 ): Promise<RaidOutcome> {
-  const duplicates = await countStored(ctx, payload);
-  const pulls = payload.data.pulls;
+  const fresh = await countNew(ctx, payload);
   return {
     status: 'preview',
-    summary: buildRaidSummary(pulls, pulls.length - duplicates),
+    summary: buildRaidSummary(payload.data.pulls, fresh),
   };
 }
 
