@@ -10,41 +10,12 @@
  *   the footer's "Check string" is `AddonImportPasteActions`.
  */
 import { useRef, type ChangeEvent, type JSX } from 'react';
-import { ADDON_IMPORT_MAX_BYTES, ADDON_IMPORT_PAGE_RE } from '@raid-ledger/contract';
+import { ADDON_IMPORT_MAX_BYTES } from '@raid-ledger/contract';
+import { formatKb, importStringBytes, importStringHeaderLabel, sendableImportString } from './addon-import.helpers';
 import { Field } from '../../../../components/ui/field';
 import { Textarea } from '../../../../components/ui/textarea';
 import { Button } from '../../../../components/ui/button';
 import { AddonImportErrorBanner } from './addon-import-error-banner';
-
-const SECTION_LABELS: Record<string, string> = { char: 'Character', guild: 'Guild', raid: 'Raid' };
-
-export function importStringBytes(text: string): number {
-    return new TextEncoder().encode(text.trim()).length;
-}
-
-export function formatKb(bytes: number): string {
-    const kb = bytes / 1024;
-    return `${Number.isInteger(kb) ? kb : kb.toFixed(1)} KB`;
-}
-
-/** The trimmed string when it may be sent; null when empty or over the cap. */
-export function sendableImportString(text: string): string | null {
-    const trimmed = text.trim();
-    if (!trimmed || importStringBytes(trimmed) > ADDON_IMPORT_MAX_BYTES) return null;
-    return trimmed;
-}
-
-/** Chip label from the page header(s); null when the text is not a recognisable import string. */
-export function importStringHeaderLabel(text: string): string | null {
-    const pages = text.trim().split(/\s+/).filter(Boolean);
-    const first = pages.length ? ADDON_IMPORT_PAGE_RE.exec(pages[0] ?? '') : null;
-    if (!first) return null;
-    const [, version, section = '', page, of] = first;
-    const label = SECTION_LABELS[section] ?? section;
-    if (!page || !of) return `${label} · RL${version}`;
-    if (pages.length > 1) return `${label} · ${pages.length} of ${of} pages`;
-    return `${label} · page ${page} of ${of}`;
-}
 
 function sizeError(bytes: number): string | undefined {
     if (bytes <= ADDON_IMPORT_MAX_BYTES) return undefined;
