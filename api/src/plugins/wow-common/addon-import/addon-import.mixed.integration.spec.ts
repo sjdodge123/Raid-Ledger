@@ -217,6 +217,32 @@ describe('addon import — mixed paste apply', () => {
     ]);
   });
 
+  it('a raid section carrying another region rejects the paste (Codex P2) — nothing written', async () => {
+    const { token, charId } = await memberWithChar('anamixregion');
+    const res = await post(
+      token,
+      charId,
+      fixture('invalid/mixed-different-region'),
+      false,
+    );
+    expect(res.status).toBe(422);
+    expect(res.body).toMatchObject({
+      code: 'INVALID_PAYLOAD',
+      message: 'These strings come from different characters.',
+    });
+    expect(await writtenRows()).toEqual({
+      snapshots: 0,
+      guilds: 0,
+      members: 0,
+      pulls: 0,
+    });
+    const [character] = await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, charId));
+    expect(character?.addonGuid).toBeNull();
+  });
+
   it('a mixed paste counts ONCE against the hourly apply limit', async () => {
     process.env.THROTTLE_DISABLED = 'false';
     const { userId, token, charId } = await memberWithChar('anamixlimit');
