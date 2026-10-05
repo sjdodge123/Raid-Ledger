@@ -44,9 +44,7 @@ type UpdateField = <K extends keyof FormState>(f: K, v: FormState[K]) => void;
 type Identity = CharacterIdentityProvider | null;
 
 /** The identity value the form holds: the user's edit, else the provider's blank one. */
-function identityValueOf(identity: Identity, form: FormState): unknown {
-    return identity && form.identity === undefined ? identity.empty() : form.identity;
-}
+const identityValueOf = (identity: Identity, form: FormState): unknown => (identity && form.identity === undefined ? identity.empty() : form.identity);
 
 function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean, identity: Identity) {
     const payload = buildBasePayload(form, gameId, showMmoFields, isMain);

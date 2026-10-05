@@ -40,12 +40,8 @@ const getInitialFormState = (char?: CharacterDto | null): FormState => ({
     identity: undefined,
 });
 
-type Identity = CharacterIdentityProvider | null;
-
 /** The identity value a form holds: the user's edit, else the provider's value for the edited character (blank on create). */
-function resolveIdentity(identity: Identity, value: unknown, editing?: CharacterDto | null): unknown {
-    return identity && value === undefined ? identity.fromCharacter(editing) : value;
-}
+const resolveIdentity = (identity: CharacterIdentityProvider | null, value: unknown, editing?: CharacterDto | null): unknown => (identity && value === undefined ? identity.fromCharacter(editing) : value);
 
 /**
  * ROK-1655: unsaved = a field differs from the state the form opened with
@@ -59,7 +55,7 @@ function isCharacterFormDirty(form: FormState, baseline: FormState, sameIdentity
     return changed || (pickedGameSlug !== undefined && pickedGameSlug !== preselectedSlug);
 }
 
-function buildUpdateDto(form: FormState, showMmoFields: boolean, identity: Identity, identityValue: unknown) {
+function buildUpdateDto(form: FormState, showMmoFields: boolean, identity: CharacterIdentityProvider | null, identityValue: unknown) {
     const dto = buildBaseUpdateDto(form, showMmoFields);
     return identity ? { ...dto, realm: undefined, ...identity.updateFields(identityValue) } : dto;
 }
@@ -75,7 +71,7 @@ function buildBaseUpdateDto(form: FormState, showMmoFields: boolean) {
 }
 
 /** A plugin-owned identity replaces the name with its own fields and never sends a realm. */
-function buildCreateDto(form: FormState, showMmoFields: boolean, gameId: number, identity: Identity, identityValue: unknown) {
+function buildCreateDto(form: FormState, showMmoFields: boolean, gameId: number, identity: CharacterIdentityProvider | null, identityValue: unknown) {
     const dto = buildBaseCreateDto(form, showMmoFields, gameId);
     return identity ? { ...dto, realm: undefined, ...identity.createFields(identityValue) } : dto;
 }
@@ -95,7 +91,7 @@ function buildBaseCreateDto(form: FormState, showMmoFields: boolean, gameId: num
  * Game first: the Name field only renders once a game is picked, so its error would be invisible before that.
  * Every path — a plugin-owned identity included — needs a resolved registry game id; the narrowed id is returned for the save.
  */
-function validateCharacterForm(form: FormState, effectiveGameId: number | undefined, selectedIgdbGame: IgdbGameDto | null, identity: Identity, identityValue: unknown): { errors: FormErrors } | { gameId: number } {
+function validateCharacterForm(form: FormState, effectiveGameId: number | undefined, selectedIgdbGame: IgdbGameDto | null, identity: CharacterIdentityProvider | null, identityValue: unknown): { errors: FormErrors } | { gameId: number } {
     if (!effectiveGameId && !selectedIgdbGame) return { errors: { game: 'Please select a game' } };
     if (identity) { const errs = identity.validate(identityValue); if (errs) return { errors: { identity: errs } }; }
     else if (!form.name.trim()) return { errors: { name: 'Character name is required' } };
@@ -197,7 +193,7 @@ function useCharacterModalState(props: AddCharacterModalProps) {
  * the name row it concerns (its toast is suppressed); anything else stays a
  * form-level alert and the hooks also toast it.
  */
-function saveErrorToFormErrors(e: Error, identity: Identity): FormErrors {
+function saveErrorToFormErrors(e: Error, identity: CharacterIdentityProvider | null): FormErrors {
     const message = e.message || 'Failed to save character';
     return identity && isConflictError(e) ? { identity: { name: message } } : { form: message };
 }

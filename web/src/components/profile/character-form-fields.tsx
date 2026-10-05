@@ -100,8 +100,7 @@ function IdentityFields({ form, identity, identityValue, isEditing, isArmorySync
     nameError?: string | undefined; identityErrors?: IdentityErrors | undefined; onUpdateField: CharacterFormFieldsProps['onUpdateField'];
 }) {
     if (identity) {
-        const { Fields } = identity;
-        return <Fields value={identityValue} onChange={(v) => onUpdateField('identity', v)} errors={identityErrors} regionLocked={isEditing} />;
+        return <identity.Fields value={identityValue} onChange={(v) => onUpdateField('identity', v)} errors={identityErrors} regionLocked={isEditing} />;
     }
     return (
         <SyncableInput label="Name" value={form.name} onChange={(v) => onUpdateField('name', v)}

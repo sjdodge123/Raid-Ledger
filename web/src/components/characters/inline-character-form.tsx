@@ -98,8 +98,7 @@ function useInlineFields(gameSlug: string | undefined) {
     const [realm, setRealm] = useState('');
     const [editedIdentity, setIdentity] = useState<unknown>(undefined);
     const identity = useCharacterIdentity(gameSlug);
-    const identityValue = identity && editedIdentity === undefined ? identity.empty() : editedIdentity;
-    return { name, setName, charClass, setCharClass, spec, setSpec, role, setRole, realm, setRealm, identity, identityValue, setIdentity };
+    return { name, setName, charClass, setCharClass, spec, setSpec, role, setRole, realm, setRealm, identity, setIdentity, identityValue: identity && editedIdentity === undefined ? identity.empty() : editedIdentity };
 }
 
 export function InlineCharacterForm({ gameId, hasRoles = true, gameSlug, eventId, onCharacterCreated, onCancel }: InlineCharacterFormProps) {
