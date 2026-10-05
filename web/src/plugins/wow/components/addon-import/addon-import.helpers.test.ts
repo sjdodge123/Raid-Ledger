@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ADDON_IMPORT_MAX_BYTES } from '@raid-ledger/contract';
+import { ADDON_IMPORT_MAX_BYTES, type AddonImportResultDto } from '@raid-ledger/contract';
 import {
     canApplyAddonImport, diffRows, formatKb, importStringBytes, importStringHeaderLabel,
     provenanceLine, resultHeadline, sendableImportString, summaryRows,
@@ -63,11 +63,11 @@ describe('summary copy', () => {
         expect(summaryRows(charResult({ summary: { gearCount: 0, avgIlvl: null, talentNodes: 0, lockouts: 0 } }))[0]).toEqual(['Gear', '0 items']);
     });
     it('builds guild and raid rows', () => {
-        const guild = { section: 'guild', status: 'preview', exportedAt: EXPORTED_AT, warnings: [], diff: {},
-            summary: { guildName: 'Night Watch', members: 40, newMembers: 3, updatedMembers: 37, pages: 2 } } as const;
+        const guild: AddonImportResultDto = { section: 'guild', status: 'preview', exportedAt: EXPORTED_AT, warnings: [], diff: {},
+            summary: { guildName: 'Night Watch', members: 40, newMembers: 3, updatedMembers: 37, pages: 2 } };
         expect(summaryRows(guild)).toContainEqual(['Members', '40 (3 new, 37 updated)']);
-        const raid = { section: 'raid', status: 'preview', exportedAt: EXPORTED_AT, warnings: [], diff: {},
-            summary: { pulls: 5, newPulls: 4, duplicatePulls: 1, kills: 3, wipes: 2 } } as const;
+        const raid: AddonImportResultDto = { section: 'raid', status: 'preview', exportedAt: EXPORTED_AT, warnings: [], diff: {},
+            summary: { pulls: 5, newPulls: 4, duplicatePulls: 1, kills: 3, wipes: 2 } };
         expect(summaryRows(raid)).toEqual([['Pulls', '5 (4 new, 1 already imported)'], ['Kills / wipes', '3 / 2']]);
     });
     it('shows class and level changes', () => {

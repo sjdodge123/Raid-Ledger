@@ -39,7 +39,7 @@ function renderHarness() {
     );
 }
 
-function countRequests(status = 200, reply: unknown = charResult()) {
+function countRequests(status = 200, reply: Record<string, unknown> = charResult()) {
     const bodies: unknown[] = [];
     server.use(http.post(IMPORT_URL, async ({ request }) => {
         bodies.push(await request.json());
