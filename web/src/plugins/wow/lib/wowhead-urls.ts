@@ -5,33 +5,21 @@
  * - quest-prep-panel.tsx (quest/item links + tooltips)
  * - item-comparison.tsx (equipped item links + tooltips)
  * - character-detail-sections.tsx (equipment links + tooltips)
+ * - item-detail-modal.tsx ("View on Wowhead" link)
+ * - boss-loot-body.tsx / boss-loot-panel.tsx (per-expansion loot links)
+ *
+ * The domains themselves live in wow-variant-config.ts (ROK-1726). WoW:
+ * Forever resolves to Wowhead's Forever environment (/forever,
+ * domain=forever); every other variant keeps its pre-ROK-1726 mapping.
  */
+import { getWowVariantIntegrations, WOWHEAD_EXPANSION_DOMAINS, WOWHEAD_RETAIL_DOMAIN, type WowheadDomain } from './wow-variant-config';
 
 /**
- * Resolve a WoW game variant OR apiNamespacePrefix to the correct
- * Wowhead domain segments. Accepts both old variant strings
- * (classic_anniversary, classic_era, classic, wow_forever) and new
- * apiNamespacePrefix values (classicann, classic1x, classic, classicforever)
- * for backward compatibility.
- *
- * ROK-1563: Wowhead has no WoW: Forever database yet and Forever's item/quest
- * IDs are vanilla's, so `wow_forever` / `classicforever` share the classic
- * domain. Give them their own branch once Wowhead ships one.
+ * Resolve a WoW game variant OR apiNamespacePrefix (classicann, classic1x,
+ * classic, classicforever) to its Wowhead domain segments. Unknown → retail.
  */
-function getWowheadDomain(variant: string | null | undefined): { urlBase: string; tooltipDomain: string } {
-    switch (variant) {
-        case 'classic_anniversary':
-        case 'classicann':
-            return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
-        case 'classic':
-        case 'classic_era':
-        case 'classic1x':
-        case 'wow_forever':
-        case 'classicforever':
-            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
-        default:
-            return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };
-    }
+function getWowheadDomain(variant: string | null | undefined): WowheadDomain {
+    return getWowVariantIntegrations(variant)?.wowhead ?? WOWHEAD_RETAIL_DOMAIN;
 }
 
 /** Build a full Wowhead quest URL. */
@@ -66,20 +54,8 @@ export function getWowheadQuestData(questId: number, variant?: string | null): s
  * Resolve a loot item expansion key to the correct Wowhead domain segments.
  * Used by boss loot panels where each item may come from a different expansion.
  */
-function getWowheadDomainForExpansion(expansion: string): { urlBase: string; tooltipDomain: string } {
-    switch (expansion) {
-        case 'tbc':
-            return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
-        case 'wotlk':
-            return { urlBase: 'www.wowhead.com/wotlk', tooltipDomain: 'wotlk' };
-        case 'cata':
-            return { urlBase: 'www.wowhead.com/cata', tooltipDomain: 'cata' };
-        case 'sod':
-        case 'classic':
-            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
-        default:
-            return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };
-    }
+function getWowheadDomainForExpansion(expansion: string): WowheadDomain {
+    return Object.hasOwn(WOWHEAD_EXPANSION_DOMAINS, expansion) ? WOWHEAD_EXPANSION_DOMAINS[expansion] : WOWHEAD_RETAIL_DOMAIN;
 }
 
 /** Build a full Wowhead item URL using the item's expansion for correct domain. */
