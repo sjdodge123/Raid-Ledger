@@ -52,7 +52,11 @@ function expectReject(
   return err;
 }
 
-const shuffle = <T>(xs: T[]): T[] => [xs[2], xs[0], xs[1], ...xs.slice(3)];
+const shuffle = <T>(xs: T[]): T[] => [
+  ...xs.slice(2, 3),
+  ...xs.slice(0, 2),
+  ...xs.slice(3),
+];
 
 describe('decodeImportString — canonical sections', () => {
   it('decodes a char string into the frozen snapshot shape', () => {
@@ -66,7 +70,7 @@ describe('decodeImportString — canonical sections', () => {
       { slot: 1, itemId: 16921, ilvl: 76, bonusIds: [] },
     ]);
     expect(JSON.stringify(out.payload)).not.toContain('|H');
-    expect(out.payload.data.lockouts[0].name).toBe('Molten Core');
+    expect(out.payload.data.lockouts[0]?.name).toBe('Molten Core');
     expect(out.payload.who.guildName).toBe('Night Shift');
   });
 
@@ -79,7 +83,7 @@ describe('decodeImportString — canonical sections', () => {
     const raid = decodeImportString(buildImportString(buildRaidPayload()));
     expect(raid.payload.section).toBe('raid');
     if (raid.payload.section === 'raid') {
-      expect(raid.payload.data.pulls[0].name).toBe('Lucifron');
+      expect(raid.payload.data.pulls[0]?.name).toBe('Lucifron');
     }
   });
 
@@ -147,12 +151,12 @@ describe('decodeImportString — paged guild strings', () => {
   });
 
   it('rejects a member listed on two pages', () => {
-    const dup = buildGuildPayload([...members, members[0]]);
+    const dup = buildGuildPayload([...members, ...members.slice(0, 1)]);
     expectReject(buildGuildPages(dup, 2).join('\n'), 'INVALID_PAYLOAD');
   });
 
   it('rejects impossible page headers and paged non-guild sections', () => {
-    const body = pages[0].split('!').pop();
+    const body = pages[0]?.split('!').pop() ?? '';
     expectReject(`!RL1!guild-2of1!${body}`, 'BAD_HEADER');
     expectReject(`!RL1!guild-0of2!${body}`, 'BAD_HEADER');
     expectReject(`!RL1!guild-1of9!${body}`, 'BAD_HEADER');
@@ -226,7 +230,8 @@ describe('decodeImportString — header + base64', () => {
     const compressed = zlib.deflateSync(
       Buffer.from(JSON.stringify(buildCharPayload())),
     );
-    compressed[Math.floor(compressed.length / 2)] ^= 0xff;
+    const mid = Math.floor(compressed.length / 2);
+    compressed.writeUInt8(compressed.readUInt8(mid) ^ 0xff, mid);
     expectReject(wrapImportBytes(compressed), 'CUT_OFF');
   });
 
