@@ -8,9 +8,6 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import * as bodyParser from 'body-parser';
 
-type CorsCallback = (err: Error | null, allow?: boolean) => void;
-type CorsOriginFn = (origin: string | undefined, cb: CorsCallback) => void;
-
 // Descending severity. A threshold like 'log' enables itself plus everything
 // to its left (more severe), e.g. error+warn+log. Order matches the original
 // inline whitelist that used to live in main.ts so existing log-shipping
@@ -134,7 +131,9 @@ export interface HelmetOptions {
  * Validates CORS configuration for the current environment.
  * - Production requires CORS_ORIGIN to be set
  * - Production blocks wildcard (*)
- * - Production warns (but does not throw) for 'auto' mode
+ * - Production notes (warn, never throws) that 'auto' is the same-origin
+ *   check of ROK-1732; the `[cors-auto] mode=` boot line from
+ *   `applyCorsPolicy` says whether mismatches are rejected or only logged.
  */
 export function validateCorsConfig(
   isProduction: boolean,
@@ -153,43 +152,11 @@ export function validateCorsConfig(
   }
   if (isProduction && corsOrigin === 'auto') {
     logger.warn(
-      'CORS_ORIGIN=auto allows all origins. ' +
-        'This is intended for single-origin reverse-proxy deployments only. ' +
-        'Set an explicit origin for tighter security.',
+      'CORS_ORIGIN=auto checks that a request Origin matches its Host ' +
+        '(single-origin reverse-proxy deployments). The [cors-auto] mode line ' +
+        'says whether mismatches are rejected (enforce) or only logged (report).',
     );
   }
-}
-
-/**
- * Builds the CORS origin callback function.
- * - Same-origin requests (origin undefined) are always allowed
- * - 'auto' mode allows any origin (proxy-only use case)
- * - Wildcard allows any origin
- * - Specific origin is matched; dev adds localhost variants
- */
-export function buildCorsOriginFn(
-  isProduction: boolean,
-  corsOrigin: string | undefined,
-  isAutoOrigin: boolean,
-): CorsOriginFn {
-  return (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (isAutoOrigin) return callback(null, true);
-    if (corsOrigin === '*') return callback(null, true);
-    const allowed: string[] = [corsOrigin].filter(Boolean) as string[];
-    if (!isProduction) {
-      allowed.push(
-        'http://localhost',
-        'http://localhost:80',
-        'http://localhost:5173',
-        'http://localhost:5174',
-      );
-    }
-    callback(
-      allowed.includes(origin) ? null : new Error('Not allowed by CORS'),
-      allowed.includes(origin),
-    );
-  };
 }
 
 /**
