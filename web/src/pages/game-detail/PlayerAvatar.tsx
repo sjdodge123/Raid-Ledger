@@ -1,5 +1,6 @@
 import type { JSX } from 'react';
-import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { toAvatarUser } from '../../lib/avatar';
+import { AvatarWithFallback } from '../../components/shared/AvatarWithFallback';
 import type {
     NowPlayingPlayerDto,
     GameTopPlayerDto,
@@ -7,7 +8,7 @@ import type {
     PublicGameTopPlayerDto,
 } from '@raid-ledger/contract';
 
-/** Player avatar helper for game detail page */
+/** Player avatar helper for game detail page (ROK-1714: falls back to initials on a dead URL) */
 export function PlayerAvatar({ player, size = 'sm' }: {
     /** Anonymous viewers get the public shape: no `discordId`, `avatar` already a URL (ROK-1734). */
     player:
@@ -17,20 +18,7 @@ export function PlayerAvatar({ player, size = 'sm' }: {
         | PublicGameTopPlayerDto;
     size?: 'sm' | 'md';
 }): JSX.Element {
-    const avatarInfo = resolveAvatar(toAvatarUser(player));
+    const user = toAvatarUser(player);
     const sizeClass = size === 'md' ? 'w-8 h-8' : 'w-6 h-6';
-    if (avatarInfo.url) {
-        return (
-            <img
-                src={avatarInfo.url}
-                alt={player.username}
-                className={`${sizeClass} rounded-full object-cover`}
-            />
-        );
-    }
-    return (
-        <div className={`${sizeClass} rounded-full bg-overlay flex items-center justify-center text-xs text-muted`}>
-            {player.username.charAt(0).toUpperCase()}
-        </div>
-    );
+    return <AvatarWithFallback user={user} username={player.username} sizeClassName={sizeClass} />;
 }
