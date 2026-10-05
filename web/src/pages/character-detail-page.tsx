@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/use-auth';
 import { useState, useEffect, useRef } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { PluginSlot } from '../plugins';
-import { formatForeverRuleset } from '../components/characters/forever-identity';
+import { formatForeverRuleset } from '../plugins/wow/lib/forever-identity';
 
 const ROLE_COLORS: Record<string, string> = {
     tank: 'bg-blue-600',

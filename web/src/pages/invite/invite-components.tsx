@@ -1,7 +1,7 @@
 import type { JSX } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { formatRole } from '../../lib/role-colors';
-import { formatForeverRuleset } from '../../components/characters/forever-identity';
+import { formatForeverRuleset } from '../../plugins/wow/lib/forever-identity';
 
 function StepDot({ stepNum, isActive, isCompleted, label }: { stepNum: number; isActive: boolean; isCompleted: boolean; label: string }) {
     const circleClass = isActive ? 'bg-emerald-600 text-white' : isCompleted ? 'bg-emerald-600/30 text-emerald-400' : 'bg-panel text-muted border border-edge';

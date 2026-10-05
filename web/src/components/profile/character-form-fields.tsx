@@ -4,8 +4,8 @@ import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
-import { ForeverIdentityFields } from '../characters/forever-identity-fields';
-import type { ForeverIdentity, ForeverIdentityErrors } from '../characters/forever-identity';
+import { ForeverIdentityFields } from '../../plugins/wow/components/forever-identity-fields';
+import type { ForeverIdentity, ForeverIdentityErrors } from '../../plugins/wow/lib/forever-identity';
 
 interface FormState {
     name: string;

@@ -9,8 +9,8 @@ import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
-import { ForeverIdentityFields } from '../characters/forever-identity-fields';
-import { emptyForeverIdentity, foreverCreateFields, isWowForeverSlug, validateForeverIdentity, type ForeverIdentity, type ForeverIdentityErrors } from '../characters/forever-identity';
+import { ForeverIdentityFields } from '../../plugins/wow/components/forever-identity-fields';
+import { emptyForeverIdentity, foreverCreateFields, isWowForeverSlug, validateForeverIdentity, type ForeverIdentity, type ForeverIdentityErrors } from '../../plugins/wow/lib/forever-identity';
 
 interface CharacterStepProps {
     /** The registry game to create a character for (pre-filled from hearted games) */

@@ -6,8 +6,8 @@ import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
-import { ForeverIdentityFields } from './forever-identity-fields';
-import { emptyForeverIdentity, foreverCreateFields, isWowForeverSlug, validateForeverIdentity, type ForeverIdentity, type ForeverIdentityErrors } from './forever-identity';
+import { ForeverIdentityFields } from '../../plugins/wow/components/forever-identity-fields';
+import { emptyForeverIdentity, foreverCreateFields, isWowForeverSlug, validateForeverIdentity, type ForeverIdentity, type ForeverIdentityErrors } from '../../plugins/wow/lib/forever-identity';
 
 interface InlineCharacterFormProps {
     gameId: number;

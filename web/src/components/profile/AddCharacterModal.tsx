@@ -13,7 +13,7 @@ import { CharacterFormFields } from './character-form-fields';
 import {
     foreverCreateFields, foreverIdentityFromCharacter, foreverUpdateFields, sameForeverIdentity, usesForeverIdentity, validateForeverIdentity,
     type ForeverIdentity, type ForeverIdentityErrors,
-} from '../characters/forever-identity';
+} from '../../plugins/wow/lib/forever-identity';
 
 interface AddCharacterModalProps {
     isOpen: boolean;
