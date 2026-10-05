@@ -18,6 +18,10 @@ export const LEDGERLINK_SCHEMA_ID =
 export function buildLedgerLinkJsonSchema(): Record<string, unknown> {
     const generated = z.toJSONSchema(AddonExportSchema, {
         target: 'draft-2020-12',
+        // INPUT mode: what the server ACCEPTS. A `.strict()` object becomes
+        // `additionalProperties: false`; output mode would emit that for every
+        // object and hide a loosened schema from the drift guard.
+        io: 'input',
         unrepresentable: 'throw',
     }) as Record<string, unknown>;
     return {
