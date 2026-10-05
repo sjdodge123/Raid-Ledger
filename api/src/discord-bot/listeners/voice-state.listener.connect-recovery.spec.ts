@@ -172,6 +172,9 @@ describe('VoiceStateListener binding-cache sweep', () => {
     const cleared = new Set(clearSpy.mock.calls.map(([t]) => t as unknown));
     expect(started).toHaveLength(2);
     // An orphaned sweep is a ref'd interval that keeps the process alive.
-    expect(started.filter((t) => !cleared.has(t))).toEqual([]);
+    const orphaned = started
+      .filter((t) => !cleared.has(t))
+      .map(() => 'uncleared 10-minute binding-cache sweep');
+    expect(orphaned).toEqual([]);
   });
 });
