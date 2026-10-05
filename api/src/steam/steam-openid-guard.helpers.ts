@@ -30,7 +30,7 @@ export async function assertFreshSteamAssertion(
   callbackUrl: string,
   deps: { nonceStore: SteamOpenIdNonceStore; logger: Logger },
 ): Promise<void> {
-  const check = validateSteamAssertion(query, callbackUrl, query.state);
+  const check = validateSteamAssertion(query, callbackUrl, query.state ?? '');
   const reason = check.ok
     ? await claimNonce(deps.nonceStore, check.nonce)
     : check.reason;
