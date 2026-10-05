@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { CharacterDto, CharacterProfessionsDto } from '@raid-ledger/contract';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
+import { PluginSlot } from '../../plugins';
 
 const FACTION_STYLES: Record<string, string> = {
     alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -12,15 +13,6 @@ const ROLE_COLORS: Record<string, string> = {
     tank: 'bg-blue-600',
     healer: 'bg-emerald-600',
     dps: 'bg-red-600',
-};
-
-/** ROK-587: Short labels for WoW Classic game variants */
-const VARIANT_LABELS: Record<string, string> = {
-    classic_anniversary: 'TBC',
-    classic_era: 'Era',
-    classic: 'Cata',
-    // ROK-1563: WoW: Forever
-    wow_forever: 'Forever',
 };
 
 interface CharacterCardCompactProps {
@@ -56,7 +48,7 @@ interface ResolvedChar {
     charId: string; charName: string; avatarUrl?: string | null | undefined; faction?: string | null | undefined;
     level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
     spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
-    isMain?: boolean | undefined; variantLabel: string | null;
+    isMain?: boolean | undefined; gameVariant: string | null; ruleset: string | null;
     professions?: CharacterProfessionsDto | null | undefined;
 }
 
@@ -69,7 +61,7 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
         charClass: c?.class ?? props.className, spec: c?.spec ?? props.spec,
         role: c?.effectiveRole ?? props.role, itemLevel: c?.itemLevel ?? props.itemLevel,
         isMain: c?.isMain ?? props.isMain,
-        variantLabel: c?.gameVariant ? VARIANT_LABELS[c.gameVariant] ?? null : null,
+        gameVariant: c?.gameVariant ?? null, ruleset: c?.ruleset ?? null,
         professions: c?.professions ?? props.professions ?? null,
     };
 }
@@ -81,15 +73,16 @@ function CharacterAvatar({ avatarUrl, charName, size }: { avatarUrl?: string | n
     return <div className={`${size} rounded-full bg-overlay flex items-center justify-center text-muted flex-shrink-0`}>👤</div>;
 }
 
-function NameRow({ charName, isMain, faction, variantLabel, textSize }: {
-    charName: string; isMain?: boolean | undefined; faction?: string | null | undefined; variantLabel: string | null; textSize: string;
+function NameRow({ charName, isMain, faction, gameVariant, ruleset, textSize }: {
+    charName: string; isMain?: boolean | undefined; faction?: string | null | undefined;
+    gameVariant: string | null; ruleset: string | null; textSize: string;
 }) {
     return (
         <div className="flex items-center gap-2 flex-wrap">
             <span className={`font-medium text-foreground truncate max-w-[180px] sm:max-w-none ${textSize}`}>{charName}</span>
             {isMain && <span className="text-yellow-400 text-xs font-semibold inline-flex items-center gap-0.5 flex-shrink-0">⭐ Main</span>}
             {faction && <span className={`px-1.5 py-0.5 rounded text-xs font-medium border flex-shrink-0 ${FACTION_STYLES[faction] ?? 'bg-faint text-muted'}`}>{faction.charAt(0).toUpperCase() + faction.slice(1)}</span>}
-            {variantLabel && <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 flex-shrink-0">{variantLabel}</span>}
+            <PluginSlot name="character-card:badges" context={{ gameVariant, ruleset }} />
         </div>
     );
 }
@@ -128,7 +121,7 @@ export function CharacterCardCompact(props: CharacterCardCompactProps) {
             className={`bg-panel border border-edge rounded-lg ${isSm ? 'p-3' : 'p-4'} flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity`}>
             <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
             <div className="min-w-0 overflow-hidden">
-                <NameRow charName={c.charName} isMain={c.isMain} faction={c.faction} variantLabel={c.variantLabel} textSize={isSm ? 'text-sm' : ''} />
+                <NameRow charName={c.charName} isMain={c.isMain} faction={c.faction} gameVariant={c.gameVariant} ruleset={c.ruleset} textSize={isSm ? 'text-sm' : ''} />
                 <MetadataRow level={c.level} race={c.race} charClass={c.charClass} spec={c.spec} role={c.role} itemLevel={c.itemLevel} professions={c.professions} textSize={isSm ? 'text-xs' : 'text-sm'} />
             </div>
         </Link>
