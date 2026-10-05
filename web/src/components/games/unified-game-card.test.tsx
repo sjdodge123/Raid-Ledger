@@ -532,3 +532,41 @@ describe('UnifiedGameCard — cover clipping (ROK-1401)', () => {
         expect(coverWrapper(container).className).toContain('overflow-hidden');
     });
 });
+
+describe('UnifiedGameCard — cover fallback chain (ROK-1715)', () => {
+    const BOXART = 'https://assets.isthereanydeal.com/boxart.jpg';
+
+    it('prefers coverUrl over itadBoxartUrl', () => {
+        renderCard(
+            <UnifiedGameCard
+                variant="link"
+                game={createBaseGame({ itadBoxartUrl: BOXART })}
+            />,
+        );
+        expect(screen.getByAltText('Elden Ring')).toHaveAttribute(
+            'src',
+            'https://example.com/cover.jpg',
+        );
+    });
+
+    it('falls back to itadBoxartUrl when coverUrl is null', () => {
+        renderCard(
+            <UnifiedGameCard
+                variant="link"
+                game={createBaseGame({ coverUrl: null, itadBoxartUrl: BOXART })}
+            />,
+        );
+        expect(screen.getByAltText('Elden Ring')).toHaveAttribute('src', BOXART);
+    });
+
+    it('renders the placeholder when both are null', () => {
+        const { container } = renderCard(
+            <UnifiedGameCard
+                variant="link"
+                game={createBaseGame({ coverUrl: null, itadBoxartUrl: null })}
+            />,
+        );
+        expect(screen.queryByAltText('Elden Ring')).not.toBeInTheDocument();
+        expect(container.querySelector('.text-dim > svg')).not.toBeNull();
+    });
+});

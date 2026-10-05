@@ -191,3 +191,10 @@ export * from './scheduling-slot-order.js';
 export * from './relay/index.js';
 // Game-name identity helpers shared by api and the relay hub (ROK-1668)
 export * from './game-identity/index.js';
+
+// WoW: Forever addon import string — payload envelope + import API (ROK-1724).
+// Keep AFTER characters/blizzard: these files import the Forever schemas back
+// through this barrel.
+export * from './wow-addon-export.schema.js';
+export * from './wow-addon-import.schema.js';
+export * from './ledgerlink-json-schema.js';
