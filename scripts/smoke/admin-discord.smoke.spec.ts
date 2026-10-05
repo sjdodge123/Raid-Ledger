@@ -190,7 +190,9 @@ test.describe("Admin Discord — Connection", () => {
     }
   });
 
-  test("renders bot invite link info (when OAuth is configured)", async ({
+  // ROK-1702: the "Bot Invite Link" card (which pointed admins at the Developer
+  // Portal's OAuth2 URL Generator) is gone; the in-form invite panel replaces it.
+  test("renders the in-form bot invite panel, not the URL Generator card", async ({
     page,
   }) => {
     await pollDiscordBotStatus();
@@ -199,12 +201,23 @@ test.describe("Admin Discord — Connection", () => {
       page.getByRole("heading", { name: "Discord Bot", exact: true }).first(),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Bot Invite Link only renders when OAuth is configured. In CI without
-    // Discord configured, this section won't exist — soft check.
-    const inviteLink = page.getByRole("heading", { name: "Bot Invite Link" });
-    if (await inviteLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await expect(inviteLink).toBeVisible();
+    // The bot form (and its invite panel) renders only when the admin has a
+    // linked Discord account; otherwise the link prompt renders. One must.
+    const invitePanel = page.getByTestId("bot-invite-panel");
+    const linkPrompt = page.getByRole("heading", {
+      name: "Discord Account Required",
+    });
+    await expect(invitePanel.or(linkPrompt).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    if (await invitePanel.isVisible()) {
+      await expect(invitePanel).toContainText(/invite url/i);
     }
+
+    await expect(
+      page.getByRole("heading", { name: "Bot Invite Link" }),
+    ).toHaveCount(0);
+    await expect(page.getByText(/URL Generator/)).toHaveCount(0);
   });
 
   test("loads without error boundary", async ({ page }) => {

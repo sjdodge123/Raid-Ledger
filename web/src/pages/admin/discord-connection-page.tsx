@@ -39,7 +39,7 @@ export function DiscordConnectionPage() {
 }
 
 function DiscordConnectionContent() {
-    const { oauthStatus, discordBotStatus } = useAdminSettings();
+    const { discordBotStatus } = useAdminSettings();
     const { user } = useAuth();
 
     const hasDiscord = isDiscordLinked(user?.discordId);
@@ -64,7 +64,6 @@ function DiscordConnectionContent() {
                     <DiscordBotForm />
                 </IntegrationCard>
             )}
-            {oauthStatus.data?.configured && <BotInviteLinkInfo />}
         </div>
     );
 }
@@ -93,22 +92,6 @@ export function LinkDiscordPrompt({ icon }: { icon: React.ReactNode }) {
                     </button>
                 </div>
             </div>
-        </div>
-    );
-}
-
-function BotInviteLinkInfo() {
-    return (
-        <div className="bg-overlay/30 rounded-lg p-4 border border-edge">
-            <h3 className="text-sm font-medium text-foreground mb-2">Bot Invite Link</h3>
-            <p className="text-xs text-muted">
-                To invite the bot to your server, go to the{' '}
-                <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                    Discord Developer Portal
-                </a>
-                , select your application, and use the <strong>OAuth2 &rarr; URL Generator</strong> with
-                the <em>bot</em> and <em>applications.commands</em> scopes.
-            </p>
         </div>
     );
 }
