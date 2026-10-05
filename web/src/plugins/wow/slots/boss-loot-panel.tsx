@@ -6,7 +6,7 @@
  */
 import { useState, useMemo } from 'react';
 import type { BossEncounterDto, EquipmentItemDto } from '@raid-ledger/contract';
-import { useBossesForInstance, useLootForBoss } from '../hooks/use-boss-loot';
+import { useAllInstancesBossless, useBossesForInstance, useLootForBoss } from '../hooks/use-boss-loot';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { getWowheadNpcSearchUrl } from '../lib/wowhead-urls';
@@ -81,8 +81,10 @@ export function BossLootPanel({ contentInstances, gameSlug, characterId }: BossL
     const { data: character } = useCharacterDetail(characterId);
     const wowheadVariant = character?.gameVariant ?? variant;
     const equippedBySlot = useEquippedBySlot(character);
+    const instanceIds = useMemo(() => instances.map((i) => i.id), [instances]);
+    const bossless = useAllInstancesBossless(instanceIds, variant);
 
-    if (!instances.length) return null;
+    if (!instances.length || bossless) return null;
     return (
         <div className="boss-loot-panel">
             <PanelHeader panelOpen={panelOpen} onToggle={() => setPanelOpen((v) => !v)} />
