@@ -19,7 +19,12 @@ import {
 const SNOWFLAKE = '123456789012345678';
 const CDN = `https://cdn.discordapp.com/avatars/${SNOWFLAKE}/hash1.png`;
 const CUSTOM = 'https://example.com/custom.png';
-const FORBIDDEN = ['discordId', 'discordUserId', 'discordAvatarHash', 'steamId'];
+const FORBIDDEN = [
+  'discordId',
+  'discordUserId',
+  'discordAvatarHash',
+  'steamId',
+];
 
 /** Every key at any depth (objects + arrays). */
 function collectKeys(value: unknown, into = new Set<string>()): Set<string> {
@@ -38,9 +43,21 @@ function expectNoIdentityKeys(body: unknown): void {
   expect(keys.filter((k) => FORBIDDEN.includes(k))).toEqual([]);
 }
 
-const linked = { discordId: SNOWFLAKE, avatar: 'hash1', customAvatarUrl: CUSTOM };
-const local = { discordId: 'local:bob', avatar: 'hash2', customAvatarUrl: null };
-const unlinked = { discordId: 'unlinked:al', avatar: 'hash3', customAvatarUrl: null };
+const linked = {
+  discordId: SNOWFLAKE,
+  avatar: 'hash1',
+  customAvatarUrl: CUSTOM,
+};
+const local = {
+  discordId: 'local:bob',
+  avatar: 'hash2',
+  customAvatarUrl: null,
+};
+const unlinked = {
+  discordId: 'unlinked:al',
+  avatar: 'hash3',
+  customAvatarUrl: null,
+};
 
 function playersList(): PlayersListResponseDto {
   return {
@@ -97,11 +114,15 @@ describe('toPublicIdentity (ROK-1734)', () => {
   it('nulls the avatar for local: / unlinked: ids and a null hash', () => {
     expect(toPublicIdentity(local).avatar).toBeNull();
     expect(toPublicIdentity(unlinked).avatar).toBeNull();
-    expect(toPublicIdentity({ discordId: SNOWFLAKE, avatar: null }).avatar).toBeNull();
+    expect(
+      toPublicIdentity({ discordId: SNOWFLAKE, avatar: null }).avatar,
+    ).toBeNull();
   });
 
   it('passes an absolute avatar URL through', () => {
-    expect(toPublicIdentity({ discordId: null, avatar: CUSTOM }).avatar).toBe(CUSTOM);
+    expect(toPublicIdentity({ discordId: null, avatar: CUSTOM }).avatar).toBe(
+      CUSTOM,
+    );
   });
 });
 
@@ -186,7 +207,10 @@ describe('strict parse — a new key throws instead of leaking (AC4)', () => {
 
   it('checks profile character values loosely (a non-RFC uuid does not 500)', () => {
     const char = { id: 'not-a-uuid', name: 'Thrall', avatarUrl: 'not-a-url' };
-    const out = projectUserProfile(profile([char as unknown as CharacterDto]), false);
+    const out = projectUserProfile(
+      profile([char as unknown as CharacterDto]),
+      false,
+    );
     expect(out.data.characters).toEqual([char]);
   });
 });
