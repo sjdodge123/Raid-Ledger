@@ -18,6 +18,7 @@ import {
 } from '@raid-ledger/contract';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { validateSteamReturnTo } from '../steam/steam-link-returnto.helpers';
+import { setNoStoreLinkHeaders } from '../steam/steam-link-headers.helpers';
 import { LinkNonceService } from './link-nonce.service';
 import { setLinkNonceCookie } from './link-nonce-cookie.helpers';
 import type { AuthenticatedExpressRequest } from './types';
@@ -70,6 +71,7 @@ export class LinkStartController {
     @Body() body: unknown,
     @Res({ passthrough: true }) res: Response,
   ): LinkStartResponseDto {
+    setNoStoreLinkHeaders(res); // ROK-1731 OQ6: the body carries the nonce
     const { returnTo } = parseStartBody(body);
     const minted = this.linkNonceService.mint(
       'steam',
