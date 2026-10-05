@@ -99,27 +99,46 @@ function toListRow(inst: ForeverSeedInstance): WowInstance {
   return { id, name, shortName, expansion, minimumLevel, maximumLevel };
 }
 
+/** The seed row a journal `Forever`-expansion row stands for, if any. */
+function seedFor(row: WowInstance): ForeverSeedInstance | undefined {
+  if (row.expansion !== FOREVER_EXPANSION) return undefined;
+  const key = normalizeInstanceName(row.name);
+  return FOREVER_INSTANCES.find((i) => normalizeInstanceName(i.name) === key);
+}
+
+/**
+ * Journal list rows carry only id/name/expansion. Keep the journal id and
+ * name but the seed's short name and levels, so enrichInstance never applies
+ * a name-keyed Classic/TBC override (Hyjal Summit would become 70-70).
+ */
+function withSeedMetadata(row: WowInstance): WowInstance {
+  const hit = seedFor(row);
+  if (!hit) return row;
+  return {
+    ...row,
+    shortName: row.shortName ?? hit.shortName,
+    minimumLevel: row.minimumLevel ?? hit.minimumLevel,
+    maximumLevel: row.maximumLevel ?? hit.maximumLevel,
+  };
+}
+
 /**
  * Append the seeded Forever instances of `category` to a journal list.
  * A seed row is skipped when the list already holds a `Forever`-expansion
- * instance with the same normalized name (journal wins). Rows of any other
- * expansion — e.g. the TBC "Hyjal Summit" — never suppress a seed row.
+ * instance with the same normalized name (journal wins on id and name, the
+ * seed's levels carry over). Rows of any other expansion — e.g. the TBC
+ * "Hyjal Summit" — never suppress a seed row.
  */
 export function mergeForeverSeed(
   list: WowInstance[],
   category: 'dungeon' | 'raid',
 ): WowInstance[] {
-  const journalNames = new Set(
-    list
-      .filter((i) => i.expansion === FOREVER_EXPANSION)
-      .map((i) => normalizeInstanceName(i.name)),
-  );
+  const merged = list.map(withSeedMetadata);
+  const covered = new Set(list.map(seedFor).filter((i) => i !== undefined));
   const additions = FOREVER_INSTANCES.filter(
-    (i) =>
-      i.category === category &&
-      !journalNames.has(normalizeInstanceName(i.name)),
+    (i) => i.category === category && !covered.has(i),
   ).map(toListRow);
-  return [...list, ...additions];
+  return [...merged, ...additions];
 }
 
 /** Seed-only list, served for Forever when Blizzard's journal is down. */

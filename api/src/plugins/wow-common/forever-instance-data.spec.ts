@@ -98,6 +98,21 @@ describe('mergeForeverSeed — journal wins (ROK-1719)', () => {
     expect(names).toEqual(['Molten Core', 'The Barrow Deeps', 'Hyjal Summit']);
   });
 
+  it('keeps a journal Forever Hyjal Summit id but the seed 60-60 levels', () => {
+    const journal = [{ id: 5001, name: 'Hyjal Summit', expansion: 'Forever' }];
+    expect(mergeForeverSeed(journal, 'raid')).toEqual([
+      {
+        id: 5001,
+        name: 'Hyjal Summit',
+        shortName: 'HS',
+        expansion: 'Forever',
+        minimumLevel: 60,
+        maximumLevel: 60,
+      },
+      expect.objectContaining({ id: 90_000_010, name: 'Barrow Deeps' }),
+    ]);
+  });
+
   it('never lets a non-Forever row (TBC Hyjal Summit) suppress the seed', () => {
     const journal = [
       { id: 750, name: 'Hyjal Summit', expansion: 'Burning Crusade' },

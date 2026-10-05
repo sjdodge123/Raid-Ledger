@@ -78,7 +78,11 @@ const JOURNAL: Record<string, unknown> = {
 };
 
 /** `failing` journal keys answer 503 (a partial journal outage). */
-function mockJournal(failing: string[] = []) {
+function mockJournal(
+  failing: string[] = [],
+  extra: Record<string, unknown> = {},
+) {
+  const journal = { ...JOURNAL, ...extra };
   return jest.spyOn(global, 'fetch').mockImplementation((input) => {
     const url =
       typeof input === 'string'
@@ -86,10 +90,10 @@ function mockJournal(failing: string[] = []) {
         : input instanceof URL
           ? input.href
           : input.url;
-    const key = Object.keys(JOURNAL).find((k) => url.includes(`/${k}?`));
+    const key = Object.keys(journal).find((k) => url.includes(`/${k}?`));
     if (key && failing.includes(key))
       return Promise.resolve(new Response('down', { status: 503 }));
-    const body = key ? JSON.stringify(JOURNAL[key]) : 'missing';
+    const body = key ? JSON.stringify(journal[key]) : 'missing';
     return Promise.resolve(new Response(body, { status: key ? 200 : 404 }));
   });
 }
@@ -130,15 +134,6 @@ describe('fetchAllInstancesFromApi — Forever seed (ROK-1719)', () => {
     ]);
   });
 
-  it('throws (so nothing is cached) when the Classic tier detail fails', async () => {
-    mockJournal(['journal-expansion/68']);
-    await expect(
-      fetchAllInstancesFromApi('us', 'wow_forever', 't'),
-    ).rejects.toThrow(
-      'WoW: Forever instance list is missing the Classic journal tier',
-    );
-  });
-
   it.each(['classic_era', 'classic', 'classic_anniversary', 'retail'] as const)(
     'adds no seed rows for %s',
     async (variant) => {
@@ -151,6 +146,45 @@ describe('fetchAllInstancesFromApi — Forever seed (ROK-1719)', () => {
       expect([...dungeons, ...raids].filter(isSeed)).toEqual([]);
     },
   );
+});
+
+/** ROK-1719 Codex P2s: journal Forever rows keep seed levels; no partial cache. */
+describe('fetchAllInstancesFromApi — Forever journal edge cases (ROK-1719)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('keeps Forever levels on a journal Forever Hyjal Summit (not TBC 70)', async () => {
+    mockJournal([], {
+      'journal-expansion/index': {
+        tiers: [
+          { id: 68, name: 'Classic' },
+          { id: 70, name: 'Burning Crusade' },
+          { id: 99, name: 'Forever' },
+        ],
+      },
+      'journal-expansion/99': {
+        name: 'Forever',
+        raids: [{ id: 5001, name: 'Hyjal Summit' }],
+      },
+    });
+    const { raids } = await fetchAllInstancesFromApi('us', 'wow_forever', 't');
+    expect(raids.find((r) => r.name === 'Hyjal Summit')).toEqual({
+      id: 5001,
+      name: 'Hyjal Summit',
+      shortName: 'HS',
+      expansion: 'Forever',
+      minimumLevel: 60,
+      maximumLevel: 60,
+    });
+  });
+
+  it('throws (so nothing is cached) when the Classic tier detail fails', async () => {
+    mockJournal(['journal-expansion/68']);
+    await expect(
+      fetchAllInstancesFromApi('us', 'wow_forever', 't'),
+    ).rejects.toThrow(
+      'WoW: Forever instance list is missing the Classic journal tier',
+    );
+  });
 });
 
 describe('fetchInstanceDetailFromApi — Forever seed ids (ROK-1719)', () => {
