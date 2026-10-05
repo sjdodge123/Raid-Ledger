@@ -100,6 +100,47 @@ export const CharacterProfessionsSchema = z.object({
 export type CharacterProfessionsDto = z.infer<typeof CharacterProfessionsSchema>;
 
 // ==========================================
+// WoW: Forever identity (ROK-1721)
+// ==========================================
+
+/** WoW regions supported by the Blizzard API */
+export const WowRegionSchema = z.enum(['us', 'eu', 'kr', 'tw']);
+export type WowRegion = z.infer<typeof WowRegionSchema>;
+
+/**
+ * WoW: Forever is realmless — a character lives in a region and plays on a
+ * ruleset. The ruleset is a mutable attribute (dead Hardcore characters can
+ * move), NOT part of the identity; identity is region + full two-part name.
+ */
+export const WowForeverRulesetSchema = z.enum(['normal', 'pvp', 'roleplaying', 'hardcore']);
+export type WowForeverRuleset = z.infer<typeof WowForeverRulesetSchema>;
+
+/**
+ * Rulesets a player can pick today. Hardcore opens after launch, so it is
+ * stored-capable but not accepted on create/update until it is enabled here.
+ */
+export const WowForeverSelectableRulesetSchema = WowForeverRulesetSchema.exclude(['hardcore']);
+export type WowForeverSelectableRuleset = z.infer<typeof WowForeverSelectableRulesetSchema>;
+export const WOW_FOREVER_SELECTABLE_RULESETS = WowForeverSelectableRulesetSchema.options;
+
+export const WOW_FOREVER_RULESET_LABELS: Record<WowForeverRuleset, string> = {
+    normal: 'Normal',
+    pvp: 'PvP',
+    roleplaying: 'Roleplaying',
+    hardcore: 'Hardcore',
+};
+
+export const WOW_FOREVER_DEFAULT_REGION: WowRegion = 'us';
+
+/** One name part: letters only, 2–24 (tighten/loosen once Blizzard publishes the rules). */
+export const WowForeverNamePartSchema = z.string().trim()
+    .regex(/^\p{L}{2,24}$/u, 'Use 2–24 letters');
+
+/** Full Forever name stored in `characters.name`: "First Second", one space. */
+export const WowForeverNameSchema = z.string().trim().max(100)
+    .regex(/^\p{L}{2,24} \p{L}{2,24}$/u, 'Enter a first and second name');
+
+// ==========================================
 // Character DTOs
 // ==========================================
 
@@ -129,6 +170,8 @@ export const CharacterSchema = z.object({
     lastSyncedAt: z.string().datetime().nullable(),
     profileUrl: z.string().url().nullable(),
     region: z.string().max(10).nullable(),
+    /** ROK-1721: WoW: Forever ruleset (null for every other game). */
+    ruleset: WowForeverRulesetSchema.nullable(),
     gameVariant: z.string().max(30).nullable(),
     equipment: CharacterEquipmentSchema.nullable(),
     talents: z.unknown().nullable(),
@@ -164,6 +207,10 @@ export const CreateCharacterSchema = z.object({
     isMain: z.boolean().optional().default(false),
     itemLevel: z.number().int().positive().optional(),
     avatarUrl: z.string().url().optional(),
+    /** ROK-1721: required for WoW: Forever (server-checked), rejected for other games. */
+    region: WowRegionSchema.optional(),
+    /** ROK-1721: required for WoW: Forever (server-checked), rejected for other games. */
+    ruleset: WowForeverSelectableRulesetSchema.optional(),
 });
 
 /** Type after Zod parsing (isMain has default applied) */
@@ -190,6 +237,10 @@ export const UpdateCharacterSchema = z.object({
     displayOrder: z.number().int().optional(),
     /** ROK-1130: manual profession entry (Classic players, retail overrides). */
     professions: CharacterProfessionsSchema.nullable().optional(),
+    /** ROK-1721: WoW: Forever only — editable (ruleset moves are allowed in-game). */
+    ruleset: WowForeverSelectableRulesetSchema.optional(),
+    /** ROK-1721: region is part of a Forever identity — never editable; delete and re-add. */
+    region: z.never({ error: 'Region cannot be changed after creation' }).optional(),
 });
 
 export type UpdateCharacterDto = z.infer<typeof UpdateCharacterSchema>;
@@ -246,10 +297,6 @@ export type CharactersGroupedResponseDto = z.infer<typeof CharactersGroupedRespo
 // ==========================================
 // WoW Armory Import (ROK-234)
 // ==========================================
-
-/** WoW regions supported by the Blizzard API */
-export const WowRegionSchema = z.enum(['us', 'eu', 'kr', 'tw']);
-export type WowRegion = z.infer<typeof WowRegionSchema>;
 
 /**
  * WoW game variant — determines which Blizzard API namespace to use.

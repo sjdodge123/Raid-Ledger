@@ -11,6 +11,10 @@ import {
   demoteDuplicateMains,
   dropCollidingChannelBindings,
 } from './igdb-dedup-partial-index.helpers';
+import {
+  characterUniqueKeyJoin,
+  reportCrossOwnerCharacterDeletes,
+} from '../characters/characters-unique-keys.helpers';
 
 /**
  * The transaction handle Drizzle hands a `db.transaction` callback.
@@ -320,6 +324,18 @@ async function safeReassignWithUnique(
   await safeReassign(tx, table, column, loserId, winnerId);
 }
 
+/**
+ * NULL-safe: `realm` and similar nullable key columns must compare equal when
+ * both sides are NULL, which plain `=` does not do. characters has a second
+ * unique key (ROK-1721), so it supplies its own join.
+ */
+function buildConflictJoin(
+  cols: string[] | ((l: string, r: string) => string),
+): string {
+  if (typeof cols === 'function') return cols('l', 'w');
+  return cols.map((c) => `l.${c} IS NOT DISTINCT FROM w.${c}`).join(' AND ');
+}
+
 /** Delete rows for loserId that would conflict with winnerId. */
 async function deleteConflictingRows(
   tx: Tx,
@@ -331,11 +347,10 @@ async function deleteConflictingRows(
   const contextCols = getConflictColumns(table);
   if (!contextCols) return;
 
-  // NULL-safe: `realm` and similar nullable key columns must compare equal when
-  // both sides are NULL, which plain `=` does not do.
-  const join = contextCols
-    .map((c) => `l.${c} IS NOT DISTINCT FROM w.${c}`)
-    .join(' AND ');
+  const join = buildConflictJoin(contextCols);
+  // ROK-1721: the Forever key spans players — surface any other player's loss.
+  if (table === 'characters')
+    await reportCrossOwnerCharacterDeletes(tx, loserId, winnerId);
 
   const sp = `sp_del_${table}`;
   await tx.execute(sql.raw(`SAVEPOINT ${sp}`));
@@ -373,8 +388,10 @@ async function deleteConflictingRows(
  * catch is decorative for constraint violations, which is how ROK-1437's fix
  * surfaced this as the very next prod failure. Collisions must be PREVENTED.
  */
-function getConflictColumns(table: string): string[] | null {
-  const map: Record<string, string[]> = {
+function getConflictColumns(
+  table: string,
+): string[] | ((l: string, r: string) => string) | null {
+  const map: Record<string, string[] | ((l: string, r: string) => string)> = {
     // (lineup_id, game_id)
     community_lineup_entries: ['lineup_id'],
     community_lineup_matches: ['lineup_id'],
@@ -382,8 +399,8 @@ function getConflictColumns(table: string): string[] | null {
     community_lineup_votes: ['lineup_id', 'user_id'],
     // (user_id, game_id)
     game_interest_suppressions: ['user_id'],
-    // (user_id, game_id, name, realm)
-    characters: ['user_id', 'name', 'realm'],
+    // (user_id, game_id, name, realm) OR Forever (game_id, region, lower(name))
+    characters: characterUniqueKeyJoin,
     // (game_id, slug)
     event_types: ['slug'],
     // (user_id, game_id, period, period_start) — additively merged first

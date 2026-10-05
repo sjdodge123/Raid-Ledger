@@ -27,6 +27,7 @@ const FORBIDDEN = [FLEET_FIRST_LOGIN_ENV, FLEET_ADMIN_ID_ENV];
 /** Files (or `dir/` prefixes) allowed to name the variables. Keep it short. */
 const ALLOWLIST = [
   'rl-infra/', // the fleet itself: env-spin injects them, docs explain them
+  'docs/spikes/', // design write-ups discussing the fleet path; never shipped
   'api/scripts/bootstrap-admin.ts', // gated on DEMO_MODE, reads them
   'api/src/auth/fleet-first-login-admin.helpers.ts', // gated reader
   'api/src/auth/fleet-first-login-admin.spec.ts',

@@ -8,7 +8,12 @@ import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { GameSearchInput } from '../events/game-search-input';
 import { PluginSlot } from '../../plugins';
+import { isConflictError } from '../../lib/api/api-error';
 import { CharacterFormFields } from './character-form-fields';
+import {
+    foreverCreateFields, foreverIdentityFromCharacter, foreverUpdateFields, sameForeverIdentity, usesForeverIdentity, validateForeverIdentity,
+    type ForeverIdentity, type ForeverIdentityErrors,
+} from '../characters/forever-identity';
 
 interface AddCharacterModalProps {
     isOpen: boolean;
@@ -25,14 +30,16 @@ interface FormState {
     role: CharacterRole | '';
     realm: string;
     isMain: boolean;
+    forever: ForeverIdentity;
 }
 
 /** Where each validation/save message renders (ROK-1648 ruling 8): name → Field, game → search, form → alert. */
-interface FormErrors { name?: string; game?: string; form?: string }
+interface FormErrors { name?: string; game?: string; form?: string; forever?: ForeverIdentityErrors }
 
 const getInitialFormState = (char?: CharacterDto | null): FormState => ({
     name: char?.name ?? '', class: char?.class ?? '', spec: char?.spec ?? '',
     role: char?.role ?? '', realm: char?.realm ?? '', isMain: char?.isMain ?? false,
+    forever: foreverIdentityFromCharacter(char),
 });
 
 /**
@@ -42,11 +49,17 @@ const getInitialFormState = (char?: CharacterDto | null): FormState => ({
  * A search query alone never reaches here, so it is not dirty.
  */
 function isCharacterFormDirty(form: FormState, baseline: FormState, pickedGameSlug: string | undefined, preselectedSlug: string | undefined): boolean {
-    const changed = (Object.keys(baseline) as (keyof FormState)[]).some((k) => form[k] !== baseline[k]);
+    const changed = (Object.keys(baseline) as (keyof FormState)[])
+        .some((k) => (k === 'forever' ? !sameForeverIdentity(form.forever, baseline.forever) : form[k] !== baseline[k]));
     return changed || (pickedGameSlug !== undefined && pickedGameSlug !== preselectedSlug);
 }
 
-function buildUpdateDto(form: FormState, showMmoFields: boolean) {
+function buildUpdateDto(form: FormState, showMmoFields: boolean, isForever: boolean) {
+    const dto = buildBaseUpdateDto(form, showMmoFields);
+    return isForever ? { ...dto, realm: undefined, ...foreverUpdateFields(form.forever) } : dto;
+}
+
+function buildBaseUpdateDto(form: FormState, showMmoFields: boolean) {
     return {
         name: form.name.trim(),
         class: showMmoFields ? (form.class.trim() || null) : null,
@@ -56,7 +69,13 @@ function buildUpdateDto(form: FormState, showMmoFields: boolean) {
     };
 }
 
-function buildCreateDto(form: FormState, showMmoFields: boolean, gameId: number) {
+/** ROK-1721: a Forever character sends region + ruleset + "First Second" and never a realm. */
+function buildCreateDto(form: FormState, showMmoFields: boolean, gameId: number, isForever: boolean) {
+    const dto = buildBaseCreateDto(form, showMmoFields, gameId);
+    return isForever ? { ...dto, realm: undefined, ...foreverCreateFields(form.forever) } : dto;
+}
+
+function buildBaseCreateDto(form: FormState, showMmoFields: boolean, gameId: number) {
     return {
         gameId, name: form.name.trim(),
         class: showMmoFields ? (form.class.trim() || undefined) : undefined,
@@ -67,12 +86,16 @@ function buildCreateDto(form: FormState, showMmoFields: boolean, gameId: number)
     };
 }
 
-/** Game first: the Name field only renders once a game is picked, so its error would be invisible before that. */
-function validateCharacterForm(form: FormState, effectiveGameId: number | undefined, selectedIgdbGame: IgdbGameDto | null): FormErrors | null {
-    if (!effectiveGameId && !selectedIgdbGame) return { game: 'Please select a game' };
-    if (!form.name.trim()) return { name: 'Character name is required' };
-    if (!effectiveGameId) return { form: 'This game is not registered in the system. Only a name can be set for generic characters.' };
-    return null;
+/**
+ * Game first: the Name field only renders once a game is picked, so its error would be invisible before that.
+ * Every path — Forever included (ROK-1721) — needs a resolved registry game id; the narrowed id is returned for the save.
+ */
+function validateCharacterForm(form: FormState, effectiveGameId: number | undefined, selectedIgdbGame: IgdbGameDto | null, isForever: boolean): { errors: FormErrors } | { gameId: number } {
+    if (!effectiveGameId && !selectedIgdbGame) return { errors: { game: 'Please select a game' } };
+    if (isForever) { const forever = validateForeverIdentity(form.forever); if (forever) return { errors: { forever } }; }
+    else if (!form.name.trim()) return { errors: { name: 'Character name is required' } };
+    if (!effectiveGameId) return { errors: { form: 'This game is not registered in the system. Only a name can be set for generic characters.' } };
+    return { gameId: effectiveGameId };
 }
 
 /** Pinned in the Modal footer (ROK-1655): the submit reaches the form by id; Cancel goes through the guard. */
@@ -87,9 +110,12 @@ function CharacterFormActions({ formId, onCancel, isPending, isEditing }: { form
     );
 }
 
+// A 409 (name already claimed) is shown inline by the form, so its toast is suppressed.
+const CONFLICT_SHOWN_INLINE = { isHandledError: isConflictError };
+
 function useCharacterModalMutations() {
-    const createMutation = useCreateCharacter();
-    const updateMutation = useUpdateCharacter();
+    const createMutation = useCreateCharacter(CONFLICT_SHOWN_INLINE);
+    const updateMutation = useUpdateCharacter(CONFLICT_SHOWN_INLINE);
     const setMainMutation = useSetMainCharacter();
     const isPending = createMutation.isPending || updateMutation.isPending || setMainMutation.isPending;
     return { createMutation, updateMutation, setMainMutation, isPending };
@@ -146,6 +172,8 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const isEditing = !!editingCharacter;
     const effectiveRegistryGame = isEditing ? preselectedRegistryGame : registryGame;
     const effectiveGameId = effectiveRegistryGame?.id ?? preselectedGameId;
+    // ROK-1721: Forever is detected by the picked (or edited) game's slug; a region-less legacy row edits as before.
+    const isForever = usesForeverIdentity(effectiveRegistryGame?.slug ?? selectedIgdbGame?.slug, editingCharacter);
     const showMmoFields = effectiveRegistryGame?.hasRoles ?? (selectedIgdbGame ? false : true);
     const { data: gameCharsData } = useMyCharacters(effectiveGameId, !!effectiveGameId);
     const gameChars = gameCharsData?.data ?? [];
@@ -154,22 +182,31 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const isDirty = isCharacterFormDirty(form, baseline, isEditing ? undefined : selectedIgdbGame?.slug, preselectedRegistryGame?.slug);
     const updateField = <K extends keyof FormState>(field: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [field]: value }));
 
-    return { form, errors, setErrors, selectedIgdbGame, setSelectedIgdbGame, activeTab, setActiveTab, resetKey, effectiveRegistryGame, effectiveGameId, showMmoFields, gameChars, hasMainForGame, isEditing, isDirty, ...mutations, updateField, onClose };
+    return { form, errors, setErrors, selectedIgdbGame, setSelectedIgdbGame, activeTab, setActiveTab, resetKey, effectiveRegistryGame, effectiveGameId, showMmoFields, isForever, gameChars, hasMainForGame, isEditing, isDirty, ...mutations, updateField, onClose };
+}
+
+/**
+ * A failed save is a form alert, shown once: a Forever 409 sits under the name
+ * row it concerns (its toast is suppressed); anything else stays a form-level
+ * alert and the hooks also toast it.
+ */
+function saveErrorToFormErrors(e: Error, isForever: boolean): FormErrors {
+    const message = e.message || 'Failed to save character';
+    return isForever && isConflictError(e) ? { forever: { name: message } } : { form: message };
 }
 
 function handleCharacterSubmit(s: ReturnType<typeof useCharacterModalState>, editingCharacter: CharacterDto | null | undefined, onClose: () => void) {
     s.setErrors({});
-    const errs = validateCharacterForm(s.form, s.effectiveGameId, s.selectedIgdbGame);
-    if (errs) { s.setErrors(errs); return; }
-    // A failed save is a form-level alert (the hooks also toast it).
-    const onError = (e: Error) => s.setErrors({ form: e.message || 'Failed to save character' });
+    const result = validateCharacterForm(s.form, s.effectiveGameId, s.selectedIgdbGame, s.isForever);
+    if ('errors' in result) { s.setErrors(result.errors); return; }
+    const onError = (e: Error) => s.setErrors(saveErrorToFormErrors(e, s.isForever));
     if (s.isEditing && editingCharacter) {
         const needsSetMain = s.form.isMain && !editingCharacter.isMain;
-        const doUpdate = () => s.updateMutation.mutate({ id: editingCharacter.id, dto: buildUpdateDto(s.form, s.showMmoFields) }, { onSuccess: () => onClose(), onError });
+        const doUpdate = () => s.updateMutation.mutate({ id: editingCharacter.id, dto: buildUpdateDto(s.form, s.showMmoFields, s.isForever) }, { onSuccess: () => onClose(), onError });
         if (needsSetMain) s.setMainMutation.mutate(editingCharacter.id, { onSuccess: doUpdate, onError });
         else doUpdate();
     } else {
-        s.createMutation.mutate(buildCreateDto(s.form, s.showMmoFields, s.effectiveGameId!), { onSuccess: () => { onClose(); s.setSelectedIgdbGame(null); }, onError });
+        s.createMutation.mutate(buildCreateDto(s.form, s.showMmoFields, result.gameId, s.isForever), { onSuccess: () => { onClose(); s.setSelectedIgdbGame(null); }, onError });
     }
 }
 
@@ -193,7 +230,7 @@ function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiv
                     {(s.selectedIgdbGame || s.isEditing) && (
                         <CharacterFormFields form={s.form} showMmoFields={s.showMmoFields} isArmorySynced={isArmorySynced}
                             isEditing={s.isEditing} editingIsMain={!!editingCharacter?.isMain} hasMainForGame={s.hasMainForGame}
-                            nameError={s.errors.name} onUpdateField={s.updateField} />
+                            nameError={s.errors.name} isForever={s.isForever} foreverErrors={s.errors.forever} onUpdateField={s.updateField} />
                     )}
                     {s.errors.form && <p role="alert" className="text-sm text-danger">{s.errors.form}</p>}
                 </>

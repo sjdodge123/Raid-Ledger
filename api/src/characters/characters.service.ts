@@ -31,6 +31,7 @@ import {
 } from './characters-mapping.helpers';
 import * as importH from './characters-import.helpers';
 import * as crudH from './characters-crud.helpers';
+import * as foreverH from './characters-forever.helpers';
 import { defined } from '../common/defined.helpers';
 
 /**
@@ -109,9 +110,16 @@ export class CharactersService {
       .where(eq(schema.games.id, dto.gameId))
       .limit(1);
     if (!game) throw new NotFoundException(`Game ${dto.gameId} not found`);
+    const prepared = foreverH.prepareCreateDto(game, dto);
     try {
-      return await crudH.executeCreateTx(this.db, userId, dto, this.logger);
+      return await crudH.executeCreateTx(
+        this.db,
+        userId,
+        prepared,
+        this.logger,
+      );
     } catch (error: unknown) {
+      crudH.rethrowForeverViolation(error, prepared.name, prepared.region);
       if (crudH.isUniqueViolation(error, 'unique_user_game_character'))
         throw new ConflictException(
           `Character ${dto.name} already exists for this game/realm`,
@@ -125,12 +133,23 @@ export class CharactersService {
     characterId: string,
     dto: UpdateCharacterDto,
   ): Promise<CharacterDto> {
-    await this.findOne(userId, characterId);
+    const character = await this.findOne(userId, characterId);
+    const prepared = await foreverH.prepareCharacterUpdate(
+      this.db,
+      userId,
+      character,
+      dto,
+    );
     const [updated] = await this.db
       .update(schema.characters)
-      .set({ ...dto, updatedAt: new Date() })
+      .set({ ...prepared, updatedAt: new Date() })
       .where(eq(schema.characters.id, characterId))
-      .returning();
+      .returning()
+      .catch((error: unknown) => {
+        const name = prepared.name ?? character.name;
+        crudH.rethrowForeverViolation(error, name, character.region);
+        throw error;
+      });
     this.logger.log(`User ${userId} updated character ${characterId}`);
     return mapCharacterToDto(defined(updated, 'updated character row'));
   }

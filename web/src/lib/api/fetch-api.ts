@@ -5,6 +5,7 @@ import { getAuthMethod } from './silent-reauth';
 import { isTokenStale } from './token-expiry';
 import { Sentry } from '../../sentry';
 import type { ZodType } from 'zod';
+import { withHttpStatus } from './api-error';
 
 function buildHeaders(options: RequestInit): Record<string, string> {
     const token = getAuthToken();
@@ -25,7 +26,7 @@ async function handleErrorResponse(response: Response): Promise<never> {
     const message = details
         ? `${error.message || 'Request failed'}: ${details}`
         : error.message || `HTTP ${response.status}`;
-    throw new Error(message);
+    throw withHttpStatus(new Error(message), response.status);
 }
 
 /**

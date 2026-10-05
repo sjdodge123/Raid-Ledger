@@ -11,19 +11,26 @@
  * commit. The collision must be PREVENTED: the loser's colliding row is deleted
  * (the winner's binding is kept) before the UPDATE runs.
  */
+import { Logger } from '@nestjs/common';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { SQL } from 'drizzle-orm';
 import { reassignMiscFks, type Tx } from './igdb-dedup-fk-reassign.helpers';
+import { reportCrossOwnerCharacterDeletes } from '../characters/characters-unique-keys.helpers';
 
 const dialect = new PgDialect();
 
 /** Run reassignMiscFks against a tx that records every statement's SQL text. */
-async function recordStatements(loserId: number, winnerId: number) {
+async function recordStatements(
+  loserId: number,
+  winnerId: number,
+  rowsFor: (statement: string) => unknown[] = () => [],
+) {
   const statements: string[] = [];
   const tx = {
     execute: jest.fn((query: SQL) => {
-      statements.push(dialect.sqlToQuery(query).sql.replace(/\s+/g, ' '));
-      return Promise.resolve([]);
+      const text = dialect.sqlToQuery(query).sql.replace(/\s+/g, ' ').trim();
+      statements.push(text);
+      return Promise.resolve(rowsFor(text));
     }),
   };
   await reassignMiscFks(tx as unknown as Tx, loserId, winnerId);
@@ -75,5 +82,64 @@ describe('reassignMiscFks — channel_bindings partial-unique collision', () => 
     // different index and never collide on game_id.
     expect(del).toContain('l.recurrence_group_id IS NULL');
     expect(del).toContain('w.recurrence_group_id IS NULL');
+  });
+});
+
+describe('reassignMiscFks — characters deleted from ANOTHER player (ROK-1721)', () => {
+  const crossOwner = {
+    loser_character_id: 'char-loser',
+    loser_user_id: 5,
+    winner_character_id: 'char-winner',
+    winner_user_id: 9,
+  };
+  const isCrossOwnerSelect = (s: string) =>
+    s.startsWith('SELECT DISTINCT ON (l.id)') &&
+    s.includes('l.user_id <> w.user_id');
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('logs each cross-owner character the conflict-delete drops, with ids, before the DELETE', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const statements = await recordStatements(11, 22, (s) =>
+      isCrossOwnerSelect(s) ? [crossOwner] : [],
+    );
+
+    expect(warn).toHaveBeenCalledWith({
+      event: 'game_merge_cross_owner_character_delete',
+      loserGameId: 11,
+      winnerGameId: 22,
+      loserCharacterId: 'char-loser',
+      loserUserId: 5,
+      winnerCharacterId: 'char-winner',
+      winnerUserId: 9,
+    });
+    expect(warn).toHaveBeenCalledWith({
+      event: 'game_merge_cross_owner_character_delete_count',
+      loserGameId: 11,
+      winnerGameId: 22,
+      count: 1,
+    });
+    const selectIdx = statements.findIndex(isCrossOwnerSelect);
+    const deleteIdx = indexOfMatch(
+      statements,
+      /^DELETE FROM characters AS l USING characters AS w /,
+    );
+    expect({ selectIdx: selectIdx >= 0, deleteIdx: deleteIdx >= 0 }).toEqual({
+      selectIdx: true,
+      deleteIdx: true,
+    });
+    expect(selectIdx).toBeLessThan(deleteIdx);
+  });
+
+  it('counts the cross-owner rows and stays quiet when there are none', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const tx = {
+      execute: jest.fn(() => Promise.resolve([crossOwner, crossOwner])),
+    };
+    await expect(reportCrossOwnerCharacterDeletes(tx, 1, 2)).resolves.toBe(2);
+    warn.mockClear();
+    tx.execute.mockResolvedValueOnce([]);
+    await expect(reportCrossOwnerCharacterDeletes(tx, 1, 2)).resolves.toBe(0);
+    expect(warn).not.toHaveBeenCalled();
   });
 });

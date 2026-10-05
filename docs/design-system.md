@@ -136,7 +136,9 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:819-827`)
   and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
   an emerald-800 `#065f46` hover (7.68:1) on any element that also carries `hover:bg-emerald-500` /
-  `hover:bg-emerald-700` (`:837-851`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
+  `hover:bg-emerald-700`, and an emerald-900 `#064e3b` pressed fill (9.72:1) on any element that carries an
+  `active:bg-*` class — the unlayered repaint otherwise beats Tailwind's `active:` and the press never shows
+  (`:837-856`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
   Both rules are unlayered, so they skip a disabled / `aria-disabled` element that carries its own
   `disabled:bg-*` / `aria-disabled:bg-*` — otherwise they beat Tailwind v4's `@layer utilities` variant and
   that button paints enabled-green. An opacity-only disabled or `loading` primary keeps the fill and fades.
@@ -317,6 +319,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `LineupEmptyState.tsx` | `components/lineups/` | The empty-state shape (see §4.5) |
 | `player-filters.tsx`, `pages/games/coop-filter-controls.tsx` | filter bodies | Reference implementations of `FilterPanel` children |
 | `DurationPresetGroup` (`duration-preset-group.tsx`), `DurationSection` | `components/events/shared/` | Picking an event duration: a segmented `RadioGroup` 'Duration' of the presets you pass in (two lists exist: `shared/event-form-constants.ts` and `reschedule-utils.ts`) plus 'Custom'; value is minutes or `'custom'`, with an `error` slot (`role="alert"`). No asterisk — it always holds a value. `DurationSection` adds the named hr/min number fields for Custom (ROK-1649). |
+| `ForeverIdentityFields` (`forever-identity-fields.tsx`) + helpers (`forever-identity.ts`) | `components/characters/` | WoW: Forever manual character identity (ROK-1721): Region `Select` (US/EU/KR/TW, US default; `regionLocked` disables it in edit mode with a hint), Ruleset segmented `RadioGroup` (Hardcore hidden), First + Second name `Field`/`Input` pairs, a form-level `role="alert"` for "Enter a first and second name" and a muted "Shown in-game as …" preview. Pairs are `grid-cols-1 sm:grid-cols-2`, so they stack one per row below 640px; `compact` uses `fieldSize="sm"` for the inline signup form. Every manual add surface swaps its Name + Realm inputs for it when the game slug is `world-of-warcraft-forever` — never build a per-form copy. `formatForeverRuleset` renders "PvP (US)" where a realm would show. |
 
 ### 3.3 Shared hooks
 
@@ -986,7 +989,8 @@ them; do not fix them as scope creep.
     (`:819-827`). The primary `bg-emerald-600` fill is the one light step (operator ruling 2026-10-04,
     ROK-1472): emerald-700 `#047857` (5.48:1 under the white label; emerald-600 was 3.77:1) and, on an
     element that also carries `hover:bg-emerald-500` / `hover:bg-emerald-700`, an emerald-800 `#065f46`
-    hover (7.68:1; the old emerald-500 hover was ~2.5:1) — `:837-843`, guarded by
+    hover (7.68:1; the old emerald-500 hover was ~2.5:1), and on one that carries an `active:bg-*` class an
+    emerald-900 `#064e3b` pressed fill (9.72:1, darker than rest and hover) — `:837-856`, guarded by
     `web/src/styles/primary-fill-light.guard.test.ts`. The `/10 /30 /50` alpha variants keep their own
     washes; quest-log's `!important` gold button wins over all of it. This is still why solid button fills
     were NOT tokenised by ROK-1586 (§2.2). A `Button brandColor` label is NOT forced white: it is white or

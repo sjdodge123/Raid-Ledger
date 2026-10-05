@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/use-auth';
 import { useState, useEffect, useRef } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { PluginSlot } from '../plugins';
+import { formatForeverRuleset } from '../components/characters/forever-identity';
 
 const ROLE_COLORS: Record<string, string> = {
     tank: 'bg-blue-600',
@@ -121,14 +122,16 @@ function CharacterAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: 
     return <div className="w-20 h-20 rounded-full bg-overlay flex items-center justify-center text-3xl text-muted flex-shrink-0">&#128100;</div>;
 }
 
-function CharacterMeta({ character }: { character: { level?: number | null; race?: string | null; class?: string | null; spec?: string | null; realm?: string | null } }) {
+function CharacterMeta({ character }: { character: { level?: number | null; race?: string | null; class?: string | null; spec?: string | null; realm?: string | null; region?: string | null; ruleset?: string | null } }) {
+    // ROK-1721: a realmless WoW: Forever character shows its ruleset + region ("PvP (US)") in the realm slot.
+    const realmLabel = character.realm || formatForeverRuleset(character.ruleset, character.region);
     return (
         <div className="flex items-center gap-2 text-sm text-muted mt-1 flex-wrap">
             {character.level && <span className="text-amber-400">Level {character.level}</span>}
             {character.race && <><span>·</span><span>{character.race}</span></>}
             {character.class && <><span>·</span><span>{character.class}</span></>}
             {character.spec && <><span>·</span><span>{character.spec}</span></>}
-            {character.realm && <><span>·</span><span>{character.realm}</span></>}
+            {realmLabel && <><span>·</span><span>{realmLabel}</span></>}
         </div>
     );
 }
