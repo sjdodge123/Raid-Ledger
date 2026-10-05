@@ -194,3 +194,4 @@ export * from './game-identity/index.js';
 // through this barrel.
 export * from './wow-addon-export.schema.js';
 export * from './wow-addon-import.schema.js';
+export * from './ledgerlink-json-schema.js';
