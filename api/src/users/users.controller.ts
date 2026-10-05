@@ -15,6 +15,7 @@ import {
   Request,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { buildUserProfile } from './user-profile.helpers';
 import { CharactersService } from '../characters/characters.service';
 import { EventsService } from '../events/events.service';
 import type {
@@ -148,17 +149,7 @@ export class UsersController {
   ): Promise<UserProfileResponse | PublicUserProfileResponseDto> {
     const user = await this.assertUserVisible(id, req);
     const charactersResult = await this.charactersService.findAllForUser(id);
-    const profile: UserProfileResponse = {
-      data: {
-        id: user.id,
-        username: user.username,
-        avatar: user.avatar || null,
-        discordId: user.discordId || null,
-        customAvatarUrl: user.customAvatarUrl || null,
-        createdAt: user.createdAt.toISOString(),
-        characters: charactersResult.data,
-      },
-    };
+    const profile = buildUserProfile(user, charactersResult.data);
     return projectUserProfile(profile, isMemberViewer(req?.user));
   }
 

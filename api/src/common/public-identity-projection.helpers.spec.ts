@@ -81,6 +81,7 @@ function profile(characters: CharacterDto[] = []): UserProfileResponse {
     data: {
       id: 1,
       username: 'linked',
+      steamLinked: true,
       createdAt: '2026-10-01T00:00:00.000Z',
       characters,
       ...linked,
@@ -167,6 +168,11 @@ describe('anonymous shapes', () => {
     const out = projectPlayersList(playersList(), false);
     expect(out.data.map((u) => u.steamLinked)).toEqual([true, false, false]);
     expect(out.meta).toEqual(playersList().meta);
+  });
+
+  it('keep steamLinked on the profile (Q3)', () => {
+    const out = projectUserProfile(profile(), false);
+    expect(out.data.steamLinked).toBe(true);
   });
 
   it('local:/unlinked: users get a null avatar on /users', () => {
