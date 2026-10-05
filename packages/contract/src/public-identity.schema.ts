@@ -40,7 +40,7 @@ import {
 const PublicCharacterKeysSchema = z
     .object(
         Object.fromEntries(
-            Object.keys(CharacterSchema.shape).map((k) => [k, z.unknown()]),
+            Object.keys(CharacterSchema.shape).map((k) => [k, z.unknown().optional()]),
         ),
     )
     .strict();
