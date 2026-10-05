@@ -4,8 +4,7 @@ import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
-import { ForeverIdentityFields } from '../../plugins/wow/components/forever-identity-fields';
-import type { ForeverIdentity, ForeverIdentityErrors } from '../../plugins/wow/lib/forever-identity';
+import type { CharacterIdentityProvider, IdentityErrors } from '../../plugins/character-identity';
 
 interface FormState {
     name: string;
@@ -14,8 +13,8 @@ interface FormState {
     role: CharacterRole | '';
     realm: string;
     isMain: boolean;
-    /** ROK-1721: WoW: Forever identity (used only when `isForever`). */
-    forever: ForeverIdentity;
+    /** ROK-1733: plugin-owned identity value (used only with an `identity` provider). */
+    identity: unknown;
 }
 
 interface CharacterFormFieldsProps {
@@ -27,9 +26,10 @@ interface CharacterFormFieldsProps {
     hasMainForGame: boolean;
     /** Inline error on the Name field (e.g. 'Character name is required'). */
     nameError?: string | undefined;
-    /** ROK-1721: WoW: Forever swaps Name + Realm for region / ruleset / two-part name. */
-    isForever?: boolean | undefined;
-    foreverErrors?: ForeverIdentityErrors | undefined;
+    /** ROK-1733: an active plugin's identity provider swaps Name (and maybe Realm) for its own fields. */
+    identity?: CharacterIdentityProvider | null | undefined;
+    identityValue?: unknown;
+    identityErrors?: IdentityErrors | undefined;
     onUpdateField: <K extends keyof FormState>(field: K, value: FormState[K]) => void;
 }
 
@@ -94,13 +94,14 @@ function MainCheckbox({ form, isEditing, editingIsMain, hasMainForGame, onUpdate
     );
 }
 
-/** Name — or, for WoW: Forever, region / ruleset / two-part name with region locked when editing (ROK-1721). */
-function IdentityFields({ form, isForever, isEditing, isArmorySynced, nameError, foreverErrors, onUpdateField }: {
-    form: FormState; isForever: boolean; isEditing: boolean; isArmorySynced: boolean; nameError?: string | undefined;
-    foreverErrors?: ForeverIdentityErrors | undefined; onUpdateField: CharacterFormFieldsProps['onUpdateField'];
+/** Name — or a plugin's identity fields, with their creation-fixed parts locked when editing (ROK-1733). */
+function IdentityFields({ form, identity, identityValue, isEditing, isArmorySynced, nameError, identityErrors, onUpdateField }: {
+    form: FormState; identity?: CharacterIdentityProvider | null | undefined; identityValue: unknown; isEditing: boolean; isArmorySynced: boolean;
+    nameError?: string | undefined; identityErrors?: IdentityErrors | undefined; onUpdateField: CharacterFormFieldsProps['onUpdateField'];
 }) {
-    if (isForever) {
-        return <ForeverIdentityFields value={form.forever} onChange={(v) => onUpdateField('forever', v)} errors={foreverErrors} regionLocked={isEditing} />;
+    if (identity) {
+        const { Fields } = identity;
+        return <Fields value={identityValue} onChange={(v) => onUpdateField('identity', v)} errors={identityErrors} regionLocked={isEditing} />;
     }
     return (
         <SyncableInput label="Name" value={form.name} onChange={(v) => onUpdateField('name', v)}
@@ -109,13 +110,13 @@ function IdentityFields({ form, isForever, isEditing, isArmorySynced, nameError,
 }
 
 export function CharacterFormFields({
-    form, showMmoFields, isArmorySynced, isEditing, editingIsMain, hasMainForGame, nameError, isForever, foreverErrors, onUpdateField,
+    form, showMmoFields, isArmorySynced, isEditing, editingIsMain, hasMainForGame, nameError, identity, identityValue, identityErrors, onUpdateField,
 }: CharacterFormFieldsProps) {
     return (
         <>
             {isArmorySynced && <ArmorySyncBanner />}
-            <IdentityFields form={form} isForever={!!isForever} isEditing={isEditing} isArmorySynced={isArmorySynced}
-                nameError={nameError} foreverErrors={foreverErrors} onUpdateField={onUpdateField} />
+            <IdentityFields form={form} identity={identity} identityValue={identityValue} isEditing={isEditing} isArmorySynced={isArmorySynced}
+                nameError={nameError} identityErrors={identityErrors} onUpdateField={onUpdateField} />
             {showMmoFields && (
                 <>
                     <div className="grid grid-cols-2 gap-3">
@@ -125,7 +126,7 @@ export function CharacterFormFields({
                             placeholder="e.g. Arms" maxLength={50} isArmorySynced={isArmorySynced} />
                     </div>
                     <RoleSelect value={form.role} onChange={(v) => onUpdateField('role', v)} />
-                    {!isForever && <SyncableInput label="Realm/Server" value={form.realm} onChange={(v) => onUpdateField('realm', v)}
+                    {!identity?.hidesRealm && <SyncableInput label="Realm/Server" value={form.realm} onChange={(v) => onUpdateField('realm', v)}
                         placeholder="e.g. Illidan" maxLength={100} isArmorySynced={isArmorySynced} />}
                 </>
             )}
