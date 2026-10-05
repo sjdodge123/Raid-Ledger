@@ -8,9 +8,6 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import * as bodyParser from 'body-parser';
 
-type CorsCallback = (err: Error | null, allow?: boolean) => void;
-type CorsOriginFn = (origin: string | undefined, cb: CorsCallback) => void;
-
 // Descending severity. A threshold like 'log' enables itself plus everything
 // to its left (more severe), e.g. error+warn+log. Order matches the original
 // inline whitelist that used to live in main.ts so existing log-shipping
@@ -160,41 +157,6 @@ export function validateCorsConfig(
         'says whether mismatches are rejected (enforce) or only logged (report).',
     );
   }
-}
-
-/**
- * @deprecated ROK-1732 — superseded by `applyCorsPolicy`
- * (`cors/cors-auto-policy.ts`), which makes `auto` same-origin only and turns
- * a mismatch into a 403 instead of this Error → 500. Kept only until main.ts
- * switches to `applyCorsPolicy`; delete it (and its spec block) then.
- * - Same-origin requests (origin undefined) are always allowed
- * - 'auto' mode allows any origin (the pre-ROK-1732 behaviour)
- * - Wildcard allows any origin
- * - Specific origin is matched; dev adds localhost variants
- */
-export function buildCorsOriginFn(
-  isProduction: boolean,
-  corsOrigin: string | undefined,
-  isAutoOrigin: boolean,
-): CorsOriginFn {
-  return (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (isAutoOrigin) return callback(null, true);
-    if (corsOrigin === '*') return callback(null, true);
-    const allowed: string[] = [corsOrigin].filter(Boolean) as string[];
-    if (!isProduction) {
-      allowed.push(
-        'http://localhost',
-        'http://localhost:80',
-        'http://localhost:5173',
-        'http://localhost:5174',
-      );
-    }
-    callback(
-      allowed.includes(origin) ? null : new Error('Not allowed by CORS'),
-      allowed.includes(origin),
-    );
-  };
 }
 
 /**
