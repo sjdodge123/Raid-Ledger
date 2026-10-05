@@ -154,7 +154,6 @@ async function upsertGuild(
   payload: AddonGuildExport,
 ): Promise<number | undefined> {
   const set = guildSet(payload);
-  const snapshotAt = set.lastSnapshotAt;
   const [row] = await ctx.tx
     .insert(guilds)
     .values({
@@ -168,7 +167,10 @@ async function upsertGuild(
       target: [guilds.gameId, guilds.region, guilds.nameKey],
       targetWhere: sql`${guilds.realmSlug} IS NULL`,
       set,
-      setWhere: sql`${guilds.lastSnapshotAt} IS NULL OR ${guilds.lastSnapshotAt} <= ${snapshotAt}`,
+      // Compare against `excluded`, never a bound JS Date: drizzle's
+      // postgres.js driver does not serialize a Date inside raw `sql`
+      // (ERR_INVALID_ARG_TYPE → 500).
+      setWhere: sql`(${guilds.lastSnapshotAt} IS NULL OR ${guilds.lastSnapshotAt} <= excluded.last_snapshot_at)`,
     })
     .returning({ id: guilds.id });
   return row?.id;
