@@ -65,3 +65,5 @@ export * from './schema/discord-thread-messages';
 export * from './schema/character-addon-snapshots';
 export * from './schema/addon-encounter-pulls';
 export * from './schema/addon-import-audit';
+export * from './schema/guilds';
+export * from './schema/guild-members';
