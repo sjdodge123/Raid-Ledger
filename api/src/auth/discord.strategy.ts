@@ -21,7 +21,7 @@ export class DiscordStrategy extends PassportStrategy(Strategy, 'discord') {
     const user = await this.authService.validateDiscordUser(
       id,
       username,
-      avatar ?? undefined,
+      avatar ?? null,
     );
     return user;
   }
