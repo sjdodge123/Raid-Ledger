@@ -3,22 +3,23 @@ import { inflateSync } from 'node:zlib';
 import {
   ADDON_IMPORT_MAX_BYTES,
   ADDON_IMPORT_MAX_DECODED_BYTES,
-  ADDON_IMPORT_MAX_PAGES,
   AddonExportSchema,
   type AddonCharExport,
   type AddonCharSnapshotData,
   type AddonExport,
+  type AddonExportSection,
   type AddonGuildExport,
   type AddonRaidExport,
 } from '@raid-ledger/contract';
 import { AddonImportError } from './addon-import.errors';
 import { assertStructuralLimits } from './addon-import.limits';
+import { mergeGuildPages, type AddonPageHeader } from './addon-import.pages';
 import {
-  assertPageSet,
-  mergeGuildPages,
-  parsePageHeader,
-  type AddonPageHeader,
-} from './addon-import.pages';
+  ADDON_SECTION_LABEL,
+  assertSameExporter,
+  parsePaste,
+  type AddonSectionGroup,
+} from './addon-import.paste';
 import { sanitizeStrings, toCharSnapshotData } from './addon-import.sanitize';
 
 /** Char export with `data` already in the frozen snapshot shape. */
@@ -29,13 +30,42 @@ export type DecodedAddonCharExport = Omit<AddonCharExport, 'data'> & {
 export type DecodedAddonExport =
   DecodedAddonCharExport | AddonGuildExport | AddonRaidExport;
 
-export interface DecodedAddonImport {
-  payload: DecodedAddonExport;
+/** One decoded section of a paste. */
+export interface DecodedAddonSection<
+  P extends DecodedAddonExport = DecodedAddonExport,
+> {
+  payload: P;
   /** Pages merged (1 for an unpaged string). */
   pages: number;
-  /** sha256 hex of the normalised input (pages sorted), computed pre-decode. */
+  /**
+   * sha256 hex of THIS section's normalised tokens (pages sorted), computed
+   * pre-decode — identical whether the section is pasted alone or mixed.
+   */
   sha256: string;
-  /** UTF-8 byte length of the trimmed input. */
+  /**
+   * UTF-8 bytes: the whole trimmed input for a single-section paste; in a
+   * mixed paste, this section's tokens joined by `\n`.
+   */
+  inputBytes: number;
+}
+
+/** Single-section result (pre-ROK-1737 shape, unchanged). */
+export type DecodedAddonImport = DecodedAddonSection;
+
+export interface DecodedAddonSections {
+  char?: DecodedAddonSection<DecodedAddonCharExport>;
+  guild?: DecodedAddonSection<AddonGuildExport>;
+  raid?: DecodedAddonSection<AddonRaidExport>;
+}
+
+/** A whole paste: 1–3 sections (ROK-1737 "Export all"). */
+export interface DecodedAddonPaste {
+  sections: DecodedAddonSections;
+  /** Present sections in canonical order char → guild → raid. */
+  order: AddonExportSection[];
+  /** Whitespace-separated tokens in the paste. */
+  tokens: number;
+  /** UTF-8 byte length of the whole trimmed input. */
   inputBytes: number;
 }
 
@@ -132,28 +162,74 @@ function normalisedHash(headers: AddonPageHeader[]): string {
   return createHash('sha256').update(canonical).digest('hex');
 }
 
+/** Decode one section group; in a mixed paste, errors name the section. */
+function decodeGroup(
+  group: AddonSectionGroup,
+  inputBytes: number,
+  mixed: boolean,
+): DecodedAddonSection {
+  const sha256 = normalisedHash(group.headers);
+  try {
+    const payload = finalize(group.headers.map(decodePage));
+    return { payload, pages: group.headers.length, sha256, inputBytes };
+  } catch (err) {
+    if (!mixed || !(err instanceof AddonImportError)) throw err;
+    const label = ADDON_SECTION_LABEL[group.section];
+    throw new AddonImportError(err.code, `${label}: ${err.body.message}`);
+  }
+}
+
+function toSections(decoded: DecodedAddonSection[]): DecodedAddonSections {
+  const sections: Partial<Record<AddonExportSection, DecodedAddonSection>> =
+    {};
+  for (const d of decoded) sections[d.payload.section] = d;
+  return sections as DecodedAddonSections;
+}
+
 /**
- * Decode a pasted `!RL1!<section>[-<n>of<m>]!<base64(zlib(json))>` string
- * (one or more whitespace-separated pages). Order of guards, each before
- * the next allocates anything: input bytes → page count → headers + page
- * set → per page: base64 length → bounded inflate → JSON → structural
- * limits → strict schema. Throws `AddonImportError`; never echoes input.
+ * Decode a paste of one or more `!RL1!<section>[-<n>of<m>]!<base64(zlib(json))>`
+ * tokens — one char, one guild export (unpaged or every page once) and one
+ * raid, any order (ROK-1737). Order of guards, each before the next
+ * allocates anything: input bytes → token count → headers + grouping +
+ * page set → per section, per page: base64 length → bounded inflate → JSON
+ * → structural limits → strict schema → same exporter across sections.
+ * All-or-nothing: any failure rejects the whole paste. Throws
+ * `AddonImportError`; never echoes input.
  */
-export function decodeImportString(raw: string): DecodedAddonImport {
+export function decodeImportPaste(raw: string): DecodedAddonPaste {
   const input = raw.trim();
   const inputBytes = Buffer.byteLength(input, 'utf8');
   if (inputBytes > ADDON_IMPORT_MAX_BYTES)
     throw new AddonImportError('TOO_LARGE');
   if (input === '') throw new AddonImportError('BAD_HEADER');
-  const tokens = input.split(/\s+/);
-  if (tokens.length > ADDON_IMPORT_MAX_PAGES) {
+  const groups = parsePaste(input);
+  const mixed = groups.length > 1;
+  const decoded = groups.map((g) =>
+    decodeGroup(g, mixed ? g.bytes : inputBytes, mixed),
+  );
+  assertSameExporter(decoded.map((d) => d.payload));
+  return {
+    sections: toSections(decoded),
+    order: groups.map((g) => g.section),
+    tokens: groups.reduce((n, g) => n + g.headers.length, 0),
+    inputBytes,
+  };
+}
+
+/**
+ * Single-section compatibility path (the ROK-1724 import service): decode
+ * the paste, then require exactly one section. A mixed paste is rejected
+ * with `PAGES_INCOMPLETE` until the service handles several sections.
+ */
+export function decodeImportString(raw: string): DecodedAddonImport {
+  const { sections, order } = decodeImportPaste(raw);
+  const [only] = order;
+  const section = only && order.length === 1 ? sections[only] : undefined;
+  if (!section) {
     throw new AddonImportError(
       'PAGES_INCOMPLETE',
-      'That paste has too many pages.',
+      'Paste one import string at a time.',
     );
   }
-  const headers = assertPageSet(tokens.map(parsePageHeader));
-  const sha256 = normalisedHash(headers);
-  const payload = finalize(headers.map(decodePage));
-  return { payload, pages: headers.length, sha256, inputBytes };
+  return section;
 }
