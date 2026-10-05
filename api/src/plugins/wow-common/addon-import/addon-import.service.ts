@@ -35,9 +35,9 @@ import {
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
- * decode → bind (game, region, name, ruleset, GUID) → preview/apply in ONE
+ * size + schema → decode → bind (game, region, name, ruleset, GUID) → preview/apply in ONE
  * transaction → audit row finalised AFTER, outside the tx, on every outcome
- * incl. rejects (a reject before the reservation inserts its row then).
+ * incl. rejects (a `RATE_LIMITED` reject inserts its row then).
  * Never logs or stores the pasted string or its payload — only its sha256
  * and size.
  */
@@ -80,11 +80,14 @@ export class AddonImportService {
     body: unknown,
     facts: AttemptFacts,
   ): Promise<AddonImportResultDto> {
-    const request = parseImportRequest(body, facts);
-    facts.dryRun = request.dryRun;
+    // Limit FIRST (Codex P2): a user at the cap gets 429 even for a paste
+    // that would 413/400 — `facts.dryRun` is read from the raw body, and the
+    // schema only accepts a boolean, so it equals `request.dryRun` whenever
+    // the parse below succeeds. A parse reject finalises the reserved row.
     facts.auditId = await this.audit.reserveAttempt(
       auditRow(userId, characterId, facts, ADDON_IMPORT_PENDING),
     );
+    const request = parseImportRequest(body, facts);
     const decoded = decodeImportString(request.importString);
     facts.section = decoded.payload.section;
     facts.sha256 = decoded.sha256;

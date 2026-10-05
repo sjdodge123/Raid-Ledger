@@ -146,7 +146,7 @@ describe('AddonImportService', () => {
     expect(audit.recordAttempt).not.toHaveBeenCalled();
   });
 
-  it('an oversized string is 413 TOO_LARGE (not the schema 400) and audited', async () => {
+  it('an oversized string is 413 TOO_LARGE (not the schema 400); its reserved row is finalised', async () => {
     const { service, audit } = setup();
     const big = { importString: 'A'.repeat(262_145) };
     const err: unknown = await service
@@ -155,11 +155,28 @@ describe('AddonImportService', () => {
     expect(err).toBeInstanceOf(AddonImportError);
     expect((err as AddonImportError).getStatus()).toBe(413);
     expect((err as AddonImportError).code).toBe('TOO_LARGE');
+    expect(audit.reserveAttempt).toHaveBeenCalledTimes(1);
+    expect(audit.recordAttempt).toHaveBeenCalledTimes(1);
     expect(audit.recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ result: 'TOO_LARGE', sizeBytes: 262_145 }),
+      41,
+    );
+  });
+
+  it('a user at the cap gets 429 RATE_LIMITED even for an oversized paste (Codex P2)', async () => {
+    const { service, audit } = setup();
+    audit.reserveAttempt.mockRejectedValue(
+      new AddonImportError('RATE_LIMITED'),
+    );
+    const big = { importString: 'A'.repeat(262_145), dryRun: false };
+    await expect(service.importString(1, CHAR_ID, big)).rejects.toMatchObject({
+      code: 'RATE_LIMITED',
+    });
+    expect(audit.recordAttempt).toHaveBeenCalledTimes(1);
+    expect(audit.recordAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ result: 'RATE_LIMITED', dryRun: false }),
       null,
     );
-    expect(audit.reserveAttempt).not.toHaveBeenCalled();
   });
 
   it('throws the first binding error and audits its code', async () => {

@@ -20,6 +20,11 @@ import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { AddonImportTx } from './addon-import-apply.types';
 import { ADDON_IMPORT_APPLY_LIMIT } from './addon-import.audit';
+import {
+  applyBinding,
+  GUID_ALREADY_LINKED_MESSAGE,
+} from './addon-import-binding.apply';
+import type { AddonBindingResult } from './addon-import.binding';
 import { applyChar } from './addon-import-char.apply';
 import { decodeImportString } from './addon-import.decoder';
 import {
@@ -298,6 +303,70 @@ describe('addon import — char, overlapping applies (Codex P2)', () => {
   });
 });
 
+/** A binding that only pins `guid` (the race is on the GUID write alone). */
+const pinOnly = (guid: string): AddonBindingResult => ({
+  errors: [],
+  warnings: [],
+  diff: {},
+  pinGuid: guid,
+});
+
+/** Any backend waiting on a heavyweight lock (advisory or row/tx). */
+async function lockWaiters(): Promise<number> {
+  const rows = await testApp.db.execute<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM pg_stat_activity
+    WHERE wait_event_type = 'Lock' AND pid <> pg_backend_pid()`);
+  return Number(rows[0]?.n ?? 0);
+}
+
+describe('addon import — same GUID into two characters, concurrently (Codex P2)', () => {
+  it('the loser sees the holder → 422 already-linked, never a unique violation', async () => {
+    const ana = await createChar(await memberToken('anaguid1'));
+    const bob = await createChar(await memberToken('bobguid2'), {
+      name: 'Bob Forever',
+    });
+    const ctx = (tx: AddonImportTx, characterId: string) => ({
+      tx,
+      userId: 0,
+      characterId,
+      gameId,
+      region: 'us' as const,
+      sha256: 'a'.repeat(64),
+    });
+    let release = (): void => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    let pinned = (): void => undefined;
+    const firstPinned = new Promise<void>((r) => (pinned = r));
+    // Ana's apply pins the GUID and holds its tx open (uncommitted).
+    const first = testApp.db.transaction(async (tx) => {
+      await applyBinding(ctx(tx, ana), pinOnly(FIXTURE_GUID));
+      pinned();
+      await gate;
+    });
+    let second: Promise<unknown> | undefined;
+    try {
+      await firstPinned;
+      // Bob's pre-check can't see Ana's uncommitted pin; it must WAIT for it.
+      second = testApp.db
+        .transaction((tx) => applyBinding(ctx(tx, bob), pinOnly(FIXTURE_GUID)))
+        .catch((e: unknown) => e);
+      await waitFor(async () => {
+        expect(await lockWaiters()).toBeGreaterThan(0);
+      }, 5000);
+    } finally {
+      release();
+    }
+    await first;
+    const err = (await second) as { code?: unknown; message?: unknown };
+    expect({ code: err.code, message: err.message }).toEqual({
+      code: 'INVALID_PAYLOAD',
+      message: GUID_ALREADY_LINKED_MESSAGE,
+    });
+    expect((await charRow(ana)).addonGuid).toBe(FIXTURE_GUID);
+    expect((await charRow(bob)).addonGuid).toBeNull();
+  });
+});
+
 describe('addon import — binding rejects', () => {
   it('WRONG_GAME for a character of another game', async () => {
     const token = await memberToken('anawrong');
@@ -468,6 +537,51 @@ describe('addon import — gating, limits, audit', () => {
     expect(res.status).toBe(413);
     expect(res.body.code).toBe('TOO_LARGE');
     expect((await audits()).map((a) => a.result)).toEqual(['TOO_LARGE']);
+  });
+
+  it('a user AT the cap sending an oversized paste → 429, not 413 (Codex P2)', async () => {
+    process.env.THROTTLE_DISABLED = 'false';
+    const token = await memberToken('anacapbig');
+    const id = await createChar(token);
+    const [user] = nonEmpty(
+      await testApp.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.username, 'anacapbig')),
+      'user',
+    );
+    const userId = user.id;
+    await testApp.db.insert(schema.addonImportAudit).values(
+      Array.from({ length: ADDON_IMPORT_APPLY_LIMIT }, () => ({
+        userId,
+        characterId: id,
+        sizeBytes: 1,
+        dryRun: false,
+        result: 'applied',
+      })),
+    );
+    const big = `!RL1!char!${'A'.repeat(262_144)}`;
+    const res = await apply(token, id, big);
+    expect({ status: res.status, code: res.body.code }).toEqual({
+      status: 429,
+      code: 'RATE_LIMITED',
+    });
+    const results = (await audits()).map((a) => a.result);
+    expect(results.slice(ADDON_IMPORT_APPLY_LIMIT)).toEqual(['RATE_LIMITED']);
+    expect(results).not.toContain('PENDING');
+  });
+
+  it('parse rejects leave no PENDING row behind (400 schema + 413 size)', async () => {
+    const token = await memberToken('anaparse');
+    const id = await createChar(token);
+    const bad = await post(token, id, fixture('char-normal'), { extra: 1 });
+    expect(bad.status).toBe(400);
+    const big = await post(token, id, `!RL1!char!${'A'.repeat(262_144)}`);
+    expect(big.status).toBe(413);
+    const rows = await audits();
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.result)).not.toContain('PENDING');
+    expect(rows[1]?.result).toBe('TOO_LARGE');
   });
 
   it('21st apply in an hour → 429 RATE_LIMITED; every attempt audited', async () => {
