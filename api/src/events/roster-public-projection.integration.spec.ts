@@ -62,11 +62,11 @@ async function insertSignup(
   eventId: number,
   values: Partial<typeof schema.eventSignups.$inferInsert>,
 ) {
-  const [row] = await testApp.db
+  const rows = await testApp.db
     .insert(schema.eventSignups)
     .values({ eventId, ...values })
     .returning();
-  return nonEmpty([row], 'inserted signup')[0];
+  return nonEmpty(rows, 'inserted signup')[0];
 }
 
 /** Linked member: real snowflake + avatar hash, character with null spec/ilvl. */
@@ -80,7 +80,7 @@ async function seedLinkedMember(eventId: number) {
     .update(schema.users)
     .set({ discordId: LINKED_SNOWFLAKE, avatar: 'abcdef' })
     .where(eq(schema.users.id, userId));
-  const [character] = await testApp.db
+  const characters = await testApp.db
     .insert(schema.characters)
     .values({
       userId,
@@ -93,7 +93,7 @@ async function seedLinkedMember(eventId: number) {
   const signup = await insertSignup(eventId, {
     userId,
     status: 'signed_up',
-    characterId: nonEmpty([character], 'character')[0].id,
+    characterId: nonEmpty(characters, 'character')[0].id,
     note: 'private note',
     runningLateAt: new Date(),
   });
@@ -107,12 +107,12 @@ async function seedLinkedMember(eventId: number) {
 async function seedOtherSignups(eventId: number) {
   const local = await createMemberAndLogin(testApp, 'loc', 'loc@test.local');
   await insertSignup(eventId, { userId: local.userId, status: 'tentative' });
-  const [unlinked] = await testApp.db
+  const unlinkedRows = await testApp.db
     .insert(schema.users)
     .values({ discordId: 'unlinked:abc', username: 'unl', role: 'member' })
     .returning();
   await insertSignup(eventId, {
-    userId: nonEmpty([unlinked], 'unlinked user')[0].id,
+    userId: nonEmpty(unlinkedRows, 'unlinked user')[0].id,
     status: 'declined',
   });
   const roach = await createMemberAndLogin(testApp, 'roach', 'ro@test.local');
