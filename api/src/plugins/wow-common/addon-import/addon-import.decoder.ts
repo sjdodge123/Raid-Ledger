@@ -180,8 +180,7 @@ function decodeGroup(
 }
 
 function toSections(decoded: DecodedAddonSection[]): DecodedAddonSections {
-  const sections: Partial<Record<AddonExportSection, DecodedAddonSection>> =
-    {};
+  const sections: Partial<Record<AddonExportSection, DecodedAddonSection>> = {};
   for (const d of decoded) sections[d.payload.section] = d;
   return sections as DecodedAddonSections;
 }
