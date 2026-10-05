@@ -137,11 +137,13 @@ export const GAMES_SEED = [
     ],
   },
   {
-    // ROK-1563: WoW: Forever (launch 2026-11-04). No IGDB id yet — same
-    // precedent as the Anniversary row above; the normalized-name guard merges
-    // the IGDB row in when the sync finds it. The namespace prefix is the
-    // placeholder ROK-1562's probe replaces; a wrong prefix 404s loudly.
-    igdbId: null,
+    // ROK-1563: WoW: Forever (launch 2026-11-04). ROK-1715 pins IGDB's
+    // "World of Warcraft: Forever" entry (game type Port, id 417650): the
+    // name-merge never fired (search is ITAD-primary; popular discovery needs
+    // ratings), so the cover stayed a placeholder. With the id set, the IGDB
+    // sync's refresh + cover backfill own the cover. The namespace prefix is
+    // the placeholder ROK-1562's probe replaces; a wrong prefix 404s loudly.
+    igdbId: 417650,
     slug: 'world-of-warcraft-forever',
     name: 'World of Warcraft: Forever',
     shortName: 'WoW Forever',

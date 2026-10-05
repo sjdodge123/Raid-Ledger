@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { games } from '../drizzle/schema';
@@ -70,11 +70,7 @@ export async function upsertSeedGame(
       .where(eq(games.slug, game.slug))
       .limit(1);
     if (bySlug) {
-      // ROK-1643: the seed owns this row's name — re-assert it every boot.
-      await tx
-        .update(games)
-        .set({ ...buildSeedGameUpdateSet(game), name: game.name })
-        .where(eq(games.id, bySlug.id));
+      await updateSeedSlugRow(tx, game, bySlug.id);
       return { id: bySlug.id, action: 'updated' };
     }
     const byName = await findGameByNormalizedName(tx, game.name);
@@ -108,4 +104,41 @@ async function mergeSeedIntoRow(
     .update(games)
     .set({ ...safe, slug: game.slug })
     .where(eq(games.id, id));
+}
+
+/**
+ * The slug-branch write. ROK-1643: the seed owns this row's name, so it is
+ * re-asserted every boot. ROK-1715: when the seed pins an igdbId that ANOTHER
+ * row already holds (e.g. a search created the IGDB row before the pin), the
+ * UNIQUE(igdb_id) violation would abort the whole boot seed — and inside the
+ * name-lock transaction a failed statement can't be caught and retried. So
+ * pre-check, then issue one UPDATE that cannot violate: omit igdbId and warn.
+ * The leftover name-dup is the dedup cleanup's job.
+ */
+async function updateSeedSlugRow(
+  tx: Db,
+  game: GameSeedEntry,
+  id: number,
+): Promise<void> {
+  const set = { ...buildSeedGameUpdateSet(game), name: game.name };
+  if (set.igdbId && (await igdbIdHeldElsewhere(tx, set.igdbId, id))) {
+    delete set.igdbId;
+    console.warn(
+      `[seed-games] ${game.slug}: igdb_id ${game.igdbId} is already held by another row; leaving this row's igdb_id unchanged`,
+    );
+  }
+  await tx.update(games).set(set).where(eq(games.id, id));
+}
+
+async function igdbIdHeldElsewhere(
+  tx: Db,
+  igdbId: number,
+  exceptId: number,
+): Promise<boolean> {
+  const [holder] = await tx
+    .select({ id: games.id })
+    .from(games)
+    .where(and(eq(games.igdbId, igdbId), ne(games.id, exceptId)))
+    .limit(1);
+  return holder != null;
 }
