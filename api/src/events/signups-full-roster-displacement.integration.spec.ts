@@ -246,6 +246,32 @@ async function testDisplacedNotification() {
   expect(await displacedMessages(newcomer.userId)).toEqual([]);
 }
 
+// ─── AC1f: imbalanced full roster — no rearrange that would over-fill ─────
+
+/**
+ * Legacy/manual imbalance: the tank's assignment sits in dps (dps 4/3,
+ * tank 0/1) so the roster is full (5/5) while tank has room. The tentative
+ * victim also prefers tank; rearranging it there would leave 6 non-bench.
+ */
+async function testImbalancedFullRosterBenchesVictim() {
+  const r = await fillRoster();
+  await testApp.db
+    .update(schema.rosterAssignments)
+    .set({ role: 'dps', position: 4 })
+    .where(eq(schema.rosterAssignments.signupId, r.tank.signupId));
+  const victim = r.dps[2];
+  await testApp.db
+    .update(schema.eventSignups)
+    .set({ status: 'tentative', preferredRoles: ['dps', 'tank'] })
+    .where(eq(schema.eventSignups.id, victim.signupId));
+  const newcomer = await joinAs(r.eventId, 'fr_new', ['dps']);
+  expect({
+    newcomer: await roleOf(newcomer.signupId),
+    tentativeVictim: await roleOf(victim.signupId),
+    nonBenchCount: await nonBenchCount(r.eventId),
+  }).toEqual({ newcomer: 'dps', tentativeVictim: 'bench', nonBenchCount: 5 });
+}
+
 describe('Full-roster tentative displacement (integration, ROK-1729)', () => {
   beforeAll(() => setupAll());
   afterEach(() => resetAfterEach());
@@ -262,4 +288,6 @@ describe('Full-roster tentative displacement (integration, ROK-1729)', () => {
     testFullRosterNoTentativeBenches());
   it('AC2: displaced player gets exactly one tentative_displaced "moved to the bench" row; newcomer none', () =>
     testDisplacedNotification());
+  it('AC1f: imbalanced full roster benches the victim instead of rearranging it (no over-fill)', () =>
+    testImbalancedFullRosterBenchesVictim());
 });
