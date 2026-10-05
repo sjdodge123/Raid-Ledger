@@ -19,7 +19,7 @@ function renderModal(gameVariant: string | null) {
     return screen.getByRole('link', { name: /view on wowhead/i }).getAttribute('href');
 }
 
-/** ROK-1726: the modal uses the shared Wowhead helper (defect 1 — it drifted to classic.wowhead.com). */
+/** ROK-1726: the modal uses the shared Wowhead helper (defect 1 — it had drifted to the legacy classic subdomain). */
 describe('ItemDetailModal — View on Wowhead link', () => {
     it.each([
         ['wow_forever', 'https://www.wowhead.com/forever/item=19019'],
