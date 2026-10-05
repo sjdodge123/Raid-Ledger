@@ -2,6 +2,7 @@ import { BadGatewayException } from '@nestjs/common';
 import { checkOrSetAlreadyCaught } from '@sentry/core';
 import { BlizzardService } from './blizzard.service';
 import * as instH from './blizzard-instance.helpers';
+import * as instFetch from './blizzard-instance.fetch';
 import {
   blizzardUpstreamError,
   isNamespaceRefusal,
@@ -157,5 +158,45 @@ describe('BlizzardService.fetchRealmList — stale and recovery paths', () => {
       realmRefusals: Map<string, unknown>;
     };
     expect([...realmRefusals.keys()]).toEqual([]);
+  });
+});
+
+/**
+ * ROK-1719 (OQ2): when Blizzard's journal is down, WoW: Forever still offers
+ * the seeded instances — and that seed-only list is never cached.
+ */
+describe('BlizzardService.fetchAllInstances — Forever degraded mode', () => {
+  afterEach(() => jest.restoreAllMocks());
+  const FULL = {
+    dungeons: [{ id: 63, name: 'Deadmines', expansion: 'Classic' }],
+    raids: [],
+  };
+
+  it('serves the 11 seeded instances instead of throwing, then recovers', async () => {
+    const { service } = setup();
+    const fetchAll = jest
+      .spyOn(instFetch, 'fetchAllInstancesFromApi')
+      .mockRejectedValueOnce(failed())
+      .mockResolvedValueOnce(FULL);
+    const degraded = await service.fetchAllInstances('us', 'wow_forever');
+    expect(degraded.dungeons.map((d) => d.id)).toHaveLength(9);
+    expect(degraded.raids.map((r) => r.name)).toEqual([
+      'Barrow Deeps',
+      'Hyjal Summit',
+    ]);
+    await expect(
+      service.fetchAllInstances('us', 'wow_forever'),
+    ).resolves.toEqual(FULL);
+    expect(fetchAll).toHaveBeenCalledTimes(2);
+  });
+
+  it('still throws for every other variant', async () => {
+    const { service } = setup();
+    jest
+      .spyOn(instFetch, 'fetchAllInstancesFromApi')
+      .mockRejectedValue(failed());
+    await expect(
+      service.fetchAllInstances('us', 'classic_era'),
+    ).rejects.toBeInstanceOf(BadGatewayException);
   });
 });

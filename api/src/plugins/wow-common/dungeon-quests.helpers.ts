@@ -27,8 +27,8 @@ export const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic_anniversary: ['classic', 'tbc'],
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
-  // ROK-1563: WoW: Forever launches with vanilla content only.
-  wow_forever: ['classic'],
+  // ROK-1719: vanilla content plus Forever's own (no 'forever' rows seeded yet).
+  wow_forever: ['classic', 'forever'],
 };
 
 /** Map a DB row to a DTO. */

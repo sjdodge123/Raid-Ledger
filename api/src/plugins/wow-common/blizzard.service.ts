@@ -22,6 +22,7 @@ import * as profH from './blizzard-professions.helpers';
 import * as specH from './blizzard-spec.helpers';
 import * as instH from './blizzard-instance.helpers';
 import * as instFetch from './blizzard-instance.fetch';
+import { foreverSeedOnlyList } from './forever-instance-data';
 import { isNamespaceRefusal } from './blizzard-upstream-error';
 import type { ExternalCharacterProfessions } from '../plugin-host/extension-types';
 
@@ -204,15 +205,28 @@ export class BlizzardService {
     region: string,
     gameVariant: WowGameVariant = 'retail',
   ): Promise<{ dungeons: WowInstance[]; raids: WowInstance[] }> {
-    return memorySwr({
-      cache: this.instanceListCache,
-      key: `${region}:${gameVariant}`,
-      ttlMs: INSTANCE_CACHE_TTL,
-      fetcher: async () => {
-        const token = await this.auth.getAccessToken(region);
-        return instFetch.fetchAllInstancesFromApi(region, gameVariant, token);
-      },
-    });
+    const load = () =>
+      memorySwr({
+        cache: this.instanceListCache,
+        key: `${region}:${gameVariant}`,
+        ttlMs: INSTANCE_CACHE_TTL,
+        fetcher: async () => {
+          const token = await this.auth.getAccessToken(region);
+          return instFetch.fetchAllInstancesFromApi(region, gameVariant, token);
+        },
+      });
+    if (gameVariant !== 'wow_forever') return load();
+    // ROK-1719: Forever planning survives a Blizzard outage with the seeded
+    // instances. Deliberately outside the SWR fetcher so the seed-only list
+    // is never cached over the full journal list.
+    try {
+      return await load();
+    } catch (err) {
+      this.logger.warn(
+        `Forever instance list served seed-only: ${(err as Error).message}`,
+      );
+      return foreverSeedOnlyList();
+    }
   }
 
   async fetchInstanceDetail(

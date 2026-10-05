@@ -10,6 +10,28 @@ import type {
 } from './blizzard.constants';
 import * as instH from './blizzard-instance.helpers';
 import { blizzardUpstreamError } from './blizzard-upstream-error';
+import {
+  findForeverSeedInstance,
+  mergeForeverSeed,
+  withForeverSeedDetail,
+} from './forever-instance-data';
+
+type ExpansionDetails = Awaited<ReturnType<typeof instH.fetchExpansionDetails>>;
+
+/**
+ * ROK-1719: a failed journal-expansion call is dropped as null. For Forever
+ * that would cache a seed-only (no vanilla) list for 24h, so a missing
+ * Classic tier throws instead — BlizzardService serves the seed uncached.
+ * Forever only: other variants keep their existing partial-list behaviour.
+ */
+function assertForeverHasClassic(details: ExpansionDetails): void {
+  if (details.some((d) => d?.expansionName === 'Classic')) return;
+  throw blizzardUpstreamError(
+    502,
+    'instances',
+    'WoW: Forever instance list is missing the Classic journal tier. Please try again later.',
+  );
+}
 
 export async function fetchAllInstancesFromApi(
   region: string,
@@ -23,6 +45,7 @@ export async function fetchAllInstancesFromApi(
     `static-${region}`,
     token,
   );
+  if (gameVariant === 'wow_forever') assertForeverHasClassic(details);
   let { dungeons, raids } = instH.mergeExpansionInstances(details);
   ({ dungeons, raids } = instH.filterByVariant(dungeons, raids, gameVariant));
   dungeons = instH.deduplicateById(dungeons);
@@ -30,6 +53,12 @@ export async function fetchAllInstancesFromApi(
   if (gameVariant !== 'retail') {
     dungeons = instH.expandSubInstances(dungeons);
     raids = instH.expandSubInstances(raids);
+  }
+  if (gameVariant === 'wow_forever') {
+    // ROK-1719: seeded Forever instances carry explicit levels, so
+    // enrichInstance never applies the name-keyed (TBC) Hyjal Summit 70.
+    dungeons = mergeForeverSeed(dungeons, 'dungeon');
+    raids = mergeForeverSeed(raids, 'raid');
   }
   return {
     dungeons: dungeons.map((i) => instH.enrichInstance(i, gameVariant)),
@@ -57,6 +86,11 @@ export async function fetchInstanceDetailFromApi(
   gameVariant: WowGameVariant,
   token: string,
 ): Promise<WowInstanceDetail> {
+  // ROK-1719: before the synthetic branch — 90_000_001 % 100 would otherwise
+  // resolve to a Scarlet Monastery wing. Variant-independent on purpose: a
+  // saved event's id must resolve whatever the viewer's variant mapping.
+  const seeded = findForeverSeedInstance(instanceId);
+  if (seeded) return seeded;
   if (instanceId > 10000) {
     const synth = instH.resolveSyntheticInstance(instanceId);
     if (synth) return synth;
@@ -74,5 +108,5 @@ export async function fetchInstanceDetailFromApi(
     category?: { type: string };
     expansion?: { name: string };
   };
-  return instH.buildInstanceDetail(data, gameVariant);
+  return withForeverSeedDetail(instH.buildInstanceDetail(data, gameVariant));
 }
