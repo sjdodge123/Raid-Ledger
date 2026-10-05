@@ -211,7 +211,7 @@ export class DiscordBotService
         guildName: guildInfo?.name,
         message: guildInfo
           ? `Connected to ${guildInfo.name} (${guildInfo.memberCount} members)`
-          : 'Bot token is valid! Almost done — invite the bot to your Discord server using the OAuth2 URL Generator in the Developer Portal.',
+          : 'Bot token is valid! Almost done — save the token, enable the bot, then use the Invite URL under "Invite Bot to Your Server" above to add it to your Discord server.',
       };
     } catch (error) {
       await testClient.disconnect();
