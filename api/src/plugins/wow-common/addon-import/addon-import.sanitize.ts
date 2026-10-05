@@ -57,7 +57,7 @@ export function parseItemLink(link: string): {
 } {
   const match = ITEM_LINK_RE.exec(link);
   if (!match) return { itemId: null, bonusIds: [] };
-  const fields = match[1].split(':');
+  const fields = (match[1] ?? '').split(':');
   const itemId = toId(fields[0]);
   const count = toId(fields[BONUS_COUNT_FIELD]);
   if (count === null || count > MAX_BONUS_IDS) return { itemId, bonusIds: [] };

@@ -116,6 +116,7 @@ function decodePage(header: AddonPageHeader): AddonExport {
 /** Sanitise exactly once (stripping is not idempotent: `||c…` → `|c…`). */
 function finalize(pages: AddonExport[]): DecodedAddonExport {
   const [first] = pages;
+  if (!first) throw new AddonImportError('BAD_HEADER');
   if (first.section === 'guild') {
     return sanitizeStrings(mergeGuildPages(pages as AddonGuildExport[]));
   }

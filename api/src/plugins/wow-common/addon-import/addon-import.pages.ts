@@ -28,13 +28,14 @@ function versionMessage(version: number): string {
 /** Parse one token's header. Never echoes the token in an error. */
 export function parsePageHeader(token: string): AddonPageHeader {
   const m = ADDON_IMPORT_PAGE_RE.exec(token);
-  if (!m) throw new AddonImportError('BAD_HEADER');
+  const body = m?.[5];
+  if (!m || body === undefined) throw new AddonImportError('BAD_HEADER');
   const version = Number(m[1]);
   if (version !== ADDON_EXPORT_ENVELOPE_VERSION) {
     throw new AddonImportError('UNSUPPORTED_VERSION', versionMessage(version));
   }
   const section = m[2] as AddonExportSection;
-  if (m[3] === undefined) return { section, page: null, of: null, body: m[5] };
+  if (m[3] === undefined) return { section, page: null, of: null, body };
   const page = Number(m[3]);
   const of = Number(m[4]);
   if (
@@ -46,7 +47,7 @@ export function parsePageHeader(token: string): AddonPageHeader {
   ) {
     throw new AddonImportError('BAD_HEADER');
   }
-  return { section, page, of, body: m[5] };
+  return { section, page, of, body };
 }
 
 const incomplete = (message?: string) =>
@@ -58,11 +59,13 @@ const incomplete = (message?: string) =>
  * paste order). Returns the headers sorted by page number.
  */
 export function assertPageSet(headers: AddonPageHeader[]): AddonPageHeader[] {
-  if (headers.length === 1 && headers[0].page === null) return headers;
+  const [first] = headers;
+  if (!first) throw new AddonImportError('BAD_HEADER');
+  if (headers.length === 1 && first.page === null) return headers;
   if (headers.some((h) => h.page === null)) {
     throw incomplete('Paste one import string at a time.');
   }
-  const of = headers[0].of;
+  const of = first.of;
   if (headers.some((h) => h.of !== of)) throw incomplete();
   const seen = new Set(headers.map((h) => h.page));
   if (seen.size !== headers.length || headers.length !== of) throw incomplete();
@@ -86,6 +89,7 @@ function samePageExport(a: AddonGuildExport, b: AddonGuildExport): boolean {
  */
 export function mergeGuildPages(pages: AddonGuildExport[]): AddonGuildExport {
   const [first] = pages;
+  if (!first) throw incomplete();
   if (pages.some((p) => !samePageExport(first, p))) {
     throw incomplete('These pages come from different guild exports.');
   }
