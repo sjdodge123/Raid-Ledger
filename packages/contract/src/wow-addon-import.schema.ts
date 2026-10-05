@@ -135,12 +135,35 @@ export const AddonRaidImportSummarySchema = z.object({
     wipes: n,
 });
 
-const resultBase = {
+const sectionBase = {
     status: AddonImportStatusSchema,
     /** Unix seconds from the payload. */
     exportedAt: z.number().int(),
+};
+
+/**
+ * One section of a mixed "Export all" paste (ROK-1737): its own status
+ * (a stale section writes nothing for that section) and counts.
+ */
+export const AddonImportSectionResultSchema = z.discriminatedUnion('section', [
+    z.object({ ...sectionBase, section: z.literal('char'), summary: AddonCharImportSummarySchema }),
+    z.object({ ...sectionBase, section: z.literal('guild'), summary: AddonGuildImportSummarySchema }),
+    z.object({ ...sectionBase, section: z.literal('raid'), summary: AddonRaidImportSummarySchema }),
+]);
+export type AddonImportSectionResultDto = z.infer<typeof AddonImportSectionResultSchema>;
+
+const resultBase = {
+    ...sectionBase,
     warnings: z.array(AddonImportWarningSchema),
     diff: AddonImportDiffSchema,
+    /**
+     * ROK-1737 — present only for a paste with 2–3 sections, one entry per
+     * section in canonical order char → guild → raid. The top-level
+     * `section`/`status`/`exportedAt`/`summary` then mirror the FIRST entry,
+     * and `warnings` carries `STALE_EXPORT` when ANY section is stale. A
+     * single-section paste omits it (body unchanged since ROK-1724).
+     */
+    sections: z.array(AddonImportSectionResultSchema).min(2).max(3).optional(),
 };
 
 /** Discriminated by `section`; `summary` carries that section's counts. */
