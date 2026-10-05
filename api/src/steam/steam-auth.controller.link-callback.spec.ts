@@ -242,14 +242,17 @@ describe('SteamAuthController — OpenID assertion hardening (ROK-1731)', () => 
       'a signed list without return_to',
       { 'openid.signed': SIGNED.replace(',return_to', '') },
     ],
-  ])('rejects %s before claiming the nonce or contacting Steam', async (_l, o) => {
-    const res = await callback(ctrl, o);
+  ])(
+    'rejects %s before claiming the nonce or contacting Steam',
+    async (_l, o) => {
+      const res = await callback(ctrl, o);
 
-    expect(onlyRedirect(res)).toEqual([failed]);
-    expect(m.claim).not.toHaveBeenCalled();
-    expect(verifyOpenIdMock).not.toHaveBeenCalled();
-    expect(m.linkSteam).not.toHaveBeenCalled();
-  });
+      expect(onlyRedirect(res)).toEqual([failed]);
+      expect(m.claim).not.toHaveBeenCalled();
+      expect(verifyOpenIdMock).not.toHaveBeenCalled();
+      expect(m.linkSteam).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects a response_nonce replayed into a second, independent flow', async () => {
     const first = await callback(ctrl);
