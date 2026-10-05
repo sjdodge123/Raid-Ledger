@@ -17,6 +17,7 @@ import type { AddonImportErrorCode } from '@raid-ledger/contract';
 import { decodeImportString } from '../src/plugins/wow-common/addon-import/addon-import.decoder';
 import { AddonImportError } from '../src/plugins/wow-common/addon-import/addon-import.errors';
 import {
+  FIXTURE_GUID,
   buildCharPayload,
   buildGuildPages,
   buildGuildPayload,
@@ -36,8 +37,22 @@ const members = (n: number) =>
     buildMember(i + 1, i % 7 === 0 ? { note: 'Main tank' } : {}),
   );
 
+/**
+ * A roster of exactly `n` that INCLUDES the exporter (`FIXTURE_GUID`) as
+ * its first member — apply rejects a roster without the exporter with
+ * `NOT_IN_GUILD`, so a golden guild fixture must carry them.
+ */
+function roster(n: number) {
+  const exporter = buildMember(0xabcdef0, {
+    name: 'Ana Forever',
+    class: 'PALADIN',
+  });
+  if (exporter.guid !== FIXTURE_GUID) throw new Error('exporter GUID drift');
+  return [exporter, ...members(n - 1)];
+}
+
 function guildPaste(count: number): string {
-  const payload = buildGuildPayload(members(count));
+  const payload = buildGuildPayload(roster(count));
   const of = Math.ceil(count / PER_PAGE);
   if (of === 1) return buildImportString(payload);
   return buildGuildPages(payload, of).join('\n');
