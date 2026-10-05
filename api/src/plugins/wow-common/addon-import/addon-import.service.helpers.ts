@@ -23,6 +23,8 @@ export interface AttemptFacts {
   dryRun: boolean;
   section: AddonExportSection | null;
   sha256: string | null;
+  /** The reserved audit row (limit check passed), finalised by `finish`. */
+  auditId: number | null;
 }
 
 const SECTION_SNIFF = /^\s*!RL\d+!(char|guild|raid)\b/;
@@ -43,6 +45,7 @@ export function rawFacts(body: unknown): AttemptFacts {
     dryRun: b.dryRun !== false,
     section: sniffSection(str),
     sha256: null,
+    auditId: null,
   };
 }
 

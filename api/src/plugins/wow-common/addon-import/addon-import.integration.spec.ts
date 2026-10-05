@@ -19,6 +19,7 @@ import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { AddonImportTx } from './addon-import-apply.types';
+import { ADDON_IMPORT_APPLY_LIMIT } from './addon-import.audit';
 import { applyChar } from './addon-import-char.apply';
 import { decodeImportString } from './addon-import.decoder';
 import {
@@ -487,6 +488,27 @@ describe('addon import — gating, limits, audit', () => {
     expect(rows.slice(0, 20).every((r) => r.result === 'applied')).toBe(true);
     expect(rows[20]).toMatchObject({ result: 'RATE_LIMITED', dryRun: false });
     expect(rows[21]).toMatchObject({ result: 'stale', dryRun: true });
+  });
+
+  it('limit + 1 PARALLEL applies → exactly one 429; every attempt audited (Codex P2)', async () => {
+    process.env.THROTTLE_DISABLED = 'false';
+    const token = await memberToken('anaburst');
+    const id = await createChar(token);
+    const n = ADDON_IMPORT_APPLY_LIMIT + 1;
+    const res = await Promise.all(
+      Array.from({ length: n }, (_, i) =>
+        apply(token, id, charAt(FIXTURE_EXPORTED_AT + i)),
+      ),
+    );
+    const statuses = res.map((r) => r.status);
+    expect(statuses.filter((s) => s === 429)).toHaveLength(1);
+    expect(statuses.filter((s) => s === 200)).toHaveLength(
+      ADDON_IMPORT_APPLY_LIMIT,
+    );
+    const results = (await audits()).map((r) => r.result);
+    expect(results).toHaveLength(n);
+    expect(results.filter((r) => r === 'RATE_LIMITED')).toHaveLength(1);
+    expect(results.filter((r) => r === 'PENDING')).toEqual([]);
   });
 
   it('every attempt is audited with sha256 + size, never the string', async () => {

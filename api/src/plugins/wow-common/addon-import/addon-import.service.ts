@@ -9,7 +9,11 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { CharactersService } from '../../../characters/characters.service';
-import { AddonImportAuditService } from './addon-import.audit';
+import type { AddonImportAuditInsert } from '../../../drizzle/schema';
+import {
+  ADDON_IMPORT_PENDING,
+  AddonImportAuditService,
+} from './addon-import.audit';
 import {
   bindToCharacter,
   type AddonBindingCharacter,
@@ -30,10 +34,12 @@ import {
 } from './addon-import.service.helpers';
 
 /**
- * ROK-1724 §4.3 — owner check → limit → decode → bind (game, region, name,
- * ruleset, GUID) → preview/apply in ONE transaction → audit row written
- * AFTER, outside the tx, on every outcome incl. rejects. Never logs or
- * stores the pasted string or its payload — only its sha256 and size.
+ * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
+ * decode → bind (game, region, name, ruleset, GUID) → preview/apply in ONE
+ * transaction → audit row finalised AFTER, outside the tx, on every outcome
+ * incl. rejects (a reject before the reservation inserts its row then).
+ * Never logs or stores the pasted string or its payload — only its sha256
+ * and size.
  */
 @Injectable()
 export class AddonImportService {
@@ -75,7 +81,10 @@ export class AddonImportService {
     facts: AttemptFacts,
   ): Promise<AddonImportResultDto> {
     const request = parseImportRequest(body, facts);
-    await this.audit.assertWithinLimit(userId, request.dryRun);
+    facts.dryRun = request.dryRun;
+    facts.auditId = await this.audit.reserveAttempt(
+      auditRow(userId, characterId, facts, ADDON_IMPORT_PENDING),
+    );
     const decoded = decodeImportString(request.importString);
     facts.section = decoded.payload.section;
     facts.sha256 = decoded.sha256;
@@ -149,16 +158,28 @@ export class AddonImportService {
     this.logger.log(
       `addon-import userId=${userId} section=${facts.section ?? '-'} sha256=${facts.sha256 ?? '-'} size=${facts.sizeBytes} dryRun=${facts.dryRun} result=${result}`,
     );
-    await this.audit.recordAttempt({
-      userId,
-      characterId,
-      section: facts.section,
-      payloadSha256: facts.sha256,
-      sizeBytes: facts.sizeBytes,
-      dryRun: facts.dryRun,
-      result,
-    });
+    await this.audit.recordAttempt(
+      auditRow(userId, characterId, facts, result),
+      facts.auditId,
+    );
   }
+}
+
+function auditRow(
+  userId: number,
+  characterId: string,
+  facts: AttemptFacts,
+  result: string,
+): AddonImportAuditInsert {
+  return {
+    userId,
+    characterId,
+    section: facts.section,
+    payloadSha256: facts.sha256,
+    sizeBytes: facts.sizeBytes,
+    dryRun: facts.dryRun,
+    result,
+  };
 }
 
 interface LoadedCharacter {

@@ -55,7 +55,7 @@ function makeDb() {
 function setup() {
   const characters = { findOne: jest.fn().mockResolvedValue({}) };
   const audit = {
-    assertWithinLimit: jest.fn().mockResolvedValue(undefined),
+    reserveAttempt: jest.fn().mockResolvedValue(41),
     recordAttempt: jest.fn().mockResolvedValue(undefined),
   };
   const service = new AddonImportService(
@@ -99,6 +99,27 @@ describe('AddonImportService', () => {
     expect(applyBinding).not.toHaveBeenCalled();
     expect(audit.recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ result: 'stale', dryRun: false }),
+      41,
+    );
+  });
+
+  it('reserves the audit row (limit check) before decoding, as PENDING', async () => {
+    const { service, audit } = setup();
+    (applyChar as jest.Mock).mockResolvedValue({
+      status: 'applied',
+      summary: SUMMARY,
+    });
+    await service.importString(1, CHAR_ID, body);
+    expect(audit.reserveAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 1, dryRun: false, result: 'PENDING' }),
+    );
+    const reserved = audit.reserveAttempt.mock.invocationCallOrder[0] ?? 0;
+    const decoded =
+      (decodeImportString as jest.Mock).mock.invocationCallOrder[0] ?? 0;
+    expect(reserved).toBeLessThan(decoded);
+    expect(audit.recordAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ result: 'applied' }),
+      41,
     );
   });
 
@@ -136,7 +157,9 @@ describe('AddonImportService', () => {
     expect((err as AddonImportError).code).toBe('TOO_LARGE');
     expect(audit.recordAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ result: 'TOO_LARGE', sizeBytes: 262_145 }),
+      null,
     );
+    expect(audit.reserveAttempt).not.toHaveBeenCalled();
   });
 
   it('throws the first binding error and audits its code', async () => {
@@ -153,6 +176,7 @@ describe('AddonImportService', () => {
         result: 'NAME_MISMATCH',
         payloadSha256: 'a'.repeat(64),
       }),
+      41,
     );
   });
 });
