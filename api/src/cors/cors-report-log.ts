@@ -39,6 +39,7 @@ export interface CorsReporter {
 export const REPORT_WINDOW_MS = 10 * 60 * 1000;
 export const MAX_REPORT_KEYS = 200;
 export const MAX_HOST_CHECK_PAIRS = 20;
+const OVERFLOW_LINE = '[cors-auto] would-reject overflow suppressed=';
 
 /** Printable ASCII minus space, capped; `-` when absent or empty. */
 export function sanitizeField(value: string | undefined, max = 120): string {
@@ -119,21 +120,6 @@ function throttle(state: Throttle, now: number): number | null {
   return suppressed;
 }
 
-/** New keys past the cap share one counter, emitted at most once a window. */
-function reportOverflow(
-  overflow: Throttle,
-  now: number,
-  logger: CorsReportLogger,
-): void {
-  overflow.suppressed += 1;
-  if (now - overflow.lastAt < REPORT_WINDOW_MS) return;
-  logger.warn(
-    `[cors-auto] would-reject overflow suppressed=${overflow.suppressed}`,
-  );
-  overflow.lastAt = now;
-  overflow.suppressed = 0;
-}
-
 function reportKey(input: CorsReportInput): string {
   return [input.reason, sanitizeOrigin(input.origin), sanitizeField(input.host)]
     .join('|')
@@ -159,7 +145,9 @@ export function createCorsReporter(
       keys.set(key, { lastAt: now(), suppressed: 0 });
       logger.warn(formatWouldReject(input, 0));
     } else {
-      reportOverflow(overflow, now(), logger);
+      // Keys past the cap share one counter, emitted at most once a window.
+      const dropped = throttle(overflow, now());
+      if (dropped !== null) logger.warn(`${OVERFLOW_LINE}${dropped + 1}`);
     }
   };
   const hostCheck = (input: CorsReportInput): void => {
