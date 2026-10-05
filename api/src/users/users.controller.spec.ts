@@ -11,6 +11,7 @@ import { EventsService } from '../events/events.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { RecentPlayersResponseSchema } from '@raid-ledger/contract';
+import { at } from '../common/testing/narrow';
 
 /** Signed-in member / anonymous (OptionalJwtGuard sets null) / deactivated viewers (ROK-1734). */
 const MEMBER_REQ = { user: { id: 9, role: 'member', deactivatedAt: null } };
@@ -297,7 +298,7 @@ describe('UsersController', () => {
     it('strips discordId and builds the CDN avatar for an anonymous viewer (ROK-1734)', async () => {
       jest.spyOn(usersService, 'findAll').mockResolvedValue({
         data: [
-          { ...mockFindAllResult.data[0], discordId: '555', avatar: 'h1' },
+          { ...at(mockFindAllResult.data, 0), discordId: '555', avatar: 'h1' },
         ],
         total: 1,
       });

@@ -15,6 +15,7 @@ import {
   projectUserProfile,
   toPublicIdentity,
 } from './public-identity-projection.helpers';
+import { at } from './testing/narrow';
 
 const SNOWFLAKE = '123456789012345678';
 const CDN = `https://cdn.discordapp.com/avatars/${SNOWFLAKE}/hash1.png`;
@@ -177,7 +178,7 @@ describe('anonymous shapes', () => {
 describe('strict parse — a new key throws instead of leaking (AC4)', () => {
   it('rejects an unknown key on a /users row', () => {
     const p = playersList();
-    Object.assign(p.data[0], { steamId: '7656119' });
+    Object.assign(at(p.data, 0), { steamId: '7656119' });
     expect(() => projectPlayersList(p, false)).toThrow(/steamId/);
   });
 
@@ -189,16 +190,16 @@ describe('strict parse — a new key throws instead of leaking (AC4)', () => {
 
   it('rejects an unknown key on activity and now-playing rows', () => {
     const a = activity();
-    Object.assign(a.topPlayers[0], { discordUserId: SNOWFLAKE });
+    Object.assign(at(a.topPlayers, 0), { discordUserId: SNOWFLAKE });
     expect(() => projectGameActivity(a, false)).toThrow(/discordUserId/);
     const n = nowPlaying();
-    Object.assign(n.players[0], { email: 'x@y.z' });
+    Object.assign(at(n.players, 0), { email: 'x@y.z' });
     expect(() => projectNowPlaying(n, false)).toThrow(/email/);
   });
 
   it('rejects an unknown key on a recent-player row and on a profile character', () => {
     const r = recent();
-    Object.assign(r.data[0], { discordAvatarHash: 'h' });
+    Object.assign(at(r.data, 0), { discordAvatarHash: 'h' });
     expect(() => projectRecentPlayers(r, false)).toThrow(/discordAvatarHash/);
     const char = { id: 'c1', name: 'Thrall', ownerDiscordId: SNOWFLAKE };
     const p = profile([char as unknown as CharacterDto]);
