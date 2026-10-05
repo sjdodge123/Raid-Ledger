@@ -22,6 +22,7 @@ import {
   PublicRosterAssignmentResponseSchema,
   PublicRosterWithAssignmentsSchema,
   PublicEventCreatorSchema,
+  PublicPugSlotResponseSchema,
 } from '@raid-ledger/contract';
 import type {
   SignupUserDto,
@@ -32,6 +33,8 @@ import type {
   EventCreatorDto,
   EventResponseDto,
   EventDetailResponseDto,
+  PugSlotResponseDto,
+  PublicPugSlotResponseDto,
   PublicSignupUserDto,
   PublicSignupResponseDto,
   PublicEventRosterDto,
@@ -133,6 +136,29 @@ export function toPublicCreator(c: EventCreatorDto): PublicEventCreatorDto {
 }
 
 /**
+ * PUG slot for anonymous viewers (ROK-1626/1629): the slot stays visible; the
+ * invite code, server invite URL and Discord id/avatar hash are not sent.
+ */
+export function toPublicPugSlot(
+  p: PugSlotResponseDto,
+): PublicPugSlotResponseDto {
+  return PublicPugSlotResponseSchema.parse({
+    id: p.id,
+    eventId: p.eventId,
+    discordUsername: p.discordUsername,
+    role: p.role,
+    class: p.class,
+    spec: p.spec,
+    notes: p.notes,
+    status: p.status,
+    claimedByUserId: p.claimedByUserId,
+    createdBy: p.createdBy,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+  }) as PublicPugSlotResponseDto;
+}
+
+/**
  * `GET /events`, `GET /events/:id`: project creator + signups preview. The rest
  * of the event carries no member identity, so it is passed through rather than
  * re-validated field-by-field on the public list path.
@@ -179,5 +205,6 @@ export function projectEventDetailForViewer(
     event: projectEventForViewer(detail.event, false),
     roster: toPublicRoster(detail.roster),
     rosterAssignments: toPublicRosterWithAssignments(detail.rosterAssignments),
+    pugs: detail.pugs.map(toPublicPugSlot),
   };
 }

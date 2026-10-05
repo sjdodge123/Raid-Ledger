@@ -2,8 +2,10 @@
  * ROK-1629 (AC4) — public roster routes project per viewer, on real DB data.
  *
  * Anonymous and deactivated callers must receive NO `discordId` /
- * `discordUserId` / `discordAvatarHash` key at ANY depth (recursive key walk,
- * not spot checks); signed-in members and admins keep today's payload.
+ * `discordUserId` / `discordAvatarHash` key — nor a PUG `inviteCode` /
+ * `serverInviteUrl` key — at ANY depth (recursive key walk over a bundle that
+ * carries a fully-populated PUG slot; absent, not null). Signed-in members and
+ * admins keep today's payload.
  *
  * Fixtures are deliberately realistic (Lead directive): every signup status, a
  * linked member, `local:` and `unlinked:` users, an anonymous Discord signup,
@@ -28,7 +30,13 @@ import {
 const LINKED_SNOWFLAKE = '123456789012345678';
 const ANON_SNOWFLAKE = '987654321098765432';
 const CDN = 'https://cdn.discordapp.com/avatars';
-const FORBIDDEN = new Set(['discordId', 'discordUserId', 'discordAvatarHash']);
+const FORBIDDEN = new Set([
+  'discordId',
+  'discordUserId',
+  'discordAvatarHash',
+  'inviteCode',
+  'serverInviteUrl',
+]);
 /**
  * Statuses the roster shows to ANY viewer. `declined` / `roached_out` are
  * seeded but excluded upstream for everyone by `fetchRosterSignups`
@@ -40,7 +48,7 @@ const ROSTER_STATUSES = ['departed', 'signed_up', 'signed_up', 'tentative'];
 let testApp: TestApp;
 let adminToken: string;
 
-/** Every JSON path whose key is a Discord identity field, at any depth. */
+/** Every JSON path whose key is a member-only Discord/invite field, at any depth. */
 function forbiddenPaths(value: unknown, path = '$'): string[] {
   if (Array.isArray(value))
     return value.flatMap((v, i) => forbiddenPaths(v, `${path}[${i}]`));
@@ -176,12 +184,6 @@ const PUG_MEMBER_FIELDS = {
   discordUserId: PUG_SNOWFLAKE,
   discordAvatarHash: 'pughash',
 };
-const PUG_BLANK_FIELDS = {
-  inviteCode: null,
-  serverInviteUrl: null,
-  discordUserId: null,
-  discordAvatarHash: null,
-};
 
 /** A PUG slot carrying every member-only field (invite code, server URL, Discord). */
 async function seedPugSlot(eventId: number) {
@@ -246,6 +248,7 @@ describe('ROK-1629 public roster projection (integration)', () => {
   ] as const)(
     'a %s caller gets no Discord id key anywhere on any public route',
     async (_label, who) => {
+      await seedPugSlot(f.eventId);
       const token = who ? f.deactivatedToken : undefined;
       for (const route of publicRoutes(f)) {
         const res = await get(route, token);
@@ -326,7 +329,9 @@ describe('ROK-1629 public roster projection (integration)', () => {
       const res = await get(`/events/${f.eventId}/detail`, token);
       expect(res.status).toBe(200);
       const body = res.body as DetailBody;
-      expect(pugMemberFields(body)).toEqual([PUG_BLANK_FIELDS]);
+      // The slot stays visible; its member-only keys are ABSENT (not null).
+      expect(body.pugs.map((p) => p.discordUsername)).toEqual(['pugguy']);
+      expect(forbiddenPaths(body.pugs, '$.pugs')).toEqual([]);
       expect(body.voiceChannel?.guildId ?? null).toBeNull();
     },
   );

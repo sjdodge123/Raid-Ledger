@@ -14,7 +14,6 @@ import type {
 import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
 import { findConflictingEvents } from './event-conflict.helpers';
 import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
-import { pugSlotsVisibleTo } from './pugs.helpers';
 import {
   isMemberViewer,
   projectEventDetailForViewer,
@@ -85,7 +84,7 @@ export class EventDetailService {
       event: enriched,
       roster,
       rosterAssignments,
-      pugs: pugSlotsVisibleTo(pugList.pugs, isAuthenticated),
+      pugs: pugList.pugs,
       voiceChannel,
     };
   }

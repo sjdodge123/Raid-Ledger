@@ -11,6 +11,7 @@ import {
     type RosterAssignmentResponse,
     type RosterWithAssignments,
 } from './roster.schema.js';
+import { PugSlotResponseSchema, type PugSlotResponseDto } from './pug.schema.js';
 import {
     EventCreatorSchema,
     EventResponseSchema,
@@ -147,17 +148,44 @@ export const PublicEventResponseSchema = EventResponseSchema.extend({
 });
 export type PublicEventResponseDto = z.infer<typeof PublicEventResponseSchema>;
 
+/**
+ * PUG slot for anonymous viewers: the slot is visible, but the invite code,
+ * server invite URL and Discord id/avatar hash are members-only (ROK-1626) —
+ * the keys are ABSENT, not null. `id` / `role` / `status` / timestamps are DB
+ * uuid / varchar / timestamp columns, so they are re-typed loosely.
+ */
+export const PublicPugSlotResponseSchema = PugSlotResponseSchema.omit({
+    discordUserId: true,
+    discordAvatarHash: true,
+    serverInviteUrl: true,
+    inviteCode: true,
+})
+    .extend({
+        id: z.string(),
+        role: z.string(),
+        status: z.string(),
+        createdAt: z.string(),
+        updatedAt: z.string(),
+    })
+    .strict();
+export type PublicPugSlotResponseDto = Omit<
+    PugSlotResponseDto,
+    'discordUserId' | 'discordAvatarHash' | 'serverInviteUrl' | 'inviteCode'
+>;
+
 /** `GET /events/:id/detail` bundle for anonymous viewers. */
 export const PublicEventDetailResponseSchema = EventDetailResponseSchema.extend({
     event: PublicEventResponseSchema,
     roster: PublicEventRosterSchema,
     rosterAssignments: PublicRosterWithAssignmentsSchema,
+    pugs: z.array(PublicPugSlotResponseSchema),
 });
 export type PublicEventDetailResponseDto = Omit<
     EventDetailResponseDto,
-    'event' | 'roster' | 'rosterAssignments'
+    'event' | 'roster' | 'rosterAssignments' | 'pugs'
 > & {
     event: PublicEventResponseDto;
     roster: PublicEventRosterDto;
     rosterAssignments: PublicRosterWithAssignments;
+    pugs: PublicPugSlotResponseDto[];
 };

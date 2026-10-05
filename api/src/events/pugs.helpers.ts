@@ -65,26 +65,6 @@ export function toPugSlotResponse(row: SlotRow): PugSlotResponseDto {
   };
 }
 
-/**
- * ROK-1626: the slots as the viewer of the public detail bundle sees them. A
- * logged-out viewer still sees that a slot exists; these three fields are for
- * members.
- */
-export function pugSlotsVisibleTo(
-  pugs: PugSlotResponseDto[],
-  isAuthenticated: boolean,
-): PugSlotResponseDto[] {
-  if (isAuthenticated) return pugs;
-  return pugs.map((pug) => ({
-    ...pug,
-    inviteCode: null,
-    serverInviteUrl: null,
-    discordUserId: null,
-    // ROK-1629: without the id the hash renders nothing; send no Discord field.
-    discordAvatarHash: null,
-  }));
-}
-
 export async function findPugSlotOrThrow(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,

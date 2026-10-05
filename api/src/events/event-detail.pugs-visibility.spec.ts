@@ -3,7 +3,7 @@
  *
  * `GET /events/:id/detail` is deliberately public (`OptionalJwtGuard`), and it
  * embeds the same list `GET /events/:id/pugs` serves. A logged-out viewer still
- * sees that a slot exists; the member-only fields are blanked.
+ * sees that a slot exists; the member-only fields are omitted (ROK-1629).
  */
 import type { PugSlotResponseDto } from '@raid-ledger/contract';
 import { EventDetailService } from './event-detail.service';
@@ -36,6 +36,18 @@ const PUG: PugSlotResponseDto = {
   updatedAt: '2026-09-01T00:00:00.000Z',
 };
 
+/** ROK-1629: anonymous slots carry NO key for these — absent, not null. */
+const MEMBER_ONLY_PUG_KEYS = [
+  'inviteCode',
+  'serverInviteUrl',
+  'discordUserId',
+  'discordAvatarHash',
+];
+
+function memberOnlyKeysPresent(pug: object | undefined): string[] {
+  return MEMBER_ONLY_PUG_KEYS.filter((k) => k in (pug ?? {}));
+}
+
 function buildService(): EventDetailService {
   // ROK-1629: an anonymous bundle is projected, so the fixtures carry the
   // minimal real shapes the public projection parses.
@@ -61,14 +73,11 @@ function buildService(): EventDetailService {
 }
 
 describe('EventDetailService — PUG slot visibility (ROK-1626)', () => {
-  it('blanks the member-only fields for a logged-out viewer', async () => {
+  it('omits the member-only fields for a logged-out viewer', async () => {
     const { pugs } = await buildService().findDetail(7, null);
 
     expect(pugs).toHaveLength(1);
-    expect(pugs[0]?.inviteCode).toBeNull();
-    expect(pugs[0]?.serverInviteUrl).toBeNull();
-    expect(pugs[0]?.discordUserId).toBeNull();
-    expect(pugs[0]?.discordAvatarHash).toBeNull();
+    expect(memberOnlyKeysPresent(pugs[0])).toEqual([]);
   });
 
   it('still shows a logged-out viewer that the slot exists', async () => {
@@ -94,13 +103,10 @@ describe('EventDetailService — deactivated viewer is anonymous (ROK-1629)', ()
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('blanks the member-only PUG fields for a signed-in deactivated viewer', async () => {
+  it('omits the member-only PUG fields for a signed-in deactivated viewer', async () => {
     const { pugs } = await buildService().findDetail(7, DEACTIVATED);
 
-    expect(pugs[0]?.inviteCode).toBeNull();
-    expect(pugs[0]?.serverInviteUrl).toBeNull();
-    expect(pugs[0]?.discordUserId).toBeNull();
-    expect(pugs[0]?.discordAvatarHash).toBeNull();
+    expect(memberOnlyKeysPresent(pugs[0])).toEqual([]);
   });
 
   it('resolves voice as unauthenticated and skips conflicts for a deactivated viewer', async () => {
