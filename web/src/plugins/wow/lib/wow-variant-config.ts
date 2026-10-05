@@ -86,7 +86,7 @@ export function getWowVariantIntegrations(variant: string | null | undefined): W
  * (ROK-1721) are stored with `gameVariant: null` and a `ruleset`, so a
  * ruleset with no recognised variant means Forever.
  */
-export function resolveWowVariant(character: { gameVariant?: string | null; ruleset?: string | null }): WowVariant | null {
+export function resolveWowVariant(character: { gameVariant?: string | null | undefined; ruleset?: string | null | undefined }): WowVariant | null {
     const variant = normalizeWowVariant(character.gameVariant);
     if (variant) return variant;
     return character.ruleset != null ? 'wow_forever' : null;
