@@ -14,6 +14,12 @@ import type {
   ExternalContentInstanceDetail,
   CronJobDefinition,
 } from './extension-types';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type {
+  CreateCharacterDto,
+  UpdateCharacterDto,
+} from '@raid-ledger/contract';
+import type * as schema from '../../drizzle/schema';
 
 /** Provides character data fetch + sync capabilities for a game */
 export interface CharacterSyncAdapter {
@@ -127,6 +133,38 @@ export interface AuthProvider {
   isConfigured(): boolean | Promise<boolean>;
 }
 
+/** A db or transaction handle, as handed to a CharacterIdentityProvider. */
+export type IdentityDb = PostgresJsDatabase<typeof schema>;
+
+/** Plugin-owned identity rules for MANUAL characters of a game (ROK-1733). */
+export interface CharacterIdentityProvider {
+  readonly gameSlugs: string[];
+  /** Validate + normalize a create DTO (throws 400). */
+  prepareCreate(
+    game: { slug: string },
+    dto: CreateCharacterDto,
+  ): CreateCharacterDto;
+  /** Validate + normalize an update; may run its own claim check (throws 400/409). */
+  prepareUpdate(
+    db: IdentityDb,
+    userId: number,
+    game: { slug: string },
+    character: { id: string; gameId: number; region: string | null },
+    dto: UpdateCharacterDto,
+  ): Promise<UpdateCharacterDto>;
+  /** Cross-player claim check for a realm-less character, inside the create tx (throws 409). */
+  checkClaim(
+    tx: IdentityDb,
+    args: { gameId: number; userId: number; name: string; region: string },
+  ): Promise<void>;
+  /** Map a lost race on the core ruleset-identity index to a 409; return to let the caller continue. */
+  rethrowIdentityViolation(
+    error: unknown,
+    name: string,
+    region: string | null | undefined,
+  ): void;
+}
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -136,4 +174,5 @@ export const EXTENSION_POINTS = {
   SETTINGS_PROVIDER: 'settings-provider',
   CRON_REGISTRAR: 'cron-registrar',
   AUTH_PROVIDER: 'auth-provider',
+  CHARACTER_IDENTITY: 'character-identity',
 } as const;
