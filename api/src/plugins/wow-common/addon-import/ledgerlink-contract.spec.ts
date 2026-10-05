@@ -2,7 +2,7 @@
  * LedgerLink v1 conformance + drift guard (ROK-1724). Raid Ledger owns the
  * addon wire format (`packages/contract/ledgerlink/v1/CONTRACT.md`):
  * - every golden `fixtures/*.txt` decodes, with the REAL decoder, to its
- *   `.json`; every `fixtures/invalid/*.txt` fails with its `.json` code;
+ *   `.json` (single-section `{ pages, payload }`, mixed `{ sections }`); every `fixtures/invalid/*.txt` fails with its `.json` code;
  * - the committed `schema.json` equals a fresh generation from the Zod
  *   source of truth. Fix drift with
  *   `npm run gen:ledgerlink-schema -w @raid-ledger/contract`.
@@ -14,8 +14,9 @@ import {
   AddonImportErrorCodeSchema,
   serializeLedgerLinkJsonSchema,
 } from '@raid-ledger/contract';
-import { decodeImportString } from './addon-import.decoder';
+import { decodeImportPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
+import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
 
 const V1 = join(
   __dirname,
@@ -36,7 +37,7 @@ const read = (dir: string, file: string): string =>
 
 function decodeErrorCode(paste: string): string {
   try {
-    decodeImportString(paste);
+    decodeImportPaste(paste);
   } catch (err) {
     if (err instanceof AddonImportError) return err.code;
     throw err;
@@ -55,16 +56,16 @@ describe('LedgerLink v1 golden fixtures — valid', () => {
       'guild-1-page',
       'guild-3-pages',
       'guild-8-pages-2000-members',
+      'mixed-char-guild3-raid-shuffled',
+      'mixed-char-raid',
       'raid',
     ]);
   });
 
   it.each(names)('%s.txt decodes to %s.json', (name) => {
     const expected: unknown = JSON.parse(read(FIXTURES, `${name}.json`));
-    const { pages, payload } = decodeImportString(
-      read(FIXTURES, `${name}.txt`),
-    );
-    expect({ pages, payload }).toEqual(expected);
+    const decoded = decodeImportPaste(read(FIXTURES, `${name}.txt`));
+    expect(ledgerLinkFixtureView(decoded)).toEqual(expected);
   });
 });
 
@@ -77,6 +78,10 @@ describe('LedgerLink v1 golden fixtures — invalid', () => {
         'unknown-key-officer-note',
         'decoded-too-large',
         'pages-missing-middle',
+        'mixed-two-char',
+        'mixed-guild-incomplete',
+        'mixed-different-exporters',
+        'mixed-11-tokens',
       ]),
     );
   });
