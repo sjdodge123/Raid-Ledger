@@ -27,7 +27,7 @@ export const UserProfileSchema = z.object({
     displayName: z.string().nullable().optional(),
     avatar: z.string().nullable(),
     discordId: z.string().nullable().optional(),
-    steamId: z.string().nullable().optional(),
+    // ROK-1734 Q1: no `steamId` — owner-only, served by `GET /auth/me`.
     customAvatarUrl: z.string().nullable().optional(),
     role: UserRoleSchema.optional(),
     onboardingCompletedAt: z.string().datetime().nullable().optional(),
