@@ -35,6 +35,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import * as path from 'path';
 import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
+import { applyCorsPolicy } from '../../cors/cors-auto-policy';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { closeTestSharedRedis } from '../../queue/queue.module';
@@ -228,6 +229,10 @@ async function buildNestApp(
     .useValue(redisMock.client)
     .compile();
   const app = moduleRef.createNestApplication();
+  // ROK-1732: mirror prod's CORS policy. Registered before init() so it runs
+  // ahead of the router. Supertest sends no Origin, so it allows every
+  // existing spec; specs that set Origin/Host exercise the real policy.
+  applyCorsPolicy(app, { isProduction: false });
   await app.init();
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
