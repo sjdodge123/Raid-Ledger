@@ -145,6 +145,12 @@ payload are unchanged — this only widens what one paste may contain.
   Nothing is partially imported. The character binding (game, region,
   name, ruleset, GUID) runs against **every** section, not just the first;
   any section's binding reject rejects the whole paste.
+- **One authoritative section for the character row:** the class/level
+  update, the ruleset change (`confirm.updateRuleset`) and the GUID pin
+  follow ONE section — the `char` section when present (it is the
+  character snapshot), otherwise the section with the newest `exportedAt`
+  (ties → canonical order). Binding warnings come from that section too;
+  rejects still come from every section.
 - Each section keeps its own identity: its sha256 (re-pasting one section
   alone is recognised as the same import) and page count.
 - A mixed paste changes **no per-section rule** — e.g. `client.region` is

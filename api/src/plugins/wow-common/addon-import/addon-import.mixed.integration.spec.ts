@@ -20,6 +20,7 @@ import { ADDON_IMPORT_APPLY_LIMIT } from './addon-import.audit';
 import {
   buildCharPayload,
   buildGuildPayload,
+  FIXTURE_EXPORTED_AT,
   buildImportString,
   buildRaidPayload,
   buildWho,
@@ -241,6 +242,24 @@ describe('addon import — mixed paste apply', () => {
       .from(schema.characters)
       .where(eq(schema.characters.id, charId));
     expect(character?.addonGuid).toBeNull();
+  });
+
+  it('guild → char paste: the character row takes the CHAR section level, even when guild is newer (Codex P2)', async () => {
+    const { token, charId } = await memberWithChar('anamixlevel');
+    const guild = {
+      ...buildGuildPayload(),
+      exportedAt: FIXTURE_EXPORTED_AT + 60,
+      who: buildWho({ level: 58 }),
+    };
+    const char = { ...buildCharPayload(), who: buildWho({ level: 59 }) };
+    const paste = [guild, char].map((p) => buildImportString(p)).join('\n');
+    const res = await post(token, charId, paste, false);
+    expect(res.status).toBe(200);
+    const [character] = await testApp.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, charId));
+    expect(character?.level).toBe(59);
   });
 
   it('a mixed paste counts ONCE against the hourly apply limit', async () => {

@@ -1,11 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AddonWho } from '@raid-ledger/contract';
-import type {
-  AddonBindingCharacter,
-  AddonBindingPayload,
-} from './addon-import.binding';
-import { bindEverySection } from './addon-import.binding-paste';
+import type { AddonExportSection, AddonWho } from '@raid-ledger/contract';
+import type { AddonBindingCharacter } from './addon-import.binding';
+import {
+  bindEverySection,
+  type AddonBindingSection,
+} from './addon-import.binding-paste';
 
 /** ROK-1737 (Codex P2) — a mixed paste binds every section, all-or-nothing. */
 
@@ -15,7 +15,7 @@ const FIXTURES = join(
 );
 const base = (
   JSON.parse(readFileSync(join(FIXTURES, 'char-normal.json'), 'utf8')) as {
-    payload: AddonBindingPayload;
+    payload: AddonBindingSection;
   }
 ).payload;
 
@@ -29,7 +29,14 @@ const character: AddonBindingCharacter = {
   level: 60,
   addonGuid: GUID,
 };
-const section = (who: Partial<AddonWho> = {}, region = 1) => ({
+const section = (
+  who: Partial<AddonWho> = {},
+  region = 1,
+  kind: AddonExportSection = 'char',
+  exportedAt = base.exportedAt,
+): AddonBindingSection => ({
+  section: kind,
+  exportedAt,
   client: { region },
   who: { ...base.who, ...who },
 });
@@ -91,5 +98,34 @@ describe('bindEverySection', () => {
     });
     expect(confirmed.errors).toEqual([]);
     expect(confirmed.pinGuid).toBe(GUID);
+  });
+
+  // Codex P2 (3d9b6abcc): the row follows ONE authoritative section.
+  it('a guild-first paste takes class/level from the char section, not the first or newest', () => {
+    const at58 = { ...character, level: 58 };
+    const guild = section({ level: 58 }, 1, 'guild', base.exportedAt + 60);
+    const char = section({ level: 59 }, 1, 'char', base.exportedAt);
+    const r = bindEverySection([guild, char], at58, APPLY);
+    expect(r.errors).toEqual([]);
+    expect(r.diff).toEqual({ level: { from: 58, to: 59 } });
+    expect(r.warnings.map((w) => w.code)).toEqual(['CLASS_LEVEL_UPDATED']);
+  });
+
+  it('with no char section the newest exportedAt wins (level + ruleset)', () => {
+    const at58 = { ...character, level: 58 };
+    const guild = section({ level: 58 }, 1, 'guild', base.exportedAt);
+    const raid = section(
+      { level: 59, ruleset: 'hardcore' },
+      1,
+      'raid',
+      base.exportedAt + 60,
+    );
+    const r = bindEverySection([guild, raid], at58, {
+      dryRun: false,
+      confirm: { updateRuleset: true },
+    });
+    expect(r.errors).toEqual([]);
+    expect(r.diff).toEqual({ level: { from: 58, to: 59 } });
+    expect(r.setRuleset).toBe('hardcore');
   });
 });
