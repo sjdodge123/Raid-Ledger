@@ -12,7 +12,7 @@ import type { AddonImportAuditService } from './addon-import.audit';
 import { bindToCharacter } from './addon-import.binding';
 import { applyBinding } from './addon-import-binding.apply';
 import { applyChar } from './addon-import-char.apply';
-import { decodeImportString } from './addon-import.decoder';
+import { decodeImportPaste, decodeImportString } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import { AddonImportService } from './addon-import.service';
 
@@ -75,6 +75,7 @@ function setup() {
   const audit = {
     reserveAttempt: jest.fn().mockResolvedValue(41),
     recordAttempt: jest.fn().mockResolvedValue(undefined),
+    recordSections: jest.fn().mockResolvedValue(undefined),
   };
   const service = new AddonImportService(
     makeDb(),
@@ -211,6 +212,41 @@ describe('AddonImportService', () => {
         result: 'NAME_MISMATCH',
         payloadSha256: 'a'.repeat(64),
       }),
+      41,
+    );
+  });
+
+  it('binds EVERY section of a mixed paste; a later section reject rejects all (Codex P2)', async () => {
+    const { service, audit } = setup();
+    const section = (name: string, region: number) => ({
+      payload: { section: name, client: { region }, exportedAt: 1_790_000_000 },
+      pages: 1,
+      sha256: name.charAt(0).repeat(64),
+      inputBytes: 10,
+    });
+    (decodeImportPaste as jest.Mock).mockReturnValueOnce({
+      sections: { char: section('char', 1), raid: section('raid', 3) },
+      order: ['char', 'raid'],
+      tokens: 2,
+      inputBytes: 21,
+    });
+    (bindToCharacter as jest.Mock)
+      .mockReturnValueOnce(binding())
+      .mockReturnValueOnce(binding([new AddonImportError('REGION_MISMATCH')]));
+    await expect(service.importString(1, CHAR_ID, body)).rejects.toMatchObject({
+      code: 'REGION_MISMATCH',
+    });
+    const bound = (bindToCharacter as jest.Mock).mock.calls.map(
+      ([p]: [{ client: { region: number } }]) => p.client.region,
+    );
+    expect(bound).toEqual([1, 3]);
+    expect(applyChar).not.toHaveBeenCalled();
+    expect(applyBinding).not.toHaveBeenCalled();
+    expect(audit.recordSections).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({ section: 'char', result: 'REGION_MISMATCH' }),
+        expect.objectContaining({ section: 'raid', result: 'REGION_MISMATCH' }),
+      ],
       41,
     );
   });

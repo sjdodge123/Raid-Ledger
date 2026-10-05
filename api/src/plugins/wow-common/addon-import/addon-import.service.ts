@@ -14,15 +14,14 @@ import {
   ADDON_IMPORT_PENDING,
   AddonImportAuditService,
 } from './addon-import.audit';
-import {
-  bindToCharacter,
-  type AddonBindingCharacter,
-  type AddonBindingResult,
+import type {
+  AddonBindingCharacter,
+  AddonBindingResult,
 } from './addon-import.binding';
+import { bindEverySection } from './addon-import.binding-paste';
 import { applyBinding } from './addon-import-binding.apply';
 import {
   decodeImportPaste,
-  type DecodedAddonImport,
   type DecodedAddonPaste,
 } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
@@ -96,13 +95,15 @@ export class AddonImportService {
     );
     const request = parseImportRequest(body, facts);
     const paste = decodeImportPaste(request.importString);
-    const first = recordPasteFacts(facts, paste);
+    recordPasteFacts(facts, paste);
     const character = await this.loadCharacter(characterId);
-    // Every section shares one exporter (decoder-enforced): bind once.
-    const binding = bindToCharacter(first.payload, character.binding, {
-      dryRun: request.dryRun,
-      confirm: request.confirm,
-    });
+    // Codex P2: bind EVERY section (the decoder also requires one exporter);
+    // any section's reject rejects the whole paste before anything runs.
+    const binding = bindEverySection(
+      pasteSections(paste).map((s) => s.payload),
+      character.binding,
+      { dryRun: request.dryRun, confirm: request.confirm },
+    );
     const [firstError] = binding.errors;
     if (firstError) throw firstError;
     return this.run(userId, character, paste, binding, request);
@@ -192,11 +193,8 @@ export class AddonImportService {
   }
 }
 
-/** Audit facts from a decoded paste; returns its first (binding) section. */
-function recordPasteFacts(
-  facts: AttemptFacts,
-  paste: DecodedAddonPaste,
-): DecodedAddonImport {
+/** Audit facts from a decoded paste. */
+function recordPasteFacts(facts: AttemptFacts, paste: DecodedAddonPaste): void {
   const sections = pasteSections(paste);
   const [first] = sections;
   if (!first) throw new AddonImportError('BAD_HEADER');
@@ -209,7 +207,6 @@ function recordPasteFacts(
       sizeBytes: s.inputBytes,
     }));
   }
-  return first;
 }
 
 function auditRow(
