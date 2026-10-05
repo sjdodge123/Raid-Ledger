@@ -55,7 +55,8 @@ export function getWowheadQuestData(questId: number, variant?: string | null): s
  * Used by boss loot panels where each item may come from a different expansion.
  */
 function getWowheadDomainForExpansion(expansion: string): WowheadDomain {
-    return Object.hasOwn(WOWHEAD_EXPANSION_DOMAINS, expansion) ? WOWHEAD_EXPANSION_DOMAINS[expansion] : WOWHEAD_RETAIL_DOMAIN;
+    const domain = Object.hasOwn(WOWHEAD_EXPANSION_DOMAINS, expansion) ? WOWHEAD_EXPANSION_DOMAINS[expansion] : undefined;
+    return domain ?? WOWHEAD_RETAIL_DOMAIN;
 }
 
 /** Build a full Wowhead item URL using the item's expansion for correct domain. */
