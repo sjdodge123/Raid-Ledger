@@ -12,7 +12,7 @@ const BASE = { faction: 'horde', itemLevel: null, equippedItemLevel: null, lastS
 describe('CharacterDetailHeaderBadges — Armory link', () => {
     it('renders no "View on Armory" link when profileUrl is null', () => {
         render(<CharacterDetailHeaderBadges {...BASE} profileUrl={null} />);
-        expect(screen.queryByRole('link', { name: /view on armory/i })).toBeNull();
+        expect(screen.queryByText(/view on armory/i)).toBeNull();
     });
 
     it('links to the Armory when profileUrl is set', () => {
