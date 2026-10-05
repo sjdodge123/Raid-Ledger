@@ -73,6 +73,18 @@ describe('user-FK wipe manifest drift guard (ROK-313 §9.6)', () => {
     );
   });
 
+  // ROK-1724: the importer's own audit rows are personal (CASCADE → WIPE); raid
+  // pulls and guild roster rows are shared community records the user merely
+  // reported/captured (SET NULL → KEEP) and must survive a ban+wipe.
+  it('classifies the ROK-1724 addon-import tables by FK ownership', () => {
+    const wipe = WIPE_BY_COLUMN.map((w) => tableName(w.table));
+    const keep = KEEP_TABLES.map(tableName);
+    expect(wipe).toContain('addon_import_audit');
+    expect(keep).toEqual(
+      expect.arrayContaining(['addon_encounter_pulls', 'guild_members']),
+    );
+  });
+
   it('sanity: the manifest is non-trivial and the users table is excluded', () => {
     expect(referencing.size).toBeGreaterThan(20);
     expect(classifiedSet.has('users')).toBe(false);
