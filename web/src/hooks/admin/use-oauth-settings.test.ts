@@ -27,7 +27,7 @@ function setup() {
 }
 
 function invalidatedKeys(invalidate: ReturnType<typeof vi.spyOn>): unknown[] {
-    return invalidate.mock.calls.map((c) => (c[0] as { queryKey?: unknown } | undefined)?.queryKey);
+    return invalidate.mock.calls.map((c: unknown[]) => (c[0] as { queryKey?: unknown } | undefined)?.queryKey);
 }
 
 describe('useOAuthSettings — invite URL refresh (ROK-1702)', () => {
