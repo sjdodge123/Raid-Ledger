@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { getWowheadTalentCalcUrl, getWowheadTalentCalcEmbedUrl } from '../lib/wowhead-urls';
 import { buildWowheadTalentString } from '../lib/classic-talent-positions';
+import { FOREVER_ADDON_HINT_TALENTS, getWowVariantIntegrations } from '../lib/wow-variant-config';
 
 /** Retail talent data shape from Blizzard API */
 interface RetailTalents {
@@ -164,19 +165,29 @@ interface TalentDisplayProps {
     gameVariant?: string | null;
 }
 
-function NoTalentData({ isArmoryImported }: { isArmoryImported: boolean }) {
+function noTalentHint(isArmoryImported: boolean, gameVariant: string | null | undefined): string {
+    if (isArmoryImported) return 'Talent data may not be available for this character. Try refreshing.';
+    // A variant the Armory cannot import (WoW: Forever) gets the addon hint (AC5).
+    if (getWowVariantIntegrations(gameVariant)?.armoryImport === false) return FOREVER_ADDON_HINT_TALENTS;
+    return 'Talent data is only available for characters imported from the Blizzard Armory.';
+}
+
+function NoTalentData({ isArmoryImported, gameVariant }: { isArmoryImported: boolean; gameVariant: string | null | undefined }) {
     return (
         <div className="text-center py-8 text-muted">
             <p className="text-lg">No talent data</p>
-            <p className="text-sm mt-1">
-                {isArmoryImported ? 'Talent data may not be available for this character. Try refreshing.' : 'Talent data is only available for characters imported from the Blizzard Armory.'}
-            </p>
+            <p className="text-sm mt-1">{noTalentHint(isArmoryImported, gameVariant)}</p>
         </div>
     );
 }
 
+/**
+ * Wowhead calc link + Classic embed. WoW: Forever (talentCalc 'foreverTraits')
+ * gets the plain calc link only — no embed, no build string (D5, spike Q6).
+ */
 function resolveClassicUrls(characterClass: string | null | undefined, talents: ClassicTalents, gameVariant: string | null | undefined) {
     const wowheadUrl = characterClass ? getWowheadTalentCalcUrl(characterClass, gameVariant) : null;
+    if (getWowVariantIntegrations(gameVariant)?.talentCalc === 'foreverTraits') return { embedUrl: null, talentCalcUrl: wowheadUrl };
     const talentString = characterClass ? buildWowheadTalentString(characterClass, talents.trees) : null;
     const embedUrl = characterClass && talentString ? getWowheadTalentCalcEmbedUrl(characterClass, talentString, gameVariant) : null;
     const talentCalcUrl = talentString && wowheadUrl ? `${wowheadUrl}/${talentString}` : wowheadUrl;
@@ -184,7 +195,7 @@ function resolveClassicUrls(characterClass: string | null | undefined, talents: 
 }
 
 export function TalentDisplay({ talents, isArmoryImported, characterClass, gameVariant }: TalentDisplayProps) {
-    if (!talents || !isTalentData(talents)) return <NoTalentData isArmoryImported={isArmoryImported} />;
+    if (!talents || !isTalentData(talents)) return <NoTalentData isArmoryImported={isArmoryImported} gameVariant={gameVariant} />;
     if (isRetailTalents(talents)) return <RetailTalentDisplay talents={talents} />;
     if (isClassicTalents(talents)) {
         const { embedUrl, talentCalcUrl } = resolveClassicUrls(characterClass, talents, gameVariant);
