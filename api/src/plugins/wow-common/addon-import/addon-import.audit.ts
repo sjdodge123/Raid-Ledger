@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, count, eq, gte, ne, sql } from 'drizzle-orm';
+import { and, countDistinct, eq, gte, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -66,7 +66,14 @@ export class AddonImportAuditService {
       }
       const [reserved] = await tx
         .insert(addonImportAudit)
-        .values({ ...row, result: ADDON_IMPORT_PENDING })
+        // clock_timestamp() under the lock: every reservation's instant is
+        // unique, so a mixed paste's extra section rows (which copy it)
+        // count once — see `countRecent`.
+        .values({
+          ...row,
+          result: ADDON_IMPORT_PENDING,
+          createdAt: sql`clock_timestamp()`,
+        })
         .returning({ id: addonImportAudit.id });
       if (!reserved) throw new Error('addon-import audit reserve failed');
       return reserved.id;
@@ -103,9 +110,54 @@ export class AddonImportAuditService {
       );
     }
   }
+
+  /**
+   * ROK-1737 — a mixed paste: one row per section. The first finalises the
+   * reserved row; the rest copy its `created_at`, so the paste still counts
+   * as ONE attempt against the limit. Best effort, like `recordAttempt`.
+   */
+  async recordSections(
+    rows: AddonImportAuditInsert[],
+    reservedId: number | null,
+  ): Promise<void> {
+    const [first, ...rest] = rows;
+    if (!first) return;
+    if (reservedId == null) {
+      for (const row of rows) await this.recordAttempt(row, null);
+      return;
+    }
+    try {
+      await this.db
+        .update(addonImportAudit)
+        .set({ ...outcomeOf(first), sizeBytes: first.sizeBytes })
+        .where(eq(addonImportAudit.id, reservedId));
+      if (rest.length === 0) return;
+      // Copied in SQL — a JS Date would drop the microseconds.
+      const reservedAt = sql`(SELECT created_at FROM addon_import_audit WHERE id = ${reservedId})`;
+      await this.db
+        .insert(addonImportAudit)
+        .values(rest.map((r) => ({ ...r, createdAt: reservedAt })));
+    } catch (err) {
+      this.logger.warn(
+        `addon-import audit write failed userId=${first.userId} sections=${rows.length}: ${String(err)}`,
+      );
+    }
+  }
 }
 
-/** Attempts of this kind in the window, reserved-but-unfinished included. */
+function outcomeOf(row: AddonImportAuditInsert): AddonImportAuditOutcome {
+  return {
+    section: row.section,
+    payloadSha256: row.payloadSha256,
+    result: row.result,
+  };
+}
+
+/**
+ * Attempts (pastes) of this kind in the window, reserved-but-unfinished
+ * included. Counts distinct `created_at`: a mixed paste writes one row per
+ * section, all stamped with its reservation's instant (ROK-1737).
+ */
 async function countRecent(
   tx: Db,
   userId: number,
@@ -113,7 +165,7 @@ async function countRecent(
 ): Promise<number> {
   const since = new Date(Date.now() - WINDOW_MS);
   const [row] = await tx
-    .select({ n: count() })
+    .select({ n: countDistinct(addonImportAudit.createdAt) })
     .from(addonImportAudit)
     .where(
       and(

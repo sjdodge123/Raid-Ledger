@@ -16,7 +16,25 @@ import { decodeImportString } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import { AddonImportService } from './addon-import.service';
 
-jest.mock('./addon-import.decoder', () => ({ decodeImportString: jest.fn() }));
+// ROK-1737: the service decodes via `decodeImportPaste`; a single-section
+// paste is the mocked `decodeImportString` result wrapped as one section.
+jest.mock('./addon-import.decoder', () => {
+  const decodeImportString = jest.fn();
+  const decodeImportPaste = jest.fn((raw: string) => {
+    const d = decodeImportString(raw) as {
+      payload: { section: string };
+      inputBytes: number;
+    };
+    const { section } = d.payload;
+    return {
+      sections: { [section]: d },
+      order: [section],
+      tokens: 1,
+      inputBytes: d.inputBytes,
+    };
+  });
+  return { decodeImportString, decodeImportPaste };
+});
 jest.mock('./addon-import.binding', () => ({ bindToCharacter: jest.fn() }));
 jest.mock('./addon-import-binding.apply', () => ({ applyBinding: jest.fn() }));
 jest.mock('./addon-import-char.apply', () => ({
