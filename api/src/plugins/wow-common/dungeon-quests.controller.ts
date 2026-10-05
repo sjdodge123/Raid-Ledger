@@ -44,7 +44,7 @@ export class DungeonQuestsController {
    *   - classic_era_sod: ['classic', 'sod']
    *   - classic_anniversary: ['classic', 'tbc']
    *   - classic (Cata): ['classic', 'tbc', 'wotlk', 'cata']
-   *   - wow_forever: ['classic'] (ROK-1563 — vanilla content only for now)
+   *   - wow_forever: ['classic', 'forever'] (ROK-1719 — vanilla + Forever)
    */
   @Get('instances/:id/quests')
   async getQuestsForInstance(
