@@ -1,0 +1,76 @@
+{
+  "pages": 1,
+  "payload": {
+    "schema": 1,
+    "addonVersion": "0.1.0",
+    "client": {
+      "interface": 11507,
+      "build": "1.15.7",
+      "locale": "enUS",
+      "region": 1
+    },
+    "exportedAt": 1790000000,
+    "who": {
+      "guid": "Player-4395-0ABCDEF0",
+      "fullName": "Ana Forever",
+      "raw": {
+        "getUnitName": "Ana Forever",
+        "unitName": ["Ana Forever",null]
+      },
+      "ruleset": "normal",
+      "class": "PALADIN",
+      "race": "Human",
+      "level": 60,
+      "faction": "Alliance",
+      "guildName": "Night Shift"
+    },
+    "section": "guild",
+    "data": {
+      "name": "Night Shift",
+      "snapshotAt": 1790000000,
+      "canViewOfficerNote": false,
+      "members": [
+        {"guid":"Player-4395-00000001","name":"Member1","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2,"note":"Main tank"},
+        {"guid":"Player-4395-00000002","name":"Member2","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000003","name":"Member3","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000004","name":"Member4","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000005","name":"Member5","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000006","name":"Member6","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000007","name":"Member7","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000008","name":"Member8","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2,"note":"Main tank"},
+        {"guid":"Player-4395-00000009","name":"Member9","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000000A","name":"Member10","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000000B","name":"Member11","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000000C","name":"Member12","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000000D","name":"Member13","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000000E","name":"Member14","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000000F","name":"Member15","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2,"note":"Main tank"},
+        {"guid":"Player-4395-00000010","name":"Member16","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000011","name":"Member17","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000012","name":"Member18","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000013","name":"Member19","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000014","name":"Member20","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000015","name":"Member21","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000016","name":"Member22","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2,"note":"Main tank"},
+        {"guid":"Player-4395-00000017","name":"Member23","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000018","name":"Member24","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000019","name":"Member25","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000001A","name":"Member26","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000001B","name":"Member27","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000001C","name":"Member28","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000001D","name":"Member29","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2,"note":"Main tank"},
+        {"guid":"Player-4395-0000001E","name":"Member30","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-0000001F","name":"Member31","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000020","name":"Member32","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000021","name":"Member33","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000022","name":"Member34","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000023","name":"Member35","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000024","name":"Member36","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2,"note":"Main tank"},
+        {"guid":"Player-4395-00000025","name":"Member37","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000026","name":"Member38","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000027","name":"Member39","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2},
+        {"guid":"Player-4395-00000028","name":"Member40","rankIndex":3,"rank":"Raider","level":60,"class":"MAGE","online":false,"lastOnlineDays":2}
+      ]
+    }
+  }
+}
