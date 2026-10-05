@@ -8,13 +8,19 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as bcrypt from 'bcrypt';
-import { count, eq } from 'drizzle-orm';
+import { count, eq, sql } from 'drizzle-orm';
 import type { PgTable } from 'drizzle-orm/pg-core';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import { truncateAllTables } from '../../../common/testing/integration-helpers';
+import {
+  truncateAllTables,
+  waitFor,
+} from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import type { AddonImportTx } from './addon-import-apply.types';
+import { applyChar } from './addon-import-char.apply';
+import { decodeImportString } from './addon-import.decoder';
 import {
   FIXTURE_EXPORTED_AT,
   FIXTURE_GUID,
@@ -223,6 +229,71 @@ describe('addon import — char', () => {
     });
     expect(repinned.status).toBe(200);
     expect((await charRow(id)).addonGuid).toBe(FIXTURE_GUID);
+  });
+});
+
+/** Decode a char export at `exportedAt` for a direct `applyChar` call. */
+function decodedChar(exportedAt: number) {
+  const { payload, sha256 } = decodeImportString(charAt(exportedAt));
+  if (payload.section !== 'char') throw new Error('expected a char export');
+  return { payload, sha256 };
+}
+
+/** An `addon-import` apply blocked on another tx's row/tx lock. */
+async function blockedSnapshotWriters(): Promise<number> {
+  const rows = await testApp.db.execute<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM pg_stat_activity
+    WHERE wait_event_type = 'Lock'
+      AND query ILIKE '%character_addon_snapshots%'`);
+  return Number(rows[0]?.n ?? 0);
+}
+
+describe('addon import — char, overlapping applies (Codex P2)', () => {
+  it('an older export racing a newer one never overwrites it → stale', async () => {
+    const token = await memberToken('anarace');
+    const id = await createChar(token);
+    const newer = decodedChar(FIXTURE_EXPORTED_AT + 60);
+    const older = decodedChar(FIXTURE_EXPORTED_AT);
+    const ctx = (tx: AddonImportTx, sha256: string) => ({
+      tx,
+      userId: 0,
+      characterId: id,
+      gameId,
+      region: 'us' as const,
+      sha256,
+    });
+    let release = (): void => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    let written = (): void => undefined;
+    const newerWrote = new Promise<void>((r) => (written = r));
+    // The newer apply writes its row and holds the tx open (uncommitted).
+    const newerTx = testApp.db.transaction(async (tx) => {
+      const out = await applyChar(ctx(tx, newer.sha256), newer.payload);
+      written();
+      await gate;
+      return out;
+    });
+    let olderTx: Promise<{ status: string }> | undefined;
+    try {
+      await newerWrote;
+      // Its pre-read can't see the uncommitted row → decides `write`, then
+      // its upsert blocks on the newer row until that commits.
+      olderTx = testApp.db.transaction((tx) =>
+        applyChar(ctx(tx, older.sha256), older.payload),
+      );
+      await waitFor(async () => {
+        expect(await blockedSnapshotWriters()).toBeGreaterThan(0);
+      }, 5000);
+    } finally {
+      release();
+    }
+    expect((await newerTx).status).toBe('applied');
+    expect((await olderTx).status).toBe('stale');
+    const rows = await testApp.db.select().from(schema.characterAddonSnapshots);
+    expect(rows.map((r) => r.payloadSha256)).toEqual([newer.sha256]);
+    expect(rows[0]?.capturedAt.getTime()).toBe(
+      (FIXTURE_EXPORTED_AT + 60) * 1000,
+    );
   });
 });
 

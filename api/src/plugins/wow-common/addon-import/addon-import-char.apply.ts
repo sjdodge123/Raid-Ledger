@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type {
   AddonCharSnapshotData,
   AddonCharImportSummarySchema,
@@ -88,7 +88,24 @@ export async function previewChar(
   return { status, summary: buildCharSummary(payload.data) };
 }
 
-/** Upsert the snapshot unless noop/stale. Writes only the importer's char. */
+/**
+ * When the guarded upsert updated nothing, a concurrent apply won the row
+ * between our pre-read and our write: the same export → noop, anything else
+ * (a newer snapshot, or an equal one with another sha) → stale.
+ */
+export function decideLostRace(
+  stored: StoredCharSnapshot | undefined,
+  sha256: string,
+): 'noop' | 'stale' {
+  return stored?.payloadSha256 === sha256 ? 'noop' : 'stale';
+}
+
+/**
+ * Upsert the snapshot unless noop/stale. Writes only the importer's char.
+ * The pre-read is advisory; the conflict update re-checks atomically
+ * (`setWhere`: not older, different sha) so an older export racing a newer
+ * one can never overwrite it. No row back = nothing written.
+ */
 export async function applyChar(
   ctx: AddonApplyContext,
   payload: DecodedAddonCharExport,
@@ -100,6 +117,15 @@ export async function applyChar(
     payload.exportedAt,
   );
   if (decision !== 'write') return { status: decision, summary };
+  if (await upsertChar(ctx, payload)) return { status: 'applied', summary };
+  return { status: decideLostRace(await loadStored(ctx), ctx.sha256), summary };
+}
+
+/** True when a row was inserted or updated. */
+async function upsertChar(
+  ctx: AddonApplyContext,
+  payload: DecodedAddonCharExport,
+): Promise<boolean> {
   const values = {
     schema: payload.schema,
     data: payload.data,
@@ -107,15 +133,16 @@ export async function applyChar(
     importedAt: new Date(),
     payloadSha256: ctx.sha256,
   };
-  await ctx.tx
-    .insert(characterAddonSnapshots)
+  const t = characterAddonSnapshots;
+  const rows = await ctx.tx
+    .insert(t)
     .values({ characterId: ctx.characterId, section: 'char', ...values })
     .onConflictDoUpdate({
-      target: [
-        characterAddonSnapshots.characterId,
-        characterAddonSnapshots.section,
-      ],
+      target: [t.characterId, t.section],
       set: values,
-    });
-  return { status: 'applied', summary };
+      // `excluded` = the incoming row: not older, and a different export.
+      setWhere: sql`${t.capturedAt} <= excluded.captured_at AND ${t.payloadSha256} <> excluded.payload_sha256`,
+    })
+    .returning({ characterId: t.characterId });
+  return rows.length > 0;
 }

@@ -5,7 +5,12 @@ import type { DecodedAddonCharExport } from './addon-import.decoder';
 import type { AddonBindingResult } from './addon-import.binding';
 import { AddonImportError } from './addon-import.errors';
 import { bindingUpdates } from './addon-import-binding.apply';
-import { buildCharSummary, decideCharWrite } from './addon-import-char.apply';
+import {
+  applyChar,
+  buildCharSummary,
+  decideCharWrite,
+  decideLostRace,
+} from './addon-import-char.apply';
 import {
   assertExporterInGuild,
   buildGuildSummary,
@@ -99,6 +104,62 @@ describe('char', () => {
     ],
   ] as const)('%s', (_label, stored, expected) => {
     expect(decideCharWrite(stored, CTX.sha256, EXPORTED_AT)).toBe(expected);
+  });
+});
+
+/**
+ * A tx whose pre-read returns `reads` in order and whose guarded upsert
+ * returns `upserted` rows (none = the `setWhere` refused the update).
+ */
+function charTx(reads: unknown[][], upserted: unknown[]) {
+  const where = jest.fn();
+  for (const r of reads) where.mockResolvedValueOnce(r);
+  const conflict = jest.fn().mockReturnValue({
+    returning: jest.fn().mockResolvedValue(upserted),
+  });
+  const tx = {
+    select: () => ({ from: () => ({ where }) }),
+    insert: () => ({ values: () => ({ onConflictDoUpdate: conflict }) }),
+  };
+  return { tx: tx as never, conflict };
+}
+
+describe('char apply — overlapping applies (Codex P2)', () => {
+  const older = {
+    schema: 1,
+    exportedAt: EXPORTED_AT,
+    data: { gear: [], talents: { nodes: [] }, lockouts: [] },
+  } as unknown as DecodedAddonCharExport;
+  const newer = {
+    payloadSha256: 'b'.repeat(64),
+    capturedAt: at(EXPORTED_AT + 60),
+  };
+
+  it.each([
+    [
+      'same export won the race → noop',
+      { ...newer, payloadSha256: CTX.sha256 },
+      'noop',
+    ],
+    ['a newer export won the race → stale', newer, 'stale'],
+    ['row vanished → stale (never claims applied)', undefined, 'stale'],
+  ] as const)('%s', (_label, stored, expected) => {
+    expect(decideLostRace(stored, CTX.sha256)).toBe(expected);
+  });
+
+  it('an older export that passed the stale pre-read cannot overwrite the newer snapshot', async () => {
+    // Pre-read saw nothing (the newer apply had not committed); by the time
+    // our upsert ran, the newer row was there and `setWhere` refused it.
+    const { tx, conflict } = charTx([[], [newer]], []);
+    const res = await applyChar({ ...CTX, tx }, older);
+    expect(res.status).toBe('stale');
+    const [arg] = conflict.mock.calls[0] as [{ setWhere?: unknown }];
+    expect(arg.setWhere).toBeDefined();
+  });
+
+  it('the guarded upsert returning its row → applied', async () => {
+    const { tx } = charTx([[]], [{ characterId: CTX.characterId }]);
+    expect((await applyChar({ ...CTX, tx }, older)).status).toBe('applied');
   });
 });
 
