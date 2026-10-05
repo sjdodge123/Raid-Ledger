@@ -29,6 +29,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
+import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
 
 interface SubmissionRow extends Record<string, unknown> {
   lineup_id: number;
@@ -220,18 +221,31 @@ function describeLineupSubmit() {
 
     expect((await submitVotes()).status).toBe(200);
     // Backdate the first stamp so "later" is deterministic without a sleep.
+    // `now()` is the same clock the endpoint stamps with, so both values sit
+    // in the session zone's wall clock and compare like for like.
     await testApp.db.execute(sql`
       UPDATE community_lineup_user_submissions
          SET votes_submitted_at = now() - interval '1 hour'
        WHERE lineup_id = ${lineupId} AND user_id = ${voter.userId}
     `);
     const backdated = await readSubmission(lineupId, voter.userId);
-    const firstMs = new Date(backdated!.votes_submitted_at!).getTime();
+    // The raw read returns the zone-less column as a naive string; a bare
+    // `new Date()` parses it in the host's TZ and skewed this by the runner's
+    // UTC offset (fleet TZ=America/Denver). Parse it as UTC like the app does.
+    const firstMs = parseTimestampUtc(backdated!.votes_submitted_at!).getTime();
 
     const second = await submitVotes();
     expect(second.status).toBe(200);
     const secondTs = second.body.viewerSubmissions.votesSubmittedAt as string;
-    expect(new Date(secondTs).getTime()).toBeGreaterThan(firstMs);
+    // A fresh stamp lands ~1h after the backdated one; an un-overwritten
+    // stamp would echo the backdated value back (equal, not later).
+    expect(new Date(secondTs).getTime() - firstMs).toBeGreaterThan(
+      59 * 60 * 1000,
+    );
+    const stored = await readSubmission(lineupId, voter.userId);
+    expect(
+      parseTimestampUtc(stored!.votes_submitted_at!).getTime(),
+    ).toBeGreaterThan(firstMs);
 
     const rows = await testApp.db.execute<{ c: number }>(
       sql`SELECT count(*)::int AS c FROM community_lineup_user_submissions WHERE lineup_id = ${lineupId} AND user_id = ${voter.userId}`,
