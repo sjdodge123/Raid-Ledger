@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getAuthToken } from '../use-auth';
 import { adminFetch } from './admin-fetch';
+import { BOT_INVITE_KEY } from './use-lfg-board-settings';
 import type {
     OAuthStatusResponse,
     OAuthConfigDto,
@@ -25,6 +26,8 @@ function useOAuthMutations() {
     const invalidateOAuth = () => {
         queryClient.invalidateQueries({ queryKey: [...OAUTH_KEY] });
         queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        // ROK-1702: the bot invite URL falls back to the saved OAuth client id.
+        queryClient.invalidateQueries({ queryKey: [...BOT_INVITE_KEY] });
     };
 
     const updateOAuth = useMutation<ApiResponse, Error, OAuthConfigDto>({

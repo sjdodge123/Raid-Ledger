@@ -75,7 +75,12 @@ describe('DiscordBotInvitePanel (ROK-1471)', () => {
         render(<DiscordBotInvitePanel />);
         expect(screen.getByText('Manage Channels')).toBeInTheDocument();
         expect(screen.queryByRole('link', { name: /invite url/i })).not.toBeInTheDocument();
-        expect(screen.getByText(/client id/i)).toBeInTheDocument();
+        // ROK-1702: the note names where the id actually comes from (the OAuth
+        // Login settings, or a connected bot) — not "saved on this page".
+        const note = screen.getByText(/invite url appears here/i);
+        expect(note).toHaveTextContent(/OAuth client ID is saved under Discord \u2192 Login settings/);
+        expect(note).toHaveTextContent(/once the bot connects with a valid token/);
+        expect(note).not.toHaveTextContent(/on this page/i);
     });
 
     // ROK-1652 (verify C): the copy action is the shared secondary Button — 44px, focus ring, no raw blue.

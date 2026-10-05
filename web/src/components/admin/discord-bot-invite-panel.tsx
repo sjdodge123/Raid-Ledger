@@ -15,8 +15,13 @@ export const INVITE_INSTALL_TIME_NOTE =
     'developer portal does not change an existing guild install; re-authorising with this URL ' +
     'updates the install in place without removing the bot or losing its channel bindings.';
 
-const PENDING_CLIENT_ID_NOTE =
-    'The invite URL appears here once the Discord application client ID is saved on this page.';
+/**
+ * ROK-1702: the API falls back to the saved Discord OAuth client id (same Discord
+ * application) when the bot is not connected, so either path produces the URL.
+ */
+export const PENDING_CLIENT_ID_NOTE =
+    'The invite URL appears here once a Discord OAuth client ID is saved under ' +
+    'Discord \u2192 Login settings, or once the bot connects with a valid token.';
 
 /** Copies the invite URL, reporting the outcome via toast. */
 function copyInviteUrl(url: string): void {
