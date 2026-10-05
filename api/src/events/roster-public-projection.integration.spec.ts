@@ -29,13 +29,13 @@ const LINKED_SNOWFLAKE = '123456789012345678';
 const ANON_SNOWFLAKE = '987654321098765432';
 const CDN = 'https://cdn.discordapp.com/avatars';
 const FORBIDDEN = new Set(['discordId', 'discordUserId', 'discordAvatarHash']);
-const ALL_STATUSES = [
-  'declined',
-  'departed',
-  'roached_out',
-  'signed_up',
-  'tentative',
-];
+/**
+ * Statuses the roster shows to ANY viewer. `declined` / `roached_out` are
+ * seeded but excluded upstream for everyone by `fetchRosterSignups`
+ * (signups-roster-query.helpers.ts), so the projection never sees them.
+ * (The second `signed_up` is created by `createFutureEvent` itself.)
+ */
+const ROSTER_STATUSES = ['departed', 'signed_up', 'signed_up', 'tentative'];
 
 let testApp: TestApp;
 let adminToken: string;
@@ -257,7 +257,13 @@ describe('ROK-1629 public roster projection (integration)', () => {
   it('anonymous roster keeps every status, builds avatar URLs, drops Q2 fields', async () => {
     const res = await get(`/events/${f.eventId}/roster`);
     const body = res.body as RosterBody;
-    expect(body.signups.map((s) => s.status).sort()).toEqual(ALL_STATUSES);
+    const member = await get(`/events/${f.eventId}/roster`, f.memberToken);
+    const statuses = (b: RosterBody) => b.signups.map((s) => s.status).sort();
+    // The privacy property: the projection neither adds nor drops a status.
+    expect({ anonymous: statuses(body) }).toEqual({
+      anonymous: statuses(member.body as RosterBody),
+    });
+    expect(statuses(member.body as RosterBody)).toEqual(ROSTER_STATUSES);
     const byName = new Map(body.signups.map((s) => [s.user.username, s]));
     expect(byName.get('linked')?.user.avatar).toBe(
       `${CDN}/${LINKED_SNOWFLAKE}/abcdef.png`,
