@@ -233,6 +233,15 @@ export async function evictVictim(
     );
     return 'pool';
   }
+  await moveVictimToBench(p, logger);
+  return 'bench';
+}
+
+/** Full roster: re-point the victim's assignment at the next bench slot. */
+async function moveVictimToBench(
+  p: ExecuteDisplacementParams,
+  logger: { log: (msg: string) => void },
+) {
   const position = await findNextPosition(
     p.tx,
     p.eventId,
@@ -248,7 +257,6 @@ export async function evictVictim(
   logger.log(
     `ROK-1729: Displaced tentative signup ${p.victim.signupId} from ${p.role} slot ${p.victim.position} to bench slot ${position} (roster full)`,
   );
-  return 'bench';
 }
 
 const DISPLACED_ACTION: Record<DisplacedDestination, (r?: string) => string> = {
