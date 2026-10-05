@@ -177,19 +177,24 @@ export class SignupsAllocationService {
   private async executeDisplacement(
     p: ExecuteDisplacementParams,
   ): Promise<boolean> {
-    const rearrangedToRole = await tentH.tryRearrangeVictim(
-      {
-        tx: p.tx,
-        victim: p.victim,
-        displacedRole: p.role,
-        currentAssignments: p.currentAssignments,
-        roleCapacity: p.roleCapacity,
-        occupiedPositions: p.occupiedPositions,
-        findPos: p.findPos,
-        signupById: p.signupById,
-      },
-      this.logger,
-    );
+    // ROK-1729: on a FULL roster a rearrange keeps the victim in a role AND
+    // adds the newcomer — an over-fill when manual/legacy assignments left an
+    // alt role with room. Full ⇒ the victim always goes to the bench.
+    const rearrangedToRole = p.rosterFull
+      ? undefined
+      : await tentH.tryRearrangeVictim(
+          {
+            tx: p.tx,
+            victim: p.victim,
+            displacedRole: p.role,
+            currentAssignments: p.currentAssignments,
+            roleCapacity: p.roleCapacity,
+            occupiedPositions: p.occupiedPositions,
+            findPos: p.findPos,
+            signupById: p.signupById,
+          },
+          this.logger,
+        );
     const destination = rearrangedToRole
       ? 'role'
       : await tentH.evictVictim(p, this.logger);
