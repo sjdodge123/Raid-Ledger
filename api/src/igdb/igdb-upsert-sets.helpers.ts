@@ -24,14 +24,15 @@ export function steamSourceOnChange(newId: SQL, tag: SteamAppIdSource): SQL {
 }
 
 /**
- * Single-row upsert SET. COALESCE preserves existing twitch/steam ids when row
- * is null; seed-owned rows keep their curated name + slug (ROK-1643).
+ * Single-row upsert SET. COALESCE preserves existing twitch/steam ids and the
+ * cover (ROK-1715) when row is null; seed-owned rows keep their curated name +
+ * slug (ROK-1643).
  */
 export function buildUpsertSet(row: ReturnType<typeof mapApiGameToDbRow>) {
   return {
     name: keepSeedOwned(schema.games.name, row.name),
     slug: keepSeedOwned(schema.games.slug, row.slug),
-    coverUrl: row.coverUrl,
+    coverUrl: row.coverUrl ?? sql`${schema.games.coverUrl}`,
     genres: row.genres,
     summary: row.summary,
     rating: row.rating,
@@ -60,7 +61,7 @@ export function buildBatchUpsertSet() {
   return {
     name: keepSeedOwned(schema.games.name, sql`excluded.name`),
     slug: keepSeedOwned(schema.games.slug, sql`excluded.slug`),
-    coverUrl: sql`excluded.cover_url`,
+    coverUrl: sql`COALESCE(excluded.cover_url, ${schema.games.coverUrl})`,
     genres: sql`excluded.genres`,
     summary: sql`excluded.summary`,
     rating: sql`excluded.rating`,

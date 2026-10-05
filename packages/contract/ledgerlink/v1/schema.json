@@ -1,0 +1,918 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "number",
+          "const": 1
+        },
+        "addonVersion": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "interface": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "build": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "locale": {
+              "type": "string",
+              "maxLength": 8
+            },
+            "region": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "interface",
+            "build",
+            "locale",
+            "region"
+          ],
+          "additionalProperties": false
+        },
+        "exportedAt": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 4102444800
+        },
+        "who": {
+          "type": "object",
+          "properties": {
+            "guid": {
+              "type": "string",
+              "pattern": "^Player-\\d{1,5}-[0-9A-F]{8}$"
+            },
+            "fullName": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "raw": {
+              "type": "object",
+              "properties": {
+                "getUnitName": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "unitName": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 1,
+                  "maxItems": 2
+                },
+                "unitFullName": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 1,
+                  "maxItems": 2
+                },
+                "realmName": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "additionalProperties": false
+            },
+            "ruleset": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "pvp",
+                    "roleplaying",
+                    "hardcore"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "class": {
+              "type": "string",
+              "pattern": "^[A-Z]{2,16}$"
+            },
+            "race": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "faction": {
+              "type": "string",
+              "enum": [
+                "Alliance",
+                "Horde",
+                "Neutral"
+              ]
+            },
+            "guildName": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "guid",
+            "fullName",
+            "raw",
+            "ruleset",
+            "class",
+            "race",
+            "level",
+            "faction"
+          ],
+          "additionalProperties": false
+        },
+        "section": {
+          "type": "string",
+          "const": "char"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "gear": {
+              "maxItems": 19,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "slot": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 19
+                  },
+                  "itemId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "link": {
+                    "type": "string",
+                    "maxLength": 512
+                  },
+                  "ilvl": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "slot"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "talents": {
+              "type": "object",
+              "properties": {
+                "configId": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "importString": {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                "nodes": {
+                  "maxItems": 200,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "nodeId": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "rank": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "entryId": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      }
+                    },
+                    "required": [
+                      "nodeId",
+                      "rank"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "nodes"
+              ],
+              "additionalProperties": false
+            },
+            "lockouts": {
+              "maxItems": 100,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "instanceId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "difficultyId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "resetAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 4102444800
+                  },
+                  "killed": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "total": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "name",
+                  "instanceId",
+                  "difficultyId",
+                  "resetAt",
+                  "killed",
+                  "total"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "gear",
+            "talents",
+            "lockouts"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "addonVersion",
+        "client",
+        "exportedAt",
+        "who",
+        "section",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "number",
+          "const": 1
+        },
+        "addonVersion": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "interface": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "build": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "locale": {
+              "type": "string",
+              "maxLength": 8
+            },
+            "region": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "interface",
+            "build",
+            "locale",
+            "region"
+          ],
+          "additionalProperties": false
+        },
+        "exportedAt": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 4102444800
+        },
+        "who": {
+          "type": "object",
+          "properties": {
+            "guid": {
+              "type": "string",
+              "pattern": "^Player-\\d{1,5}-[0-9A-F]{8}$"
+            },
+            "fullName": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "raw": {
+              "type": "object",
+              "properties": {
+                "getUnitName": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "unitName": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 1,
+                  "maxItems": 2
+                },
+                "unitFullName": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 1,
+                  "maxItems": 2
+                },
+                "realmName": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "additionalProperties": false
+            },
+            "ruleset": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "pvp",
+                    "roleplaying",
+                    "hardcore"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "class": {
+              "type": "string",
+              "pattern": "^[A-Z]{2,16}$"
+            },
+            "race": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "faction": {
+              "type": "string",
+              "enum": [
+                "Alliance",
+                "Horde",
+                "Neutral"
+              ]
+            },
+            "guildName": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "guid",
+            "fullName",
+            "raw",
+            "ruleset",
+            "class",
+            "race",
+            "level",
+            "faction"
+          ],
+          "additionalProperties": false
+        },
+        "section": {
+          "type": "string",
+          "const": "guild"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "rawRealm": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "snapshotAt": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "maximum": 4102444800
+            },
+            "canViewOfficerNote": {
+              "type": "boolean",
+              "const": false
+            },
+            "members": {
+              "maxItems": 2000,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "guid": {
+                    "type": "string",
+                    "pattern": "^Player-\\d{1,5}-[0-9A-F]{8}$"
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "rankIndex": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 255
+                  },
+                  "rank": {
+                    "type": "string",
+                    "maxLength": 64
+                  },
+                  "level": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100
+                  },
+                  "class": {
+                    "type": "string",
+                    "pattern": "^[A-Z]{2,16}$"
+                  },
+                  "online": {
+                    "type": "boolean"
+                  },
+                  "lastOnlineDays": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 256
+                  }
+                },
+                "required": [
+                  "guid",
+                  "name",
+                  "rankIndex",
+                  "rank",
+                  "level",
+                  "class",
+                  "online"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "name",
+            "snapshotAt",
+            "canViewOfficerNote",
+            "members"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "addonVersion",
+        "client",
+        "exportedAt",
+        "who",
+        "section",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schema": {
+          "type": "number",
+          "const": 1
+        },
+        "addonVersion": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "client": {
+          "type": "object",
+          "properties": {
+            "interface": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2147483647
+            },
+            "build": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "locale": {
+              "type": "string",
+              "maxLength": 8
+            },
+            "region": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 5
+            }
+          },
+          "required": [
+            "interface",
+            "build",
+            "locale",
+            "region"
+          ],
+          "additionalProperties": false
+        },
+        "exportedAt": {
+          "type": "integer",
+          "exclusiveMinimum": 0,
+          "maximum": 4102444800
+        },
+        "who": {
+          "type": "object",
+          "properties": {
+            "guid": {
+              "type": "string",
+              "pattern": "^Player-\\d{1,5}-[0-9A-F]{8}$"
+            },
+            "fullName": {
+              "type": "string",
+              "maxLength": 100
+            },
+            "raw": {
+              "type": "object",
+              "properties": {
+                "getUnitName": {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                "unitName": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 1,
+                  "maxItems": 2
+                },
+                "unitFullName": {
+                  "type": "array",
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 100
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  ],
+                  "items": false,
+                  "minItems": 1,
+                  "maxItems": 2
+                },
+                "realmName": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              },
+              "additionalProperties": false
+            },
+            "ruleset": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "normal",
+                    "pvp",
+                    "roleplaying",
+                    "hardcore"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "class": {
+              "type": "string",
+              "pattern": "^[A-Z]{2,16}$"
+            },
+            "race": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "faction": {
+              "type": "string",
+              "enum": [
+                "Alliance",
+                "Horde",
+                "Neutral"
+              ]
+            },
+            "guildName": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "guid",
+            "fullName",
+            "raw",
+            "ruleset",
+            "class",
+            "race",
+            "level",
+            "faction"
+          ],
+          "additionalProperties": false
+        },
+        "section": {
+          "type": "string",
+          "const": "raid"
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "pulls": {
+              "maxItems": 200,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "encounterId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "name": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "difficultyId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "groupSize": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 40
+                  },
+                  "instanceId": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "startAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 4102444800
+                  },
+                  "endAt": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0,
+                    "maximum": 4102444800
+                  },
+                  "success": {
+                    "type": "boolean"
+                  },
+                  "roster": {
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^Player-\\d{1,5}-[0-9A-F]{8}$"
+                    }
+                  },
+                  "rosterNames": {
+                    "maxItems": 40,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 100
+                    }
+                  }
+                },
+                "required": [
+                  "encounterId",
+                  "name",
+                  "difficultyId",
+                  "groupSize",
+                  "startAt",
+                  "endAt",
+                  "success",
+                  "roster",
+                  "rosterNames"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "pulls"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema",
+        "addonVersion",
+        "client",
+        "exportedAt",
+        "who",
+        "section",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$id": "https://raid.gamernight.net/contracts/ledgerlink/v1/schema.json",
+  "title": "LedgerLink addon export payload v1",
+  "description": "GENERATED from AddonExportSchema (packages/contract/src/wow-addon-export.schema.ts) — do not edit by hand. See CONTRACT.md."
+}

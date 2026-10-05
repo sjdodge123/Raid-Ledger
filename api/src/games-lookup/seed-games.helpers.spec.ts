@@ -1,6 +1,7 @@
 import { buildSeedGameUpdateSet, upsertSeedGame } from './seed-games.helpers';
 import { findGameByNormalizedName } from '../igdb/igdb-name-dedup.helpers';
 import { withGameNameLock } from '../igdb/games-name-lock.helpers';
+import { GAMES_SEED } from './seed-games.data';
 
 jest.mock('../igdb/igdb-name-dedup.helpers', () => ({
   findGameByNormalizedName: jest.fn(),
@@ -71,7 +72,11 @@ describe('upsertSeedGame (ROK-1563 — the boot seed goes through the name-dedup
     apiNamespacePrefix: 'classicforever',
   };
 
-  function fakeDb(opts: { bySlug: { id: number }[]; insertedId?: number }) {
+  function fakeDb(opts: {
+    bySlug: { id: number }[];
+    igdbHolders?: { id: number }[];
+    insertedId?: number;
+  }) {
     const set = jest
       .fn()
       .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) });
@@ -82,7 +87,11 @@ describe('upsertSeedGame (ROK-1563 — the boot seed goes through the name-dedup
       select: jest.fn().mockReturnValue({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue(opts.bySlug),
+            // 1st select: slug lookup; 2nd (ROK-1715): who holds the igdb_id.
+            limit: jest
+              .fn()
+              .mockResolvedValueOnce(opts.bySlug)
+              .mockResolvedValueOnce(opts.igdbHolders ?? []),
           }),
         }),
       }),
@@ -169,5 +178,48 @@ describe('upsertSeedGame (ROK-1563 — the boot seed goes through the name-dedup
       action: 'created',
     });
     expect(values).toHaveBeenCalledWith(entry);
+  });
+
+  describe('ROK-1715 — pinning an igdbId on the slug row', () => {
+    const pinned = { ...entry, igdbId: 417650 };
+    let warn: jest.SpyInstance;
+    beforeEach(() => {
+      warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    });
+    afterEach(() => warn.mockRestore());
+
+    it('writes the seed igdbId when no other row holds it', async () => {
+      const { db, set } = fakeDb({ bySlug: [{ id: 7 }], igdbHolders: [] });
+      await upsertSeedGame(db as never, pinned);
+      const written = set.mock.calls[0][0] as Record<string, unknown>;
+      expect(written.igdbId).toBe(417650);
+      expect(written.name).toBe(pinned.name);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('omits igdbId and warns (never aborts the boot seed) when another row already holds it', async () => {
+      const { db, set } = fakeDb({
+        bySlug: [{ id: 7 }],
+        igdbHolders: [{ id: 8 }],
+      });
+      await expect(upsertSeedGame(db as never, pinned)).resolves.toEqual({
+        id: 7,
+        action: 'updated',
+      });
+      const written = set.mock.calls[0][0] as Record<string, unknown>;
+      expect('igdbId' in written).toBe(false);
+      expect(written.name).toBe(pinned.name);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('417650'));
+    });
+  });
+});
+
+describe('GAMES_SEED — WoW: Forever (ROK-1715)', () => {
+  it('pins the IGDB "World of Warcraft: Forever" Port id so the sync owns its cover', () => {
+    const forever = GAMES_SEED.find(
+      (g) => g.slug === 'world-of-warcraft-forever',
+    );
+    expect(forever?.igdbId).toBe(417650);
+    expect('coverUrl' in (forever ?? {})).toBe(false);
   });
 });
