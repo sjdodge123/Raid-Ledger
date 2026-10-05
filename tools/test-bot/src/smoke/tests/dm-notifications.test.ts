@@ -205,16 +205,60 @@ const departureNotifSentWhenFull: SmokeTest = {
   },
 };
 
+type DisplacedNotif = {
+  type: string;
+  message?: string;
+  payload?: Record<string, unknown>;
+};
+
+/**
+ * ROK-1729: poll the displaced tentative player's notifications for a
+ * `tentative_displaced` row on THIS event (payload.eventId — users[4] is also
+ * displaced by the roster-calculation smoke), then require the bench wording.
+ * Fails with every notification the user actually received.
+ */
+async function assertDisplacedToBench(
+  ctx: TestContext,
+  eventId: number,
+  userId: number,
+): Promise<void> {
+  let seen: DisplacedNotif[] = [];
+  const notif = await pollForCondition(
+    async () => {
+      const list = await getNotificationsFor(ctx.api, userId, undefined, 20);
+      seen = Array.isArray(list) ? (list as DisplacedNotif[]) : [];
+      return seen.find((n) => n.type === 'tentative_displaced' &&
+        Number(n.payload?.eventId) === eventId) ?? null;
+    },
+    ctx.config.timeoutMs,
+    { intervalMs: 2000 },
+  ).catch(() => {
+    const got = seen.map((n) => `${n.type}@${String(n.payload?.eventId)}`);
+    throw new Error(
+      `No tentative_displaced notification for user ${userId} on event ` +
+        `${eventId}; received [${got.join(', ')}]`,
+    );
+  });
+  if (!/moved to the bench/i.test(notif.message ?? '')) {
+    throw new Error(
+      `tentative_displaced should say "moved to the bench" on a full ` +
+        `roster, got: ${JSON.stringify(notif.message)}`,
+    );
+  }
+}
+
 const tentativeDisplacedNotification: SmokeTest = {
   name: 'Tentative displaced notification on roster overflow',
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
     if (users.length < 6) throw new Error('Need 6+ demo users');
-    // Fill roster with 4 confirmed + 1 tentative, then add 1 more confirmed
+    // Fill roster with 4 confirmed + 1 tentative, then add 1 more confirmed.
+    // ROK-1729: `flex: 0` is load-bearing — omitting it defaults flex to 5,
+    // so the roster would never be full and only the role-full path ran.
     const ev = await createEvent(ctx.api, 'dm-tentative-displace', {
       ...mmoOverrides(ctx),
-      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, bench: 2 },
+      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 2 },
     });
     try {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
@@ -228,7 +272,7 @@ const tentativeDisplacedNotification: SmokeTest = {
       // 6th confirmed signup should displace tentative
       await signupAs(ctx.api, ev.id, users[5], ['dps']);
       await awaitProcessing(ctx.api);
-      // tentative_displaced notification triggered for users[4]
+      await assertDisplacedToBench(ctx, ev.id, users[4]);
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }

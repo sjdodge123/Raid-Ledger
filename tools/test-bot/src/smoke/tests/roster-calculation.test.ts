@@ -6,7 +6,8 @@
  *
  * Uses POST /admin/test/signup to create signups for demo users.
  */
-import { pollForEmbed } from '../../helpers/polling.js';
+import type { EventRosterDto } from '@raid-ledger/contract';
+import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
 import {
   createEvent,
   signupAs,
@@ -64,6 +65,48 @@ function hasNameInSection(desc: string, sectionMarker: string): boolean {
 function signupCountOf(e: { author: string | null }): number | null {
   const match = (e.author ?? '').match(/(\d+) of (\d+)/);
   return match ? parseInt(match[1], 10) : null;
+}
+
+/** The slot `GET /events/:id/roster` reports for a user (null = unassigned). */
+function slotOf(roster: EventRosterDto, userId: number): string | null {
+  const signup = roster.signups.find((s) => s.user.id === userId);
+  return signup?.assignedSlot ?? null;
+}
+
+/**
+ * ROK-1729: poll the API roster until the confirmed newcomer holds a dps slot,
+ * the displaced tentative player sits on the bench, and the main roster still
+ * holds exactly 5. On main the newcomer is auto-benched and the tentative
+ * player keeps dps, so this fails naming the slots it actually saw.
+ */
+async function assertTentativeBenched(
+  ctx: TestContext,
+  eventId: number,
+  ids: { confirmed: number; tentative: number },
+): Promise<void> {
+  let seen = 'no roster read';
+  await pollForCondition(
+    async () => {
+      const roster = await ctx.api.get<EventRosterDto>(`/events/${eventId}/roster`);
+      const main = roster.signups.filter(
+        (s) => s.assignedSlot && s.assignedSlot !== 'bench',
+      ).length;
+      const confirmed = slotOf(roster, ids.confirmed);
+      const tentative = slotOf(roster, ids.tentative);
+      seen = JSON.stringify({ confirmed, tentative, mainRoster: main });
+      return confirmed === 'dps' && tentative === 'bench' && main === 5
+        ? true
+        : null;
+    },
+    ctx.config.timeoutMs,
+    { intervalMs: 1000 },
+  ).catch((err: unknown) => {
+    throw new Error(
+      `Expected confirmed user ${ids.confirmed} in dps, tentative user ` +
+        `${ids.tentative} on bench, main roster 5 — last read ${seen} ` +
+        `(${err instanceof Error ? err.message : String(err)})`,
+    );
+  });
 }
 
 const multiPreferredRoles: SmokeTest = {
@@ -244,15 +287,18 @@ const tentativeDisplacement: SmokeTest = {
       );
       const embed = dispMsg.embeds.find((e) => e.title?.includes(ev.title));
       if (!embed) throw new Error('Embed not found');
-      // Only checks that 5+ signups reached the roster. The displacement itself
-      // (tentative user on Bench, confirmed user in the dps slot) is not asserted
-      // yet: see TECH-DEBT-BACKLOG.md, 2026-09-30.
       const totalSignups = signupCountOf(embed) ?? 0;
       if (totalSignups < 5) {
         throw new Error(
           `Expected 5+ signups in roster, got ${totalSignups}`,
         );
       }
+      // ROK-1729: the displacement itself — confirmed users[5] takes the dps
+      // slot, tentative users[4] goes to the bench (operator ruling Q1).
+      await assertTentativeBenched(ctx, ev.id, {
+        confirmed: users[5],
+        tentative: users[4],
+      });
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
