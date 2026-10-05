@@ -3,12 +3,12 @@
  *
  * Blizzard has no WoW: Forever profile API yet (the namespace answers 403), so
  * both Armory entry points (the Add Character tabs and the inline import) ask
- * this one helper. When ROK-1562 lands the real namespace, drop `wow_forever`
- * from the set and every entry point — tabs and variant pickers — comes back.
+ * this one helper. The flag lives in wow-variant-config.ts (ROK-1726): when
+ * ROK-1562 lands the real namespace, flip `wow_forever.armoryImport` and every
+ * entry point — tabs and variant pickers — comes back.
  */
 import { WOW_FOREVER_LABEL } from './wow-era';
-
-const ARMORY_UNSUPPORTED_VARIANTS: ReadonlySet<string> = new Set(['wow_forever']);
+import { getWowVariantIntegrations } from './wow-variant-config';
 
 /** Short muted note shown wherever the Armory tab is unavailable. */
 export const ARMORY_UNAVAILABLE_NOTE =
@@ -16,7 +16,7 @@ export const ARMORY_UNAVAILABLE_NOTE =
 
 /** True when the Armory can import characters for this variant. Unknown/absent = retail = supported. */
 export function isArmoryImportSupported(variant: string | null | undefined): boolean {
-    return !variant || !ARMORY_UNSUPPORTED_VARIANTS.has(variant);
+    return !variant || (getWowVariantIntegrations(variant)?.armoryImport ?? true);
 }
 
 const ALL_CLASSIC_VARIANTS = [

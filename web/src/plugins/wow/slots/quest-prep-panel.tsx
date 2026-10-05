@@ -9,39 +9,10 @@ import type { EnrichedDungeonQuestDto, EquipmentItemDto, QuestCoverageEntry } fr
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { useEnrichedQuests, useQuestCoverage, useUpdateQuestProgress } from '../hooks/use-quest-prep';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
+import { slugToContentVariant } from '../lib/wow-variant-config';
 import { QuestCard } from './quest-card';
 import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';
 import './quest-prep-panel.css';
-
-/**
- * Map game slug to WoW variant for the quest API.
- * Handles both short legacy slugs and full ITAD-style variant slugs.
- * Falls back to classic_era for unknown slugs.
- */
-function slugToVariant(gameSlug?: string): string {
-    switch (gameSlug) {
-        case 'wow-classic-anniversary':
-        case 'world-of-warcraft-burning-crusade-classic-anniversary-edition':
-            return 'classic_anniversary';
-        case 'world-of-warcraft-classic':
-        case 'wow-classic-era':
-            return 'classic_era';
-        case 'wow-classic':
-        case 'wow-cata':
-        case 'world-of-warcraft-burning-crusade-classic':
-        case 'world-of-warcraft-wrath-of-the-lich-king':
-            return 'classic';
-        case 'wow-retail':
-        case 'world-of-warcraft':
-            return 'retail';
-        // ROK-1563: WoW: Forever — vanilla content only for now.
-        case 'world-of-warcraft-forever':
-            return 'wow_forever';
-        default:
-            return 'classic_era';
-    }
-}
-
 
 /** Sub-group quests by practical pickup type */
 function groupByType(list: EnrichedDungeonQuestDto[]) {
@@ -177,7 +148,7 @@ function buildSharedProps(opts: BuildSharedPropsOptions): SharedQuestProps {
 /** Quest Prep Panel main component */
 export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterId }: QuestPrepPanelProps) {
     const { user } = useAuth();
-    const variant = useMemo(() => slugToVariant(gameSlug), [gameSlug]);
+    const variant = useMemo(() => slugToContentVariant(gameSlug), [gameSlug]);
     const parsedInstances = useParsedInstances(contentInstances);
     const instanceIds = useInstanceIds(parsedInstances);
     const { data: questMap, isLoading } = useEnrichedQuests(instanceIds, variant);
