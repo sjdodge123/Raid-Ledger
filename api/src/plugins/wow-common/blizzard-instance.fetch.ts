@@ -15,6 +15,23 @@ import {
   mergeForeverSeed,
 } from './forever-instance-data';
 
+type ExpansionDetails = Awaited<ReturnType<typeof instH.fetchExpansionDetails>>;
+
+/**
+ * ROK-1719: a failed journal-expansion call is dropped as null. For Forever
+ * that would cache a seed-only (no vanilla) list for 24h, so a missing
+ * Classic tier throws instead — BlizzardService serves the seed uncached.
+ * Forever only: other variants keep their existing partial-list behaviour.
+ */
+function assertForeverHasClassic(details: ExpansionDetails): void {
+  if (details.some((d) => d?.expansionName === 'Classic')) return;
+  throw blizzardUpstreamError(
+    502,
+    'instances',
+    'WoW: Forever instance list is missing the Classic journal tier. Please try again later.',
+  );
+}
+
 export async function fetchAllInstancesFromApi(
   region: string,
   gameVariant: WowGameVariant,
@@ -27,6 +44,7 @@ export async function fetchAllInstancesFromApi(
     `static-${region}`,
     token,
   );
+  if (gameVariant === 'wow_forever') assertForeverHasClassic(details);
   let { dungeons, raids } = instH.mergeExpansionInstances(details);
   ({ dungeons, raids } = instH.filterByVariant(dungeons, raids, gameVariant));
   dungeons = instH.deduplicateById(dungeons);

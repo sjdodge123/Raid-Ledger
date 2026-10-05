@@ -77,7 +77,8 @@ const JOURNAL: Record<string, unknown> = {
   },
 };
 
-function mockJournal() {
+/** `failing` journal keys answer 503 (a partial journal outage). */
+function mockJournal(failing: string[] = []) {
   return jest.spyOn(global, 'fetch').mockImplementation((input) => {
     const url =
       typeof input === 'string'
@@ -86,6 +87,8 @@ function mockJournal() {
           ? input.href
           : input.url;
     const key = Object.keys(JOURNAL).find((k) => url.includes(`/${k}?`));
+    if (key && failing.includes(key))
+      return Promise.resolve(new Response('down', { status: 503 }));
     const body = key ? JSON.stringify(JOURNAL[key]) : 'missing';
     return Promise.resolve(new Response(body, { status: key ? 200 : 404 }));
   });
@@ -125,6 +128,15 @@ describe('fetchAllInstancesFromApi — Forever seed (ROK-1719)', () => {
       ['Barrow Deeps', 60, 60],
       ['Hyjal Summit', 60, 60],
     ]);
+  });
+
+  it('throws (so nothing is cached) when the Classic tier detail fails', async () => {
+    mockJournal(['journal-expansion/68']);
+    await expect(
+      fetchAllInstancesFromApi('us', 'wow_forever', 't'),
+    ).rejects.toThrow(
+      'WoW: Forever instance list is missing the Classic journal tier',
+    );
   });
 
   it.each(['classic_era', 'classic', 'classic_anniversary', 'retail'] as const)(
