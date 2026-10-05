@@ -30,7 +30,7 @@ export interface PasteSectionRun {
 export function pasteSections(paste: DecodedAddonPaste): DecodedAddonImport[] {
   return paste.order.flatMap((section) => {
     const s = paste.sections[section];
-    return s ? [s as DecodedAddonImport] : [];
+    return s ? [s] : [];
   });
 }
 

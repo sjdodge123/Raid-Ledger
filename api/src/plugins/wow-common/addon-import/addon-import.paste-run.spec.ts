@@ -63,7 +63,7 @@ function paste(...names: Array<'char' | 'guild' | 'raid'>): DecodedAddonPaste {
     order: names,
     tokens: names.length,
     inputBytes: 300,
-  } as unknown as DecodedAddonPaste;
+  };
 }
 
 const CTX = {
