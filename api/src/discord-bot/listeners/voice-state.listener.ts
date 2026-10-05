@@ -222,7 +222,13 @@ export class VoiceStateListener implements OnApplicationShutdown {
     this.cacheSweepTimer = stopBindingCacheSweep(this.cacheSweepTimer);
   }
 
+  /**
+   * CONNECTED fires again on every reconnect, so restart the sweep rather than
+   * stack another one: an overwritten handle is a ref'd 10-minute interval
+   * nothing can clear (it kept the in-band jest process alive on the fleet).
+   */
   private startCacheSweep(): void {
+    stopBindingCacheSweep(this.cacheSweepTimer);
     this.cacheSweepTimer = startBindingCacheSweep(this.channelBindingCache);
   }
 

@@ -143,3 +143,35 @@ describe('VoiceStateListener connect recovery', () => {
     );
   });
 });
+
+describe('VoiceStateListener binding-cache sweep', () => {
+  let listener: VoiceStateListener | undefined;
+
+  afterEach(() => {
+    listener?.onBotDisconnected();
+    listener = undefined;
+    jest.restoreAllMocks();
+  });
+
+  it('restarts the sweep instead of stacking one per CONNECTED', async () => {
+    const m = makeMocks();
+    m.client.getClient.mockReturnValue(makeClient());
+    const SWEEP_MS = 10 * 60 * 1000;
+    const setSpy = jest.spyOn(global, 'setInterval');
+    const clearSpy = jest.spyOn(global, 'clearInterval');
+    listener = await buildListener(m);
+
+    await listener.onBotConnected();
+    await listener.onBotConnected();
+    listener.onBotDisconnected();
+
+    const started = setSpy.mock.calls
+      .map((call, i) => ({ ms: call[1], timer: setSpy.mock.results[i]?.value }))
+      .filter((s) => s.ms === SWEEP_MS)
+      .map((s) => s.timer as unknown);
+    const cleared = new Set(clearSpy.mock.calls.map(([t]) => t as unknown));
+    expect(started).toHaveLength(2);
+    // An orphaned sweep is a ref'd interval that keeps the process alive.
+    expect(started.filter((t) => !cleared.has(t))).toEqual([]);
+  });
+});
