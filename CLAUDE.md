@@ -47,6 +47,14 @@ Any story with a visible or felt surface — an AC that says "operator confirms"
 
 Full procedure — seeding as `admin@local`, the verify lane's sign-in/viewport/theme/simulator steps, what still goes to the operator, closing the loop on verdicts and resets: `docs/runbooks/fleet-test-plans.md` + `.claude/skills/fleet-ui-verify/SKILL.md`.
 
+## LedgerLink addon contract (STRICT — applies to ALL agents, this repo and the addon repo)
+
+The WoW: Forever addon **LedgerLink** lives in its own repo (`github.com/sjdodge123/ledger-link`). Its export strings are a wire format that **Raid Ledger owns**: `packages/contract/ledgerlink/v1/` (`CONTRACT.md`, generated `schema.json`, golden `fixtures/`, `CHANGELOG.md`), with the Zod schemas in `packages/contract/src/wow-addon-*.schema.ts` as the source of truth. Operator ruling 2026-10-05.
+
+- **Only a Raid Ledger PR touching that folder changes the format.** It updates `schema.json` (the drift-guard test fails otherwise), the fixtures and `CHANGELOG.md`, and its PR body says **additive** (optional field the server ignores → stays v1) or **breaking** (anything else → new `vN/`, server accepts current + previous during the transition).
+- **LedgerLink agents never change the format on their own.** They request a change through a Raid Ledger story; the addon pins a copy of `vN/` and validates against it in its own CI.
+- Real beta strings become fixtures only after anonymisation (no real names, GUIDs or guild names).
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for any feature/fix that **adds, relocates, or restructures UI or introduces a new user-facing flow**, scan for design references that may already exist. (In-place cosmetic tweaks — color, copy, spacing, a single prop on an existing element — are **exempt**.) The operator regularly approves simplified-flow targets, wireframes or design specs ahead of implementation — follow-up work should be **implementing the approved target, not redesigning it**.

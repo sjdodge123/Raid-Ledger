@@ -46,6 +46,28 @@ async function insertTestJob(
 /** A schedule frequent enough that completed runs defer (ROK-1380). */
 const FIVE_MINUTE = { cronExpression: '*/5 * * * *' };
 
+type FakeTimersConfig = NonNullable<Parameters<typeof jest.useFakeTimers>[0]>;
+
+/** Fake only `Date`: timers, ticks and I/O stay real for the DB driver. */
+const PIN_DATE_ONLY: FakeTimersConfig = {
+  doNotFake: [
+    'hrtime',
+    'nextTick',
+    'performance',
+    'queueMicrotask',
+    'requestAnimationFrame',
+    'cancelAnimationFrame',
+    'requestIdleCallback',
+    'cancelIdleCallback',
+    'setImmediate',
+    'clearImmediate',
+    'setInterval',
+    'clearInterval',
+    'setTimeout',
+    'clearTimeout',
+  ],
+};
+
 /** Read one cron job row by id. */
 async function readJob(testApp: TestApp, jobId: number) {
   const [job] = nonEmpty(
@@ -427,10 +449,19 @@ function describeCronJob() {
       const jobId = await insertTestJob(testApp, name, FIVE_MINUTE);
       const cronJobService = testApp.app.get(CronJobService);
 
-      await cronJobService.executeWithTracking(name, () => Promise.resolve());
-      await cronJobService.executeWithTracking(name, () =>
-        Promise.reject(new Error('Later failure')),
-      );
+      // Pin the clock so the failed run is a full second newer: two runs in
+      // the same millisecond made "newer" a tie the flush cannot order.
+      jest.useFakeTimers(PIN_DATE_ONLY);
+      try {
+        jest.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+        await cronJobService.executeWithTracking(name, () => Promise.resolve());
+        jest.setSystemTime(new Date('2026-01-01T00:00:01.000Z'));
+        await cronJobService.executeWithTracking(name, () =>
+          Promise.reject(new Error('Later failure')),
+        );
+      } finally {
+        jest.useRealTimers();
+      }
       const executions = await readExecutions(testApp, jobId);
       const failed = executions.find((e) => e.status === 'failed')!;
       const completed = executions.find((e) => e.status === 'completed')!;
