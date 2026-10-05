@@ -15,7 +15,25 @@ import type { ItadGame, ItadGameInfo } from '../itad/itad.constants';
 const logger = new Logger('IgdbSyncHelpers');
 
 /**
- * Refresh existing non-hidden, non-banned games from IGDB in batches.
+ * Non-hidden, non-banned rows with an IGDB id. ROK-1715: an igdb-less row
+ * (seed, ITAD) has nothing to refresh, and its NULL joined as an empty slot —
+ * `where id = (1,,2)` — would poison its whole 10-row batch.
+ */
+function selectRefreshableGames(db: PostgresJsDatabase<typeof schema>) {
+  return db
+    .select({ igdbId: schema.games.igdbId })
+    .from(schema.games)
+    .where(
+      and(
+        eq(schema.games.hidden, false),
+        eq(schema.games.banned, false),
+        isNotNull(schema.games.igdbId),
+      ),
+    );
+}
+
+/**
+ * Refresh existing non-hidden, non-banned games that have an IGDB id, in batches.
  * @param db - Database connection
  * @param queryIgdb - Function to execute IGDB queries
  * @param adultThemeFilter - APICALYPSE adult theme filter string
@@ -30,11 +48,7 @@ export async function refreshExistingGames(
   onGameChanged?: (gameId: number) => void,
 ): Promise<number> {
   let refreshed = 0;
-  const games = await db
-    .select({ igdbId: schema.games.igdbId })
-    .from(schema.games)
-    .where(and(eq(schema.games.hidden, false), eq(schema.games.banned, false)));
-
+  const games = await selectRefreshableGames(db);
   if (games.length === 0) return 0;
 
   for (let i = 0; i < games.length; i += 10) {

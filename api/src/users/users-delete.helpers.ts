@@ -117,6 +117,9 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.communityLineupUserSubmissions,
     column: schema.communityLineupUserSubmissions.userId,
   },
+  // ROK-1724: the importer's own addon-import audit trail (CASCADE) — personal
+  // rate-limit/history rows with no value once the user is wiped.
+  { table: schema.addonImportAudit, column: schema.addonImportAudit.userId },
 ];
 
 /**
@@ -154,6 +157,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   schema.adHocParticipants,
   schema.eventVoiceSessions,
   schema.discoveryCategorySuggestions,
+  // ROK-1724: shared community records the user only reported/captured (SET
+  // NULL) — a raid pull or guild roster row belongs to the guild, not the user.
+  schema.addonEncounterPulls,
+  schema.guildMembers,
 ];
 
 /**

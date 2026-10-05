@@ -1,0 +1,137 @@
+import { z } from 'zod';
+// Via the barrel, never by file path (ROK-1733 moves these between files).
+import { WowForeverRulesetSchema, WowRegionSchema } from './characters.schema.js';
+
+// ============================================================
+// WoW: Forever addon import — request / result / errors (ROK-1724)
+// Route: POST /api/plugins/wow/characters/:id/addon-import
+// ============================================================
+
+/** Max pasted input (trimmed), in bytes — over it is `TOO_LARGE` (413). */
+export const ADDON_IMPORT_MAX_BYTES = 262_144;
+/** zlib `maxOutputLength` per page — over it is `DECODED_TOO_LARGE`. */
+export const ADDON_IMPORT_MAX_DECODED_BYTES = 1_048_576;
+/** Whitespace-separated pages accepted in one paste (paged guild export). */
+export const ADDON_IMPORT_MAX_PAGES = 8;
+
+/**
+ * One page token: `!RL<version>!<section>[-<n>of<m>]!<std base64>`.
+ * Groups: 1 version · 2 section · 3 page n · 4 page count · 5 base64 body.
+ * Shared so the web dialog's header chip and the API decoder agree.
+ */
+export const ADDON_IMPORT_PAGE_RE = /^!RL(\d+)!(char|guild|raid)(?:-(\d+)of(\d+))?!([A-Za-z0-9+/]+={0,2})$/;
+
+export const AddonImportRequestSchema = z.object({
+    importString: z.string().min(1).max(ADDON_IMPORT_MAX_BYTES),
+    /** Preview by default; `false` applies. */
+    dryRun: z.boolean().default(true),
+    confirm: z.object({
+        updateRuleset: z.boolean().optional(),
+        repinGuid: z.boolean().optional(),
+    }).strict().optional(),
+}).strict();
+export type AddonImportRequestDto = z.infer<typeof AddonImportRequestSchema>;
+export type AddonImportRequestInput = z.input<typeof AddonImportRequestSchema>;
+
+/** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, everything else 422. */
+export const AddonImportErrorCodeSchema = z.enum([
+    'TOO_LARGE',
+    'BAD_HEADER',
+    'UNSUPPORTED_VERSION',
+    'CUT_OFF',
+    'DECODED_TOO_LARGE',
+    'INVALID_PAYLOAD',
+    'PAGES_INCOMPLETE',
+    'WRONG_GAME',
+    'REGION_MISMATCH',
+    'NAME_MISMATCH',
+    'NOT_IN_GUILD',
+    'GUID_CONFIRM_REQUIRED',
+    'RATE_LIMITED',
+]);
+export type AddonImportErrorCode = z.infer<typeof AddonImportErrorCodeSchema>;
+
+/** Add Character prefill for the `NAME_MISMATCH` deep link (router state, Q6). */
+export const AddonImportAddCharacterPrefillSchema = z.object({
+    firstName: z.string(),
+    secondName: z.string(),
+    region: WowRegionSchema,
+    ruleset: WowForeverRulesetSchema.nullable(),
+    /** Title-cased display class, e.g. `Paladin`. */
+    class: z.string(),
+});
+export type AddonImportAddCharacterPrefill = z.infer<typeof AddonImportAddCharacterPrefillSchema>;
+
+export const AddonImportErrorBodySchema = z.object({
+    code: AddonImportErrorCodeSchema,
+    message: z.string(),
+    /** Only on `NAME_MISMATCH`. */
+    addCharacter: AddonImportAddCharacterPrefillSchema.optional(),
+});
+export type AddonImportErrorBody = z.infer<typeof AddonImportErrorBodySchema>;
+
+export const AddonImportWarningCodeSchema = z.enum([
+    'RULESET_CHANGED',
+    'GUID_CHANGED',
+    'STALE_EXPORT',
+    'CLASS_LEVEL_UPDATED',
+]);
+export type AddonImportWarningCode = z.infer<typeof AddonImportWarningCodeSchema>;
+
+const warningValue = z.union([z.string(), z.number(), z.null()]);
+
+export const AddonImportWarningSchema = z.object({
+    code: AddonImportWarningCodeSchema,
+    from: warningValue.optional(),
+    to: warningValue.optional(),
+});
+export type AddonImportWarning = z.infer<typeof AddonImportWarningSchema>;
+
+export const AddonImportStatusSchema = z.enum(['preview', 'applied', 'noop', 'stale']);
+export type AddonImportStatus = z.infer<typeof AddonImportStatusSchema>;
+
+export const AddonImportDiffSchema = z.object({
+    class: z.object({ from: z.string().nullable(), to: z.string() }).optional(),
+    level: z.object({ from: z.number().int().nullable(), to: z.number().int() }).optional(),
+});
+export type AddonImportDiff = z.infer<typeof AddonImportDiffSchema>;
+
+const n = z.number().int().nonnegative();
+
+export const AddonCharImportSummarySchema = z.object({
+    gearCount: n,
+    /** Null when no gear row carried an item level. */
+    avgIlvl: z.number().nullable(),
+    talentNodes: n,
+    lockouts: n,
+});
+export const AddonGuildImportSummarySchema = z.object({
+    guildName: z.string(),
+    members: n,
+    newMembers: n,
+    updatedMembers: n,
+    pages: n,
+});
+export const AddonRaidImportSummarySchema = z.object({
+    pulls: n,
+    newPulls: n,
+    duplicatePulls: n,
+    kills: n,
+    wipes: n,
+});
+
+const resultBase = {
+    status: AddonImportStatusSchema,
+    /** Unix seconds from the payload. */
+    exportedAt: z.number().int(),
+    warnings: z.array(AddonImportWarningSchema),
+    diff: AddonImportDiffSchema,
+};
+
+/** Discriminated by `section`; `summary` carries that section's counts. */
+export const AddonImportResultSchema = z.discriminatedUnion('section', [
+    z.object({ ...resultBase, section: z.literal('char'), summary: AddonCharImportSummarySchema }),
+    z.object({ ...resultBase, section: z.literal('guild'), summary: AddonGuildImportSummarySchema }),
+    z.object({ ...resultBase, section: z.literal('raid'), summary: AddonRaidImportSummarySchema }),
+]);
+export type AddonImportResultDto = z.infer<typeof AddonImportResultSchema>;
