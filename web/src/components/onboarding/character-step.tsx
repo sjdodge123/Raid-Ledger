@@ -9,8 +9,7 @@ import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Input } from '../ui/input';
 import { Select } from '../ui/select';
-import { ForeverIdentityFields } from '../../plugins/wow/components/forever-identity-fields';
-import { emptyForeverIdentity, foreverCreateFields, isWowForeverSlug, validateForeverIdentity, type ForeverIdentity, type ForeverIdentityErrors } from '../../plugins/wow/lib/forever-identity';
+import { useCharacterIdentity, type CharacterIdentityProvider, type IdentityErrors } from '../../plugins/character-identity';
 
 interface CharacterStepProps {
     /** The registry game to create a character for (pre-filled from hearted games) */
@@ -31,20 +30,27 @@ interface FormState {
     spec: string;
     role: CharacterRole | '';
     realm: string;
-    /** ROK-1721: WoW: Forever identity (used only for the Forever game). */
-    forever: ForeverIdentity;
+    /** ROK-1733: plugin-owned identity value — undefined until edited, then the provider's own shape. */
+    identity: unknown;
 }
 
 /** A missing name is a Field error on Name; a failed create is a separate form-level alert (ROK-1648). */
-interface StepErrors { name?: string; submit?: string; forever?: ForeverIdentityErrors }
+interface StepErrors { name?: string; submit?: string; identity?: IdentityErrors }
 
-const EMPTY_FORM: FormState = { name: '', class: '', spec: '', role: '', realm: '', forever: emptyForeverIdentity() };
+const EMPTY_FORM: FormState = { name: '', class: '', spec: '', role: '', realm: '', identity: undefined };
 
 type UpdateField = <K extends keyof FormState>(f: K, v: FormState[K]) => void;
 
-function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean, isForever: boolean) {
+type Identity = CharacterIdentityProvider | null;
+
+/** The identity value the form holds: the user's edit, else the provider's blank one. */
+function identityValueOf(identity: Identity, form: FormState): unknown {
+    return identity && form.identity === undefined ? identity.empty() : form.identity;
+}
+
+function buildCharacterPayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean, identity: Identity) {
     const payload = buildBasePayload(form, gameId, showMmoFields, isMain);
-    return isForever ? { ...payload, realm: undefined, ...foreverCreateFields(form.forever) } : payload;
+    return identity ? { ...payload, realm: undefined, ...identity.createFields(identityValueOf(identity, form)) } : payload;
 }
 
 function buildBasePayload(form: FormState, gameId: number, showMmoFields: boolean, isMain: boolean) {
@@ -120,16 +126,16 @@ function useCharacterStepState(preselectedGame: GameRegistryDto) {
 /** Step: Create a Character for a specific game. */
 export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator, onAddAnother, onRemoveStep }: CharacterStepProps) {
     const s = useCharacterStepState(preselectedGame);
+    // ROK-1733: an active plugin may own this game's identity fields.
+    const identity = useCharacterIdentity(preselectedGame.slug);
     const savedCharacter = s.existingChars[charIndex] ?? null;
     const handleDelete = (id: string) => { s.deleteMutation.mutate(id, { onSuccess: () => { if (charIndex > 0) onRemoveStep?.(); } }); };
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault(); s.setErrors({});
-        // ROK-1721: WoW: Forever is detected by the game's slug.
-        const isForever = isWowForeverSlug(preselectedGame.slug);
-        const foreverErrors = isForever ? validateForeverIdentity(s.form.forever) : null;
-        if (foreverErrors) { s.setErrors({ forever: foreverErrors }); return; }
-        if (!isForever && !s.form.name.trim()) { s.setErrors({ name: 'Character name is required' }); return; }
-        s.createMutation.mutate(buildCharacterPayload(s.form, preselectedGame.id, preselectedGame.hasRoles, s.existingChars.length === 0, isForever), { onSuccess: () => s.resetForm(), onError: () => s.setErrors({ submit: 'Failed to create character. Please try again.' }) });
+        const identityErrors = identity ? identity.validate(identityValueOf(identity, s.form)) : null;
+        if (identityErrors) { s.setErrors({ identity: identityErrors }); return; }
+        if (!identity && !s.form.name.trim()) { s.setErrors({ name: 'Character name is required' }); return; }
+        s.createMutation.mutate(buildCharacterPayload(s.form, preselectedGame.id, preselectedGame.hasRoles, s.existingChars.length === 0, identity), { onSuccess: () => s.resetForm(), onError: () => s.setErrors({ submit: 'Failed to create character. Please try again.' }) });
     };
 
     return (
@@ -139,28 +145,27 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                 <p className="text-muted text-sm mt-1">You can always add more from your profile later.</p>
             </div>
             {savedCharacter ? <SavedCharacterView savedCharacter={savedCharacter} onDelete={handleDelete} isDeleting={s.deleteMutation.isPending} onAddAnother={onAddAnother} /> : (
-                <CharacterStepForm s={s} preselectedGame={preselectedGame} onRegisterValidator={onRegisterValidator} handleSubmit={handleSubmit} />
+                <CharacterStepForm s={s} identity={identity} preselectedGame={preselectedGame} onRegisterValidator={onRegisterValidator} handleSubmit={handleSubmit} />
             )}
         </div>
     );
 }
 
-function CharacterStepForm({ s, preselectedGame, onRegisterValidator, handleSubmit }: {
-    s: ReturnType<typeof useCharacterStepState>; preselectedGame: GameRegistryDto;
+function CharacterStepForm({ s, identity, preselectedGame, onRegisterValidator, handleSubmit }: {
+    s: ReturnType<typeof useCharacterStepState>; identity: Identity; preselectedGame: GameRegistryDto;
     onRegisterValidator?: ((fn: () => boolean) => void) | undefined; handleSubmit: (e: React.FormEvent) => void;
 }) {
-    const isForever = isWowForeverSlug(preselectedGame.slug);
     return (
         <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
             {preselectedGame.slug && <PluginSlot name="character-create:import-form" context={{ onClose: () => {}, gameSlug: preselectedGame.slug, activeTab: s.activeTab, onTabChange: s.setActiveTab, existingCharacters: s.existingChars, onRegisterValidator }} />}
             {s.activeTab === 'manual' && (
                 <>
-                    {isForever ? <ForeverIdentityFields value={s.form.forever} onChange={(v) => s.updateField('forever', v)} errors={s.errors.forever} /> : (
+                    {identity ? <identity.Fields value={identityValueOf(identity, s.form)} onChange={(v) => s.updateField('identity', v)} errors={s.errors.identity} /> : (
                         <Field label="Name" required error={s.errors.name}>
                             <Input type="text" value={s.form.name} onChange={(e) => s.updateField('name', e.target.value)} placeholder="Character name" maxLength={100} />
                         </Field>
                     )}
-                    {preselectedGame.hasRoles && <MmoFields form={s.form} updateField={s.updateField} showRealm={!isForever} />}
+                    {preselectedGame.hasRoles && <MmoFields form={s.form} updateField={s.updateField} showRealm={!identity?.hidesRealm} />}
                     {s.errors.submit && <p role="alert" className="text-sm text-danger">{s.errors.submit}</p>}
                     <Button type="submit" variant="primary" fullWidth loading={s.createMutation.isPending} loadingLabel="Creating…">Create Character</Button>
                 </>
