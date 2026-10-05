@@ -139,6 +139,8 @@ export type IdentityDb = PostgresJsDatabase<typeof schema>;
 /** Plugin-owned identity rules for MANUAL characters of a game (ROK-1733). */
 export interface CharacterIdentityProvider {
   readonly gameSlugs: string[];
+  /** Owning plugin id — core skips the provider while that plugin is inactive. */
+  readonly pluginSlug: string;
   /** Validate + normalize a create DTO (throws 400). */
   prepareCreate(
     game: { slug: string },

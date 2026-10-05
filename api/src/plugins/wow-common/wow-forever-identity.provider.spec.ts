@@ -29,6 +29,10 @@ describe('WowForeverIdentityProvider', () => {
     expect(provider.gameSlugs).toEqual(['world-of-warcraft-forever']);
   });
 
+  it('names the WoW plugin as its owner, so core skips it while that plugin is off', () => {
+    expect(provider.pluginSlug).toBe('blizzard');
+  });
+
   it('prepareCreate normalizes a Forever create and enforces region+ruleset', () => {
     const out = provider.prepareCreate(
       FOREVER,

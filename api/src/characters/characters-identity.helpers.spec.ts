@@ -37,6 +37,7 @@ function makeDb(gameRows: unknown[] = [{ slug: SLUG }]) {
 function makeProvider() {
   return {
     gameSlugs: [SLUG],
+    pluginSlug: 'some-plugin',
     prepareCreate: jest.fn((_g: unknown, dto: CreateCharacterDto) => ({
       ...dto,
       name: 'Ana Normalized',
@@ -50,8 +51,14 @@ function makeProvider() {
   };
 }
 
-function makeRegistry(provider?: ReturnType<typeof makeProvider>) {
-  return { getAdapter: jest.fn(() => provider) };
+function makeRegistry(
+  provider?: ReturnType<typeof makeProvider>,
+  pluginActive = true,
+) {
+  return {
+    getAdapter: jest.fn(() => provider),
+    isActive: jest.fn(() => pluginActive),
+  };
 }
 
 describe('no-provider guards', () => {
@@ -87,6 +94,43 @@ describe('resolveIdentity', () => {
       'character-identity',
       SLUG,
     );
+    expect(registry.isActive).toHaveBeenCalledWith('some-plugin');
+  });
+
+  it('skips a registered provider while its owning plugin is inactive', () => {
+    const registry = makeRegistry(makeProvider(), false);
+    expect(resolveIdentity(registry as never, SLUG)).toBeUndefined();
+  });
+});
+
+describe('plugin off means off (identity rules switch off with the plugin)', () => {
+  it('create: a plain DTO passes untouched and the provider is never asked', async () => {
+    const provider = makeProvider();
+    const reg = makeRegistry(provider, false) as never;
+    const out = await prepareIdentityCreate(makeDb() as never, reg, createDto);
+    expect(out).toEqual({ prepared: createDto, identity: undefined });
+    expect(provider.prepareCreate).not.toHaveBeenCalled();
+    await expect(
+      prepareIdentityCreate(makeDb() as never, reg, {
+        ...createDto,
+        region: 'us',
+      }),
+    ).rejects.toThrow('Region and ruleset do not apply to this game');
+  });
+
+  it('update: a plain DTO passes untouched and the provider is never asked', async () => {
+    const provider = makeProvider();
+    const reg = makeRegistry(provider, false) as never;
+    const dto = { name: 'Renamed Plain' };
+    const out = await prepareIdentityUpdate(
+      makeDb() as never,
+      reg,
+      1,
+      character,
+      dto,
+    );
+    expect(out).toEqual({ prepared: dto, identity: undefined });
+    expect(provider.prepareUpdate).not.toHaveBeenCalled();
   });
 });
 

@@ -13,10 +13,12 @@ import type {
   IdentityDb,
 } from '../plugin-host/extension-points';
 import * as forever from './wow-forever-identity.helpers';
+import { WOW_COMMON_MANIFEST } from './manifest';
 
 @Injectable()
 export class WowForeverIdentityProvider implements CharacterIdentityProvider {
   readonly gameSlugs = [forever.WOW_FOREVER_GAME_SLUG];
+  readonly pluginSlug = WOW_COMMON_MANIFEST.id;
 
   prepareCreate(
     game: { slug: string },
