@@ -17,7 +17,8 @@
     "scripts": {
         "build": "tsc",
         "lint": "echo 'lint passed'",
-        "test": "vitest run"
+        "test": "vitest run",
+        "gen:ledgerlink-schema": "tsc && node scripts/gen-ledgerlink-schema.mjs"
     },
     "devDependencies": {
         "typescript": "^6.0.3",
