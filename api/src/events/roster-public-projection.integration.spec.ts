@@ -103,17 +103,21 @@ async function seedLinkedMember(eventId: number) {
   return userId;
 }
 
-/** `local:` (tentative), `unlinked:` (declined), `local:` (roached_out), anon Discord (departed). */
+/**
+ * `local:` (declined), `unlinked:` (tentative), `local:` (roached_out), anon
+ * Discord (departed). The `unlinked:` user must hold a roster-visible status,
+ * or its avatar assertion reads a row the roster never returns.
+ */
 async function seedOtherSignups(eventId: number) {
   const local = await createMemberAndLogin(testApp, 'loc', 'loc@test.local');
-  await insertSignup(eventId, { userId: local.userId, status: 'tentative' });
+  await insertSignup(eventId, { userId: local.userId, status: 'declined' });
   const unlinkedRows = await testApp.db
     .insert(schema.users)
     .values({ discordId: 'unlinked:abc', username: 'unl', role: 'member' })
     .returning();
   await insertSignup(eventId, {
     userId: nonEmpty(unlinkedRows, 'unlinked user')[0].id,
-    status: 'declined',
+    status: 'tentative',
   });
   const roach = await createMemberAndLogin(testApp, 'roach', 'ro@test.local');
   await insertSignup(eventId, { userId: roach.userId, status: 'roached_out' });
