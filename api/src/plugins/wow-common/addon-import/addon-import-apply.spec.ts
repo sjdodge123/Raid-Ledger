@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type {
   AddonGuildExport,
-  AddonGuildMember,
   AddonRaidExport,
 } from '@raid-ledger/contract';
 import type { DecodedAddonCharExport } from './addon-import.decoder';
@@ -135,15 +134,13 @@ describe('character-row binding updates', () => {
   });
 });
 
-/** The golden guild fixture with the exporter added to its own roster. */
+/** The golden guild fixture — its roster includes the exporter (member #1). */
 function guildWithExporter(): AddonGuildExport {
   const p = fixture<AddonGuildExport>('guild-1-page');
-  const me: AddonGuildMember = {
-    ...at0(p.data.members, 1),
-    guid: p.who.guid,
-    name: 'Ana Forever',
-  };
-  return { ...p, data: { ...p.data, members: [...p.data.members, me] } };
+  if (!p.data.members.some((m) => m.guid === p.who.guid)) {
+    throw new Error('guild-1-page fixture lost the exporter');
+  }
+  return p;
 }
 
 function codeOf(fn: () => void): string | null {
@@ -160,7 +157,10 @@ describe('guild', () => {
     const p = guildWithExporter();
     const without = {
       ...p,
-      data: { ...p.data, members: p.data.members.slice(0, -1) },
+      data: {
+        ...p.data,
+        members: p.data.members.filter((m) => m.guid !== p.who.guid),
+      },
     };
     expect(codeOf(() => assertExporterInGuild(without))).toBe('NOT_IN_GUILD');
     expect(codeOf(() => assertExporterInGuild(p))).toBeNull();
@@ -180,17 +180,18 @@ describe('guild rows', () => {
   it('summary splits new vs updated members', () => {
     expect(buildGuildSummary(guildWithExporter(), 1, 5)).toEqual({
       guildName: 'Night Shift',
-      members: 41,
+      members: 40,
       newMembers: 5,
-      updatedMembers: 36,
+      updatedMembers: 35,
       pages: 1,
     });
   });
 
   it('member row: public note only when present, no officer-note key', () => {
     const members = fixture<AddonGuildExport>('guild-1-page').data.members;
-    const withNote = at0(members, 0);
-    const without = at0(members, 1);
+    // [0] is the exporter; [1] is Member1 (noted), [2] Member2 (no note).
+    const withNote = at0(members, 1);
+    const without = at0(members, 2);
     const row = memberValues(withNote, 9, CTX, at(EXPORTED_AT));
     expect(row).toMatchObject({
       guildId: 9,
@@ -220,7 +221,7 @@ describe('guild rows', () => {
   it('guild columns come from the snapshot', () => {
     expect(guildSet(guildWithExporter())).toMatchObject({
       name: 'Night Shift',
-      memberCount: 41,
+      memberCount: 40,
       lastSnapshotAt: at(EXPORTED_AT),
     });
   });
