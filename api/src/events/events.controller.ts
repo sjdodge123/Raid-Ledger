@@ -39,12 +39,16 @@ import {
   ShareEventResponseDto,
   type ActivityTimelineResponseDto,
 } from '@raid-ledger/contract';
-import type { UserRole } from '@raid-ledger/contract';
+import type { PublicEventResponseDto } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
-import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
-import { findConflictingEvents } from './event-conflict.helpers';
+import {
+  findEventsForViewer,
+  findEventForViewer,
+  type EventViewer,
+  type PublicEventListResponseDto,
+} from './events-public-read.helpers';
 import { createEventWithSignups } from './event-create-lfg.helpers';
 import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
 
@@ -89,11 +93,11 @@ export class EventsController {
   @UseGuards(OptionalJwtGuard)
   async findAll(
     @Query() query: Record<string, string>,
-    @Request() req: { user?: { id: number; role: UserRole } },
-  ): Promise<EventListResponseDto> {
+    @Request() req: { user?: NonNullable<EventViewer> },
+  ): Promise<EventListResponseDto | PublicEventListResponseDto> {
     try {
       const dto = EventListQuerySchema.parse(query);
-      return this.eventsService.findAll(dto, req.user?.id);
+      return findEventsForViewer(this.eventsService, dto, req.user);
     } catch (error) {
       handleValidationError(error);
     }
@@ -114,12 +118,9 @@ export class EventsController {
   @UseGuards(OptionalJwtGuard)
   async findOne(
     @Param('id', ParseIntPipe) id: number,
-    @Request() req: { user?: { id: number } },
-  ): Promise<EventResponseDto> {
-    const event = await this.eventsService.findOne(id);
-    return enrichEventWithConflicts(event, req.user?.id ?? null, (p) =>
-      findConflictingEvents(this.db, p),
-    );
+    @Request() req: { user?: NonNullable<EventViewer> },
+  ): Promise<EventResponseDto | PublicEventResponseDto> {
+    return findEventForViewer(this.db, this.eventsService, id, req.user);
   }
 
   @Get(':id/activity')

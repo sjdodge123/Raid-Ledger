@@ -53,8 +53,16 @@ import {
   type AddMatchMembersResult,
 } from './scheduling-members.service';
 
+import { isMemberViewer } from '../../events/roster-public-projection.helpers';
+import { projectSchedulePollForViewer } from './scheduling-public-projection.helpers';
+
 interface AuthRequest extends Request {
-  user: { id: number; username: string; role: string } | null;
+  user: {
+    id: number;
+    username: string;
+    role: string;
+    deactivatedAt?: Date | null;
+  } | null;
 }
 
 @Controller('lineups')
@@ -75,7 +83,7 @@ export class SchedulingController {
     @Req() req: AuthRequest,
   ): Promise<SchedulePollPageResponseDto> {
     const userId = req.user?.id ?? null;
-    return this.schedulingService.getSchedulePoll(
+    const poll = await this.schedulingService.getSchedulePoll(
       lineupId,
       matchId,
       userId,
@@ -83,6 +91,8 @@ export class SchedulingController {
       // private lineup they were never invited to.
       req.user?.role ?? null,
     );
+    // ROK-1629 (Q4): anonymous / deactivated viewers get voter identity only.
+    return projectSchedulePollForViewer(poll, isMemberViewer(req.user));
   }
 
   /** POST /lineups/:lineupId/schedule/:matchId/suggest — suggest a slot. */

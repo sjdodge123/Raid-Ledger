@@ -80,6 +80,8 @@ export function pugSlotsVisibleTo(
     inviteCode: null,
     serverInviteUrl: null,
     discordUserId: null,
+    // ROK-1629: without the id the hash renders nothing; send no Discord field.
+    discordAvatarHash: null,
   }));
 }
 

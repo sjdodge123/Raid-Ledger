@@ -361,6 +361,18 @@ describe('UsersController', () => {
   });
 
   describe('getUserEventSignups (ROK-299)', () => {
+    it('strips creator.discordId for an anonymous viewer (ROK-1629)', async () => {
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
+      jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(mockEventsResponse);
+
+      const result = await controller.getUserEventSignups(1);
+
+      expect(result.data[0]?.creator).not.toHaveProperty('discordId');
+      expect(result.total).toBe(mockEventsResponse.total);
+    });
+
     it('should return upcoming events for valid user', async () => {
       const findByIdSpy = jest
         .spyOn(usersService, 'findById')
@@ -369,7 +381,9 @@ describe('UsersController', () => {
         .spyOn(eventsService, 'findUpcomingByUser')
         .mockResolvedValue(mockEventsResponse);
 
-      const result = await controller.getUserEventSignups(1);
+      const result = await controller.getUserEventSignups(1, {
+        user: { id: 2 },
+      });
 
       expect(result).toEqual(mockEventsResponse);
       expect(findByIdSpy).toHaveBeenCalledWith(1);

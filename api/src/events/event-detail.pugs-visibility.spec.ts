@@ -35,10 +35,17 @@ const PUG: PugSlotResponseDto = {
 };
 
 function buildService(): EventDetailService {
-  const events = { findOne: jest.fn().mockResolvedValue({ id: 7 }) };
+  // ROK-1629: an anonymous bundle is projected, so the fixtures carry the
+  // minimal real shapes the public projection parses.
+  const creator = { id: 1, username: 'owner', avatar: null, discordId: null };
+  const events = { findOne: jest.fn().mockResolvedValue({ id: 7, creator }) };
   const signups = {
-    getRoster: jest.fn().mockResolvedValue({}),
-    getRosterWithAssignments: jest.fn().mockResolvedValue({}),
+    getRoster: jest
+      .fn()
+      .mockResolvedValue({ eventId: 7, signups: [], count: 0 }),
+    getRosterWithAssignments: jest
+      .fn()
+      .mockResolvedValue({ eventId: 7, pool: [], assignments: [] }),
   };
   const pugs = { findAll: jest.fn().mockResolvedValue({ pugs: [PUG] }) };
   return new EventDetailService(
@@ -59,6 +66,7 @@ describe('EventDetailService — PUG slot visibility (ROK-1626)', () => {
     expect(pugs[0]?.inviteCode).toBeNull();
     expect(pugs[0]?.serverInviteUrl).toBeNull();
     expect(pugs[0]?.discordUserId).toBeNull();
+    expect(pugs[0]?.discordAvatarHash).toBeNull();
   });
 
   it('still shows a logged-out viewer that the slot exists', async () => {
@@ -73,7 +81,7 @@ describe('EventDetailService — PUG slot visibility (ROK-1626)', () => {
   });
 
   it('leaves the slot untouched for a logged-in member', async () => {
-    const { pugs } = await buildService().findDetail(7, 42);
+    const { pugs } = await buildService().findDetail(7, { id: 42 });
 
     expect(pugs[0]).toEqual(PUG);
   });
