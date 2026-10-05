@@ -1,9 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type {
-  AddonGuildExport,
-  AddonRaidExport,
-} from '@raid-ledger/contract';
+import type { AddonGuildExport, AddonRaidExport } from '@raid-ledger/contract';
 import type { DecodedAddonCharExport } from './addon-import.decoder';
 import type { AddonBindingResult } from './addon-import.binding';
 import { AddonImportError } from './addon-import.errors';
