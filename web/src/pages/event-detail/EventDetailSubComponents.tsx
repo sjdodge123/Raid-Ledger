@@ -4,7 +4,8 @@
  */
 import { useState, type JSX } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import type { EventResponseDto, EventRosterDto } from '@raid-ledger/contract';
+import type { EventResponseDto } from '@raid-ledger/contract';
+import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';
 import { AttendeeAvatars } from '../../components/calendar/AttendeeAvatars';
 import { GameTimeWidget } from '../../components/features/game-time/GameTimeWidget';
 import { AttendanceTracker } from '../../components/events/AttendanceTracker';
@@ -25,7 +26,7 @@ function withCharacters(chars: RawAttendeeCharacter[] | undefined): { characters
     return chars ? { characters: chars.map(toAttendeeCharacter) } : {};
 }
 
-function mapGameTimeAttendees(roster: EventRosterDto | undefined) {
+function mapGameTimeAttendees(roster: ViewerEventRosterDto | undefined) {
     return roster?.signups.slice(0, 6).map(s => ({
         id: s.user.id,
         username: s.user.username,
@@ -80,7 +81,7 @@ export function EventDetailFallbackSignup({ rosterAssignments, isAuthenticated, 
 }
 
 export function EventDetailGameTimeWidget({ rosterAssignments, isAuthenticated, event, roster }: {
-    rosterAssignments: unknown; isAuthenticated: boolean; event: EventResponseDto; roster: EventRosterDto | undefined;
+    rosterAssignments: unknown; isAuthenticated: boolean; event: EventResponseDto; roster: ViewerEventRosterDto | undefined;
 }) {
     if (rosterAssignments || !isAuthenticated || !event.startTime || !event.endTime) return null;
     return (
