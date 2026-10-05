@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, countDistinct, eq, gte, ne, sql } from 'drizzle-orm';
+import { and, count, eq, gte, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -155,8 +155,10 @@ function outcomeOf(row: AddonImportAuditInsert): AddonImportAuditOutcome {
 
 /**
  * Attempts (pastes) of this kind in the window, reserved-but-unfinished
- * included. Counts distinct `created_at`: a mixed paste writes one row per
- * section, all stamped with its reservation's instant (ROK-1737).
+ * included. ROK-1737: a mixed paste writes one row per section, the extras
+ * copying its reservation's instant — a row is such an extra when an
+ * EARLIER row of the same user + kind has the same `created_at` and another
+ * non-null section, so the paste counts once.
  */
 async function countRecent(
   tx: Db,
@@ -165,7 +167,7 @@ async function countRecent(
 ): Promise<number> {
   const since = new Date(Date.now() - WINDOW_MS);
   const [row] = await tx
-    .select({ n: countDistinct(addonImportAudit.createdAt) })
+    .select({ n: count() })
     .from(addonImportAudit)
     .where(
       and(
@@ -173,7 +175,18 @@ async function countRecent(
         eq(addonImportAudit.dryRun, dryRun),
         gte(addonImportAudit.createdAt, since),
         ne(addonImportAudit.result, 'RATE_LIMITED'),
+        notExtraSectionRow,
       ),
     );
   return Number(row?.n ?? 0);
 }
+
+/** Excludes a mixed paste's 2nd/3rd section rows (see `countRecent`). */
+const notExtraSectionRow = sql`NOT (${addonImportAudit.section} IS NOT NULL AND EXISTS (
+  SELECT 1 FROM addon_import_audit e
+  WHERE e.user_id = ${addonImportAudit.userId}
+    AND e.dry_run = ${addonImportAudit.dryRun}
+    AND e.created_at = ${addonImportAudit.createdAt}
+    AND e.id < ${addonImportAudit.id}
+    AND e.section IS NOT NULL
+    AND e.section <> ${addonImportAudit.section}))`;
