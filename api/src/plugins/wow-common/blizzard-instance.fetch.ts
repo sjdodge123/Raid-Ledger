@@ -10,6 +10,10 @@ import type {
 } from './blizzard.constants';
 import * as instH from './blizzard-instance.helpers';
 import { blizzardUpstreamError } from './blizzard-upstream-error';
+import {
+  findForeverSeedInstance,
+  mergeForeverSeed,
+} from './forever-instance-data';
 
 export async function fetchAllInstancesFromApi(
   region: string,
@@ -30,6 +34,12 @@ export async function fetchAllInstancesFromApi(
   if (gameVariant !== 'retail') {
     dungeons = instH.expandSubInstances(dungeons);
     raids = instH.expandSubInstances(raids);
+  }
+  if (gameVariant === 'wow_forever') {
+    // ROK-1719: seeded Forever instances carry explicit levels, so
+    // enrichInstance never applies the name-keyed (TBC) Hyjal Summit 70.
+    dungeons = mergeForeverSeed(dungeons, 'dungeon');
+    raids = mergeForeverSeed(raids, 'raid');
   }
   return {
     dungeons: dungeons.map((i) => instH.enrichInstance(i, gameVariant)),
@@ -57,6 +67,11 @@ export async function fetchInstanceDetailFromApi(
   gameVariant: WowGameVariant,
   token: string,
 ): Promise<WowInstanceDetail> {
+  // ROK-1719: before the synthetic branch — 90_000_001 % 100 would otherwise
+  // resolve to a Scarlet Monastery wing. Variant-independent on purpose: a
+  // saved event's id must resolve whatever the viewer's variant mapping.
+  const seeded = findForeverSeedInstance(instanceId);
+  if (seeded) return seeded;
   if (instanceId > 10000) {
     const synth = instH.resolveSyntheticInstance(instanceId);
     if (synth) return synth;
