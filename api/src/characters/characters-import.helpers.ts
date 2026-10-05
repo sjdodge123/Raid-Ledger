@@ -23,7 +23,10 @@ import {
   demoteExistingMain,
 } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
-import { checkRegionClaim } from '../plugins/wow-common/wow-forever-identity.helpers';
+import {
+  checkIdentityClaim,
+  type IdentityClaimOpts,
+} from './characters-identity.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = { log: (msg: string) => void };
@@ -36,15 +39,11 @@ export async function checkDuplicateClaim(
   userId: number,
   name: string,
   realm?: string | null,
-  opts: { region?: string | null } = {},
+  opts: IdentityClaimOpts = {},
 ): Promise<void> {
-  // ROK-1721: realm-less characters with a region (WoW: Forever) are keyed on
-  // region + full name; realm-less without a region stay per-user only.
-  if (!realm) {
-    if (opts.region)
-      await checkRegionClaim(tx, { gameId, userId, name, region: opts.region });
-    return;
-  }
+  // ROK-1721/1733: a realm-less character with a region is claimed through
+  // its game's identity provider; realm-less without one stays per-user only.
+  if (!realm) return checkIdentityClaim(tx, { gameId, userId, name }, opts);
   const [existingClaim] = await tx
     .select({ id: schema.characters.id, userId: schema.characters.userId })
     .from(schema.characters)

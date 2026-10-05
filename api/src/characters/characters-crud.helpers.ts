@@ -16,7 +16,10 @@ import type {
   CreateCharacterDto,
   RefreshCharacterDto,
 } from '@raid-ledger/contract';
-import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
+import type {
+  CharacterIdentityProvider,
+  CharacterSyncAdapter,
+} from '../plugins/plugin-host/extension-points';
 import {
   fetchFullProfile,
   buildSyncUpdateFields,
@@ -64,10 +67,12 @@ export async function executeCreateTx(
   userId: number,
   dto: CreateCharacterDto,
   logger: Logger,
+  identity?: CharacterIdentityProvider,
 ): Promise<CharacterDto> {
   return db.transaction(async (tx) => {
     await checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm, {
       region: dto.region,
+      identity,
     });
     const { shouldBeMain, charCount } = await resolveMainStatus(
       tx,
@@ -82,11 +87,17 @@ export async function executeCreateTx(
       .values(buildCreateValues(userId, dto, shouldBeMain))
       .returning();
     const character = defined(inserted, 'created character row');
-    logger.log(
-      `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
-    );
+    logger.log(createdLogLine(userId, character, shouldBeMain));
     return mapCharacterToDto(character);
   });
+}
+
+function createdLogLine(
+  userId: number,
+  character: { id: string; name: string },
+  isMain: boolean,
+): string {
+  return `User ${userId} created character ${character.id} (${character.name})${isMain ? ' [main]' : ''}`;
 }
 
 /** After deletion, promote the lowest-order char to main if none exists. */
@@ -205,7 +216,7 @@ export async function syncAllCharacters(
       and(
         isNotNull(schema.characters.region),
         isNotNull(schema.characters.gameVariant),
-        // ROK-1721: realm-less (WoW: Forever) characters have no Armory path yet
+        // ROK-1721: realm-less characters have no Armory path yet
         isNotNull(schema.characters.realm),
       ),
     );
