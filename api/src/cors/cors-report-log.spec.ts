@@ -70,7 +70,9 @@ describe('would-reject line format', () => {
       'suppressed=',
     ]);
   });
+});
 
+describe('field sanitising', () => {
   it('reduces the Origin to scheme://host[:port] (drops userinfo and path)', () => {
     expect(sanitizeOrigin('https://user:hunter2@evil.example:8443/x?y=1')).toBe(
       'https://evil.example:8443',

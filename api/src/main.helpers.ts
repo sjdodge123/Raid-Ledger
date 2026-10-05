@@ -134,7 +134,9 @@ export interface HelmetOptions {
  * Validates CORS configuration for the current environment.
  * - Production requires CORS_ORIGIN to be set
  * - Production blocks wildcard (*)
- * - Production warns (but does not throw) for 'auto' mode
+ * - Production notes (warn, never throws) that 'auto' is the same-origin
+ *   check of ROK-1732; the `[cors-auto] mode=` boot line from
+ *   `applyCorsPolicy` says whether mismatches are rejected or only logged.
  */
 export function validateCorsConfig(
   isProduction: boolean,
@@ -153,17 +155,20 @@ export function validateCorsConfig(
   }
   if (isProduction && corsOrigin === 'auto') {
     logger.warn(
-      'CORS_ORIGIN=auto allows all origins. ' +
-        'This is intended for single-origin reverse-proxy deployments only. ' +
-        'Set an explicit origin for tighter security.',
+      'CORS_ORIGIN=auto checks that a request Origin matches its Host ' +
+        '(single-origin reverse-proxy deployments). The [cors-auto] mode line ' +
+        'says whether mismatches are rejected (enforce) or only logged (report).',
     );
   }
 }
 
 /**
- * Builds the CORS origin callback function.
+ * @deprecated ROK-1732 — superseded by `applyCorsPolicy`
+ * (`cors/cors-auto-policy.ts`), which makes `auto` same-origin only and turns
+ * a mismatch into a 403 instead of this Error → 500. Kept only until main.ts
+ * switches to `applyCorsPolicy`; delete it (and its spec block) then.
  * - Same-origin requests (origin undefined) are always allowed
- * - 'auto' mode allows any origin (proxy-only use case)
+ * - 'auto' mode allows any origin (the pre-ROK-1732 behaviour)
  * - Wildcard allows any origin
  * - Specific origin is matched; dev adds localhost variants
  */

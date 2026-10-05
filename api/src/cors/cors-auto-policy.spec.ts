@@ -5,14 +5,14 @@
  *
  * The report-mode block is the release's safety proof: for a matrix of
  * Origin/Host pairs it runs the SAME request against the pre-ROK-1732 wiring
- * (`buildCorsOriginFn`) and the new policy, and requires identical status,
+ * (a frozen copy of `buildCorsOriginFn`) and the new policy, and requires identical status,
  * body, `Access-Control-*` headers and handler execution.
  */
 import { Controller, Get, Post } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { applyTrustProxy, buildCorsOriginFn } from '../main.helpers';
+import { applyTrustProxy } from '../main.helpers';
 import { applyCorsPolicy, type CorsEnv } from './cors-auto-policy';
 
 const PROD = 'raid.gamernight.net';
@@ -32,6 +32,38 @@ class ProbeController {
     handlerRuns += 1;
     return { ok: true };
   }
+}
+
+/**
+ * Frozen copy of the pre-ROK-1732 `buildCorsOriginFn` (main.helpers.ts @
+ * 910fa9f77) — the oracle for "report mode changes nothing". Do not edit.
+ */
+function legacyOriginFn(
+  isProduction: boolean,
+  corsOrigin: string | undefined,
+  isAutoOrigin: boolean,
+) {
+  return (
+    origin: string | undefined,
+    callback: (err: Error | null, allow?: boolean) => void,
+  ) => {
+    if (!origin) return callback(null, true);
+    if (isAutoOrigin) return callback(null, true);
+    if (corsOrigin === '*') return callback(null, true);
+    const allowed: string[] = [corsOrigin].filter(Boolean) as string[];
+    if (!isProduction) {
+      allowed.push(
+        'http://localhost',
+        'http://localhost:80',
+        'http://localhost:5173',
+        'http://localhost:5174',
+      );
+    }
+    callback(
+      allowed.includes(origin) ? null : new Error('Not allowed by CORS'),
+      allowed.includes(origin),
+    );
+  };
 }
 
 type Wiring = 'legacy' | 'policy';
@@ -71,7 +103,7 @@ async function buildApp(
   } else {
     const auto = env.corsOrigin === 'auto';
     app.enableCors({
-      origin: buildCorsOriginFn(isProduction, env.corsOrigin, auto),
+      origin: legacyOriginFn(isProduction, env.corsOrigin, auto),
       credentials: true,
       exposedHeaders: ['Content-Disposition'],
     });

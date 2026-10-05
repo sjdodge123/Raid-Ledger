@@ -8,6 +8,7 @@ import {
   LOGGER_SELF_TEST_WARN_SENTINEL,
   LOGGER_SELF_TEST_ERROR_SENTINEL,
 } from './main.helpers';
+import { applyCorsPolicy } from './cors/cors-auto-policy';
 
 type CorsCallback = (err: Error | null, allow?: boolean) => void;
 
@@ -33,12 +34,14 @@ function describeValidateCorsConfig() {
     );
   });
 
-  it('warns when production uses auto', () => {
+  it('notes the same-origin check when production uses auto (ROK-1732)', () => {
     const logger = { warn: jest.fn() };
     validateCorsConfig(true, 'auto', logger);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('CORS_ORIGIN=auto allows all origins'),
-    );
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const [message] = logger.warn.mock.calls[0] as [string];
+    expect(message).toContain('CORS_ORIGIN=auto checks that a request Origin');
+    expect(message).toContain('[cors-auto] mode line');
+    expect(message).not.toContain('allows all origins');
   });
 
   it('does not warn for auto in development', () => {
@@ -254,9 +257,94 @@ function describeBuildLoggerSelfTest() {
   });
 }
 
+type Delegate = (req: object, cb: (e: Error | null, o: object) => void) => void;
+type Gate = (req: object, res: object, next: () => void) => void;
+
+/** ROK-1732: applyCorsPolicy against a fake app recording what it registers. */
+function wireFakeApp(autoMode: string) {
+  const calls: Array<[string, unknown]> = [];
+  const app = {
+    use: (fn: unknown) => calls.push(['use', fn]),
+    enableCors: (opts: unknown) => calls.push(['enableCors', opts]),
+  };
+  const env = { corsOrigin: 'auto', autoMode };
+  const logger = { warn: jest.fn(), log: jest.fn() };
+  applyCorsPolicy(app, { isProduction: true, getEnv: () => env, logger });
+  const gate = calls[0]?.[1] as Gate;
+  const delegate = calls[1]?.[1] as Delegate;
+  const optionsFor = (req: object) =>
+    new Promise<Record<string, unknown>>((resolve) =>
+      delegate(req, (_e, o) => resolve(o as Record<string, unknown>)),
+    );
+  return { calls, gate, optionsFor };
+}
+
+function siblingRequest() {
+  return {
+    headers: { origin: 'https://slot-1.example.net', host: 'raid.example.net' },
+    method: 'POST',
+    path: '/auth/refresh',
+  };
+}
+
+function fakeResponse() {
+  const res = { status: jest.fn(), json: jest.fn() };
+  res.status.mockReturnValue(res);
+  return res;
+}
+
+function describeApplyCorsPolicyWiring() {
+  it('registers the gate BEFORE cors, and cors in delegate form', () => {
+    const { calls } = wireFakeApp('report');
+    expect(calls.map(([kind, arg]) => [kind, typeof arg])).toEqual([
+      ['use', 'function'],
+      ['enableCors', 'function'],
+    ]);
+  });
+
+  it('report: passes a sibling Origin through and reflects it (as auto did)', async () => {
+    const { gate, optionsFor } = wireFakeApp('report');
+    const req = siblingRequest();
+    const next = jest.fn();
+    gate(req, fakeResponse(), next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(await optionsFor(req)).toEqual({
+      origin: true,
+      credentials: true,
+      exposedHeaders: ['Content-Disposition'],
+    });
+  });
+
+  it('enforce: 403s a sibling Origin without calling next', async () => {
+    const { gate, optionsFor } = wireFakeApp('enforce');
+    const req = siblingRequest();
+    const res = fakeResponse();
+    const next = jest.fn();
+    gate(req, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(res.json).toHaveBeenCalledWith({
+      statusCode: 403,
+      message: 'Origin not allowed',
+    });
+    expect((await optionsFor(req)).origin).toBe(false);
+  });
+
+  it('never reflects an Origin for a request the gate did not pass', async () => {
+    const { optionsFor } = wireFakeApp('report');
+    expect(await optionsFor(siblingRequest())).toEqual({
+      origin: false,
+      credentials: true,
+      exposedHeaders: ['Content-Disposition'],
+    });
+  });
+}
+
 describe('main.helpers', () => {
   describe('validateCorsConfig', () => describeValidateCorsConfig());
   describe('buildCorsOriginFn', () => describeBuildCorsOriginFn());
+  describe('applyCorsPolicy wiring (ROK-1732)', () =>
+    describeApplyCorsPolicyWiring());
   describe('buildHelmetOptions', () => describeBuildHelmetOptions());
   describe('parseLogLevel', () => describeParseLogLevel());
   describe('getLogLevels', () => describeGetLogLevels());
