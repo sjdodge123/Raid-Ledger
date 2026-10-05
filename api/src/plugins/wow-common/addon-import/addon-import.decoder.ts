@@ -26,7 +26,8 @@ export type DecodedAddonCharExport = Omit<AddonCharExport, 'data'> & {
   data: AddonCharSnapshotData;
 };
 /** Validated + sanitised payload, discriminated by `section`. */
-export type DecodedAddonExport = DecodedAddonCharExport | AddonGuildExport | AddonRaidExport;
+export type DecodedAddonExport =
+  DecodedAddonCharExport | AddonGuildExport | AddonRaidExport;
 
 export interface DecodedAddonImport {
   payload: DecodedAddonExport;
@@ -41,19 +42,32 @@ export interface DecodedAddonImport {
 const SAFE_KEY = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
 
 /** First Zod issue → message with its PATH only; values are never echoed. */
-function describeIssue(issue?: { code: string; path: ReadonlyArray<PropertyKey> }): string {
+function describeIssue(issue?: {
+  code: string;
+  path: ReadonlyArray<PropertyKey>;
+}): string {
   const path = (issue?.path ?? [])
     .map((seg) =>
-      typeof seg === 'number' ? `[${seg}]` : typeof seg === 'string' && SAFE_KEY.test(seg) ? `.${seg}` : '.?',
+      typeof seg === 'number'
+        ? `[${seg}]`
+        : typeof seg === 'string' && SAFE_KEY.test(seg)
+          ? `.${seg}`
+          : '.?',
     )
     .join('')
     .replace(/^\./, '');
-  const what = issue?.code === 'unrecognized_keys' ? 'an unexpected field' : 'an invalid value';
+  const what =
+    issue?.code === 'unrecognized_keys'
+      ? 'an unexpected field'
+      : 'an invalid value';
   return `The import string has ${what}${path ? ` at ${path}` : ''}.`;
 }
 
 function isOutputTooLarge(err: unknown): boolean {
-  return err instanceof RangeError || (err as { code?: unknown })?.code === 'ERR_BUFFER_TOO_LARGE';
+  return (
+    err instanceof RangeError ||
+    (err as { code?: unknown })?.code === 'ERR_BUFFER_TOO_LARGE'
+  );
 }
 
 /**
@@ -64,9 +78,13 @@ function inflatePage(body: string): Buffer {
   if (body.length % 4 !== 0) throw new AddonImportError('CUT_OFF');
   const compressed = Buffer.from(body, 'base64');
   try {
-    return inflateSync(compressed, { maxOutputLength: ADDON_IMPORT_MAX_DECODED_BYTES });
+    return inflateSync(compressed, {
+      maxOutputLength: ADDON_IMPORT_MAX_DECODED_BYTES,
+    });
   } catch (err) {
-    throw new AddonImportError(isOutputTooLarge(err) ? 'DECODED_TOO_LARGE' : 'CUT_OFF');
+    throw new AddonImportError(
+      isOutputTooLarge(err) ? 'DECODED_TOO_LARGE' : 'CUT_OFF',
+    );
   }
 }
 
@@ -81,10 +99,16 @@ function decodePage(header: AddonPageHeader): AddonExport {
   assertStructuralLimits(json);
   const parsed = AddonExportSchema.safeParse(json);
   if (!parsed.success) {
-    throw new AddonImportError('INVALID_PAYLOAD', describeIssue(parsed.error.issues[0]));
+    throw new AddonImportError(
+      'INVALID_PAYLOAD',
+      describeIssue(parsed.error.issues[0]),
+    );
   }
   if (parsed.data.section !== header.section) {
-    throw new AddonImportError('INVALID_PAYLOAD', "The string's header and contents disagree.");
+    throw new AddonImportError(
+      'INVALID_PAYLOAD',
+      "The string's header and contents disagree.",
+    );
   }
   return parsed.data;
 }
@@ -117,11 +141,15 @@ function normalisedHash(headers: AddonPageHeader[]): string {
 export function decodeImportString(raw: string): DecodedAddonImport {
   const input = raw.trim();
   const inputBytes = Buffer.byteLength(input, 'utf8');
-  if (inputBytes > ADDON_IMPORT_MAX_BYTES) throw new AddonImportError('TOO_LARGE');
+  if (inputBytes > ADDON_IMPORT_MAX_BYTES)
+    throw new AddonImportError('TOO_LARGE');
   if (input === '') throw new AddonImportError('BAD_HEADER');
   const tokens = input.split(/\s+/);
   if (tokens.length > ADDON_IMPORT_MAX_PAGES) {
-    throw new AddonImportError('PAGES_INCOMPLETE', 'That paste has too many pages.');
+    throw new AddonImportError(
+      'PAGES_INCOMPLETE',
+      'That paste has too many pages.',
+    );
   }
   const headers = assertPageSet(tokens.map(parsePageHeader));
   const sha256 = normalisedHash(headers);

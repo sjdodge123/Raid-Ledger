@@ -26,7 +26,8 @@ export function stripEscapes(value: string): string {
 /** Deep-copy `value`, stripping escapes from every string (keys untouched). */
 export function sanitizeStrings<T>(value: T): T {
   if (typeof value === 'string') return stripEscapes(value) as T;
-  if (Array.isArray(value)) return value.map((v: unknown) => sanitizeStrings(v)) as T;
+  if (Array.isArray(value))
+    return value.map((v: unknown) => sanitizeStrings(v)) as T;
   if (value === null || typeof value !== 'object') return value;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(value)) out[k] = sanitizeStrings(v);
@@ -50,14 +51,20 @@ function toId(field: string | undefined): number | null {
  * modifiersMask:context:numBonusIDs:bonus1…|h`. Anything malformed yields
  * `itemId: null` / `bonusIds: []` rather than throwing.
  */
-export function parseItemLink(link: string): { itemId: number | null; bonusIds: number[] } {
+export function parseItemLink(link: string): {
+  itemId: number | null;
+  bonusIds: number[];
+} {
   const match = ITEM_LINK_RE.exec(link);
   if (!match) return { itemId: null, bonusIds: [] };
   const fields = match[1].split(':');
   const itemId = toId(fields[0]);
   const count = toId(fields[BONUS_COUNT_FIELD]);
   if (count === null || count > MAX_BONUS_IDS) return { itemId, bonusIds: [] };
-  const raw = fields.slice(BONUS_COUNT_FIELD + 1, BONUS_COUNT_FIELD + 1 + count);
+  const raw = fields.slice(
+    BONUS_COUNT_FIELD + 1,
+    BONUS_COUNT_FIELD + 1 + count,
+  );
   const ids = raw.map(toId);
   if (ids.length !== count || ids.some((id) => id === null)) {
     return { itemId, bonusIds: [] };
@@ -65,8 +72,12 @@ export function parseItemLink(link: string): { itemId: number | null; bonusIds: 
   return { itemId, bonusIds: ids as number[] };
 }
 
-function toSnapshotGear(item: AddonCharData['gear'][number]): AddonSnapshotGearItem {
-  const parsed = item.link ? parseItemLink(item.link) : { itemId: null, bonusIds: [] };
+function toSnapshotGear(
+  item: AddonCharData['gear'][number],
+): AddonSnapshotGearItem {
+  const parsed = item.link
+    ? parseItemLink(item.link)
+    : { itemId: null, bonusIds: [] };
   const itemId = item.itemId ?? parsed.itemId ?? undefined;
   return {
     slot: item.slot,

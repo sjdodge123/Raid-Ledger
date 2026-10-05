@@ -37,13 +37,20 @@ export function parsePageHeader(token: string): AddonPageHeader {
   if (m[3] === undefined) return { section, page: null, of: null, body: m[5] };
   const page = Number(m[3]);
   const of = Number(m[4]);
-  if (section !== 'guild' || of < 1 || of > ADDON_IMPORT_MAX_PAGES || page < 1 || page > of) {
+  if (
+    section !== 'guild' ||
+    of < 1 ||
+    of > ADDON_IMPORT_MAX_PAGES ||
+    page < 1 ||
+    page > of
+  ) {
     throw new AddonImportError('BAD_HEADER');
   }
   return { section, page, of, body: m[5] };
 }
 
-const incomplete = (message?: string) => new AddonImportError('PAGES_INCOMPLETE', message);
+const incomplete = (message?: string) =>
+  new AddonImportError('PAGES_INCOMPLETE', message);
 
 /**
  * Validate the page SET before anything is decoded: a single unpaged
@@ -84,14 +91,20 @@ export function mergeGuildPages(pages: AddonGuildExport[]): AddonGuildExport {
   }
   const members = pages.flatMap((p) => p.data.members);
   if (new Set(members.map((m) => m.guid)).size !== members.length) {
-    throw new AddonImportError('INVALID_PAYLOAD', 'The guild roster lists a member twice.');
+    throw new AddonImportError(
+      'INVALID_PAYLOAD',
+      'The guild roster lists a member twice.',
+    );
   }
   const merged = AddonGuildExportSchema.safeParse({
     ...first,
     data: { ...first.data, members },
   });
   if (!merged.success) {
-    throw new AddonImportError('INVALID_PAYLOAD', 'The guild roster is too large.');
+    throw new AddonImportError(
+      'INVALID_PAYLOAD',
+      'The guild roster is too large.',
+    );
   }
   return merged.data;
 }

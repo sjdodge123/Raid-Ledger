@@ -12,16 +12,20 @@ import type {
 const DEFAULT_MESSAGES: Record<AddonImportErrorCode, string> = {
   TOO_LARGE: 'That import string is too large.',
   BAD_HEADER: "That doesn't look like a Raid Ledger import string.",
-  UNSUPPORTED_VERSION: 'That import string comes from an unsupported addon version.',
+  UNSUPPORTED_VERSION:
+    'That import string comes from an unsupported addon version.',
   CUT_OFF: 'The string looks cut off — copy it again.',
   DECODED_TOO_LARGE: 'That import string expands to more data than allowed.',
-  INVALID_PAYLOAD: "The import string's contents are not in the expected format.",
-  PAGES_INCOMPLETE: 'Some pages of this export are missing or duplicated — paste every page once.',
+  INVALID_PAYLOAD:
+    "The import string's contents are not in the expected format.",
+  PAGES_INCOMPLETE:
+    'Some pages of this export are missing or duplicated — paste every page once.',
   WRONG_GAME: 'This character is not a WoW: Forever character.',
   REGION_MISMATCH: "The export's region does not match this character.",
   NAME_MISMATCH: 'The export is from a different character.',
   NOT_IN_GUILD: 'The exporting character is not in that guild roster.',
-  GUID_CONFIRM_REQUIRED: 'The in-game character changed — confirm to re-link it.',
+  GUID_CONFIRM_REQUIRED:
+    'The in-game character changed — confirm to re-link it.',
   RATE_LIMITED: 'Too many imports — try again later.',
 };
 

@@ -21,16 +21,24 @@ export interface ImportStringOptions {
 }
 
 /** Wrap already-compressed bytes in the header (for bomb / corrupt cases). */
-export function wrapImportBytes(compressed: Buffer, opts: ImportStringOptions = {}): string {
+export function wrapImportBytes(
+  compressed: Buffer,
+  opts: ImportStringOptions = {},
+): string {
   const section = opts.section ?? 'char';
   const paging = opts.page ? `-${opts.page.n}of${opts.page.of}` : '';
   return `!RL${opts.version ?? 1}!${section}${paging}!${compressed.toString('base64')}`;
 }
 
 /** Build an import string from a JSON-serialisable payload. */
-export function buildImportString(payload: unknown, opts: ImportStringOptions = {}): string {
+export function buildImportString(
+  payload: unknown,
+  opts: ImportStringOptions = {},
+): string {
   const section =
-    opts.section ?? ((payload as { section?: AddonExportSection }).section ?? 'char');
+    opts.section ??
+    (payload as { section?: AddonExportSection }).section ??
+    'char';
   const compressed = deflateSync(Buffer.from(JSON.stringify(payload), 'utf8'));
   return wrapImportBytes(compressed, { ...opts, section });
 }
@@ -66,7 +74,9 @@ function envelope() {
 export const FIXTURE_ITEM_LINK =
   '|cffa335ee|Hitem:19019:0:0:0:0:0:0:0:60:0:0:0:2:6646:7890|h[Thunderfury]|h|r';
 
-export function buildCharPayload(overrides: Partial<AddonCharExport> = {}): AddonCharExport {
+export function buildCharPayload(
+  overrides: Partial<AddonCharExport> = {},
+): AddonCharExport {
   return {
     ...envelope(),
     section: 'char',
@@ -77,14 +87,24 @@ export function buildCharPayload(overrides: Partial<AddonCharExport> = {}): Addo
       ],
       talents: { configId: 7, nodes: [{ nodeId: 101, rank: 2 }] },
       lockouts: [
-        { name: '|cffffd100Molten Core|r', instanceId: 409, difficultyId: 9, resetAt: 1_790_500_000, killed: 3, total: 10 },
+        {
+          name: '|cffffd100Molten Core|r',
+          instanceId: 409,
+          difficultyId: 9,
+          resetAt: 1_790_500_000,
+          killed: 3,
+          total: 10,
+        },
       ],
     },
     ...overrides,
   };
 }
 
-export function buildMember(i: number, overrides: Partial<AddonGuildMember> = {}): AddonGuildMember {
+export function buildMember(
+  i: number,
+  overrides: Partial<AddonGuildMember> = {},
+): AddonGuildMember {
   const hex = i.toString(16).toUpperCase().padStart(8, '0');
   return {
     guid: `Player-4395-${hex}`,
@@ -121,9 +141,16 @@ export function buildRaidPayload(): AddonRaidExport {
     data: {
       pulls: [
         {
-          encounterId: 663, name: 'Lucifron', difficultyId: 9, groupSize: 40, instanceId: 409,
-          startAt: 1_789_999_000, endAt: 1_789_999_120, success: true,
-          roster: [FIXTURE_GUID], rosterNames: ['Ana Forever'],
+          encounterId: 663,
+          name: 'Lucifron',
+          difficultyId: 9,
+          groupSize: 40,
+          instanceId: 409,
+          startAt: 1_789_999_000,
+          endAt: 1_789_999_120,
+          success: true,
+          roster: [FIXTURE_GUID],
+          rosterNames: ['Ana Forever'],
         },
       ],
     },
@@ -131,11 +158,20 @@ export function buildRaidPayload(): AddonRaidExport {
 }
 
 /** Split a guild payload's roster into `of` page strings (page order). */
-export function buildGuildPages(payload: AddonGuildExport, of: number): string[] {
+export function buildGuildPages(
+  payload: AddonGuildExport,
+  of: number,
+): string[] {
   const size = Math.ceil(payload.data.members.length / of);
   return Array.from({ length: of }, (_, i) =>
     buildImportString(
-      { ...payload, data: { ...payload.data, members: payload.data.members.slice(i * size, (i + 1) * size) } },
+      {
+        ...payload,
+        data: {
+          ...payload.data,
+          members: payload.data.members.slice(i * size, (i + 1) * size),
+        },
+      },
       { section: 'guild', page: { n: i + 1, of } },
     ),
   );
