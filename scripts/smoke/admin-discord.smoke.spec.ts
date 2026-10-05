@@ -190,6 +190,131 @@ test.describe("Admin Discord — Connection", () => {
     }
   });
 
+  // ROK-1702: the "Bot Invite Link" card (which pointed admins at the Developer
+  // Portal's OAuth2 URL Generator) is gone; the in-form invite panel replaces it.
+  test("renders the in-form bot invite panel, not the URL Generator card", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/connection");
+    await expect(
+      page.getByRole("heading", { name: "Discord Bot", exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // The bot form (and its invite panel) renders only when the admin has a
+    // linked Discord account; otherwise the link prompt renders. One must.
+    const invitePanel = page.getByTestId("bot-invite-panel");
+    const linkPrompt = page.getByRole("heading", {
+      name: "Discord Account Required",
+    });
+    await expect(invitePanel.or(linkPrompt).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    if (await invitePanel.isVisible()) {
+      await expect(invitePanel).toContainText(/invite url/i);
+    }
+
+    await expect(
+      page.getByRole("heading", { name: "Bot Invite Link" }),
+    ).toHaveCount(0);
+    await expect(page.getByText(/URL Generator/)).toHaveCount(0);
+  });
+
+  test("loads without error boundary", async ({ page }) => {
+    await page.goto("/admin/settings/discord");
+    await expect(
+      page.getByRole("heading", { name: "Discord Overview" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toHaveText(/something went wrong/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Auth panel
+// ---------------------------------------------------------------------------
+
+test.describe("Admin Discord — Auth", () => {
+  test("renders OAuth config form", async ({ page }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/auth");
+    await expect(
+      page.getByRole("heading", { name: "Discord Authentication" }),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // OAuth card heading
+    await expect(
+      page.getByRole("heading", { name: "Discord OAuth" }),
+    ).toBeVisible();
+
+    // Form fields
+    await expect(
+      page.getByRole("textbox", { name: "Client ID" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("textbox", { name: "Client Secret" }),
+    ).toBeVisible();
+  });
+
+  test("renders save button (test button only when configured)", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/auth");
+    await expect(
+      page.getByRole("heading", { name: "Discord Authentication" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole("button", { name: "Save Configuration" }),
+    ).toBeVisible();
+
+    // "Test Connection" only renders when OAuth is already configured (conditional in DiscordOAuthForm).
+    // In CI without Discord configured, this button won't exist — soft check.
+    const testBtn = page.getByRole("button", { name: "Test Connection" });
+    if (await testBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+      await expect(testBtn).toBeVisible();
+    }
+  });
+
+  test("loads without error boundary", async ({ page }) => {
+    await page.goto("/admin/settings/discord/auth");
+    await expect(
+      page.getByRole("heading", { name: "Discord Authentication" }),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("body")).not.toHaveText(/something went wrong/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Connection panel
+// ---------------------------------------------------------------------------
+
+test.describe("Admin Discord — Connection", () => {
+  test("renders bot token field and enable switch (when Discord is linked)", async ({
+    page,
+  }) => {
+    await pollDiscordBotStatus();
+    await page.goto("/admin/settings/discord/connection");
+    await expect(
+      page.getByRole("heading", { name: "Discord Bot", exact: true }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Bot Token field and Enable Bot switch only render when the admin user
+    // has their Discord account linked. In CI the user may not have Discord
+    // linked, so a "Link Discord Account" prompt appears instead — soft check.
+    const botTokenField = page.getByRole("textbox", { name: "Bot Token" });
+    if (await botTokenField.isVisible({ timeout: 5_000 }).catch(() => false)) {
+      await expect(botTokenField).toBeVisible();
+      await expect(
+        page.getByRole("switch", { name: "Enable Bot" }),
+      ).toBeVisible();
+    } else {
+      // Fallback: the "Discord Account Required" prompt should be visible
+      await expect(
+        page.getByRole("heading", { name: "Discord Account Required" }),
+      ).toBeVisible();
+    }
+  });
+
   test("renders bot invite link info (when OAuth is configured)", async ({
     page,
   }) => {
