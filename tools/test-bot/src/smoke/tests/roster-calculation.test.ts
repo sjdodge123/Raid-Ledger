@@ -6,7 +6,7 @@
  *
  * Uses POST /admin/test/signup to create signups for demo users.
  */
-import type { EventRosterDto } from '@raid-ledger/contract';
+import type { RosterWithAssignments } from '@raid-ledger/contract';
 import { pollForCondition, pollForEmbed } from '../../helpers/polling.js';
 import {
   createEvent,
@@ -67,10 +67,14 @@ function signupCountOf(e: { author: string | null }): number | null {
   return match ? parseInt(match[1], 10) : null;
 }
 
-/** The slot `GET /events/:id/roster` reports for a user (null = unassigned). */
-function slotOf(roster: EventRosterDto, userId: number): string | null {
-  const signup = roster.signups.find((s) => s.user.id === userId);
-  return signup?.assignedSlot ?? null;
+/**
+ * The slot `GET /events/:id/roster/assignments` reports for a user
+ * (null = no assignment / unassigned pool). Plain `GET /events/:id/roster`
+ * never carries `assignedSlot` — it is only set on the signup POST response.
+ */
+function slotOf(roster: RosterWithAssignments, userId: number): string | null {
+  const a = roster.assignments.find((x) => x.userId === userId);
+  return a?.slot ?? null;
 }
 
 /**
@@ -87,9 +91,11 @@ async function assertTentativeBenched(
   let seen = 'no roster read';
   await pollForCondition(
     async () => {
-      const roster = await ctx.api.get<EventRosterDto>(`/events/${eventId}/roster`);
-      const main = roster.signups.filter(
-        (s) => s.assignedSlot && s.assignedSlot !== 'bench',
+      const roster = await ctx.api.get<RosterWithAssignments>(
+        `/events/${eventId}/roster/assignments`,
+      );
+      const main = roster.assignments.filter(
+        (a) => a.slot !== null && a.slot !== 'bench',
       ).length;
       const confirmed = slotOf(roster, ids.confirmed);
       const tentative = slotOf(roster, ids.tentative);
