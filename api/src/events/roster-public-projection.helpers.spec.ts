@@ -144,7 +144,11 @@ function assignment(
 }
 
 function roster(): EventRosterDto {
-  return { eventId: 9, signups: [memberSignup(), anonDiscordSignup()], count: 2 };
+  return {
+    eventId: 9,
+    signups: [memberSignup(), anonDiscordSignup()],
+    count: 2,
+  };
 }
 
 function rosterWithAssignments(): RosterWithAssignments {
@@ -307,8 +311,9 @@ describe('route projections — anonymous viewer has no Discord id key anywhere'
   });
 
   it('GET /events/:id leaves signupsPreview absent when the source had none', () => {
-    const { signupsPreview: _omit, ...noPreview } = event();
-    const out = projectEventForViewer(noPreview as EventResponseDto, false);
+    const noPreview = event();
+    delete noPreview.signupsPreview;
+    const out = projectEventForViewer(noPreview, false);
     expect(Object.keys(out)).not.toContain('signupsPreview');
   });
 
@@ -370,6 +375,8 @@ describe('Public* schemas are strict', () => {
 
   it('toPublicRoster / toPublicRosterWithAssignments produce schema-valid output', () => {
     expect(toPublicRoster(roster()).count).toBe(2);
-    expect(toPublicRosterWithAssignments(rosterWithAssignments()).pool).toHaveLength(1);
+    expect(
+      toPublicRosterWithAssignments(rosterWithAssignments()).pool,
+    ).toHaveLength(1);
   });
 });
