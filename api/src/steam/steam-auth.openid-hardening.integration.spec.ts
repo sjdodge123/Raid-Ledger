@@ -81,7 +81,7 @@ function cookie(res: Res, name: string): string {
   const lines = Array.isArray(raw) ? (raw as string[]) : [];
   const line = lines.find((l) => l.startsWith(`${name}=`));
   expect(line).toBeDefined();
-  return (line as string).split(';')[0];
+  return (line as string).split(';')[0] ?? '';
 }
 
 const location = (res: Res) => String(res.headers['location']);
