@@ -165,6 +165,47 @@ async function get(route: string, token?: string) {
   return token ? req.set('Authorization', `Bearer ${token}`) : req;
 }
 
+const PUG_SNOWFLAKE = '555555555555555555';
+const PUG_MEMBER_FIELDS = {
+  inviteCode: 'pugcode1',
+  serverInviteUrl: 'https://discord.gg/pugserver',
+  discordUserId: PUG_SNOWFLAKE,
+  discordAvatarHash: 'pughash',
+};
+const PUG_BLANK_FIELDS = {
+  inviteCode: null,
+  serverInviteUrl: null,
+  discordUserId: null,
+  discordAvatarHash: null,
+};
+
+/** A PUG slot carrying every member-only field (invite code, server URL, Discord). */
+async function seedPugSlot(eventId: number) {
+  await testApp.db.insert(schema.pugSlots).values({
+    eventId,
+    role: 'dps',
+    status: 'invited',
+    discordUsername: 'pugguy',
+    createdBy: testApp.seed.adminUser.id,
+    ...PUG_MEMBER_FIELDS,
+  });
+}
+
+type DetailBody = {
+  pugs: Array<Record<string, unknown>>;
+  voiceChannel: { guildId: string | null } | null;
+};
+
+/** The member-only PUG fields of each slot in a detail bundle. */
+function pugMemberFields(body: DetailBody) {
+  return body.pugs.map((p) => ({
+    inviteCode: p.inviteCode,
+    serverInviteUrl: p.serverInviteUrl,
+    discordUserId: p.discordUserId,
+    discordAvatarHash: p.discordAvatarHash,
+  }));
+}
+
 type RosterBody = {
   signups: Array<{
     status: string;
@@ -263,6 +304,31 @@ describe('ROK-1629 public roster projection (integration)', () => {
       );
     },
   );
+
+  it.each([
+    ['anonymous', undefined],
+    ['deactivated', 'deactivated'],
+  ] as const)(
+    'a %s caller of the detail bundle gets no PUG invite, Discord or guild field',
+    async (_label, who) => {
+      await seedPugSlot(f.eventId);
+      const token = who ? f.deactivatedToken : undefined;
+      const res = await get(`/events/${f.eventId}/detail`, token);
+      expect(res.status).toBe(200);
+      const body = res.body as DetailBody;
+      expect(pugMemberFields(body)).toEqual([PUG_BLANK_FIELDS]);
+      expect(body.voiceChannel?.guildId ?? null).toBeNull();
+    },
+  );
+
+  it('a signed-in member of the detail bundle keeps the PUG invite + Discord fields', async () => {
+    await seedPugSlot(f.eventId);
+    const res = await get(`/events/${f.eventId}/detail`, f.memberToken);
+    expect(res.status).toBe(200);
+    expect(pugMemberFields(res.body as DetailBody)).toEqual([
+      PUG_MEMBER_FIELDS,
+    ]);
+  });
 
   it('roster availability stays members-only (PR #1388 regression)', async () => {
     const res = await get(`/events/${f.eventId}/roster/availability`);
