@@ -123,6 +123,25 @@ function withSeedMetadata(row: WowInstance): WowInstance {
 }
 
 /**
+ * Detail-path twin of withSeedMetadata: a journal `Forever` instance keeps
+ * its id, name and category but takes the seed's short name and levels —
+ * buildInstanceDetail has already applied the name-keyed TBC Hyjal 70-70.
+ */
+export function withForeverSeedDetail(
+  detail: WowInstanceDetail,
+): WowInstanceDetail {
+  const hit = seedFor(detail);
+  if (!hit) return detail;
+  return {
+    ...detail,
+    shortName: hit.shortName,
+    minimumLevel: hit.minimumLevel,
+    maximumLevel: hit.maximumLevel,
+    maxPlayers: detail.maxPlayers ?? hit.maxPlayers,
+  };
+}
+
+/**
  * Append the seeded Forever instances of `category` to a journal list.
  * A seed row is skipped when the list already holds a `Forever`-expansion
  * instance with the same normalized name (journal wins on id and name, the

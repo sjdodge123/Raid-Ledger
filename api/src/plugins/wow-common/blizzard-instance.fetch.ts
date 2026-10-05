@@ -13,6 +13,7 @@ import { blizzardUpstreamError } from './blizzard-upstream-error';
 import {
   findForeverSeedInstance,
   mergeForeverSeed,
+  withForeverSeedDetail,
 } from './forever-instance-data';
 
 type ExpansionDetails = Awaited<ReturnType<typeof instH.fetchExpansionDetails>>;
@@ -107,5 +108,5 @@ export async function fetchInstanceDetailFromApi(
     category?: { type: string };
     expansion?: { name: string };
   };
-  return instH.buildInstanceDetail(data, gameVariant);
+  return withForeverSeedDetail(instH.buildInstanceDetail(data, gameVariant));
 }

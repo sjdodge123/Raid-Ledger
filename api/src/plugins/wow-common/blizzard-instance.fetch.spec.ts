@@ -222,3 +222,35 @@ describe('fetchInstanceDetailFromApi — Forever seed ids (ROK-1719)', () => {
     });
   });
 });
+
+describe('fetchInstanceDetailFromApi — journal Forever id (ROK-1719)', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('keeps the seed levels for a journal Forever Hyjal Summit (not TBC 70)', async () => {
+    mockJournal([], {
+      'journal-instance/5001': {
+        id: 5001,
+        name: 'Hyjal Summit',
+        expansion: { name: 'Forever' },
+        category: { type: 'RAID' },
+        modes: [{ mode: { type: 'NORMAL' }, players: 20 }],
+      },
+    });
+    const detail = await fetchInstanceDetailFromApi(
+      5001,
+      'us',
+      'wow_forever',
+      't',
+    );
+    expect(detail).toEqual({
+      id: 5001,
+      name: 'Hyjal Summit',
+      shortName: 'HS',
+      expansion: 'Forever',
+      minimumLevel: 60,
+      maximumLevel: 60,
+      maxPlayers: 20,
+      category: 'raid',
+    });
+  });
+});
