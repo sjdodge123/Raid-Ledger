@@ -23,6 +23,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import { LinkNonceService } from '../auth/link-nonce.service';
+import { SteamOpenIdNonceStore } from './steam-openid-nonce.store';
 import {
   ITAD_BACKGROUND_FETCH,
   ITAD_INTERACTIVE_FETCH,
@@ -44,6 +45,7 @@ function createMockResponse(): Response {
     status: jest.fn().mockReturnThis(),
     json: jest.fn().mockReturnThis(),
     redirect: jest.fn(),
+    setHeader: jest.fn(),
     cookie: jest.fn(),
     clearCookie: jest.fn(),
   } as unknown as Response;
@@ -127,6 +129,7 @@ async function createTestController(): Promise<{
       { provide: LinkNonceService, useValue: mocks.linkNonce },
       { provide: SteamService, useValue: mocks.steam },
       { provide: SteamWishlistService, useValue: mocks.wishlist },
+      { provide: SteamOpenIdNonceStore, useValue: { claim: jest.fn() } },
     ],
   }).compile();
 
