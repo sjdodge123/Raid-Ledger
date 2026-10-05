@@ -23,7 +23,7 @@ import {
   demoteExistingMain,
 } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
-import { checkRegionClaim } from './characters-forever.helpers';
+import { checkRegionClaim } from '../plugins/wow-common/wow-forever-identity.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Logger = { log: (msg: string) => void };

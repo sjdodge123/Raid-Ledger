@@ -31,7 +31,7 @@ import {
 } from './characters-mapping.helpers';
 import * as importH from './characters-import.helpers';
 import * as crudH from './characters-crud.helpers';
-import * as foreverH from './characters-forever.helpers';
+import * as foreverH from '../plugins/wow-common/wow-forever-identity.helpers';
 import { defined } from '../common/defined.helpers';
 
 /**
@@ -119,7 +119,7 @@ export class CharactersService {
         this.logger,
       );
     } catch (error: unknown) {
-      crudH.rethrowForeverViolation(error, prepared.name, prepared.region);
+      foreverH.rethrowForeverViolation(error, prepared.name, prepared.region);
       if (crudH.isUniqueViolation(error, 'unique_user_game_character'))
         throw new ConflictException(
           `Character ${dto.name} already exists for this game/realm`,
@@ -147,7 +147,7 @@ export class CharactersService {
       .returning()
       .catch((error: unknown) => {
         const name = prepared.name ?? character.name;
-        crudH.rethrowForeverViolation(error, name, character.region);
+        foreverH.rethrowForeverViolation(error, name, character.region);
         throw error;
       });
     this.logger.log(`User ${userId} updated character ${characterId}`);
