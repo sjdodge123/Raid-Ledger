@@ -190,14 +190,9 @@ export class SignupsAllocationService {
       },
       this.logger,
     );
-    if (!rearrangedToRole)
-      await tentH.removeVictimAssignment(
-        p.tx,
-        p.victim,
-        p.role,
-        p.occupiedPositions,
-        this.logger,
-      );
+    const destination = rearrangedToRole
+      ? 'role'
+      : await tentH.evictVictim(p, this.logger);
     const pos = rearrangedToRole ? p.findPos(p.role) : p.victim.position;
     await allocH.insertAndConfirmSlot(
       p.tx,
@@ -211,12 +206,14 @@ export class SignupsAllocationService {
       `ROK-459: Auto-allocated confirmed signup ${p.newSignupId} to ${p.role} slot ${pos} (tentative displacement)`,
     );
     await this.benchPromotionService.cancelPromotion(p.eventId, p.role, pos);
+    // ROK-1729: lookups on this.db — the DM fires after the signup tx ends.
     this.fireDisplacedNotification({
-      tx: p.tx,
+      db: this.db,
       eventId: p.eventId,
       victimSignupId: p.victim.signupId,
       role: p.role,
       rearrangedToRole,
+      destination,
     });
     return true;
   }

@@ -32,6 +32,7 @@ function buildCtx(
     },
     allSignups: [],
     currentAssignments: [],
+    totalCapacity: null,
     ...overrides,
   };
 }
