@@ -94,6 +94,8 @@ export interface DisplaceTentativeParams {
   roleCapacity: Record<string, number>;
   occupiedPositions: Record<string, Set<number>>;
   findPos: (role: string) => number;
+  /** Non-bench roster at total capacity — the victim goes to bench (ROK-1729). */
+  rosterFull: boolean;
 }
 
 export type DisplaceAssignmentEntry = {
@@ -121,6 +123,7 @@ export interface ExecuteDisplacementParams {
   occupiedPositions: Record<string, Set<number>>;
   findPos: (role: string) => number;
   signupById: Map<number, { preferredRoles: string[] | null }>;
+  rosterFull: boolean;
 }
 
 export interface RearrangeVictimParams {
@@ -134,12 +137,17 @@ export interface RearrangeVictimParams {
   signupById: Map<number, { preferredRoles: string[] | null }>;
 }
 
+/** Where a displaced tentative player ended up (ROK-1729). */
+export type DisplacedDestination = 'role' | 'bench' | 'pool';
+
 export interface DisplacedNotificationParams {
-  tx: Tx;
+  /** Main db handle, not the signup tx — the DM fires after commit. */
+  db: Tx;
   eventId: number;
   victimSignupId: number;
   role: string;
   rearrangedToRole: string | undefined;
+  destination: DisplacedDestination;
 }
 
 export interface OccupantMovesParams {
