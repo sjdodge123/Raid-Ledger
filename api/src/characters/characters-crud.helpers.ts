@@ -5,7 +5,6 @@
 import {
   NotFoundException,
   ForbiddenException,
-  ConflictException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
@@ -17,7 +16,10 @@ import type {
   CreateCharacterDto,
   RefreshCharacterDto,
 } from '@raid-ledger/contract';
-import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
+import type {
+  CharacterIdentityProvider,
+  CharacterSyncAdapter,
+} from '../plugins/plugin-host/extension-points';
 import {
   fetchFullProfile,
   buildSyncUpdateFields,
@@ -28,11 +30,6 @@ import {
   demoteExistingMain,
 } from './characters-mapping.helpers';
 import { checkDuplicateClaim } from './characters-import.helpers';
-import {
-  FOREVER_IDENTITY_INDEX,
-  foreverLabel,
-  titleForeverName,
-} from './characters-forever.helpers';
 import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -70,10 +67,12 @@ export async function executeCreateTx(
   userId: number,
   dto: CreateCharacterDto,
   logger: Logger,
+  identity?: CharacterIdentityProvider,
 ): Promise<CharacterDto> {
   return db.transaction(async (tx) => {
     await checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm, {
       region: dto.region,
+      identity,
     });
     const { shouldBeMain, charCount } = await resolveMainStatus(
       tx,
@@ -88,11 +87,17 @@ export async function executeCreateTx(
       .values(buildCreateValues(userId, dto, shouldBeMain))
       .returning();
     const character = defined(inserted, 'created character row');
-    logger.log(
-      `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
-    );
+    logger.log(createdLogLine(userId, character, shouldBeMain));
     return mapCharacterToDto(character);
   });
+}
+
+function createdLogLine(
+  userId: number,
+  character: { id: string; name: string },
+  isMain: boolean,
+): string {
+  return `User ${userId} created character ${character.id} (${character.name})${isMain ? ' [main]' : ''}`;
 }
 
 /** After deletion, promote the lowest-order char to main if none exists. */
@@ -211,7 +216,7 @@ export async function syncAllCharacters(
       and(
         isNotNull(schema.characters.region),
         isNotNull(schema.characters.gameVariant),
-        // ROK-1721: realm-less (WoW: Forever) characters have no Armory path yet
+        // ROK-1721: realm-less characters have no Armory path yet
         isNotNull(schema.characters.realm),
       ),
     );
@@ -295,16 +300,4 @@ export function isUniqueViolation(
   const causeMsg =
     error.cause instanceof Error ? (error.cause.message ?? '') : '';
   return msg.includes(constraintName) || causeMsg.includes(constraintName);
-}
-
-/** Map a lost race on the Forever identity index (ROK-1721) to the claim 409. */
-export function rethrowForeverViolation(
-  error: unknown,
-  name: string,
-  region: string | null | undefined,
-): void {
-  if (region && isUniqueViolation(error, FOREVER_IDENTITY_INDEX))
-    throw new ConflictException(
-      `${foreverLabel(titleForeverName(name), region)} is already claimed by another player`,
-    );
 }

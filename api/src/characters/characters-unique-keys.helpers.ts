@@ -1,6 +1,9 @@
 import { Logger } from '@nestjs/common';
 import { sql, type SQL } from 'drizzle-orm';
 
+/** Core migration 0198's cross-player identity index (realm-less rulesets). */
+export const RULESET_IDENTITY_INDEX = 'idx_characters_ruleset_identity';
+
 /**
  * The characters table carries TWO unique keys that include game_id. Game
  * merge helpers re-point characters between game rows and must detect a
@@ -14,10 +17,10 @@ export function characterUniqueKeyJoin(l: string, r: string): string {
   const perUser = ['user_id', 'name', 'realm']
     .map((c) => `${l}.${c} IS NOT DISTINCT FROM ${r}.${c}`)
     .join(' AND ');
-  const forever =
+  const rulesetIdentity =
     `${l}.ruleset IS NOT NULL AND ${r}.ruleset IS NOT NULL` +
     ` AND ${l}.region = ${r}.region AND lower(${l}.name) = lower(${r}.name)`;
-  return `((${perUser}) OR (${forever}))`;
+  return `((${perUser}) OR (${rulesetIdentity}))`;
 }
 
 const logger = new Logger('CharacterUniqueKeys');
@@ -37,7 +40,7 @@ interface CrossOwnerRow {
 /**
  * A game merge pre-deletes each losing-game character that collides with a
  * winning-game one. On the per-user key both rows share an owner, but the
- * Forever key spans players — so the delete can drop a character that belongs
+ * ruleset-identity key spans players — so the delete can drop a character that belongs
  * to a DIFFERENT player than the winner's. Run before that delete: logs one
  * structured warning per such row (with ids) and returns how many there are.
  */

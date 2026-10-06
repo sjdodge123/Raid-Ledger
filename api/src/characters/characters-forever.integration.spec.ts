@@ -12,6 +12,7 @@ import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { CharactersService } from './characters.service';
 import { BlizzardService } from '../plugins/wow-common/blizzard.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 
@@ -53,6 +54,30 @@ async function memberToken(
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
   return { userId: user.id, token: res.body.access_token as string };
+}
+
+/** Upsert plugin rows and reload the registry's active cache, as an API restart does. */
+async function setPluginsActive(
+  testApp: TestApp,
+  rows: { slug: string; active: boolean }[],
+): Promise<void> {
+  const registry = testApp.app.get(PluginRegistryService);
+  for (const { slug, active } of rows) {
+    const manifest = registry.getManifest(slug);
+    await testApp.db
+      .insert(schema.plugins)
+      .values({
+        slug,
+        name: manifest?.name ?? slug,
+        version: manifest?.version ?? '0.0.0',
+        active,
+      })
+      .onConflictDoUpdate({
+        target: schema.plugins.slug,
+        set: { active, updatedAt: new Date() },
+      });
+  }
+  await registry.onModuleInit();
 }
 
 describe('WoW: Forever manual characters (integration)', () => {
@@ -214,6 +239,36 @@ describe('WoW: Forever manual characters (integration)', () => {
       region: 'us',
     });
     expect(noRuleset.status).toBe(400);
+  });
+
+  it('treats Forever as a plain game while the WoW plugin is off after a restart', async () => {
+    const registry = testApp.app.get(PluginRegistryService);
+    const wasActive = [...registry.getActiveSlugsSync()];
+    await setPluginsActive(testApp, [{ slug: 'blizzard', active: false }]);
+    try {
+      // The boot-time registration is still there; only the plugin is off.
+      expect(
+        registry.getAdapter('character-identity', FOREVER_SLUG),
+      ).toBeDefined();
+      const { token } = await memberToken(testApp, 'foreverplain');
+      const plain = await create(token, { name: 'Ana' });
+      expect(plain.status).toBe(201);
+      expect(plain.body).toMatchObject({ name: 'Ana', region: null });
+      const withIdentity = await create(token, {
+        name: 'Ana Forever',
+        region: 'us',
+        ruleset: 'pvp',
+      });
+      expect(withIdentity.status).toBe(400);
+      expect(withIdentity.body.message).toBe(
+        'Region and ruleset do not apply to this game',
+      );
+    } finally {
+      await setPluginsActive(
+        testApp,
+        wasActive.map((slug) => ({ slug, active: true })),
+      );
+    }
   });
 
   it('allows a ruleset edit and rejects a region edit', async () => {

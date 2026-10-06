@@ -7,11 +7,11 @@
  */
 import type { JSX } from 'react';
 import { WOW_FOREVER_RULESET_LABELS, WOW_FOREVER_SELECTABLE_RULESETS, type WowForeverRuleset, type WowRegion } from '@raid-ledger/contract';
-import { Field } from '../ui/field';
-import { Input } from '../ui/input';
-import { Select } from '../ui/select';
-import { RadioGroup, type RadioOption } from '../ui/radio-group';
-import type { ForeverIdentity, ForeverIdentityErrors } from './forever-identity';
+import { Field } from '../../../components/ui/field';
+import { Input } from '../../../components/ui/input';
+import { Select } from '../../../components/ui/select';
+import { RadioGroup, type RadioOption } from '../../../components/ui/radio-group';
+import type { ForeverIdentity, ForeverIdentityErrors } from '../lib/forever-identity';
 
 const REGIONS: readonly WowRegion[] = ['us', 'eu', 'kr', 'tw'];
 

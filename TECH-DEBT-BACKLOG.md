@@ -2351,6 +2351,9 @@ same day (#1278, #1279, #1280).
 
 - `low` `tools/test-bot/src/smoke/tests/channel-embeds.test.ts` "Event embed chrome: per-state colour + author line (ROK-1460)" — flaked on combined PR #1487 run 37248564446: `Expected author to match /STARTS IN \d+ MIN · \b1 of 10\b/, got "◌ STARTS IN 60 MIN · 0 of 10"` — embed read before the creator's auto-signup lands (same race class as ROK-1622). Branch had passed discord-smoke twice with the same deps; rerun once. Suggested: poll the embed until the roster count reflects the creator's signup (deterministic wait), not a single read.
 
+### 2026-10-05 — refactor/rok-1733-forever-identity-to-wow-plugin (surfaced during the ROK-1733 fleet UI verify)
+
+- **low** game search: typing the single word "Forever" in the Add Character game picker returns only "Forever Ago", not "World of Warcraft: Forever"; the full title finds it. Pre-existing search relevance (the branch does not touch search). Suggested: weight word-boundary/token matches inside titles (e.g. match any title token, not just a prefix), or add search aliases for seeded games.
 ### 2026-10-05 — feat/rok-1719-forever-instances (surfaced during the ROK-1719 fleet UI verify)
 
 - **low** event detail page, phone width — at max scroll the fixed bottom nav (~57px) covers the last ~9px of the page content (the page bottom padding is 48px), clipping the instance chip on a WoW: Forever event. Pre-existing: the branch does not touch the layout. Suggested: give the mobile page container bottom padding of at least the nav height (a token/var shared with the nav, plus safe-area inset) — check other pages that end in content near the nav.
