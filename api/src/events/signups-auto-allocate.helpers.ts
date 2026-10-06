@@ -18,6 +18,7 @@ import {
   bfsRearrangementChain,
 } from './signups-allocation.helpers';
 import * as tentH from './signups-tentative.helpers';
+import { computeSlotCapacity } from './signups-signup.helpers';
 import { defined } from '../common/defined.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
@@ -47,7 +48,19 @@ export async function buildAllocationContext(
     currentAssignments,
     filledPerRole: countFilledPerRole(currentAssignments),
     occupiedPositions: buildOccupiedPositions(currentAssignments),
+    totalCapacity: slotConfig ? computeSlotCapacity(slotConfig) : null,
   };
+}
+
+/** Non-bench assignments have reached the event's total capacity (ROK-1729).
+ *  On a full roster only tentative displacement may place a newcomer — a
+ *  direct or chain placement would over-fill it. */
+export function isRosterFull(ctx: AllocationContext): boolean {
+  if (ctx.totalCapacity === null) return false;
+  const filled = ctx.currentAssignments.filter(
+    (a) => a.role !== null && a.role !== 'bench',
+  ).length;
+  return filled >= ctx.totalCapacity;
 }
 
 export async function insertAndConfirmSlot(
@@ -200,6 +213,7 @@ export async function tryTentativeDisplacement(
       roleCapacity: ctx.roleCapacity,
       occupiedPositions: ctx.occupiedPositions,
       findPos: posFinder,
+      rosterFull: isRosterFull(ctx),
     },
     (p) => executeDisplacementFn(p),
   );
@@ -259,8 +273,10 @@ async function runAllocationStrategies(
   cancelPromotion: (e: number, r: string, p: number) => Promise<void>,
   executeDisplacementFn: (p: ExecuteDisplacementParams) => Promise<boolean>,
 ): Promise<boolean> {
+  const full = isRosterFull(ctx);
   if (
-    await tryDirectAllocation(
+    !full &&
+    (await tryDirectAllocation(
       tx,
       eventId,
       newSignupId,
@@ -269,11 +285,12 @@ async function runAllocationStrategies(
       ctx,
       logger,
       cancelPromotion,
-    )
+    ))
   )
     return true;
   if (
-    await tryChainRearrangement(
+    !full &&
+    (await tryChainRearrangement(
       tx,
       eventId,
       newSignupId,
@@ -281,7 +298,7 @@ async function runAllocationStrategies(
       ctx,
       logger,
       cancelPromotion,
-    )
+    ))
   )
     return true;
   return tryTentativeDisplacement(

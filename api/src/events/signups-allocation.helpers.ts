@@ -30,6 +30,8 @@ export interface AllocationContext {
   }>;
   filledPerRole: Record<string, number>;
   occupiedPositions: Record<string, Set<number>>;
+  /** Total non-bench capacity incl. flex; null = unbounded (ROK-1729). */
+  totalCapacity: number | null;
 }
 
 /** Shared result type for bench promotion methods. */

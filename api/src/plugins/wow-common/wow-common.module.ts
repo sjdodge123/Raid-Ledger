@@ -23,6 +23,9 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
+import { AddonImportController } from './addon-import/addon-import.controller';
+import { AddonImportService } from './addon-import/addon-import.service';
+import { AddonImportAuditService } from './addon-import/addon-import.audit';
 
 @Module({
   imports: [SettingsModule, CharactersModule],
@@ -31,6 +34,7 @@ import { WOW_COMMON_MANIFEST } from './manifest';
     DungeonQuestsController,
     BossEncountersController,
     QuestProgressController,
+    AddonImportController,
   ],
   providers: [
     BlizzardService,
@@ -45,6 +49,8 @@ import { WOW_COMMON_MANIFEST } from './manifest';
     BossEncounterSeeder,
     BossDataRefreshService,
     QuestProgressService,
+    AddonImportService,
+    AddonImportAuditService,
   ],
   exports: [
     BlizzardService,
