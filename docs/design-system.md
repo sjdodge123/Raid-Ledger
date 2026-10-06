@@ -900,6 +900,20 @@ archived-header pill. Reuse the component (or its `SIZE_CLS` entry) — never a 
 **DON'T** confuse this with the §4.3 *filter* chip (an `aria-pressed` toggle with an amber ON state): the
 touch chip is a secondary button on the surface, tokens only, identical grammar in both families.
 
+### 4.21 Status-chip matrix (admin diagnostics, ROK-1716)
+
+**DO** — for a grid of read-only HTTP/health statuses (rows = subject, columns = region/target, one small
+chip per check in a cell), follow `web/src/plugins/wow/components/forever-probe-matrix.tsx`: the table sits
+inside `ScrollCollapsible` (collapsed by default), in its own `max-w-full overflow-x-auto border border-edge
+rounded-xl` box so a phone never gets page overflow; header row `border-b border-edge bg-surface/50`, body
+`divide-y divide-edge` (the admin logs/backups table idiom). Chips are `rounded-full border text-xs font-mono`
+with a tone map on tokens only: success `bg-success/10 border-success/30 text-success`, warning and danger the
+same recipe, neutral/expected-refusal `bg-panel border-edge text-muted`. Put a one-line legend above the
+table saying what each chip in a cell means, and a `title` on every chip.
+
+**DON'T** use this for anything clickable: these chips are read-only. A tappable chip is §4.20. A filter
+toggle is §4.3.
+
 ---
 
 ## 5. Rendered reference
