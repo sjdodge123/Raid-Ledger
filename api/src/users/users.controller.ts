@@ -22,6 +22,8 @@ import type {
   RecentPlayersResponseDto,
   UserProfileDto,
   UserEventSignupsResponseDto,
+  EventResponseDto,
+  PublicEventResponseDto,
   UserActivityResponseDto,
   UserHeartedGamesResponseDto,
   SteamLibraryResponseDto,
@@ -30,6 +32,10 @@ import type {
 import { ActivityPeriodSchema } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import {
+  isMemberViewer,
+  projectEventForViewer,
+} from '../events/roster-public-projection.helpers';
+import {
   parsePagination,
   parsePlaytimeMin,
   parsePlayHistory,
@@ -37,7 +43,12 @@ import {
   buildPaginatedMeta,
 } from './users-controller.helpers';
 
-type RequestWithMaybeUser = { user?: { id: number; role?: string } };
+type RequestWithMaybeUser = {
+  user?: { id: number; role?: string; deactivatedAt?: Date | null };
+};
+type PublicUserEventSignupsDto = Omit<UserEventSignupsResponseDto, 'data'> & {
+  data: Array<EventResponseDto | PublicEventResponseDto>;
+};
 
 /** Controller for public user endpoints. */
 @Controller('users')
@@ -235,8 +246,14 @@ export class UsersController {
   async getUserEventSignups(
     @Param('id', ParseIntPipe) id: number,
     @Request() req?: RequestWithMaybeUser,
-  ): Promise<UserEventSignupsResponseDto> {
+  ): Promise<UserEventSignupsResponseDto | PublicUserEventSignupsDto> {
     await this.assertUserVisible(id, req);
-    return this.eventsService.findUpcomingByUser(id);
+    const res = await this.eventsService.findUpcomingByUser(id);
+    // ROK-1629: anonymous / deactivated viewers get the public creator shape.
+    if (isMemberViewer(req?.user)) return res;
+    return {
+      ...res,
+      data: res.data.map((e) => projectEventForViewer(e, false)),
+    };
   }
 }

@@ -32,6 +32,21 @@ describe('filterByVariant — wow_forever (ROK-1563)', () => {
     expect(result.raids).toHaveLength(1);
   });
 
+  it('keeps a journal Forever tier for wow_forever only (ROK-1719)', () => {
+    const forever = { id: 3, name: 'Hall of Thanes', expansion: 'Forever' };
+    const withForever = [...dungeons, forever];
+    expect(
+      filterByVariant(withForever, raids, 'wow_forever').dungeons.map(
+        (d) => d.name,
+      ),
+    ).toEqual(['Deadmines', 'Hall of Thanes']);
+    expect(
+      filterByVariant(withForever, raids, 'classic_era').dungeons.map(
+        (d) => d.name,
+      ),
+    ).toEqual(['Deadmines']);
+  });
+
   it('leaves the existing variants unchanged (AC4)', () => {
     expect(filterByVariant(dungeons, raids, 'classic_era').raids).toHaveLength(
       1,
