@@ -1,6 +1,7 @@
 import { z } from 'zod';
 // Via the barrel, never by file path (ROK-1733 moves these between files).
-import { WowForeverRulesetSchema, WowRegionSchema } from './characters.schema.js';
+import { WowForeverRulesetSchema } from './blizzard.schema.js';
+import { WowRegionSchema } from './characters.schema.js';
 
 // ============================================================
 // WoW: Forever addon import — request / result / errors (ROK-1724)

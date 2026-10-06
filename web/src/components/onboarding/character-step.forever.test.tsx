@@ -8,6 +8,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 import { CharacterStep } from './character-step';
 import { useCreateCharacter } from '../../hooks/use-character-mutations';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
 
 vi.mock('../../hooks/use-character-mutations', () => ({
     useCreateCharacter: vi.fn(), useDeleteCharacter: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
@@ -17,6 +18,7 @@ vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
 
 const mutate = vi.fn();
 beforeEach(() => {
+    activateWowPlugin();
     mutate.mockReset();
     vi.mocked(useCreateCharacter).mockReturnValue({ mutate, isPending: false } as unknown as ReturnType<typeof useCreateCharacter>);
 });
