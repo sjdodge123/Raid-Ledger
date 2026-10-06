@@ -11,6 +11,7 @@ import type {
   WowForeverConfigDto,
   WowForeverConfigResponseDto,
 } from '@raid-ledger/contract';
+import { bestEffortInit } from '../../common/lifecycle.util';
 import { SettingsService } from '../../settings/settings.service';
 import { BlizzardService } from './blizzard.service';
 import {
@@ -42,13 +43,16 @@ export class ForeverConfigService implements OnModuleInit {
 
   /** Load the stored prefix into the resolver; a failure keeps the default. */
   async onModuleInit(): Promise<void> {
-    try {
-      const stored = await this.settings.get(WOW_FOREVER_NAMESPACE_PREFIX_KEY);
-      setForeverNamespacePrefix(stored);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.warn(`Forever prefix not loaded, using default: ${msg}`);
-    }
+    await bestEffortInit(
+      'ForeverConfigService: load prefix',
+      this.logger,
+      async () => {
+        const stored = await this.settings.get(
+          WOW_FOREVER_NAMESPACE_PREFIX_KEY,
+        );
+        setForeverNamespacePrefix(stored);
+      },
+    );
   }
 
   /** Current config as the admin form shows it. */
