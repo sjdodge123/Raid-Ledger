@@ -13,8 +13,9 @@ import type {
     UpdateQuestProgressBody,
     BossEncounterDto,
     BossLootDto,
+    BlizzardCapabilitiesDto,
 } from '@raid-ledger/contract';
-import { CharacterSchema } from '@raid-ledger/contract';
+import { CharacterSchema, BlizzardCapabilitiesSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 
 /**
@@ -158,4 +159,12 @@ export async function fetchLootForBoss(
 ): Promise<BossLootDto[]> {
     const params = new URLSearchParams({ variant });
     return fetchApi(`/plugins/wow-classic/bosses/${bossId}/loot?${params}`);
+}
+
+/**
+ * Runtime Blizzard capabilities — whether the Armory can import WoW Forever
+ * characters (ROK-1717). Public, plugin-gated route.
+ */
+export async function fetchBlizzardCapabilities(): Promise<BlizzardCapabilitiesDto> {
+    return fetchApi('/blizzard/capabilities', {}, BlizzardCapabilitiesSchema);
 }

@@ -4,7 +4,8 @@ import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
-import { isArmoryImportSupported, ARMORY_CLASSIC_VARIANTS, defaultArmoryClassicVariant } from '../lib/armory-import';
+import { isArmoryImportSupported, armoryClassicVariants, defaultArmoryClassicVariant, type ArmoryCapabilities } from '../lib/armory-import';
+import { useArmoryCapabilities } from '../hooks/use-armory-capabilities';
 import { ArmoryUnavailableNote, ARMORY_TAB_CLS, ARMORY_TAB_TRACK_CLS } from '../components/armory-unavailable-note';
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
@@ -26,13 +27,13 @@ function isClassicSlug(slug: string): boolean {
     return slug === 'world-of-warcraft-classic' || slug in FIXED_CLASSIC_VARIANTS;
 }
 
-function useImportFormVariant(gameSlug: string, eventId: number | undefined, existingCharacters: CharacterDto[]) {
+function useImportFormVariant(gameSlug: string, eventId: number | undefined, existingCharacters: CharacterDto[], caps: ArmoryCapabilities) {
     const isClassic = isClassicSlug(gameSlug);
     const fixedVariant = FIXED_CLASSIC_VARIANTS[gameSlug] ?? null;
     const { data: variantContext } = useEventVariantContext(eventId, isClassic && !fixedVariant && !!eventId);
     const [userVariant, setUserVariant] = useState<string | null>(null);
     const wowVariant = !isClassic ? 'retail'
-        : fixedVariant ?? userVariant ?? defaultArmoryClassicVariant(variantContext?.gameVariant);
+        : fixedVariant ?? userVariant ?? defaultArmoryClassicVariant(variantContext?.gameVariant, caps);
     const variantIsMain = useMemo(() => !existingCharacters.some((c) => c.isMain && c.gameVariant === wowVariant), [existingCharacters, wowVariant]);
     return { isClassic, showVariantSelector: isClassic && !fixedVariant, wowVariant, setUserVariant, variantIsMain };
 }
@@ -59,12 +60,14 @@ function useArmoryTabSync(blizzardConfigured: boolean, armoryOk: boolean, active
     useEffect(() => { if (!armoryOk && activeTab === 'import') onTabChange('manual'); }, [armoryOk, activeTab, onTabChange]);
 }
 
-function VariantSelector({ wowVariant, gameSlug, onVariantChange }: { wowVariant: string; gameSlug: string; onVariantChange: (v: string) => void }) {
+function VariantSelector({ wowVariant, gameSlug, caps, onVariantChange }: {
+    wowVariant: string; gameSlug: string; caps: ArmoryCapabilities; onVariantChange: (v: string) => void;
+}) {
     return (
         <Field label="Game version">
             <Select value={wowVariant} onChange={(e) => onVariantChange(e.target.value)}>
                 {gameSlug === 'world-of-warcraft-classic' ? (
-                    ARMORY_CLASSIC_VARIANTS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)
+                    armoryClassicVariants(caps).map((v) => <option key={v.value} value={v.value}>{v.label}</option>)
                 ) : <option value="retail">Retail (Live)</option>}
             </Select>
         </Field>
@@ -84,9 +87,10 @@ export function CharacterCreateImportForm({
 }: CharacterCreateImportFormProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
-    const { showVariantSelector, wowVariant, setUserVariant, variantIsMain } = useImportFormVariant(gameSlug, eventId, existingCharacters);
+    const { data: caps } = useArmoryCapabilities();
+    const { showVariantSelector, wowVariant, setUserVariant, variantIsMain } = useImportFormVariant(gameSlug, eventId, existingCharacters, caps);
 
-    const armoryOk = isArmoryImportSupported(wowVariant);
+    const armoryOk = isArmoryImportSupported(wowVariant, caps);
     const noteId = useId();
     useArmoryTabSync(blizzardConfigured, armoryOk, activeTab, onTabChange);
     if (!isWowSlug(gameSlug)) return null;
@@ -96,7 +100,7 @@ export function CharacterCreateImportForm({
         <>
             <TabToggle activeTab={activeTab} onTabChange={onTabChange} noteId={armoryOk ? undefined : noteId} />
             {!armoryOk && <ArmoryUnavailableNote id={noteId} />}
-            {showImport && blizzardConfigured && showVariantSelector && <VariantSelector wowVariant={wowVariant} gameSlug={gameSlug} onVariantChange={setUserVariant} />}
+            {showImport && blizzardConfigured && showVariantSelector && <VariantSelector wowVariant={wowVariant} gameSlug={gameSlug} caps={caps} onVariantChange={setUserVariant} />}
             {showImport && (blizzardConfigured
                 ? <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} isMain={variantIsMain} onRegisterValidator={onRegisterValidator} />
                 : <BlizzardNotConfigured />)}
