@@ -65,3 +65,13 @@ describe('AddonImportPreview', () => {
         expect(screen.getByTestId('addon-import-error')).toHaveTextContent('Too many imports');
     });
 });
+
+describe('AddonImportPreviewActions while importing (Codex P2)', () => {
+    it('disables Back so a late apply response cannot land on a step the user left', () => {
+        const confirm: AddonImportConfirm = {};
+        renderWithProviders(
+            <AddonImportPreviewActions result={charResult()} confirm={confirm} onBack={vi.fn()} onImport={vi.fn()} importing />,
+        );
+        expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+    });
+});

@@ -112,7 +112,7 @@ export function AddonImportPreviewActions(props: AddonImportPreviewActionsProps)
     const allowed = canApplyAddonImport(props.result, props.confirm);
     return (
         <>
-            <Button variant="ghost" onClick={props.onBack}>Back</Button>
+            <Button variant="ghost" disabled={props.importing} onClick={props.onBack}>Back</Button>
             <Button disabled={!allowed} loading={props.importing} loadingLabel="Importing…" onClick={() => { if (allowed) props.onImport(); }}>
                 Import
             </Button>
