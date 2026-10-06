@@ -6,7 +6,7 @@
  * `global.fetch` — no real network calls.
  */
 import * as bcrypt from 'bcrypt';
-import * as Sentry from '@sentry/nestjs';
+import type * as SentryNest from '@sentry/nestjs';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -17,10 +17,15 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 
-jest.mock('@sentry/nestjs', () => ({
-  ...jest.requireActual<object>('@sentry/nestjs'),
-  captureMessage: jest.fn(),
-}));
+/**
+ * Spy on the real Sentry exports rather than `jest.mock` them: the integration
+ * app is a per-worker singleton, so the probe service may already be loaded with
+ * the real `@sentry/nestjs` by an earlier spec file, and a `jest.mock` factory
+ * here never reaches it. The service reads `captureMessage` through a live
+ * binding at call time, so a spy on the exports object does (as csp-report).
+ */
+const sentryExports = jest.requireActual<typeof SentryNest>('@sentry/nestjs');
+let captureMessage: jest.SpyInstance;
 
 const ROUTE = '/admin/plugins/blizzard/forever-probe';
 const SKYBORNE_URL =
@@ -51,8 +56,8 @@ function stubBlizzard(): void {
 
 /** Sentry "found" alerts raised so far by the probe. */
 function foundAlerts(): unknown[][] {
-  return (Sentry.captureMessage as jest.Mock).mock.calls.filter(
-    (c: unknown[]) => String(c[0]).startsWith('Forever namespace found'),
+  return captureMessage.mock.calls.filter((c: unknown[]) =>
+    String(c[0]).startsWith('Forever namespace found'),
   );
 }
 
@@ -91,11 +96,14 @@ beforeEach(async () => {
     .get(SettingsService)
     .setBlizzardConfig({ clientId: 'cid', clientSecret: 'secret' });
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
-  (Sentry.captureMessage as jest.Mock).mockClear();
+  captureMessage = jest
+    .spyOn(sentryExports, 'captureMessage')
+    .mockImplementation(() => '');
 });
 
 afterEach(async () => {
   fetchSpy.mockRestore();
+  captureMessage.mockRestore();
   testApp.seed = await truncateAllTables(testApp.db);
   testApp.app.get(SettingsService).invalidateCache(true);
 });
