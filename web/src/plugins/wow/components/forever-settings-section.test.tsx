@@ -19,6 +19,7 @@ beforeEach(() => {
     puts = [];
     server.use(
         http.get(URL, () => HttpResponse.json(DEFAULT_CONFIG)),
+        http.get(`${URL}-probe`, () => HttpResponse.json({ result: null, extraCandidates: [], characterPath: null })),
         http.put(URL, async ({ request }) => {
             const body = (await request.json()) as Record<string, unknown>;
             puts.push(body);
@@ -63,5 +64,12 @@ describe('ForeverSettingsSection (ROK-1717)', () => {
         await user.click(toggle);
         await waitFor(() => expect(puts).toEqual([{ namespacePrefix: 'classicforever', armoryImportEnabled: true }]));
         await waitFor(() => expect(queryClient.getQueryState(['blizzard', 'capabilities'])?.isInvalidated).toBe(true));
+    });
+});
+
+describe('ForeverSettingsSection probe panel (ROK-1716)', () => {
+    it('renders the namespace probe panel inside the section', async () => {
+        renderWithProviders(<ForeverSettingsSection />);
+        expect(await screen.findByRole('heading', { name: /namespace probe/i })).toBeInTheDocument();
     });
 });
