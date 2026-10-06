@@ -36,8 +36,9 @@ One export string = one **page token**. Header grammar
 What the decoder **tolerates**:
 
 - leading/trailing whitespace around the whole paste (trimmed);
-- several page tokens separated by any whitespace (newline, space), in **any
-  order**.
+- several tokens separated by any whitespace (newline, space), in **any
+  order** — the pages of one guild export, and/or one `char`, one `guild`
+  export and one `raid` string together (a mixed paste, §5.1).
 
 What it does **not** tolerate (the addon must normalise before emitting):
 
@@ -112,12 +113,60 @@ ruling 2026-10-04, Q4); fixture `invalid/unknown-key-officer-note` pins it.
 - LedgerLink emits 250 members per page (2000 / 250 = 8). The server does not
   enforce a per-page count below the 2000 schema cap.
 
+### 5.1 Mixed paste — "Export all" (additive, ROK-1737)
+
+One paste may carry the `char`, `guild` and `raid` strings together, so
+LedgerLink can offer a single "Export all" box. The token grammar and every
+payload are unchanged — this only widens what one paste may contain.
+
+- Every token's header is parsed first and the tokens are grouped by
+  section; any order, any whitespace between them.
+- `char`: at most **one** token. `raid`: at most **one** token. `guild`:
+  exactly one export, under the §5 page-set rules unchanged (one unpaged
+  token, or every page `1..m` once). A second char/raid string or a second
+  guild export → `PAGES_INCOMPLETE` (fixture `invalid/mixed-two-char`); a
+  guild page missing → `PAGES_INCOMPLETE` (`invalid/mixed-guild-incomplete`).
+- At most `ADDON_IMPORT_MAX_TOKENS` (10 = 8 guild pages + 1 char + 1 raid)
+  tokens → else `PAGES_INCOMPLETE` (`invalid/mixed-11-tokens`).
+- **Same exporter:** every section must carry the same `who.guid`, the
+  same `client.region` and the same exporter name (the realm-less name the
+  binding resolves from `who`, compared case-insensitively) → else
+  `INVALID_PAYLOAD` "These strings come from different characters."
+  (`invalid/mixed-different-exporters`, `invalid/mixed-different-region`);
+  and the sections' `exportedAt` may differ by at most
+  `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS` (600 s) → else
+  `INVALID_PAYLOAD`. "Export all"
+  stamps every section within a second; 10 minutes still admits sections
+  exported one by one in the same sitting, and rejects a stale string from an
+  earlier session pasted beside fresh ones.
+- **All-or-nothing:** each section is decoded and validated exactly as if it
+  were pasted alone; if any section fails, the whole paste is rejected and
+  the error `message` is prefixed with the section (`Raid export: …`).
+  Nothing is partially imported. The character binding (game, region,
+  name, ruleset, GUID) runs against **every** section, not just the first;
+  any section's binding reject rejects the whole paste.
+- **One authoritative section for the character row:** the class/level
+  update, the ruleset change (`confirm.updateRuleset`) and the GUID pin
+  follow ONE section — the `char` section when present (it is the
+  character snapshot), otherwise the section with the newest `exportedAt`
+  (ties → canonical order). Binding warnings come from that section too;
+  rejects still come from every section.
+- Each section keeps its own identity: its sha256 (re-pasting one section
+  alone is recognised as the same import) and page count.
+- A mixed paste changes **no per-section rule** — e.g. `client.region` is
+  validated per section exactly as in §2 (the beta client's region value is
+  ROK-1736's concern, not this one).
+- The addon should still emit single-section strings for single-section
+  exports; mixing is optional, never required.
+
 ## 6. Limits (exported constants)
 
 | Constant | Value | Applies to | Over it |
 |---|---|---|---|
 | `ADDON_IMPORT_MAX_BYTES` | 262 144 | whole trimmed paste (all pages + separators), UTF-8 bytes | `TOO_LARGE` (HTTP 413) |
-| `ADDON_IMPORT_MAX_PAGES` | 8 | whitespace-separated tokens | `PAGES_INCOMPLETE` |
+| `ADDON_IMPORT_MAX_PAGES` | 8 | pages of **one** guild export (`m ≤ 8`) | `BAD_HEADER` (`m` > 8) / `PAGES_INCOMPLETE` |
+| `ADDON_IMPORT_MAX_TOKENS` | 10 | whitespace-separated tokens in the whole paste (8 guild pages + char + raid) | `PAGES_INCOMPLETE` |
+| `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS` | 600 | `exportedAt` spread across the sections of a mixed paste | `INVALID_PAYLOAD` |
 | `ADDON_IMPORT_MAX_DECODED_BYTES` | 1 048 576 | inflated JSON, **per page** | `DECODED_TOO_LARGE` |
 | guild `members` | 2000 | per page and merged | `INVALID_PAYLOAD` |
 | structural (server-internal, `addon-import.limits.ts`) | depth ≤ 12, arrays ≤ 2000, any string or key ≤ 2048 UTF-8 bytes | decoded JSON | `INVALID_PAYLOAD` |
@@ -134,18 +183,29 @@ Body: `{ code, message }` — `message` never echoes the paste. HTTP 413 for
 | `UNSUPPORTED_VERSION` | `!RL<n>!` is not a version the server accepts (message says which side to update). |
 | `CUT_OFF` | Base64 length not a multiple of 4, zlib stream invalid/truncated, or inflated bytes aren't JSON. |
 | `DECODED_TOO_LARGE` | A page inflates past 1 MiB. |
-| `INVALID_PAYLOAD` | JSON violates the schema (unknown key, wrong type, out of range, header/section mismatch, duplicate member, structural limit). Message names the field **path** only. |
-| `PAGES_INCOMPLETE` | > 8 tokens, a page missing/duplicated, mixed `m`, pages from different exports, or an unpaged string pasted with another. |
+| `INVALID_PAYLOAD` | JSON violates the schema (unknown key, wrong type, out of range, header/section mismatch, duplicate member, structural limit), or the sections of a mixed paste come from different characters / exports. Message names the field **path** only (prefixed with the section in a mixed paste). |
+| `PAGES_INCOMPLETE` | > 10 tokens, a guild page missing/duplicated, mixed `m`, pages from different exports, a second char/raid string or a second guild export in one paste. |
 | `WRONG_GAME` · `REGION_MISMATCH` · `NAME_MISMATCH` · `NOT_IN_GUILD` · `GUID_CONFIRM_REQUIRED` · `RATE_LIMITED` | Apply-time checks against the Raid Ledger character/account — the string itself is well-formed. Not addon-format bugs. |
 
 ## 8. Fixtures
 
 `fixtures/<name>.txt` is the paste exactly as a user would paste it;
-`fixtures/<name>.json` is `{ pages, payload }` **as the server decodes it** —
+`fixtures/<name>.json` is the paste **as the server decodes it**, in one of
+two shapes — tell them apart by the presence of `sections`:
+
+| Paste | `.json` shape |
+|---|---|
+| one section (`char-*`, `guild-*`, `raid`) | `{ "pages": <n>, "payload": <decoded payload> }` |
+| mixed (`mixed-*`, §5.1) | `{ "sections": [ { "section": "char"\|"guild"\|"raid", "pages": <n>, "payload": <decoded payload> }, … ] }` — sections in canonical order **char → guild → raid**, whatever the paste order; absent sections are omitted |
+| invalid (`invalid/*`) | `{ "code": <AddonImportErrorCode> }` |
+
+Each decoded payload is
 display strings have WoW UI escapes (`|cAARRGGBB…|r`, `|H…|h`, …) stripped,
 and char gear `link` is replaced by the parsed `itemId` + `bonusIds`. So a
 `.json` is the decoded view, not the raw addon emit. `fixtures/invalid/<name>.txt`
-must fail with the `code` in its `.json`. All data is synthetic (fixture
+must fail with the `code` in its `.json`. The generator and the conformance
+spec share one shape function
+(`api/src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view.ts`). All data is synthetic (fixture
 builder) — no real players.
 
 Regenerate (Raid Ledger side only):

@@ -4,7 +4,7 @@
  * so parallel requests can't all pass a count taken before any is recorded.
  * The real race is proven in `addon-import.integration.spec.ts`.
  */
-import { sql } from 'drizzle-orm';
+import { SQL, sql } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
@@ -83,9 +83,12 @@ describe('reserveAttempt', () => {
       'count',
       'insert',
     ]);
+    // ROK-1737: stamped with clock_timestamp() under the lock, so each
+    // reservation's instant is unique (mixed-paste rows copy it).
     expect(values).toHaveBeenCalledWith({
       ...ROW,
       result: ADDON_IMPORT_PENDING,
+      createdAt: expect.any(SQL),
     });
   });
 

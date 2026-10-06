@@ -14,24 +14,28 @@ import {
   ADDON_IMPORT_PENDING,
   AddonImportAuditService,
 } from './addon-import.audit';
-import {
-  bindToCharacter,
-  type AddonBindingCharacter,
-  type AddonBindingResult,
+import type {
+  AddonBindingCharacter,
+  AddonBindingResult,
 } from './addon-import.binding';
+import { bindEverySection } from './addon-import.binding-paste';
 import { applyBinding } from './addon-import-binding.apply';
 import {
-  decodeImportString,
-  type DecodedAddonImport,
+  decodeImportPaste,
+  type DecodedAddonPaste,
 } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import {
-  buildResult,
   parseImportRequest,
   rawFacts,
-  runSection,
   type AttemptFacts,
 } from './addon-import.service.helpers';
+import {
+  buildPasteResult,
+  pasteSections,
+  runPaste,
+  shouldApplyBinding,
+} from './addon-import.paste-run';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -62,15 +66,17 @@ export class AddonImportService {
     await this.characters.findOne(userId, characterId);
     const facts = rawFacts(body);
     let result = 'ERROR';
+    let perSection: string[] = [];
     try {
       const res = await this.attempt(userId, characterId, body, facts);
       result = res.status;
+      perSection = (res.sections ?? []).map((s) => s.status);
       return res;
     } catch (err) {
       if (err instanceof AddonImportError) result = err.code;
       throw err;
     } finally {
-      await this.finish(userId, characterId, facts, result);
+      await this.finish(userId, characterId, facts, result, perSection);
     }
   }
 
@@ -88,24 +94,26 @@ export class AddonImportService {
       auditRow(userId, characterId, facts, ADDON_IMPORT_PENDING),
     );
     const request = parseImportRequest(body, facts);
-    const decoded = decodeImportString(request.importString);
-    facts.section = decoded.payload.section;
-    facts.sha256 = decoded.sha256;
+    const paste = decodeImportPaste(request.importString);
+    recordPasteFacts(facts, paste);
     const character = await this.loadCharacter(characterId);
-    const binding = bindToCharacter(decoded.payload, character.binding, {
-      dryRun: request.dryRun,
-      confirm: request.confirm,
-    });
+    // Codex P2: bind EVERY section (the decoder also requires one exporter);
+    // any section's reject rejects the whole paste before anything runs.
+    const binding = bindEverySection(
+      pasteSections(paste).map((s) => s.payload),
+      character.binding,
+      { dryRun: request.dryRun, confirm: request.confirm },
+    );
     const [firstError] = binding.errors;
     if (firstError) throw firstError;
-    return this.run(userId, character, decoded, binding, request);
+    return this.run(userId, character, paste, binding, request);
   }
 
-  /** Preview/apply + the binding's character-row writes, in one tx. */
+  /** Preview/apply every section + the binding's writes, in ONE tx. */
   private run(
     userId: number,
     character: LoadedCharacter,
-    decoded: DecodedAddonImport,
+    paste: DecodedAddonPaste,
     binding: AddonBindingResult,
     request: AddonImportRequestDto,
   ): Promise<AddonImportResultDto> {
@@ -116,14 +124,18 @@ export class AddonImportService {
         characterId: character.id,
         gameId: character.gameId,
         region: character.binding.region as WowRegion,
-        sha256: decoded.sha256,
       };
-      const outcome = await runSection(ctx, decoded, request.dryRun);
-      // Lead ruling: a stale export writes NOTHING — binding updates too.
-      if (!request.dryRun && outcome.status !== 'stale') {
-        await applyBinding(ctx, binding);
+      const runs = await runPaste(ctx, paste, request.dryRun);
+      // Lead ruling: a stale export writes NOTHING — binding updates too
+      // (a mixed paste skips them only when EVERY section is stale).
+      if (!request.dryRun && shouldApplyBinding(runs)) {
+        const [head] = runs;
+        await applyBinding(
+          { ...ctx, sha256: head?.decoded.sha256 ?? '' },
+          binding,
+        );
       }
-      return buildResult(decoded, binding, outcome);
+      return buildPasteResult(runs, binding);
     });
   }
 
@@ -157,14 +169,43 @@ export class AddonImportService {
     characterId: string,
     facts: AttemptFacts,
     result: string,
+    perSection: string[],
   ): Promise<void> {
+    const section = facts.sections.map((s) => s.section).join('+');
     this.logger.log(
-      `addon-import userId=${userId} section=${facts.section ?? '-'} sha256=${facts.sha256 ?? '-'} size=${facts.sizeBytes} dryRun=${facts.dryRun} result=${result}`,
+      `addon-import userId=${userId} section=${section || (facts.section ?? '-')} sha256=${facts.sha256 ?? '-'} size=${facts.sizeBytes} dryRun=${facts.dryRun} result=${result}`,
     );
+    if (facts.sections.length > 1) {
+      // ROK-1737: one row per section; the paste still holds ONE reservation.
+      const rows = facts.sections.map((s, i) => ({
+        ...auditRow(userId, characterId, facts, perSection[i] ?? result),
+        section: s.section,
+        payloadSha256: s.sha256,
+        sizeBytes: s.sizeBytes,
+      }));
+      await this.audit.recordSections(rows, facts.auditId);
+      return;
+    }
     await this.audit.recordAttempt(
       auditRow(userId, characterId, facts, result),
       facts.auditId,
     );
+  }
+}
+
+/** Audit facts from a decoded paste. */
+function recordPasteFacts(facts: AttemptFacts, paste: DecodedAddonPaste): void {
+  const sections = pasteSections(paste);
+  const [first] = sections;
+  if (!first) throw new AddonImportError('BAD_HEADER');
+  facts.section = first.payload.section;
+  facts.sha256 = first.sha256;
+  if (sections.length > 1) {
+    facts.sections = sections.map((s) => ({
+      section: s.payload.section,
+      sha256: s.sha256,
+      sizeBytes: s.inputBytes,
+    }));
   }
 }
 

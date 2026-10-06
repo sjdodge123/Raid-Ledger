@@ -66,7 +66,14 @@ export class AddonImportAuditService {
       }
       const [reserved] = await tx
         .insert(addonImportAudit)
-        .values({ ...row, result: ADDON_IMPORT_PENDING })
+        // clock_timestamp() under the lock: every reservation's instant is
+        // unique, so a mixed paste's extra section rows (which copy it)
+        // count once — see `countRecent`.
+        .values({
+          ...row,
+          result: ADDON_IMPORT_PENDING,
+          createdAt: sql`clock_timestamp()`,
+        })
         .returning({ id: addonImportAudit.id });
       if (!reserved) throw new Error('addon-import audit reserve failed');
       return reserved.id;
@@ -103,9 +110,56 @@ export class AddonImportAuditService {
       );
     }
   }
+
+  /**
+   * ROK-1737 — a mixed paste: one row per section. The first finalises the
+   * reserved row; the rest copy its `created_at`, so the paste still counts
+   * as ONE attempt against the limit. Best effort, like `recordAttempt`.
+   */
+  async recordSections(
+    rows: AddonImportAuditInsert[],
+    reservedId: number | null,
+  ): Promise<void> {
+    const [first, ...rest] = rows;
+    if (!first) return;
+    if (reservedId == null) {
+      for (const row of rows) await this.recordAttempt(row, null);
+      return;
+    }
+    try {
+      await this.db
+        .update(addonImportAudit)
+        .set({ ...outcomeOf(first), sizeBytes: first.sizeBytes })
+        .where(eq(addonImportAudit.id, reservedId));
+      if (rest.length === 0) return;
+      // Copied in SQL — a JS Date would drop the microseconds.
+      const reservedAt = sql`(SELECT created_at FROM addon_import_audit WHERE id = ${reservedId})`;
+      await this.db
+        .insert(addonImportAudit)
+        .values(rest.map((r) => ({ ...r, createdAt: reservedAt })));
+    } catch (err) {
+      this.logger.warn(
+        `addon-import audit write failed userId=${first.userId} sections=${rows.length}: ${String(err)}`,
+      );
+    }
+  }
 }
 
-/** Attempts of this kind in the window, reserved-but-unfinished included. */
+function outcomeOf(row: AddonImportAuditInsert): AddonImportAuditOutcome {
+  return {
+    section: row.section,
+    payloadSha256: row.payloadSha256,
+    result: row.result,
+  };
+}
+
+/**
+ * Attempts (pastes) of this kind in the window, reserved-but-unfinished
+ * included. ROK-1737: a mixed paste writes one row per section, the extras
+ * copying its reservation's instant — a row is such an extra when an
+ * EARLIER row of the same user + kind has the same `created_at` and another
+ * non-null section, so the paste counts once.
+ */
 async function countRecent(
   tx: Db,
   userId: number,
@@ -121,7 +175,18 @@ async function countRecent(
         eq(addonImportAudit.dryRun, dryRun),
         gte(addonImportAudit.createdAt, since),
         ne(addonImportAudit.result, 'RATE_LIMITED'),
+        notExtraSectionRow,
       ),
     );
   return Number(row?.n ?? 0);
 }
+
+/** Excludes a mixed paste's 2nd/3rd section rows (see `countRecent`). */
+const notExtraSectionRow = sql`NOT (${addonImportAudit.section} IS NOT NULL AND EXISTS (
+  SELECT 1 FROM addon_import_audit e
+  WHERE e.user_id = ${addonImportAudit.userId}
+    AND e.dry_run = ${addonImportAudit.dryRun}
+    AND e.created_at = ${addonImportAudit.createdAt}
+    AND e.id < ${addonImportAudit.id}
+    AND e.section IS NOT NULL
+    AND e.section <> ${addonImportAudit.section}))`;

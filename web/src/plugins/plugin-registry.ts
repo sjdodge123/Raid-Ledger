@@ -5,6 +5,8 @@ import type { CharacterIdentityProvider } from './character-identity';
 export type PluginSlotName =
     | 'character-detail:sections'
     | 'character-detail:header-badges'
+    /** Owner-only actions in the character page header (ROK-1724). */
+    | 'character-detail:owner-actions'
     | 'character-create:import-form'
     | 'character-create:inline-import'
     | 'event-create:content-browser'
