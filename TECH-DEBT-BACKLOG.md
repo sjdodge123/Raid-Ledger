@@ -2357,3 +2357,8 @@ same day (#1278, #1279, #1280).
 ### 2026-10-05 — feat/rok-1719-forever-instances (surfaced during the ROK-1719 fleet UI verify)
 
 - **low** event detail page, phone width — at max scroll the fixed bottom nav (~57px) covers the last ~9px of the page content (the page bottom padding is 48px), clipping the instance chip on a WoW: Forever event. Pre-existing: the branch does not touch the layout. Suggested: give the mobile page container bottom padding of at least the nav height (a token/var shared with the nav, plus safe-area inset) — check other pages that end in content near the nav.
+
+### 2026-10-06 — feat/rok-1717-forever-namespace-runtime (surfaced during ROK-1717 build)
+
+- **nit** — `api/src/plugins/wow-common/forever.settings.ts`: plugin-owned setting keys must be cast `as SettingKey` because `SettingKey` (`api/src/drizzle/schema/app-settings.ts`) is a closed union of core keys. Precedent: `api/src/ai/llm-provider-registry.ts`. Not a failure, a typing gap. Suggested: add a generic `PluginSettingKey` (template-literal or branded string) accepted by `SettingsService.get/set`, and drop the casts.
+- **low** — `web/src/plugins/wow/components/talent-display.tsx:171`, `web/src/plugins/wow/components/character-detail-sections.tsx:109`: the Forever "use the addon" hints still read the static `wow-variant-config.ts` `armoryImport === false`, not the runtime capability ROK-1717 added. Once an admin turns Forever Armory on, the hints keep showing. Suggested: read `useArmoryCapabilities()` there too, as part of ROK-1722.
