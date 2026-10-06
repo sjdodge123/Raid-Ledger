@@ -14,8 +14,10 @@ import type {
     BossEncounterDto,
     BossLootDto,
     BlizzardCapabilitiesDto,
+    WowForeverConfigDto,
+    WowForeverConfigResponseDto,
 } from '@raid-ledger/contract';
-import { CharacterSchema, BlizzardCapabilitiesSchema } from '@raid-ledger/contract';
+import { CharacterSchema, BlizzardCapabilitiesSchema, WowForeverConfigResponseSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 
 /**
@@ -167,4 +169,14 @@ export async function fetchLootForBoss(
  */
 export async function fetchBlizzardCapabilities(): Promise<BlizzardCapabilitiesDto> {
     return fetchApi('/blizzard/capabilities', {}, BlizzardCapabilitiesSchema);
+}
+
+/** Admin: the WoW Forever namespace prefix + Armory-import flag (ROK-1717). */
+export async function fetchForeverConfig(): Promise<WowForeverConfigResponseDto> {
+    return fetchApi('/admin/plugins/blizzard/forever', {}, WowForeverConfigResponseSchema);
+}
+
+/** Admin: save the WoW Forever namespace prefix + Armory-import flag (ROK-1717). */
+export async function updateForeverConfig(dto: WowForeverConfigDto): Promise<WowForeverConfigResponseDto> {
+    return fetchApi('/admin/plugins/blizzard/forever', { method: 'PUT', body: JSON.stringify(dto) }, WowForeverConfigResponseSchema);
 }
