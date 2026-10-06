@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { SignupsService } from './signups.service';
 import { EventsService } from './events.service';
 import {
@@ -25,9 +26,19 @@ import {
   EventRosterDto,
   RosterAvailabilityResponse,
   RosterWithAssignments,
+  PublicEventRosterDto,
+  PublicRosterWithAssignments,
 } from '@raid-ledger/contract';
-import type { AuthenticatedRequest } from '../auth/types';
+import type { AuthenticatedRequest, AuthenticatedUser } from '../auth/types';
 import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
+import {
+  isMemberViewer,
+  projectRosterForViewer,
+  projectRosterWithAssignmentsForViewer,
+} from './roster-public-projection.helpers';
+
+/** OptionalJwtGuard routes: `user` is absent for anonymous callers. */
+type MaybeAuthedRequest = { user?: AuthenticatedUser };
 
 @Controller('events')
 export class EventsSignupsController {
@@ -64,11 +75,15 @@ export class EventsSignupsController {
     return { message: 'Signup canceled successfully' };
   }
 
+  /** ROK-1629: anonymous / deactivated viewers get the public projection. */
   @Get(':id/roster')
+  @UseGuards(OptionalJwtGuard)
   async getRoster(
     @Param('id', ParseIntPipe) eventId: number,
-  ): Promise<EventRosterDto> {
-    return this.signupsService.getRoster(eventId);
+    @Request() req: MaybeAuthedRequest,
+  ): Promise<EventRosterDto | PublicEventRosterDto> {
+    const roster = await this.signupsService.getRoster(eventId);
+    return projectRosterForViewer(roster, isMemberViewer(req.user));
   }
 
   @Patch(':id/roster')
@@ -100,11 +115,15 @@ export class EventsSignupsController {
     return this.signupsService.selfUnassign(eventId, req.user.id);
   }
 
+  /** ROK-1629: anonymous / deactivated viewers get the public projection. */
   @Get(':id/roster/assignments')
+  @UseGuards(OptionalJwtGuard)
   async getRosterWithAssignments(
     @Param('id', ParseIntPipe) eventId: number,
-  ): Promise<RosterWithAssignments> {
-    return this.signupsService.getRosterWithAssignments(eventId);
+    @Request() req: MaybeAuthedRequest,
+  ): Promise<RosterWithAssignments | PublicRosterWithAssignments> {
+    const r = await this.signupsService.getRosterWithAssignments(eventId);
+    return projectRosterWithAssignmentsForViewer(r, isMemberViewer(req.user));
   }
 
   /** ROK-1629 AC1 — members only; availability windows are not public. */

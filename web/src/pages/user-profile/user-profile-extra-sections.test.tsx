@@ -29,3 +29,14 @@ describe('GuestProfile avatar (TDB:1951)', () => {
         ).toContain('def');
     });
 });
+
+describe('GuestProfile — public roster link without a discordId (ROK-1629)', () => {
+    it('renders the server-built avatar URL when discordId is empty', () => {
+        const url = 'https://cdn.discordapp.com/avatars/111/abc.png';
+        renderWithProviders(<GuestProfile username="shadowfax" discordId="" avatarHash={url} />);
+        expect(
+            screen.queryByRole('img', { name: 'shadowfax' })?.getAttribute('src') ?? null,
+            'the guest avatar must render from the server-built URL with no discordId',
+        ).toBe(url);
+    });
+});

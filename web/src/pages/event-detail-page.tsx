@@ -5,7 +5,8 @@ import { useEventDetail } from '../hooks/use-events';
 import { useAuth, isOperatorOrAdmin, type User } from '../hooks/use-auth';
 import { EventBanner } from '../components/events/EventBanner';
 import { isMMOSlotConfig } from '../utils/game-utils';
-import type { EventResponseDto, EventRosterDto, RosterWithAssignments, VoiceChannelResponseDto } from '@raid-ledger/contract';
+import type { EventResponseDto, VoiceChannelResponseDto } from '@raid-ledger/contract';
+import type { ViewerEventRosterDto, ViewerRosterWithAssignments } from '../lib/api/viewer-event-schemas';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useMyCharacters } from '../hooks/use-characters';
 import { getEventStatus } from '../lib/event-utils';
@@ -59,7 +60,7 @@ function useBannerCollapse(event: EventResponseDto | undefined) {
     return { bannerRef, isBannerCollapsed };
 }
 
-function useEventDetailDerived(event: EventResponseDto | undefined, roster: EventRosterDto | undefined, rosterAssignments: RosterWithAssignments | undefined, user: User | null | undefined, isAuthenticated: boolean) {
+function useEventDetailDerived(event: EventResponseDto | undefined, roster: ViewerEventRosterDto | undefined, rosterAssignments: ViewerRosterWithAssignments | undefined, user: User | null | undefined, isAuthenticated: boolean) {
     const { games } = useGameRegistry();
     const gameRegistryEntry = games.find((g) => g.id === event?.game?.id || g.slug === event?.game?.slug);
     const gameHasRoles = gameRegistryEntry?.hasRoles ?? event?.game?.hasRoles ?? false;
@@ -121,7 +122,7 @@ function EventDetailModals({ event, eventId, derived, handlers, showCancelModal,
     showCancelModal: boolean; setShowCancelModal: (v: boolean) => void; showRescheduleModal: boolean; setShowRescheduleModal: (v: boolean) => void;
     showInviteModal: boolean; setShowInviteModal: (v: boolean) => void;
     seriesAction: 'edit' | 'delete' | 'cancel' | null; setSeriesAction: (v: 'edit' | 'delete' | 'cancel' | null) => void;
-    roster: EventRosterDto | undefined;
+    roster: ViewerEventRosterDto | undefined;
     searchParams: URLSearchParams; setSearchParams: ReturnType<typeof useSearchParams>[1];
 }) {
     const deepLinkAction = searchParams.get('action');
