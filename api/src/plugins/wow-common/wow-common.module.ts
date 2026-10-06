@@ -7,6 +7,7 @@ import { BlizzardController } from './blizzard.controller';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { WowCronRegistrar } from './wow-cron-registrar';
+import { WowForeverIdentityProvider } from './wow-forever-identity.provider';
 import { DungeonQuestsController } from './dungeon-quests.controller';
 import { DungeonQuestsService } from './dungeon-quests.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
@@ -37,6 +38,7 @@ import { WOW_COMMON_MANIFEST } from './manifest';
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
     WowCronRegistrar,
+    WowForeverIdentityProvider,
     DungeonQuestsService,
     DungeonQuestSeeder,
     BossEncountersService,
@@ -66,6 +68,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly cronRegistrar: WowCronRegistrar,
     private readonly dungeonQuestsService: DungeonQuestsService,
     private readonly bossEncountersService: BossEncountersService,
+    private readonly identityProvider: WowForeverIdentityProvider,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -187,6 +190,14 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
         EXTENSION_POINTS.CONTENT_PROVIDER,
         slug,
         this.contentProvider,
+      );
+    }
+
+    for (const slug of this.identityProvider.gameSlugs) {
+      this.pluginRegistry.registerAdapter(
+        EXTENSION_POINTS.CHARACTER_IDENTITY,
+        slug,
+        this.identityProvider,
       );
     }
 

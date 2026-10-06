@@ -31,7 +31,7 @@ import {
 } from './characters-mapping.helpers';
 import * as importH from './characters-import.helpers';
 import * as crudH from './characters-crud.helpers';
-import * as foreverH from './characters-forever.helpers';
+import * as identityH from './characters-identity.helpers';
 import { defined } from '../common/defined.helpers';
 
 /**
@@ -104,22 +104,21 @@ export class CharactersService {
   }
 
   async create(userId: number, dto: CreateCharacterDto): Promise<CharacterDto> {
-    const [game] = await this.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, dto.gameId))
-      .limit(1);
-    if (!game) throw new NotFoundException(`Game ${dto.gameId} not found`);
-    const prepared = foreverH.prepareCreateDto(game, dto);
+    const { prepared, identity } = await identityH.prepareIdentityCreate(
+      this.db,
+      this.pluginRegistry,
+      dto,
+    );
     try {
       return await crudH.executeCreateTx(
         this.db,
         userId,
         prepared,
         this.logger,
+        identity,
       );
     } catch (error: unknown) {
-      crudH.rethrowForeverViolation(error, prepared.name, prepared.region);
+      identity?.rethrowIdentityViolation(error, prepared.name, prepared.region);
       if (crudH.isUniqueViolation(error, 'unique_user_game_character'))
         throw new ConflictException(
           `Character ${dto.name} already exists for this game/realm`,
@@ -134,8 +133,9 @@ export class CharactersService {
     dto: UpdateCharacterDto,
   ): Promise<CharacterDto> {
     const character = await this.findOne(userId, characterId);
-    const prepared = await foreverH.prepareCharacterUpdate(
+    const { prepared, identity } = await identityH.prepareIdentityUpdate(
       this.db,
+      this.pluginRegistry,
       userId,
       character,
       dto,
@@ -147,7 +147,7 @@ export class CharactersService {
       .returning()
       .catch((error: unknown) => {
         const name = prepared.name ?? character.name;
-        crudH.rethrowForeverViolation(error, name, character.region);
+        identity?.rethrowIdentityViolation(error, name, character.region);
         throw error;
       });
     this.logger.log(`User ${userId} updated character ${characterId}`);

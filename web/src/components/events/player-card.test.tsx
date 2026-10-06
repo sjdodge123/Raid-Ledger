@@ -5,6 +5,7 @@ import { PlayerCard } from './player-card';
 import { formatRole } from '../../lib/role-colors';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
+import type { ViewerRosterAssignment } from '../../lib/api/viewer-event-schemas';
 
 /** Create a minimal RosterAssignmentResponse for testing. */
 function createMockPlayer(
@@ -195,7 +196,7 @@ function ProfileProbe() {
 }
 
 /** Render the card on a route, click its name link, and return where it landed. */
-function followNameLink(player: RosterAssignmentResponse, href: string) {
+function followNameLink(player: ViewerRosterAssignment, href: string) {
     const { container } = render(
         <MemoryRouter initialEntries={['/events/1']}>
             <Routes>
@@ -267,5 +268,31 @@ describe('PlayerCard — titled badges above the stretched action (TDB:1949)', (
     it('a non-clickable card with every badge raises nothing (identical to main)', () => {
         const { container } = renderCard({ player: badgedPlayer(), onRemove: vi.fn() });
         expect(container.querySelector('.relative, .w-fit, .cursor-default'), 'non-clickable cards keep their original classes').toBeNull();
+    });
+});
+
+/** ROK-1629: anonymous viewers get no discordId and a server-built avatar URL. */
+function publicPlayer(overrides: Partial<RosterAssignmentResponse> = {}): ViewerRosterAssignment {
+    const { discordId, ...rest } = createMockPlayer(overrides);
+    expect(discordId, 'fixture sanity: the member mock carries a discordId to strip').toBeTruthy();
+    return rest;
+}
+const SERVER_AVATAR = 'https://cdn.discordapp.com/avatars/111/abc.png';
+
+describe('PlayerCard — public roster payload without discordId (ROK-1629)', () => {
+    it('renders the server-built avatar URL', () => {
+        const { container } = renderCard({ player: publicPlayer({ avatar: SERVER_AVATAR }) });
+        expect(
+            container.querySelector(`img[src="${SERVER_AVATAR}"]`),
+            'the server-built avatar must render with no discordId',
+        ).not.toBeNull();
+    });
+
+    it('an anonymous Discord signup still links to the guest profile, carrying the avatar URL', () => {
+        const player = publicPlayer({ userId: 0, username: 'DiscordGuy', avatar: SERVER_AVATAR });
+        expect(followNameLink(player, '/users/0')).toEqual({
+            path: '/users/0',
+            state: { guest: true, username: 'DiscordGuy', discordId: '', avatarHash: SERVER_AVATAR },
+        });
     });
 });

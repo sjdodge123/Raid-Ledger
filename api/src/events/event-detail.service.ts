@@ -7,11 +7,23 @@ import { SignupsService } from './signups.service';
 import { PugsService } from './pugs.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
-import type { EventDetailResponseDto } from '@raid-ledger/contract';
+import type {
+  EventDetailResponseDto,
+  PublicEventDetailResponseDto,
+} from '@raid-ledger/contract';
 import { enrichEventWithConflicts } from './event-conflict-enrich.helpers';
 import { findConflictingEvents } from './event-conflict.helpers';
 import { resolveVoiceChannelForEvent } from './voice-channel-resolver.helpers';
-import { pugSlotsVisibleTo } from './pugs.helpers';
+import {
+  isMemberViewer,
+  projectEventDetailForViewer,
+} from './roster-public-projection.helpers';
+
+/** The caller as OptionalJwtGuard leaves it: null for anonymous. */
+export type DetailViewer = {
+  id: number;
+  deactivatedAt?: Date | string | null;
+} | null;
 
 @Injectable()
 export class EventDetailService {
@@ -25,7 +37,24 @@ export class EventDetailService {
     private readonly discordBotClientService: DiscordBotClientService,
   ) {}
 
+  /**
+   * ROK-1629: the bundle embeds the roster + assignments, so it carries the
+   * same per-viewer projection as the standalone routes (deactivated = anon).
+   * A deactivated viewer is built as anonymous too, so the PUG, voice and
+   * conflict branches never see their id.
+   */
   async findDetail(
+    id: number,
+    viewer: DetailViewer,
+  ): Promise<EventDetailResponseDto | PublicEventDetailResponseDto> {
+    const isMember = isMemberViewer(viewer);
+    const memberId = isMember && viewer ? viewer.id : null;
+    const detail = await this.buildDetail(id, memberId);
+    return projectEventDetailForViewer(detail, isMember);
+  }
+
+  /** The full member-shape bundle; never returned to a caller unprojected. */
+  private async buildDetail(
     id: number,
     userId: number | null,
   ): Promise<EventDetailResponseDto> {
@@ -55,7 +84,7 @@ export class EventDetailService {
       event: enriched,
       roster,
       rosterAssignments,
-      pugs: pugSlotsVisibleTo(pugList.pugs, isAuthenticated),
+      pugs: pugList.pugs,
       voiceChannel,
     };
   }

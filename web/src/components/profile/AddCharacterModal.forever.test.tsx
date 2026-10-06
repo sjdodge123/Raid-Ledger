@@ -12,6 +12,7 @@ import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-characte
 import { withHttpStatus } from '../../lib/api/api-error';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { GameSearchInput } from '../events/game-search-input';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
 
 vi.mock('../../hooks/use-character-mutations', () => ({
     useCreateCharacter: vi.fn(), useUpdateCharacter: vi.fn(),
@@ -32,6 +33,7 @@ const createMutate = vi.fn();
 const updateMutate = vi.fn();
 
 beforeEach(() => {
+    activateWowPlugin();
     createMutate.mockReset(); updateMutate.mockReset();
     vi.mocked(useGameRegistry).mockReturnValue({ games: registryGames, isLoading: false } as unknown as ReturnType<typeof useGameRegistry>);
     vi.mocked(GameSearchInput).mockImplementation(() => <></>);

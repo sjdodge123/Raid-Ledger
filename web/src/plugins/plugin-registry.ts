@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { CharacterIdentityProvider } from './character-identity';
 
 /** All plugin slot names — each corresponds to a page location */
 export type PluginSlotName =
@@ -39,6 +40,14 @@ export interface PluginHandle {
         component: ComponentType<any>,
         priority?: number,
     ): void;
+    /** Register this plugin's manual-character identity rules for each of `provider.gameSlugs` (ROK-1733). */
+    registerCharacterIdentity<V>(provider: CharacterIdentityProvider<V>): void;
+}
+
+/** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
+export interface CharacterIdentityRegistration {
+    pluginSlug: string;
+    provider: CharacterIdentityProvider;
 }
 
 /** Module-level registry — populated at import time by plugin register files */
@@ -46,6 +55,9 @@ const registry: SlotRegistration[] = [];
 
 /** Badge metadata keyed by plugin slug */
 const badgeRegistry = new Map<string, PluginBadgeMeta>();
+
+/** Character-identity providers keyed by game slug — one provider per game */
+const identityRegistry = new Map<string, CharacterIdentityRegistration>();
 
 /**
  * Register a plugin with badge metadata and receive a handle for slot registration.
@@ -64,7 +76,24 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
                 priority,
             });
         },
+        registerCharacterIdentity(provider) {
+            // Core treats the provider's form value as opaque (V = unknown).
+            const opaque = provider as unknown as CharacterIdentityProvider;
+            for (const gameSlug of provider.gameSlugs) {
+                identityRegistry.set(gameSlug, { pluginSlug: slug, provider: opaque });
+            }
+        },
     };
+}
+
+/** The identity registration for a game slug, regardless of plugin status — callers filter by active plugin. */
+export function getCharacterIdentityRegistration(gameSlug: string): CharacterIdentityRegistration | undefined {
+    return identityRegistry.get(gameSlug);
+}
+
+/** Every identity registration (one per game slug), regardless of plugin status. */
+export function getCharacterIdentityRegistrations(): readonly CharacterIdentityRegistration[] {
+    return [...identityRegistry.values()];
 }
 
 export function getPluginBadge(slug: string): PluginBadgeMeta | undefined {
@@ -96,6 +125,7 @@ export function getSlotRegistrations(slotName: PluginSlotName): readonly SlotReg
 export function clearRegistry(): void {
     registry.length = 0;
     badgeRegistry.clear();
+    identityRegistry.clear();
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */
