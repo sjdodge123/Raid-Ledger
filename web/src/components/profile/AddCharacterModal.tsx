@@ -10,7 +10,7 @@ import { GameSearchInput } from '../events/game-search-input';
 import { PluginSlot } from '../../plugins';
 import { isConflictError } from '../../lib/api/api-error';
 import { CharacterFormFields } from './character-form-fields';
-import { useCharacterIdentity, type CharacterIdentityProvider, type IdentityErrors } from '../../plugins/character-identity';
+import { useCharacterIdentity, type CharacterIdentityProvider, type CharacterPrefill, type IdentityErrors } from '../../plugins/character-identity';
 
 interface AddCharacterModalProps {
     isOpen: boolean;
@@ -18,6 +18,8 @@ interface AddCharacterModalProps {
     gameId?: number | undefined;
     gameName?: string | undefined;
     editingCharacter?: CharacterDto | null;
+    /** New character only: starting values from another flow (router state). */
+    prefill?: CharacterPrefill | null | undefined;
 }
 
 interface FormState {
@@ -34,14 +36,14 @@ interface FormState {
 /** Where each validation/save message renders (ROK-1648 ruling 8): name → Field, game → search, form → alert. */
 interface FormErrors { name?: string; game?: string; form?: string; identity?: IdentityErrors }
 
-const getInitialFormState = (char?: CharacterDto | null): FormState => ({
-    name: char?.name ?? '', class: char?.class ?? '', spec: char?.spec ?? '',
+const getInitialFormState = (char?: CharacterDto | null, prefill?: CharacterPrefill | null): FormState => ({
+    name: char?.name ?? prefill?.name ?? '', class: char?.class ?? prefill?.class ?? '', spec: char?.spec ?? '',
     role: char?.role ?? '', realm: char?.realm ?? '', isMain: char?.isMain ?? false,
     identity: undefined,
 });
 
-/** The identity value a form holds: the user's edit, else the provider's value for the edited character (blank on create). */
-const resolveIdentity = (identity: CharacterIdentityProvider | null, value: unknown, editing?: CharacterDto | null): unknown => (identity && value === undefined ? identity.fromCharacter(editing) : value);
+/** The identity value a form holds: the user's edit, else the provider's value for the edited (or prefilled) character; blank otherwise. */
+const resolveIdentity = (identity: CharacterIdentityProvider | null, value: unknown, source?: CharacterDto | CharacterPrefill | null): unknown => (identity && value === undefined ? identity.fromCharacter(source) : value);
 
 /**
  * ROK-1655: unsaved = a field differs from the state the form opened with
@@ -142,13 +144,13 @@ interface ModalResetState {
 }
 
 function syncModalOpenClose(
-    isOpen: boolean, prevIsOpen: boolean, editingCharacter: CharacterDto | null | undefined,
+    isOpen: boolean, prevIsOpen: boolean, editingCharacter: CharacterDto | null | undefined, prefill: CharacterPrefill | null | undefined,
     hasMainForGame: boolean, preselectedGameId: number | undefined,
     registryGames: { id: number; name: string; slug: string }[], rs: ModalResetState,
 ) {
     if (isOpen && !prevIsOpen) {
         rs.setPrevIsOpen(true); rs.setResetKey((k) => k + 1);
-        const initial = getInitialFormState(editingCharacter);
+        const initial = getInitialFormState(editingCharacter, editingCharacter ? null : prefill);
         if (!editingCharacter && !hasMainForGame) initial.isMain = true;
         rs.setForm(initial); rs.setBaseline(initial); rs.setErrors({});
         if (!editingCharacter) {
@@ -160,7 +162,8 @@ function syncModalOpenClose(
 }
 
 function useCharacterModalState(props: AddCharacterModalProps) {
-    const { isOpen, onClose, gameId: preselectedGameId, editingCharacter } = props;
+    const { isOpen, onClose, gameId: preselectedGameId, editingCharacter, prefill } = props;
+    const identitySource = editingCharacter ?? prefill;
     const mutations = useCharacterModalMutations();
     const [selectedIgdbGame, setSelectedIgdbGame] = useState<IgdbGameDto | null>(null);
     const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
@@ -175,13 +178,13 @@ function useCharacterModalState(props: AddCharacterModalProps) {
     const effectiveGameId = effectiveRegistryGame?.id ?? preselectedGameId;
     // ROK-1733: an active plugin may own the picked (or edited) game's identity fields.
     const identity = useCharacterIdentity(effectiveRegistryGame?.slug ?? selectedIgdbGame?.slug, editingCharacter);
-    const identityValue = resolveIdentity(identity, form.identity, editingCharacter);
-    const sameIdentity = (a: unknown, b: unknown) => (identity ? identity.same(resolveIdentity(identity, a, editingCharacter), resolveIdentity(identity, b, editingCharacter)) : a === b);
+    const identityValue = resolveIdentity(identity, form.identity, identitySource);
+    const sameIdentity = (a: unknown, b: unknown) => (identity ? identity.same(resolveIdentity(identity, a, identitySource), resolveIdentity(identity, b, identitySource)) : a === b);
     const showMmoFields = effectiveRegistryGame?.hasRoles ?? (selectedIgdbGame ? false : true);
     const { data: gameCharsData } = useMyCharacters(effectiveGameId, !!effectiveGameId);
     const gameChars = gameCharsData?.data ?? [];
     const hasMainForGame = gameChars.some((c) => c.isMain);
-    syncModalOpenClose(isOpen, prevIsOpen, editingCharacter, hasMainForGame, preselectedGameId, registryGames, { setForm, setBaseline, setErrors, setResetKey, setSelectedIgdbGame, setPrevIsOpen });
+    syncModalOpenClose(isOpen, prevIsOpen, editingCharacter, prefill, hasMainForGame, preselectedGameId, registryGames, { setForm, setBaseline, setErrors, setResetKey, setSelectedIgdbGame, setPrevIsOpen });
     const isDirty = isCharacterFormDirty(form, baseline, sameIdentity, isEditing ? undefined : selectedIgdbGame?.slug, preselectedRegistryGame?.slug);
     const updateField = <K extends keyof FormState>(field: K, value: FormState[K]) => setForm((prev) => ({ ...prev, [field]: value }));
 
