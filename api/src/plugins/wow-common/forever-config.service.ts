@@ -95,13 +95,18 @@ export class ForeverConfigService implements OnModuleInit {
   /** Point the resolver at the new prefix and drop realm state for old + new. */
   @OnEvent(WOW_FOREVER_CONFIG_UPDATED)
   handleConfigUpdated(payload: WowForeverConfigUpdatedPayload): void {
-    const previous = getForeverNamespacePrefix();
-    setForeverNamespacePrefix(payload.namespacePrefix);
-    this.blizzard.purgeNamespace(previous);
-    this.blizzard.purgeNamespace(getForeverNamespacePrefix());
-    this.logger.log(
-      `Forever namespace prefix: ${previous} -> ${getForeverNamespacePrefix()}`,
-    );
+    try {
+      const previous = getForeverNamespacePrefix();
+      setForeverNamespacePrefix(payload.namespacePrefix);
+      this.blizzard.purgeNamespace(previous);
+      this.blizzard.purgeNamespace(getForeverNamespacePrefix());
+      this.logger.log(
+        `Forever namespace prefix: ${previous} -> ${getForeverNamespacePrefix()}`,
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Forever config update not applied: ${msg}`);
+    }
   }
 
   /** Public capability flags the Add Character flow reads. */
