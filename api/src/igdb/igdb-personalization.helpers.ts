@@ -29,7 +29,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 /** The `req.user` shape an `OptionalJwtGuard`-protected route receives. */
 export interface OptionalViewer {
-  user?: { id: number } | null;
+  user?: { id: number; deactivatedAt?: Date | null } | null;
 }
 
 /** Read the viewer id off an optionally-authenticated request. */
