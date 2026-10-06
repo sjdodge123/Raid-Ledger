@@ -4,7 +4,7 @@ import type {
   AddonWho,
   WowForeverRuleset,
 } from '@raid-ledger/contract';
-import { WOW_FOREVER_GAME_SLUG } from '../../../characters/characters-forever.helpers';
+import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
 import { AddonImportError } from './addon-import.errors';
 import {
   ADDON_REGION_MAP,
