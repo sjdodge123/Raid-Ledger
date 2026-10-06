@@ -15,3 +15,5 @@ Newest first. Every entry states **additive** or **breaking** (see
   `roleplaying`.
 - `schema.json` generated from `AddonExportSchema`; golden fixtures: 7 valid,
   9 invalid.
+
+- 2026-10-05 v1 — fixture fix, additive: guild fixtures now include the exporter; wire format unchanged.
