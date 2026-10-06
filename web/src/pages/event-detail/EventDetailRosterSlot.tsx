@@ -4,7 +4,8 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import type { EventResponseDto, EventRosterDto, RosterWithAssignments } from '@raid-ledger/contract';
+import type { EventResponseDto } from '@raid-ledger/contract';
+import type { ViewerEventRosterDto, ViewerRosterWithAssignments } from '../../lib/api/viewer-event-schemas';
 import { RosterBuilder } from '../../components/roster';
 import { GameTimeWidget } from '../../components/features/game-time/GameTimeWidget';
 import { AutoSubToggle, SignedUpActions } from './EventDetailSubComponents';
@@ -31,7 +32,7 @@ function RosterSlotHeader({ event, canManageRoster, canJoinSlot, isMMOGame, isAu
     );
 }
 
-function buildStickyExtra(isAuthenticated: boolean, event: EventResponseDto, roster: EventRosterDto | undefined) {
+function buildStickyExtra(isAuthenticated: boolean, event: EventResponseDto, roster: ViewerEventRosterDto | undefined) {
     if (!isAuthenticated || !event.startTime || !event.endTime) return undefined;
     return (
         <GameTimeWidget eventStartTime={event.startTime} eventEndTime={event.endTime} eventTitle={event.title}
@@ -44,7 +45,7 @@ function buildStickyExtra(isAuthenticated: boolean, event: EventResponseDto, ros
 
 /** Roster slot section with RosterBuilder */
 export function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthenticated, isSignedUp, userSignup, canManageRoster, canJoinSlot, isMMOGame, handlers, user }: {
-    event: EventResponseDto; eventId: number; roster: EventRosterDto | undefined; rosterAssignments: RosterWithAssignments | undefined;
+    event: EventResponseDto; eventId: number; roster: ViewerEventRosterDto | undefined; rosterAssignments: ViewerRosterWithAssignments | undefined;
     isAuthenticated: boolean; isSignedUp: boolean; userSignup: { status: string } | undefined;
     canManageRoster: boolean; canJoinSlot: boolean; isMMOGame: boolean; handlers: ReturnType<typeof useEventDetailHandlers>; user: { id: number } | null | undefined;
 }): JSX.Element | null {

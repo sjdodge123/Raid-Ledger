@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { RosterWithAssignments, RosterAssignmentResponse, UpdateRosterDto } from '@raid-ledger/contract';
+import type { UpdateRosterDto } from '@raid-ledger/contract';
+import type { ViewerRosterWithAssignments, ViewerRosterAssignment } from '../lib/api/viewer-event-schemas';
 import { getRosterWithAssignments, updateRoster, selfUnassignFromRoster, adminRemoveUserFromEvent } from '../lib/api-client';
 
 interface MutationContext {
-    previousRoster?: RosterWithAssignments | undefined;
+    previousRoster?: ViewerRosterWithAssignments | undefined;
 }
 
 /**
@@ -11,7 +12,7 @@ interface MutationContext {
  * Returns pool and assigned users for the RosterBuilder component.
  */
 export function useRoster(eventId: number) {
-    return useQuery<RosterWithAssignments>({
+    return useQuery<ViewerRosterWithAssignments>({
         queryKey: ['events', eventId, 'roster', 'assignments'],
         queryFn: () => getRosterWithAssignments(eventId),
         enabled: eventId > 0,
@@ -42,11 +43,11 @@ export function invalidateRosterQueries(queryClient: ReturnType<typeof useQueryC
 export function useUpdateRoster(eventId: number) {
     const queryClient = useQueryClient();
 
-    return useMutation<RosterWithAssignments, Error, UpdateRosterDto, MutationContext>({
+    return useMutation<ViewerRosterWithAssignments, Error, UpdateRosterDto, MutationContext>({
         mutationFn: (dto) => updateRoster(eventId, dto),
         onMutate: async () => {
             await queryClient.cancelQueries({ queryKey: rosterKey(eventId) });
-            const previousRoster = queryClient.getQueryData<RosterWithAssignments>(rosterKey(eventId));
+            const previousRoster = queryClient.getQueryData<ViewerRosterWithAssignments>(rosterKey(eventId));
             return { previousRoster };
         },
         onError: (_err, _dto, context) => {
@@ -62,7 +63,7 @@ export function useUpdateRoster(eventId: number) {
  */
 export function useSelfUnassign(eventId: number) {
     const queryClient = useQueryClient();
-    return useMutation<RosterWithAssignments, Error, void>({
+    return useMutation<ViewerRosterWithAssignments, Error, void>({
         mutationFn: () => selfUnassignFromRoster(eventId),
         onSettled: () => invalidateRosterQueries(queryClient, eventId),
     });
@@ -84,8 +85,8 @@ export function useAdminRemoveUser(eventId: number) {
  * ROK-461: characterId map allows admin assignment to set a character on the signup.
  */
 export function buildRosterUpdate(
-    _pool: RosterAssignmentResponse[],
-    assignments: RosterAssignmentResponse[],
+    _pool: ViewerRosterAssignment[],
+    assignments: ViewerRosterAssignment[],
     characterIdMap?: Map<number, string>,
 ): UpdateRosterDto {
     return {

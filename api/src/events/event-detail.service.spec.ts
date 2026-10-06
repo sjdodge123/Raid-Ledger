@@ -81,7 +81,7 @@ describe('EventDetailService.findDetail', () => {
     );
 
     // userId must be non-null or the enrichment short-circuits before querying.
-    const pending = service.findDetail(42, 99);
+    const pending = service.findDetail(42, { id: 99 });
 
     // Let the synchronous part of the batch run. Nothing has resolved yet.
     await Promise.resolve();

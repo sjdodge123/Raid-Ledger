@@ -1,7 +1,8 @@
 import type { JSX } from 'react';
 import { lazy, Suspense } from 'react';
 import { Modal } from '../../components/ui/modal';
-import type { CharacterRole, PugSlotResponseDto, EventRosterDto, SeriesScope } from '@raid-ledger/contract';
+import type { CharacterRole, PugSlotResponseDto, SeriesScope } from '@raid-ledger/contract';
+import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';
 
 // ROK-343: Lazy load modals
 const SignupConfirmationModal = lazy(() =>
@@ -131,7 +132,7 @@ interface InviteModalProps {
     onClose: () => void;
     eventId: number;
     pugs: PugSlotResponseDto[];
-    roster: EventRosterDto | undefined;
+    roster: ViewerEventRosterDto | undefined;
     isMMOGame: boolean;
 }
 
