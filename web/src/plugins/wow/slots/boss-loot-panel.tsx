@@ -9,39 +9,11 @@ import type { BossEncounterDto, EquipmentItemDto } from '@raid-ledger/contract';
 import { useAllInstancesBossless, useBossesForInstance, useLootForBoss } from '../hooks/use-boss-loot';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
+import { slugToContentVariant } from '../lib/wow-variant-config';
 import { getWowheadNpcSearchUrl } from '../lib/wowhead-urls';
 import { BossLootBody } from './boss-loot-body';
 import './boss-loot-panel.css';
 import './quest-prep-panel.css';
-
-/**
- * Map game slug to WoW variant for the boss/loot API.
- * Handles both short legacy slugs and full ITAD-style variant slugs.
- * Falls back to classic_era for unknown slugs.
- */
-function slugToVariant(gameSlug?: string): string {
-    switch (gameSlug) {
-        case 'wow-classic-anniversary':
-        case 'world-of-warcraft-burning-crusade-classic-anniversary-edition':
-            return 'classic_anniversary';
-        case 'world-of-warcraft-classic':
-        case 'wow-classic-era':
-            return 'classic_era';
-        case 'wow-classic':
-        case 'wow-cata':
-        case 'world-of-warcraft-burning-crusade-classic':
-        case 'world-of-warcraft-wrath-of-the-lich-king':
-            return 'classic';
-        case 'wow-retail':
-        case 'world-of-warcraft':
-            return 'retail';
-        // ROK-1563: WoW: Forever — vanilla content only for now.
-        case 'world-of-warcraft-forever':
-            return 'wow_forever';
-        default:
-            return 'classic_era';
-    }
-}
 
 /** Props passed via PluginSlot context from event-detail-page */
 interface BossLootPanelProps {
@@ -75,7 +47,7 @@ function useEquippedBySlot(character: ReturnType<typeof useCharacterDetail>['dat
 
 /** Boss & Loot Preview Panel main component */
 export function BossLootPanel({ contentInstances, gameSlug, characterId }: BossLootPanelProps) {
-    const variant = useMemo(() => slugToVariant(gameSlug), [gameSlug]);
+    const variant = useMemo(() => slugToContentVariant(gameSlug), [gameSlug]);
     const [panelOpen, setPanelOpen] = useState(true);
     const instances = useContentInstances(contentInstances);
     const { data: character } = useCharacterDetail(characterId);
