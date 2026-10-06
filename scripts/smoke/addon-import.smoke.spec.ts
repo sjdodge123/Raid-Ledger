@@ -13,12 +13,13 @@
  * the demo seed except the boot-seeded game row (resolved by slug, else skip).
  * Every character created is deleted in `afterAll`.
  */
-import { deflateSync } from 'node:zlib';
+import { deflateSync, inflateSync } from 'node:zlib';
 import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPost, getAdminToken, getInviteeFixture } from './api-helpers';
-import golden from '../../packages/contract/ledgerlink/v1/fixtures/char-normal.json';
 
 const GAME_SLUG = 'world-of-warcraft-forever';
 
@@ -36,13 +37,28 @@ function uniqueName(testInfo: TestInfo, first: string): string {
     return `${first} Q${suffix}`;
 }
 
-/** The golden char export re-pointed at `fullName` with a fresh GUID, encoded as a paste. */
+const HEADER = '!RL1!char!';
+
+/**
+ * The golden char wire payload, decoded from the `.txt` export string (the
+ * sibling `.json` is the decoder's OUTPUT shape — e.g. gear `bonusIds` — and
+ * fails the strict wire schema). `process.cwd()` is the repo root for every
+ * `npx playwright test` (see scripts/auth-paths.ts, ROK-1286).
+ */
+function goldenCharPayload(): { who: Record<string, unknown> } & Record<string, unknown> {
+    const file = path.resolve(process.cwd(), 'packages/contract/ledgerlink/v1/fixtures/char-normal.txt');
+    const token = readFileSync(file, 'utf8').trim();
+    if (!token.startsWith(HEADER)) throw new Error(`char-normal.txt should start with ${HEADER}`);
+    return JSON.parse(inflateSync(Buffer.from(token.slice(HEADER.length), 'base64')).toString('utf8'));
+}
+
+/** The golden char export re-pointed at `fullName` with a fresh GUID, re-encoded as a paste. */
 function buildImportString(fullName: string): string {
+    const golden = goldenCharPayload();
     const guid = `Player-4395-${randomBytes(4).toString('hex').toUpperCase()}`;
-    const who = { ...golden.payload.who, guid, fullName, raw: { getUnitName: fullName, unitName: [fullName, null] } };
-    const payload = { ...golden.payload, who };
-    const body = deflateSync(Buffer.from(JSON.stringify(payload), 'utf8')).toString('base64');
-    return `!RL1!char!${body}`;
+    const who = { ...golden.who, guid, fullName, raw: { getUnitName: fullName, unitName: [fullName, null] } };
+    const body = deflateSync(Buffer.from(JSON.stringify({ ...golden, who }), 'utf8')).toString('base64');
+    return `${HEADER}${body}`;
 }
 
 /** Create a Forever character (US, the fixture's `client.region: 1`) and claim its id for cleanup. */
@@ -71,15 +87,16 @@ async function openImportDialog(page: Page): Promise<Locator> {
     return dialog;
 }
 
-/** Paste `value` and press Check string, waiting on the dry-run response. */
-async function pasteAndCheck(page: Page, dialog: Locator, value: string): Promise<void> {
+/** Paste `value`, press Check string, and return the dry-run's status + body (for failure messages). */
+async function pasteAndCheck(page: Page, dialog: Locator, value: string): Promise<{ status: number; body: string }> {
     await dialog.getByRole('textbox', { name: 'Export string' }).fill(value);
     const preview = page.waitForResponse(
         (r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith('/addon-import'),
         { timeout: 20_000 },
     );
     await dialog.getByRole('button', { name: 'Check string' }).click();
-    await preview;
+    const res = await preview;
+    return { status: res.status(), body: await res.text() };
 }
 
 test.describe('Addon Import string dialog (ROK-1724)', () => {
@@ -106,8 +123,8 @@ test.describe('Addon Import string dialog (ROK-1724)', () => {
 
         await openCharacter(page, id, fullName);
         const dialog = await openImportDialog(page);
-        await pasteAndCheck(page, dialog, importString);
-
+        const first = await pasteAndCheck(page, dialog, importString);
+        expect(first.status, `the matching export's preview should succeed: ${first.body}`).toBe(200);
         await expect(dialog.getByTestId('addon-import-error'), 'the matching export should not be rejected').toHaveCount(0);
         // char-normal.json: 2 gear items (ilvl 80 + 76), 1 talent node, 1 lockout; PALADIN 60 vs a class-less row.
         await expect(dialog, 'the preview summarises the golden char export').toContainText('2 items · avg ilvl 78');
@@ -138,7 +155,8 @@ test.describe('Addon Import string dialog (ROK-1724)', () => {
 
         await openCharacter(page, id, fullName);
         const dialog = await openImportDialog(page);
-        await pasteAndCheck(page, dialog, buildImportString(otherName));
+        const checked = await pasteAndCheck(page, dialog, buildImportString(otherName));
+        expect(checked.body, 'the API should reject another character\'s export as NAME_MISMATCH').toContain('NAME_MISMATCH');
 
         const error = dialog.getByTestId('addon-import-error');
         await expect(error, 'an export from another character is NAME_MISMATCH').toContainText('Different character');
