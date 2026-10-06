@@ -1,4 +1,5 @@
 import type { PluginManifest } from '../plugin-host/plugin-manifest.interface';
+import { WOW_FOREVER_SETTING_KEYS } from './forever.settings';
 
 /** All WoW game slugs this plugin handles (retail + all classic variants). */
 export const ALL_WOW_GAME_SLUGS: string[] = [
@@ -19,7 +20,11 @@ export const WOW_COMMON_MANIFEST: PluginManifest = {
   author: { name: 'Raid Ledger' },
   gameSlugs: ALL_WOW_GAME_SLUGS,
   capabilities: ['character-sync', 'content-provider', 'cron-registrar'],
-  settingKeys: ['blizzard_client_id', 'blizzard_client_secret'],
+  settingKeys: [
+    'blizzard_client_id',
+    'blizzard_client_secret',
+    ...WOW_FOREVER_SETTING_KEYS,
+  ],
   integrations: [
     {
       key: 'blizzard-api',

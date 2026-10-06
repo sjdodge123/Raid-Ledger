@@ -3,6 +3,10 @@
  * Extracted from blizzard.service.ts for file size compliance (ROK-711).
  */
 import type { MemoryCacheEntry } from '../../common/swr-cache';
+import {
+  FOREVER_NAMESPACE_ALIAS,
+  resolveBlizzardNamespacePrefix,
+} from './forever-namespace.resolver';
 
 // ── Exported Interfaces ──────────────────────────────────────────────────────
 
@@ -181,9 +185,12 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
 };
 
 /**
- * PLACEHOLDER (ROK-1563) — Blizzard has NOT published the WoW: Forever
- * namespace yet (beta 2026-09-17, launch 2026-11-04). Replace this value the
- * moment ROK-1562's probe finds the real one; it is the single point of change.
+ * The WoW: Forever namespace ALIAS + default (ROK-1563, ROK-1717). Blizzard has
+ * NOT published the real Forever namespace yet (launch 2026-11-04). This value
+ * is what the games row stores and what `variantToNamespacePrefix` returns; it
+ * is resolved to the admin setting `wow_forever_namespace_prefix` only at the
+ * Blizzard-call edge (`getNamespacePrefixes`, via forever-namespace.resolver).
+ * On ship day an admin changes the setting — no deploy, no constant edit.
  *
  * A wrong prefix makes the Blizzard API answer 403 (not 404 — observed
  * 2026-09, ROK-1636) for both the profile and realm-index calls. That surfaces
@@ -191,7 +198,7 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
  * blizzard-upstream-error.ts), not "character not found". Mapping the variant
  * to `null` instead would silently read RETAIL data, which is strictly worse.
  */
-export const WOW_FOREVER_NAMESPACE_PREFIX = 'classicforever';
+export const WOW_FOREVER_NAMESPACE_PREFIX = FOREVER_NAMESPACE_ALIAS;
 
 /**
  * Map legacy WowGameVariant enum to the game's apiNamespacePrefix value.
@@ -211,6 +218,7 @@ export function variantToNamespacePrefix(variant: string): string | null {
 /**
  * Build Blizzard API namespace prefixes from a game's stored prefix.
  * Null means retail (no prefix). Non-null is appended with a hyphen.
+ * The Forever alias is first resolved to the admin-set prefix (ROK-1717).
  * @param apiNamespacePrefix - The game's stored namespace prefix (e.g., 'classic1x', 'classicann', null for retail)
  */
 export function getNamespacePrefixes(apiNamespacePrefix: string | null): {
@@ -218,12 +226,13 @@ export function getNamespacePrefixes(apiNamespacePrefix: string | null): {
   dynamic: string;
   profile: string;
 } {
-  if (!apiNamespacePrefix) {
+  const prefix = resolveBlizzardNamespacePrefix(apiNamespacePrefix);
+  if (!prefix) {
     return { static: 'static', dynamic: 'dynamic', profile: 'profile' };
   }
   return {
-    static: `static-${apiNamespacePrefix}`,
-    dynamic: `dynamic-${apiNamespacePrefix}`,
-    profile: `profile-${apiNamespacePrefix}`,
+    static: `static-${prefix}`,
+    dynamic: `dynamic-${prefix}`,
+    profile: `profile-${prefix}`,
   };
 }

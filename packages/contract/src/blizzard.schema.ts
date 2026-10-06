@@ -70,3 +70,29 @@ export const WowForeverNamePartSchema = z.string().trim()
 /** Full Forever name stored in `characters.name`: "First Second", one space. */
 export const WowForeverNameSchema = z.string().trim().max(100)
     .regex(/^\p{L}{2,24} \p{L}{2,24}$/u, 'Enter a first and second name');
+
+// ============================================================
+// ROK-1717: runtime WoW: Forever namespace prefix + Armory flag
+// ============================================================
+
+/** Public capability flags the Add Character flow reads (no auth). */
+export const BlizzardCapabilitiesSchema = z.object({
+    armoryImport: z.object({ wow_forever: z.boolean() }),
+});
+export type BlizzardCapabilitiesDto = z.infer<typeof BlizzardCapabilitiesSchema>;
+
+/** Blizzard namespace prefix without `static-`/`dynamic-`/`profile-` or the region, e.g. `classicforever`. */
+export const WowForeverNamespacePrefixSchema = z.string().trim().regex(/^[a-z0-9]{2,32}$/, 'Lowercase letters and digits only (2-32)');
+
+/** Admin PUT body for the Forever settings. */
+export const WowForeverConfigSchema = z.object({
+    namespacePrefix: WowForeverNamespacePrefixSchema,
+    armoryImportEnabled: z.boolean(),
+});
+export type WowForeverConfigDto = z.infer<typeof WowForeverConfigSchema>;
+
+/** Admin GET response: the effective config plus whether the prefix is the built-in default. */
+export const WowForeverConfigResponseSchema = WowForeverConfigSchema.extend({
+    namespacePrefixIsDefault: z.boolean(),
+});
+export type WowForeverConfigResponseDto = z.infer<typeof WowForeverConfigResponseSchema>;

@@ -24,6 +24,11 @@ vi.mock('../../../hooks/use-admin-settings', () => ({
     }),
 }));
 
+// ROK-1717: the Forever section has its own spec (forever-settings-section.test.tsx); here only its placement matters.
+vi.mock('../components/forever-settings-section', () => ({
+    ForeverSettingsSection: () => <div data-testid="forever-settings-section" />,
+}));
+
 vi.mock('../../../hooks/use-new-badge', () => ({
     useNewBadge: () => ({ isNew: false, markSeen: vi.fn() }),
 }));
@@ -192,5 +197,20 @@ describe('BlizzardIntegrationSlot — action triad layout (ROK-1652 B)', () => {
     it('renders Save as a full-width primary row, then Test and Clear', () => {
         renderConfigured();
         expectIntegrationActionTriad();
+    });
+});
+
+describe('BlizzardIntegrationSlot — WoW Forever section (ROK-1717)', () => {
+    beforeEach(resetMocks);
+
+    it('renders the Forever section once Blizzard credentials are configured', () => {
+        renderConfigured();
+        expect(screen.getByTestId('forever-settings-section')).toBeInTheDocument();
+    });
+
+    it('hides the Forever section until Blizzard is configured', () => {
+        mockBlizzardStatus.data = { configured: false };
+        render(<BlizzardIntegrationSlot />);
+        expect(screen.queryByTestId('forever-settings-section')).not.toBeInTheDocument();
     });
 });

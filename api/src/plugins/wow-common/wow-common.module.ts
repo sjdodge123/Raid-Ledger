@@ -4,6 +4,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
+import { ForeverConfigController } from './forever-config.controller';
+import { ForeverConfigService } from './forever-config.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { WowCronRegistrar } from './wow-cron-registrar';
@@ -31,6 +33,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
   imports: [SettingsModule, CharactersModule],
   controllers: [
     BlizzardController,
+    ForeverConfigController,
     DungeonQuestsController,
     BossEncountersController,
     QuestProgressController,
@@ -39,6 +42,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
   providers: [
     BlizzardService,
     BlizzardAuthService,
+    ForeverConfigService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
     WowCronRegistrar,
