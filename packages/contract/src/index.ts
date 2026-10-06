@@ -39,6 +39,7 @@ export * from './roster.schema.js';
 
 // Public (anonymous-viewer) roster projections (ROK-1629)
 export * from './roster-public.schema.js';
+export * from './public-identity.schema.js';
 
 // System Status (ROK-175)
 export * from './system.schema.js';

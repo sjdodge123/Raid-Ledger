@@ -16,6 +16,10 @@ import {
   GameNowPlayingResponseSchema,
 } from '@raid-ledger/contract';
 
+/** OptionalJwtGuard viewers (ROK-1734): signed-in member vs anonymous (null). */
+const MEMBER_REQ = { user: { id: 9, deactivatedAt: null } };
+const ANON_REQ = { user: null };
+
 const PRICE_SYNC_QUEUE_PROVIDER = {
   provide: getQueueToken(ITAD_PRICE_SYNC_QUEUE),
   useValue: { add: jest.fn() },
@@ -76,9 +80,9 @@ function describeIgdbControllerActivityEndpoints() {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      await expect(ctrl.getGameActivity(42, 'invalid')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        ctrl.getGameActivity(42, 'invalid', MEMBER_REQ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should delegate to igdbService.getGameActivity when game exists', async () => {
@@ -116,10 +120,48 @@ function describeIgdbControllerActivityEndpoints() {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      const result = await ctrl.getGameActivity(42, 'week');
+      const result = await ctrl.getGameActivity(42, 'week', MEMBER_REQ);
 
       expect(result).toEqual(mockActivityResult);
       expect(mockService.getGameActivity).toHaveBeenCalledWith(42, 'week');
+    });
+
+    it('strips discordId from topPlayers for an anonymous viewer (ROK-1734)', async () => {
+      const mockDb: Record<string, jest.Mock> = {};
+      for (const m of ['select', 'from', 'where']) {
+        mockDb[m] = jest.fn().mockReturnThis();
+      }
+      mockDb.limit = jest.fn().mockResolvedValue([{ id: 42 }]);
+      const mockService: Partial<IgdbService> = {
+        database: mockDb as never,
+        getGameActivity: jest.fn().mockResolvedValue({
+          topPlayers: mockTopPlayers,
+          totalSeconds: 10800,
+          period: 'week' as const,
+        }),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        controllers: [IgdbController],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+          { provide: ItadService, useValue: {} },
+          { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
+        ],
+      }).compile();
+      const ctrl = module.get<IgdbController>(IgdbController);
+
+      const result = await ctrl.getGameActivity(42, 'week', ANON_REQ);
+
+      expect(result.topPlayers[0]).not.toHaveProperty('discordId');
+      expect(result.topPlayers[0]?.avatar).toBe(
+        'https://cdn.discordapp.com/avatars/111/abc123.png',
+      );
+      expect(result.topPlayers[1]).toMatchObject({
+        avatar: null,
+        customAvatarUrl: '/avatars/2.webp',
+      });
     });
 
     it('should throw BadRequestException for invalid period', async () => {
@@ -144,9 +186,9 @@ function describeIgdbControllerActivityEndpoints() {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      await expect(ctrl.getGameActivity(1, 'yearly')).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        ctrl.getGameActivity(1, 'yearly', MEMBER_REQ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException with correct message for invalid period', async () => {
@@ -171,7 +213,7 @@ function describeIgdbControllerActivityEndpoints() {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      await expect(ctrl.getGameActivity(1, 'bad')).rejects.toThrow(
+      await expect(ctrl.getGameActivity(1, 'bad', MEMBER_REQ)).rejects.toThrow(
         'Invalid period. Must be week, month, or all.',
       );
     });
@@ -205,13 +247,13 @@ function describeIgdbControllerActivityEndpoints() {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      await expect(ctrl.getGameActivity(999, 'week')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        ctrl.getGameActivity(999, 'week', MEMBER_REQ),
+      ).rejects.toThrow(NotFoundException);
 
-      await expect(ctrl.getGameActivity(999, 'week')).rejects.toThrow(
-        'Game not found',
-      );
+      await expect(
+        ctrl.getGameActivity(999, 'week', MEMBER_REQ),
+      ).rejects.toThrow('Game not found');
     });
 
     it('should default period to week when not provided', async () => {
@@ -245,9 +287,9 @@ function describeIgdbControllerActivityEndpoints() {
 
       // Should not throw BadRequestException (period defaults to 'week')
       // Will throw NotFoundException since the game doesn't exist in mock
-      await expect(ctrl.getGameActivity(1, undefined)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        ctrl.getGameActivity(1, undefined, MEMBER_REQ),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('GameActivityResponseSchema validates expected response shape', () => {
@@ -314,7 +356,7 @@ function describeIgdbControllerActivityEndpoints() {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      const result = await ctrl.getGameNowPlaying(1);
+      const result = await ctrl.getGameNowPlaying(1, MEMBER_REQ);
 
       expect(result).toMatchObject({
         players: [],
@@ -350,11 +392,40 @@ function describeIgdbControllerActivityEndpoints() {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      const result = await ctrl.getGameNowPlaying(42);
+      const result = await ctrl.getGameNowPlaying(42, MEMBER_REQ);
 
       expect(result.players).toHaveLength(1);
       expect(result.count).toBe(1);
       expect(mockService.getGameNowPlaying).toHaveBeenCalledWith(42);
+    });
+
+    it('strips discordId from players for an anonymous viewer (ROK-1734)', async () => {
+      const mockService: Partial<IgdbService> = {
+        getGameNowPlaying: jest
+          .fn()
+          .mockResolvedValue({ players: mockNowPlayingPlayers, count: 1 }),
+      };
+      const module: TestingModule = await Test.createTestingModule({
+        controllers: [IgdbController],
+        providers: [
+          { provide: IgdbService, useValue: mockService },
+          { provide: ItadPriceService, useValue: {} },
+          { provide: ItadService, useValue: {} },
+          { provide: SettingsService, useValue: {} },
+          PRICE_SYNC_QUEUE_PROVIDER,
+        ],
+      }).compile();
+      const ctrl = module.get<IgdbController>(IgdbController);
+
+      const result = await ctrl.getGameNowPlaying(42, ANON_REQ);
+
+      expect(result.players[0]).toEqual({
+        userId: 3,
+        username: 'ActivePlayer',
+        avatar: 'https://cdn.discordapp.com/avatars/333/def456.png',
+        customAvatarUrl: null,
+      });
+      expect(result.count).toBe(1);
     });
 
     it('GameNowPlayingResponseSchema validates correct response shape', () => {

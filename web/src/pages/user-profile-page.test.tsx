@@ -63,6 +63,7 @@ const createMockProfile = (
   avatar: null,
   customAvatarUrl: null,
   discordId: "123456",
+  steamLinked: false,
   characters: [],
   createdAt: "2025-01-01T00:00:00Z",
   ...overrides,

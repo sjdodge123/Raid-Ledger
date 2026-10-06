@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { GameDiscoverResponseDto, GameDetailDto, GameStreamsResponseDto, ActivityPeriod, GameActivityResponseDto, GameNowPlayingResponseDto, ItadGamePricingDto } from '@raid-ledger/contract';
+import type { GameDiscoverResponseDto, GameDetailDto, GameStreamsResponseDto, ActivityPeriod, GameActivityResponseDto, GameNowPlayingResponseDto, PublicGameActivityResponseDto, PublicGameNowPlayingResponseDto, ItadGamePricingDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken, useViewerCacheScope } from './use-auth';
 import { getGameActivity, getGameNowPlaying, getGamePricing } from '../lib/api-client';
@@ -77,8 +77,10 @@ export function useGameStreams(id: number | undefined) {
  * ROK-443: Hook for fetching community activity for a game.
  */
 export function useGameActivity(gameId: number | undefined, period: ActivityPeriod) {
-    return useQuery<GameActivityResponseDto>({
-        queryKey: ['games', 'activity', gameId, period],
+    // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+    const viewer = useViewerCacheScope();
+    return useQuery<GameActivityResponseDto | PublicGameActivityResponseDto>({
+        queryKey: ['games', 'activity', gameId, period, viewer],
         queryFn: async () => {
             if (!gameId) throw new Error('Game ID required');
             return getGameActivity(gameId, period);
@@ -92,8 +94,10 @@ export function useGameActivity(gameId: number | undefined, period: ActivityPeri
  * ROK-443: Hook for fetching users currently playing a game.
  */
 export function useGameNowPlaying(gameId: number | undefined) {
-    return useQuery<GameNowPlayingResponseDto>({
-        queryKey: ['games', 'nowPlaying', gameId],
+    // ROK-1734: viewer-scoped — members get raw discordId, anonymous a projection.
+    const viewer = useViewerCacheScope();
+    return useQuery<GameNowPlayingResponseDto | PublicGameNowPlayingResponseDto>({
+        queryKey: ['games', 'nowPlaying', gameId, viewer],
         queryFn: async () => {
             if (!gameId) throw new Error('Game ID required');
             return getGameNowPlaying(gameId);

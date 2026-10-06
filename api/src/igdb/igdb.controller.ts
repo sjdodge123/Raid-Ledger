@@ -5,7 +5,6 @@ import {
   Delete,
   Param,
   Query,
-  BadRequestException,
   InternalServerErrorException,
   NotFoundException,
   Logger,
@@ -35,9 +34,6 @@ import {
   GameStreamsResponseDto,
   GameInterestResponseDto,
   EventTypesResponseDto,
-  ActivityPeriodSchema,
-  GameActivityResponseDto,
-  GameNowPlayingResponseDto,
   type ItadGamePricingDto,
   type ItadBatchPricingResponseDto,
   type UserRole,
@@ -66,6 +62,12 @@ import {
 import { parseBatchIds } from './igdb-batch.util';
 import { resolveGameBySteamAppId } from './igdb-game-lookup.helpers';
 import { defined } from '../common/defined.helpers';
+import {
+  gameActivityForViewer,
+  nowPlayingForViewer,
+  type GameActivityForViewerDto,
+  type NowPlayingForViewerDto,
+} from './igdb-activity-viewer.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -194,33 +196,25 @@ export class IgdbController {
     return result.game;
   }
 
-  /** GET /games/:id/activity -- Community activity for a game. */
+  /** GET /games/:id/activity -- Community activity (projected per viewer). */
   @Get(':id/activity')
+  @UseGuards(OptionalJwtGuard)
   async getGameActivity(
     @Param('id', ParseIntPipe) id: number,
-    @Query('period') periodParam?: string,
-  ): Promise<GameActivityResponseDto> {
-    const period = ActivityPeriodSchema.safeParse(periodParam ?? 'week');
-    if (!period.success)
-      throw new BadRequestException(
-        'Invalid period. Must be week, month, or all.',
-      );
-    const db = this.igdbService.database;
-    const gameExists = await db
-      .select({ id: schema.games.id })
-      .from(schema.games)
-      .where(eq(schema.games.id, id))
-      .limit(1);
-    if (gameExists.length === 0) throw new NotFoundException('Game not found');
-    return this.igdbService.getGameActivity(id, period.data);
+    @Query('period') periodParam: string | undefined,
+    @Req() req: OptionalViewer,
+  ): Promise<GameActivityForViewerDto> {
+    return gameActivityForViewer(this.igdbService, id, periodParam, req);
   }
 
-  /** GET /games/:id/now-playing -- Users currently playing this game. */
+  /** GET /games/:id/now-playing -- Users currently playing (per viewer). */
   @Get(':id/now-playing')
+  @UseGuards(OptionalJwtGuard)
   async getGameNowPlaying(
     @Param('id', ParseIntPipe) id: number,
-  ): Promise<GameNowPlayingResponseDto> {
-    return this.igdbService.getGameNowPlaying(id);
+    @Req() req: OptionalViewer,
+  ): Promise<NowPlayingForViewerDto> {
+    return nowPlayingForViewer(this.igdbService, id, req);
   }
 
   /** GET /games/:id/pricing -- ITAD price overview for a game (ROK-419). */

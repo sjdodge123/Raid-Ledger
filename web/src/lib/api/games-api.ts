@@ -5,6 +5,8 @@ import type {
     ActivityPeriod,
     GameActivityResponseDto,
     GameNowPlayingResponseDto,
+    PublicGameActivityResponseDto,
+    PublicGameNowPlayingResponseDto,
     ItadGamePricingDto,
     ItadBatchPricingResponseDto,
     IgdbGameDto,
@@ -45,18 +47,18 @@ export async function getGameEventTypes(
     return fetchApi(`/games/${gameId}/event-types`);
 }
 
-/** Fetch community activity for a game (ROK-443) */
+/** Fetch community activity for a game (ROK-443). Anonymous viewers get the public shape (ROK-1734). */
 export async function getGameActivity(
     gameId: number,
     period: ActivityPeriod,
-): Promise<GameActivityResponseDto> {
+): Promise<GameActivityResponseDto | PublicGameActivityResponseDto> {
     return fetchApi(`/games/${gameId}/activity?period=${period}`);
 }
 
-/** Fetch users currently playing a game (ROK-443) */
+/** Fetch users currently playing a game (ROK-443). Anonymous viewers get the public shape (ROK-1734). */
 export async function getGameNowPlaying(
     gameId: number,
-): Promise<GameNowPlayingResponseDto> {
+): Promise<GameNowPlayingResponseDto | PublicGameNowPlayingResponseDto> {
     return fetchApi(`/games/${gameId}/now-playing`);
 }
 

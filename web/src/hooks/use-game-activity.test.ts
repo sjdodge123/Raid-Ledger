@@ -19,6 +19,7 @@ vi.mock('../lib/api-client', () => ({
 
 vi.mock('./use-auth', () => ({
     getAuthToken: vi.fn().mockReturnValue(null),
+    useViewerCacheScope: () => 'anon',
 }));
 
 // ─── Lazy imports after mocks ─────────────────────────────────────────────────
