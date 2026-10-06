@@ -14,15 +14,6 @@ const FACTION_STYLES: Record<string, string> = {
     horde: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
-/** ROK-587: Short labels for WoW Classic game variants */
-const VARIANT_LABELS: Record<string, string> = {
-    classic_anniversary: 'TBC',
-    classic_era: 'Era',
-    classic: 'Cata',
-    // ROK-1563: WoW: Forever
-    wow_forever: 'Forever',
-};
-
 const ROLE_COLORS: Record<string, string> = {
     tank: 'bg-blue-600',
     healer: 'bg-emerald-600',
@@ -55,11 +46,7 @@ function CharacterNameBadges({ character }: { character: CharacterDto }) {
                     {character.faction.charAt(0).toUpperCase() + character.faction.slice(1)}
                 </span>
             )}
-            {character.gameVariant && VARIANT_LABELS[character.gameVariant] && (
-                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 flex-shrink-0">
-                    {VARIANT_LABELS[character.gameVariant]}
-                </span>
-            )}
+            <PluginSlot name="character-card:badges" context={{ gameVariant: character.gameVariant, ruleset: character.ruleset }} />
         </div>
     );
 }

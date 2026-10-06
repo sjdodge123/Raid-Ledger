@@ -2,6 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { EquipmentItemDto } from '@raid-ledger/contract';
 import { useBodyScrollLock } from '../../../hooks/use-body-scroll-lock';
+import { getWowheadItemUrl } from '../lib/wowhead-urls';
 
 const QUALITY_COLORS: Record<string, string> = {
     POOR: 'text-gray-500',
@@ -42,25 +43,6 @@ interface ItemDetailModalProps {
     currentIndex: number;
     onNavigate: (index: number) => void;
     gameVariant: string | null;
-}
-
-function getWowheadUrl(itemId: number, gameVariant: string | null): string {
-    let urlBase: string;
-    switch (gameVariant) {
-        case 'classic_anniversary':
-            urlBase = 'www.wowhead.com/tbc';
-            break;
-        case 'classic':
-        case 'classic_era':
-        case 'wow_forever': // ROK-1563: no Forever database on Wowhead yet — vanilla IDs.
-        case 'classicforever': // the game row's apiNamespacePrefix form of the same variant
-            urlBase = 'classic.wowhead.com';
-            break;
-        default:
-            urlBase = 'www.wowhead.com';
-            break;
-    }
-    return `https://${urlBase}/item=${itemId}`;
 }
 
 function useItemModalKeyboard(isOpen: boolean, onClose: () => void, items: EquipmentItemDto[], currentIndex: number, onNavigate: (i: number) => void) {
@@ -146,7 +128,7 @@ function ItemFooter({ item, gameVariant }: { item: EquipmentItemDto; gameVariant
             {item.setName && <div className="text-sm text-yellow-300">{item.setName}</div>}
             {item.description && <div className="text-sm text-yellow-600 italic">&quot;{item.description}&quot;</div>}
             <div className="pt-2 border-t border-edge">
-                <a href={getWowheadUrl(item.itemId, gameVariant)} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
+                <a href={getWowheadItemUrl(item.itemId, gameVariant)} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-400 hover:underline inline-flex items-center gap-1">
                     View on Wowhead <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                 </a>
             </div>
