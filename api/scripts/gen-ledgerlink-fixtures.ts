@@ -5,8 +5,9 @@
  *
  *   cd api && npx ts-node scripts/gen-ledgerlink-fixtures.ts
  *
- * Valid case: `<name>.txt` (the paste) + `<name>.json` ({ pages, payload }:
- * the decoder's output). Invalid case: `invalid/<name>.txt` +
+ * Valid case: `<name>.txt` (the paste) + `<name>.json` (the decoder's output:
+ * `{ pages, payload }`, or `{ sections: [...] }` for a mixed paste — see
+ * `ledgerLinkFixtureView`). Invalid case: `invalid/<name>.txt` +
  * `invalid/<name>.json` ({ code }). Conformance spec:
  * `src/plugins/wow-common/addon-import/ledgerlink-contract.spec.ts`.
  */
@@ -14,7 +15,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import type { AddonImportErrorCode } from '@raid-ledger/contract';
-import { decodeImportString } from '../src/plugins/wow-common/addon-import/addon-import.decoder';
+import { decodeImportPaste } from '../src/plugins/wow-common/addon-import/addon-import.decoder';
 import { AddonImportError } from '../src/plugins/wow-common/addon-import/addon-import.errors';
 import {
   FIXTURE_GUID,
@@ -27,6 +28,7 @@ import {
   buildWho,
   wrapImportBytes,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.builder';
+import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
 
 const OUT = join(__dirname, '../../packages/contract/ledgerlink/v1/fixtures');
 /** Members per page the addon emits (LedgerLink `Guild.MEMBERS_PER_PAGE`). */
@@ -64,6 +66,17 @@ function charNoGuild(): string {
   return buildImportString(buildCharPayload({ who }));
 }
 
+/** ROK-1737 "Export all": char + every guild page + raid, shuffled. */
+function mixedAll(): string {
+  const pages = buildGuildPages(buildGuildPayload(roster(600)), 3);
+  const char = buildImportString(buildCharPayload());
+  const raid = buildImportString(buildRaidPayload());
+  return [pages[2], raid, pages[0], char, pages[1]].join('\n');
+}
+
+const mixedCharRaid = () =>
+  [buildCharPayload(), buildRaidPayload()].map((p) => buildImportString(p));
+
 const VALID: Record<string, () => string> = {
   'char-normal': () => buildImportString(buildCharPayload()),
   'char-roleplaying': () =>
@@ -75,6 +88,8 @@ const VALID: Record<string, () => string> = {
   'guild-3-pages': () => guildPaste(600),
   'guild-8-pages-2000-members': () => guildPaste(2000),
   raid: () => buildImportString(buildRaidPayload()),
+  'mixed-char-raid': () => mixedCharRaid().join('\n'),
+  'mixed-char-guild3-raid-shuffled': mixedAll,
 };
 
 /** Body of a single-page string, asserting a property the case relies on. */
@@ -105,6 +120,31 @@ function unpadded(): string {
     b.endsWith('='),
   );
   return `!RL1!raid!${body.replace(/=+$/, '')}`;
+}
+
+function mixedGuildIncomplete(): string {
+  const pages = buildGuildPages(buildGuildPayload(roster(600)), 3);
+  return [...mixedCharRaid(), pages[0], pages[2]].join('\n');
+}
+
+function mixedDifferentExporters(): string {
+  const raid = {
+    ...buildRaidPayload(),
+    who: buildWho({ guid: 'Player-4395-0BBBBBB0', fullName: 'Bea Forever' }),
+  };
+  return [buildCharPayload(), raid].map((p) => buildImportString(p)).join('\n');
+}
+
+/** Same GUID + name, but the raid section claims another client region. */
+function mixedDifferentRegion(): string {
+  const base = buildRaidPayload();
+  const raid = { ...base, client: { ...base.client, region: 3 } };
+  return [buildCharPayload(), raid].map((p) => buildImportString(p)).join('\n');
+}
+
+function mixed11Tokens(): string {
+  const pages = buildGuildPages(buildGuildPayload(roster(2000)), 8);
+  return [...pages, ...mixedCharRaid(), mixedCharRaid()[1]].join('\n');
 }
 
 const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
@@ -157,6 +197,14 @@ const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
   ],
   'url-safe-base64': ['BAD_HEADER', urlSafe],
   'unpadded-base64': ['CUT_OFF', unpadded],
+  'mixed-two-char': [
+    'PAGES_INCOMPLETE',
+    () => [mixedCharRaid()[0], ...mixedCharRaid()].join('\n'),
+  ],
+  'mixed-guild-incomplete': ['PAGES_INCOMPLETE', mixedGuildIncomplete],
+  'mixed-different-exporters': ['INVALID_PAYLOAD', mixedDifferentExporters],
+  'mixed-different-region': ['INVALID_PAYLOAD', mixedDifferentRegion],
+  'mixed-11-tokens': ['PAGES_INCOMPLETE', mixed11Tokens],
 };
 
 /** Pretty JSON, but containers 4+ levels deep stay on one line. */
@@ -179,7 +227,7 @@ function fmt(value: unknown, depth = 0): string {
 
 function codeOf(paste: string): AddonImportErrorCode | null {
   try {
-    decodeImportString(paste);
+    decodeImportPaste(paste);
     return null;
   } catch (err) {
     if (err instanceof AddonImportError) return err.code;
@@ -191,9 +239,9 @@ function main(): void {
   mkdirSync(join(OUT, 'invalid'), { recursive: true });
   for (const [name, build] of Object.entries(VALID)) {
     const paste = build();
-    const { pages, payload } = decodeImportString(paste);
+    const view = ledgerLinkFixtureView(decodeImportPaste(paste));
     writeFileSync(join(OUT, `${name}.txt`), paste);
-    writeFileSync(join(OUT, `${name}.json`), `${fmt({ pages, payload })}\n`);
+    writeFileSync(join(OUT, `${name}.json`), `${fmt(view)}\n`);
   }
   for (const [name, [code, build]] of Object.entries(INVALID)) {
     const paste = build();

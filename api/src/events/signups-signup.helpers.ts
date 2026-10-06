@@ -7,7 +7,13 @@ import { eq, and, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
 import type { CreateSignupDto } from '@raid-ledger/contract';
-import type { Tx, EventRow, SignupRow } from './signups.service.types';
+import type {
+  Tx,
+  EventRow,
+  SignupRow,
+  SignupTxParams,
+} from './signups.service.types';
+import { hasDisplaceableTentative } from './signups-tentative-capacity.helpers';
 
 /** Shared MMO slot defaults used across capacity and roster-query helpers. */
 export const MMO_SLOT_DEFAULTS = {
@@ -60,6 +66,26 @@ export async function checkAutoBench(
     );
   const { count } = defined(countRow, 'signup count row');
   return Number(count) >= capacity;
+}
+
+/**
+ * Auto-bench decision for the web/API signup flow (ROK-1729): a full roster
+ * benches the newcomer UNLESS it may bump a tentative occupant from a role it
+ * prefers — then allocation runs and ROK-459 displacement makes room.
+ * Callers without a dto (anonymous Discord, PUG invite) use checkAutoBench.
+ */
+export async function checkSignupAutoBench(
+  p: Pick<SignupTxParams, 'tx' | 'eventRow' | 'eventId' | 'userId' | 'dto'>,
+): Promise<boolean> {
+  const full = await checkAutoBench(p.tx, p.eventRow, p.eventId, p.dto);
+  if (!full || !p.dto) return full;
+  return !(await hasDisplaceableTentative(
+    p.tx,
+    p.eventRow,
+    p.eventId,
+    p.dto,
+    p.userId,
+  ));
 }
 
 /**

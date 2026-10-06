@@ -11,8 +11,10 @@ import type {
   ExecuteDisplacementParams,
   RearrangeVictimParams,
   DisplacedNotificationParams,
+  DisplacedDestination,
 } from './signups.service.types';
 import { findOldestTentativeOccupant } from './signups-allocation.helpers';
+import { findNextPosition } from './signups-roster-query.helpers';
 import type { NotificationService } from '../notifications/notification.service';
 
 export async function reslotTentativeTx(
@@ -211,27 +213,77 @@ export async function removeVictimAssignment(
   );
 }
 
+/**
+ * Take the displaced (non-rearranged) victim out of its role. On a FULL
+ * roster it moves to the next bench position; otherwise its assignment is
+ * deleted (unassigned pool, still reachable by reslotTentativeTx).
+ * Operator ruling ROK-1729 Q1.
+ */
+export async function evictVictim(
+  p: ExecuteDisplacementParams,
+  logger: { log: (msg: string) => void },
+): Promise<Exclude<DisplacedDestination, 'role'>> {
+  if (!p.rosterFull) {
+    await removeVictimAssignment(
+      p.tx,
+      p.victim,
+      p.role,
+      p.occupiedPositions,
+      logger,
+    );
+    return 'pool';
+  }
+  await moveVictimToBench(p, logger);
+  return 'bench';
+}
+
+/** Full roster: re-point the victim's assignment at the next bench slot. */
+async function moveVictimToBench(
+  p: ExecuteDisplacementParams,
+  logger: { log: (msg: string) => void },
+) {
+  const position = await findNextPosition(
+    p.tx,
+    p.eventId,
+    'bench',
+    undefined,
+    true,
+  );
+  await p.tx
+    .update(schema.rosterAssignments)
+    .set({ role: 'bench', position })
+    .where(eq(schema.rosterAssignments.id, p.victim.id));
+  p.occupiedPositions[p.role]?.delete(p.victim.position);
+  logger.log(
+    `ROK-1729: Displaced tentative signup ${p.victim.signupId} from ${p.role} slot ${p.victim.position} to bench slot ${position} (roster full)`,
+  );
+}
+
+const DISPLACED_ACTION: Record<DisplacedDestination, (r?: string) => string> = {
+  role: (r) => `moved to ${r}`,
+  bench: () => 'moved to the bench',
+  pool: () => 'moved to the unassigned pool',
+};
+
 export async function sendDisplacedNotification(
   p: DisplacedNotificationParams,
   notificationService: NotificationService,
   fetchNotificationCtx: (eventId: number) => Promise<Record<string, string>>,
 ) {
-  const { tx, eventId, victimSignupId, role, rearrangedToRole } = p;
-  const [signup] = await tx
+  const { db, eventId, victimSignupId, role, rearrangedToRole } = p;
+  const [signup] = await db
     .select({ userId: schema.eventSignups.userId })
     .from(schema.eventSignups)
     .where(eq(schema.eventSignups.id, victimSignupId))
     .limit(1);
   if (!signup?.userId) return;
-  const [event] = await tx
+  const [event] = await db
     .select({ title: schema.events.title })
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
   const eventTitle = event?.title ?? `Event #${eventId}`;
-  const action = rearrangedToRole
-    ? `moved to ${rearrangedToRole}`
-    : 'moved to the unassigned pool';
+  const action = DISPLACED_ACTION[p.destination](rearrangedToRole);
   const extraPayload = await fetchNotificationCtx(eventId);
   await notificationService.create({
     userId: signup.userId,
