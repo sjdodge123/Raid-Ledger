@@ -217,7 +217,7 @@ describe('BlizzardService.fetchRealmList — Forever prefix override', () => {
     const { service } = setup();
     fetchRealms.mockRejectedValueOnce(refused());
     await rejectionOf(service.fetchRealmList('us', 'classicforever'));
-    fetchRealms.mockResolvedValueOnce(REALMS as never);
+    fetchRealms.mockResolvedValueOnce(REALMS);
 
     setForeverNamespacePrefix('foo');
 
@@ -229,9 +229,9 @@ describe('BlizzardService.fetchRealmList — Forever prefix override', () => {
 
   it('purgeNamespace clears the realm cache and refusal memo for that prefix only', async () => {
     const { service } = setup();
-    fetchRealms.mockResolvedValueOnce(REALMS as never);
+    fetchRealms.mockResolvedValueOnce(REALMS);
     await service.fetchRealmList('us', 'classicforever');
-    fetchRealms.mockResolvedValueOnce(REALMS as never);
+    fetchRealms.mockResolvedValueOnce(REALMS);
     await service.fetchRealmList('us', 'classicann');
     fetchRealms.mockRejectedValueOnce(refused());
     await rejectionOf(service.fetchRealmList('eu', 'classicforever'));

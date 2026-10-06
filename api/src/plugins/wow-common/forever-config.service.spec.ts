@@ -34,7 +34,7 @@ function setup(initial: Record<string, string> = {}) {
   return { service, store, settings, blizzard, events };
 }
 
-describe('ForeverConfigService (ROK-1717)', () => {
+describe('ForeverConfigService reads (ROK-1717)', () => {
   afterEach(() => setForeverNamespacePrefix(null));
 
   it('loads the stored prefix into the resolver on boot', async () => {
@@ -54,6 +54,10 @@ describe('ForeverConfigService (ROK-1717)', () => {
       armoryImport: { wow_forever: false },
     });
   });
+});
+
+describe('ForeverConfigService writes (ROK-1717)', () => {
+  afterEach(() => setForeverNamespacePrefix(null));
 
   it('persists an override + the Armory flag and emits the change', async () => {
     const { service, store, events } = setup();

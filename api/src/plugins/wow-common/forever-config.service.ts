@@ -102,7 +102,9 @@ export class ForeverConfigService implements OnModuleInit {
 
   /** Public capability flags the Add Character flow reads. */
   async getCapabilities(): Promise<BlizzardCapabilitiesDto> {
-    return { armoryImport: { wow_forever: await this.isArmoryImportEnabled() } };
+    return {
+      armoryImport: { wow_forever: await this.isArmoryImportEnabled() },
+    };
   }
 
   private async isArmoryImportEnabled(): Promise<boolean> {
