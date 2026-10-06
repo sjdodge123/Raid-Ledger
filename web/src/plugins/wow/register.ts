@@ -10,6 +10,7 @@ import { BlizzardIntegrationSlot } from './slots/admin-settings-integration-card
 import { ProfileCharacterActions } from './slots/profile-character-actions';
 import { QuestPrepPanel } from './slots/quest-prep-panel';
 import { BossLootPanel } from './slots/boss-loot-panel';
+import { CharacterVariantBadge } from './slots/character-variant-badge';
 import { foreverIdentityProvider } from './forever-identity-provider';
 
 const blizzard = registerPlugin('blizzard', {
@@ -30,4 +31,5 @@ blizzard.registerSlot('event-detail:content-sections', QuestPrepPanel, 10);
 blizzard.registerSlot('event-detail:signup-warnings', EventDetailSignupWarnings);
 blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
 blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);
+blizzard.registerSlot('character-card:badges', CharacterVariantBadge);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);

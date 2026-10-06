@@ -12,7 +12,8 @@ export type PluginSlotName =
     | 'event-detail:signup-warnings'
     | 'admin-settings:integration-cards'
     | 'admin-settings:plugin-content'
-    | 'profile:character-actions';
+    | 'profile:character-actions'
+    | 'character-card:badges';
 
 export interface PluginBadgeMeta {
     /** Emoji string, or image URL (starting with "/" or "http") */

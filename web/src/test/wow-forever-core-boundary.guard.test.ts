@@ -28,10 +28,7 @@ const BANNED = [/forever/i, /['"`](roleplaying|hardcore)['"`]/];
  * Files allowed to keep a match, each with its reason. Delete an entry the
  * moment its file is cleaned — the stale-entry test below enforces that.
  */
-const ALLOWLIST: Record<string, string> = {
-    'components/profile/CharacterCard.tsx': 'ROK-1563 variant label — ROK-1726 Lane B removes; delete this entry then',
-    'components/characters/character-card-compact.tsx': 'ROK-1563 variant label — ROK-1726 Lane B removes; delete this entry then',
-};
+const ALLOWLIST: Record<string, string> = {};
 
 /** Every shipped, non-test `.ts`/`.tsx` file under `dir`, recursively. */
 function sourceFiles(dir: string): string[] {
