@@ -75,7 +75,7 @@ function ActivityHeader({ period, onPeriodChange }: { period: ActivityPeriod; on
 
 /** Now playing row with player avatars */
 function NowPlayingRow({ players, count }: {
-    players: { userId: number; username: string; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[];
+    players: { userId: number; username: string; avatar: string | null; customAvatarUrl: string | null; discordId?: string | null }[];
     count: number;
 }): JSX.Element | null {
     if (count <= 0) return null;
@@ -97,7 +97,7 @@ function NowPlayingRow({ players, count }: {
 
 /** Top players leaderboard list */
 function TopPlayersList({ players, isLoading }: {
-    players: { userId: number; username: string; totalSeconds: number; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[];
+    players: { userId: number; username: string; totalSeconds: number; avatar: string | null; customAvatarUrl: string | null; discordId?: string | null }[];
     isLoading: boolean;
 }): JSX.Element | null {
     if (isLoading) {
