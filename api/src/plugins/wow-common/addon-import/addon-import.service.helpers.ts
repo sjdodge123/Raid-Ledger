@@ -25,6 +25,18 @@ export interface AttemptFacts {
   sha256: string | null;
   /** The reserved audit row (limit check passed), finalised by `finish`. */
   auditId: number | null;
+  /**
+   * ROK-1737 — a mixed paste's sections (2–3, canonical order): one audit
+   * row each. Empty for a single-section paste (one row, as before).
+   */
+  sections: SectionAuditFact[];
+}
+
+/** One section of a mixed paste, for its own audit row. */
+export interface SectionAuditFact {
+  section: AddonExportSection;
+  sha256: string;
+  sizeBytes: number;
 }
 
 const SECTION_SNIFF = /^\s*!RL\d+!(char|guild|raid)\b/;
@@ -46,6 +58,7 @@ export function rawFacts(body: unknown): AttemptFacts {
     section: sniffSection(str),
     sha256: null,
     auditId: null,
+    sections: [],
   };
 }
 

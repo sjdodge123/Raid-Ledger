@@ -12,8 +12,22 @@ import { WowRegionSchema } from './characters.schema.js';
 export const ADDON_IMPORT_MAX_BYTES = 262_144;
 /** zlib `maxOutputLength` per page — over it is `DECODED_TOO_LARGE`. */
 export const ADDON_IMPORT_MAX_DECODED_BYTES = 1_048_576;
-/** Whitespace-separated pages accepted in one paste (paged guild export). */
+/** Pages accepted for ONE guild export (`guild-<n>of<m>`, m ≤ 8). */
 export const ADDON_IMPORT_MAX_PAGES = 8;
+/**
+ * Whitespace-separated tokens accepted in one paste (ROK-1737 "Export all"):
+ * 8 guild pages + 1 char + 1 raid. Over it is `PAGES_INCOMPLETE`.
+ */
+export const ADDON_IMPORT_MAX_TOKENS = 10;
+/**
+ * Max spread of `exportedAt` (unix seconds) across the sections of one
+ * mixed paste (ROK-1737). "Export all" stamps every section within a
+ * second; 10 minutes still admits a player who exports the sections one by
+ * one in the same sitting, while rejecting a stale string left over from an
+ * earlier session being pasted beside fresh ones. Over it is
+ * `INVALID_PAYLOAD`.
+ */
+export const ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS = 600;
 
 /**
  * One page token: `!RL<version>!<section>[-<n>of<m>]!<std base64>`.
@@ -121,12 +135,35 @@ export const AddonRaidImportSummarySchema = z.object({
     wipes: n,
 });
 
-const resultBase = {
+const sectionBase = {
     status: AddonImportStatusSchema,
     /** Unix seconds from the payload. */
     exportedAt: z.number().int(),
+};
+
+/**
+ * One section of a mixed "Export all" paste (ROK-1737): its own status
+ * (a stale section writes nothing for that section) and counts.
+ */
+export const AddonImportSectionResultSchema = z.discriminatedUnion('section', [
+    z.object({ ...sectionBase, section: z.literal('char'), summary: AddonCharImportSummarySchema }),
+    z.object({ ...sectionBase, section: z.literal('guild'), summary: AddonGuildImportSummarySchema }),
+    z.object({ ...sectionBase, section: z.literal('raid'), summary: AddonRaidImportSummarySchema }),
+]);
+export type AddonImportSectionResultDto = z.infer<typeof AddonImportSectionResultSchema>;
+
+const resultBase = {
+    ...sectionBase,
     warnings: z.array(AddonImportWarningSchema),
     diff: AddonImportDiffSchema,
+    /**
+     * ROK-1737 — present only for a paste with 2–3 sections, one entry per
+     * section in canonical order char → guild → raid. The top-level
+     * `section`/`status`/`exportedAt`/`summary` then mirror the FIRST entry,
+     * and `warnings` carries `STALE_EXPORT` when ANY section is stale. A
+     * single-section paste omits it (body unchanged since ROK-1724).
+     */
+    sections: z.array(AddonImportSectionResultSchema).min(2).max(3).optional(),
 };
 
 /** Discriminated by `section`; `summary` carries that section's counts. */
