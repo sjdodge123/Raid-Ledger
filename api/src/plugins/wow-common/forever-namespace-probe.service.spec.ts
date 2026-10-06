@@ -120,7 +120,9 @@ describe('ForeverNamespaceProbeService.run — alerting', () => {
     expect(captureMessage).toHaveBeenCalledTimes(2);
     expect(second.found?.prefix).toBe('forever');
   });
+});
 
+describe('ForeverNamespaceProbeService.run — no alert', () => {
   it('does not alert for a classic control 200 without Skyborne', async () => {
     const { service, store } = setup();
     const result = await service.run();
@@ -198,7 +200,9 @@ describe('ForeverNamespaceProbeService config + state', () => {
       characterPath: null,
     });
   });
+});
 
+describe('ForeverNamespaceProbeService config', () => {
   it('stores config and feeds it into the next run', async () => {
     const { service } = setup();
     const state = await service.updateConfig({
@@ -210,12 +214,14 @@ describe('ForeverNamespaceProbeService config + state', () => {
       characterPath: 'dreamscythe/thrall',
     });
     await service.run();
-    const input = runProbeMock.mock.calls[0][0];
-    expect(input.candidates).toContain('classicann');
-    expect(input.candidates).toContain('classic');
-    expect(input.regions).toEqual(['us', 'eu', 'kr', 'tw']);
-    expect(input.characterPath).toBe('dreamscythe/thrall');
-    expect(input.token).toBe('tok');
+    expect(runProbeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        candidates: expect.arrayContaining(['classicann', 'classic']),
+        regions: ['us', 'eu', 'kr', 'tw'],
+        characterPath: 'dreamscythe/thrall',
+        token: 'tok',
+      }),
+    );
   });
 
   it('deletes cleared config keys', async () => {
@@ -237,7 +243,9 @@ describe('ForeverNamespaceProbeService config + state', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+});
 
+describe('ForeverNamespaceProbeService stored state', () => {
   it('treats corrupt stored JSON as absent', async () => {
     const { service, store } = setup();
     store.set(WOW_FOREVER_PROBE_LAST_RESULT_KEY, '{nope');

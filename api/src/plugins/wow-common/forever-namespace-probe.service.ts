@@ -35,6 +35,9 @@ const probeFetch: ProbeFetch = (url, init) => fetch(url, init);
 
 const ExtraCandidatesSchema = z.array(z.string());
 
+/** A result before its status + duration are known. */
+type ProbeBase = Omit<ForeverProbeResultDto, 'status' | 'durationMs'>;
+
 /**
  * WoW: Forever namespace discovery probe (ROK-1716). Reports what Blizzard
  * answers and raises ONE Sentry info event per newly found prefix. It never
@@ -102,16 +105,13 @@ export class ForeverNamespaceProbeService {
 
   private async execute(): Promise<ForeverProbeResultDto> {
     const started = Date.now();
-    const ranAt = new Date(started).toISOString();
-    const found = await this.readJson(
-      WOW_FOREVER_PROBE_FOUND_KEY,
-      ForeverProbeFoundSchema,
-    );
-    const candidates = buildCandidateList(await this.readExtras());
-    const base = {
-      ranAt,
-      candidates,
-      found,
+    const base: ProbeBase = {
+      ranAt: new Date(started).toISOString(),
+      candidates: buildCandidateList(await this.readExtras()),
+      found: await this.readJson(
+        WOW_FOREVER_PROBE_FOUND_KEY,
+        ForeverProbeFoundSchema,
+      ),
       cells: [],
       matches: [],
       shapes: {},
@@ -119,18 +119,20 @@ export class ForeverNamespaceProbeService {
     if (!(await this.settings.isBlizzardConfigured())) {
       return this.persist({ ...base, status: 'skipped', durationMs: 0 });
     }
+    return this.probeAndPersist(base, started);
+  }
+
+  /** Probe, record any new find, persist; a failure persists `error` (no throw). */
+  private async probeAndPersist(
+    base: ProbeBase,
+    started: number,
+  ): Promise<ForeverProbeResultDto> {
     try {
-      const run = await this.probe(candidates);
-      const next = await this.recordFound(run, found, ranAt);
+      const run = await this.probe(base.candidates);
+      const found = await this.recordFound(run, base.found, base.ranAt);
       this.logShapes(run);
       const durationMs = Date.now() - started;
-      return this.persist({
-        ...base,
-        ...run,
-        status: 'ok',
-        found: next,
-        durationMs,
-      });
+      return this.persist({ ...base, ...run, status: 'ok', found, durationMs });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Forever namespace probe failed: ${msg}`);

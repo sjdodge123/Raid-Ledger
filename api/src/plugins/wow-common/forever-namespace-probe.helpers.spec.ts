@@ -82,9 +82,10 @@ describe('probeOne', () => {
     );
     const out = await probeOne(fetchFn, 'tok', 'https://x');
     expect(out).toEqual({ status: 200, body: { a: 1 } });
-    expect(fetchFn.mock.calls[0][1].headers).toEqual({
-      Authorization: 'Bearer tok',
-    });
+    expect(fetchFn).toHaveBeenCalledWith(
+      'https://x',
+      expect.objectContaining({ headers: { Authorization: 'Bearer tok' } }),
+    );
   });
 
   it('returns a null body for a non-200 status', async () => {
