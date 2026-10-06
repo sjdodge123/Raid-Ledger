@@ -243,6 +243,16 @@ describe('ForeverNamespaceProbeService config', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it.each(['dreamscythe/..', 'dreamscythe/.'])(
+    'rejects a dot-only character name (%s) that would change the Blizzard path',
+    async (characterPath) => {
+      const { service } = setup();
+      await expect(
+        service.updateConfig({ extraCandidates: [], characterPath }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
 });
 
 describe('ForeverNamespaceProbeService stored state', () => {

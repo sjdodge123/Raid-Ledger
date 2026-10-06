@@ -144,6 +144,7 @@ export type ForeverProbeStateDto = z.infer<typeof ForeverProbeStateSchema>;
 /** Admin PUT body: extra candidate prefixes + optional raw `<realmOrRuleset>/<name>` profile path. */
 export const ForeverProbeConfigSchema = z.object({
     extraCandidates: z.array(WowForeverNamespacePrefixSchema).max(20),
-    characterPath: z.string().trim().regex(/^[a-z0-9-]{1,64}\/[^/\s?#&]{1,64}$/i).nullable(),
+    // A dot-only name (`.`/`..`) would resolve to another Blizzard path, so it is rejected.
+    characterPath: z.string().trim().regex(/^[a-z0-9-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}$/i).nullable(),
 });
 export type ForeverProbeConfigDto = z.infer<typeof ForeverProbeConfigSchema>;
