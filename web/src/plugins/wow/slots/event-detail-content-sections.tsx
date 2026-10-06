@@ -20,6 +20,7 @@ export function EventDetailContentSections({
             {contentInstances.map((inst) => (
                 <span
                     key={inst.id}
+                    title={inst.name}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600/20 border border-emerald-500/30 text-xs text-emerald-300"
                 >
                     {inst.shortName || inst.name}

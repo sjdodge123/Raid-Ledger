@@ -12,6 +12,7 @@ import {
   CLASSIC_INSTANCE_LEVELS,
   getShortName,
 } from './blizzard-instance-data';
+import { FOREVER_EXPANSION } from './forever-instance-data';
 
 type Logger = { error: (msg: string) => void; warn: (msg: string) => void };
 
@@ -142,35 +143,38 @@ export function mergeExpansionInstances(
   return { dungeons, raids };
 }
 
+const CLASSIC_THROUGH_CATA = [
+  'Classic',
+  'Burning Crusade',
+  'Wrath of the Lich King',
+  'Cataclysm',
+];
+
+/** Journal expansions kept per variant; unlisted variants (retail) keep all. */
+const VARIANT_INSTANCE_EXPANSIONS: Partial<
+  Record<WowGameVariant, ReadonlySet<string>>
+> = {
+  classic_era: new Set(['Classic']),
+  // ROK-1719: WoW: Forever keeps the vanilla set and adds its own instances.
+  // Until the journal exposes a `Forever` tier they come from the hand seed
+  // (forever-instance-data.ts); a journal `Forever` tier passes through here.
+  wow_forever: new Set(['Classic', FOREVER_EXPANSION]),
+  classic: new Set(CLASSIC_THROUGH_CATA),
+  classic_anniversary: new Set(CLASSIC_THROUGH_CATA),
+};
+
 /** Filter instances by game variant. */
 export function filterByVariant(
   dungeons: WowInstance[],
   raids: WowInstance[],
   gameVariant: WowGameVariant,
 ): { dungeons: WowInstance[]; raids: WowInstance[] } {
-  // ROK-1563: WoW: Forever ships with the Classic (vanilla) instance set. Its
-  // 9 new dungeons / 2 new raids arrive post-launch — widen this when Blizzard
-  // publishes them AND the journal exposes them under the Forever namespace.
-  if (gameVariant === 'classic_era' || gameVariant === 'wow_forever') {
-    const exps = new Set(['Classic']);
-    return {
-      dungeons: dungeons.filter((d) => exps.has(d.expansion)),
-      raids: raids.filter((r) => exps.has(r.expansion)),
-    };
-  }
-  if (gameVariant === 'classic' || gameVariant === 'classic_anniversary') {
-    const exps = new Set([
-      'Classic',
-      'Burning Crusade',
-      'Wrath of the Lich King',
-      'Cataclysm',
-    ]);
-    return {
-      dungeons: dungeons.filter((d) => exps.has(d.expansion)),
-      raids: raids.filter((r) => exps.has(r.expansion)),
-    };
-  }
-  return { dungeons, raids };
+  const exps = VARIANT_INSTANCE_EXPANSIONS[gameVariant];
+  if (!exps) return { dungeons, raids };
+  return {
+    dungeons: dungeons.filter((d) => exps.has(d.expansion)),
+    raids: raids.filter((r) => exps.has(r.expansion)),
+  };
 }
 
 /** Expand sub-instances for classic variants. */
