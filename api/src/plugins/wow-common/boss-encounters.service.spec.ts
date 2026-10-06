@@ -77,6 +77,13 @@ describe('BossEncountersService — variant and queries', () => {
     it('should default to classic_era for unknown variant', () => {
       expect(service.getExpansionsForVariant('unknown')).toEqual(['classic']);
     });
+
+    it('should return classic + forever for wow_forever (ROK-1719)', () => {
+      expect(service.getExpansionsForVariant('wow_forever')).toEqual([
+        'classic',
+        'forever',
+      ]);
+    });
   });
 
   describe('getBossesForInstance()', () => {
