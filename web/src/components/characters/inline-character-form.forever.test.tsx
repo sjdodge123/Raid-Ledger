@@ -7,12 +7,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { InlineCharacterForm } from './inline-character-form';
 import { useCreateCharacter } from '../../hooks/use-character-mutations';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
 
 vi.mock('../../hooks/use-character-mutations', () => ({ useCreateCharacter: vi.fn() }));
 vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
 
 const mutate = vi.fn();
 beforeEach(() => {
+    activateWowPlugin();
     mutate.mockReset();
     vi.mocked(useCreateCharacter).mockReturnValue({ mutate, isPending: false } as unknown as ReturnType<typeof useCreateCharacter>);
 });

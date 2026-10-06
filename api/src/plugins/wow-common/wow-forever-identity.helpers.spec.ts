@@ -5,9 +5,9 @@ import {
   prepareCharacterUpdate,
   prepareCreateDto,
   prepareUpdateDto,
-} from './characters-forever.helpers';
-import { rethrowForeverViolation } from './characters-crud.helpers';
-import { characterUniqueKeyJoin } from './characters-unique-keys.helpers';
+  rethrowForeverViolation,
+} from './wow-forever-identity.helpers';
+import { characterUniqueKeyJoin } from '../../characters/characters-unique-keys.helpers';
 
 const FOREVER = { slug: 'world-of-warcraft-forever' };
 const RETAIL = { slug: 'world-of-warcraft' };
