@@ -162,8 +162,11 @@ function CharacterHeader({ character, isOwner, isArmoryImported }: { character: 
                         <CharacterRoleBadge character={character} isOwner={isOwner} />
                     </div>
                     <CharacterMeta character={character} />
-                    {isOwner && isArmoryImported && (
-                        <div className="mt-3"><PluginSlot name="profile:character-actions" context={{ characterId: character.id, lastSyncedAt: character.lastSyncedAt, region: character.region, gameVariant: character.gameVariant }} /></div>
+                    {isOwner && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 empty:hidden">
+                            {isArmoryImported && <PluginSlot name="profile:character-actions" context={{ characterId: character.id, lastSyncedAt: character.lastSyncedAt, region: character.region, gameVariant: character.gameVariant }} />}
+                            <PluginSlot name="character-detail:owner-actions" context={{ characterId: character.id, gameId: character.gameId, name: character.name, region: character.region, ruleset: character.ruleset, gameVariant: character.gameVariant, class: character.class, level: character.level }} />
+                        </div>
                     )}
                 </div>
             </div>
