@@ -524,10 +524,20 @@ describe('addon import — gating, limits, audit', () => {
   it('plugin inactive → route refused', async () => {
     const token = await memberToken('anaplugin');
     const id = await createChar(token);
-    await testApp.app.get(PluginRegistryService).deactivate('blizzard');
-    const res = await post(token, id, fixture('char-normal'));
-    expect(res.status).toBe(403);
-    expect(await rowCount(schema.addonImportAudit)).toBe(0);
+    const registry = testApp.app.get(PluginRegistryService);
+    await registry.deactivate('blizzard');
+    try {
+      const res = await post(token, id, fixture('char-normal'));
+      expect(res.status).toBe(403);
+      expect(await rowCount(schema.addonImportAudit)).toBe(0);
+    } finally {
+      // deactivate() drops the plugin's adapters (incl. the Forever identity
+      // provider, ROK-1733). Only activate() — via PLUGIN_EVENTS.ACTIVATED —
+      // re-registers them; beforeEach's ensureInstalled after a truncate
+      // inserts the row already active and emits nothing. Without this every
+      // later test's Forever create 400s ("Region and ruleset do not apply").
+      await registry.activate('blizzard');
+    }
   });
 
   it('oversized paste → 413 TOO_LARGE (not the schema 400), audited', async () => {
