@@ -10,6 +10,7 @@ import { PasswordInput } from '../../../components/ui/password-input';
 import { TestResultBanner } from '../../../components/admin/admin-form-helpers';
 import { getPluginBadge } from '../../plugin-registry';
 import { IntegrationFormActions } from '../../../components/admin/integration-form-actions';
+import { ForeverSettingsSection } from '../components/forever-settings-section';
 
 async function handleSave(
     e: React.FormEvent, clientId: string, clientSecret: string,
@@ -109,6 +110,8 @@ export function BlizzardIntegrationSlot({ pluginSlug }: { pluginSlug?: string })
                 onSave={(e) => handleSave(e, clientId, clientSecret, updateBlizzard, setTestResult, () => { setClientId(''); setClientSecret(''); })}
                 onTest={() => handleTest(testBlizzard, setTestResult)} onClear={() => handleClear(clearBlizzard, setTestResult)}
                 savePending={updateBlizzard.isPending} testPending={testBlizzard.isPending} clearPending={clearBlizzard.isPending} />
+            {/* ROK-1717: Forever prefix + Armory flag — only once Blizzard credentials exist. */}
+            {blizzardStatus.data?.configured && <ForeverSettingsSection />}
         </IntegrationCard>
     );
 }
