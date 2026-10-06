@@ -28,12 +28,39 @@ export interface IdentityFieldsProps<V> {
 
 export interface CharacterLocationSource { ruleset?: string | null; region?: string | null }
 
+/**
+ * A new character's starting values, handed over by another flow (e.g. a
+ * plugin deep link via router state `{ addCharacter }`). Core seeds the name
+ * and class; the game's identity provider turns it into its own form value
+ * through `fromCharacter`, so core never reads region/ruleset itself.
+ */
+export interface CharacterPrefill {
+    gameId: number;
+    name: string;
+    region?: string | null | undefined;
+    ruleset?: string | null | undefined;
+    class?: string | null | undefined;
+}
+
+const optionalString = (v: unknown) => v === undefined || v === null || typeof v === 'string';
+
+/** The `addCharacter` prefill from a router `location.state`, or null when absent or malformed. */
+export function readCharacterPrefill(state: unknown): CharacterPrefill | null {
+    if (!state || typeof state !== 'object') return null;
+    const p: unknown = (state as { addCharacter?: unknown }).addCharacter;
+    if (!p || typeof p !== 'object') return null;
+    const c = p as Record<string, unknown>;
+    if (typeof c.gameId !== 'number' || typeof c.name !== 'string') return null;
+    if (![c.region, c.ruleset, c.class].every(optionalString)) return null;
+    return p as CharacterPrefill;
+}
+
 export interface CharacterIdentityProvider<V = unknown> {
     readonly gameSlugs: readonly string[];
     /** False for a legacy row the plugin does not treat as having an identity. */
     appliesTo(editing?: { region?: string | null } | null): boolean;
     empty(): V;
-    fromCharacter(c: { name: string; region?: string | null; ruleset?: string | null } | null | undefined): V;
+    fromCharacter(c: { name: string; region?: string | null | undefined; ruleset?: string | null | undefined } | null | undefined): V;
     same(a: V, b: V): boolean;
     /** Null when valid; otherwise inline messages keyed by field (`name` = the form-level row). */
     validate(v: V): IdentityErrors | null;
