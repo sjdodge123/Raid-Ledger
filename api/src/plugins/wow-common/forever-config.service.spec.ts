@@ -88,6 +88,13 @@ describe('ForeverConfigService (ROK-1717)', () => {
     expect([...store.keys()]).toEqual([]);
   });
 
+  it('treats any stored flag value other than "true" as disabled', async () => {
+    const { service } = setup({ [WOW_FOREVER_ARMORY_IMPORT_KEY]: 'false' });
+    await expect(service.getCapabilities()).resolves.toEqual({
+      armoryImport: { wow_forever: false },
+    });
+  });
+
   it('rejects an invalid prefix with 400 and writes nothing', async () => {
     const { service, settings, events } = setup();
     await expect(
