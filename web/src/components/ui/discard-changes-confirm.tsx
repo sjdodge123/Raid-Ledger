@@ -23,15 +23,17 @@ export interface DiscardChangesConfirmProps {
     onDiscard: () => void;
     /** What is unsaved, in the caller's words. Defaults to `DEFAULT_DISCARD_MESSAGE`. */
     message?: string | undefined;
+    /** Layer override — above a `stacked` sheet (ROK-1738). Default `Z_INDEX.MODAL`. */
+    zIndex?: number | undefined;
 }
 
 /** See file docstring. */
 export function DiscardChangesConfirm({
-    isOpen, onKeep, onDiscard, message = DEFAULT_DISCARD_MESSAGE,
+    isOpen, onKeep, onDiscard, message = DEFAULT_DISCARD_MESSAGE, zIndex,
 }: DiscardChangesConfirmProps): JSX.Element {
     const keepRef = useRef<HTMLButtonElement>(null);
     return (
-        <ModalFrame isOpen={isOpen} onClose={onKeep} title="Discard your changes?" initialFocusRef={keepRef}>
+        <ModalFrame isOpen={isOpen} onClose={onKeep} title="Discard your changes?" initialFocusRef={keepRef} zIndex={zIndex}>
             <div data-testid="discard-changes-confirm">
                 <p className="text-sm text-muted">{message}</p>
                 <div className="mt-4 flex justify-end gap-2">

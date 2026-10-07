@@ -8,6 +8,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, fireEvent, cleanup, screen } from '@testing-library/react';
 import { Modal } from './modal';
 import { BottomSheet } from './bottom-sheet';
+import { Z_INDEX } from '../../lib/z-index';
+import { overlayLayer, paintsAbove } from '../../test/paint-order';
 
 afterEach(cleanup);
 
@@ -85,5 +87,36 @@ describe('a lone overlay still closes on Escape', () => {
         rerender(<Modal isOpen={false} onClose={onClose} title="Lone"><p>text</p></Modal>);
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(onClose).not.toHaveBeenCalled();
+    });
+});
+
+describe('stacked overlays — layer order does not depend on mount order', () => {
+    const guard = { requestClose: () => {}, confirming: true, keep: () => {}, discard: () => {}, reset: () => {} };
+
+    it('a stacked sheet mounted BEFORE its host Modal opens still paints above it', () => {
+        const sheet = <BottomSheet isOpen onClose={() => {}} title="Import sheet" stacked><p>x</p></BottomSheet>;
+        const { rerender } = render(<>{sheet}<Modal isOpen={false} onClose={() => {}} title="Add Character"><p>y</p></Modal></>);
+        rerender(<>{sheet}<Modal isOpen onClose={() => {}} title="Add Character"><p>y</p></Modal></>);
+        const sheetLayer = overlayLayer(screen.getByRole('dialog', { name: 'Import sheet' }));
+        const hostLayer = overlayLayer(screen.getByRole('dialog', { name: 'Add Character' }));
+        expect(sheetLayer.compareDocumentPosition(hostLayer) & Node.DOCUMENT_POSITION_FOLLOWING, 'host portal mounted last').toBeTruthy();
+        expect(paintsAbove(sheetLayer, hostLayer), 'the stacked sheet must paint above its host Modal').toBe(true);
+    });
+
+    it("the stacked sheet's discard confirm paints above the sheet", () => {
+        render(<BottomSheet isOpen onClose={() => {}} title="Import sheet" stacked closeGuard={guard}><p>x</p></BottomSheet>);
+        const sheetLayer = overlayLayer(screen.getByRole('dialog', { name: 'Import sheet' }));
+        const confirmLayer = overlayLayer(screen.getByRole('dialog', { name: 'Discard your changes?' }));
+        expect(paintsAbove(confirmLayer, sheetLayer), 'the confirm must paint above the stacked sheet').toBe(true);
+    });
+
+    it('toasts stay above a stacked sheet and its confirm', () => {
+        render(<BottomSheet isOpen onClose={() => {}} title="Import sheet" stacked closeGuard={guard}><p>x</p></BottomSheet>);
+        const toast = document.createElement('div');
+        toast.style.zIndex = String(Z_INDEX.TOAST);
+        document.body.prepend(toast);
+        const confirmLayer = overlayLayer(screen.getByRole('dialog', { name: 'Discard your changes?' }));
+        expect(paintsAbove(toast, confirmLayer), 'a toast must paint above the stacked confirm').toBe(true);
+        toast.remove();
     });
 });

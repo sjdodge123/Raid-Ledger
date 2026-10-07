@@ -11,7 +11,7 @@ import { DesignSystemPage } from './DesignSystemPage';
 import { THEME_REGISTRY } from '../../stores/theme-registry';
 import { useThemeStore } from '../../stores/theme-store';
 import { GROUP_FILL, GROUP_GRADIENT } from '../../components/features/game-time/phone/week-strip.fills';
-import { Z_INDEX } from '../../lib/z-index';
+import { paintsAbove, overlayLayer } from '../../test/paint-order';
 
 /** Answers `min-width` / `max-width` queries as a viewport `width` px wide (others false); returns the restore. */
 function withViewportWidth(width: number): () => void {
@@ -592,12 +592,13 @@ describe('DesignSystemPage — stretched-button card', () => {
 describe('DesignSystemPage — ROK-1738 stacked BottomSheet (Overlays)', () => {
     beforeEach(() => { mockUseSystemStatus.mockReset(); });
 
-    it('opens a stacked sheet from inside a modal on the Modal layer', () => {
+    it('opens a stacked sheet from inside a modal, painted above it (the sheet mounted first)', () => {
         demoMode(true);
         renderWithProviders(<DesignSystemPage />);
         fireEvent.click(within(screen.getByTestId('ds-overlays')).getByRole('button', { name: 'Open host modal' }));
         fireEvent.click(within(screen.getByRole('dialog', { name: 'Host modal' })).getByRole('button', { name: 'Open stacked sheet' }));
         const sheet = screen.getByRole('dialog', { name: 'Stacked sheet' });
-        expect((sheet.parentElement as HTMLElement).style.zIndex).toBe(String(Z_INDEX.MODAL));
+        const host = screen.getByRole('dialog', { name: 'Host modal' });
+        expect(paintsAbove(overlayLayer(sheet), overlayLayer(host)), 'the stacked sheet must paint above its host modal').toBe(true);
     });
 });

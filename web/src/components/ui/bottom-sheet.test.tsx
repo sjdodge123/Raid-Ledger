@@ -632,8 +632,8 @@ describe('BottomSheet — stacked (ROK-1738)', () => {
         expect(layer().style.zIndex).toBe(String(Z_INDEX.BOTTOM_SHEET));
     });
 
-    it('lifts to the Modal layer when stacked over an open Modal', () => {
+    it('lifts to the stacked layer when stacked over an open Modal', () => {
         render(<BottomSheet isOpen={true} onClose={() => {}} stacked>x</BottomSheet>);
-        expect(layer().style.zIndex).toBe(String(Z_INDEX.MODAL));
+        expect(layer().style.zIndex).toBe(String(Z_INDEX.MODAL_STACKED));
     });
 });

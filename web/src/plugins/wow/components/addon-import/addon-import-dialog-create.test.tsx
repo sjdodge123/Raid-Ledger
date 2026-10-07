@@ -148,11 +148,11 @@ describe('AddonImportDialog create mode — ruleset picker (D13)', () => {
 describe('AddonImportDialog frames', () => {
     const layer = () => screen.getByRole('dialog').parentElement as HTMLElement;
 
-    it('create mode on a phone lifts the sheet to the Modal layer (stacked over Add Character)', () => {
+    it('create mode on a phone lifts the sheet to the stacked layer (above Add Character)', () => {
         mockViewportWidth(375);
         renderCreate();
         expect(screen.getByTestId('bottom-sheet-footer')).toBeInTheDocument();
-        expect(layer().style.zIndex).toBe(String(Z_INDEX.MODAL));
+        expect(layer().style.zIndex).toBe(String(Z_INDEX.MODAL_STACKED));
     });
 
     it('character mode is unchanged: own route, "Import string", unstacked sheet, result step, no target banner', async () => {

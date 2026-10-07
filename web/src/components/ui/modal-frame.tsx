@@ -7,6 +7,7 @@ import { useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
+import { Z_INDEX } from '../../lib/z-index';
 import { useEscapeLayer } from '../../hooks/use-escape-layer';
 import { OVERLAY_FOOTER_CLASS } from './overlay-footer';
 import { FOCUS_RING } from './form-classes';
@@ -28,6 +29,8 @@ export interface ModalFrameProps {
     footer?: ReactNode;
     /** Element to focus on open instead of the first focusable (the close button) */
     initialFocusRef?: React.RefObject<HTMLElement | null>;
+    /** Layer (default `Z_INDEX.MODAL`); a confirm over a stacked sheet goes above it (ROK-1738). */
+    zIndex?: number | undefined;
 }
 
 /** Escape closes only the top overlay (ROK-1738, `useEscapeLayer`), never the dialog under it too. */
@@ -75,7 +78,7 @@ function ModalHeader({ titleId, title, onClose }: { titleId: string; title: stri
  * ROK-342: focus trap + ARIA dialog semantics.
  */
 export function ModalFrame({
-    isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef, footer,
+    isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName, initialFocusRef, footer, zIndex = Z_INDEX.MODAL,
 }: ModalFrameProps) {
     const titleId = useId();
     const trapRef = useFocusTrap<HTMLDivElement>(isOpen, initialFocusRef);
@@ -87,7 +90,7 @@ export function ModalFrame({
     const hasFooter = footer != null && typeof footer !== 'boolean';
 
     return createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 flex items-center justify-center" style={{ zIndex }}>
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
             <div
                 ref={trapRef}

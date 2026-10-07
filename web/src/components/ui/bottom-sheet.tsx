@@ -40,9 +40,10 @@ interface BottomSheetProps {
     /** What is unsaved, in the caller's words (the confirm's message). */
     discardMessage?: string;
     /**
-     * Opened from inside an open `Modal` (ROK-1738): lifts the sheet to the
-     * Modal layer so it renders above its host instead of under it
-     * (`BOTTOM_SHEET` < `MODAL`; the later portal wins at equal z-index).
+     * Opened from inside an open `Modal` (ROK-1738): lifts the sheet to
+     * `Z_INDEX.MODAL_STACKED`, strictly above every Modal, so it renders above
+     * its host whatever order the portals mounted in (`BOTTOM_SHEET` < `MODAL`).
+     * Its discard confirm goes one above that.
      */
     stacked?: boolean;
 }
@@ -186,13 +187,23 @@ function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: 
     return { sheetRef, drag, ...useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight) };
 }
 
+/** The confirm is a Modal (Z_INDEX.MODAL > BOTTOM_SHEET); over a stacked sheet it goes one above MODAL_STACKED. */
+function SheetDiscardConfirm({ guard, message, stacked }: { guard: DirtyCloseGuard; message?: string | undefined; stacked: boolean }) {
+    return (
+        <DiscardChangesConfirm
+            isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard} message={message}
+            zIndex={stacked ? Z_INDEX.MODAL_STACKED + 1 : undefined}
+        />
+    );
+}
+
 export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage, stacked = false }: BottomSheetProps) {
     const requestClose = closeGuard?.requestClose ?? onClose;
     useResetGuardOnClose(isOpen, closeGuard);
     const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
 
     const sheet = createPortal(
-        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: stacked ? Z_INDEX.MODAL : Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
+        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: stacked ? Z_INDEX.MODAL_STACKED : Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={requestClose} aria-hidden="true" />
             <div
                 ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}
@@ -210,8 +221,6 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
         </div>,
         document.body,
     );
-    // The confirm is a Modal (Z_INDEX.MODAL > BOTTOM_SHEET), so it stacks above the sheet.
-    const confirm = closeGuard
-        && <DiscardChangesConfirm isOpen={closeGuard.confirming} onKeep={closeGuard.keep} onDiscard={closeGuard.discard} message={discardMessage} />;
+    const confirm = closeGuard && <SheetDiscardConfirm guard={closeGuard} message={discardMessage} stacked={stacked} />;
     return <>{sheet}{confirm}</>;
 }
