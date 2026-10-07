@@ -19,6 +19,7 @@ import { eq, desc } from 'drizzle-orm';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
 import { CronJobService } from './cron-job.service';
+import type { CronRunBookkeeping } from './cron-job.bookkeeping';
 import { at, nonEmpty } from '../common/testing/narrow';
 
 /** Insert a test cron job directly into DB and return its ID. */
@@ -127,6 +128,14 @@ function describeCronJob() {
         },
       );
 
+      // ROK-1380: a completed run hands its execution row AND last_run_at
+      // to the batched flusher, so nothing is written until a flush runs.
+      expect(await readExecutions(testApp, jobId)).toHaveLength(0);
+      const beforeFlush = await readJob(testApp, jobId);
+      expect(beforeFlush.lastRunAt).toBeNull();
+
+      await cronJobService.flushLastRunUpdates();
+
       // Check execution was recorded
       const executions = await testApp.db
         .select()
@@ -139,13 +148,6 @@ function describeCronJob() {
       expect(executions[0]?.durationMs).toBeGreaterThanOrEqual(0);
       expect(at(executions, 0).finishedAt).toBeDefined();
       expect(at(executions, 0).error).toBeNull();
-
-      // ROK-1380: a completed run hands last_run_at to the batched flusher,
-      // so nothing is written to the job row until a flush cycle runs.
-      const beforeFlush = await readJob(testApp, jobId);
-      expect(beforeFlush.lastRunAt).toBeNull();
-
-      await cronJobService.flushLastRunUpdates();
 
       const afterFlush = await readJob(testApp, jobId);
       expect(afterFlush.lastRunAt).not.toBeNull();
@@ -380,7 +382,7 @@ function describeCronJob() {
   // ===================================================================
 
   function describeLastRunDeferral() {
-    it('degraded run defers last_run_at until flush', async () => {
+    it('degraded run defers its row and last_run_at until flush', async () => {
       const jobId = await insertTestJob(
         testApp,
         'test:degraded-deferred',
@@ -392,11 +394,13 @@ function describeCronJob() {
         Promise.resolve({ degraded: true as const }),
       );
 
-      const executions = await readExecutions(testApp, jobId);
-      expect(executions.map((e) => e.status)).toEqual(['degraded']);
+      expect(await readExecutions(testApp, jobId)).toHaveLength(0);
       expect((await readJob(testApp, jobId)).lastRunAt).toBeNull();
 
       await cronJobService.flushLastRunUpdates();
+
+      const executions = await readExecutions(testApp, jobId);
+      expect(executions.map((e) => e.status)).toEqual(['degraded']);
 
       const flushed = await readJob(testApp, jobId);
       expect(flushed.lastRunAt).not.toBeNull();
@@ -462,14 +466,14 @@ function describeCronJob() {
       } finally {
         jest.useRealTimers();
       }
+      await cronJobService.flushLastRunUpdates();
+
       const executions = await readExecutions(testApp, jobId);
       const failed = executions.find((e) => e.status === 'failed')!;
       const completed = executions.find((e) => e.status === 'completed')!;
       expect(failed.finishedAt!.getTime()).toBeGreaterThan(
         completed.finishedAt!.getTime(),
       );
-
-      await cronJobService.flushLastRunUpdates();
 
       // The queued completed run must not roll the failure's write back.
       const job = await readJob(testApp, jobId);
@@ -544,8 +548,8 @@ function describeCronJob() {
       // not on every tick — ROK-607)
       const cronJobService = testApp.app.get(CronJobService);
       (
-        cronJobService as unknown as { executionCounts: Map<number, number> }
-      ).executionCounts.set(jobId, 49);
+        cronJobService as unknown as { book: CronRunBookkeeping }
+      ).book.executionCounts.set(jobId, 49);
 
       await cronJobService.executeWithTracking(
         'test:prunable-job',
