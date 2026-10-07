@@ -3,6 +3,7 @@ import {
   variantToNamespacePrefix,
   WOW_FOREVER_NAMESPACE_PREFIX,
 } from './blizzard.constants';
+import { setForeverNamespacePrefix } from './forever-namespace.resolver';
 
 describe('getNamespacePrefixes', () => {
   it('should return bare prefixes when apiNamespacePrefix is null (retail)', () => {
@@ -76,5 +77,30 @@ describe('wow_forever variant (ROK-1563)', () => {
     expect(variantToNamespacePrefix('classic_era')).toBe('classic1x');
     expect(variantToNamespacePrefix('classic')).toBe('classic');
     expect(variantToNamespacePrefix('classic_anniversary')).toBe('classicann');
+  });
+});
+
+describe('getNamespacePrefixes under a Forever override (ROK-1717)', () => {
+  afterEach(() => setForeverNamespacePrefix(null));
+
+  it('sends the admin-set prefix to Blizzard for the stored alias', () => {
+    setForeverNamespacePrefix('foo');
+    expect(getNamespacePrefixes('classicforever')).toEqual({
+      static: 'static-foo',
+      dynamic: 'dynamic-foo',
+      profile: 'profile-foo',
+    });
+  });
+
+  it('still maps the variant to the stored alias (games-row lookup key)', () => {
+    setForeverNamespacePrefix('foo');
+    expect(variantToNamespacePrefix('wow_forever')).toBe('classicforever');
+  });
+
+  it('leaves other Classic namespaces alone under an override', () => {
+    setForeverNamespacePrefix('foo');
+    expect(getNamespacePrefixes('classicann').profile).toBe(
+      'profile-classicann',
+    );
   });
 });

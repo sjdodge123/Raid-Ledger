@@ -153,3 +153,48 @@ describe('WoW character-create toggles — aria-pressed + named Game version (RO
         expect(importTab()).toHaveAttribute('aria-pressed', 'false');
     });
 });
+
+/** ROK-1717: the admin-set runtime capability decides whether Forever gets the Armory. */
+function foreverCapability(enabled: boolean) {
+    server.use(http.get(`${API_BASE}/blizzard/capabilities`, () => HttpResponse.json({ armoryImport: { wow_forever: enabled } })));
+}
+
+const gameVersionOptions = () => Array.from(gameVersionSelect().querySelectorAll('option')).map((o) => o.value);
+
+describe('Armory gating follows the runtime Forever capability (ROK-1717)', () => {
+    /** Seeded (as contextVariantClient) so the off answer is present on first render — loading's fail-closed default cannot mask it. */
+    it('capability off: the Forever Armory tab stays disabled with the note', async () => {
+        blizzardConfigured();
+        const queryClient = createTestQueryClient();
+        queryClient.setQueryData(['blizzard', 'capabilities'], { armoryImport: { wow_forever: false } });
+        renderWithProviders(<Harness gameSlug={FOREVER} initial="import" />, { queryClient });
+        await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('manual'));
+        expect(importTab()).toHaveAttribute('aria-disabled', 'true');
+        expect(screen.getByText(ARMORY_UNAVAILABLE_NOTE)).toBeInTheDocument();
+    });
+
+    it('capability on: the Forever Armory tab is offered and selected, with no note', async () => {
+        blizzardConfigured();
+        foreverCapability(true);
+        renderWithProviders(<Harness gameSlug={FOREVER} initial="manual" />);
+        await waitFor(() => expect(screen.getByTestId('active-tab')).toHaveTextContent('import'));
+        expect(importTab()).not.toHaveAttribute('aria-disabled');
+        expect(screen.queryByText(ARMORY_UNAVAILABLE_NOTE)).not.toBeInTheDocument();
+    });
+
+    it('capability on: the Classic Game Version picker offers Forever', async () => {
+        blizzardConfigured();
+        foreverCapability(true);
+        renderWithProviders(<Harness gameSlug="world-of-warcraft-classic" initial="manual" />);
+        await waitFor(() => expect(gameVersionOptions()).toEqual(['classic_anniversary', 'classic_era', 'classic', 'wow_forever']));
+    });
+
+    it('capability on: the inline import offers the Armory for Forever', async () => {
+        foreverCapability(true);
+        const onModeChange = vi.fn();
+        renderWithProviders(<CharacterCreateInlineImport gameSlug={FOREVER} onModeChange={onModeChange} />);
+        await waitFor(() => expect(onModeChange).toHaveBeenLastCalledWith('import'));
+        expect(importTab()).not.toHaveAttribute('aria-disabled');
+        expect(screen.queryByText(ARMORY_UNAVAILABLE_NOTE)).not.toBeInTheDocument();
+    });
+});

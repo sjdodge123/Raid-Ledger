@@ -8,6 +8,8 @@ import {
   isNamespaceRefusal,
 } from './blizzard-upstream-error';
 
+import { setForeverNamespacePrefix } from './forever-namespace.resolver';
+
 jest.mock('./blizzard-instance.helpers');
 
 /**
@@ -198,5 +200,46 @@ describe('BlizzardService.fetchAllInstances — Forever degraded mode', () => {
     await expect(
       service.fetchAllInstances('us', 'classic_era'),
     ).rejects.toBeInstanceOf(BadGatewayException);
+  });
+});
+
+/** ROK-1717: the realm cache/refusal key follows the admin Forever prefix. */
+describe('BlizzardService.fetchRealmList — Forever prefix override', () => {
+  useRealmClock();
+  afterEach(() => setForeverNamespacePrefix(null));
+
+  type RealmMaps = {
+    realmCache: Map<string, unknown>;
+    realmRefusals: Map<string, unknown>;
+  };
+
+  it('a 403 remembered for classicforever no longer blocks after an override', async () => {
+    const { service } = setup();
+    fetchRealms.mockRejectedValueOnce(refused());
+    await rejectionOf(service.fetchRealmList('us', 'classicforever'));
+    fetchRealms.mockResolvedValueOnce(REALMS);
+
+    setForeverNamespacePrefix('foo');
+
+    await expect(service.fetchRealmList('us', 'classicforever')).resolves.toBe(
+      REALMS,
+    );
+    expect(fetchRealms).toHaveBeenCalledTimes(2);
+  });
+
+  it('purgeNamespace clears the realm cache and refusal memo for that prefix only', async () => {
+    const { service } = setup();
+    fetchRealms.mockResolvedValueOnce(REALMS);
+    await service.fetchRealmList('us', 'classicforever');
+    fetchRealms.mockResolvedValueOnce(REALMS);
+    await service.fetchRealmList('us', 'classicann');
+    fetchRealms.mockRejectedValueOnce(refused());
+    await rejectionOf(service.fetchRealmList('eu', 'classicforever'));
+
+    service.purgeNamespace('classicforever');
+
+    const { realmCache, realmRefusals } = service as unknown as RealmMaps;
+    expect([...realmCache.keys()]).toEqual(['us:classicann']);
+    expect([...realmRefusals.keys()]).toEqual([]);
   });
 });
