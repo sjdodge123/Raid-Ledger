@@ -4,6 +4,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import { useTabTrap } from '../../hooks/use-focus-trap';
+import { useEscapeLayer } from '../../hooks/use-escape-layer';
 import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 import { DiscardChangesConfirm } from './discard-changes-confirm';
@@ -86,14 +87,6 @@ function useSheetFocus(isOpen: boolean, sheetRef: React.RefObject<HTMLDivElement
             if (!focusMovedToAnotherDialog(sheet)) previous?.focus?.();
         };
     }, [isOpen, sheetRef]);
-}
-
-function useSheetKeyboard(isOpen: boolean, onClose: () => void) {
-    useEffect(() => {
-        const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
-        window.addEventListener('keydown', handleEscape);
-        return () => window.removeEventListener('keydown', handleEscape);
-    }, [isOpen, onClose]);
 }
 
 function useDragHandlers(
@@ -184,11 +177,12 @@ function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: 
     const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
     if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(initiallyExpanded); }
 
-    useSheetKeyboard(isOpen, requestClose);
     useBodyScrollLock(isOpen);
     const drag = useDragHandlers(sheetRef, expanded, setExpanded, requestClose, initiallyExpanded);
     useSheetFocus(isOpen, sheetRef);
     useTabTrap(isOpen, sheetRef);
+    // Escape closes only the top overlay — not the Modal this sheet is stacked over (ROK-1738).
+    useEscapeLayer(isOpen, requestClose);
     return { sheetRef, drag, ...useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight) };
 }
 
