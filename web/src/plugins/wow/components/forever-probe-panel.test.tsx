@@ -66,6 +66,8 @@ describe('ForeverProbePanel (ROK-1716)', () => {
         expect(within(classicRow).getByText('200')).toBeInTheDocument();
         expect(within(classicRow).getByText('err')).toBeInTheDocument();
         expect(within(classicRow).getByTitle('realm: 200')).toBeInTheDocument();
+        // The legend names only endpoints that were probed (profile is absent with no character path).
+        expect(screen.getByText(/each cell: realm · playable-race status/i)).toBeInTheDocument();
     });
 
     it('Run now POSTs and refreshes the panel with the fresh result', async () => {

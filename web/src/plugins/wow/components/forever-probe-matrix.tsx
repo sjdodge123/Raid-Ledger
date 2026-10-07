@@ -67,9 +67,10 @@ function MatrixRow({ prefix, regions, cells }: { prefix: string; regions: string
 /** The collapsed candidate x region status matrix for the latest probe run. */
 export function ForeverProbeMatrix({ result }: { result: ForeverProbeResultDto }): JSX.Element {
     const regions = regionsOf(result.cells);
+    const probed = ENDPOINT_ORDER.filter((e) => result.cells.some((c) => c.endpoint === e));
     return (
         <ScrollCollapsible title={`Probe matrix (${result.cells.length} checks)`} className="text-sm">
-            <p className="mb-2 text-xs text-muted">Each cell: {ENDPOINT_ORDER.join(' · ')} status, in that order.</p>
+            <p className="mb-2 text-xs text-muted">Each cell: {probed.join(' · ')} status, in that order.</p>
             <div className="max-w-full overflow-x-auto border border-edge rounded-xl">
                 <table className="min-w-max w-full text-sm">
                     <thead>
