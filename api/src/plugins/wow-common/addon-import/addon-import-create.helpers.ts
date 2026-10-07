@@ -59,9 +59,7 @@ export type CreatableWho = AddonWho & {
  * A1 (ruled: refuse until Hardcore opens) + a usable name. Run on the create
  * path BEFORE any write — dry run included. The update path never calls it.
  */
-export function assertCreatable(
-  who: AddonWho,
-): asserts who is CreatableWho {
+export function assertCreatable(who: AddonWho): asserts who is CreatableWho {
   if (who.ruleset === 'hardcore') {
     throw new AddonImportError('INVALID_PAYLOAD', HARDCORE_CREATE_MESSAGE);
   }

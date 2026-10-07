@@ -1,4 +1,4 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { WowRegion } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import { GUID_ALREADY_LINKED_MESSAGE } from './addon-import-binding.apply';
@@ -18,8 +18,7 @@ import { findLoadedCharacter, type LoadedCharacter } from './addon-import.run';
  */
 
 export type ImportTarget =
-  | { action: 'create' }
-  | { action: 'update'; character: LoadedCharacter };
+  { action: 'create' } | { action: 'update'; character: LoadedCharacter };
 
 export interface ImportTargetQuery {
   userId: number;
@@ -30,17 +29,26 @@ export interface ImportTargetQuery {
   name: string;
 }
 
+/** A character on the query's (game, region) slot matching `extra`. */
+function findOnSlot(db: AddonImportTx, q: ImportTargetQuery, extra: SQL) {
+  return findLoadedCharacter(
+    db,
+    and(
+      eq(schema.characters.gameId, q.gameId),
+      eq(schema.characters.region, q.region),
+      extra,
+    ),
+  );
+}
+
 export async function resolveImportTarget(
   db: AddonImportTx,
   q: ImportTargetQuery,
 ): Promise<ImportTarget> {
-  const sameSlot = [
-    eq(schema.characters.gameId, q.gameId),
-    eq(schema.characters.region, q.region),
-  ];
-  const byGuid = await findLoadedCharacter(
+  const byGuid = await findOnSlot(
     db,
-    and(...sameSlot, eq(schema.characters.addonGuid, q.guid)),
+    q,
+    eq(schema.characters.addonGuid, q.guid),
   );
   if (byGuid) {
     if (byGuid.userId === q.userId) {
@@ -48,12 +56,10 @@ export async function resolveImportTarget(
     }
     throw new AddonImportError('INVALID_PAYLOAD', GUID_ALREADY_LINKED_MESSAGE);
   }
-  const byName = await findLoadedCharacter(
+  const byName = await findOnSlot(
     db,
-    and(
-      ...sameSlot,
-      sql`lower(${schema.characters.name}) = lower(${q.name})`,
-    ),
+    q,
+    sql`lower(${schema.characters.name}) = lower(${q.name})`,
   );
   if (!byName) return { action: 'create' };
   if (byName.userId !== q.userId) {

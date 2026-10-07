@@ -54,7 +54,10 @@ async function rejection(p: Promise<unknown>) {
   );
   expect(err).toBeInstanceOf(AddonImportError);
   const e = err as AddonImportError;
-  return { code: e.code, message: (e.getResponse() as { message: string }).message };
+  return {
+    code: e.code,
+    message: (e.getResponse() as { message: string }).message,
+  };
 }
 
 describe('resolveImportTarget (ROK-1738 D2)', () => {

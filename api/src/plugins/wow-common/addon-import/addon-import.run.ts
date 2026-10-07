@@ -36,7 +36,10 @@ export interface LoadedCharacter {
 }
 
 /** The request flags the run reads (both request schemas carry them). */
-export type ImportRunRequest = Pick<AddonImportRequestDto, 'dryRun' | 'confirm'>;
+export type ImportRunRequest = Pick<
+  AddonImportRequestDto,
+  'dryRun' | 'confirm'
+>;
 
 type CharacterRow = typeof schema.characters.$inferSelect;
 
@@ -72,7 +75,10 @@ export async function findLoadedCharacter(
     .where(where)
     .limit(1);
   if (!row) return null;
-  return { userId: row.c.userId, character: toLoadedCharacter(row.c, row.slug) };
+  return {
+    userId: row.c.userId,
+    character: toLoadedCharacter(row.c, row.slug),
+  };
 }
 
 /** Load the (already owner-checked) character; missing → `WRONG_GAME`. */

@@ -48,9 +48,16 @@ describe('createDtoFromExport (ROK-1738 D7 / D13 / A1)', () => {
   });
 
   it('title-cases a multi-word class token and strips the realm', () => {
-    const who = buildWho({ class: 'DEATHKNIGHT', fullName: 'Ana Forever-Realm' });
+    const who = buildWho({
+      class: 'DEATHKNIGHT',
+      fullName: 'Ana Forever-Realm',
+    });
     const dto = createDtoFromExport(who, 'eu', 7);
-    expect(dto).toEqual({ ...EXPECTED_DTO, region: 'eu', class: 'Death Knight' });
+    expect(dto).toEqual({
+      ...EXPECTED_DTO,
+      region: 'eu',
+      class: 'Death Knight',
+    });
   });
 
   it('who.ruleset null + no pick → RULESET_REQUIRED', () => {
@@ -73,8 +80,13 @@ describe('createDtoFromExport (ROK-1738 D7 / D13 / A1)', () => {
 
   it('Hardcore export → INVALID_PAYLOAD refusal (A1), even with a pick', () => {
     const who = buildWho({ ruleset: 'hardcore' });
-    const expected = { code: 'INVALID_PAYLOAD', message: HARDCORE_CREATE_MESSAGE };
-    expect(thrown(() => createDtoFromExport(who, 'us', 7, 'pvp'))).toEqual(expected);
+    const expected = {
+      code: 'INVALID_PAYLOAD',
+      message: HARDCORE_CREATE_MESSAGE,
+    };
+    expect(thrown(() => createDtoFromExport(who, 'us', 7, 'pvp'))).toEqual(
+      expected,
+    );
     expect(thrown(() => assertCreatable(who))).toEqual(expected);
   });
 
@@ -95,7 +107,12 @@ describe('createDtoFromExport (ROK-1738 D7 / D13 / A1)', () => {
 
 describe('regionFromExport', () => {
   it('maps addon region ids', () => {
-    expect([1, 2, 3, 4].map(regionFromExport)).toEqual(['us', 'kr', 'eu', 'tw']);
+    expect([1, 2, 3, 4].map(regionFromExport)).toEqual([
+      'us',
+      'kr',
+      'eu',
+      'tw',
+    ]);
   });
 
   it('cn (5) → REGION_MISMATCH "unsupported region"', () => {
@@ -144,7 +161,9 @@ describe('targetDto', () => {
 
   it('update: the stored id, name and ruleset; the export class/level', () => {
     const who = buildWho({ fullName: 'ana forever' });
-    expect(targetDto({ action: 'update', character: stored }, who, 'us')).toEqual({
+    expect(
+      targetDto({ action: 'update', character: stored }, who, 'us'),
+    ).toEqual({
       action: 'update',
       characterId: stored.id,
       name: 'Ana Forever',
@@ -172,20 +191,36 @@ describe('foreverGameId', () => {
   });
 
   it('no Forever game row → WRONG_GAME', async () => {
-    await expect(foreverGameId(db([]))).rejects.toMatchObject({ code: 'WRONG_GAME' });
+    await expect(foreverGameId(db([]))).rejects.toMatchObject({
+      code: 'WRONG_GAME',
+    });
   });
 });
 
 describe('parseImportRequest with the create-route schema (D1)', () => {
-  const body = { importString: ' !RL1!char!abc ', dryRun: false, ruleset: 'pvp' };
+  const body = {
+    importString: ' !RL1!char!abc ',
+    dryRun: false,
+    ruleset: 'pvp',
+  };
 
   it('accepts and returns the picked ruleset', () => {
-    const parsed = parseImportRequest(body, rawFacts(body), AddonImportNewRequestSchema);
-    expect(parsed).toEqual({ importString: '!RL1!char!abc', dryRun: false, ruleset: 'pvp' });
+    const parsed = parseImportRequest(
+      body,
+      rawFacts(body),
+      AddonImportNewRequestSchema,
+    );
+    expect(parsed).toEqual({
+      importString: '!RL1!char!abc',
+      dryRun: false,
+      ruleset: 'pvp',
+    });
   });
 
   it('the default (per-character) schema still rejects a ruleset key', () => {
-    expect(() => parseImportRequest(body, rawFacts(body))).toThrow('Validation failed');
+    expect(() => parseImportRequest(body, rawFacts(body))).toThrow(
+      'Validation failed',
+    );
   });
 
   it('the create schema rejects a Hardcore pick', () => {
