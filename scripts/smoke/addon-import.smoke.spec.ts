@@ -223,12 +223,23 @@ test.describe('Addon Import string dialog (ROK-1724)', () => {
         const id = await createForeverCharacter(adminToken, fullName);
         const invitee = await getInviteeFixture();
 
-        await page.goto('/');
-        await page.evaluate((t) => localStorage.setItem('raid_ledger_token', t), invitee.jwt);
-        // Wait for the session user to load as the invitee, so "no button" is not just "user not loaded yet".
-        const me = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith('/auth/me') && r.ok(), { timeout: 20_000 });
+        // Sign in as the invitee BEFORE the first navigation (the pattern of
+        // scheduling-poll-live-updates / game-badges-personalization): the
+        // init script swaps the token ahead of the app on every document, so no
+        // admin page load ever runs and no admin `/auth/me` can be caught.
+        await page.addInitScript((t) => localStorage.setItem('raid_ledger_token', t), invitee.jwt);
+        // Wait for the invitee's own `/auth/me` (matched by its Bearer token),
+        // registered before navigating, so "no button" is not just "user not loaded yet".
+        const me = page.waitForResponse(
+            (r) =>
+                new URL(r.url()).pathname.endsWith('/auth/me') &&
+                r.request().headers()['authorization'] === `Bearer ${invitee.jwt}`,
+            { timeout: 20_000 },
+        );
         await openCharacter(page, id, fullName);
-        const meBody = (await (await me).json()) as { id?: number | string };
+        const meResponse = await me;
+        expect(meResponse.status(), 'the invitee session should load').toBe(200);
+        const meBody = (await meResponse.json()) as { id?: number | string };
         expect(String(meBody.id), 'the page should be signed in as the invitee').toBe(String(invitee.userId));
         await expect(
             page.getByRole('button', { name: 'Import string' }),
