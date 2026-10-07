@@ -147,6 +147,34 @@ function describeBatching() {
     });
   });
 
+  it('keeps last_run_at back while a failed INSERT re-queues the row, then retries', async () => {
+    const jobId = await insertJob(testApp, 'test:batch-insert-fails');
+    await svc.executeWithTracking('test:batch-insert-fails', ok);
+    const realInsert = testApp.db.insert.bind(testApp.db);
+    const insertSpy = jest
+      .spyOn(testApp.db, 'insert')
+      .mockImplementation((table: unknown) => {
+        if (table === schema.cronJobExecutions) {
+          throw new Error('simulated transient outage'); // not an FK 23503
+        }
+        return realInsert(table as typeof schema.cronJobs);
+      });
+
+    await svc.flushLastRunUpdates();
+
+    expect(await readExecutions(testApp, jobId)).toHaveLength(0);
+    expect((await readJob(testApp, jobId))?.lastRunAt ?? null).toBeNull();
+
+    insertSpy.mockRestore();
+    await svc.flushLastRunUpdates();
+
+    const [row] = await readExecutions(testApp, jobId);
+    expect(row?.status).toBe('completed');
+    expect((await readJob(testApp, jobId))?.lastRunAt?.toISOString()).toBe(
+      row?.finishedAt?.toISOString(),
+    );
+  });
+
   it('derives a rebound last_run_at’s next_run_at from the FRESH schedule', async () => {
     const name = 'test:batch-recreate-reschedule';
     const staleId = await insertJob(testApp, name); // every 5 minutes

@@ -140,8 +140,26 @@ export class LastRunBuffer {
     });
   }
 
-  /** Write every queued value in one batched UPDATE and drain the buffer. */
-  flush(db: Db, logger: Logger): Promise<void> {
-    return flushPendingUpdates(db, this.pending, logger);
+  /**
+   * Write every queued value in one batched UPDATE and drain the buffer.
+   * Values for `hold` ids stay queued for a later flush (their execution
+   * rows did not land yet).
+   */
+  async flush(
+    db: Db,
+    logger: Logger,
+    hold: ReadonlySet<number> = new Set(),
+  ): Promise<void> {
+    if (hold.size === 0) return flushPendingUpdates(db, this.pending, logger);
+    const batch = new Map<number, PendingLastRun>();
+    for (const [id, queued] of this.pending) {
+      if (!hold.has(id)) batch.set(id, queued);
+    }
+    for (const id of batch.keys()) this.pending.delete(id);
+    await flushPendingUpdates(db, batch, logger);
+    // A failed UPDATE re-queued into `batch`; a value queued meanwhile wins.
+    for (const [id, queued] of batch) {
+      if (!this.pending.has(id)) this.pending.set(id, queued);
+    }
   }
 }

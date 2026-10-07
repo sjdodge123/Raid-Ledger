@@ -15,7 +15,11 @@ import { PRUNE_EVERY_N_EXECUTIONS } from './cron-job.constants';
 import { pruneExecutions } from './cron-job.helpers';
 import { type ReresolveJob } from './cron-job.fk-recovery.helpers';
 import { LastRunBuffer } from './cron-job.last-run-buffer';
-import { ExecutionBuffer } from './cron-job.execution-buffer';
+import {
+  ExecutionBuffer,
+  type ParentRebinds,
+  type QueuedExecution,
+} from './cron-job.execution-buffer';
 import { type RecordDeps } from './cron-job.execution.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -75,7 +79,9 @@ export class CronRunBookkeeping {
   /**
    * Flush queued execution rows (one multi-row INSERT), then queued
    * last_run_at values (one batched UPDATE). A last_run_at queued under a
-   * stale job id follows its execution rows to the re-created job.
+   * stale job id follows its execution rows to the re-created job. A job
+   * whose rows are still queued (a failed INSERT re-queued them) keeps its
+   * last_run_at queued too, so the timestamp never lands without its row.
    */
   async flush(): Promise<void> {
     const rebinds = await this.executions.flush({
@@ -87,7 +93,8 @@ export class CronRunBookkeeping {
     for (const [staleId, fresh] of rebinds) {
       this.lastRun.rebind(staleId, fresh);
     }
-    await this.lastRun.flush(this.db, this.logger);
+    const hold = jobsWithQueuedRows(this.executions.pending, rebinds);
+    await this.lastRun.flush(this.db, this.logger, hold);
   }
 
   /**
@@ -100,4 +107,18 @@ export class CronRunBookkeeping {
     this.closing = true;
     await this.flush();
   }
+}
+
+/** Ids (stale and rebound) of every job that still has a queued row. */
+function jobsWithQueuedRows(
+  pending: readonly QueuedExecution[],
+  rebinds: ParentRebinds,
+): Set<number> {
+  const ids = new Set<number>();
+  for (const { job } of pending) {
+    ids.add(job.id);
+    const fresh = rebinds.get(job.id);
+    if (fresh) ids.add(fresh.id);
+  }
+  return ids;
 }

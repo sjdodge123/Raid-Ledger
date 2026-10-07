@@ -62,6 +62,9 @@ describe('CronJobService.updateSchedule with a queued last_run_at (ROK-1380)', (
     db.returning.mockResolvedValueOnce([jobRow(NEW)]);
 
     await service.updateSchedule(7, NEW);
+    // The execution flush's parent pre-check finds job 7, so its queued row
+    // lands and its last_run_at is not held back behind a re-queued row.
+    db.where.mockResolvedValueOnce([{ id: 7 }]);
     await service.flushLastRunUpdates();
 
     const query = db.execute.mock.calls[0][0] as SQL;

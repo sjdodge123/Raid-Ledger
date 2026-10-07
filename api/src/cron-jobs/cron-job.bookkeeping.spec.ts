@@ -16,7 +16,7 @@ const row = (cronExpression: string, id = 7) =>
 
 function setup() {
   const db = createDrizzleMock();
-  const logger = { warn: jest.fn() } as unknown as Logger;
+  const logger = { warn: jest.fn(), debug: jest.fn() } as unknown as Logger;
   const book = new CronRunBookkeeping(db as never, logger, jest.fn());
   return { db, book };
 }
@@ -81,6 +81,36 @@ describe('CronRunBookkeeping.flush — re-created job (ROK-1380)', () => {
 
     expect([...book.lastRun.pending.keys()]).toEqual([9]);
     expect(book.lastRun.pending.get(9)?.lastRunAt).toBe(newer);
+  });
+});
+
+describe('CronRunBookkeeping.flush — execution INSERT failed (ROK-1380)', () => {
+  it('keeps that job’s last_run_at queued; other jobs still flush', async () => {
+    const { db, book } = setup();
+    book.recordDeps.deferRun(row('*/5 * * * *'), 'Job_7', VALUES);
+    book.lastRun.pending.set(8, {
+      lastRunAt: FINISH,
+      cronExpression: '* * * * *',
+    }); // a liveness heartbeat: no execution row
+    // The INSERT failed: the buffer re-queued job 7's row and returned.
+    jest.spyOn(book.executions, 'flush').mockResolvedValue(new Map());
+
+    await book.flush();
+
+    expect(db.execute).toHaveBeenCalledTimes(1);
+    expect([...book.lastRun.pending.keys()]).toEqual([7]);
+  });
+
+  it('holds a rebound job under its fresh id while its rows are queued', async () => {
+    const { book } = setup();
+    book.recordDeps.deferRun(row('*/5 * * * *'), 'Job_7', VALUES);
+    jest
+      .spyOn(book.executions, 'flush')
+      .mockResolvedValue(new Map([[7, row('*/5 * * * *', 9)]]));
+
+    await book.flush();
+
+    expect([...book.lastRun.pending.keys()]).toEqual([9]);
   });
 });
 
