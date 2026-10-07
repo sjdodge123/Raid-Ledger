@@ -6,7 +6,10 @@ import {
   buildLoggerSelfTest,
   LOGGER_SELF_TEST_WARN_SENTINEL,
   LOGGER_SELF_TEST_ERROR_SENTINEL,
+  enableGracefulShutdown,
 } from './main.helpers';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { applyCorsPolicy } from './cors/cors-auto-policy';
 
 function describeValidateCorsConfig() {
@@ -284,4 +287,38 @@ describe('main.helpers', () => {
   describe('parseLogLevel', () => describeParseLogLevel());
   describe('getLogLevels', () => describeGetLogLevels());
   describe('buildLoggerSelfTest', () => describeBuildLoggerSelfTest());
+});
+
+/** Strip block and line comments before scanning (main.client-url.guard.spec.ts). */
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+describe('enableGracefulShutdown (TDB:2085)', () => {
+  it('enables shutdown hooks on SIGTERM/SIGINT only, exiting the process', () => {
+    const app = { enableShutdownHooks: jest.fn() };
+
+    enableGracefulShutdown(app);
+
+    expect(app.enableShutdownHooks).toHaveBeenCalledTimes(1);
+    expect(app.enableShutdownHooks).toHaveBeenCalledWith(
+      ['SIGTERM', 'SIGINT'],
+      { useProcessExit: true },
+    );
+  });
+
+  it('is called by bootstrap() before app.listen', () => {
+    // main.ts runs `void bootstrap()` on import, so scan its source instead.
+    const source = stripComments(
+      readFileSync(join(__dirname, 'main.ts'), 'utf8'),
+    );
+    const call = source.indexOf('enableGracefulShutdown(app)');
+    const listen = source.indexOf('app.listen(');
+    expect({ callFound: call >= 0, beforeListen: call < listen }).toEqual({
+      callFound: true,
+      beforeListen: true,
+    });
+  });
 });
