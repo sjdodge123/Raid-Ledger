@@ -13,7 +13,7 @@ import * as schema from '../drizzle/schema';
 import { asc, eq } from 'drizzle-orm';
 import { CronJobService } from './cron-job.service';
 import type { CronRunBookkeeping } from './cron-job.bookkeeping';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 async function insertJob(testApp: TestApp, name: string): Promise<number> {
   const [job] = nonEmpty(
@@ -86,7 +86,7 @@ function describeBatching() {
       .select()
       .from(schema.cronJobs)
       .where(eq(schema.cronJobs.id, jobId));
-    expect(job?.lastRunAt?.getTime()).toBe(rows[2].finishedAt!.getTime());
+    expect(job?.lastRunAt?.getTime()).toBe(at(rows, 2).finishedAt!.getTime());
   });
 
   it('drops a deleted job’s queued rows without losing the live job’s rows', async () => {
