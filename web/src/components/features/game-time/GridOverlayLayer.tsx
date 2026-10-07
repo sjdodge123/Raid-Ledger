@@ -1,8 +1,8 @@
 import type { JSX } from 'react';
-import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import type { GridDims, GameTimePreviewBlock } from './game-time-grid.types';
 import {
-    RollingWeekDivider, TodayHighlight, CurrentTimeIndicator,
+    TodayHighlight, CurrentTimeIndicator,
     EventBlockOverlays, PreviewBlockOverlays,
 } from './GridOverlays';
 
@@ -10,7 +10,6 @@ interface GridOverlayLayerProps {
     todayIndex?: number | undefined;
     currentHour?: number | undefined;
     gridDims: GridDims | null;
-    nextWeekSlots?: GameTimeSlot[] | undefined;
     HOURS: number[];
     rangeStart: number;
     rangeEnd: number;
@@ -21,12 +20,11 @@ interface GridOverlayLayerProps {
 
 /** Renders all positioned overlays: time indicator, highlights, events, previews */
 export function GridOverlayLayer(props: GridOverlayLayerProps): JSX.Element | null {
-    const { todayIndex, currentHour, gridDims, nextWeekSlots, HOURS, rangeStart, rangeEnd, displayEvents, onEventClick, previewBlocks } = props;
+    const { todayIndex, currentHour, gridDims, HOURS, rangeStart, rangeEnd, displayEvents, onEventClick, previewBlocks } = props;
 
     return (
         <>
-            <RollingDividerOverlay todayIndex={todayIndex} gridDims={gridDims} nextWeekSlots={nextWeekSlots} currentHour={currentHour} hoursCount={HOURS.length} rangeStart={rangeStart} />
-            <TodayOverlay todayIndex={todayIndex} gridDims={gridDims} nextWeekSlots={nextWeekSlots} currentHour={currentHour} hoursCount={HOURS.length} rangeStart={rangeStart} />
+            <TodayOverlay todayIndex={todayIndex} gridDims={gridDims} hoursCount={HOURS.length} />
             <TimeOverlay todayIndex={todayIndex} currentHour={currentHour} gridDims={gridDims} rangeStart={rangeStart} rangeEnd={rangeEnd} />
             <EventsOverlay displayEvents={displayEvents} gridDims={gridDims} rangeStart={rangeStart} rangeEnd={rangeEnd} onEventClick={onEventClick} />
             <PreviewsOverlay previewBlocks={previewBlocks} displayEvents={displayEvents} gridDims={gridDims} rangeStart={rangeStart} rangeEnd={rangeEnd} />
@@ -34,18 +32,11 @@ export function GridOverlayLayer(props: GridOverlayLayerProps): JSX.Element | nu
     );
 }
 
-function RollingDividerOverlay({ todayIndex, gridDims, nextWeekSlots, currentHour, hoursCount, rangeStart }: {
-    todayIndex?: number | undefined; gridDims: GridDims | null; nextWeekSlots?: GameTimeSlot[] | undefined; currentHour?: number | undefined; hoursCount: number; rangeStart: number;
-}): JSX.Element | null {
-    if (todayIndex === undefined || !nextWeekSlots || !gridDims || currentHour === undefined) return null;
-    return <RollingWeekDivider todayIndex={todayIndex} gridDims={gridDims} currentHour={currentHour} hoursCount={hoursCount} rangeStart={rangeStart} />;
-}
-
-function TodayOverlay({ todayIndex, gridDims, nextWeekSlots, currentHour, hoursCount, rangeStart }: {
-    todayIndex?: number | undefined; gridDims: GridDims | null; nextWeekSlots?: GameTimeSlot[] | undefined; currentHour?: number | undefined; hoursCount: number; rangeStart: number;
+function TodayOverlay({ todayIndex, gridDims, hoursCount }: {
+    todayIndex?: number | undefined; gridDims: GridDims | null; hoursCount: number;
 }): JSX.Element | null {
     if (todayIndex === undefined || !gridDims) return null;
-    return <TodayHighlight todayIndex={todayIndex} gridDims={gridDims} hoursCount={hoursCount} hasRolling={!!nextWeekSlots} currentHour={currentHour} rangeStart={rangeStart} />;
+    return <TodayHighlight todayIndex={todayIndex} gridDims={gridDims} hoursCount={hoursCount} />;
 }
 
 function TimeOverlay({ todayIndex, currentHour, gridDims, rangeStart, rangeEnd }: {

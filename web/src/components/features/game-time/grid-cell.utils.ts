@@ -104,13 +104,11 @@ export function computeHeatmapLabel(
 export function computeCellClasses(
     compact: boolean | undefined, rounding: string, cellClasses: string,
     canInteract: boolean, clickable: boolean,
-    locked: boolean, past: boolean, hasNextWeek: boolean,
-    isHovered: boolean, isInteractive: boolean,
+    locked: boolean, isHovered: boolean, isInteractive: boolean,
 ): string {
     const cursorClass = canInteract || clickable ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : '';
-    const pastClass = past && hasNextWeek && !isHovered ? 'opacity-60' : '';
     const hoverClass = isHovered && (isInteractive || clickable) ? 'z-10 relative' : '';
-    return `${compact ? 'h-4' : 'h-5'} ${rounding} transition-colors ${cellClasses} ${cursorClass} ${pastClass} ${hoverClass}`;
+    return `${compact ? 'h-4' : 'h-5'} ${rounding} transition-colors ${cellClasses} ${cursorClass} ${hoverClass}`;
 }
 
 /** Builds the inline style object for a grid cell */
