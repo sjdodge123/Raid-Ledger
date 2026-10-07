@@ -81,6 +81,8 @@ function StepFooter({ flow, onCancel, onDone }: { flow: Flow; onCancel: () => vo
     return <AddonImportPasteActions value={flow.text} onCheck={flow.check} onCancel={onCancel} checking={flow.preview.isPending} />;
 }
 
+const noop = () => {};
+
 export function AddonImportDialog(props: AddonImportDialogProps) {
     const { isOpen, onClose } = props;
     const isDesktop = useMediaQuery(DESKTOP_MQ);
@@ -92,7 +94,10 @@ export function AddonImportDialog(props: AddonImportDialogProps) {
     const title = props.mode === 'create' ? CREATE_TITLE : TITLE;
     const body = <StepBody flow={flow} gameId={gameId} />;
     const footer = <StepFooter flow={flow} onCancel={guard.requestClose} onDone={onClose} />;
-    const shared = { isOpen, onClose, closeGuard: guard, discardMessage: 'Discard the pasted import string?', title, footer };
+    // Create mode: an in-flight apply can't be closed out from under — its success closes Add Character and navigates.
+    const locked = props.mode === 'create' && flow.apply.isPending;
+    const closeGuard = locked ? { ...guard, requestClose: noop } : guard;
+    const shared = { isOpen, onClose: locked ? noop : onClose, closeGuard, discardMessage: 'Discard the pasted import string?', title, footer };
     if (isDesktop) return <Modal {...shared} maxWidth="max-w-lg">{body}</Modal>;
     // Over the Add Character Modal a phone sheet must lift to the modal layer (D9).
     return <BottomSheet {...shared} stacked={props.mode === 'create'}>{body}</BottomSheet>;

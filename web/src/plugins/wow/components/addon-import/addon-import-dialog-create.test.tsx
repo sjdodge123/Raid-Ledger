@@ -145,6 +145,31 @@ describe('AddonImportDialog create mode — ruleset picker (D13)', () => {
     });
 });
 
+describe('AddonImportDialog create mode — an apply in flight', () => {
+    it('cannot be closed (Escape, ×) until the apply settles, then hands the result to onCreated', async () => {
+        let release: () => void = () => {};
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.post(NEW_IMPORT_URL, async ({ request }) => {
+            const body = await request.json() as Body;
+            if (!body.dryRun) await gate;
+            return HttpResponse.json((body.dryRun ? newCharResult({}) : APPLIED) as Record<string, unknown>);
+        }));
+        const onClose = vi.fn();
+        const onCreated = vi.fn();
+        const user = userEvent.setup();
+        renderWithProviders(<AddonImportDialog mode="create" isOpen={true} onClose={onClose} onCreated={onCreated} />);
+        await pasteAndCheck(user);
+        await user.click(screen.getByRole('button', { name: 'Import' }));
+        await screen.findByText('Importing…');
+        await user.keyboard('{Escape}');
+        await user.click(screen.getByRole('button', { name: 'Close modal' }));
+        expect(screen.queryByText('Discard your changes?'), 'no discard confirm while importing').toBeNull();
+        expect(onClose, 'closing must be locked while the apply is in flight').not.toHaveBeenCalled();
+        release();
+        await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1));
+    });
+});
+
 describe('AddonImportDialog frames', () => {
     const layer = () => screen.getByRole('dialog').parentElement as HTMLElement;
 
