@@ -469,6 +469,22 @@ describe('create route — limits, audit, gating (AC7)', () => {
     ]);
   });
 
+  it('an update target that rejects GUID_CONFIRM_REQUIRED is audited with its character_id (Codex P2)', async () => {
+    const { token } = await member('anaauditrepin');
+    const id = await handMade(token);
+    await testApp.db
+      .update(schema.characters)
+      .set({ addonGuid: 'Player-4395-0000FFFF' })
+      .where(eq(schema.characters.id, id));
+    const res = await applyNew(token, fixture('char-normal'));
+    expect(res.status).toBe(422);
+    expect(res.body.code).toBe('GUID_CONFIRM_REQUIRED');
+    const rows = await audits();
+    expect(rows.map((r) => [r.dryRun, r.result, r.characterId])).toEqual([
+      [false, 'GUID_CONFIRM_REQUIRED', id],
+    ]);
+  });
+
   it('plugin inactive → route refused, nothing written or audited', async () => {
     const { token } = await member('anaplugin');
     const registry = testApp.app.get(PluginRegistryService);

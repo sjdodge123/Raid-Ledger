@@ -32,11 +32,7 @@ import {
   type AttemptOutcome,
 } from './addon-import.finish';
 import { pasteSections } from './addon-import.paste-run';
-import {
-  parseImportRequest,
-  rawFacts,
-  type AttemptFacts,
-} from './addon-import.service.helpers';
+import { parseImportRequest, rawFacts } from './addon-import.service.helpers';
 
 /**
  * ROK-1738 — `POST /plugins/wow/characters/addon-import`: import a
@@ -68,7 +64,7 @@ export class AddonImportCreateService {
       perSection: [],
     };
     try {
-      const res = await this.attempt(userId, body, facts);
+      const res = await this.attempt(userId, body, outcome);
       outcome.result = res.status;
       outcome.perSection = (res.sections ?? []).map((s) => s.status);
       outcome.characterId = res.target.characterId;
@@ -84,8 +80,9 @@ export class AddonImportCreateService {
   private async attempt(
     userId: number,
     body: unknown,
-    facts: AttemptFacts,
+    outcome: AttemptOutcome,
   ): Promise<AddonImportNewResultDto> {
+    const { facts } = outcome;
     // Limit FIRST (as the per-character route): a capped user gets 429 even
     // for a paste that would 413/400; a parse reject finalises the row.
     facts.auditId = await this.audit.reserveAttempt(
@@ -99,6 +96,10 @@ export class AddonImportCreateService {
     const paste = decodeImportPaste(request.importString);
     recordPasteFacts(facts, paste);
     const input = await this.buildInput(userId, paste, request);
+    // An update target's id is audited even when the run then throws.
+    input.onTarget = (id) => {
+      outcome.characterId = id;
+    };
     return request.dryRun
       ? previewImport(this.db, input)
       : applyImport(this.db, this.characters, input);

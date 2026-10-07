@@ -310,6 +310,38 @@ describe('AddonImportCreateService — A1, claims, D4', () => {
     await expect(s.service.importNew(1, body(false))).rejects.toBe(conflict);
   });
 
+  it.each([true, false])(
+    'update target that then throws (dryRun=%s) → audit still carries its id (Codex P2)',
+    async (dryRun) => {
+      const s = setup(who(), {
+        action: 'update',
+        character: loaded(OWN_ID, 'normal'),
+      });
+      (runForCharacter as jest.Mock).mockRejectedValue(
+        new AddonImportError('GUID_CONFIRM_REQUIRED'),
+      );
+      expect(await codeOf(s.service.importNew(1, body(dryRun)))).toMatchObject({
+        code: 'GUID_CONFIRM_REQUIRED',
+      });
+      expect(audited(s.audit)).toMatchObject({
+        characterId: OWN_ID,
+        result: 'GUID_CONFIRM_REQUIRED',
+      });
+    },
+  );
+
+  it('a create whose tx rolls back after the insert audits NO id (Codex P2)', async () => {
+    const s = setup(who());
+    (runForCharacter as jest.Mock).mockRejectedValue(
+      new AddonImportError('GUID_CONFIRM_REQUIRED'),
+    );
+    expect(await codeOf(s.service.importNew(1, body(false)))).toMatchObject({
+      code: 'GUID_CONFIRM_REQUIRED',
+    });
+    expect(s.characters.createWithin).toHaveBeenCalledTimes(1);
+    expect(audited(s.audit)).toMatchObject({ characterId: null });
+  });
+
   it('apply takes the GUID lock BEFORE re-resolving the target', async () => {
     const s = setup(who());
     await s.service.importNew(1, body(false));

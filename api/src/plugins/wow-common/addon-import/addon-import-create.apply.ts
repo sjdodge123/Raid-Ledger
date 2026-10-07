@@ -51,6 +51,16 @@ export interface CreateImportInput {
   /** The AUTHORITATIVE section's `who` (ruling Q7). */
   who: AddonWho;
   query: ImportTargetQuery;
+  /**
+   * Codex P2 — told the EXISTING row's id the moment the target resolves to
+   * `update`, so a later throw still audits it. Never told a created id: that
+   * row only exists once the tx commits (the success path records it).
+   */
+  onTarget?: (characterId: string) => void;
+}
+
+function noteTarget(input: CreateImportInput, target: ImportTarget): void {
+  if (target.action === 'update') input.onTarget?.(target.character.id);
 }
 
 type Creator = Pick<CharactersService, 'createWithin'>;
@@ -103,6 +113,7 @@ export async function previewImport(
   input: CreateImportInput,
 ): Promise<AddonImportNewResultDto> {
   const target = await resolveImportTarget(db, input.query);
+  noteTarget(input, target);
   const character =
     target.action === 'update' ? target.character : previewCharacter(input);
   const result = await db.transaction((tx) => runBound(tx, input, character));
@@ -172,6 +183,7 @@ export async function applyImport(
     return await db.transaction(async (tx) => {
       await lockGuid(tx, input.query);
       const target = await resolveImportTarget(tx, input.query);
+      noteTarget(input, target);
       if (target.action === 'create') {
         return runCreate(tx, creator, input, target, phase);
       }
