@@ -66,11 +66,21 @@ export interface ThrowawayCharacter {
 
 type CharacterApi = Pick<ApiClient, 'get' | 'post' | 'delete'>;
 
+const LEFTOVER_MIN_AGE_MS = 10 * 60 * 1000;
+
 /** Delete leftovers from an earlier run that died before its finally. */
 async function sweepLeftovers(api: CharacterApi, prefix: string): Promise<void> {
   const res = await api.get<unknown>('/users/me/characters');
   const rows = (Array.isArray(res) ? res : rowsOf(res)) as unknown as ThrowawayCharacter[];
-  for (const c of rows.filter((r) => r.name?.startsWith(prefix))) {
+  // Only leftovers older than 10 min (the create stamps Date.now() into the
+  // name): a concurrent run's in-flight character is left alone.
+  const cutoff = Date.now() - LEFTOVER_MIN_AGE_MS;
+  const stale = rows.filter(
+    (r) =>
+      r.name?.startsWith(prefix) &&
+      Number(r.name.slice(prefix.length)) < cutoff,
+  );
+  for (const c of stale) {
     console.log(`    Sweeping leftover throwaway character ${c.name} (${c.id})`);
     await api.delete(`/users/me/characters/${c.id}`);
   }
@@ -101,6 +111,14 @@ export async function withThrowawayCharacter<T>(
   try {
     return await fn(char);
   } finally {
-    await api.delete(`/users/me/characters/${char.id}`);
+    // A failed cleanup must not mask `fn`'s own assertion error; the next
+    // run's leftover sweep reaps the character.
+    await api
+      .delete(`/users/me/characters/${char.id}`)
+      .catch((err: unknown) =>
+        console.warn(
+          `    Throwaway character ${char.id} cleanup failed: ${err instanceof Error ? err.message : String(err)}`,
+        ),
+      );
   }
 }

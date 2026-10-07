@@ -136,6 +136,25 @@ async function throwawayCases() {
     ]);
     assert.ok(!calls.includes('DELETE /users/me/characters/keep-1'), 'swept a non-prefixed character');
   });
+
+  await test('leaves a fresh (<10 min) prefixed character to its concurrent run', async () => {
+    const { api, calls } = charApi([{ id: 'live-1', name: `Smoke-868-${Date.now() - 60_000}` }]);
+    await withThrowawayCharacter(api, 7, 'Smoke-868-', async () => undefined);
+    assert.ok(!calls.includes('DELETE /users/me/characters/live-1'), 'swept an in-flight character');
+  });
+
+  await test('a failed cleanup DELETE does not mask the error thrown by fn', async () => {
+    const { api } = charApi();
+    api.delete = async () => {
+      throw new Error('cleanup 500');
+    };
+    await assert.rejects(
+      withThrowawayCharacter(api, 7, 'Smoke-868-', async () => {
+        throw new Error('assertion inside fn');
+      }),
+      { message: 'assertion inside fn' },
+    );
+  });
 }
 
 async function main() {
