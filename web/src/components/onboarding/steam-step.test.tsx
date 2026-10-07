@@ -66,3 +66,11 @@ describe('SteamStep connect control (ROK-1630 AC16)', () => {
         expect(button).toHaveAttribute('aria-busy', 'true');
     });
 });
+
+describe('SteamStep sign-in notice (ROK-1731)', () => {
+    it('warns that Steam may notify about the sign-in, as muted secondary text', () => {
+        renderStep();
+        const notice = screen.getByText('Steam may notify you about this sign-in — sometimes hours later.');
+        expect(notice).toHaveClass('text-xs', 'text-muted');
+    });
+});

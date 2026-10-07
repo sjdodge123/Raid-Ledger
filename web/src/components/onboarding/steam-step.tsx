@@ -14,6 +14,7 @@ function SteamStepHeader() {
             <p className="text-muted mt-2">
                 Connect Steam to see which games your community owns, get price alerts, and power game night picks.
             </p>
+            <p className="text-xs text-muted mt-2">Steam may notify you about this sign-in — sometimes hours later.</p>
         </div>
     );
 }

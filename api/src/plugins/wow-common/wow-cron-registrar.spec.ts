@@ -2,11 +2,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WowCronRegistrar } from './wow-cron-registrar';
 import { CharactersService } from '../../characters/characters.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
+import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { at } from '../../common/testing/narrow';
 
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
 let mockBossDataRefresh: { refresh: jest.Mock };
+let mockProbe: { run: jest.Mock; runIfInLaunchWindow: jest.Mock };
 
 async function setupEach() {
   mockCharactersService = {
@@ -15,12 +17,14 @@ async function setupEach() {
   mockBossDataRefresh = {
     refresh: jest.fn(),
   };
+  mockProbe = { run: jest.fn(), runIfInLaunchWindow: jest.fn() };
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       WowCronRegistrar,
       { provide: CharactersService, useValue: mockCharactersService },
       { provide: BossDataRefreshService, useValue: mockBossDataRefresh },
+      { provide: ForeverNamespaceProbeService, useValue: mockProbe },
     ],
   }).compile();
 
@@ -53,13 +57,69 @@ describe('WowCronRegistrar — getCronJobs', () => {
 
   it('should return cron jobs for character sync and boss data refresh', () => {
     const jobs = registrar.getCronJobs();
-    expect(jobs).toHaveLength(2);
+    expect(jobs).toHaveLength(4);
     expect(jobs[0]?.name).toBe('character-auto-sync');
     expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
     expect(typeof at(jobs, 0).handler).toBe('function');
     expect(jobs[1]?.name).toBe('boss-data-refresh');
     expect(jobs[1]?.cronExpression).toBe('0 0 4 * * 0');
     expect(typeof at(jobs, 1).handler).toBe('function');
+  });
+
+  it('registers the daily and launch-window Forever probe jobs (ROK-1716 D7)', () => {
+    const jobs = registrar.getCronJobs();
+    expect(jobs[2]?.name).toBe('forever-namespace-probe');
+    expect(jobs[2]?.cronExpression).toBe('0 0 5 * * *');
+    expect(jobs[3]?.name).toBe('forever-namespace-probe-launch');
+    expect(jobs[3]?.cronExpression).toBe('0 30 * * * *');
+  });
+});
+
+/** Find a registered job's handler by name. */
+function handlerFor(name: string): () => Promise<void> {
+  const job = registrar.getCronJobs().find((j) => j.name === name);
+  if (!job) throw new Error(`no cron job ${name}`);
+  return async () => job.handler();
+}
+
+describe('WowCronRegistrar — Forever probe handlers (ROK-1716)', () => {
+  beforeEach(() => setupEach());
+
+  it('daily job runs the probe', async () => {
+    mockProbe.run.mockResolvedValue({ status: 'ok' });
+    await handlerFor('forever-namespace-probe')();
+    expect(mockProbe.run).toHaveBeenCalledTimes(1);
+    expect(mockProbe.runIfInLaunchWindow).not.toHaveBeenCalled();
+  });
+
+  it('daily job throws when the probe result is an error', async () => {
+    mockProbe.run.mockResolvedValue({ status: 'error' });
+    await expect(handlerFor('forever-namespace-probe')()).rejects.toThrow(
+      /Forever namespace probe failed/,
+    );
+  });
+
+  it('daily job resolves when the probe is skipped', async () => {
+    mockProbe.run.mockResolvedValue({ status: 'skipped' });
+    await expect(
+      handlerFor('forever-namespace-probe')(),
+    ).resolves.toBeUndefined();
+  });
+
+  it('launch job goes through the launch-window gate, never run()', async () => {
+    mockProbe.runIfInLaunchWindow.mockResolvedValue(null);
+    await expect(
+      handlerFor('forever-namespace-probe-launch')(),
+    ).resolves.toBeUndefined();
+    expect(mockProbe.runIfInLaunchWindow).toHaveBeenCalledTimes(1);
+    expect(mockProbe.run).not.toHaveBeenCalled();
+  });
+
+  it('launch job throws when an in-window run errors', async () => {
+    mockProbe.runIfInLaunchWindow.mockResolvedValue({ status: 'error' });
+    await expect(
+      handlerFor('forever-namespace-probe-launch')(),
+    ).rejects.toThrow(/Forever namespace probe failed/);
   });
 });
 
