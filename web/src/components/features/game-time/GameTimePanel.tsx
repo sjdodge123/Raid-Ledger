@@ -9,11 +9,6 @@ import { useDesktopProfileWindow } from './use-desktop-profile-window';
 import { awayDatesInWeek } from './phone/away-days';
 
 interface GameTimePanelProps {
-    /**
-     * The profile's weekly-template editor is the only mode. The rolling
-     * 'modal' / 'picker' modes had no mount and were removed (TDB:1933).
-     */
-    mode: 'profile';
     /** Whether auth is confirmed (for useGameTime enabled) */
     enabled?: boolean;
 }

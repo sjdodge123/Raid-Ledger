@@ -1,6 +1,6 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useGameTime, useSaveGameTime, useSaveGameTimeOverrides } from './use-game-time';
-import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeSlot } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
 import { useTimezoneStore } from '../stores/timezone-store';
 import { getTimezoneAbbr, getTimezoneOffsetMinutes } from '../lib/timezone-utils';
@@ -13,9 +13,7 @@ export type GameTimePreset = 'morning' | 'afternoon' | 'evening' | 'night';
 
 export interface UseGameTimeEditorReturn {
     slots: GameTimeSlot[];
-    events: GameTimeEventBlock[];
     isLoading: boolean;
-    weekStart: string;
     isDirty: boolean;
     handleChange: (slots: GameTimeSlot[]) => void;
     applyPreset: (dayOfWeek: number, preset: GameTimePreset) => void;
@@ -24,8 +22,6 @@ export interface UseGameTimeEditorReturn {
     discard: () => void;
     isSaving: boolean;
     tzLabel: string;
-    todayIndex: number;
-    currentHour: number;
     overrides: Array<{ date: string; hour: number; status: string }>;
     absences: Array<{ id: number; startDate: string; endDate: string; reason: string | null }>;
 }
@@ -94,15 +90,6 @@ function useGameTimeQueries(enabled: boolean) {
     return { gameTimeData, isLoading, tzLabel };
 }
 
-function useCurrentTime() {
-    const [now, setNow] = useState(() => new Date());
-    useEffect(() => {
-        const interval = setInterval(() => setNow(new Date()), 60_000);
-        return () => clearInterval(interval);
-    }, []);
-    return { todayIndex: now.getDay(), currentHour: now.getHours() + now.getMinutes() / 60 };
-}
-
 function useSaveHandler(slots: GameTimeSlot[], saveGameTime: ReturnType<typeof useSaveGameTime>, setEditSlots: (v: GameTimeSlot[] | null) => void) {
     return useCallback(async () => {
         const templateSlots = slots.filter(isAvailableSlot).map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour }));
@@ -118,10 +105,8 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     const saveGameTime = useSaveGameTime();
     const saveOverrides = useSaveGameTimeOverrides();
     const [editSlots, setEditSlots] = useState<GameTimeSlot[] | null>(null);
-    const { todayIndex, currentHour } = useCurrentTime();
 
     const slots = useMemo(() => deriveDisplaySlots(editSlots, gameTimeData), [editSlots, gameTimeData]);
-    const events = useMemo<GameTimeEventBlock[]>(() => (gameTimeData?.events as GameTimeEventBlock[]) ?? [], [gameTimeData]);
 
     const applyPreset = useCallback((dayOfWeek: number, preset: GameTimePreset) => {
         const [start, end] = PRESET_HOUR_RANGES[preset];
@@ -131,11 +116,10 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     const save = useSaveHandler(slots, saveGameTime, setEditSlots);
 
     return {
-        slots, events, isLoading,
-        weekStart: gameTimeData?.weekStart ?? '', isDirty: editSlots !== null,
+        slots, isLoading, isDirty: editSlots !== null,
         handleChange: useCallback((newSlots: GameTimeSlot[]) => setEditSlots(newSlots), []),
         applyPreset, save, clear: useCallback(() => setEditSlots([]), []), discard: useCallback(() => setEditSlots(null), []),
-        isSaving: saveGameTime.isPending || saveOverrides.isPending, tzLabel, todayIndex, currentHour,
+        isSaving: saveGameTime.isPending || saveOverrides.isPending, tzLabel,
         overrides: (gameTimeData?.overrides as Array<{ date: string; hour: number; status: string }>) ?? [],
         absences: (gameTimeData?.absences as Array<{ id: number; startDate: string; endDate: string; reason: string | null }>) ?? [],
     };

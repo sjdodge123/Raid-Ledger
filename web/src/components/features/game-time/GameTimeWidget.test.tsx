@@ -16,9 +16,7 @@ vi.mock('../../../hooks/use-game-time-editor', () => ({
 function makeEditorData(overrides: Record<string, unknown> = {}) {
     return {
         slots: [],
-        events: [],
         isLoading: false,
-        weekStart: '2026-02-08',
         isDirty: false,
         handleChange: vi.fn(),
         save: vi.fn(),
@@ -26,8 +24,6 @@ function makeEditorData(overrides: Record<string, unknown> = {}) {
         discard: vi.fn(),
         isSaving: false,
         tzLabel: 'EST',
-        todayIndex: 1, // Monday
-        currentHour: 16.5,
         overrides: [],
         absences: [],
         ...overrides,
