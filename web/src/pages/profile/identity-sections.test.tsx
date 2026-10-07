@@ -49,6 +49,17 @@ describe('SteamSection — linked state', () => {
         expect(screen.getByRole('button', { name: /link steam account/i })).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /unlink/i })).not.toBeInTheDocument();
     });
+
+    it('ROK-1731: warns that Steam may notify about the sign-in on the unlinked CTA', () => {
+        render(<SteamSection {...createLinkedSteamProps({ steamStatus: { data: { linked: false } } })} />);
+        const notice = screen.getByText('Steam may notify you about this sign-in — sometimes hours later.');
+        expect(notice).toHaveClass('text-xs', 'text-muted');
+    });
+
+    it('ROK-1731: the Steam sign-in notice is not shown once Steam is linked', () => {
+        render(<SteamSection {...createLinkedSteamProps()} />);
+        expect(screen.queryByText(/Steam may notify you about this sign-in/)).not.toBeInTheDocument();
+    });
 });
 
 describe('ROK-1307 AC-2a — Sync buttons disabled while unlink is in flight', () => {

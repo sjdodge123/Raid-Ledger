@@ -18,7 +18,7 @@ const req = { user: { id: 5 } } as unknown as AuthenticatedExpressRequest;
 const NONCE_HASH = crypto.createHash('sha256').update('n0nce').digest('hex');
 
 function mockRes(): Response {
-  return { cookie: jest.fn() } as unknown as Response;
+  return { cookie: jest.fn(), setHeader: jest.fn() } as unknown as Response;
 }
 
 function setup() {
@@ -54,6 +54,12 @@ describe('LinkStartController', () => {
       const body = returnTo === undefined ? {} : { returnTo };
       expect(ctrl.startSteamLink(req, body, mockRes())).toEqual(MINTED);
       expect(mint).toHaveBeenCalledWith('steam', 5, bound);
+    });
+
+    it('marks the nonce response no-store (ROK-1731 OQ6)', () => {
+      const res = mockRes();
+      setup().ctrl.startSteamLink(req, {}, res);
+      expect(res.setHeader).toHaveBeenCalledWith('Cache-Control', 'no-store');
     });
   });
 
