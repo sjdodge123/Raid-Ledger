@@ -17,6 +17,8 @@ import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { isUniqueViolation } from '../../../characters/characters-crud.helpers';
+import { RULESET_IDENTITY_INDEX } from '../../../characters/characters-unique-keys.helpers';
 import { ADDON_IMPORT_APPLY_LIMIT } from './addon-import.audit';
 import { GUID_ALREADY_LINKED_MESSAGE } from './addon-import-binding.apply';
 import {
@@ -374,7 +376,7 @@ describe('create route — name claimed by another player (AC5)', () => {
     expect(await written()).toEqual({ ...NOTHING, characters: 1 });
   });
 
-  it('a lost race past the resolver (core create collides) → 422 CHARACTER_CLAIMED, never 500', async () => {
+  it("a race past the resolver stopped by core's claim pre-check (409) → 422 CHARACTER_CLAIMED, never 500", async () => {
     const other = await member('anaholder');
     await handMade(other.token);
     // Simulate the resolver having read BEFORE the other player's insert.
@@ -635,4 +637,61 @@ describe('create route — a name core would refuse (review MAJOR)', () => {
       ]);
     },
   );
+});
+
+const targetModule = () =>
+  jest.requireActual<typeof import('./addon-import.target')>(
+    './addon-import.target',
+  );
+const foreverModule = () =>
+  jest.requireActual<typeof import('../wow-forever-identity.helpers')>(
+    '../wow-forever-identity.helpers',
+  );
+
+describe('create route — lost race on the identity INDEX (review MINOR)', () => {
+  it('pre-checks bypassed: the INSERT hits idx_characters_ruleset_identity → 422 CHARACTER_CLAIMED, tx rolled back, pool healthy', async () => {
+    const other = await member('anaindex');
+    await handMade(other.token);
+    jest.spyOn(targetModule(), 'resolveImportTarget').mockResolvedValue({
+      action: 'create',
+    });
+    const claim = jest
+      .spyOn(foreverModule(), 'checkRegionClaim')
+      .mockResolvedValue(undefined);
+    const mapper = jest.spyOn(foreverModule(), 'rethrowForeverViolation');
+    const { token } = await member('anaindexloser');
+    const res = await applyNew(token, fixture('char-normal'));
+    expect(claim).toHaveBeenCalled();
+    const sawIndex = mapper.mock.calls.some(([e]) =>
+      isUniqueViolation(e, RULESET_IDENTITY_INDEX),
+    );
+    expect({ sawIndex, status: res.status, code: res.body.code }).toEqual({
+      sawIndex: true,
+      status: 422,
+      code: 'CHARACTER_CLAIMED',
+    });
+    expect(await written()).toEqual({ ...NOTHING, characters: 1 });
+    const rows = await audits();
+    expect(rows.map((r) => [r.dryRun, r.result])).toEqual([
+      [false, 'CHARACTER_CLAIMED'],
+    ]);
+    jest.restoreAllMocks();
+    const after = await preview(token, fixture('char-normal'));
+    expect([after.status, after.body.code]).toEqual([422, 'CHARACTER_CLAIMED']);
+  });
+});
+
+describe('create route — collision with the caller OWN row (review NIT)', () => {
+  it('own row lands between re-resolve and insert → one fresh-tx retry updates it, no duplicate', async () => {
+    const { token } = await member('anaowntab');
+    const id = await handMade(token);
+    jest
+      .spyOn(targetModule(), 'resolveImportTarget')
+      .mockResolvedValueOnce({ action: 'create' });
+    const res = await applyNew(token, fixture('char-normal'));
+    expect([res.status, res.body.target?.action]).toEqual([200, 'update']);
+    expect(res.body.target.characterId).toBe(id);
+    expect(await rowCount(schema.characters)).toBe(1);
+    expect(await charRow(id)).toMatchObject({ addonGuid: FIXTURE_GUID });
+  });
 });

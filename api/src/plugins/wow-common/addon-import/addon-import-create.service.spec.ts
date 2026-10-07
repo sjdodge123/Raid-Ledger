@@ -41,7 +41,7 @@ const GUID = 'Player-4395-0A1B2C3D';
 function who(over: Partial<AddonWho> = {}): AddonWho {
   return {
     guid: GUID,
-    fullName: 'Ana-Doomhowl',
+    fullName: 'Ana Forever-Doomhowl',
     raw: {},
     ruleset: 'normal',
     class: 'PALADIN',
@@ -74,7 +74,7 @@ function loaded(id: string, ruleset: string | null) {
     gameId: 7,
     binding: {
       gameSlug: 'world-of-warcraft-forever',
-      name: 'Ana',
+      name: 'Ana Forever',
       region: 'us',
       ruleset,
       class: 'Paladin',
@@ -144,7 +144,7 @@ describe('AddonImportCreateService — D13 ruleset picker', () => {
     expect(res.target).toEqual({
       action: 'create',
       characterId: null,
-      name: 'Ana',
+      name: 'Ana Forever',
       region: 'us',
       ruleset: null,
       class: 'Paladin',
@@ -175,7 +175,7 @@ describe('AddonImportCreateService — D13 ruleset picker', () => {
     const res = await s.service.importNew(1, body(false, { ruleset: 'pvp' }));
     expect(s.characters.createWithin).toHaveBeenCalledWith(s.tx, 1, {
       gameId: 7,
-      name: 'Ana',
+      name: 'Ana Forever',
       region: 'us',
       ruleset: 'pvp',
       class: 'Paladin',
@@ -271,6 +271,34 @@ describe('AddonImportCreateService — A1, claims, D4', () => {
       });
     },
   );
+
+  it('own-row collision during create → ONE retry in a fresh tx becomes an update (review NIT)', async () => {
+    const s = setup(who());
+    (resolveImportTarget as jest.Mock)
+      .mockResolvedValueOnce({ action: 'create' })
+      .mockResolvedValueOnce({
+        action: 'update',
+        character: loaded(OWN_ID, 'normal'),
+      });
+    s.characters.createWithin.mockRejectedValueOnce(
+      new ConflictException(
+        'Ana Forever (US) is already on your character list',
+      ),
+    );
+    await expect(s.service.importNew(1, body(false))).resolves.toMatchObject({
+      target: { action: 'update', characterId: OWN_ID },
+    });
+    expect(s.characters.createWithin).toHaveBeenCalledTimes(1);
+  });
+
+  it('a collision that persists is retried once only → CHARACTER_CLAIMED', async () => {
+    const s = setup(who());
+    s.characters.createWithin.mockRejectedValue(new ConflictException('x'));
+    expect(await codeOf(s.service.importNew(1, body(false)))).toMatchObject({
+      code: 'CHARACTER_CLAIMED',
+    });
+    expect(s.characters.createWithin).toHaveBeenCalledTimes(2);
+  });
 
   it('a 409 outside the create step is NOT remapped', async () => {
     const s = setup(who(), {

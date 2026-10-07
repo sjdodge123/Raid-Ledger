@@ -153,11 +153,19 @@ async function runCreate(
   };
 }
 
-/** Apply: ONE tx, GUID lock first, re-resolve under it (D4). */
+/**
+ * Apply: ONE tx, GUID lock first, re-resolve under it (D4). A claim
+ * collision in the create step is mapped only AFTER rollback, then retried
+ * ONCE in a fresh tx: if the colliding row is the caller's own (a manual
+ * create in another tab landed between the re-resolve and the insert), the
+ * re-resolve now finds it and the import becomes an update; another
+ * player's row makes the resolver itself answer `CHARACTER_CLAIMED`.
+ */
 export async function applyImport(
   db: AddonImportTx,
   creator: Creator,
   input: CreateImportInput,
+  retried = false,
 ): Promise<AddonImportNewResultDto> {
   const phase: ApplyPhase = { creating: false };
   try {
@@ -172,8 +180,17 @@ export async function applyImport(
       return { ...result, target: dto };
     });
   } catch (err) {
-    throw phase.creating ? claimedOr(err, input.query) : err;
+    if (!phase.creating) throw err;
+    const mapped = claimedOr(err, input.query);
+    if (isClaimed(mapped) && !retried) {
+      return applyImport(db, creator, input, true);
+    }
+    throw mapped;
   }
+}
+
+function isClaimed(err: unknown): boolean {
+  return err instanceof AddonImportError && err.code === 'CHARACTER_CLAIMED';
 }
 
 /**
