@@ -36,7 +36,8 @@ Determine `ci_scope` from the files you actually modified. **The default is the 
 | `Dockerfile*`, `docker-entrypoint.sh`, `nginx/**` | `full` | `./scripts/validate-ci.sh --full` (runs container-startup) |
 | DB migration added (`api/src/drizzle/migrations/**`) | `full` | `./scripts/validate-ci.sh --full` (runs validate-migrations) |
 | `tools/**` or `scripts/**` | `full` | `./scripts/validate-ci.sh --full` |
-| Both `api/` and `web/` source | `full` | `./scripts/validate-ci.sh --full` |
+| Large cross-workspace refactor (many modules across `api/` + `web/`, not just a feature touching both) | `full` | `./scripts/validate-ci.sh --full` |
+| A feature touching both `api/` and `web/` source | `static` | `./scripts/validate-ci.sh --static` (operator ruling 2026-10-07 — matches CLAUDE.md; GitHub runs the full suite) |
 | `api/` source only | `static` | `./scripts/validate-ci.sh --static` |
 | `web/` source only | `static` | `./scripts/validate-ci.sh --static` |
 | Test files only | `static` | `./scripts/validate-ci.sh --static` |
@@ -44,7 +45,7 @@ Determine `ci_scope` from the files you actually modified. **The default is the 
 
 Note: `--static` already runs the conditional migration + container checks, so even an `api`-only diff that happens to touch a migration gets that validation — but adding a migration is itself a `full` row above, so prefer `full` when you authored one.
 
-**When in doubt, run `--static`.** The scope is your judgment — Lead will verify. Escalate to `full` only on a risk signal (breaking contract change, `package.json`/`package-lock.json`, migration, container/infra, tools/scripts, or both api+web changed). If you ran the appropriate scope, Lead trusts it; Lead may still run `--full` if a risk signal appears that you didn't flag (contract touched but not listed, migration file in diff, etc.).
+**When in doubt, run `--static`.** The scope is your judgment — Lead will verify. Escalate to `full` only on a risk signal (breaking contract change, `package.json`/`package-lock.json`, migration, container/infra, tools/scripts, or a large cross-workspace refactor). If you ran the appropriate scope, Lead trusts it; Lead may still run `--full` if a risk signal appears that you didn't flag (contract touched but not listed, migration file in diff, etc.).
 
 ### Workflow
 
