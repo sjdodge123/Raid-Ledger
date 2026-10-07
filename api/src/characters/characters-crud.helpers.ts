@@ -1,6 +1,7 @@
 /**
  * Character CRUD helpers.
  * Extracted from characters.service.ts for file size compliance (ROK-719).
+ * The create path lives in characters-create.helpers.ts (ROK-1738).
  */
 import {
   NotFoundException,
@@ -11,25 +12,13 @@ import {
 import { eq, and, asc, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import type {
-  CharacterDto,
-  CreateCharacterDto,
-  RefreshCharacterDto,
-} from '@raid-ledger/contract';
-import type {
-  CharacterIdentityProvider,
-  CharacterSyncAdapter,
-} from '../plugins/plugin-host/extension-points';
+import type { CharacterDto, RefreshCharacterDto } from '@raid-ledger/contract';
+import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
 import {
   fetchFullProfile,
   buildSyncUpdateFields,
 } from './characters-sync.helpers';
-import {
-  mapCharacterToDto,
-  resolveMainStatus,
-  demoteExistingMain,
-} from './characters-mapping.helpers';
-import { checkDuplicateClaim } from './characters-import.helpers';
+import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -38,67 +27,6 @@ type Logger = {
   warn: (msg: string) => void;
   debug: (msg: string) => void;
 };
-
-/** Build insert values for a new character. */
-export function buildCreateValues(
-  userId: number,
-  dto: CreateCharacterDto,
-  shouldBeMain: boolean,
-) {
-  return {
-    userId,
-    gameId: dto.gameId,
-    name: dto.name,
-    realm: dto.realm ?? null,
-    region: dto.region ?? null,
-    ruleset: dto.ruleset ?? null,
-    class: dto.class ?? null,
-    spec: dto.spec ?? null,
-    role: dto.role ?? null,
-    isMain: shouldBeMain,
-    itemLevel: dto.itemLevel ?? null,
-    avatarUrl: dto.avatarUrl ?? null,
-  };
-}
-
-/** Execute the create transaction (main-swap + insert). */
-export async function executeCreateTx(
-  db: Db,
-  userId: number,
-  dto: CreateCharacterDto,
-  logger: Logger,
-  identity?: CharacterIdentityProvider,
-): Promise<CharacterDto> {
-  return db.transaction(async (tx) => {
-    await checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm, {
-      region: dto.region,
-      identity,
-    });
-    const { shouldBeMain, charCount } = await resolveMainStatus(
-      tx,
-      userId,
-      dto.gameId,
-      dto.isMain,
-    );
-    if (shouldBeMain && charCount > 0)
-      await demoteExistingMain(tx, userId, dto.gameId);
-    const [inserted] = await tx
-      .insert(schema.characters)
-      .values(buildCreateValues(userId, dto, shouldBeMain))
-      .returning();
-    const character = defined(inserted, 'created character row');
-    logger.log(createdLogLine(userId, character, shouldBeMain));
-    return mapCharacterToDto(character);
-  });
-}
-
-function createdLogLine(
-  userId: number,
-  character: { id: string; name: string },
-  isMain: boolean,
-): string {
-  return `User ${userId} created character ${character.id} (${character.name})${isMain ? ' [main]' : ''}`;
-}
 
 /** After deletion, promote the lowest-order char to main if none exists. */
 export async function autoPromoteAfterDelete(

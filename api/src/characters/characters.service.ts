@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { eq, and, asc } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -31,6 +25,7 @@ import {
 } from './characters-mapping.helpers';
 import * as importH from './characters-import.helpers';
 import * as crudH from './characters-crud.helpers';
+import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
 import { defined } from '../common/defined.helpers';
 
@@ -104,27 +99,28 @@ export class CharactersService {
   }
 
   async create(userId: number, dto: CreateCharacterDto): Promise<CharacterDto> {
-    const { prepared, identity } = await identityH.prepareIdentityCreate(
-      this.db,
-      this.pluginRegistry,
+    const registry = this.pluginRegistry;
+    return createH.createCharacter(this.db, registry, userId, dto, this.logger);
+  }
+
+  /**
+   * ROK-1738 — create on the CALLER's transaction (same identity, duplicate
+   * and main/alt rules as `create`). Opens no tx and catches nothing: a
+   * violation aborts the caller's tx, which maps it after rollback.
+   */
+  async createWithin(
+    tx: createH.CharactersTx,
+    userId: number,
+    dto: CreateCharacterDto,
+  ): Promise<CharacterDto> {
+    const registry = this.pluginRegistry;
+    return createH.createCharacterWithin(
+      tx,
+      registry,
+      userId,
       dto,
+      this.logger,
     );
-    try {
-      return await crudH.executeCreateTx(
-        this.db,
-        userId,
-        prepared,
-        this.logger,
-        identity,
-      );
-    } catch (error: unknown) {
-      identity?.rethrowIdentityViolation(error, prepared.name, prepared.region);
-      if (crudH.isUniqueViolation(error, 'unique_user_game_character'))
-        throw new ConflictException(
-          `Character ${dto.name} already exists for this game/realm`,
-        );
-      throw error;
-    }
   }
 
   async update(
