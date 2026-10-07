@@ -116,6 +116,24 @@ function describeBatching() {
     expect(await readExecutions(testApp, staleId)).toHaveLength(0);
   });
 
+  it('moves the queued last_run_at to a re-created job with its rows', async () => {
+    const staleId = await insertJob(testApp, 'test:batch-recreate-lastrun');
+    await svc.executeWithTracking('test:batch-recreate-lastrun', ok);
+    await deleteJob(testApp, staleId);
+    const freshId = await insertJob(testApp, 'test:batch-recreate-lastrun');
+
+    await svc.flushLastRunUpdates();
+
+    const [row] = await readExecutions(testApp, freshId);
+    const [fresh] = await testApp.db
+      .select()
+      .from(schema.cronJobs)
+      .where(eq(schema.cronJobs.id, freshId));
+    expect({ lastRunAt: fresh?.lastRunAt ?? null }).toEqual({
+      lastRunAt: row?.finishedAt,
+    });
+  });
+
   it('counts rows for pruning when the flush writes them, not when queued', async () => {
     const jobId = await insertJob(testApp, 'test:batch-prune');
     const old = Array.from({ length: 55 }, (_, i) => {

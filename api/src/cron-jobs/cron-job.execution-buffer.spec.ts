@@ -88,6 +88,33 @@ describe('ExecutionBuffer.flush — batching (ROK-1380 part B)', () => {
   });
 });
 
+describe('ExecutionBuffer.flush — failed-flush re-queue cap', () => {
+  it('re-applies the cap after re-queueing, dropping the oldest with a warn', async () => {
+    const at = (i: number) => ({ ...VALUES, durationMs: i });
+    const { deps, buffer } = setup([1]);
+    const values = jest.fn().mockImplementation(() => {
+      // Rows that finish while the failed INSERT is in flight.
+      for (let i = 0; i < 5; i++) buffer.enqueue(job(1), 'Job_1', at(5000 + i));
+      return Promise.reject(new Error('conn reset'));
+    });
+    (deps.db as unknown as { insert: jest.Mock }).insert.mockReturnValue({
+      values,
+    });
+    for (let i = 0; i < MAX_QUEUED_EXECUTIONS; i++) {
+      buffer.enqueue(job(1), 'Job_1', at(i));
+    }
+
+    await buffer.flush(deps);
+
+    expect(buffer.pending).toHaveLength(MAX_QUEUED_EXECUTIONS);
+    expect(buffer.pending[0]?.values.durationMs).toBe(5); // 0..4 dropped
+    expect(buffer.pending.at(-1)?.values.durationMs).toBe(5004);
+    expect(deps.logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('dropped the 5 oldest'),
+    );
+  });
+});
+
 describe('ExecutionBuffer.flush — missing parent (ROK-1328 guarantee)', () => {
   it('rebinds rows of a re-created job to its fresh id, re-resolving once', async () => {
     const { values, deps, buffer } = setup([2]);
@@ -96,8 +123,9 @@ describe('ExecutionBuffer.flush — missing parent (ROK-1328 guarantee)', () => 
     buffer.enqueue(job(1), 'Job_1', VALUES);
     buffer.enqueue(job(2), 'Job_2', VALUES);
 
-    await buffer.flush(deps);
+    const rebinds = await buffer.flush(deps);
 
+    expect(rebinds).toEqual(new Map([[1, 9]]));
     expect(deps.reresolve).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledWith([
@@ -131,7 +159,7 @@ describe('ExecutionBuffer.flush — missing parent (ROK-1328 guarantee)', () => 
     buffer.enqueue(job(1), 'Job_1', VALUES);
     buffer.enqueue(job(2), 'Job_2', VALUES);
 
-    await expect(buffer.flush(deps)).resolves.toBeUndefined();
+    await expect(buffer.flush(deps)).resolves.toEqual(new Map());
 
     expect(db.insert).toHaveBeenCalledTimes(3);
     expect(deps.reresolve).toHaveBeenCalledWith('Job_1');

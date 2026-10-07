@@ -68,15 +68,20 @@ export class CronRunBookkeeping {
 
   /**
    * Flush queued execution rows (one multi-row INSERT), then queued
-   * last_run_at values (one batched UPDATE).
+   * last_run_at values (one batched UPDATE). A last_run_at queued under a
+   * stale job id follows its execution rows to the re-created job.
    */
   async flush(): Promise<void> {
-    await this.executions.flush({
+    const rebinds = await this.executions.flush({
       db: this.db,
       logger: this.logger,
       reresolve: this.reresolve,
       onInserted: this.countWritten,
     });
+    for (const [staleId, freshId] of rebinds) {
+      this.lastRun.rebind(staleId, freshId);
+    }
     await this.lastRun.flush(this.db, this.logger);
   }
+
 }

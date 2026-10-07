@@ -14,7 +14,11 @@
  * name — rebinding to a re-created row or dropping the row when the job is
  * gone. If a parent vanishes between that check and the INSERT, the batch
  * falls back to the per-row self-healing insert. No transaction is involved,
- * so a failed statement poisons nothing.
+ * so a failed statement poisons nothing. The flush reports every stale→fresh
+ * id rebind so the owner can move the job's queued last_run_at with it.
+ *
+ * Known trade (accepted): an INSERT that commits but whose reply is lost
+ * (connection reset) is re-queued and written twice on the next cycle.
  *
  * Plain class (no DI) owned by CronRunBookkeeping.
  */
@@ -34,6 +38,9 @@ type Db = PostgresJsDatabase<typeof schema>;
 
 /** Most rows kept queued; on overflow the oldest are dropped. */
 export const MAX_QUEUED_EXECUTIONS = 1000;
+
+/** Stale cached `cron_jobs.id` → the re-created row it was rebound to. */
+export type ParentRebinds = Map<number, number>;
 
 /** One queued execution-history row. */
 export interface QueuedExecution {
@@ -57,31 +64,54 @@ export class ExecutionBuffer {
   /** Queue one execution row for the next flush. */
   enqueue(job: CronJobRow, jobName: string, values: ExecutionValues): void {
     this.pending.push({ job, jobName, values });
+    this.trimOverflow();
+  }
+
+  /** Drop the oldest rows past MAX_QUEUED_EXECUTIONS; returns how many. */
+  private trimOverflow(): number {
     const overflow = this.pending.length - MAX_QUEUED_EXECUTIONS;
     if (overflow > 0) this.pending.splice(0, overflow);
+    return Math.max(0, overflow);
   }
 
   /**
    * Write every queued row in one multi-row INSERT and drain the buffer. A
-   * non-FK failure re-queues the batch for the next cycle; never throws.
+   * non-FK failure re-queues the batch (still capped) for the next cycle.
+   * Returns the parent rebinds made while binding rows; never throws.
    */
-  async flush(deps: ExecutionFlushDeps): Promise<void> {
-    if (this.pending.length === 0) return;
+  async flush(deps: ExecutionFlushDeps): Promise<ParentRebinds> {
+    const rebinds: ParentRebinds = new Map();
+    if (this.pending.length === 0) return rebinds;
     const batch = this.pending.splice(0);
     let rows: QueuedExecution[];
     try {
-      rows = await bindLiveParents(deps, batch);
-      if (rows.length === 0) return;
+      rows = await bindLiveParents(deps, batch, rebinds);
+      if (rows.length === 0) return rebinds;
       await deps.db.insert(schema.cronJobExecutions).values(rows.map(toInsert));
     } catch (err) {
       if (!isForeignKeyViolation(err)) {
-        deps.logger.warn(`Failed to flush cron execution rows: ${err}`);
-        this.pending.unshift(...batch.slice(-MAX_QUEUED_EXECUTIONS));
-        return;
+        this.requeue(deps.logger, batch, err);
+        return rebinds;
       }
-      rows = await insertEachRow(deps, batch);
+      // Re-runs the ORIGINAL batch: rows the pre-check dropped (job gone) are
+      // re-resolved once more on the per-row path. Harmless, rare.
+      rows = await insertEachRow(deps, batch, rebinds);
     }
     await reportInserted(deps, rows);
+    return rebinds;
+  }
+
+  /** Put a failed batch back in front of rows queued meanwhile, re-capped. */
+  private requeue(logger: Logger, batch: QueuedExecution[], err: unknown) {
+    logger.warn(`Failed to flush cron execution rows: ${String(err)}`);
+    this.pending.unshift(...batch);
+    const dropped = this.trimOverflow();
+    if (dropped > 0) {
+      logger.warn(
+        `Cron execution queue over ${MAX_QUEUED_EXECUTIONS} rows after a ` +
+          `failed flush; dropped the ${dropped} oldest.`,
+      );
+    }
   }
 }
 
@@ -98,6 +128,7 @@ function toInsert(row: QueuedExecution) {
 async function bindLiveParents(
   deps: ExecutionFlushDeps,
   batch: QueuedExecution[],
+  rebinds: ParentRebinds,
 ): Promise<QueuedExecution[]> {
   const ids = [...new Set(batch.map((r) => r.job.id))];
   const live = await deps.db
@@ -116,7 +147,9 @@ async function bindLiveParents(
       fresh.set(row.jobName, await reresolveMissing(deps, row));
     }
     const job = fresh.get(row.jobName);
-    if (job) out.push({ ...row, job });
+    if (!job) continue;
+    rebinds.set(row.job.id, job.id);
+    out.push({ ...row, job });
   }
   return out;
 }
@@ -144,6 +177,7 @@ async function reresolveMissing(
 async function insertEachRow(
   deps: ExecutionFlushDeps,
   batch: QueuedExecution[],
+  rebinds: ParentRebinds,
 ): Promise<QueuedExecution[]> {
   const landed: QueuedExecution[] = [];
   for (const row of batch) {
@@ -156,7 +190,9 @@ async function insertEachRow(
         deps.reresolve,
         deps.logger,
       );
-      if (job) landed.push({ ...row, job });
+      if (!job) continue;
+      if (job.id !== row.job.id) rebinds.set(row.job.id, job.id);
+      landed.push({ ...row, job });
     } catch (err) {
       deps.logger.warn(
         `Dropped queued execution row for "${row.jobName}": ${err}`,

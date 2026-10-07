@@ -9,10 +9,12 @@
  * immediately (the admin panel re-reads `last_run_at` right after "Run now").
  *
  * Only high-frequency jobs defer (see `isDeferrableSchedule`): the write
- * amplification comes from them, and the API registers no shutdown hooks, so
- * a deploy drops whatever is still queued. A daily or weekly job writes its
- * run at once rather than showing the previous run until the next one; a
- * high-frequency job's lost value is replaced within one interval.
+ * amplification comes from them. A graceful shutdown (Nest shutdown hooks,
+ * TDB:2085) flushes the queue and stops deferring; a hard kill — and the
+ * allinone image, which fires no hooks yet — drops whatever is still queued.
+ * A daily or weekly job writes its run at once rather than showing the
+ * previous run until the next one; a high-frequency job's lost value is
+ * replaced within one interval.
  *
  * Plain class (no DI) owned by CronJobService, extracted to keep that file
  * under the 300-line cap.
@@ -114,6 +116,20 @@ export class LastRunBuffer {
   reschedule(jobId: number, cronExpression: string): void {
     const queued = this.pending.get(jobId);
     if (queued) this.pending.set(jobId, { ...queued, cronExpression });
+  }
+
+  /**
+   * Move a write queued under a stale cached id to the re-created job the
+   * execution flush rebound it to (ROK-1380). An already-queued newer value
+   * for the fresh id wins.
+   */
+  rebind(staleId: number, freshId: number): void {
+    const queued = this.pending.get(staleId);
+    if (!queued) return;
+    this.pending.delete(staleId);
+    const current = this.pending.get(freshId);
+    if (current && current.lastRunAt >= queued.lastRunAt) return;
+    this.pending.set(freshId, queued);
   }
 
   /** Write every queued value in one batched UPDATE and drain the buffer. */
