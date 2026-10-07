@@ -66,7 +66,9 @@ export async function verifySteamOpenId(
 
   const text = await response.text();
 
-  if (!text.includes('is_valid:true')) {
+  // ROK-1731: match the key-value LINE, not a substring — a body with
+  // "is_valid:true" inside another value must not pass.
+  if (!/^is_valid:true\r?$/m.test(text)) {
     return null;
   }
 

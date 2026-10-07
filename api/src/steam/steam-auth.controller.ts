@@ -35,8 +35,14 @@ import {
   verifySteamOpenId,
   getPlayerSummary,
 } from './steam-http.util';
+import { assertFreshSteamAssertion } from './steam-openid-guard.helpers';
+import { SteamOpenIdNonceStore } from './steam-openid-nonce.store';
+import {
+  signSteamLinkState,
+  verifySteamLinkState,
+} from './steam-link-state.helpers';
+import { setNoStoreLinkHeaders } from './steam-link-headers.helpers';
 import type { SteamLinkStatusDto } from '@raid-ledger/contract';
-import * as crypto from 'crypto';
 import type { Response, Request } from 'express';
 import type { AuthenticatedExpressRequest } from '../auth/types';
 
@@ -56,58 +62,12 @@ export class SteamAuthController {
     private readonly linkNonceService: LinkNonceService,
     private readonly steamService: SteamService,
     private readonly steamWishlistService: SteamWishlistService,
+    private readonly nonceStore: SteamOpenIdNonceStore,
   ) {}
 
-  /**
-   * Sign state parameter to prevent tampering (same pattern as Discord).
-   */
-  private signState(payload: object): string {
-    const data = JSON.stringify(payload);
-    const secret = this.configService.get<string>('JWT_SECRET')!;
-    const signature = crypto
-      .createHmac('sha256', secret)
-      .update(data)
-      .digest('hex');
-    return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
-  }
-
-  /**
-   * Verify and decode signed state parameter.
-   */
   private verifyState(state: string): Record<string, unknown> | null {
-    try {
-      const { data, signature } = JSON.parse(
-        Buffer.from(state, 'base64').toString(),
-      ) as { data: string; signature: string };
-      const secret = this.configService.get<string>('JWT_SECRET')!;
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(data)
-        .digest('hex');
-
-      if (
-        !crypto.timingSafeEqual(
-          Buffer.from(signature),
-          Buffer.from(expectedSignature),
-        )
-      ) {
-        return null;
-      }
-
-      const parsed = JSON.parse(data) as Record<string, unknown>;
-
-      // Enforce 10-minute expiry
-      const MAX_STATE_AGE_MS = 10 * 60 * 1000;
-      const timestamp = parsed.timestamp as number | undefined;
-      if (!timestamp || Date.now() - timestamp > MAX_STATE_AGE_MS) {
-        this.logger.warn('Steam OpenID state parameter expired');
-        return null;
-      }
-
-      return parsed;
-    } catch {
-      return null;
-    }
+    const secret = this.configService.get<string>('JWT_SECRET')!;
+    return verifySteamLinkState(state, secret, this.logger);
   }
 
   private getClientUrl(req: Request): string {
@@ -132,6 +92,11 @@ export class SteamAuthController {
       'http';
     const host = req.headers.host || 'localhost';
     return `${proto}://${host}`;
+  }
+
+  /** The OpenID return_to we issue, minus its `?state=` (ROK-1731). */
+  private linkCallbackUrl(req: Request): string {
+    return `${this.getApiBaseUrl(req)}/auth/steam/link/callback`;
   }
 
   /** Redirect to client with Steam-not-configured error. */
@@ -167,6 +132,7 @@ export class SteamAuthController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    setNoStoreLinkHeaders(res);
     const clientUrl = this.getClientUrl(req);
     const claims = await consumeBrowserBoundNonce(
       this.linkNonceService,
@@ -194,15 +160,18 @@ export class SteamAuthController {
     userId: number,
     returnTo: string,
   ): void {
-    const state = this.signState({
-      userId,
-      action: 'steam_link',
-      timestamp: Date.now(),
-      returnTo,
-      // Binds the state to this browser through the callback (ROK-1366).
-      r: bindLinkStateToBrowser(res, 'steam'),
-    });
-    const callbackUrl = `${this.getApiBaseUrl(req)}/auth/steam/link/callback?state=${encodeURIComponent(state)}`;
+    const state = signSteamLinkState(
+      {
+        userId,
+        action: 'steam_link',
+        timestamp: Date.now(),
+        returnTo,
+        // Binds the state to this browser through the callback (ROK-1366).
+        r: bindLinkStateToBrowser(res, 'steam'),
+      },
+      this.configService.get<string>('JWT_SECRET')!,
+    );
+    const callbackUrl = `${this.linkCallbackUrl(req)}?state=${encodeURIComponent(state)}`;
     res.redirect(buildSteamOpenIdUrl(callbackUrl));
   }
 
@@ -217,6 +186,7 @@ export class SteamAuthController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    setNoStoreLinkHeaders(res);
     const clientUrl = this.getClientUrl(req);
     const returnTo = this.extractReturnToFromState(query.state);
     try {
@@ -255,6 +225,10 @@ export class SteamAuthController {
     if (!stateData || stateData.action !== 'steam_link')
       throw new Error('Invalid or tampered state parameter');
     assertLinkStateBoundToBrowser(req, res, 'steam', stateData.r);
+    await assertFreshSteamAssertion(query, this.linkCallbackUrl(req), {
+      nonceStore: this.nonceStore,
+      logger: this.logger,
+    });
     const userId = stateData.userId as number;
     const steamId = await verifySteamOpenId(query);
     if (!steamId) throw new Error('Steam verification failed');

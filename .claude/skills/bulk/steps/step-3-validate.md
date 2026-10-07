@@ -29,7 +29,7 @@ State: `gates.test_gaps: PASS` (or `FAIL`).
 
 `--static` covers build, TypeScript, lint, and conditional migration / container checks across all workspaces (the latter two auto-skip unless the batch touched `drizzle/migrations/**` or infra files). Unit, integration, Playwright, and Discord smoke are **deferred to GitHub CI** (sharded + randomized on every PR; auto-merge-squash blocks until green). This is the lite gate by operator policy.
 
-**Escalate to `./scripts/validate-ci.sh --full`** (adds local unit + integration + auto-scoped e2e) when the batch touches `package.json`/`package-lock.json` (GitHub skips unit + integration for deps-only diffs), `packages/contract/**`, migrations, or container/infra — or is a large/cross-workspace batch where a post-push behavioral break would be costly, or when the operator asks.
+**Escalate to `./scripts/validate-ci.sh --full`** (adds local unit + integration + auto-scoped e2e) when the batch touches `package.json`/`package-lock.json` (GitHub skips unit + integration for deps-only diffs), a **breaking** `packages/contract/**` change (additive contract changes stay `--static`, CLAUDE.md ruling 2026-10-07), migrations, or container/infra — or is a large/cross-workspace batch where a post-push behavioral break would be costly, or when the operator asks.
 
 Fix failures directly on the batch branch (`fix: resolve <issue>`). If substantive (logic bug from a story), diagnose which story, fix or respawn dev.
 
