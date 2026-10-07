@@ -286,6 +286,42 @@ describe('ad-hoc suppression predicate scoping (Regression: ROK-1418)', () => {
     });
   });
 
+  // Codex B2 P2: a series bound to C whose live event runs in ephemeral D is
+  // homed in D. It occupies D for every join, and C for none.
+  it('5e — series bound to C running in ephemeral D does NOT suppress joins on C, does on D', async () => {
+    const now = new Date();
+    const recurrenceGroupId = randomUUID();
+    await createVoiceBinding({
+      channelId: 'voice-channel-C',
+      bindingPurpose: 'general-lobby',
+      recurrenceGroupId,
+    });
+    const eventId = await createScheduledEvent({
+      gameId: testApp.seed.game.id,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: 'voice-channel-D',
+      recurrenceGroupId,
+    });
+    const find = (gameId: number | null, channelId: string) =>
+      findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        gameId,
+        now,
+        channelId,
+      );
+    const otherGame = testApp.seed.game.id + 100_000;
+
+    expect((await find(otherGame, 'voice-channel-C'))?.id).toBeUndefined();
+    expect((await find(null, 'voice-channel-C'))?.id).toBeUndefined();
+    expect(
+      (await find(testApp.seed.game.id, 'voice-channel-C'))?.id,
+    ).toBeUndefined();
+    expect((await find(otherGame, 'voice-channel-D'))?.id).toBe(eventId);
+    expect((await find(null, 'voice-channel-D'))?.id).toBe(eventId);
+  });
+
   describe('case 5 — other events stay game-scoped for a game join (TDB:224)', () => {
     const otherGame = () => testApp.seed.game.id + 100_000;
 

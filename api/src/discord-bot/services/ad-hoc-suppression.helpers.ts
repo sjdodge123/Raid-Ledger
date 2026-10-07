@@ -166,12 +166,17 @@ export function buildNullGameAnchoredClause(channelId?: string) {
  * channel, or its series is bound to this channel by `recurrence_group_id`.
  * Game-agnostic on purpose — a channel-anchored scheduled event occupies the
  * channel for EVERY Quick Play binding on it (TDB:224 ruling).
+ *
+ * The series branch requires no ephemeral channel: an event of a series bound
+ * to C that is running in ephemeral channel D is homed in D, not C — the same
+ * invariant `buildAnchoredGameClause` enforces (Codex B2 P2).
  */
 function buildChannelAnchorClause(channelId: string) {
   return sql`(${tables.events.ephemeralVoiceChannelId} = ${channelId}
-    OR EXISTS (SELECT 1 FROM channel_bindings cbng
-                WHERE cbng.recurrence_group_id = ${tables.events.recurrenceGroupId}
-                  AND cbng.channel_type = 'voice' AND cbng.channel_id = ${channelId}))`;
+    OR (${tables.events.ephemeralVoiceChannelId} IS NULL
+        AND EXISTS (SELECT 1 FROM channel_bindings cbng
+                     WHERE cbng.recurrence_group_id = ${tables.events.recurrenceGroupId}
+                       AND cbng.channel_type = 'voice' AND cbng.channel_id = ${channelId})))`;
 }
 
 /**
