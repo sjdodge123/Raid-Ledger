@@ -104,7 +104,7 @@ including `in oklab` — `components/features/game-time/phone/week-strip.fills.t
 
 **Themes.** Fifteen schemes (`web/src/stores/theme-registry.ts`). `data-scheme` on `<html>` swaps every
 value — except `quest-log`, applied via `data-variant` (`theme-helpers.ts:53,76-82`; tokens at
-`index.css:1269`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
+`index.css:1296`). Light family: `default-light`, `quest-log`, `sky`, `dawn`, `holy`, `celestial` (shared
 block `index.css:106`, plus per-scheme re-overrides `:199` `sky`, `:251` `dawn`, `:303` `holy`, `:355`
 `celestial` — see checklist item 7). Dark family: `default-dark`, `space`, `underwater`, `obsidian`,
 `ember`, `arctic`, `bloodmoon`, `forest`, `fel`. Every colour must be a token or a §2.2 accent hue — a raw
@@ -113,13 +113,13 @@ hex is a bug in 14 of the 15 themes.
 **The two families are not symmetric:** light tokens sit on *unqualified* `[data-scheme=...]` selectors
 and therefore cascade into nested scopes, while the dark tokens are declared on `@theme` (`:32`) and
 `html` (`:96`) only — root-only, so a scoped dark wrapper inherits whatever the root is (§6.8). Root-only
-either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1339`,
-`:1352`) — full list in `docs/design-system-tokens.md` §4.
+either way: `color-scheme` (`:617-631`), page background (`:633`, `:640`), quest-log parchment (`:1356`,
+`:1369`) — full list in `docs/design-system-tokens.md` §4.
 
 ### 2.2 Accent hues (raw Tailwind, deliberate)
 
 **Success, warning and danger are tokens** (§2.1, ROK-1586). **Every other accent is still a raw Tailwind
-hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:690`, plus
+hue** used by convention, with per-theme contrast fixes in `index.css` (light overrides from `:680`, plus
 `.badge-overlay` for badges over imagery). As of ROK-1586 only the journey hero, the week strip and the
 week-cell marks use the tokens (FeedbackDialog's inline `var(--color-danger, #ef4444)` fallback is gone —
 its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the app is unmigrated (see
@@ -133,12 +133,12 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   alpha. The raw hues only have light mappings for the alphas hand-listed in `index.css` —
   `bg-amber-500/70` had none; `bg-warning/70` needs none.
 - **DON'T** tokenise a **solid accent button fill.** `bg-emerald-600` / `bg-red-600` stay raw because
-  `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:819-827`)
+  `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:832-840`)
   and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
   an emerald-800 `#065f46` hover (7.68:1) on any element that also carries `hover:bg-emerald-500` /
   `hover:bg-emerald-700`, and an emerald-900 `#064e3b` pressed fill (9.72:1) on any element that carries an
   `active:bg-*` class — the unlayered repaint otherwise beats Tailwind's `active:` and the press never shows
-  (`:837-856`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
+  (`:850-869`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
   Both rules are unlayered, so they skip a disabled / `aria-disabled` element that carries its own
   `disabled:bg-*` / `aria-disabled:bg-*` — otherwise they beat Tailwind v4's `@layer utilities` variant and
   that button paints enabled-green. An opacity-only disabled or `loading` primary keeps the fill and fades.
@@ -173,16 +173,16 @@ Alpha-on-token is the house style for tinted surfaces: `bg-emerald-500/10` over 
 tracks that use it step to emerald-700 on light with the buttons (§4.12).
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
-text `-300`/`-400` → a `-700`…`-800` shade (`:688-705`), tinted fills → a `-100` wash (`:723-758`), borders → a `-300`
-(`:759-773`); solid fills keep their hue with the label forced white on light (`:819-827`) — except the primary
+text `-300`/`-400` → a `-700`…`-800` shade (`:692-711`), tinted fills → a `-100` wash (`:732-760`), borders → a `-300`
+(`:776-791`); solid fills keep their hue with the label forced white on light (`:832-840`) — except the primary
 `bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
-(`:837-851`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
+(`:850-868`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
 `bg-cyan-600` / `bg-cyan-500` (white is 3.62 / 2.37:1 on them), whose `text-foreground` label is forced to `#0f172a` (4.93 / 7.55:1; dawn's own
-foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:796-817`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
+foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:793-818`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple, indigo and teal repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`, teal-800 `#115e59`);
-`text-gray-400` paints gray-700 `#374151`, except inside a fixed `bg-gray-900` panel where `:830-840` keeps gray-400 (and the raw green / blue / purple / yellow-400); the opacity
+`text-gray-400` paints gray-700 `#374151`, except inside a fixed `bg-gray-900` panel where `:820-830` keeps gray-400 (and the raw green / blue / purple / yellow-400); the opacity
 variants carry the AA alpha floor (red `.9`, amber `.95`). `web/src/styles/raw-hue-light.guard.test.ts` parses each
 light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Still prefer
 `text-success` / `text-warning` / `text-danger` for new semantic text.
@@ -223,10 +223,10 @@ is no `font-light`.
   (192) for chips, pills, avatars and count badges. `rounded-xl` (61) for hero/large surfaces.
   `rounded-md` (57) for small inputs. Avoid `rounded-2xl` (1 use).
 - **Elevation** is border + tint, not shadow. `.glass-card` (`index.css:610`) is the one blurred surface;
-  `.glow-emerald` / `.glow-indigo` (`index.css:883,891`; vars at `:438-439`) glow a primary action. Themes
+  `.glow-emerald` / `.glow-indigo` (`index.css:908,916`; vars at `:472-473`) glow a primary action. Themes
   restyle these — never reimplement them inline.
   - **Light / Dark:** dark separates with border + surface step; light adds the shadow it needs
-    (`:852-862`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
+    (`:877-887`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
     to neither. Detail: `design-system-tokens.md` §2.
 - **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG). The form
   primitives build it in — `form-classes.ts` (fields stay 44px below `lg`), `slider.tsx` (an `h-11` hit
@@ -457,8 +457,8 @@ button" and tests query that name. It is neither the toggle chip above (it has n
 `components/ui/` instead of copying the class string. Rendered: `/dev/design-system` → *Primitives* →
 "Removable chip".
 
-**Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:747`) and border
-(`:791`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
+**Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:737`) and border
+(`:781`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
 `text-amber-400` on a new ON label until that is fixed. The removable chip is tokens only, so it flips with `success` (`#10b981` →
 `#047857`); check both families in the gallery's side-by-side view.
 
@@ -555,7 +555,7 @@ blocking. Tint = `bg-<hue>-500/10 border border-<hue>-500/30`.
 job · 4 different shapes") as the thing Cycle 4 removes.
 
 **Light / Dark** — the `-500/10` + `-500/30` pair is remapped for light, but only for `red`, `amber`,
-`emerald`, `green`, `yellow`, `indigo`, `cyan` (fills `:742-770`, borders `:786-801`) — a `blue` banner gets none and a `purple` one only its `/30` border, which
+`emerald`, `green`, `yellow`, `indigo`, `cyan` (fills `:732-760`, borders `:776-791`) — a `blue` banner gets none and a `purple` one only its `/30` border, which
 is why instruction callouts use the neutral `bg-overlay/30 border-edge` panel rather than a blue or purple
 tint. The token banners and the neutral panel flip with the theme. Keep body copy in `text-foreground` /
 `text-secondary`.
@@ -676,7 +676,7 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   Discord `#5865F2`) as an inline fill. It replaces the variant's classes and adds `data-brand-fill` +
   `text-foreground` + `data-brand-label="light|dark"`. **The label is picked by contrast** (operator ruling
   2026-10-04, ROK-1472): `brandLabelFor(fill)` (`web/src/lib/brand-label.ts`) returns whichever of white and
-  `#0f172a` has the higher WCAG contrast on the fill, and `index.css:853-857` paints it on EVERY scheme —
+  `#0f172a` has the higher WCAG contrast on the fill, and `index.css:871-875` paints it on EVERY scheme —
   Discord blurple gets white, a light accent (`#10b981`, `#f59e0b`) gets `#0f172a`. `[data-brand-fill]` is
   NOT in the forced-white list. A static, non-interactive sample of a runtime fill (BrandingSection's
   "Sample Button") uses the same two attributes and the same helper. Theme colours use the variants: never pass a token or a
@@ -981,7 +981,7 @@ them; do not fix them as scope creep.
    `--color-success` / `--color-warning` / `--color-danger` are declared in `@theme` and the shared light
    block (§2.1), guarded by `web/src/styles/semantic-tokens.guard.test.ts`, and used by the journey hero,
    week strip and week-cell marks. **What remains:** every other call site still spells the meaning as a raw
-   `emerald` / `amber` / `red` hue and still leans on the per-hue overrides (`index.css:702-801`) — the
+   `emerald` / `amber` / `red` hue and still leans on the per-hue overrides (`index.css:692-791`) — the
    repo-wide sweep is a report-only backlog item (`TECH-DEBT-BACKLOG.md`, 2026-09-22), not a story. The
    §6.3 `--color-accent` gap is resolved (ROK-1645).
 
@@ -999,16 +999,16 @@ them; do not fix them as scope creep.
 
 9. ~~**Two accent shades have no light-family override**~~ — **fixed (ROK-1586):** `text-amber-300`,
    `text-red-300`, `text-indigo-300` and `text-blue-300`/`-400` are now repainted beside the others at
-   `:702-721`, and every repaint is measured on the surface, panel and its own `/10` tint by
+   `:692-711`, and every repaint is measured on the surface, panel and its own `/10` tint by
    `raw-hue-light.guard.test.ts`.
 
 10. **Solid accent fills keep their hue in both families; the primary fill steps darker on light.**
     The `bg-emerald-500` count badge and the other solid fills do not move, label forced white on light
-    (`:819-827`). The primary `bg-emerald-600` fill is the one light step (operator ruling 2026-10-04,
+    (`:832-840`). The primary `bg-emerald-600` fill is the one light step (operator ruling 2026-10-04,
     ROK-1472): emerald-700 `#047857` (5.48:1 under the white label; emerald-600 was 3.77:1) and, on an
     element that also carries `hover:bg-emerald-500` / `hover:bg-emerald-700`, an emerald-800 `#065f46`
     hover (7.68:1; the old emerald-500 hover was ~2.5:1), and on one that carries an `active:bg-*` class an
-    emerald-900 `#064e3b` pressed fill (9.72:1, darker than rest and hover) — `:837-856`, guarded by
+    emerald-900 `#064e3b` pressed fill (9.72:1, darker than rest and hover) — `:850-869`, guarded by
     `web/src/styles/primary-fill-light.guard.test.ts`. The `/10 /30 /50` alpha variants keep their own
     washes; quest-log's `!important` gold button wins over all of it. This is still why solid button fills
     were NOT tokenised by ROK-1586 (§2.2). A `Button brandColor` label is NOT forced white: it is white or
