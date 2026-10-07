@@ -1,11 +1,12 @@
 import { eq } from 'drizzle-orm';
-import type {
-  AddonImportTargetDto,
-  AddonWho,
-  CreateCharacterDto,
-  WowForeverRuleset,
-  WowForeverSelectableRuleset,
-  WowRegion,
+import {
+  WowForeverNameSchema,
+  type AddonImportTargetDto,
+  type AddonWho,
+  type CreateCharacterDto,
+  type WowForeverRuleset,
+  type WowForeverSelectableRuleset,
+  type WowRegion,
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 import { WOW_FOREVER_GAME_SLUG } from '../wow-forever-identity.helpers';
@@ -29,6 +30,8 @@ export const UNSUPPORTED_REGION_MESSAGE =
   "Raid Ledger doesn't support that region.";
 export const HARDCORE_CREATE_MESSAGE =
   "Hardcore characters can't be added from an import yet.";
+export const UNUSABLE_NAME_MESSAGE =
+  "This character's name can't be added: Raid Ledger needs a first and second name, 2–24 letters each.";
 
 /** The WoW: Forever games row id; missing → `WRONG_GAME`. */
 export async function foreverGameId(db: AddonImportTx): Promise<number> {
@@ -58,13 +61,16 @@ export type CreatableWho = AddonWho & {
 /**
  * A1 (ruled: refuse until Hardcore opens) + a usable name. Run on the create
  * path BEFORE any write — dry run included. The update path never calls it.
+ * The name check is core's own (`prepareCreateDto` parses the same
+ * `resolveExportName` value with `WowForeverNameSchema`), so a preview that
+ * says `create` never turns into a code-less 400 on apply.
  */
 export function assertCreatable(who: AddonWho): asserts who is CreatableWho {
   if (who.ruleset === 'hardcore') {
     throw new AddonImportError('INVALID_PAYLOAD', HARDCORE_CREATE_MESSAGE);
   }
-  if (resolveExportName(who) === '') {
-    throw new AddonImportError('INVALID_PAYLOAD');
+  if (!WowForeverNameSchema.safeParse(resolveExportName(who)).success) {
+    throw new AddonImportError('INVALID_PAYLOAD', UNUSABLE_NAME_MESSAGE);
   }
 }
 

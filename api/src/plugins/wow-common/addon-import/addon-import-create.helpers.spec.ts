@@ -12,6 +12,7 @@ import {
   regionFromExport,
   targetDto,
   UNSUPPORTED_REGION_MESSAGE,
+  UNUSABLE_NAME_MESSAGE,
 } from './addon-import-create.helpers';
 import { AddonImportError } from './addon-import.errors';
 import { parseImportRequest, rawFacts } from './addon-import.service.helpers';
@@ -95,6 +96,28 @@ describe('createDtoFromExport (ROK-1738 D7 / D13 / A1)', () => {
     expect(thrown(() => createDtoFromExport(who, 'us', 7)).code).toBe(
       'INVALID_PAYLOAD',
     );
+  });
+
+  it.each([
+    ['a single-word name', 'Ana'],
+    ['a three-part name', 'Ana Mae Forever'],
+    ['an apostrophe', "D'Arcy Smith"],
+    ['a one-letter part', 'A Forever'],
+  ])(
+    '%s core would refuse on apply → INVALID_PAYLOAD before any write',
+    (_label, fullName) => {
+      const who = buildWho({ fullName, raw: { getUnitName: fullName } });
+      const expected = { code: 'INVALID_PAYLOAD', message: UNUSABLE_NAME_MESSAGE };
+      expect(thrown(() => assertCreatable(who))).toEqual(expected);
+      expect(thrown(() => createDtoFromExport(who, 'us', 7, 'pvp'))).toEqual(
+        expected,
+      );
+    },
+  );
+
+  it('normalises like core: realm suffix + surrounding spaces still create', () => {
+    const who = buildWho({ fullName: '  Ana Forever-Realm  ' });
+    expect(() => assertCreatable(who)).not.toThrow();
   });
 
   it('guild- and raid-section envelope who → same DTO as a char who (Q7)', () => {

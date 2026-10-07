@@ -22,6 +22,7 @@ import { GUID_ALREADY_LINKED_MESSAGE } from './addon-import-binding.apply';
 import {
   HARDCORE_CREATE_MESSAGE,
   UNSUPPORTED_REGION_MESSAGE,
+  UNUSABLE_NAME_MESSAGE,
 } from './addon-import-create.helpers';
 import {
   FIXTURE_GUID,
@@ -610,4 +611,28 @@ describe('create route — Hardcore export (AC11, A1)', () => {
       addonGuid: FIXTURE_GUID,
     });
   });
+});
+
+describe('create route — a name core would refuse (review MAJOR)', () => {
+  it.each([['Ana'], ["D'Arcy Smith"]])(
+    '%s: dry run AND apply → 422 INVALID_PAYLOAD, never a code-less 400, nothing written',
+    async (fullName) => {
+      const { token } = await member('ananame');
+      const paste = charString({ fullName, raw: { getUnitName: fullName } });
+      for (const send of [preview, applyNew]) {
+        const res = await send(token, paste);
+        expect([res.status, res.body.code, res.body.message]).toEqual([
+          422,
+          'INVALID_PAYLOAD',
+          UNUSABLE_NAME_MESSAGE,
+        ]);
+      }
+      expect(await written()).toEqual(NOTHING);
+      const rows = await audits();
+      expect(rows.map((r) => [r.dryRun, r.result])).toEqual([
+        [true, 'INVALID_PAYLOAD'],
+        [false, 'INVALID_PAYLOAD'],
+      ]);
+    },
+  );
 });
