@@ -12,6 +12,7 @@ import { QuestPrepPanel } from './slots/quest-prep-panel';
 import { BossLootPanel } from './slots/boss-loot-panel';
 import { CharacterVariantBadge } from './slots/character-variant-badge';
 import { CharacterDetailOwnerActions } from './slots/character-detail-owner-actions';
+import { CharacterCreateHeaderActions } from './slots/character-create-header-actions';
 import { foreverIdentityProvider } from './forever-identity-provider';
 
 const blizzard = registerPlugin('blizzard', {
@@ -24,6 +25,7 @@ const blizzard = registerPlugin('blizzard', {
 blizzard.registerSlot('character-detail:sections', CharacterDetailSections);
 blizzard.registerSlot('character-detail:header-badges', CharacterDetailHeaderBadges);
 blizzard.registerSlot('character-detail:owner-actions', CharacterDetailOwnerActions);
+blizzard.registerSlot('character-create:header-actions', CharacterCreateHeaderActions);
 blizzard.registerSlot('character-create:import-form', CharacterCreateImportForm);
 blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
 blizzard.registerSlot('event-create:content-browser', EventCreateContentBrowser);

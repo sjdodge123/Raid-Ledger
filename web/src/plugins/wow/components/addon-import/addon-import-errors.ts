@@ -48,6 +48,8 @@ const COPY: Record<AddonImportErrorCode, Omit<AddonImportErrorCopy, 'action'>> =
     NOT_IN_GUILD: { title: 'Not in this guild', body: 'The exporting character is not on that guild roster.' },
     GUID_CONFIRM_REQUIRED: { title: 'Confirm the in-game character', body: 'The in-game character changed. Tick the confirmation to link it, then import again.' },
     RATE_LIMITED: { title: 'Too many imports', body: 'You have hit the hourly import limit. Try again later.' },
+    CHARACTER_CLAIMED: { title: 'Already claimed', body: 'Another player already has this character on Raid Ledger.' },
+    RULESET_REQUIRED: { title: 'Choose a ruleset', body: "The export doesn't say which ruleset this character plays on. Pick one above, then import." },
 };
 
 const FALLBACK: AddonImportErrorCopy = {

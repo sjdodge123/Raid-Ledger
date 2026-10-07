@@ -29,6 +29,7 @@ import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
 import { AddonImportController } from './addon-import/addon-import.controller';
 import { AddonImportService } from './addon-import/addon-import.service';
+import { AddonImportCreateService } from './addon-import/addon-import-create.service';
 import { AddonImportAuditService } from './addon-import/addon-import.audit';
 
 @Module({
@@ -58,6 +59,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
     BossDataRefreshService,
     QuestProgressService,
     AddonImportService,
+    AddonImportCreateService,
     AddonImportAuditService,
   ],
   exports: [

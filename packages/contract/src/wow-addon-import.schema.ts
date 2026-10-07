@@ -1,6 +1,9 @@
 import { z } from 'zod';
 // Via the barrel, never by file path (ROK-1733 moves these between files).
-import { WowForeverRulesetSchema } from './blizzard.schema.js';
+import {
+    WowForeverRulesetSchema,
+    WowForeverSelectableRulesetSchema,
+} from './blizzard.schema.js';
 import { WowRegionSchema } from './characters.schema.js';
 
 // ============================================================
@@ -48,6 +51,20 @@ export const AddonImportRequestSchema = z.object({
 export type AddonImportRequestDto = z.infer<typeof AddonImportRequestSchema>;
 export type AddonImportRequestInput = z.input<typeof AddonImportRequestSchema>;
 
+/**
+ * ROK-1738 — body of the id-less create route
+ * `POST /api/plugins/wow/characters/addon-import`. Same as
+ * `AddonImportRequestSchema` plus the ruleset the user picked in the preview;
+ * consulted only when the target is a `create` and the export carries no
+ * ruleset (Hardcore is not selectable). The per-character route keeps the
+ * strict `AddonImportRequestSchema`, which still rejects a `ruleset` key.
+ */
+export const AddonImportNewRequestSchema = AddonImportRequestSchema.extend({
+    ruleset: WowForeverSelectableRulesetSchema.optional(),
+}).strict();
+export type AddonImportNewRequestDto = z.infer<typeof AddonImportNewRequestSchema>;
+export type AddonImportNewRequestInput = z.input<typeof AddonImportNewRequestSchema>;
+
 /** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, everything else 422. */
 export const AddonImportErrorCodeSchema = z.enum([
     'TOO_LARGE',
@@ -63,6 +80,10 @@ export const AddonImportErrorCodeSchema = z.enum([
     'NOT_IN_GUILD',
     'GUID_CONFIRM_REQUIRED',
     'RATE_LIMITED',
+    /** ROK-1738 — create route: name + region already belong to another player. */
+    'CHARACTER_CLAIMED',
+    /** ROK-1738 — create route: the export has no ruleset and none was picked. */
+    'RULESET_REQUIRED',
 ]);
 export type AddonImportErrorCode = z.infer<typeof AddonImportErrorCodeSchema>;
 
@@ -173,3 +194,35 @@ export const AddonImportResultSchema = z.discriminatedUnion('section', [
     z.object({ ...resultBase, section: z.literal('raid'), summary: AddonRaidImportSummarySchema }),
 ]);
 export type AddonImportResultDto = z.infer<typeof AddonImportResultSchema>;
+
+// ============================================================
+// ROK-1738 — create-from-export route result
+// ============================================================
+
+export const AddonImportTargetActionSchema = z.enum(['create', 'update']);
+export type AddonImportTargetAction = z.infer<typeof AddonImportTargetActionSchema>;
+
+/** The character the create route resolved the export to. */
+export const AddonImportTargetSchema = z.object({
+    action: AddonImportTargetActionSchema,
+    /** Null only on a `create` dry run (nothing written yet). */
+    characterId: z.string().uuid().nullable(),
+    name: z.string(),
+    region: WowRegionSchema,
+    /**
+     * Null ONLY on a `create` target whose export has no ruleset — the web's
+     * "show the ruleset picker" signal. An `update` target always carries the
+     * stored ruleset.
+     */
+    ruleset: WowForeverRulesetSchema.nullable(),
+    /** Title-cased display class, e.g. `Paladin`. */
+    class: z.string(),
+    level: z.number().int(),
+});
+export type AddonImportTargetDto = z.infer<typeof AddonImportTargetSchema>;
+
+/** The ROK-1724 result plus the resolved `target`. */
+export const AddonImportNewResultSchema = AddonImportResultSchema.and(
+    z.object({ target: AddonImportTargetSchema }),
+);
+export type AddonImportNewResultDto = z.infer<typeof AddonImportNewResultSchema>;

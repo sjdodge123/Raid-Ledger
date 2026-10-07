@@ -6,15 +6,23 @@
  * `message`, but the dialog branches on the contract's error `code` (and the
  * `NAME_MISMATCH` prefill), so this goes through `fetchWithAuth` and keeps the
  * parsed body on `AddonImportRequestError`.
+ *
+ * ROK-1738: `POST /plugins/wow/characters/addon-import` (no id) is the create
+ * route Add Character uses — same dry-run/apply split, plus the resolved
+ * `target` in the result and an optional picked `ruleset` in the request.
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
     AddonImportErrorBodySchema,
+    AddonImportNewResultSchema,
     AddonImportResultSchema,
     type AddonImportAddCharacterPrefill,
     type AddonImportErrorCode,
+    type AddonImportNewRequestInput,
+    type AddonImportNewResultDto,
     type AddonImportRequestInput,
     type AddonImportResultDto,
+    type WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
 import { fetchWithAuth } from '../../../../lib/api/fetch-api';
 
@@ -25,6 +33,14 @@ export interface AddonImportVariables {
     importString: string;
     confirm?: AddonImportConfirm | undefined;
 }
+
+/** Create-route variables: also the ruleset the user picked when the export has none (ROK-1738 D13). */
+export interface AddonImportNewVariables extends AddonImportVariables {
+    ruleset?: WowForeverSelectableRuleset | undefined;
+}
+
+/** The id-less create route (ROK-1738 D1). */
+export const ADDON_IMPORT_NEW_PATH = '/plugins/wow/characters/addon-import';
 
 /** A failed import. `code` is null when the body was not a contract error. */
 export class AddonImportRequestError extends Error {
@@ -55,12 +71,30 @@ async function toRequestError(response: Response): Promise<AddonImportRequestErr
     return new AddonImportRequestError(response.status, null, `HTTP ${response.status}`);
 }
 
+/** POST + error mapping shared by both routes; the caller parses the success body. */
+async function postImport(path: string, body: unknown): Promise<{ status: number; data: unknown }> {
+    const response = await fetchWithAuth(path, { method: 'POST', body: JSON.stringify(body) });
+    if (!response.ok) throw await toRequestError(response);
+    return { status: response.status, data: await response.json().catch(() => null) };
+}
+
+function offContract(status: number): AddonImportRequestError {
+    return new AddonImportRequestError(status, null, 'Unexpected response from the server.');
+}
+
 /** One import call. Throws `AddonImportRequestError` on any non-2xx or an off-contract body. */
 export async function postAddonImport(characterId: string, body: AddonImportRequestInput): Promise<AddonImportResultDto> {
-    const response = await fetchWithAuth(addonImportPath(characterId), { method: 'POST', body: JSON.stringify(body) });
-    if (!response.ok) throw await toRequestError(response);
-    const parsed = AddonImportResultSchema.safeParse(await response.json().catch(() => null));
-    if (!parsed.success) throw new AddonImportRequestError(response.status, null, 'Unexpected response from the server.');
+    const { status, data } = await postImport(addonImportPath(characterId), body);
+    const parsed = AddonImportResultSchema.safeParse(data);
+    if (!parsed.success) throw offContract(status);
+    return parsed.data;
+}
+
+/** One create-route call (ROK-1738). Same error contract as `postAddonImport`. */
+export async function postAddonImportNew(body: AddonImportNewRequestInput): Promise<AddonImportNewResultDto> {
+    const { status, data } = await postImport(ADDON_IMPORT_NEW_PATH, body);
+    const parsed = AddonImportNewResultSchema.safeParse(data);
+    if (!parsed.success) throw offContract(status);
     return parsed.data;
 }
 
@@ -81,5 +115,29 @@ export function useAddonImportApply(characterId: string) {
     return useMutation<AddonImportResultDto, AddonImportRequestError, AddonImportVariables>({
         mutationFn: (vars) => postAddonImport(characterId, requestBody(vars, false)),
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['characters', characterId] }),
+    });
+}
+
+function newRequestBody(vars: AddonImportNewVariables, dryRun: boolean): AddonImportNewRequestInput {
+    return { ...requestBody(vars, dryRun), ...(vars.ruleset ? { ruleset: vars.ruleset } : {}) };
+}
+
+/** Create-route preview (`dryRun: true`) — resolves the target, writes nothing, never invalidates. */
+export function useAddonImportNewPreview() {
+    return useMutation<AddonImportNewResultDto, AddonImportRequestError, AddonImportNewVariables>({
+        mutationFn: (vars) => postAddonImportNew(newRequestBody(vars, true)),
+    });
+}
+
+/** Create-route apply. A character was created or updated: refresh every character list and detail, and the profile (as core create/update do). */
+export function useAddonImportNewApply() {
+    const queryClient = useQueryClient();
+    return useMutation<AddonImportNewResultDto, AddonImportRequestError, AddonImportNewVariables>({
+        mutationFn: (vars) => postAddonImportNew(newRequestBody(vars, false)),
+        onSuccess: () => Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['me', 'characters'] }),
+            queryClient.invalidateQueries({ queryKey: ['characters'] }),
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
+        ]),
     });
 }

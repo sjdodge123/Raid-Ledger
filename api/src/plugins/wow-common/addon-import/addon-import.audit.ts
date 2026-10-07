@@ -27,10 +27,14 @@ export function isOverLimit(used: number, dryRun: boolean): boolean {
   return used >= limit;
 }
 
-/** Fields `finish` fills in once the attempt's outcome is known. */
+/**
+ * Fields `finish` fills in once the attempt's outcome is known. ROK-1738 D8:
+ * `characterId` too — the create route reserves with null and finishes with
+ * the created/updated character (undefined = leave the reserved value).
+ */
 export type AddonImportAuditOutcome = Pick<
   AddonImportAuditInsert,
-  'section' | 'payloadSha256' | 'result'
+  'section' | 'payloadSha256' | 'result' | 'characterId'
 >;
 
 /**
@@ -95,14 +99,9 @@ export class AddonImportAuditService {
         await this.db.insert(addonImportAudit).values(row);
         return;
       }
-      const outcome: AddonImportAuditOutcome = {
-        section: row.section,
-        payloadSha256: row.payloadSha256,
-        result: row.result,
-      };
       await this.db
         .update(addonImportAudit)
-        .set(outcome)
+        .set(outcomeOf(row))
         .where(eq(addonImportAudit.id, reservedId));
     } catch (err) {
       this.logger.warn(
@@ -150,6 +149,7 @@ function outcomeOf(row: AddonImportAuditInsert): AddonImportAuditOutcome {
     section: row.section,
     payloadSha256: row.payloadSha256,
     result: row.result,
+    characterId: row.characterId,
   };
 }
 
