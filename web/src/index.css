@@ -97,7 +97,6 @@ html {
     --gt-widget-bg: rgba(30, 41, 59, 0.7);
     --gt-widget-border: rgba(51, 65, 85, 0.6);
     --gt-split-bg: rgba(30, 41, 59, 0.8);
-    --gt-past-highlight: rgba(30, 41, 59, 0.3);
     --gt-hover-glow: rgba(148, 163, 184, 0.2);
     --gt-proximity-line: 148, 163, 184;
 }
@@ -134,7 +133,6 @@ html {
     --gt-widget-bg: rgba(241, 245, 249, 0.9);
     --gt-widget-border: rgba(203, 213, 225, 0.6);
     --gt-split-bg: rgba(226, 232, 240, 0.4);
-    --gt-past-highlight: rgba(203, 213, 225, 0.3);
     --gt-hover-glow: rgba(100, 116, 139, 0.15);
     --gt-proximity-line: 100, 116, 139;
 }
@@ -158,7 +156,6 @@ html {
     --gt-widget-bg: rgba(26, 26, 62, 0.7);
     --gt-widget-border: rgba(61, 61, 107, 0.6);
     --gt-split-bg: rgba(26, 26, 62, 0.8);
-    --gt-past-highlight: rgba(26, 26, 62, 0.3);
     --gt-hover-glow: rgba(152, 152, 200, 0.2);
     --gt-proximity-line: 152, 152, 200;
 }
@@ -182,7 +179,6 @@ html {
     --gt-widget-bg: rgba(20, 40, 64, 0.7);
     --gt-widget-border: rgba(42, 69, 53, 0.6);
     --gt-split-bg: rgba(20, 40, 64, 0.8);
-    --gt-past-highlight: rgba(20, 40, 64, 0.3);
     --gt-hover-glow: rgba(107, 143, 168, 0.2);
     --gt-proximity-line: 107, 143, 168;
 
@@ -218,7 +214,6 @@ html {
     --gt-widget-bg: rgba(232, 240, 247, 0.9);
     --gt-widget-border: rgba(194, 212, 232, 0.6);
     --gt-split-bg: rgba(216, 232, 244, 0.4);
-    --gt-past-highlight: rgba(194, 212, 232, 0.3);
     --gt-hover-glow: rgba(74, 101, 128, 0.15);
     --gt-proximity-line: 74, 101, 128;
 }
@@ -242,7 +237,6 @@ html {
     --gt-widget-bg: rgba(28, 28, 30, 0.7);
     --gt-widget-border: rgba(44, 44, 46, 0.6);
     --gt-split-bg: rgba(28, 28, 30, 0.8);
-    --gt-past-highlight: rgba(28, 28, 30, 0.3);
     --gt-hover-glow: rgba(142, 142, 147, 0.2);
     --gt-proximity-line: 142, 142, 147;
 }
@@ -271,7 +265,6 @@ html {
     --gt-widget-bg: rgba(255, 232, 208, 0.9);
     --gt-widget-border: rgba(232, 201, 154, 0.6);
     --gt-split-bg: rgba(253, 219, 184, 0.4);
-    --gt-past-highlight: rgba(232, 201, 154, 0.3);
     --gt-hover-glow: rgba(122, 85, 53, 0.15);
     --gt-proximity-line: 122, 85, 53;
 }
@@ -295,7 +288,6 @@ html {
     --gt-widget-bg: rgba(42, 33, 30, 0.7);
     --gt-widget-border: rgba(61, 46, 40, 0.6);
     --gt-split-bg: rgba(42, 33, 30, 0.8);
-    --gt-past-highlight: rgba(42, 33, 30, 0.3);
     --gt-hover-glow: rgba(168, 136, 122, 0.2);
     --gt-proximity-line: 168, 136, 122;
 }
@@ -324,7 +316,6 @@ html {
     --gt-widget-bg: rgba(238, 242, 251, 0.9);
     --gt-widget-border: rgba(200, 211, 232, 0.6);
     --gt-split-bg: rgba(224, 230, 245, 0.4);
-    --gt-past-highlight: rgba(200, 211, 232, 0.3);
     --gt-hover-glow: rgba(74, 94, 130, 0.15);
     --gt-proximity-line: 74, 94, 130;
 }
@@ -348,7 +339,6 @@ html {
     --gt-widget-bg: rgba(22, 32, 48, 0.7);
     --gt-widget-border: rgba(30, 48, 72, 0.6);
     --gt-split-bg: rgba(22, 32, 48, 0.8);
-    --gt-past-highlight: rgba(22, 32, 48, 0.3);
     --gt-hover-glow: rgba(106, 144, 184, 0.2);
     --gt-proximity-line: 106, 144, 184;
 }
@@ -377,7 +367,6 @@ html {
     --gt-widget-bg: rgba(228, 221, 208, 0.9);
     --gt-widget-border: rgba(184, 168, 138, 0.6);
     --gt-split-bg: rgba(216, 208, 192, 0.4);
-    --gt-past-highlight: rgba(184, 168, 138, 0.3);
     --gt-hover-glow: rgba(106, 88, 64, 0.15);
     --gt-proximity-line: 106, 88, 64;
 }
@@ -401,7 +390,6 @@ html {
     --gt-widget-bg: rgba(36, 20, 20, 0.7);
     --gt-widget-border: rgba(61, 26, 26, 0.6);
     --gt-split-bg: rgba(36, 20, 20, 0.8);
-    --gt-past-highlight: rgba(36, 20, 20, 0.3);
     --gt-hover-glow: rgba(158, 96, 96, 0.2);
     --gt-proximity-line: 158, 96, 96;
 }
@@ -429,7 +417,6 @@ html {
     --gt-widget-bg: rgba(24, 43, 28, 0.7);
     --gt-widget-border: rgba(31, 61, 37, 0.6);
     --gt-split-bg: rgba(24, 43, 28, 0.8);
-    --gt-past-highlight: rgba(24, 43, 28, 0.3);
     --gt-hover-glow: rgba(106, 158, 114, 0.2);
     --gt-proximity-line: 106, 158, 114;
 }
@@ -453,7 +440,6 @@ html {
     --gt-widget-bg: rgba(26, 32, 26, 0.7);
     --gt-widget-border: rgba(31, 48, 32, 0.6);
     --gt-split-bg: rgba(26, 32, 26, 0.8);
-    --gt-past-highlight: rgba(26, 32, 26, 0.3);
     --gt-hover-glow: rgba(106, 144, 96, 0.2);
     --gt-proximity-line: 106, 144, 96;
 }
@@ -1287,7 +1273,6 @@ body {
     --gt-widget-bg: rgba(240, 228, 200, 0.9);
     --gt-widget-border: rgba(201, 184, 150, 0.6);
     --gt-split-bg: rgba(232, 216, 176, 0.4);
-    --gt-past-highlight: rgba(201, 184, 150, 0.3);
     --gt-hover-glow: rgba(139, 115, 85, 0.15);
     --gt-proximity-line: 139, 115, 85;
     --ql-gold: #c9a84c;

@@ -269,7 +269,20 @@ stdout_logfile_maxbytes=0
 redirect_stderr=true
 
 [program:api]
-command=/bin/bash -c '/app/start-api.sh 2>&1 | tee -a /data/logs/api.log'
+# R11 / TDB:2085: SIGTERM must reach node so Nest's shutdown hooks run
+# (enableShutdownHooks in api/src/main.ts). stopasgroup signals the whole
+# process group (bash, node, tee). The wrapper bash and tee IGNORE SIGTERM
+# ("shielded tee"): bash keeps waiting on the pipeline so supervisor sees the
+# api as stopped only after node exits, and tee keeps draining node's shutdown
+# logs to EOF instead of dying and EPIPE-ing them. The `( trap - TERM; exec ... )`
+# subshell restores the default so start-api.sh / node still get SIGTERM.
+# stopwaitsecs=7 then killasgroup SIGKILLs the group; 7s keeps the api plus
+# nginx/redis/postgres stops inside docker's default 10s stop grace.
+command=/bin/bash -c 'trap "" TERM; ( trap - TERM; exec /app/start-api.sh ) 2>&1 | tee -a /data/logs/api.log'
+stopsignal=TERM
+stopasgroup=true
+killasgroup=true
+stopwaitsecs=7
 directory=/app
 environment=PORT=3000
 user=app

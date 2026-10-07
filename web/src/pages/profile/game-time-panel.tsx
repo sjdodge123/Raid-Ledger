@@ -85,7 +85,7 @@ export function ProfileGameTimePanel(): JSX.Element {
         <div className="space-y-6">
             {returnTo && <BackToPoll to={returnTo} />}
             <div className={PROFILE_CARD}>
-                <GameTimePanel mode="profile" rolling enabled={isAuthenticated} />
+                <GameTimePanel enabled={isAuthenticated} />
             </div>
             <div data-testid="profile-away-card" className={PROFILE_CARD}>
                 <AwayPanel layout="inline" />

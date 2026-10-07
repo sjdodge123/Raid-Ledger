@@ -122,3 +122,30 @@ describe('AuthService.validateDiscordUser — ban/kick enforcement (ROK-313 AC4/
     expect(users.createOrUpdate).toHaveBeenCalled();
   });
 });
+
+// ROK-1714: a removed Discord avatar must clear the stored hash, so `null`
+// has to reach UsersService as `null` (Drizzle skips `undefined`).
+describe('AuthService.validateDiscordUser — removed avatar (ROK-1714)', () => {
+  it('writes avatar: null on login when Discord reports no avatar', async () => {
+    const { service, users } = makeService(existingRow({}));
+
+    await service.validateDiscordUser('discord-5', 'name', null);
+
+    expect(users.createOrUpdate.mock.calls[0][0]).toStrictEqual({
+      discordId: 'discord-5',
+      username: 'name',
+      avatar: null,
+    });
+  });
+
+  it('passes avatar: null to relinkDiscord for an unlinked account', async () => {
+    const { service, users } = makeService(
+      existingRow({ discordId: 'unlinked:discord-5' }),
+    );
+    users.relinkDiscord.mockResolvedValue(null);
+
+    await service.validateDiscordUser('discord-5', 'name', null);
+
+    expect(users.relinkDiscord.mock.calls[0]).toStrictEqual([5, 'name', null]);
+  });
+});

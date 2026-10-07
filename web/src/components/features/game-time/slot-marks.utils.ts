@@ -69,6 +69,16 @@ export function slotCountsByDay(marks: Map<string, SlotMark>): number[] {
     return counts;
 }
 
+/**
+ * The day's marks whose hour is NOT among the visible `hours` (TDB:1795): the
+ * strip's "● N" counts every mark on the day, the phone day only draws the
+ * ones on screen, so the day says how many it is not showing.
+ */
+export function marksOutsideHours(marks: Map<string, SlotMark> | undefined, dayOfWeek: number, hours: number[]): SlotMark[] {
+    if (!marks) return [];
+    return [...marks.values()].filter((mark) => mark.dayOfWeek === dayOfWeek && !hours.includes(mark.hour));
+}
+
 /** "0 voted" / "1 voted" / "N voted" — the slot chip and aria clause. */
 export function votedLabel(votes: number): string {
     return `${votes} voted`;

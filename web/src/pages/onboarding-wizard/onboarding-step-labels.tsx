@@ -1,7 +1,8 @@
 import type { JSX } from 'react';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 import { useMyCharacters } from '../../hooks/use-characters';
-import { isDiscordLinked } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
+import { AvatarWithFallback } from '../../components/shared/AvatarWithFallback';
 
 /**
  * Breadcrumb label for the Connect step — shows Discord avatar + name
@@ -18,11 +19,9 @@ export function ConnectStepLabel({ user, isCurrent, isVisited }: {
         return (
             <>
                 {user.avatar ? (
-                    <img
-                        src={user.avatar}
-                        alt={user.displayName || user.username}
-                        className="w-4 h-4 rounded-full object-cover flex-shrink-0"
-                    />
+                    // ROK-1714: user.avatar is a Discord hash (or a URL) — build the CDN URL; dead URL → initials.
+                    <AvatarWithFallback avatarUrl={buildDiscordAvatarUrl(user.discordId, user.avatar)}
+                        username={user.displayName || user.username} sizeClassName="w-4 h-4 text-[8px]!" />
                 ) : (
                     <StepDot isCurrent={isCurrent} isVisited={isVisited} />
                 )}

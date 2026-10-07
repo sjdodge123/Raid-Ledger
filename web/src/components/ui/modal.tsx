@@ -13,17 +13,19 @@
 import type { JSX } from 'react';
 import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { ModalFrame, type ModalFrameProps } from './modal-frame';
-import { DiscardChangesConfirm } from './discard-changes-confirm';
+import { DiscardChangesConfirm, type DiscardCopy } from './discard-changes-confirm';
 
 export interface ModalProps extends ModalFrameProps {
     /** Route Escape, backdrop and × through the dirty-close guard (ROK-1655). */
     closeGuard?: DirtyCloseGuard;
     /** What is unsaved, for the confirm. Defaults to its neutral copy. */
     discardMessage?: string;
+    /** Confirm title + button labels, when the close loses more than an edit (TDB:1928). */
+    discardCopy?: DiscardCopy | undefined;
 }
 
 /** See file docstring. */
-export function Modal({ closeGuard, discardMessage, onClose, ...frame }: ModalProps): JSX.Element {
+export function Modal({ closeGuard, discardMessage, discardCopy, onClose, ...frame }: ModalProps): JSX.Element {
     useResetGuardOnClose(frame.isOpen, closeGuard);
     return (
         <>
@@ -34,6 +36,7 @@ export function Modal({ closeGuard, discardMessage, onClose, ...frame }: ModalPr
                     onKeep={closeGuard.keep}
                     onDiscard={closeGuard.discard}
                     message={discardMessage}
+                    copy={discardCopy}
                 />
             )}
         </>

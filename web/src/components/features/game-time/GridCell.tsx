@@ -1,5 +1,4 @@
 import type { JSX } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
 import { getCellClasses, getVisualGroup } from './game-time-grid.utils';
 import { computeRounding, neighborGroup, computeShadows, computeCellClasses, computeCellStyle } from './grid-cell.utils';
 
@@ -11,13 +10,11 @@ interface GridCellProps {
     compact?: boolean | undefined;
     getSlotStatus: (d: number, h: number) => string | undefined;
     isCellLocked: (d: number, h: number) => boolean;
-    isPastCell: (d: number, h: number) => boolean;
     eventCellSet: Set<string>;
     hoveredCell: string | null;
     hoverDay: number;
     hoverHour: number;
     isInteractive: boolean;
-    nextWeekSlotMap: Map<string, GameTimeSlot> | null;
     onCellClick?: ((d: number, h: number) => void) | undefined;
     onPointerEnter: (d: number, h: number) => void;
     /** Days the viewer is away this week (ROK-1585) — an empty cell tints `bg-overlay/40`. */
@@ -27,13 +24,13 @@ interface GridCellProps {
 /** Single cell in the game-time grid */
 export function GridCell({
     dayIndex, hour, rangeStart, rangeEnd, compact, getSlotStatus, isCellLocked,
-    isPastCell, eventCellSet, hoveredCell, hoverDay, hoverHour,
-    isInteractive, nextWeekSlotMap, onCellClick, onPointerEnter, awayDays,
+    eventCellSet, hoveredCell, hoverDay, hoverHour,
+    isInteractive, onCellClick, onPointerEnter, awayDays,
 }: GridCellProps): JSX.Element {
     const vis = computeVisuals(dayIndex, hour, rangeStart, rangeEnd, getSlotStatus, eventCellSet, hoveredCell, hoverDay, hoverHour, isInteractive, isCellLocked);
     const isAway = awayDays?.has(dayIndex) ?? false;
     const fill = isAway && !getSlotStatus(dayIndex, hour) ? 'bg-overlay/40' : vis.cellClasses;
-    const className = computeCellClasses(compact, vis.rounding, fill, isInteractive && !vis.locked, !!onCellClick, vis.locked, isPastCell(dayIndex, hour), !!nextWeekSlotMap, vis.isHovered, isInteractive);
+    const className = computeCellClasses(compact, vis.rounding, fill, isInteractive && !vis.locked, !!onCellClick, vis.locked, vis.isHovered, isInteractive);
     const style = computeCellStyle(vis.shadows);
 
     return (

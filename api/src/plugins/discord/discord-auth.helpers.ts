@@ -288,7 +288,7 @@ export async function fetchDiscordProfile(
     url: string | URL,
     init?: RequestInit,
   ) => Promise<globalThis.Response>,
-): Promise<{ id: string; username: string; avatar?: string }> {
+): Promise<{ id: string; username: string; avatar: string | null }> {
   const userResponse = await discordFetch('https://discord.com/api/users/@me', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -299,6 +299,6 @@ export async function fetchDiscordProfile(
   return (await userResponse.json()) as {
     id: string;
     username: string;
-    avatar?: string;
+    avatar: string | null;
   };
 }

@@ -192,7 +192,7 @@ describe('recordCompleted — FK self-heal (ROK-1328)', () => {
         reresolve,
         logger,
       ),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe(false);
 
     expect(reresolve).toHaveBeenCalledTimes(1);
     // Only the original insert attempt; no retry.
@@ -391,18 +391,18 @@ describe('shouldUpdateLiveness', () => {
 const START = new Date('2025-01-01T00:00:00Z');
 const FINISH = new Date('2025-01-01T00:00:01Z');
 
-describe('deferred last_run_at — queued runs (ROK-1380)', () => {
+describe('deferred runs — queued (ROK-1380)', () => {
   let mockDb: MockDb;
 
   beforeEach(() => {
     mockDb = createDrizzleMock();
   });
 
-  it('recordCompleted skips the per-run UPDATE when deferLastRun queues it', async () => {
+  it('recordCompleted writes nothing when deferRun queues the run', async () => {
     const job = mockJob();
-    const deferLastRun = jest.fn().mockReturnValue(true);
+    const deferRun = jest.fn().mockReturnValue(true);
 
-    await recordCompleted(
+    const wrote = await recordCompleted(
       mockDb as any,
       job,
       'test-job',
@@ -410,22 +410,26 @@ describe('deferred last_run_at — queued runs (ROK-1380)', () => {
       FINISH,
       undefined,
       undefined,
-      deferLastRun,
+      deferRun,
     );
 
-    expect(mockDb.values).toHaveBeenCalledWith(
-      expect.objectContaining({ cronJobId: 42, status: 'completed' }),
-    );
-    expect(deferLastRun).toHaveBeenCalledWith(job, FINISH);
+    expect(wrote).toBe(false);
+    expect(deferRun).toHaveBeenCalledWith(job, 'test-job', {
+      status: 'completed',
+      startedAt: START,
+      finishedAt: FINISH,
+      durationMs: 1000,
+      error: undefined,
+    });
+    // Part B: neither the execution INSERT nor the last_run_at UPDATE runs.
+    expect(mockDb.insert).not.toHaveBeenCalled();
     expect(mockDb.update).not.toHaveBeenCalled();
-    // The cached row still reflects the run for the liveness check.
-    expect(job.lastRunAt).toBe(FINISH);
   });
 
-  it('recordDegraded skips the per-run UPDATE when deferLastRun queues it', async () => {
-    const deferLastRun = jest.fn().mockReturnValue(true);
+  it('recordDegraded writes nothing when deferRun queues the run', async () => {
+    const deferRun = jest.fn().mockReturnValue(true);
 
-    await recordDegraded(
+    const wrote = await recordDegraded(
       mockDb as any,
       mockJob(),
       'test-job',
@@ -433,27 +437,31 @@ describe('deferred last_run_at — queued runs (ROK-1380)', () => {
       FINISH,
       undefined,
       undefined,
-      deferLastRun,
+      deferRun,
     );
 
-    expect(mockDb.values).toHaveBeenCalledWith(
+    expect(wrote).toBe(false);
+    expect(deferRun).toHaveBeenCalledWith(
+      expect.anything(),
+      'test-job',
       expect.objectContaining({ status: 'degraded' }),
     );
+    expect(mockDb.insert).not.toHaveBeenCalled();
     expect(mockDb.update).not.toHaveBeenCalled();
   });
 });
 
-describe('deferred last_run_at — immediate writes (ROK-1380)', () => {
+describe('deferred runs — immediate writes (ROK-1380)', () => {
   let mockDb: MockDb;
 
   beforeEach(() => {
     mockDb = createDrizzleMock();
   });
 
-  it('writes immediately when deferLastRun declines (manual trigger)', async () => {
-    const deferLastRun = jest.fn().mockReturnValue(false);
+  it('inserts the row and writes last_run_at when deferRun declines (manual trigger)', async () => {
+    const deferRun = jest.fn().mockReturnValue(false);
 
-    await recordCompleted(
+    const wrote = await recordCompleted(
       mockDb as any,
       mockJob(),
       'test-job',
@@ -461,18 +469,22 @@ describe('deferred last_run_at — immediate writes (ROK-1380)', () => {
       FINISH,
       undefined,
       undefined,
-      deferLastRun,
+      deferRun,
     );
 
-    expect(deferLastRun).toHaveBeenCalledTimes(1);
+    expect(wrote).toBe(true);
+    expect(deferRun).toHaveBeenCalledTimes(1);
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({ cronJobId: 42, status: 'completed' }),
+    );
     expect(mockDb.update).toHaveBeenCalledTimes(1);
     expect(mockDb.set).toHaveBeenCalledWith(
       expect.objectContaining({ lastRunAt: FINISH }),
     );
   });
 
-  it('recordFailed still writes last_run_at immediately', async () => {
-    await recordFailed(
+  it('recordFailed still writes the row and last_run_at immediately', async () => {
+    const wrote = await recordFailed(
       mockDb as any,
       mockJob(),
       'test-job',
@@ -482,36 +494,13 @@ describe('deferred last_run_at — immediate writes (ROK-1380)', () => {
       { error: jest.fn() } as any,
     );
 
+    expect(wrote).toBe(true);
+    expect(mockDb.values).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'failed', error: 'boom' }),
+    );
     expect(mockDb.update).toHaveBeenCalledTimes(1);
     expect(mockDb.set).toHaveBeenCalledWith(
       expect.objectContaining({ lastRunAt: FINISH }),
     );
-  });
-});
-
-describe('deferred last_run_at — FK self-heal (ROK-1380)', () => {
-  it('hands deferLastRun the FRESH row, not the stale cached one', async () => {
-    const mockDb = createDrizzleMock();
-    const fresh = { ...mockJob(), id: 99 };
-    const fkErr = Object.assign(new Error('violates FK'), { code: '23503' });
-    mockDb.values.mockRejectedValueOnce(fkErr).mockResolvedValueOnce(undefined);
-    const deferLastRun = jest.fn().mockReturnValue(true);
-
-    await recordCompleted(
-      mockDb as any,
-      mockJob(), // stale id 42
-      'test-job',
-      START,
-      FINISH,
-      jest.fn().mockResolvedValue(fresh),
-      { warn: jest.fn(), error: jest.fn() } as any,
-      deferLastRun,
-    );
-
-    expect(deferLastRun).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 99 }),
-      FINISH,
-    );
-    expect(mockDb.update).not.toHaveBeenCalled();
   });
 });

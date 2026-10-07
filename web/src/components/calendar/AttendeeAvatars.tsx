@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { toAvatarUser } from '../../lib/avatar';
+import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 
 interface SignupPreview {
     id: number;
@@ -33,39 +34,23 @@ interface AttendeeAvatarsProps {
  * Shows first N avatars with a "+X" badge for overflow.
  * Uses character portraits in game contexts (ROK-194).
  */
-const INITIALS_COLORS = [
-    'bg-red-500', 'bg-orange-500', 'bg-amber-500', 'bg-yellow-500',
-    'bg-lime-500', 'bg-green-500', 'bg-emerald-500', 'bg-teal-500',
-    'bg-cyan-500', 'bg-sky-500', 'bg-blue-500', 'bg-indigo-500',
-    'bg-violet-500', 'bg-purple-500', 'bg-fuchsia-500', 'bg-pink-500',
-];
-
 const SIZE_CLASSES = { xs: 'w-4 h-4 text-[7px]', sm: 'w-5 h-5 text-[8px]', md: 'w-6 h-6 text-[10px]' };
 const SIZE_PX = { xs: 16, sm: 20, md: 24 };
-
-function getInitialsBg(username: string): string {
-    const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    return INITIALS_COLORS[hash % INITIALS_COLORS.length]!;
-}
 
 function AvatarItem({ signup, index, size, accentColor, totalVisible, gameId }: {
     signup: SignupPreview; index: number; size: 'xs' | 'sm' | 'md';
     accentColor: string; totalVisible: number; gameId?: number | undefined;
 }) {
-    const resolved = resolveAvatar(toAvatarUser(signup), gameId);
-    const avatarUrl = resolved.url;
     const sizePx = SIZE_PX[size];
 
     return (
         <div key={signup.id}
-            className={`attendee-avatar ${SIZE_CLASSES[size]} rounded-full overflow-hidden ring-2 flex-shrink-0 flex items-center justify-center font-semibold text-foreground ${!avatarUrl ? getInitialsBg(signup.username) : ''}`}
+            className={`attendee-avatar ${SIZE_CLASSES[size]} rounded-full overflow-hidden ring-2 flex-shrink-0 flex items-center justify-center`}
             style={{ marginLeft: index > 0 ? `-${sizePx / 3}px` : 0, zIndex: totalVisible - index, boxShadow: `0 0 0 2px ${accentColor}` }}
             title={signup.username}>
-            {avatarUrl ? (
-                <img src={avatarUrl} alt={signup.username} className="w-full h-full object-cover" loading="lazy" />
-            ) : (
-                <span className="select-none">{signup.username.charAt(0).toUpperCase()}</span>
-            )}
+            {/* ROK-1714: neutral-token initials on a missing or dead avatar; font size inherits SIZE_CLASSES. */}
+            <AvatarWithFallback user={toAvatarUser(signup)} gameId={gameId} username={signup.username}
+                sizeClassName="w-full h-full text-[length:inherit]!" loading="lazy" />
         </div>
     );
 }

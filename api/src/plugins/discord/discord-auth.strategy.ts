@@ -162,10 +162,6 @@ export class DiscordAuthStrategy
 
   private async runValidate(profile: Profile) {
     const { id, username, avatar } = profile;
-    return this.authService.validateDiscordUser(
-      id,
-      username,
-      avatar ?? undefined,
-    );
+    return this.authService.validateDiscordUser(id, username, avatar ?? null);
   }
 }

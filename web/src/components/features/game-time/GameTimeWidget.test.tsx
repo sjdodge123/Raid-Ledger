@@ -13,22 +13,10 @@ vi.mock('../../../hooks/use-game-time-editor', () => ({
     useGameTimeEditor: (options?: unknown) => useGameTimeEditorMock(options),
 }));
 
-// Mock useCancelSignup (used by EventBlockPopover)
-vi.mock('../../../hooks/use-signups', () => ({
-    useCancelSignup: () => ({
-        mutateAsync: vi.fn(),
-        isPending: false,
-    }),
-}));
-
 function makeEditorData(overrides: Record<string, unknown> = {}) {
     return {
         slots: [],
-        events: [],
-        nextWeekEvents: undefined,
-        nextWeekSlots: undefined,
         isLoading: false,
-        weekStart: '2026-02-08',
         isDirty: false,
         handleChange: vi.fn(),
         save: vi.fn(),
@@ -36,8 +24,6 @@ function makeEditorData(overrides: Record<string, unknown> = {}) {
         discard: vi.fn(),
         isSaving: false,
         tzLabel: 'EST',
-        todayIndex: 1, // Monday
-        currentHour: 16.5,
         overrides: [],
         absences: [],
         ...overrides,
@@ -102,12 +88,12 @@ describe('GameTimeWidget — part 1', () => {
         expect(screen.getByText('Inside Game Time')).toBeInTheDocument();
     });
 
-    it('uses the single-week editor mode instead of rolling composite mode', () => {
+    it('uses the single-week template editor', () => {
         mockEditorData();
 
         renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
 
-        expect(useGameTimeEditorMock).toHaveBeenCalledWith({ enabled: true, rolling: false });
+        expect(useGameTimeEditorMock).toHaveBeenCalledWith({ enabled: true });
     });
 
     it('shows no-overlap message when template does not match', () => {

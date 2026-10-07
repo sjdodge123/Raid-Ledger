@@ -1,7 +1,7 @@
 import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { createDrizzleMock } from '../common/testing/drizzle-mock';
-import type { RecordDeps } from './cron-job.execution.helpers';
+import type { CronRunBookkeeping } from './cron-job.bookkeeping';
 import { computeNextRun } from './cron-job.helpers';
 import { CronJobService } from './cron-job.service';
 
@@ -33,7 +33,8 @@ function setup() {
     })),
   };
   const service = new CronJobService(db as never, registry as never);
-  const deps = (service as unknown as { recordDeps: RecordDeps }).recordDeps;
+  const deps = (service as unknown as { book: CronRunBookkeeping }).book
+    .recordDeps;
   return { db, service, deps };
 }
 
@@ -51,10 +52,19 @@ describe('CronJobService.updateSchedule with a queued last_run_at (ROK-1380)', (
     expect(newNext).not.toBe(computeNextRun(OLD)?.toISOString());
     const { db, service, deps } = setup();
     const finishedAt = new Date('2025-01-01T00:01:00Z');
-    expect(deps.deferLastRun(jobRow(OLD), finishedAt)).toBe(true);
+    const values = {
+      status: 'completed',
+      startedAt: finishedAt,
+      finishedAt,
+      durationMs: 0,
+    };
+    expect(deps.deferRun(jobRow(OLD), 'Test_schedule_job', values)).toBe(true);
     db.returning.mockResolvedValueOnce([jobRow(NEW)]);
 
     await service.updateSchedule(7, NEW);
+    // The execution flush's parent pre-check finds job 7, so its queued row
+    // lands and its last_run_at is not held back behind a re-queued row.
+    db.where.mockResolvedValueOnce([{ id: 7 }]);
     await service.flushLastRunUpdates();
 
     const query = db.execute.mock.calls[0][0] as SQL;
