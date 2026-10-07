@@ -3,7 +3,7 @@
  * These configure CORS, helmet CSP, and validate environment settings.
  */
 
-import type { LogLevel } from '@nestjs/common';
+import type { INestApplication, LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import type { Request, Response, NextFunction } from 'express';
 import * as bodyParser from 'body-parser';
@@ -223,4 +223,23 @@ export function applyTrustProxy(
       cause: err,
     });
   }
+}
+
+/** The part of the Nest app `enableGracefulShutdown` touches. */
+export type ShutdownHookTarget = Pick<INestApplication, 'enableShutdownHooks'>;
+
+/**
+ * Run the Nest destroy/shutdown hooks (cron last_run_at flush, voice
+ * attendance flush, Discord disconnect) on SIGTERM/SIGINT (TDB:2085).
+ *
+ * Signals are explicit: the no-arg form also listens on SIGSEGV/SIGILL/
+ * SIGBUS/SIGFPE, which are unsafe as JS listeners. `useProcessExit` is
+ * load-bearing: the API runs as PID 1 under api/Dockerfile, where Nest's
+ * default re-kill is ignored and the never-closed postgres.js pool would keep
+ * the process alive until docker's SIGKILL. It also makes a SIGTERM exit 0
+ * instead of 143. No effect in the allinone image until supervisord forwards
+ * the signal to node (the allinone infra half of TDB:2085).
+ */
+export function enableGracefulShutdown(app: ShutdownHookTarget): void {
+  app.enableShutdownHooks(['SIGTERM', 'SIGINT'], { useProcessExit: true });
 }

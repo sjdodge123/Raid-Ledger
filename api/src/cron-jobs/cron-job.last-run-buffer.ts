@@ -9,10 +9,12 @@
  * immediately (the admin panel re-reads `last_run_at` right after "Run now").
  *
  * Only high-frequency jobs defer (see `isDeferrableSchedule`): the write
- * amplification comes from them, and the API registers no shutdown hooks, so
- * a deploy drops whatever is still queued. A daily or weekly job writes its
- * run at once rather than showing the previous run until the next one; a
- * high-frequency job's lost value is replaced within one interval.
+ * amplification comes from them. A graceful shutdown (Nest shutdown hooks,
+ * TDB:2085) flushes the queue and stops deferring; a hard kill — and the
+ * allinone image, which fires no hooks yet — drops whatever is still queued.
+ * A daily or weekly job writes its run at once rather than showing the
+ * previous run until the next one; a high-frequency job's lost value is
+ * replaced within one interval.
  *
  * Plain class (no DI) owned by CronJobService, extracted to keep that file
  * under the 300-line cap.
@@ -116,8 +118,48 @@ export class LastRunBuffer {
     if (queued) this.pending.set(jobId, { ...queued, cronExpression });
   }
 
-  /** Write every queued value in one batched UPDATE and drain the buffer. */
-  flush(db: Db, logger: Logger): Promise<void> {
-    return flushPendingUpdates(db, this.pending, logger);
+  /**
+   * Move a write queued under a stale cached id to the re-created job the
+   * execution flush rebound it to (ROK-1380). Only the run timestamp moves:
+   * next_run_at is derived from the FRESH row's expression, since the flush
+   * overwrites next_run_at and the deleted row's schedule may differ. An
+   * already-queued newer value for the fresh id wins.
+   */
+  rebind(
+    staleId: number,
+    fresh: Pick<CronJobRow, 'id' | 'cronExpression'>,
+  ): void {
+    const queued = this.pending.get(staleId);
+    if (!queued) return;
+    this.pending.delete(staleId);
+    const current = this.pending.get(fresh.id);
+    if (current && current.lastRunAt >= queued.lastRunAt) return;
+    this.pending.set(fresh.id, {
+      lastRunAt: queued.lastRunAt,
+      cronExpression: fresh.cronExpression,
+    });
+  }
+
+  /**
+   * Write every queued value in one batched UPDATE and drain the buffer.
+   * Values for `hold` ids stay queued for a later flush (their execution
+   * rows did not land yet).
+   */
+  async flush(
+    db: Db,
+    logger: Logger,
+    hold: ReadonlySet<number> = new Set(),
+  ): Promise<void> {
+    if (hold.size === 0) return flushPendingUpdates(db, this.pending, logger);
+    const batch = new Map<number, PendingLastRun>();
+    for (const [id, queued] of this.pending) {
+      if (!hold.has(id)) batch.set(id, queued);
+    }
+    for (const id of batch.keys()) this.pending.delete(id);
+    await flushPendingUpdates(db, batch, logger);
+    // A failed UPDATE re-queued into `batch`; a value queued meanwhile wins.
+    for (const [id, queued] of batch) {
+      if (!this.pending.has(id)) this.pending.set(id, queued);
+    }
   }
 }

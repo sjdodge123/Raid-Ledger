@@ -9,12 +9,11 @@ interface EventBlockOverlaysProps {
     gridDims: GridDims;
     rangeStart: number;
     rangeEnd: number;
-    onEventClick?: ((event: GameTimeEventBlock, anchorRect: DOMRect) => void) | undefined;
 }
 
 /** Renders positioned event blocks overlaid on the grid */
 export function EventBlockOverlays({
-    displayEvents, gridDims, rangeStart, rangeEnd, onEventClick,
+    displayEvents, gridDims, rangeStart, rangeEnd,
 }: EventBlockOverlaysProps): JSX.Element {
     const dayEventCounts = new Map<string, number>();
 
@@ -24,7 +23,7 @@ export function EventBlockOverlays({
                 const pos = computeEventPosition(ev, gridDims, rangeStart, rangeEnd, dayEventCounts);
                 if (!pos) return null;
                 return (
-                    <EventBlock key={`event-${ev.eventId}-${ev.dayOfWeek}`} ev={ev} pos={pos} onEventClick={onEventClick} />
+                    <EventBlock key={`event-${ev.eventId}-${ev.dayOfWeek}`} ev={ev} pos={pos} />
                 );
             })}
         </>
@@ -59,16 +58,14 @@ function computeEventPosition(
     };
 }
 
-function EventBlock({ ev, pos, onEventClick }: {
+function EventBlock({ ev, pos }: {
     ev: GameTimeEventBlock; pos: EventPosition;
-    onEventClick?: ((event: GameTimeEventBlock, anchorRect: DOMRect) => void) | undefined;
 }): JSX.Element {
     return (
         <div
-            className="absolute z-20 rounded-sm overflow-hidden cursor-pointer hover:brightness-110 transition-all"
+            className="absolute z-20 rounded-sm overflow-hidden"
             style={{ top: pos.top, left: pos.left, width: pos.width, height: pos.height, ...getGameTimeBlockStyle(ev.gameSlug ?? undefined, ev.coverUrl) }}
             data-testid={`event-block-${ev.eventId}-${ev.dayOfWeek}`}
-            onClick={(e) => { e.stopPropagation(); onEventClick?.(ev, (e.currentTarget as HTMLElement).getBoundingClientRect()); }}
             title={`${ev.title}${ev.gameName ? ` (${ev.gameName})` : ''}`}
         >
             <RichEventBlock

@@ -20,6 +20,7 @@ import {
   buildLoggerSelfTest,
   installCspReportBodyParser,
   applyTrustProxy,
+  enableGracefulShutdown,
 } from './main.helpers';
 
 function configureStaticAssets(
@@ -75,6 +76,7 @@ async function bootstrap() {
     new SentryExceptionFilter(),
     new ThrottlerExceptionFilter(),
   );
+  enableGracefulShutdown(app);
   await app.listen(process.env.PORT ?? 3000);
   if (process.env.LOGGER_SELF_TEST === 'true') {
     buildLoggerSelfTest(new Logger('Bootstrap'))();

@@ -13,6 +13,7 @@ import {
 } from './cron-job.constants';
 import {
   insertExecutionRow,
+  type ExecutionValues,
   type ReresolveJob,
 } from './cron-job.fk-recovery.helpers';
 
@@ -20,10 +21,15 @@ type CronJobRow = typeof schema.cronJobs.$inferSelect;
 type Db = PostgresJsDatabase<typeof schema>;
 
 /**
- * Queue a run's last_run_at for the batched flush (ROK-1380). Returns true
- * when queued (skip the per-run UPDATE), false when the caller must write now.
+ * Queue a completed/degraded run — its execution row AND its last_run_at —
+ * for the batched flush (ROK-1380). Returns true when queued (skip the
+ * per-run INSERT and UPDATE), false when the caller must write both now.
  */
-export type DeferLastRun = (job: CronJobRow, finishedAt: Date) => boolean;
+export type DeferRun = (
+  job: CronJobRow,
+  jobName: string,
+  values: ExecutionValues,
+) => boolean;
 
 /** Compute the next fire time from a cron expression. */
 export function computeNextRun(cronExpression: string): Date | null {
@@ -91,7 +97,11 @@ export async function pruneExecutions(
     );
 }
 
-/** Insert an execution row, log it, and update the job's timestamps. */
+/**
+ * Record one execution: queue it via `deferRun` when given and accepted, else
+ * insert the row and write the job's timestamps now. Returns whether a row
+ * was written now (false when queued, or when the job is gone).
+ */
 async function recordExecution(
   db: Db,
   job: CronJobRow,
@@ -102,25 +112,24 @@ async function recordExecution(
   error?: string,
   reresolve?: ReresolveJob,
   logger?: Logger,
-  deferLastRun?: DeferLastRun,
-): Promise<void> {
+  deferRun?: DeferRun,
+): Promise<boolean> {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
+  const values = { status, startedAt, finishedAt, durationMs, error };
+  perfLog('CRON', jobName, durationMs, { status });
+  if (deferRun?.(job, jobName, values)) return false;
   const inserted = await insertExecutionRow(
     db,
     job,
     jobName,
-    { status, startedAt, finishedAt, durationMs, error },
+    values,
     reresolve,
     logger,
   );
-  perfLog('CRON', jobName, durationMs, { status });
-  if (!inserted) return;
+  if (!inserted) return false;
   // `inserted` is the rebound row after an FK retry, never the stale `job`.
-  if (deferLastRun?.(inserted, finishedAt)) {
-    inserted.lastRunAt = finishedAt;
-    return;
-  }
   await writeLastRunNow(db, inserted, finishedAt);
+  return true;
 }
 
 /** Write last_run_at/next_run_at now and mirror them on the cached row. */
@@ -178,8 +187,9 @@ export async function recordSkipped(
 }
 
 /**
- * Record a completed execution. last_run_at is queued via `deferLastRun`
- * when given (ROK-1380), else written immediately.
+ * Record a completed execution. The row and last_run_at are queued via
+ * `deferRun` when given and accepted (ROK-1380), else written immediately.
+ * Returns whether a row was written now.
  */
 export async function recordCompleted(
   db: Db,
@@ -189,9 +199,9 @@ export async function recordCompleted(
   finishedAt: Date,
   reresolve?: ReresolveJob,
   logger?: Logger,
-  deferLastRun?: DeferLastRun,
-): Promise<void> {
-  await recordExecution(
+  deferRun?: DeferRun,
+): Promise<boolean> {
+  return recordExecution(
     db,
     job,
     jobName,
@@ -201,7 +211,7 @@ export async function recordCompleted(
     undefined,
     reresolve,
     logger,
-    deferLastRun,
+    deferRun,
   );
 }
 
@@ -219,9 +229,9 @@ export async function recordDegraded(
   finishedAt: Date,
   reresolve?: ReresolveJob,
   logger?: Logger,
-  deferLastRun?: DeferLastRun,
-): Promise<void> {
-  await recordExecution(
+  deferRun?: DeferRun,
+): Promise<boolean> {
+  return recordExecution(
     db,
     job,
     jobName,
@@ -231,7 +241,7 @@ export async function recordDegraded(
     undefined,
     reresolve,
     logger,
-    deferLastRun,
+    deferRun,
   );
 }
 
@@ -245,8 +255,8 @@ export async function recordFailed(
   errorMessage: string,
   logger: Logger,
   reresolve?: ReresolveJob,
-): Promise<void> {
-  await recordExecution(
+): Promise<boolean> {
+  const written = await recordExecution(
     db,
     job,
     jobName,
@@ -258,6 +268,7 @@ export async function recordFailed(
     logger,
   );
   logger.error(`Cron job "${jobName}" failed: ${errorMessage}`);
+  return written;
 }
 
 /** Result type for extractRegistryJobMeta. */

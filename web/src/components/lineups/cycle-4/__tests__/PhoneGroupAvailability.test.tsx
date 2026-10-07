@@ -208,6 +208,28 @@ describe('PhoneGroupAvailability — already-suggested slots (ROK-1587)', () => 
         expect(screen.getByTestId(`phone-group-cell-${WED}-19`)).toHaveAttribute('role', 'img');
     });
 
+    it('TDB:1795 — a slot outside the 5 PM – 11 PM window is named under the day, and blocks + hint add up to the strip', () => {
+        const slotMarks = slotMarksForWeek([slotAt(WED, 14, 1), slotAt(WED, 19, 2)], THIS_WEEK);
+
+        renderModule({ slotMarks });
+
+        expect(screen.getByTestId('phone-group-slot-block-19')).toHaveTextContent('2 voted');
+        expect(screen.queryByTestId('phone-group-slot-block-14')).toBeNull();
+        expect(screen.getByTestId('phone-group-outside-hint')).toHaveTextContent('1 more suggested outside 5 PM – 11 PM');
+        const blocks = screen.getByTestId('phone-group-overlay').querySelectorAll('[data-testid^="phone-group-slot-block-"]').length;
+        const votes = screen.getByTestId(`phone-week-strip-day-${WED}`).querySelector('[data-testid="phone-week-strip-votes"]');
+        expect(votes).toHaveTextContent(`● ${blocks + 1}`);
+    });
+
+    it('TDB:1795 — no outside-hours line when every slot of the day is on screen', () => {
+        const slotMarks = slotMarksForWeek([slotAt(WED, 19, 2), slotAt(6, 9, 1)], THIS_WEEK);
+
+        renderModule({ slotMarks });
+
+        expect(screen.getByTestId('phone-group-slot-block-19')).toBeInTheDocument();
+        expect(screen.queryByTestId('phone-group-outside-hint')).toBeNull();
+    });
+
     it('draws no slot blocks without marks', () => {
         renderModule();
 

@@ -6,6 +6,7 @@ import { slotCountsByDay, type SlotMark } from '../slot-marks.utils';
 import { DayBlockEditor } from './DayBlockEditor';
 import { DayPager } from './DayPager';
 import { GroupDayView } from './GroupDayView';
+import { OutsideHoursHint } from './GroupDayMarks';
 import { WeekStrip } from './WeekStrip';
 import { groupBandShares, type GroupBandShare } from './group-day.utils';
 import { usePhoneWeekEditor } from './use-phone-week-editor';
@@ -136,6 +137,7 @@ function GroupDay({ day, hours, group }: {
                 dayOfWeek={day} hours={hours} cells={group.cells} events={group.events}
                 slotMarks={group.slotMarks} suggested={group.suggested} onPickHour={pick ? (hour) => pick(day, hour) : undefined}
             />
+            <OutsideHoursHint slotMarks={group.slotMarks} dayOfWeek={day} hours={hours} />
         </div>
     );
 }

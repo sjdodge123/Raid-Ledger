@@ -4,9 +4,6 @@ import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 import type { GridDims } from './game-time-grid.types';
 import { DAYS, ALL_HOURS, CELL_GAP } from './game-time-grid.utils';
 
-/** No cell is ever dirty now that painting is gone (ROK-1426). */
-const EMPTY_DIRTY: ReadonlySet<string> = new Set();
-
 /** Builds a slot lookup map keyed by "dayOfWeek:hour" */
 function buildSlotMap(slots: GameTimeSlot[]): Map<string, GameTimeSlot> {
     const map = new Map<string, GameTimeSlot>();
@@ -21,69 +18,37 @@ function buildEventCellSet(events: GameTimeEventBlock[]): Set<string> {
     return set;
 }
 
-/** Builds lookup maps from slots, next-week slots, and events */
+/** Builds lookup maps from slots and events */
 export function useSlotMaps(
-    slots: GameTimeSlot[], nextWeekSlots?: GameTimeSlot[],
-    events?: GameTimeEventBlock[],
+    slots: GameTimeSlot[], events?: GameTimeEventBlock[],
 ): {
     slotMap: Map<string, GameTimeSlot>;
-    nextWeekSlotMap: Map<string, GameTimeSlot> | null;
     eventCellSet: Set<string>;
 } {
     const slotMap = useMemo(() => buildSlotMap(slots), [slots]);
-    const nextWeekSlotMap = useMemo(() => nextWeekSlots ? buildSlotMap(nextWeekSlots) : null, [nextWeekSlots]);
     const eventCellSet = useMemo(() => events ? buildEventCellSet(events) : new Set<string>(), [events]);
-    return { slotMap, nextWeekSlotMap, eventCellSet };
+    return { slotMap, eventCellSet };
 }
 
-/** Computes date labels for the displayed week and the next rolling week */
-export function useWeekDates(weekStart?: string): { dayDates: string[] | null; nextWeekDayDates: string[] | null } {
-    const dayDates = useMemo(() => parseDayDates(weekStart, 0), [weekStart]);
-    const nextWeekDayDates = useMemo(() => parseDayDates(weekStart, 7), [weekStart]);
-    return { dayDates, nextWeekDayDates };
+/** Computes date labels for the displayed week */
+export function useWeekDates(weekStart?: string): { dayDates: string[] | null } {
+    const dayDates = useMemo(() => parseDayDates(weekStart), [weekStart]);
+    return { dayDates };
 }
 
-/** Parses a weekStart ISO string into "M/D" labels offset by the given number of days */
-function parseDayDates(weekStart: string | undefined, offsetDays: number): string[] | null {
+/** Parses a weekStart ISO string into "M/D" labels for its seven days */
+function parseDayDates(weekStart: string | undefined): string[] | null {
     if (!weekStart) return null;
     const [dateStr = weekStart] = weekStart.split('T');
     const [y = NaN, m = NaN, d = NaN] = dateStr.split('-').map(Number);
     if (isNaN(y) || isNaN(m) || isNaN(d)) return null;
     const base = new Date(y, m - 1, d);
-    base.setDate(base.getDate() + offsetDays);
     return DAYS.map((_, i) => { const dt = new Date(base); dt.setDate(base.getDate() + i); return `${dt.getMonth() + 1}/${dt.getDate()}`; });
 }
 
-/** Filters current and next-week events for rolling display */
-function filterDisplayEvents(
-    events: GameTimeEventBlock[] | undefined, nextWeekEvents: GameTimeEventBlock[] | undefined,
-    todayIndex: number | undefined, currentHour: number | undefined,
-): GameTimeEventBlock[] {
-    if (!events) return [];
-    if (!nextWeekEvents) return events;
-    const nowHour = currentHour !== undefined ? Math.floor(currentHour) : undefined;
-    const result: GameTimeEventBlock[] = [];
-    for (const ev of events) {
-        if (todayIndex === undefined) { result.push(ev); continue; }
-        if (ev.dayOfWeek < todayIndex) continue;
-        if (ev.dayOfWeek === todayIndex && nowHour !== undefined && ev.endHour <= nowHour) continue;
-        result.push(ev);
-    }
-    if (nextWeekEvents && todayIndex !== undefined) {
-        for (const ev of nextWeekEvents) {
-            if (ev.dayOfWeek < todayIndex) result.push(ev);
-            else if (ev.dayOfWeek === todayIndex && nowHour !== undefined && ev.endHour <= nowHour) result.push(ev);
-        }
-    }
-    return result;
-}
-
-/** Filters events for display in rolling-week mode */
-export function useDisplayEvents(
-    events?: GameTimeEventBlock[], nextWeekEvents?: GameTimeEventBlock[],
-    todayIndex?: number, currentHour?: number,
-): GameTimeEventBlock[] {
-    return useMemo(() => filterDisplayEvents(events, nextWeekEvents, todayIndex, currentHour), [events, nextWeekEvents, todayIndex, currentHour]);
+/** Events to draw as overlay blocks (none when the grid has no events) */
+export function useDisplayEvents(events?: GameTimeEventBlock[]): GameTimeEventBlock[] {
+    return useMemo(() => events ?? [], [events]);
 }
 
 /** Measures grid cell from DOM and creates a ResizeObserver */
@@ -131,33 +96,9 @@ export function useGridMeasurement(
     return gridDims;
 }
 
-/** Returns whether a cell is in the "past" portion of the rolling week */
-export function useIsPastCell(todayIndex?: number, currentHour?: number): (day: number, hour: number) => boolean {
-    return useCallback(
-        (dayIndex: number, hour: number): boolean => {
-            if (todayIndex === undefined || currentHour === undefined) return false;
-            return dayIndex < todayIndex || (dayIndex === todayIndex && hour < Math.floor(currentHour));
-        },
-        [todayIndex, currentHour],
-    );
-}
-
-/** Returns the resolved slot status accounting for rolling week dirty cells */
-export function useSlotStatus(
-    slotMap: Map<string, GameTimeSlot>, nextWeekSlotMap: Map<string, GameTimeSlot> | null,
-    isPastCell: (d: number, h: number) => boolean, dirtyCells: ReadonlySet<string>,
-): (day: number, hour: number) => string | undefined {
-    return useCallback(
-        (day: number, hour: number): string | undefined => {
-            const key = `${day}:${hour}`;
-            if (nextWeekSlotMap && isPastCell(day, hour)) {
-                if (dirtyCells.has(key)) return slotMap.get(key)?.status;
-                return nextWeekSlotMap.get(key)?.status;
-            }
-            return slotMap.get(key)?.status;
-        },
-        [slotMap, nextWeekSlotMap, isPastCell, dirtyCells],
-    );
+/** Returns the slot status for a cell */
+export function useSlotStatus(slotMap: Map<string, GameTimeSlot>): (day: number, hour: number) => string | undefined {
+    return useCallback((day: number, hour: number): string | undefined => slotMap.get(`${day}:${hour}`)?.status, [slotMap]);
 }
 
 /** Returns whether a cell is locked (committed/blocked) */
@@ -172,26 +113,19 @@ export function useCellLocked(getSlotStatus: (d: number, h: number) => string | 
 }
 
 /**
- * Read-only slot view: status, locked-ness and past-ness for a cell.
+ * Read-only slot view: status and locked-ness for a cell.
  *
  * Drag-to-paint lived here until ROK-1426; availability is now edited as blocks
- * (see use-block-editor.ts), so nothing in this hook mutates slots. The
- * dirty-cell tracking that came with painting went with it -- it only ever
- * mattered for rolling views, and no interactive grid passes rolling props.
+ * (see use-block-editor.ts), so nothing in this hook mutates slots. The rolling
+ * next-week view and its past-cell handling went with TDB:1933.
  */
-export function useSlotView(
-    slotMap: Map<string, GameTimeSlot>,
-    nextWeekSlotMap: Map<string, GameTimeSlot> | null,
-    todayIndex?: number, currentHour?: number,
-): {
-    isPastCell: (d: number, h: number) => boolean;
+export function useSlotView(slotMap: Map<string, GameTimeSlot>): {
     getSlotStatus: (d: number, h: number) => string | undefined;
     isCellLocked: (d: number, h: number) => boolean;
 } {
-    const isPastCell = useIsPastCell(todayIndex, currentHour);
-    const getSlotStatus = useSlotStatus(slotMap, nextWeekSlotMap, isPastCell, EMPTY_DIRTY);
+    const getSlotStatus = useSlotStatus(slotMap);
     const isCellLocked = useCellLocked(getSlotStatus);
-    return { isPastCell, getSlotStatus, isCellLocked };
+    return { getSlotStatus, isCellLocked };
 }
 
 /** Computes the radial gradient background for hover glow effect */

@@ -15,7 +15,7 @@ import {
   recordCompleted,
   recordDegraded,
   recordFailed,
-  type DeferLastRun,
+  type DeferRun,
 } from './cron-job.helpers';
 import { type ReresolveJob } from './cron-job.fk-recovery.helpers';
 
@@ -31,10 +31,11 @@ export interface RecordDeps {
   /** Queue a liveness heartbeat for a no-op run (mutates service state). */
   onNoOp: (job: CronJobRow) => void;
   /**
-   * Queue a completed/degraded run's last_run_at for the batched flush
-   * (ROK-1380); false means write it now. Failed runs never defer.
+   * Queue a completed/degraded run's execution row and last_run_at for the
+   * batched flush (ROK-1380); false means write both now. Failed runs never
+   * defer.
    */
-  deferLastRun: DeferLastRun;
+  deferRun: DeferRun;
 }
 
 /**
@@ -57,7 +58,7 @@ async function recordHandlerSuccess(
   const degraded =
     typeof result === 'object' && result !== null && result.degraded === true;
   const record = degraded ? recordDegraded : recordCompleted;
-  await record(
+  return record(
     deps.db,
     job,
     jobName,
@@ -65,9 +66,8 @@ async function recordHandlerSuccess(
     finishedAt,
     deps.reresolve,
     deps.logger,
-    deps.deferLastRun,
+    deps.deferRun,
   );
-  return true;
 }
 
 /**
@@ -85,7 +85,7 @@ async function recordHandlerFailure(
   msg: string,
 ): Promise<boolean> {
   try {
-    await recordFailed(
+    return await recordFailed(
       deps.db,
       job,
       jobName,
@@ -95,7 +95,6 @@ async function recordHandlerFailure(
       deps.logger,
       deps.reresolve,
     );
-    return true;
   } catch (recordErr) {
     deps.logger.error(
       `Cron job "${jobName}" failed AND its failure-record insert failed: ` +

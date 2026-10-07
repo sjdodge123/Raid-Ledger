@@ -34,7 +34,7 @@ function renderPanel(props: Partial<React.ComponentProps<typeof GameTimePanel>> 
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
         <QueryClientProvider client={queryClient}>
-            <GameTimePanel mode="profile" {...props} />
+            <GameTimePanel {...props} />
         </QueryClientProvider>,
     );
 }
@@ -51,12 +51,6 @@ function createDefaultEditorMock(overrides = {}) {
         isSaving: false,
         isLoading: false,
         tzLabel: 'PST',
-        events: [],
-        todayIndex: 3,
-        currentHour: 15.5,
-        nextWeekEvents: [],
-        nextWeekSlots: [],
-        weekStart: '2026-02-08',
         overrides: [],
         absences: [],
         ...overrides,
@@ -75,7 +69,7 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 1', () => {
 
     describe('Full Day Names', () => {
         it('profile mode displays full day names (Sunday, Monday, etc.)', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             // Check for full day names in header cells
             expect(screen.getByTestId('day-header-0')).toHaveTextContent(/Sunday|Sun/);
@@ -85,28 +79,6 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 1', () => {
             expect(screen.getByTestId('day-header-4')).toHaveTextContent(/Thursday|Thu/);
             expect(screen.getByTestId('day-header-5')).toHaveTextContent(/Friday|Fri/);
             expect(screen.getByTestId('day-header-6')).toHaveTextContent(/Saturday|Sat/);
-        });
-
-        it('modal mode displays abbreviated day names (Sun, Mon, etc.)', () => {
-            renderPanel({ mode: 'modal' });
-
-            // Modal mode should use abbreviated names
-            const header0 = screen.getByTestId('day-header-0');
-            const header1 = screen.getByTestId('day-header-1');
-
-            // These should be short abbreviated names, not full names
-            expect(header0.textContent).toMatch(/^Sun/);
-            expect(header1.textContent).toMatch(/^Mon/);
-        });
-
-        it('picker mode displays abbreviated day names (Sun, Mon, etc.)', () => {
-            renderPanel({ mode: 'picker' });
-
-            const header0 = screen.getByTestId('day-header-0');
-            const header1 = screen.getByTestId('day-header-1');
-
-            expect(header0.textContent).toMatch(/^Sun/);
-            expect(header1.textContent).toMatch(/^Mon/);
         });
     });
 
@@ -119,7 +91,7 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 2', () => {
 
     describe('Sunday Week Start', () => {
         it('starts week on Sunday (day index 0)', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             // First day header should be Sunday
             const firstDayHeader = screen.getByTestId('day-header-0');
@@ -131,40 +103,13 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 2', () => {
         });
     });
 
-    describe('No Rolling Week Logic', () => {
-        it('profile mode does not render rolling week divider', () => {
-            renderPanel({ mode: 'profile' });
-
-            // Rolling week divider should not exist in profile mode
-            expect(screen.queryByTestId('rolling-week-divider-left')).not.toBeInTheDocument();
-            expect(screen.queryByTestId('rolling-week-divider-bottom')).not.toBeInTheDocument();
-            expect(screen.queryByTestId('rolling-week-divider-right')).not.toBeInTheDocument();
-        });
-
-        it('modal mode can render rolling week divider', () => {
-            renderPanel({ mode: 'modal', rolling: true });
-
-            // Modal mode with rolling=true should show divider elements
-            // (actual rendering depends on gridDims measurement, but elements should exist)
-            const grid = screen.getByTestId('game-time-grid');
-            expect(grid).toBeInTheDocument();
-        });
-    });
-
     describe('No Events Displayed', () => {
         it('profile mode does not render event blocks', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             // Profile mode should not render any event blocks
             const eventBlocks = screen.queryAllByTestId(/^event-block-/);
             expect(eventBlocks).toHaveLength(0);
-        });
-
-        it('profile mode does not render event popover', () => {
-            renderPanel({ mode: 'profile' });
-
-            // EventBlockPopover should not exist in profile mode
-            expect(screen.queryByTestId('event-popover')).not.toBeInTheDocument();
         });
 
     });
@@ -178,36 +123,27 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 3', () => {
 
     describe('Profile Mode UI Elements', () => {
         it('renders profile mode header and description', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             expect(screen.getByText('My Game Time')).toBeInTheDocument();
             expect(screen.getByText('Set your typical weekly availability')).toBeInTheDocument();
         });
 
         it('renders Save button', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             expect(screen.getByText('Save')).toBeInTheDocument();
         });
 
         it('renders Clear button', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             expect(screen.getByText('Clear')).toBeInTheDocument();
         });
 
         it('no longer renders the legacy red Absence button (ROK-1585)', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
-            expect(screen.queryByText('Absence')).not.toBeInTheDocument();
-        });
-
-        it('modal mode does not render profile UI elements', () => {
-            renderPanel({ mode: 'modal' });
-
-            expect(screen.queryByText('My Game Time')).not.toBeInTheDocument();
-            expect(screen.queryByText('Save')).not.toBeInTheDocument();
-            expect(screen.queryByText('Clear')).not.toBeInTheDocument();
             expect(screen.queryByText('Absence')).not.toBeInTheDocument();
         });
     });
@@ -234,18 +170,12 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 4', () => {
                 isSaving: false,
                 isLoading: false,
                 tzLabel: 'PST',
-                events: [],
-                todayIndex: 3,
-                currentHour: 15.5,
-                nextWeekEvents: [],
-                nextWeekSlots: [],
-                weekStart: '2026-02-08',
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
             });
 
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             // ROK-1426: availability renders as blocks in the editor layer, so the
             // cells beneath deliberately no longer carry the 'available' fill.
@@ -277,18 +207,12 @@ describe('Availability Data Preservation — part 2 (sub 1)', () => {
             isSaving: false,
             isLoading: false,
             tzLabel: 'PST',
-            events: [],
-            todayIndex: 3,
-            currentHour: 15.5,
-            nextWeekEvents: [],
-            nextWeekSlots: [],
-            weekStart: '2026-02-08',
             absences: [],
             discard: vi.fn(),
             overrides: [],
         });
 
-        renderPanel({ mode: 'profile' });
+        renderPanel();
 
         const cell = screen.getByTestId('cell-2-20');
         expect(cell.dataset.status).toBe('committed');
@@ -315,96 +239,15 @@ describe('Availability Data Preservation — part 2 (sub 2)', () => {
             isSaving: false,
             isLoading: false,
             tzLabel: 'PST',
-            events: [],
-            todayIndex: 3,
-            currentHour: 15.5,
-            nextWeekEvents: [],
-            nextWeekSlots: [],
-            weekStart: '2026-02-08',
             absences: [],
             discard: vi.fn(),
             overrides: [],
         });
 
-        renderPanel({ mode: 'profile' });
+        renderPanel();
 
         const cell = screen.getByTestId('cell-3-20');
         expect(cell.dataset.status).toBe('blocked');
-    });
-
-});
-
-describe('Profile Mode Rolling Override — sub 1', () => {
-    beforeEach(() => {
-        setupDefaultEditorMock();
-    });
-
-    it('forces rolling=false in profile mode even if rolling=true is passed', () => {
-        const mockEditor = {
-            slots: [],
-            handleChange: vi.fn(),
-            applyPreset: vi.fn(),
-            clear: vi.fn(),
-            discard: vi.fn(),
-            save: vi.fn(),
-            isDirty: false,
-            isSaving: false,
-            isLoading: false,
-            tzLabel: 'PST',
-            events: [],
-            todayIndex: 3,
-            currentHour: 15.5,
-            nextWeekEvents: [],
-            nextWeekSlots: [],
-            weekStart: '2026-02-08',
-            overrides: [],
-            absences: [],
-        };
-        vi.mocked(mockUseGameTimeEditor).mockReturnValue(mockEditor);
-
-        renderPanel({ mode: 'profile', rolling: true });
-
-        // useGameTimeEditor should be called with rolling: false
-        expect(vi.mocked(mockUseGameTimeEditor)).toHaveBeenCalledWith(
-            expect.objectContaining({ rolling: false }),
-        );
-    });
-
-});
-
-describe('Profile Mode Rolling Override — sub 2', () => {
-    beforeEach(() => {
-        setupDefaultEditorMock();
-    });
-
-    it('respects rolling prop in modal mode', () => {
-        vi.mocked(mockUseGameTimeEditor).mockReturnValue({
-            slots: [],
-            handleChange: vi.fn(),
-            applyPreset: vi.fn(),
-            clear: vi.fn(),
-            save: vi.fn(),
-            isDirty: false,
-            isSaving: false,
-            isLoading: false,
-            tzLabel: 'PST',
-            events: [],
-            todayIndex: 3,
-            currentHour: 15.5,
-            nextWeekEvents: [],
-            nextWeekSlots: [],
-            weekStart: '2026-02-08',
-            absences: [],
-            discard: vi.fn(),
-            overrides: [],
-        });
-
-        renderPanel({ mode: 'modal', rolling: true });
-
-        // useGameTimeEditor should be called with rolling: true
-        expect(vi.mocked(mockUseGameTimeEditor)).toHaveBeenCalledWith(
-            expect.objectContaining({ rolling: true }),
-        );
     });
 
 });
@@ -416,7 +259,7 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 7', () => {
 
     describe('Compact Grid Rendering (ROK-1011)', () => {
         it('always renders GameTimeGrid with compact mode', () => {
-            renderPanel({ mode: 'profile' });
+            renderPanel();
 
             expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
             expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
@@ -435,20 +278,7 @@ describe('Grid receives correct props in profile mode (ROK-1011)', () => {
             slots: [{ dayOfWeek: 0, hour: 6, status: 'available' }],
         }));
 
-        renderPanel({ mode: 'profile' });
-
-        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
-    });
-
-});
-
-describe('GameTimePanel - Picker Mode read-only (ROK-1011)', () => {
-    beforeEach(() => {
-        setupDefaultEditorMock();
-    });
-
-    it('renders read-only GameTimeGrid in picker mode', () => {
-        renderPanel({ mode: 'picker' });
+        renderPanel();
 
         expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
     });
@@ -461,7 +291,7 @@ describe('Timezone label display (ROK-1011)', () => {
     });
 
     it('displays timezone label in profile mode', () => {
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         expect(screen.getByText('PST')).toBeInTheDocument();
     });
 
@@ -473,7 +303,7 @@ describe('GameTimePanel - always renders GameTimeGrid (ROK-1011)', () => {
     });
 
     it('renders GameTimeGrid regardless of viewport', () => {
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
         expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
     });
@@ -494,14 +324,14 @@ describe('Desktop profile hour window (ROK-1585 AC4a)', () => {
     });
 
     it('defaults to 6 PM – 1 AM with both toggles around the grid', () => {
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         expect(screen.queryAllByTestId(/^cell-0-\d+$/)).toHaveLength(7);
         expect(screen.getByTestId('desktop-week-show-earlier')).toHaveTextContent('Show earlier (6 AM – 6 PM)');
         expect(screen.getByTestId('desktop-week-show-later')).toHaveTextContent('Show later (1 AM – 6 AM)');
     });
 
     it('opens the morning on "Show earlier" and remembers the choice', () => {
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         fireEvent.click(screen.getByTestId('desktop-week-show-earlier'));
         expect(screen.queryAllByTestId(/^cell-0-\d+$/)).toHaveLength(19);
         expect(screen.getByTestId('cell-0-6')).toBeInTheDocument();
@@ -510,15 +340,9 @@ describe('Desktop profile hour window (ROK-1585 AC4a)', () => {
 
     it('auto-opens the earlier band when the saved week has a 10 AM hour', () => {
         setupDefaultEditorMock({ slots: [{ dayOfWeek: 1, hour: 10, status: 'available' }] });
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         expect(screen.getByTestId('cell-1-10')).toBeInTheDocument();
         expect(screen.getByTestId('desktop-week-show-earlier')).toHaveAttribute('aria-expanded', 'true');
-    });
-
-    it('keeps modal mode on its own hour range with no toggles', () => {
-        renderPanel({ mode: 'modal' });
-        expect(screen.queryByTestId('desktop-week-show-earlier')).not.toBeInTheDocument();
-        expect(screen.queryByTestId('desktop-week-show-later')).not.toBeInTheDocument();
     });
 });
 
@@ -529,7 +353,7 @@ describe('Desktop profile Save / Clear / Discard under the grid (ROK-1585 Q9)', 
     });
 
     it('renders the actions in a footer after the grid and the later toggle', () => {
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         const footer = screen.getByTestId('game-time-profile-actions');
         expect(within(footer).getByText('Save')).toBeInTheDocument();
         expect(within(footer).getByText('Clear')).toBeInTheDocument();
@@ -550,7 +374,7 @@ describe('Desktop profile away day headers (ROK-1585 Q1)', () => {
         setupDefaultEditorMock({
             absences: [{ id: 1, startDate: thisWeekDate(6), endDate: thisWeekDate(7), reason: 'Lake trip' }],
         });
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         expect(screen.getByTestId('day-header-6')).toHaveTextContent('· away');
         expect(screen.getByTestId('day-header-6')).toHaveAttribute('data-away', 'true');
         expect(screen.getByTestId('cell-6-20')).toHaveAttribute('data-away', 'true');
@@ -562,7 +386,7 @@ describe('Desktop profile away day headers (ROK-1585 Q1)', () => {
         setupDefaultEditorMock({
             absences: [{ id: 1, startDate: thisWeekDate(6), endDate: thisWeekDate(6), reason: null }],
         });
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         expect(screen.getByTestId('day-header-6')).toHaveTextContent(/^Sat · away/);
         expect(screen.getByTestId('day-header-6')).not.toHaveTextContent('Saturday');
         expect(screen.getByTestId('day-header-1')).toHaveTextContent('Monday');
@@ -572,7 +396,7 @@ describe('Desktop profile away day headers (ROK-1585 Q1)', () => {
         setupDefaultEditorMock({
             absences: [{ id: 1, startDate: thisWeekDate(14), endDate: thisWeekDate(16), reason: null }],
         });
-        renderPanel({ mode: 'profile' });
+        renderPanel();
         expect(screen.queryByText(/· away/)).not.toBeInTheDocument();
     });
 });
