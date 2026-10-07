@@ -129,7 +129,7 @@ export function useAddonImportNewPreview() {
     });
 }
 
-/** Create-route apply. A character was created or updated: refresh every character list and detail. */
+/** Create-route apply. A character was created or updated: refresh every character list and detail, and the profile (as core create/update do). */
 export function useAddonImportNewApply() {
     const queryClient = useQueryClient();
     return useMutation<AddonImportNewResultDto, AddonImportRequestError, AddonImportNewVariables>({
@@ -137,6 +137,7 @@ export function useAddonImportNewApply() {
         onSuccess: () => Promise.all([
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] }),
             queryClient.invalidateQueries({ queryKey: ['characters'] }),
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
         ]),
     });
 }

@@ -101,6 +101,7 @@ describe('create route (ROK-1738)', () => {
         expect(result.current.data?.target.characterId).toBe(CREATED_ID);
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['me', 'characters'] });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['characters'] });
+        expect(invalidate, 'the profile caches the main character too').toHaveBeenCalledWith({ queryKey: ['userProfile'] });
     });
 
     it('treats a success body without a target as off-contract', async () => {
