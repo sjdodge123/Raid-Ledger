@@ -110,7 +110,7 @@ function describeBatching() {
     await deleteJob(testApp, staleId);
     const freshId = await insertJob(testApp, 'test:batch-recreate');
 
-    await svc.flushLastRunUpdates();
+    await expect(svc.flushLastRunUpdates()).resolves.toBeUndefined();
 
     expect(await readExecutions(testApp, freshId)).toHaveLength(2);
     expect(await readExecutions(testApp, staleId)).toHaveLength(0);
