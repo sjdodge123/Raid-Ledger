@@ -18,25 +18,17 @@ import {
   type CronRegistrar,
 } from '../plugins/plugin-host/extension-points';
 import * as schema from '../drizzle/schema';
-import {
-  CORE_JOB_METADATA,
-  FLUSH_INTERVAL_MS,
-  PRUNE_EVERY_N_EXECUTIONS,
-} from './cron-job.constants';
+import { CORE_JOB_METADATA, FLUSH_INTERVAL_MS } from './cron-job.constants';
 import {
   computeNextRun,
   upsertJob,
-  pruneExecutions,
   recordSkipped,
   extractRegistryJobMeta,
   recordSkippedTrigger,
 } from './cron-job.helpers';
 import { selectJobByName } from './cron-job.fk-recovery.helpers';
-import { LastRunBuffer } from './cron-job.last-run-buffer';
-import {
-  runHandlerTracked,
-  type RecordDeps,
-} from './cron-job.execution.helpers';
+import { CronRunBookkeeping } from './cron-job.bookkeeping';
+import { runHandlerTracked } from './cron-job.execution.helpers';
 import {
   getCronJobSafe,
   setPaused,
@@ -54,9 +46,7 @@ type CronJobRow = typeof schema.cronJobs.$inferSelect;
 @Injectable()
 export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(CronJobService.name);
-  private readonly executionCounts = new Map<number, number>();
   private readonly jobCache = new Map<string, CronJobRow>();
-  private readonly lastRun = new LastRunBuffer();
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   // ROK-1058: deferred sync timers, cancelled in onModuleDestroy.
   private bootstrapTimer: ReturnType<typeof setTimeout> | null = null;
@@ -67,7 +57,12 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly schedulerRegistry: SchedulerRegistry,
     @Optional() private readonly pluginRegistry?: PluginRegistryService,
-  ) {}
+  ) {
+    this.book = new CronRunBookkeeping(db, this.logger, this.reresolveJob);
+  }
+
+  /** Batched last_run_at + execution-row writes and prune counts (ROK-1380). */
+  private readonly book: CronRunBookkeeping;
 
   onApplicationBootstrap() {
     // Skip bootstrap timers when crons are disabled (integration tests).
@@ -229,42 +224,20 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     return row;
   }
 
-  /** Deps bundle threaded into the FK-aware outcome recorders (ROK-1328). */
-  private get recordDeps(): RecordDeps {
-    return {
-      db: this.db,
-      logger: this.logger,
-      reresolve: this.reresolveJob,
-      onNoOp: (job) => this.lastRun.queueLiveness(job),
-      deferLastRun: (job, at) => this.lastRun.deferCompleted(job, at),
-    };
-  }
-
   /** Run tracked execution with timing, recording, and pruning. */
   private async runTracked(
     job: CronJobRow,
     jobName: string,
     fn: () => Promise<void | boolean | { degraded: true }>,
   ): Promise<void> {
-    const didInsertRow = await runHandlerTracked(
-      this.recordDeps,
+    const wroteRow = await runHandlerTracked(
+      this.book.recordDeps,
       job,
       jobName,
       fn,
     );
-    if (didInsertRow) await this.maybePrune(job, jobName);
-  }
-
-  /** Prune old executions periodically. */
-  private async maybePrune(job: CronJobRow, jobName: string): Promise<void> {
-    const count = (this.executionCounts.get(job.id) ?? 0) + 1;
-    this.executionCounts.set(job.id, count);
-    if (count >= PRUNE_EVERY_N_EXECUTIONS) {
-      this.executionCounts.set(job.id, 0);
-      await pruneExecutions(this.db, job.id).catch((err) =>
-        this.logger.warn(`Failed to prune executions for ${jobName}: ${err}`),
-      );
-    }
+    // A queued row is counted when a flush writes it (ROK-1380).
+    if (wroteRow) await this.book.countWritten(job.id, 1);
   }
 
   // ─── Admin API methods ──────────────────────────────────────────
@@ -315,7 +288,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     // no-op/paused/failed manual run costs the next completed run one write.
     // The mark is per job, not per run: a scheduled tick finishing while this
     // run is still going consumes it, and this run then defers (≤5 min).
-    this.lastRun.markImmediate(job.name);
+    this.book.lastRun.markImmediate(job.name);
     if (handler) {
       await this.executeWithTracking(job.name, handler);
     } else {
@@ -353,12 +326,15 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     );
     if (!updated) return updated;
     this.jobCache.set(updated.name, updated);
-    this.lastRun.reschedule(updated.id, updated.cronExpression);
+    this.book.lastRun.reschedule(updated.id, updated.cronExpression);
     return updated;
   }
 
-  /** Flush pending last_run_at updates to DB. */
+  /**
+   * Flush queued execution rows (one multi-row INSERT) and pending
+   * last_run_at updates (one batched UPDATE) to the DB (ROK-1380).
+   */
   async flushLastRunUpdates(): Promise<void> {
-    return this.lastRun.flush(this.db, this.logger);
+    return this.book.flush();
   }
 }
