@@ -3,6 +3,15 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-07 — two apply-time error codes — **additive**
+
+- **Additive (stays v1).** `AddonImportErrorCodeSchema` gains
+  `CHARACTER_CLAIMED` and `RULESET_REQUIRED` (both 422), returned only by the
+  new Raid Ledger "create a character from an export" route (ROK-1738).
+  Like the other apply-time codes (CONTRACT.md §7) they are checks against
+  the Raid Ledger account, never addon-format bugs. Token grammar, envelope,
+  payloads, fixtures and `schema.json` unchanged.
+
 ## v1 — 2026-10-05 — mixed paste ("Export all") — **additive**
 
 - **Additive (stays v1).** One paste may now carry one `char`, one `guild`
