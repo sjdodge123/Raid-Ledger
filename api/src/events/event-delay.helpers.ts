@@ -117,6 +117,8 @@ async function notifyEventDelayed(
         tzMap.get(uid) ?? defaultTimezone,
       ),
       payload,
+      // TDB:196: a delay notice is stale once the (delayed) event is over.
+      expiresAt: newEnd,
     })),
   );
 }
