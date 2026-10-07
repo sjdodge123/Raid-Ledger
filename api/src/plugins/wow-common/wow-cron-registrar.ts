@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CharactersService } from '../../characters/characters.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
+import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
+import type { ForeverProbeResultDto } from '@raid-ledger/contract';
 
 /**
- * Registers cron jobs for WoW character auto-sync and boss data refresh.
- * Only active when the wow-common plugin is enabled.
+ * Registers cron jobs for WoW character auto-sync, boss data refresh and the
+ * Forever namespace probe (ROK-1716). Only active when the plugin is enabled.
  */
 @Injectable()
 export class WowCronRegistrar implements CronRegistrar {
@@ -16,6 +18,7 @@ export class WowCronRegistrar implements CronRegistrar {
   constructor(
     private readonly charactersService: CharactersService,
     private readonly bossDataRefresh: BossDataRefreshService,
+    private readonly foreverProbe: ForeverNamespaceProbeService,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
@@ -30,6 +33,19 @@ export class WowCronRegistrar implements CronRegistrar {
         // Every Sunday at 4:00 AM
         cronExpression: '0 0 4 * * 0',
         handler: () => this.handleBossDataRefresh(),
+      },
+      {
+        name: 'forever-namespace-probe',
+        // Daily at 5:00 AM (ROK-1716 D7)
+        cronExpression: '0 0 5 * * *',
+        handler: async () => throwOnProbeError(await this.foreverProbe.run()),
+      },
+      {
+        name: 'forever-namespace-probe-launch',
+        // Hourly at :30; the service no-ops outside the launch window (D7)
+        cronExpression: '0 30 * * * *',
+        handler: async () =>
+          throwOnProbeError(await this.foreverProbe.runIfInLaunchWindow()),
       },
     ];
   }
@@ -65,5 +81,15 @@ export class WowCronRegistrar implements CronRegistrar {
     } catch (err) {
       this.logger.error(`Boss data refresh failed: ${err}`);
     }
+  }
+}
+
+/**
+ * Fail the cron run (so the admin cron table shows it) when the probe errored.
+ * `skipped` (no Blizzard creds) and null (outside the launch window) succeed.
+ */
+function throwOnProbeError(result: ForeverProbeResultDto | null): void {
+  if (result?.status === 'error') {
+    throw new Error('Forever namespace probe failed (see API logs)');
   }
 }

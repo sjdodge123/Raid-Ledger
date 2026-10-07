@@ -22,6 +22,30 @@ export const WOW_FOREVER_SETTING_KEYS: string[] = [
   WOW_FOREVER_ARMORY_IMPORT_KEY,
 ];
 
+/** JSON {@link ForeverProbeResultDto}-shaped latest probe run (ROK-1716, D1). */
+export const WOW_FOREVER_PROBE_LAST_RESULT_KEY =
+  'wow_forever_probe_last_result' as SettingKey;
+
+/** JSON `{ prefix, at }` of the first Skyborne match — the alert dedupe (D4). */
+export const WOW_FOREVER_PROBE_FOUND_KEY =
+  'wow_forever_probe_found' as SettingKey;
+
+/** JSON string[] of admin-added candidate prefixes. Absent = none. */
+export const WOW_FOREVER_PROBE_EXTRA_CANDIDATES_KEY =
+  'wow_forever_probe_extra_candidates' as SettingKey;
+
+/** Raw `<realmOrRuleset>/<name>` for the optional profile check (D5). */
+export const WOW_FOREVER_PROBE_CHARACTER_KEY =
+  'wow_forever_probe_character' as SettingKey;
+
+/** The probe's four setting keys, for the plugin manifest. */
+export const WOW_FOREVER_PROBE_SETTING_KEYS: string[] = [
+  WOW_FOREVER_PROBE_LAST_RESULT_KEY,
+  WOW_FOREVER_PROBE_FOUND_KEY,
+  WOW_FOREVER_PROBE_EXTRA_CANDIDATES_KEY,
+  WOW_FOREVER_PROBE_CHARACTER_KEY,
+];
+
 /** Plugin-local event emitted after an admin saves the Forever config. */
 export const WOW_FOREVER_CONFIG_UPDATED = 'blizzard.forever-config.updated';
 

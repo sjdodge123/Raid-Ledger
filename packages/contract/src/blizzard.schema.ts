@@ -96,3 +96,55 @@ export const WowForeverConfigResponseSchema = WowForeverConfigSchema.extend({
     namespacePrefixIsDefault: z.boolean(),
 });
 export type WowForeverConfigResponseDto = z.infer<typeof WowForeverConfigResponseSchema>;
+
+// ============================================================
+// ROK-1716: WoW: Forever namespace discovery probe
+// ============================================================
+
+export const ForeverProbeEndpointSchema = z.enum(['realm', 'connected-realm', 'playable-race', 'profile']);
+export type ForeverProbeEndpoint = z.infer<typeof ForeverProbeEndpointSchema>;
+
+/** One probed (prefix, region, endpoint) → HTTP status; null status = network error / timeout. */
+export const ForeverProbeCellSchema = z.object({
+    prefix: z.string(),
+    region: z.string(),
+    endpoint: ForeverProbeEndpointSchema,
+    status: z.number().int().nullable(),
+    error: z.string().optional(),
+});
+export type ForeverProbeCellDto = z.infer<typeof ForeverProbeCellSchema>;
+
+export const ForeverProbeMatchSchema = z.object({ prefix: z.string(), region: z.string(), raceName: z.string() });
+export type ForeverProbeMatchDto = z.infer<typeof ForeverProbeMatchSchema>;
+
+export const ForeverProbeFoundSchema = z.object({ prefix: z.string(), at: z.string() });
+export type ForeverProbeFoundDto = z.infer<typeof ForeverProbeFoundSchema>;
+
+/** Latest probe run, as stored and as the admin panel shows it. */
+export const ForeverProbeResultSchema = z.object({
+    ranAt: z.string(),
+    durationMs: z.number().int().nonnegative(),
+    status: z.enum(['ok', 'skipped', 'error']),
+    candidates: z.array(z.string()),
+    cells: z.array(ForeverProbeCellSchema),
+    matches: z.array(ForeverProbeMatchSchema),
+    shapes: z.record(z.string(), z.unknown()),
+    found: ForeverProbeFoundSchema.nullable(),
+});
+export type ForeverProbeResultDto = z.infer<typeof ForeverProbeResultSchema>;
+
+/** GET response: null result = the probe has never run. */
+export const ForeverProbeStateSchema = z.object({
+    result: ForeverProbeResultSchema.nullable(),
+    extraCandidates: z.array(z.string()),
+    characterPath: z.string().nullable(),
+});
+export type ForeverProbeStateDto = z.infer<typeof ForeverProbeStateSchema>;
+
+/** Admin PUT body: extra candidate prefixes + optional raw `<realmOrRuleset>/<name>` profile path. */
+export const ForeverProbeConfigSchema = z.object({
+    extraCandidates: z.array(WowForeverNamespacePrefixSchema).max(20),
+    // A dot-only name (`.`/`..`) would resolve to another Blizzard path, so it is rejected.
+    characterPath: z.string().trim().regex(/^[a-z0-9-]{1,64}\/(?!\.{1,2}$)[^/\s?#&]{1,64}$/i).nullable(),
+});
+export type ForeverProbeConfigDto = z.infer<typeof ForeverProbeConfigSchema>;

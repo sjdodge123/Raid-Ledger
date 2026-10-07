@@ -6,6 +6,8 @@ import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
 import { ForeverConfigService } from './forever-config.service';
+import { ForeverNamespaceProbeController } from './forever-namespace-probe.controller';
+import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { WowCronRegistrar } from './wow-cron-registrar';
@@ -34,6 +36,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
   controllers: [
     BlizzardController,
     ForeverConfigController,
+    ForeverNamespaceProbeController,
     DungeonQuestsController,
     BossEncountersController,
     QuestProgressController,
@@ -43,6 +46,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
     BlizzardService,
     BlizzardAuthService,
     ForeverConfigService,
+    ForeverNamespaceProbeService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
     WowCronRegistrar,

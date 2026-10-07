@@ -13,6 +13,7 @@
 import './discord.canary.js';
 import './igdb.canary.js';
 import './blizzard.canary.js';
+import './blizzard-forever.canary.js';
 import './github.canary.js';
 import './relay.canary.js';
 
