@@ -13,6 +13,9 @@ import {
 } from '@raid-ledger/contract';
 import { RadioGroup, type RadioOption } from '../../../../components/ui/radio-group';
 
+/** The hint's id: the disabled Import button points `aria-describedby` at it while no ruleset is picked. */
+export const RULESET_HINT_ID = 'addon-import-ruleset-hint';
+
 type PickValue = WowForeverSelectableRuleset | '';
 
 const OPTIONS: readonly RadioOption<PickValue>[] = WOW_FOREVER_SELECTABLE_RULESETS.map((v) => ({
@@ -32,7 +35,9 @@ export function AddonImportRulesetPicker({ value, onChange }: AddonImportRuleset
                 label="Ruleset" appearance="segmented" options={OPTIONS}
                 value={value ?? ''} onChange={(v) => { if (v !== '') onChange(v); }}
             />
-            <p className="text-sm text-muted">The export doesn&apos;t say which ruleset this character plays on.</p>
+            <p id={RULESET_HINT_ID} className="text-sm text-muted">
+                The export doesn&apos;t say which ruleset this character plays on. Pick one to import.
+            </p>
         </div>
     );
 }

@@ -26,7 +26,7 @@ import { Button } from '../../../../components/ui/button';
 import { AddonImportSummary } from './addon-import-summary';
 import { AddonImportErrorBanner } from './addon-import-error-banner';
 import { AddonImportTargetBanner } from './addon-import-target-banner';
-import { AddonImportRulesetPicker } from './addon-import-ruleset-picker';
+import { AddonImportRulesetPicker, RULESET_HINT_ID } from './addon-import-ruleset-picker';
 import { needsRulesetPick } from './use-addon-import-flow';
 import type { AddonImportConfirm } from './use-addon-import';
 
@@ -144,7 +144,10 @@ export function AddonImportPreviewActions(props: AddonImportPreviewActionsProps)
     return (
         <>
             <Button variant="ghost" disabled={props.importing} onClick={props.onBack}>Back</Button>
-            <Button disabled={!allowed} loading={props.importing} loadingLabel="Importing…" onClick={() => { if (allowed) props.onImport(); }}>
+            <Button
+                disabled={!allowed} loading={props.importing} loadingLabel="Importing…" onClick={() => { if (allowed) props.onImport(); }}
+                aria-describedby={props.rulesetMissing ? RULESET_HINT_ID : undefined}
+            >
                 Import
             </Button>
         </>
