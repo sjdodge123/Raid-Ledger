@@ -99,7 +99,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
     this.bootstrapTimer = null;
     this.pluginActivatedTimer = null;
     this.flushInterval = null;
-    await this.flushLastRunUpdates();
+    await this.book.close();
   }
 
   @OnEvent(PLUGIN_EVENTS.ACTIVATED)

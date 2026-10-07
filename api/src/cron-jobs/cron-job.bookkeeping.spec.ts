@@ -46,6 +46,68 @@ describe('CronRunBookkeeping.deferRun (ROK-1380 part B)', () => {
   });
 });
 
+describe('CronRunBookkeeping.flush — re-created job (ROK-1380)', () => {
+  it('moves a last_run_at queued under a stale id to the rebound fresh id', async () => {
+    const { book } = setup();
+    book.recordDeps.deferRun(row('*/5 * * * *'), 'Job_7', VALUES);
+    jest.spyOn(book.executions, 'flush').mockResolvedValue(new Map([[7, 9]]));
+    let keysAtFlush: number[] = [];
+    jest.spyOn(book.lastRun, 'flush').mockImplementation(() => {
+      keysAtFlush = [...book.lastRun.pending.keys()];
+      return Promise.resolve();
+    });
+
+    await book.flush();
+
+    expect(keysAtFlush).toEqual([9]);
+    expect(book.lastRun.pending.get(9)?.lastRunAt).toBe(FINISH);
+  });
+
+  it('keeps a newer value already queued for the fresh id', () => {
+    const { book } = setup();
+    const newer = new Date(FINISH.getTime() + 60_000);
+    book.lastRun.pending.set(7, {
+      lastRunAt: FINISH,
+      cronExpression: '* * * * *',
+    });
+    book.lastRun.pending.set(9, {
+      lastRunAt: newer,
+      cronExpression: '* * * * *',
+    });
+
+    book.lastRun.rebind(7, 9);
+
+    expect([...book.lastRun.pending.keys()]).toEqual([9]);
+    expect(book.lastRun.pending.get(9)?.lastRunAt).toBe(newer);
+  });
+});
+
+describe('CronRunBookkeeping.close — graceful shutdown (ROK-1380)', () => {
+  it('stops deferring BEFORE the final flush, so later runs write directly', async () => {
+    const { book } = setup();
+    book.recordDeps.deferRun(row('*/5 * * * *'), 'Job_7', VALUES);
+    let deferredDuringFlush: boolean | undefined;
+    const flush = jest.spyOn(book, 'flush').mockImplementation(() => {
+      // A run finishing while (or after) the final flush runs.
+      deferredDuringFlush = book.recordDeps.deferRun(
+        row('*/5 * * * *'),
+        'Job_7',
+        VALUES,
+      );
+      return Promise.resolve();
+    });
+
+    await book.close();
+
+    expect(flush).toHaveBeenCalledTimes(1);
+    expect(deferredDuringFlush).toBe(false);
+    expect(book.recordDeps.deferRun(row('*/5 * * * *'), 'Job_7', VALUES)).toBe(
+      false,
+    );
+    expect(book.executions.pending).toHaveLength(1); // only the pre-close run
+  });
+});
+
 describe('CronRunBookkeeping.countWritten', () => {
   it('prunes once the written-row count reaches the threshold, then resets', async () => {
     const { db, book } = setup();

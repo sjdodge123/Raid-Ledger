@@ -25,6 +25,11 @@ export class CronRunBookkeeping {
   readonly executions = new ExecutionBuffer();
   /** Rows written per job since its last prune (counts written rows only). */
   readonly executionCounts = new Map<number, number>();
+  /**
+   * Set once shutdown begins: runs that finish afterwards write at once
+   * instead of queueing behind a final flush that has already run.
+   */
+  private closing = false;
 
   constructor(
     private readonly db: Db,
@@ -40,6 +45,7 @@ export class CronRunBookkeeping {
       reresolve: this.reresolve,
       onNoOp: (job) => this.lastRun.queueLiveness(job),
       deferRun: (job, jobName, values) => {
+        if (this.closing) return false;
         if (!this.lastRun.deferCompleted(job, values.finishedAt)) return false;
         job.lastRunAt = values.finishedAt;
         this.executions.enqueue(job, jobName, values);
@@ -84,4 +90,14 @@ export class CronRunBookkeeping {
     await this.lastRun.flush(this.db, this.logger);
   }
 
+  /**
+   * Final flush on graceful shutdown. Stops deferring FIRST, so a run that
+   * finishes after this point (an in-flight handler, or a tick before the
+   * scheduler stops crons in beforeApplicationShutdown) writes its row and
+   * last_run_at directly instead of into a queue nobody flushes again.
+   */
+  async close(): Promise<void> {
+    this.closing = true;
+    await this.flush();
+  }
 }
