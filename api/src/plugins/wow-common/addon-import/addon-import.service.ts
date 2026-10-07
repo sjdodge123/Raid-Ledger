@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AddonImportRequestDto,
@@ -7,7 +7,6 @@ import type {
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { CharactersService } from '../../../characters/characters.service';
-import type { AddonImportAuditInsert } from '../../../drizzle/schema';
 import {
   ADDON_IMPORT_PENDING,
   AddonImportAuditService,
@@ -19,11 +18,15 @@ import {
 } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import {
+  auditRow,
+  finishAttempt,
+  recordPasteFacts,
+} from './addon-import.finish';
+import {
   parseImportRequest,
   rawFacts,
   type AttemptFacts,
 } from './addon-import.service.helpers';
-import { pasteSections } from './addon-import.paste-run';
 import {
   bindPaste,
   loadImportCharacter,
@@ -41,8 +44,6 @@ import {
  */
 @Injectable()
 export class AddonImportService {
-  private readonly logger = new Logger(AddonImportService.name);
-
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -110,64 +111,19 @@ export class AddonImportService {
     );
   }
 
-  private async finish(
+  private finish(
     userId: number,
     characterId: string,
     facts: AttemptFacts,
     result: string,
     perSection: string[],
   ): Promise<void> {
-    const section = facts.sections.map((s) => s.section).join('+');
-    this.logger.log(
-      `addon-import userId=${userId} section=${section || (facts.section ?? '-')} sha256=${facts.sha256 ?? '-'} size=${facts.sizeBytes} dryRun=${facts.dryRun} result=${result}`,
-    );
-    if (facts.sections.length > 1) {
-      // ROK-1737: one row per section; the paste still holds ONE reservation.
-      const rows = facts.sections.map((s, i) => ({
-        ...auditRow(userId, characterId, facts, perSection[i] ?? result),
-        section: s.section,
-        payloadSha256: s.sha256,
-        sizeBytes: s.sizeBytes,
-      }));
-      await this.audit.recordSections(rows, facts.auditId);
-      return;
-    }
-    await this.audit.recordAttempt(
-      auditRow(userId, characterId, facts, result),
-      facts.auditId,
-    );
+    return finishAttempt(this.audit, {
+      userId,
+      characterId,
+      facts,
+      result,
+      perSection,
+    });
   }
-}
-
-/** Audit facts from a decoded paste. */
-function recordPasteFacts(facts: AttemptFacts, paste: DecodedAddonPaste): void {
-  const sections = pasteSections(paste);
-  const [first] = sections;
-  if (!first) throw new AddonImportError('BAD_HEADER');
-  facts.section = first.payload.section;
-  facts.sha256 = first.sha256;
-  if (sections.length > 1) {
-    facts.sections = sections.map((s) => ({
-      section: s.payload.section,
-      sha256: s.sha256,
-      sizeBytes: s.inputBytes,
-    }));
-  }
-}
-
-function auditRow(
-  userId: number,
-  characterId: string,
-  facts: AttemptFacts,
-  result: string,
-): AddonImportAuditInsert {
-  return {
-    userId,
-    characterId,
-    section: facts.section,
-    payloadSha256: facts.sha256,
-    sizeBytes: facts.sizeBytes,
-    dryRun: facts.dryRun,
-    result,
-  };
 }
