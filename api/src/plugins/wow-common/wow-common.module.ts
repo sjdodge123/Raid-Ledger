@@ -4,9 +4,14 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
+import { ForeverConfigController } from './forever-config.controller';
+import { ForeverConfigService } from './forever-config.service';
+import { ForeverNamespaceProbeController } from './forever-namespace-probe.controller';
+import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
 import { WowCronRegistrar } from './wow-cron-registrar';
+import { WowForeverIdentityProvider } from './wow-forever-identity.provider';
 import { DungeonQuestsController } from './dungeon-quests.controller';
 import { DungeonQuestsService } from './dungeon-quests.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
@@ -22,27 +27,40 @@ import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
+import { AddonImportController } from './addon-import/addon-import.controller';
+import { AddonImportService } from './addon-import/addon-import.service';
+import { AddonImportCreateService } from './addon-import/addon-import-create.service';
+import { AddonImportAuditService } from './addon-import/addon-import.audit';
 
 @Module({
   imports: [SettingsModule, CharactersModule],
   controllers: [
     BlizzardController,
+    ForeverConfigController,
+    ForeverNamespaceProbeController,
     DungeonQuestsController,
     BossEncountersController,
     QuestProgressController,
+    AddonImportController,
   ],
   providers: [
     BlizzardService,
     BlizzardAuthService,
+    ForeverConfigService,
+    ForeverNamespaceProbeService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
     WowCronRegistrar,
+    WowForeverIdentityProvider,
     DungeonQuestsService,
     DungeonQuestSeeder,
     BossEncountersService,
     BossEncounterSeeder,
     BossDataRefreshService,
     QuestProgressService,
+    AddonImportService,
+    AddonImportCreateService,
+    AddonImportAuditService,
   ],
   exports: [
     BlizzardService,
@@ -66,6 +84,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly cronRegistrar: WowCronRegistrar,
     private readonly dungeonQuestsService: DungeonQuestsService,
     private readonly bossEncountersService: BossEncountersService,
+    private readonly identityProvider: WowForeverIdentityProvider,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -187,6 +206,14 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
         EXTENSION_POINTS.CONTENT_PROVIDER,
         slug,
         this.contentProvider,
+      );
+    }
+
+    for (const slug of this.identityProvider.gameSlugs) {
+      this.pluginRegistry.registerAdapter(
+        EXTENSION_POINTS.CHARACTER_IDENTITY,
+        slug,
+        this.identityProvider,
       );
     }
 

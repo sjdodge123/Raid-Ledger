@@ -7,7 +7,7 @@
  * Supports compact (roster slots) and default (modal/attendees) sizes (AC-1).
  * Truncated names show full text in title tooltip (AC-6).
  */
-import type { RosterAssignmentResponse } from '@raid-ledger/contract';
+import type { ViewerRosterAssignment } from '../../lib/api/viewer-event-schemas';
 import { Link } from 'react-router-dom';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 import { toAvatarUser } from '../../lib/avatar';
@@ -18,8 +18,8 @@ import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { RoleIcon } from '../shared/RoleIcon';
 
 export interface PlayerCardProps {
-    /** Player data from roster assignments */
-    player: RosterAssignmentResponse;
+    /** Player data from roster assignments — `discordId` is absent for anonymous viewers (ROK-1629) */
+    player: ViewerRosterAssignment;
     /** Compact for roster slots, default for modal/attendee list */
     size?: 'compact' | 'default';
     /** Whether to display the role badge */
@@ -33,14 +33,14 @@ export interface PlayerCardProps {
 }
 
 /** Build an AvatarUser that includes character portrait when available */
-function buildAvatarUser(player: RosterAssignmentResponse): {
+function buildAvatarUser(player: ViewerRosterAssignment): {
     avatarUser: AvatarUser;
     gameId: string | undefined;
 } {
     const base = toAvatarUser({
         id: player.userId,
         avatar: player.avatar,
-        discordId: player.discordId,
+        discordId: player.discordId ?? null,
         customAvatarUrl: player.customAvatarUrl,
     });
     if (player.character?.avatarUrl) {
@@ -59,9 +59,9 @@ function buildAvatarUser(player: RosterAssignmentResponse): {
 }
 
 /** Member → /users/<id>; account-less Discord signup (userId 0) → ROK-381 guest profile. */
-function playerProfileLink(player: RosterAssignmentResponse) {
+function playerProfileLink(player: ViewerRosterAssignment) {
     if (player.userId !== 0) return { to: `/users/${player.userId}`, state: undefined };
-    return guestProfileLink({ username: player.username, discordId: player.discordId, avatarHash: player.avatar });
+    return guestProfileLink({ username: player.username, discordId: player.discordId ?? null, avatarHash: player.avatar });
 }
 
 /** `relative` lifts a control above an ancestor's stretched action button (RosterSlot, TDB:1949). */
@@ -72,7 +72,7 @@ const raise = (raised: boolean) => (raised ? ' relative' : '');
  */
 const raiseBadge = (raised: boolean) => (raised ? ' relative cursor-default' : '');
 
-function PlayerNameLink({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
+function PlayerNameLink({ player, raised }: { player: ViewerRosterAssignment; raised: boolean }) {
     const { to, state } = playerProfileLink(player);
     return (
         <Link
@@ -95,7 +95,7 @@ function FlexibilityBadges({ preferredRoles, raised }: { preferredRoles: string[
     );
 }
 
-function PlayerCharacterInfo({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
+function PlayerCharacterInfo({ player, raised }: { player: ViewerRosterAssignment; raised: boolean }) {
     if (!player.character) return null;
     return (
         // Raised, the line hugs its text (w-fit) so the card action keeps the rest of the row.
@@ -124,7 +124,7 @@ function RemoveButton({ username, onRemove, raised }: { username: string; onRemo
     );
 }
 
-function PlayerCardBody({ player, raised }: { player: RosterAssignmentResponse; raised: boolean }) {
+function PlayerCardBody({ player, raised }: { player: ViewerRosterAssignment; raised: boolean }) {
     const isTentative = player.signupStatus === 'tentative';
     const isRunningLate = player.runningLate === true;
     const lateTitle = player.lateMinutes ? `Running late (+${player.lateMinutes} min)` : 'Running late';

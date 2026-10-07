@@ -1,0 +1,192 @@
+import { Inject, Injectable, Logger } from '@nestjs/common';
+import { and, count, eq, gte, ne, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import * as schema from '../../../drizzle/schema';
+import {
+  addonImportAudit,
+  type AddonImportAuditInsert,
+} from '../../../drizzle/schema';
+import { AddonImportError } from './addon-import.errors';
+
+/** Applies (`dry_run=false`) per user per rolling hour (operator Q3). */
+export const ADDON_IMPORT_APPLY_LIMIT = 20;
+/** Previews (`dry_run=true`) per user per rolling hour (operator Q3). */
+export const ADDON_IMPORT_PREVIEW_LIMIT = 60;
+/** `pg_advisory_xact_lock(class, key)` namespace for the per-user limit. */
+export const ADDON_IMPORT_LIMIT_LOCK_CLASS = 1724;
+/** `result` of a reserved row until the attempt finishes (counts already). */
+export const ADDON_IMPORT_PENDING = 'PENDING';
+const WINDOW_MS = 60 * 60 * 1000;
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** True once `used` attempts in the window already reach the cap. */
+export function isOverLimit(used: number, dryRun: boolean): boolean {
+  const limit = dryRun ? ADDON_IMPORT_PREVIEW_LIMIT : ADDON_IMPORT_APPLY_LIMIT;
+  return used >= limit;
+}
+
+/**
+ * Fields `finish` fills in once the attempt's outcome is known. ROK-1738 D8:
+ * `characterId` too — the create route reserves with null and finishes with
+ * the created/updated character (undefined = leave the reserved value).
+ */
+export type AddonImportAuditOutcome = Pick<
+  AddonImportAuditInsert,
+  'section' | 'payloadSha256' | 'result' | 'characterId'
+>;
+
+/**
+ * ROK-1724 §4.3 — one `addon_import_audit` row per attempt (preview, apply
+ * or reject), and the per-user hourly limit counted from those rows. The
+ * global `ThrottlerGuard` is per-IP/minute, so it can't express 20/h/user.
+ */
+@Injectable()
+export class AddonImportAuditService {
+  private readonly logger = new Logger(AddonImportAuditService.name);
+
+  constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
+
+  /**
+   * Atomically check the hour's cap and reserve this attempt's audit row
+   * (result `PENDING`, counted by later checks). A per-(user, kind) advisory
+   * lock serialises count + insert, so parallel requests can't all pass a
+   * stale count. 429 `RATE_LIMITED` (nothing reserved) once at the cap; rows
+   * that were themselves rate-limited don't count, so hammering can't extend
+   * the lockout. `THROTTLE_DISABLED` is read per call (integration tests).
+   */
+  async reserveAttempt(row: AddonImportAuditInsert): Promise<number> {
+    return this.db.transaction(async (tx) => {
+      if (process.env.THROTTLE_DISABLED !== 'true') {
+        const key = `${row.userId}:${row.dryRun}`;
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(${ADDON_IMPORT_LIMIT_LOCK_CLASS}::int4, hashtext(${key}))`,
+        );
+        const used = await countRecent(tx, row.userId, row.dryRun);
+        if (isOverLimit(used, row.dryRun)) {
+          throw new AddonImportError('RATE_LIMITED');
+        }
+      }
+      const [reserved] = await tx
+        .insert(addonImportAudit)
+        // clock_timestamp() under the lock: every reservation's instant is
+        // unique, so a mixed paste's extra section rows (which copy it)
+        // count once — see `countRecent`.
+        .values({
+          ...row,
+          result: ADDON_IMPORT_PENDING,
+          createdAt: sql`clock_timestamp()`,
+        })
+        .returning({ id: addonImportAudit.id });
+      if (!reserved) throw new Error('addon-import audit reserve failed');
+      return reserved.id;
+    });
+  }
+
+  /**
+   * Best effort: an audit write failure is logged, never surfaced — the
+   * import's own outcome (already committed or rejected) stands. Finalises
+   * the reserved row when there is one, else (a reject before the limit
+   * check, incl. `RATE_LIMITED`) inserts the attempt's row.
+   */
+  async recordAttempt(
+    row: AddonImportAuditInsert,
+    reservedId?: number | null,
+  ): Promise<void> {
+    try {
+      if (reservedId == null) {
+        await this.db.insert(addonImportAudit).values(row);
+        return;
+      }
+      await this.db
+        .update(addonImportAudit)
+        .set(outcomeOf(row))
+        .where(eq(addonImportAudit.id, reservedId));
+    } catch (err) {
+      this.logger.warn(
+        `addon-import audit write failed userId=${row.userId} result=${row.result}: ${String(err)}`,
+      );
+    }
+  }
+
+  /**
+   * ROK-1737 — a mixed paste: one row per section. The first finalises the
+   * reserved row; the rest copy its `created_at`, so the paste still counts
+   * as ONE attempt against the limit. Best effort, like `recordAttempt`.
+   */
+  async recordSections(
+    rows: AddonImportAuditInsert[],
+    reservedId: number | null,
+  ): Promise<void> {
+    const [first, ...rest] = rows;
+    if (!first) return;
+    if (reservedId == null) {
+      for (const row of rows) await this.recordAttempt(row, null);
+      return;
+    }
+    try {
+      await this.db
+        .update(addonImportAudit)
+        .set({ ...outcomeOf(first), sizeBytes: first.sizeBytes })
+        .where(eq(addonImportAudit.id, reservedId));
+      if (rest.length === 0) return;
+      // Copied in SQL — a JS Date would drop the microseconds.
+      const reservedAt = sql`(SELECT created_at FROM addon_import_audit WHERE id = ${reservedId})`;
+      await this.db
+        .insert(addonImportAudit)
+        .values(rest.map((r) => ({ ...r, createdAt: reservedAt })));
+    } catch (err) {
+      this.logger.warn(
+        `addon-import audit write failed userId=${first.userId} sections=${rows.length}: ${String(err)}`,
+      );
+    }
+  }
+}
+
+function outcomeOf(row: AddonImportAuditInsert): AddonImportAuditOutcome {
+  return {
+    section: row.section,
+    payloadSha256: row.payloadSha256,
+    result: row.result,
+    characterId: row.characterId,
+  };
+}
+
+/**
+ * Attempts (pastes) of this kind in the window, reserved-but-unfinished
+ * included. ROK-1737: a mixed paste writes one row per section, the extras
+ * copying its reservation's instant — a row is such an extra when an
+ * EARLIER row of the same user + kind has the same `created_at` and another
+ * non-null section, so the paste counts once.
+ */
+async function countRecent(
+  tx: Db,
+  userId: number,
+  dryRun: boolean,
+): Promise<number> {
+  const since = new Date(Date.now() - WINDOW_MS);
+  const [row] = await tx
+    .select({ n: count() })
+    .from(addonImportAudit)
+    .where(
+      and(
+        eq(addonImportAudit.userId, userId),
+        eq(addonImportAudit.dryRun, dryRun),
+        gte(addonImportAudit.createdAt, since),
+        ne(addonImportAudit.result, 'RATE_LIMITED'),
+        notExtraSectionRow,
+      ),
+    );
+  return Number(row?.n ?? 0);
+}
+
+/** Excludes a mixed paste's 2nd/3rd section rows (see `countRecent`). */
+const notExtraSectionRow = sql`NOT (${addonImportAudit.section} IS NOT NULL AND EXISTS (
+  SELECT 1 FROM addon_import_audit e
+  WHERE e.user_id = ${addonImportAudit.userId}
+    AND e.dry_run = ${addonImportAudit.dryRun}
+    AND e.created_at = ${addonImportAudit.createdAt}
+    AND e.id < ${addonImportAudit.id}
+    AND e.section IS NOT NULL
+    AND e.section <> ${addonImportAudit.section}))`;

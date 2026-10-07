@@ -1,38 +1,24 @@
 /**
  * Character CRUD helpers.
  * Extracted from characters.service.ts for file size compliance (ROK-719).
+ * The create path lives in characters-create.helpers.ts (ROK-1738).
  */
 import {
   NotFoundException,
   ForbiddenException,
-  ConflictException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
 import { eq, and, asc, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import type {
-  CharacterDto,
-  CreateCharacterDto,
-  RefreshCharacterDto,
-} from '@raid-ledger/contract';
+import type { CharacterDto, RefreshCharacterDto } from '@raid-ledger/contract';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
 import {
   fetchFullProfile,
   buildSyncUpdateFields,
 } from './characters-sync.helpers';
-import {
-  mapCharacterToDto,
-  resolveMainStatus,
-  demoteExistingMain,
-} from './characters-mapping.helpers';
-import { checkDuplicateClaim } from './characters-import.helpers';
-import {
-  FOREVER_IDENTITY_INDEX,
-  foreverLabel,
-  titleForeverName,
-} from './characters-forever.helpers';
+import { mapCharacterToDto } from './characters-mapping.helpers';
 import { defined } from '../common/defined.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -41,59 +27,6 @@ type Logger = {
   warn: (msg: string) => void;
   debug: (msg: string) => void;
 };
-
-/** Build insert values for a new character. */
-export function buildCreateValues(
-  userId: number,
-  dto: CreateCharacterDto,
-  shouldBeMain: boolean,
-) {
-  return {
-    userId,
-    gameId: dto.gameId,
-    name: dto.name,
-    realm: dto.realm ?? null,
-    region: dto.region ?? null,
-    ruleset: dto.ruleset ?? null,
-    class: dto.class ?? null,
-    spec: dto.spec ?? null,
-    role: dto.role ?? null,
-    isMain: shouldBeMain,
-    itemLevel: dto.itemLevel ?? null,
-    avatarUrl: dto.avatarUrl ?? null,
-  };
-}
-
-/** Execute the create transaction (main-swap + insert). */
-export async function executeCreateTx(
-  db: Db,
-  userId: number,
-  dto: CreateCharacterDto,
-  logger: Logger,
-): Promise<CharacterDto> {
-  return db.transaction(async (tx) => {
-    await checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm, {
-      region: dto.region,
-    });
-    const { shouldBeMain, charCount } = await resolveMainStatus(
-      tx,
-      userId,
-      dto.gameId,
-      dto.isMain,
-    );
-    if (shouldBeMain && charCount > 0)
-      await demoteExistingMain(tx, userId, dto.gameId);
-    const [inserted] = await tx
-      .insert(schema.characters)
-      .values(buildCreateValues(userId, dto, shouldBeMain))
-      .returning();
-    const character = defined(inserted, 'created character row');
-    logger.log(
-      `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
-    );
-    return mapCharacterToDto(character);
-  });
-}
 
 /** After deletion, promote the lowest-order char to main if none exists. */
 export async function autoPromoteAfterDelete(
@@ -211,7 +144,7 @@ export async function syncAllCharacters(
       and(
         isNotNull(schema.characters.region),
         isNotNull(schema.characters.gameVariant),
-        // ROK-1721: realm-less (WoW: Forever) characters have no Armory path yet
+        // ROK-1721: realm-less characters have no Armory path yet
         isNotNull(schema.characters.realm),
       ),
     );
@@ -295,16 +228,4 @@ export function isUniqueViolation(
   const causeMsg =
     error.cause instanceof Error ? (error.cause.message ?? '') : '';
   return msg.includes(constraintName) || causeMsg.includes(constraintName);
-}
-
-/** Map a lost race on the Forever identity index (ROK-1721) to the claim 409. */
-export function rethrowForeverViolation(
-  error: unknown,
-  name: string,
-  region: string | null | undefined,
-): void {
-  if (region && isUniqueViolation(error, FOREVER_IDENTITY_INDEX))
-    throw new ConflictException(
-      `${foreverLabel(titleForeverName(name), region)} is already claimed by another player`,
-    );
 }

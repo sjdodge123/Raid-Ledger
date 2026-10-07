@@ -14,13 +14,14 @@ import {
   type CreateCharacterDto,
   type UpdateCharacterDto,
 } from '@raid-ledger/contract';
-import * as schema from '../drizzle/schema';
+import * as schema from '../../drizzle/schema';
+import { RULESET_IDENTITY_INDEX } from '../../characters/characters-unique-keys.helpers';
+import { isUniqueViolation } from '../../characters/characters-crud.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type GameRef = { slug: string };
 
 export const WOW_FOREVER_GAME_SLUG = 'world-of-warcraft-forever';
-export const FOREVER_IDENTITY_INDEX = 'idx_characters_ruleset_identity';
 
 export function isForeverGame(game: GameRef | null | undefined): boolean {
   return game?.slug === WOW_FOREVER_GAME_SLUG;
@@ -151,8 +152,22 @@ export async function prepareCharacterUpdate(
     .from(schema.games)
     .where(eq(schema.games.id, character.gameId))
     .limit(1);
+  return prepareUpdateForGame(db, userId, game ?? { slug: '' }, character, dto);
+}
+
+/**
+ * prepareCharacterUpdate for a caller that already looked up the game slug
+ * (the character-identity adapter — core selected it to pick the provider).
+ */
+export async function prepareUpdateForGame(
+  db: Db,
+  userId: number,
+  game: GameRef,
+  character: { id: string; gameId: number; region: string | null },
+  dto: UpdateCharacterDto,
+): Promise<UpdateCharacterDto> {
   if (isForeverGame(game) && !character.region) return prepareLegacyUpdate(dto);
-  const prepared = prepareUpdateDto(game ?? { slug: '' }, dto);
+  const prepared = prepareUpdateDto(game, dto);
   if (isForeverGame(game) && prepared.name && character.region)
     await checkRegionClaim(db, {
       gameId: character.gameId,
@@ -162,4 +177,16 @@ export async function prepareCharacterUpdate(
       excludeId: character.id,
     });
   return prepared;
+}
+
+/** Map a lost race on the ruleset-identity index (ROK-1721) to the claim 409. */
+export function rethrowForeverViolation(
+  error: unknown,
+  name: string,
+  region: string | null | undefined,
+): void {
+  if (region && isUniqueViolation(error, RULESET_IDENTITY_INDEX))
+    throw new ConflictException(
+      `${foreverLabel(titleForeverName(name), region)} is already claimed by another player`,
+    );
 }

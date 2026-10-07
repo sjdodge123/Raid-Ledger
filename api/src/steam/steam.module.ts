@@ -4,6 +4,7 @@ import { SteamAuthController } from './steam-auth.controller';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import { SteamSyncProcessor } from './steam-sync.processor';
+import { SteamOpenIdNonceStore } from './steam-openid-nonce.store';
 import { STEAM_SYNC_QUEUE } from './steam-sync.constants';
 import { UsersModule } from '../users/users.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -26,7 +27,13 @@ import { AuthModule } from '../auth/auth.module';
     BullModule.registerQueue({ name: STEAM_SYNC_QUEUE }),
   ],
   controllers: [SteamAuthController],
-  providers: [SteamService, SteamWishlistService, SteamSyncProcessor],
+  providers: [
+    SteamService,
+    SteamWishlistService,
+    SteamSyncProcessor,
+    // ROK-1731: single-use store for openid.response_nonce (replay guard).
+    SteamOpenIdNonceStore,
+  ],
   exports: [SteamService, SteamWishlistService],
 })
 export class SteamModule {}

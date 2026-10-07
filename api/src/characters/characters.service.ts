@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-  ConflictException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { eq, and, asc } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -31,7 +25,8 @@ import {
 } from './characters-mapping.helpers';
 import * as importH from './characters-import.helpers';
 import * as crudH from './characters-crud.helpers';
-import * as foreverH from './characters-forever.helpers';
+import * as createH from './characters-create.helpers';
+import * as identityH from './characters-identity.helpers';
 import { defined } from '../common/defined.helpers';
 
 /**
@@ -104,28 +99,28 @@ export class CharactersService {
   }
 
   async create(userId: number, dto: CreateCharacterDto): Promise<CharacterDto> {
-    const [game] = await this.db
-      .select()
-      .from(schema.games)
-      .where(eq(schema.games.id, dto.gameId))
-      .limit(1);
-    if (!game) throw new NotFoundException(`Game ${dto.gameId} not found`);
-    const prepared = foreverH.prepareCreateDto(game, dto);
-    try {
-      return await crudH.executeCreateTx(
-        this.db,
-        userId,
-        prepared,
-        this.logger,
-      );
-    } catch (error: unknown) {
-      crudH.rethrowForeverViolation(error, prepared.name, prepared.region);
-      if (crudH.isUniqueViolation(error, 'unique_user_game_character'))
-        throw new ConflictException(
-          `Character ${dto.name} already exists for this game/realm`,
-        );
-      throw error;
-    }
+    const registry = this.pluginRegistry;
+    return createH.createCharacter(this.db, registry, userId, dto, this.logger);
+  }
+
+  /**
+   * ROK-1738 — create on the CALLER's transaction (same identity, duplicate
+   * and main/alt rules as `create`). Opens no tx and catches nothing: a
+   * violation aborts the caller's tx, which maps it after rollback.
+   */
+  async createWithin(
+    tx: createH.CharactersTx,
+    userId: number,
+    dto: CreateCharacterDto,
+  ): Promise<CharacterDto> {
+    const registry = this.pluginRegistry;
+    return createH.createCharacterWithin(
+      tx,
+      registry,
+      userId,
+      dto,
+      this.logger,
+    );
   }
 
   async update(
@@ -134,8 +129,9 @@ export class CharactersService {
     dto: UpdateCharacterDto,
   ): Promise<CharacterDto> {
     const character = await this.findOne(userId, characterId);
-    const prepared = await foreverH.prepareCharacterUpdate(
+    const { prepared, identity } = await identityH.prepareIdentityUpdate(
       this.db,
+      this.pluginRegistry,
       userId,
       character,
       dto,
@@ -147,7 +143,7 @@ export class CharactersService {
       .returning()
       .catch((error: unknown) => {
         const name = prepared.name ?? character.name;
-        crudH.rethrowForeverViolation(error, name, character.region);
+        identity?.rethrowIdentityViolation(error, name, character.region);
         throw error;
       });
     this.logger.log(`User ${userId} updated character ${characterId}`);

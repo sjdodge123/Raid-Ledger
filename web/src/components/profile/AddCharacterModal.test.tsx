@@ -5,6 +5,7 @@ import { AddCharacterModal } from './AddCharacterModal';
 import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
+import { PluginSlot } from '../../plugins';
 
 // Mock hooks used by AddCharacterModal
 vi.mock('../../hooks/use-character-mutations', () => ({
@@ -622,5 +623,23 @@ describe('AddCharacterModal — armory sync banner tokens (ROK-1648 ruling 9)', 
         expect(banner.className, 'the banner border should be the edge token').toContain('border-edge');
         expect(banner.className, 'the banner must not hardcode a blue/indigo/purple/violet hue')
             .not.toMatch(/(blue|indigo|purple|violet)-\d/);
+    });
+});
+
+describe('AddCharacterModal — character-create:header-actions slot (ROK-1738)', () => {
+    const headerSlotCalls = () => vi.mocked(PluginSlot).mock.calls
+        .filter(([props]) => props.name === 'character-create:header-actions');
+    beforeEach(() => { vi.mocked(PluginSlot).mockClear(); });
+
+    it('renders the slot with the unguarded onClose and the picked game slug when adding', () => {
+        const onClose = vi.fn();
+        renderModal({ onClose });
+        expect(headerSlotCalls().length).toBeGreaterThan(0);
+        expect(headerSlotCalls().at(-1)?.[0].context).toEqual({ onClose, gameSlug: expect.any(String) });
+    });
+
+    it('does not render the slot when editing', () => {
+        renderModal({ editingCharacter: createArmorySyncedCharacter() });
+        expect(headerSlotCalls()).toHaveLength(0);
     });
 });

@@ -8,7 +8,8 @@ import { CharacterCardCompact } from '../../components/characters/character-card
 import { RoleIcon } from '../../components/shared/RoleIcon';
 import { PluginSlot } from '../../plugins';
 import { copyWithToast } from '../../lib/clipboard';
-import type { EventResponseDto, EventRosterDto, SignupCharacterDto } from '@raid-ledger/contract';
+import type { EventResponseDto, SignupCharacterDto } from '@raid-ledger/contract';
+import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';
 import { alphabetical } from './event-detail-helpers';
 
 interface SignupItem {
@@ -37,7 +38,7 @@ interface SignupItem {
 }
 
 interface EventDetailRosterProps {
-    roster: EventRosterDto | undefined;
+    roster: ViewerEventRosterDto | undefined;
     event: EventResponseDto;
 }
 
@@ -120,7 +121,7 @@ function SignupEntry({ signup, event, showBadge }: {
 /**
  * Roster attendee list grouped by status (confirmed, tentative, pending, departed).
  */
-function categorizeSignups(roster: EventRosterDto | undefined) {
+function categorizeSignups(roster: ViewerEventRosterDto | undefined) {
     const active = roster?.signups.filter((s) => s.status !== 'declined' && s.status !== 'departed') || [];
     const departed = roster?.signups.filter((s) => s.status === 'departed').sort(alphabetical) || [];
     const tentative = active.filter((s) => s.status === 'tentative').sort(alphabetical);

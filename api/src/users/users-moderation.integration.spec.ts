@@ -298,6 +298,9 @@ async function seedFullWipeManifest(
     .insert(schema.feedback)
     .values({ userId, category: 'bug', message: 'x' });
   await testApp.db
+    .insert(schema.addonImportAudit)
+    .values({ userId, sizeBytes: 1, dryRun: true, result: 'preview' });
+  await testApp.db
     .insert(schema.wowClassicQuestProgress)
     .values({ eventId, userId, questId: 1 });
   await testApp.db.insert(schema.eventPlans).values({

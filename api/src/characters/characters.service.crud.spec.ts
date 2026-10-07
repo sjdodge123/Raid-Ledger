@@ -42,6 +42,7 @@ describe('CharactersService — crud', () => {
   >;
   let mockPluginRegistry: {
     getAdaptersForExtensionPoint: jest.Mock;
+    getAdapter: jest.Mock;
   };
 
   const mockGame = {
@@ -159,6 +160,7 @@ describe('CharactersService — crud', () => {
 
     mockPluginRegistry = {
       getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
+      getAdapter: jest.fn().mockReturnValue(undefined),
     };
 
     setupMockDbChains();

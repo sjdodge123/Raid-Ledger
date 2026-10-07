@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { WowForeverRulesetSchema, WowForeverSelectableRulesetSchema } from './blizzard.schema.js';
 
 // ==========================================
 // Character Role Enum
@@ -100,45 +101,12 @@ export const CharacterProfessionsSchema = z.object({
 export type CharacterProfessionsDto = z.infer<typeof CharacterProfessionsSchema>;
 
 // ==========================================
-// WoW: Forever identity (ROK-1721)
+// WoW region
 // ==========================================
 
 /** WoW regions supported by the Blizzard API */
 export const WowRegionSchema = z.enum(['us', 'eu', 'kr', 'tw']);
 export type WowRegion = z.infer<typeof WowRegionSchema>;
-
-/**
- * WoW: Forever is realmless — a character lives in a region and plays on a
- * ruleset. The ruleset is a mutable attribute (dead Hardcore characters can
- * move), NOT part of the identity; identity is region + full two-part name.
- */
-export const WowForeverRulesetSchema = z.enum(['normal', 'pvp', 'roleplaying', 'hardcore']);
-export type WowForeverRuleset = z.infer<typeof WowForeverRulesetSchema>;
-
-/**
- * Rulesets a player can pick today. Hardcore opens after launch, so it is
- * stored-capable but not accepted on create/update until it is enabled here.
- */
-export const WowForeverSelectableRulesetSchema = WowForeverRulesetSchema.exclude(['hardcore']);
-export type WowForeverSelectableRuleset = z.infer<typeof WowForeverSelectableRulesetSchema>;
-export const WOW_FOREVER_SELECTABLE_RULESETS = WowForeverSelectableRulesetSchema.options;
-
-export const WOW_FOREVER_RULESET_LABELS: Record<WowForeverRuleset, string> = {
-    normal: 'Normal',
-    pvp: 'PvP',
-    roleplaying: 'Roleplaying',
-    hardcore: 'Hardcore',
-};
-
-export const WOW_FOREVER_DEFAULT_REGION: WowRegion = 'us';
-
-/** One name part: letters only, 2–24 (tighten/loosen once Blizzard publishes the rules). */
-export const WowForeverNamePartSchema = z.string().trim()
-    .regex(/^\p{L}{2,24}$/u, 'Use 2–24 letters');
-
-/** Full Forever name stored in `characters.name`: "First Second", one space. */
-export const WowForeverNameSchema = z.string().trim().max(100)
-    .regex(/^\p{L}{2,24} \p{L}{2,24}$/u, 'Enter a first and second name');
 
 // ==========================================
 // Character DTOs

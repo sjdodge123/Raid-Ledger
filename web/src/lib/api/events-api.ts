@@ -1,8 +1,6 @@
 import type {
     EventListResponseDto,
     EventResponseDto,
-    EventRosterDto,
-    EventDetailResponseDto,
     DashboardResponseDto,
     SignupResponseDto,
     CreateEventDto,
@@ -15,14 +13,17 @@ import type {
     AttendanceSummaryDto,
     AttendanceStatus,
 } from '@raid-ledger/contract';
-import {
-    EventListResponseSchema,
-    EventResponseSchema,
-    EventRosterSchema,
-    EventDetailResponseSchema,
-    SignupResponseSchema,
-} from '@raid-ledger/contract';
+import { EventResponseSchema, SignupResponseSchema } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
+import {
+    ViewerEventListResponseSchema,
+    ViewerEventResponseSchema,
+    ViewerEventRosterSchema,
+    ViewerEventDetailResponseSchema,
+    type ViewerEventRosterDto,
+    type ViewerEventDetailDto,
+    type ViewerRosterWithAssignments,
+} from './viewer-event-schemas';
 
 /**
  * Parameters for event list queries
@@ -60,28 +61,28 @@ export async function getEvents(
 ): Promise<EventListResponseDto> {
     const query = buildEventQuery(params);
     const endpoint = `/events${query ? `?${query}` : ''}`;
-    return fetchApi(endpoint, {}, EventListResponseSchema);
+    return fetchApi(endpoint, {}, ViewerEventListResponseSchema);
 }
 
 /** Fetch a single event by ID */
 export async function getEvent(
     eventId: number,
 ): Promise<EventResponseDto> {
-    return fetchApi(`/events/${eventId}`, {}, EventResponseSchema);
+    return fetchApi(`/events/${eventId}`, {}, ViewerEventResponseSchema);
 }
 
 /** Fetch event roster */
 export async function getEventRoster(
     eventId: number,
-): Promise<EventRosterDto> {
-    return fetchApi(`/events/${eventId}/roster`, {}, EventRosterSchema);
+): Promise<ViewerEventRosterDto> {
+    return fetchApi(`/events/${eventId}/roster`, {}, ViewerEventRosterSchema);
 }
 
 /** Fetch composite event detail bundle (ROK-1046) */
 export async function getEventDetail(
     eventId: number,
-): Promise<EventDetailResponseDto> {
-    return fetchApi(`/events/${eventId}/detail`, {}, EventDetailResponseSchema);
+): Promise<ViewerEventDetailDto> {
+    return fetchApi(`/events/${eventId}/detail`, {}, ViewerEventDetailResponseSchema);
 }
 
 /** Fetch event variant context (ROK-587) */
@@ -223,7 +224,7 @@ export async function getAttendanceSummary(
 /** Get roster with assignment data */
 export async function getRosterWithAssignments(
     eventId: number,
-): Promise<RosterWithAssignments> {
+): Promise<ViewerRosterWithAssignments> {
     return fetchApi(`/events/${eventId}/roster/assignments`);
 }
 

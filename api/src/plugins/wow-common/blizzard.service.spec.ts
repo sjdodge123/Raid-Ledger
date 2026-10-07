@@ -2,10 +2,13 @@ import { BadGatewayException } from '@nestjs/common';
 import { checkOrSetAlreadyCaught } from '@sentry/core';
 import { BlizzardService } from './blizzard.service';
 import * as instH from './blizzard-instance.helpers';
+import * as instFetch from './blizzard-instance.fetch';
 import {
   blizzardUpstreamError,
   isNamespaceRefusal,
 } from './blizzard-upstream-error';
+
+import { setForeverNamespacePrefix } from './forever-namespace.resolver';
 
 jest.mock('./blizzard-instance.helpers');
 
@@ -156,6 +159,87 @@ describe('BlizzardService.fetchRealmList — stale and recovery paths', () => {
     const { realmRefusals } = service as unknown as {
       realmRefusals: Map<string, unknown>;
     };
+    expect([...realmRefusals.keys()]).toEqual([]);
+  });
+});
+
+/**
+ * ROK-1719 (OQ2): when Blizzard's journal is down, WoW: Forever still offers
+ * the seeded instances — and that seed-only list is never cached.
+ */
+describe('BlizzardService.fetchAllInstances — Forever degraded mode', () => {
+  afterEach(() => jest.restoreAllMocks());
+  const FULL = {
+    dungeons: [{ id: 63, name: 'Deadmines', expansion: 'Classic' }],
+    raids: [],
+  };
+
+  it('serves the 11 seeded instances instead of throwing, then recovers', async () => {
+    const { service } = setup();
+    const fetchAll = jest
+      .spyOn(instFetch, 'fetchAllInstancesFromApi')
+      .mockRejectedValueOnce(failed())
+      .mockResolvedValueOnce(FULL);
+    const degraded = await service.fetchAllInstances('us', 'wow_forever');
+    expect(degraded.dungeons.map((d) => d.id)).toHaveLength(9);
+    expect(degraded.raids.map((r) => r.name)).toEqual([
+      'Barrow Deeps',
+      'Hyjal Summit',
+    ]);
+    await expect(
+      service.fetchAllInstances('us', 'wow_forever'),
+    ).resolves.toEqual(FULL);
+    expect(fetchAll).toHaveBeenCalledTimes(2);
+  });
+
+  it('still throws for every other variant', async () => {
+    const { service } = setup();
+    jest
+      .spyOn(instFetch, 'fetchAllInstancesFromApi')
+      .mockRejectedValue(failed());
+    await expect(
+      service.fetchAllInstances('us', 'classic_era'),
+    ).rejects.toBeInstanceOf(BadGatewayException);
+  });
+});
+
+/** ROK-1717: the realm cache/refusal key follows the admin Forever prefix. */
+describe('BlizzardService.fetchRealmList — Forever prefix override', () => {
+  useRealmClock();
+  afterEach(() => setForeverNamespacePrefix(null));
+
+  type RealmMaps = {
+    realmCache: Map<string, unknown>;
+    realmRefusals: Map<string, unknown>;
+  };
+
+  it('a 403 remembered for classicforever no longer blocks after an override', async () => {
+    const { service } = setup();
+    fetchRealms.mockRejectedValueOnce(refused());
+    await rejectionOf(service.fetchRealmList('us', 'classicforever'));
+    fetchRealms.mockResolvedValueOnce(REALMS);
+
+    setForeverNamespacePrefix('foo');
+
+    await expect(service.fetchRealmList('us', 'classicforever')).resolves.toBe(
+      REALMS,
+    );
+    expect(fetchRealms).toHaveBeenCalledTimes(2);
+  });
+
+  it('purgeNamespace clears the realm cache and refusal memo for that prefix only', async () => {
+    const { service } = setup();
+    fetchRealms.mockResolvedValueOnce(REALMS);
+    await service.fetchRealmList('us', 'classicforever');
+    fetchRealms.mockResolvedValueOnce(REALMS);
+    await service.fetchRealmList('us', 'classicann');
+    fetchRealms.mockRejectedValueOnce(refused());
+    await rejectionOf(service.fetchRealmList('eu', 'classicforever'));
+
+    service.purgeNamespace('classicforever');
+
+    const { realmCache, realmRefusals } = service as unknown as RealmMaps;
+    expect([...realmCache.keys()]).toEqual(['us:classicann']);
     expect([...realmRefusals.keys()]).toEqual([]);
   });
 });

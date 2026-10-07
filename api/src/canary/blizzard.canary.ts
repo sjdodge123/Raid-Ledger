@@ -16,7 +16,10 @@ registerCanary({
   },
 });
 
-async function fetchBlizzardToken(clientId: string, clientSecret: string) {
+export async function fetchBlizzardToken(
+  clientId: string,
+  clientSecret: string,
+) {
   const resp = await fetch('https://us.battle.net/oauth/token', {
     method: 'POST',
     headers: {

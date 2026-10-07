@@ -2,7 +2,8 @@ import { useState, useEffect, useId } from 'react';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useEventVariantContext } from '../../../hooks/use-events';
 import { isWowSlug, FIXED_CLASSIC_VARIANTS } from '../utils';
-import { isArmoryImportSupported, ARMORY_CLASSIC_VARIANTS, defaultArmoryClassicVariant } from '../lib/armory-import';
+import { isArmoryImportSupported, armoryClassicVariants, defaultArmoryClassicVariant, type ArmoryCapabilities } from '../lib/armory-import';
+import { useArmoryCapabilities } from '../hooks/use-armory-capabilities';
 import { ArmoryUnavailableNote, ARMORY_TAB_CLS, ARMORY_TAB_TRACK_CLS } from '../components/armory-unavailable-note';
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
@@ -35,14 +36,29 @@ function InlineModeToggle({ mode, onModeChange, noteId }: {
     );
 }
 
-function InlineClassicSelector({ classicVariant, onVariantChange }: { classicVariant: string; onVariantChange: (v: string) => void }) {
+function InlineClassicSelector({ classicVariant, caps, onVariantChange }: {
+    classicVariant: string; caps: ArmoryCapabilities; onVariantChange: (v: string) => void;
+}) {
     return (
         <Field label="Game version" hideLabel>
             <Select value={classicVariant} onChange={(e) => onVariantChange(e.target.value)}>
-                {ARMORY_CLASSIC_VARIANTS.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+                {armoryClassicVariants(caps).map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
             </Select>
         </Field>
     );
+}
+
+/** The inline slot's Game Version state; the Armory capabilities gate which Classic variants it offers (ROK-1717). */
+function useInlineVariant(gameSlug: string | undefined, eventId: number | undefined) {
+    const isClassic = !!gameSlug && gameSlug !== 'world-of-warcraft' && isWowSlug(gameSlug);
+    const fixedVariant = (gameSlug && FIXED_CLASSIC_VARIANTS[gameSlug]) ?? null;
+    const showSelector = isClassic && !fixedVariant;
+    const { data: variantContext } = useEventVariantContext(eventId, showSelector && !!eventId);
+    const { data: caps } = useArmoryCapabilities();
+    const [userVariant, setUserVariant] = useState<string | null>(null);
+    const classicVariant = fixedVariant ?? userVariant ?? defaultArmoryClassicVariant(variantContext?.gameVariant, caps);
+    const gameVariant = isClassic ? classicVariant : 'retail';
+    return { showSelector, variantContext, caps, classicVariant, setUserVariant, gameVariant };
 }
 
 /**
@@ -53,14 +69,8 @@ export function CharacterCreateInlineImport({
     onSuccess, isMain, gameSlug, onModeChange, eventId,
 }: CharacterCreateInlineImportProps) {
     const [userMode, setMode] = useState<'manual' | 'import'>('import');
-    const isClassic = !!gameSlug && gameSlug !== 'world-of-warcraft' && isWowSlug(gameSlug);
-    const fixedVariant = (gameSlug && FIXED_CLASSIC_VARIANTS[gameSlug]) ?? null;
-    const showSelector = isClassic && !fixedVariant;
-    const { data: variantContext } = useEventVariantContext(eventId, showSelector && !!eventId);
-    const [userVariant, setUserVariant] = useState<string | null>(null);
-    const classicVariant = fixedVariant ?? userVariant ?? defaultArmoryClassicVariant(variantContext?.gameVariant);
-    const gameVariant = isClassic ? classicVariant : 'retail';
-    const armoryOk = isArmoryImportSupported(gameVariant);
+    const { showSelector, variantContext, caps, classicVariant, setUserVariant, gameVariant } = useInlineVariant(gameSlug, eventId);
+    const armoryOk = isArmoryImportSupported(gameVariant, caps);
     const mode = armoryOk ? userMode : 'manual';
     const noteId = useId();
 
@@ -73,7 +83,7 @@ export function CharacterCreateInlineImport({
         <>
             <InlineModeToggle mode={mode} onModeChange={handleModeChange} noteId={armoryOk ? undefined : noteId} />
             {!armoryOk && <ArmoryUnavailableNote id={noteId} />}
-            {mode === 'import' && showSelector && <InlineClassicSelector classicVariant={classicVariant} onVariantChange={setUserVariant} />}
+            {mode === 'import' && showSelector && <InlineClassicSelector classicVariant={classicVariant} caps={caps} onVariantChange={setUserVariant} />}
             {mode === 'import' && (
                 <WowArmoryImportForm isMain={isMain} gameVariant={gameVariant}
                     defaultRegion={variantContext?.region as import('@raid-ledger/contract').WowRegion | undefined}

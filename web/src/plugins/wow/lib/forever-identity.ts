@@ -44,7 +44,7 @@ export function emptyForeverIdentity(): ForeverIdentity {
 }
 
 /** Edit mode: split the stored "First Second" name back into its parts. */
-export function foreverIdentityFromCharacter(char: { name: string; region?: string | null; ruleset?: string | null } | null | undefined): ForeverIdentity {
+export function foreverIdentityFromCharacter(char: { name: string; region?: string | null | undefined; ruleset?: string | null | undefined } | null | undefined): ForeverIdentity {
     if (!char) return emptyForeverIdentity();
     const [first = '', ...rest] = char.name.trim().split(/\s+/);
     const region = WowRegionSchema.safeParse(char.region);

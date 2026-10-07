@@ -1,0 +1,125 @@
+import { describe, it, expect, vi } from 'vitest';
+import type { ReactNode } from 'react';
+import { renderHook, waitFor } from '@testing-library/react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { http, HttpResponse } from 'msw';
+import { server } from '../../../../test/mocks/server';
+import { createTestQueryClient } from '../../../../test/render-helpers';
+import { AddonImportRequestError, useAddonImportApply, useAddonImportNewApply, useAddonImportNewPreview, useAddonImportPreview } from './use-addon-import';
+import { CHARACTER_ID, CHAR_STRING, CREATED_ID, IMPORT_URL, NEW_IMPORT_URL, charResult, newCharResult } from './addon-import.test-fixtures';
+
+function setup() {
+    const queryClient = createTestQueryClient();
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    return { wrapper, invalidate };
+}
+
+function captureBodies(status = 200, reply: Record<string, unknown> = charResult(), url = IMPORT_URL) {
+    const bodies: unknown[] = [];
+    server.use(http.post(url, async ({ request }) => {
+        bodies.push(await request.json());
+        return HttpResponse.json(reply, { status });
+    }));
+    return bodies;
+}
+
+describe('useAddonImportPreview', () => {
+    it('posts dryRun:true and does not invalidate', async () => {
+        const bodies = captureBodies();
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportPreview(CHARACTER_ID), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING, confirm: { updateRuleset: true } });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: true, confirm: { updateRuleset: true } }]);
+        expect(result.current.data?.section).toBe('char');
+        expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the error code and Add Character prefill from the body', async () => {
+        const addCharacter = { firstName: 'Ana', secondName: 'Forever', region: 'us', ruleset: null, class: 'Paladin' };
+        captureBodies(422, { code: 'NAME_MISMATCH', message: 'different', addCharacter });
+        const { wrapper } = setup();
+        const { result } = renderHook(() => useAddonImportPreview(CHARACTER_ID), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error).toBeInstanceOf(AddonImportRequestError);
+        expect(result.current.error).toMatchObject({ status: 422, code: 'NAME_MISMATCH', addCharacter });
+    });
+
+    it('maps an off-contract error body to code null', async () => {
+        captureBodies(500, { statusCode: 500, message: 'Internal server error' });
+        const { wrapper } = setup();
+        const { result } = renderHook(() => useAddonImportPreview(CHARACTER_ID), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error).toMatchObject({ status: 500, code: null });
+    });
+});
+
+describe('useAddonImportApply', () => {
+    it('posts dryRun:false and invalidates the character query on success', async () => {
+        const bodies = captureBodies(201, charResult({ status: 'applied' }));
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportApply(CHARACTER_ID), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING, confirm: { repinGuid: true } });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: false, confirm: { repinGuid: true } }]);
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['characters', CHARACTER_ID] });
+    });
+
+    it('does not invalidate when the apply fails', async () => {
+        captureBodies(429, { code: 'RATE_LIMITED', message: 'slow down' });
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportApply(CHARACTER_ID), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error?.code).toBe('RATE_LIMITED');
+        expect(invalidate).not.toHaveBeenCalled();
+    });
+});
+
+describe('create route (ROK-1738)', () => {
+    it('preview posts dryRun:true to the id-less route, sends no ruleset unless given, and keeps the target', async () => {
+        const bodies = captureBodies(200, newCharResult({ ruleset: null }), NEW_IMPORT_URL);
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportNewPreview(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: true }]);
+        expect(result.current.data?.target).toMatchObject({ action: 'create', characterId: null, ruleset: null });
+        expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it('apply posts dryRun:false with the picked ruleset and refreshes the character lists', async () => {
+        const bodies = captureBodies(200, newCharResult({ characterId: CREATED_ID, ruleset: 'pvp' }, { status: 'applied' }), NEW_IMPORT_URL);
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportNewApply(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING, ruleset: 'pvp' });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: false, ruleset: 'pvp' }]);
+        expect(result.current.data?.target.characterId).toBe(CREATED_ID);
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['me', 'characters'] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['characters'] });
+        expect(invalidate, 'the profile caches the main character too').toHaveBeenCalledWith({ queryKey: ['userProfile'] });
+    });
+
+    it('treats a success body without a target as off-contract', async () => {
+        captureBodies(200, charResult(), NEW_IMPORT_URL);
+        const { wrapper } = setup();
+        const { result } = renderHook(() => useAddonImportNewPreview(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error).toMatchObject({ status: 200, code: null });
+    });
+
+    it('keeps a new error code (CHARACTER_CLAIMED) from the body', async () => {
+        captureBodies(422, { code: 'CHARACTER_CLAIMED', message: 'claimed' }, NEW_IMPORT_URL);
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportNewApply(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error).toMatchObject({ status: 422, code: 'CHARACTER_CLAIMED' });
+        expect(invalidate).not.toHaveBeenCalled();
+    });
+});

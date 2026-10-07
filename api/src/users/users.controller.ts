@@ -15,13 +15,19 @@ import {
   Request,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { buildUserProfile } from './user-profile.helpers';
 import { CharactersService } from '../characters/characters.service';
 import { EventsService } from '../events/events.service';
 import type {
   PlayersListResponseDto,
+  PublicPlayersListResponseDto,
   RecentPlayersResponseDto,
-  UserProfileDto,
+  PublicRecentPlayersResponseDto,
+  UserProfileResponse,
+  PublicUserProfileResponseDto,
   UserEventSignupsResponseDto,
+  EventResponseDto,
+  PublicEventResponseDto,
   UserActivityResponseDto,
   UserHeartedGamesResponseDto,
   SteamLibraryResponseDto,
@@ -30,6 +36,15 @@ import type {
 import { ActivityPeriodSchema } from '@raid-ledger/contract';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import {
+  isMemberViewer,
+  projectEventForViewer,
+} from '../events/roster-public-projection.helpers';
+import {
+  projectPlayersList,
+  projectRecentPlayers,
+  projectUserProfile,
+} from '../common/public-identity-projection.helpers';
+import {
   parsePagination,
   parsePlaytimeMin,
   parsePlayHistory,
@@ -37,7 +52,12 @@ import {
   buildPaginatedMeta,
 } from './users-controller.helpers';
 
-type RequestWithMaybeUser = { user?: { id: number; role?: string } };
+type RequestWithMaybeUser = {
+  user?: { id: number; role?: string; deactivatedAt?: Date | null } | null;
+};
+type PublicUserEventSignupsDto = Omit<UserEventSignupsResponseDto, 'data'> & {
+  data: Array<EventResponseDto | PublicEventResponseDto>;
+};
 
 /** Controller for public user endpoints. */
 @Controller('users')
@@ -64,9 +84,14 @@ export class UsersController {
     return user;
   }
 
-  /** List all registered players (paginated, with optional search and filters). */
+  /**
+   * List all registered players (paginated, with optional search and filters).
+   * Anonymous/deactivated viewers get the public identity shape (ROK-1734).
+   */
   @Get()
+  @UseGuards(OptionalJwtGuard)
   async listPlayers(
+    @Request() req: RequestWithMaybeUser,
     @Query('page') pageStr?: string,
     @Query('limit') limitStr?: string,
     @Query('search') search?: string,
@@ -76,33 +101,33 @@ export class UsersController {
     @Query('role') role?: string,
     @Query('playtimeMin') playtimeMinStr?: string,
     @Query('playHistory') playHistoryStr?: string,
-  ): Promise<PlayersListResponseDto> {
+  ): Promise<PlayersListResponseDto | PublicPlayersListResponseDto> {
     const { page, limit } = parsePagination(pageStr, limitStr);
-    const gameId = gameIdStr ? parseInt(gameIdStr, 10) || undefined : undefined;
-    const sources = resolveSources(source, sourcesStr);
-    const playtimeMin = parsePlaytimeMin(playtimeMinStr);
-    const playHistory = parsePlayHistory(playHistoryStr);
     const result = await this.usersService.findAll(
       page,
       limit,
       search || undefined,
-      gameId,
-      sources,
-      playtimeMin,
-      playHistory,
+      gameIdStr ? parseInt(gameIdStr, 10) || undefined : undefined,
+      resolveSources(source, sourcesStr),
+      parsePlaytimeMin(playtimeMinStr),
+      parsePlayHistory(playHistoryStr),
       role || undefined,
     );
-    return {
-      data: result.data,
-      meta: buildPaginatedMeta(result.total, page, limit),
-    };
+    const meta = buildPaginatedMeta(result.total, page, limit);
+    return projectPlayersList(
+      { data: result.data, meta },
+      isMemberViewer(req.user),
+    );
   }
 
-  /** List recently joined players (last 30 days, max 10) (ROK-298). */
+  /** List recently joined players (last 30 days, max 10) (ROK-298, ROK-1734). */
   @Get('recent')
-  async listRecentPlayers(): Promise<RecentPlayersResponseDto> {
+  @UseGuards(OptionalJwtGuard)
+  async listRecentPlayers(
+    @Request() req: RequestWithMaybeUser,
+  ): Promise<RecentPlayersResponseDto | PublicRecentPlayersResponseDto> {
     const rows = await this.usersService.findRecent();
-    return {
+    const payload: RecentPlayersResponseDto = {
       data: rows.map((u) => ({
         id: u.id,
         username: u.username,
@@ -112,6 +137,7 @@ export class UsersController {
         createdAt: u.createdAt.toISOString(),
       })),
     };
+    return projectRecentPlayers(payload, isMemberViewer(req.user));
   }
 
   /** Get a user's public profile by ID. */
@@ -120,20 +146,11 @@ export class UsersController {
   async getProfile(
     @Param('id', ParseIntPipe) id: number,
     @Request() req?: RequestWithMaybeUser,
-  ): Promise<{ data: UserProfileDto }> {
+  ): Promise<UserProfileResponse | PublicUserProfileResponseDto> {
     const user = await this.assertUserVisible(id, req);
     const charactersResult = await this.charactersService.findAllForUser(id);
-    return {
-      data: {
-        id: user.id,
-        username: user.username,
-        avatar: user.avatar || null,
-        discordId: user.discordId || null,
-        customAvatarUrl: user.customAvatarUrl || null,
-        createdAt: user.createdAt.toISOString(),
-        characters: charactersResult.data,
-      },
-    };
+    const profile = buildUserProfile(user, charactersResult.data);
+    return projectUserProfile(profile, isMemberViewer(req?.user));
   }
 
   /** Get a user's characters, optionally filtered by game (ROK-461). */
@@ -235,8 +252,14 @@ export class UsersController {
   async getUserEventSignups(
     @Param('id', ParseIntPipe) id: number,
     @Request() req?: RequestWithMaybeUser,
-  ): Promise<UserEventSignupsResponseDto> {
+  ): Promise<UserEventSignupsResponseDto | PublicUserEventSignupsDto> {
     await this.assertUserVisible(id, req);
-    return this.eventsService.findUpcomingByUser(id);
+    const res = await this.eventsService.findUpcomingByUser(id);
+    // ROK-1629: anonymous / deactivated viewers get the public creator shape.
+    if (isMemberViewer(req?.user)) return res;
+    return {
+      ...res,
+      data: res.data.map((e) => projectEventForViewer(e, false)),
+    };
   }
 }

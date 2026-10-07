@@ -22,7 +22,9 @@ import * as profH from './blizzard-professions.helpers';
 import * as specH from './blizzard-spec.helpers';
 import * as instH from './blizzard-instance.helpers';
 import * as instFetch from './blizzard-instance.fetch';
+import { foreverSeedOnlyList } from './forever-instance-data';
 import { isNamespaceRefusal } from './blizzard-upstream-error';
+import { resolveBlizzardNamespacePrefix } from './forever-namespace.resolver';
 import type { ExternalCharacterProfessions } from '../plugin-host/extension-types';
 
 // Re-export types for backward compatibility
@@ -151,7 +153,10 @@ export class BlizzardService {
     region: string,
     apiNamespacePrefix: string | null = null,
   ): Promise<WowRealm[]> {
-    const cacheKey = `${region}:${apiNamespacePrefix ?? 'retail'}`;
+    // Keyed on the RESOLVED prefix (ROK-1717): a Forever override is a new
+    // key, so a 403 remembered for the old prefix cannot block it.
+    const resolved = resolveBlizzardNamespacePrefix(apiNamespacePrefix);
+    const cacheKey = `${region}:${resolved ?? 'retail'}`;
     this.throwIfRealmRefused(cacheKey);
     try {
       const realms = await memorySwr({
@@ -175,6 +180,20 @@ export class BlizzardService {
     } catch (err) {
       if (isNamespaceRefusal(err)) this.rememberRealmRefusal(cacheKey, err);
       throw err;
+    }
+  }
+
+  /**
+   * Drop every region's cached realm list and remembered 403 for one resolved
+   * namespace prefix (ROK-1717: called when the Forever prefix changes).
+   * @param resolvedPrefix - The prefix as sent to Blizzard (e.g. `classicforever`).
+   */
+  purgeNamespace(resolvedPrefix: string): void {
+    const suffix = `:${resolvedPrefix}`;
+    for (const map of [this.realmCache, this.realmRefusals]) {
+      for (const key of [...map.keys()]) {
+        if (key.endsWith(suffix)) map.delete(key);
+      }
     }
   }
 
@@ -204,15 +223,28 @@ export class BlizzardService {
     region: string,
     gameVariant: WowGameVariant = 'retail',
   ): Promise<{ dungeons: WowInstance[]; raids: WowInstance[] }> {
-    return memorySwr({
-      cache: this.instanceListCache,
-      key: `${region}:${gameVariant}`,
-      ttlMs: INSTANCE_CACHE_TTL,
-      fetcher: async () => {
-        const token = await this.auth.getAccessToken(region);
-        return instFetch.fetchAllInstancesFromApi(region, gameVariant, token);
-      },
-    });
+    const load = () =>
+      memorySwr({
+        cache: this.instanceListCache,
+        key: `${region}:${gameVariant}`,
+        ttlMs: INSTANCE_CACHE_TTL,
+        fetcher: async () => {
+          const token = await this.auth.getAccessToken(region);
+          return instFetch.fetchAllInstancesFromApi(region, gameVariant, token);
+        },
+      });
+    if (gameVariant !== 'wow_forever') return load();
+    // ROK-1719: Forever planning survives a Blizzard outage with the seeded
+    // instances. Deliberately outside the SWR fetcher so the seed-only list
+    // is never cached over the full journal list.
+    try {
+      return await load();
+    } catch (err) {
+      this.logger.warn(
+        `Forever instance list served seed-only: ${(err as Error).message}`,
+      );
+      return foreverSeedOnlyList();
+    }
   }
 
   async fetchInstanceDetail(

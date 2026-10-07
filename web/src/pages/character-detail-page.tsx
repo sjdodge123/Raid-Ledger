@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/use-auth';
 import { useState, useEffect, useRef } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { PluginSlot } from '../plugins';
-import { formatForeverRuleset } from '../components/characters/forever-identity';
+import { useCharacterLocationLabel } from '../plugins/character-identity';
 
 const ROLE_COLORS: Record<string, string> = {
     tank: 'bg-blue-600',
@@ -123,8 +123,9 @@ function CharacterAvatar({ avatarUrl, name }: { avatarUrl: string | null; name: 
 }
 
 function CharacterMeta({ character }: { character: { level?: number | null; race?: string | null; class?: string | null; spec?: string | null; realm?: string | null; region?: string | null; ruleset?: string | null } }) {
-    // ROK-1721: a realmless WoW: Forever character shows its ruleset + region ("PvP (US)") in the realm slot.
-    const realmLabel = character.realm || formatForeverRuleset(character.ruleset, character.region);
+    // ROK-1733: a realmless character shows its plugin's location label (e.g. "PvP (US)") in the realm slot.
+    const locationLabel = useCharacterLocationLabel();
+    const realmLabel = character.realm || locationLabel(character);
     return (
         <div className="flex items-center gap-2 text-sm text-muted mt-1 flex-wrap">
             {character.level && <span className="text-amber-400">Level {character.level}</span>}
@@ -161,8 +162,11 @@ function CharacterHeader({ character, isOwner, isArmoryImported }: { character: 
                         <CharacterRoleBadge character={character} isOwner={isOwner} />
                     </div>
                     <CharacterMeta character={character} />
-                    {isOwner && isArmoryImported && (
-                        <div className="mt-3"><PluginSlot name="profile:character-actions" context={{ characterId: character.id, lastSyncedAt: character.lastSyncedAt, region: character.region, gameVariant: character.gameVariant }} /></div>
+                    {isOwner && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 empty:hidden">
+                            {isArmoryImported && <PluginSlot name="profile:character-actions" context={{ characterId: character.id, lastSyncedAt: character.lastSyncedAt, region: character.region, gameVariant: character.gameVariant }} />}
+                            <PluginSlot name="character-detail:owner-actions" context={{ characterId: character.id, gameId: character.gameId, name: character.name, region: character.region, ruleset: character.ruleset, gameVariant: character.gameVariant, class: character.class, level: character.level }} />
+                        </div>
                     )}
                 </div>
             </div>

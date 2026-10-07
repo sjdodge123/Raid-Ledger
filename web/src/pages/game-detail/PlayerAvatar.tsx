@@ -1,16 +1,23 @@
 import type { JSX } from 'react';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
-import type { NowPlayingPlayerDto, GameTopPlayerDto } from '@raid-ledger/contract';
+import type {
+    NowPlayingPlayerDto,
+    GameTopPlayerDto,
+    PublicNowPlayingPlayerDto,
+    PublicGameTopPlayerDto,
+} from '@raid-ledger/contract';
 
 /** Player avatar helper for game detail page */
 export function PlayerAvatar({ player, size = 'sm' }: {
-    player: NowPlayingPlayerDto | GameTopPlayerDto;
+    /** Anonymous viewers get the public shape: no `discordId`, `avatar` already a URL (ROK-1734). */
+    player:
+        | NowPlayingPlayerDto
+        | GameTopPlayerDto
+        | PublicNowPlayingPlayerDto
+        | PublicGameTopPlayerDto;
     size?: 'sm' | 'md';
 }): JSX.Element {
-    const avatarInfo = resolveAvatar(toAvatarUser(player as {
-        avatar: string | null; customAvatarUrl: string | null;
-        discordId: string | null; username: string;
-    }));
+    const avatarInfo = resolveAvatar(toAvatarUser(player));
     const sizeClass = size === 'md' ? 'w-8 h-8' : 'w-6 h-6';
     if (avatarInfo.url) {
         return (

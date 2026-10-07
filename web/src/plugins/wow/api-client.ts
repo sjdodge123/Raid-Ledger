@@ -13,8 +13,20 @@ import type {
     UpdateQuestProgressBody,
     BossEncounterDto,
     BossLootDto,
+    BlizzardCapabilitiesDto,
+    WowForeverConfigDto,
+    WowForeverConfigResponseDto,
+    ForeverProbeStateDto,
+    ForeverProbeResultDto,
+    ForeverProbeConfigDto,
 } from '@raid-ledger/contract';
-import { CharacterSchema } from '@raid-ledger/contract';
+import {
+    CharacterSchema,
+    BlizzardCapabilitiesSchema,
+    WowForeverConfigResponseSchema,
+    ForeverProbeStateSchema,
+    ForeverProbeResultSchema,
+} from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
 
 /**
@@ -158,4 +170,39 @@ export async function fetchLootForBoss(
 ): Promise<BossLootDto[]> {
     const params = new URLSearchParams({ variant });
     return fetchApi(`/plugins/wow-classic/bosses/${bossId}/loot?${params}`);
+}
+
+/**
+ * Runtime Blizzard capabilities — whether the Armory can import WoW Forever
+ * characters (ROK-1717). Public, plugin-gated route.
+ */
+export async function fetchBlizzardCapabilities(): Promise<BlizzardCapabilitiesDto> {
+    return fetchApi('/blizzard/capabilities', {}, BlizzardCapabilitiesSchema);
+}
+
+/** Admin: the WoW Forever namespace prefix + Armory-import flag (ROK-1717). */
+export async function fetchForeverConfig(): Promise<WowForeverConfigResponseDto> {
+    return fetchApi('/admin/plugins/blizzard/forever', {}, WowForeverConfigResponseSchema);
+}
+
+/** Admin: save the WoW Forever namespace prefix + Armory-import flag (ROK-1717). */
+export async function updateForeverConfig(dto: WowForeverConfigDto): Promise<WowForeverConfigResponseDto> {
+    return fetchApi('/admin/plugins/blizzard/forever', { method: 'PUT', body: JSON.stringify(dto) }, WowForeverConfigResponseSchema);
+}
+
+const FOREVER_PROBE_PATH = '/admin/plugins/blizzard/forever-probe';
+
+/** Admin: the latest Forever namespace probe result + its saved config (ROK-1716). */
+export async function fetchForeverProbe(): Promise<ForeverProbeStateDto> {
+    return fetchApi(FOREVER_PROBE_PATH, {}, ForeverProbeStateSchema);
+}
+
+/** Admin: run the Forever namespace probe now and return the fresh result (ROK-1716). */
+export async function runForeverProbe(): Promise<ForeverProbeResultDto> {
+    return fetchApi(`${FOREVER_PROBE_PATH}/run`, { method: 'POST' }, ForeverProbeResultSchema);
+}
+
+/** Admin: save the probe's extra candidates + optional character path (ROK-1716). */
+export async function updateForeverProbeConfig(dto: ForeverProbeConfigDto): Promise<ForeverProbeStateDto> {
+    return fetchApi(`${FOREVER_PROBE_PATH}/config`, { method: 'PUT', body: JSON.stringify(dto) }, ForeverProbeStateSchema);
 }

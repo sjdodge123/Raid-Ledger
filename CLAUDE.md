@@ -47,6 +47,14 @@ Any story with a visible or felt surface — an AC that says "operator confirms"
 
 Full procedure — seeding as `admin@local`, the verify lane's sign-in/viewport/theme/simulator steps, what still goes to the operator, closing the loop on verdicts and resets: `docs/runbooks/fleet-test-plans.md` + `.claude/skills/fleet-ui-verify/SKILL.md`.
 
+## LedgerLink addon contract (STRICT — applies to ALL agents, this repo and the addon repo)
+
+The WoW: Forever addon **LedgerLink** lives in its own repo (`github.com/sjdodge123/ledger-link`). Its export strings are a wire format that **Raid Ledger owns**: `packages/contract/ledgerlink/v1/` (`CONTRACT.md`, generated `schema.json`, golden `fixtures/`, `CHANGELOG.md`), with the Zod schemas in `packages/contract/src/wow-addon-*.schema.ts` as the source of truth. Operator ruling 2026-10-05.
+
+- **Only a Raid Ledger PR touching that folder changes the format.** It updates `schema.json` (the drift-guard test fails otherwise), the fixtures and `CHANGELOG.md`, and its PR body says **additive** (optional field the server ignores → stays v1) or **breaking** (anything else → new `vN/`, server accepts current + previous during the transition).
+- **LedgerLink agents never change the format on their own.** They request a change through a Raid Ledger story; the addon pins a copy of `vN/` and validates against it in its own CI.
+- Real beta strings become fixtures only after anonymisation (no real names, GUIDs or guild names).
+
 ## Reference designs before coding (STRICT — applies to ALL agents)
 
 Before writing implementation code for any feature/fix that **adds, relocates, or restructures UI or introduces a new user-facing flow**, scan for design references that may already exist. (In-place cosmetic tweaks — color, copy, spacing, a single prop on an existing element — are **exempt**.) The operator regularly approves simplified-flow targets, wireframes or design specs ahead of implementation — follow-up work should be **implementing the approved target, not redesigning it**.
@@ -254,8 +262,10 @@ For ANY fix to a flaky/intermittent integration test, FIRST reproduce in isolati
 **Escalate to `--full`** (the complete local suite) only when:
 - The diff touches `drizzle/migrations/**` or container/infra (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — high blast radius.
 - The diff touches `package.json` / `package-lock.json` (any workspace). GitHub's path filter treats dependency files as `code` (lint) but NOT `api`/`web`, so GitHub **skips unit + integration** for a deps-only change — `--static` would defer behavioral coverage to a job that never runs.
-- It's a `packages/contract/**` change or a large cross-workspace refactor.
+- It's a **breaking** `packages/contract/**` change (tightening, removing or renaming a field, or changing a schema that parses stored data) or a large cross-workspace refactor.
 - The operator explicitly asks for a full local run.
+
+**Additive contract changes run `--static` (operator ruling 2026-10-07)** — new schemas, new optional fields, new exports. GitHub's path filter maps `packages/contract/**` to the `api`, `web`, `contract` and `smoke_tests` jobs (`.github/workflows/ci.yml`), so unit, integration, the contract specs and Playwright all run before auto-merge; a local `--full` only moves discovery ~45 min earlier. Pair the `--static` gate with the story's own NEW integration spec(s) run alone on the fleet via `rl_run_on_runner` (~2–3 min; needs the Redis sidecar — memory `reference_rl_runner_no_redis`), because a wrong new spec is the most common miss. A breaking change stays `--full`: neither gate catches old stored JSON failing a tightened schema, so it needs the full local run plus a test that seeds old-shape data.
 
 Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self-escalate on those signals. CI-job mapping, conditional-step path lists, the full flag inventory and the `SKIP_BACKUP_INTEGRATION` gating: `docs/runbooks/local-ci-gate.md`.
 

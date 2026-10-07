@@ -10,11 +10,11 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import * as path from 'path';
 import { AppModule } from './app.module';
+import { applyCorsPolicy } from './cors/cors-auto-policy';
 import { SentryExceptionFilter } from './sentry/sentry-exception.filter';
 import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
 import {
   validateCorsConfig,
-  buildCorsOriginFn,
   buildHelmetOptions,
   getLogLevels,
   buildLoggerSelfTest,
@@ -62,15 +62,10 @@ async function bootstrap() {
   // ROK-1353: parse the httpOnly `rl_rt` refresh cookie into req.cookies.
   app.use(cookieParser());
   const isProduction = process.env.NODE_ENV === 'production';
-  const corsOrigin = process.env.CORS_ORIGIN;
-  validateCorsConfig(isProduction, corsOrigin);
-  const isAutoOrigin = corsOrigin === 'auto';
-  app.enableCors({
-    origin: buildCorsOriginFn(isProduction, corsOrigin, isAutoOrigin),
-    credentials: true,
-    // ROK-1164: the web reads a log download's server-chosen filename.
-    exposedHeaders: ['Content-Disposition'],
-  });
+  validateCorsConfig(isProduction, process.env.CORS_ORIGIN);
+  // ROK-1732: CORS_ORIGIN=auto is same-origin only (CORS_AUTO_MODE picks
+  // report vs enforce); an explicit-origin mismatch is a 403, not a 500.
+  applyCorsPolicy(app, { isProduction });
   // ROK-1665: trust private hops (TRUST_PROXY overrides), not a hop count.
   applyTrustProxy(app, isProduction, process.env.TRUST_PROXY);
   // ROK-1627: CLIENT_URL is seeded from trusted configuration by

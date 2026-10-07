@@ -48,7 +48,7 @@ export interface FlowDeps {
 
 export async function signupTxBody(deps: FlowDeps, p: SignupTxParams) {
   const { tx, eventRow, eventId, userId, dto } = p;
-  const autoBench = await signupH.checkAutoBench(tx, eventRow, eventId, dto);
+  const autoBench = await signupH.checkSignupAutoBench(p);
   const hasCharacter = !!dto?.characterId;
   const discordId = p.user?.discordId ?? null;
   const rows = await signupH.insertSignupRow(

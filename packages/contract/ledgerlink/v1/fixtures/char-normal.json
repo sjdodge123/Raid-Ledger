@@ -1,0 +1,42 @@
+{
+  "pages": 1,
+  "payload": {
+    "schema": 1,
+    "addonVersion": "0.1.0",
+    "client": {
+      "interface": 11507,
+      "build": "1.15.7",
+      "locale": "enUS",
+      "region": 1
+    },
+    "exportedAt": 1790000000,
+    "who": {
+      "guid": "Player-4395-0ABCDEF0",
+      "fullName": "Ana Forever",
+      "raw": {
+        "getUnitName": "Ana Forever",
+        "unitName": ["Ana Forever",null]
+      },
+      "ruleset": "normal",
+      "class": "PALADIN",
+      "race": "Human",
+      "level": 60,
+      "faction": "Alliance",
+      "guildName": "Night Shift"
+    },
+    "section": "char",
+    "data": {
+      "gear": [
+        {"slot":16,"itemId":19019,"ilvl":80,"bonusIds":[6646,7890]},
+        {"slot":1,"itemId":16921,"ilvl":76,"bonusIds":[]}
+      ],
+      "talents": {
+        "configId": 7,
+        "nodes": [{"nodeId":101,"rank":2}]
+      },
+      "lockouts": [
+        {"name":"Molten Core","instanceId":409,"difficultyId":9,"resetAt":1790500000,"killed":3,"total":10}
+      ]
+    }
+  }
+}

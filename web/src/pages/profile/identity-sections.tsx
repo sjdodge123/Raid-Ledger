@@ -152,6 +152,7 @@ export function SteamSection({ steamStatus, linkSteam, linkPending, unlinkSteam,
     return (
         <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
             <p className="text-sm text-muted mb-3">Link your Steam account to sync your game library and playtime.</p>
+            <p className="text-xs text-muted mb-3">Steam may notify you about this sign-in — sometimes hours later.</p>
             <button onClick={() => { void linkSteam(); }} disabled={linkPending} className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1B2838] hover:bg-[#2a475e] disabled:opacity-50 text-white font-medium rounded-lg transition-colors">
                 <SteamIcon className="w-5 h-5" />
                 Link Steam Account

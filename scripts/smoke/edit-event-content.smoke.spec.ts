@@ -160,15 +160,18 @@ test.describe('ROK-1005: Content browser in edit mode (desktop)', () => {
         // Checking an unchecked instance ticks it and adds one chip.
         const group = page.getByRole('group', { name: 'Dungeons' });
         const browserChips = group.locator('xpath=..').locator('span.rounded-full');
-        const chipsBefore = await browserChips.count();
         const firstUnchecked = group.getByRole('checkbox', { checked: false }).first();
         await expect(firstUnchecked).toBeVisible({ timeout: 10_000 });
+        // The group only renders once the Blizzard instance list loads, so a
+        // one-shot count() taken earlier read 0 and the "+1" check saw 3.
+        // Wait for the seeded selections' chips instead (ROK-1738 gate).
+        await expect(browserChips).toHaveCount(TEST_DUNGEONS.length, { timeout: 10_000 });
         const labelId = await firstUnchecked.getAttribute('aria-labelledby');
         expect(labelId, 'instance checkbox must be named by its label').toBeTruthy();
         const target = group.locator(`input[type="checkbox"][aria-labelledby="${labelId}"]`);
         await target.click();
         await expect(target).toBeChecked({ timeout: 10_000 });
-        await expect(browserChips).toHaveCount(chipsBefore + 1, { timeout: 5_000 });
+        await expect(browserChips).toHaveCount(TEST_DUNGEONS.length + 1, { timeout: 5_000 });
     });
 
     test('content browser stays visible after removing all selections', async ({ page }) => {

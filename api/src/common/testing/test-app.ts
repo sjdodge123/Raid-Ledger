@@ -24,6 +24,7 @@
  */
 import { Test } from '@nestjs/testing';
 import { type INestApplication } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import type { StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { drizzle } from 'drizzle-orm/postgres-js';
@@ -35,6 +36,7 @@ import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import * as path from 'path';
 import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
+import { applyCorsPolicy } from '../../cors/cors-auto-policy';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { closeTestSharedRedis } from '../../queue/queue.module';
@@ -227,12 +229,19 @@ async function buildNestApp(
     .overrideProvider(REDIS_CLIENT)
     .useValue(redisMock.client)
     .compile();
-  const app = moduleRef.createNestApplication();
+  const app = moduleRef.createNestApplication<NestExpressApplication>();
+  // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,
+  // which would 413 a request before any route (e.g. ROK-1724's 256 KB cap).
+  app.useBodyParser('json', { limit: '2mb' });
+  // ROK-1732: mirror prod's CORS policy. Registered before init() so it runs
+  // ahead of the router. Supertest sends no Origin, so it allows every
+  // existing spec; specs that set Origin/Host exercise the real policy.
+  applyCorsPolicy(app, { isProduction: false });
   await app.init();
   if (process.env.CRON_DISABLED === 'true') {
     stopAllCronJobs(app);
   }
-  const httpServer = app.getHttpServer() as import('http').Server;
+  const httpServer = app.getHttpServer();
   // ROK-1264: bump server-side keepAliveTimeout WAY above any inter-test gap
   // so any future keep-alive pool (or supertest default if upgraded) does not
   // race the server's 5 s socket reaper. truncateAllTables + bcrypt + setup
