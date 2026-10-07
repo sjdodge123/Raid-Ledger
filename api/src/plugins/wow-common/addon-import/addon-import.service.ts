@@ -1,10 +1,8 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AddonImportRequestDto,
   AddonImportResultDto,
-  WowRegion,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
@@ -14,12 +12,7 @@ import {
   ADDON_IMPORT_PENDING,
   AddonImportAuditService,
 } from './addon-import.audit';
-import type {
-  AddonBindingCharacter,
-  AddonBindingResult,
-} from './addon-import.binding';
-import { bindEverySection } from './addon-import.binding-paste';
-import { applyBinding } from './addon-import-binding.apply';
+import type { AddonBindingResult } from './addon-import.binding';
 import {
   decodeImportPaste,
   type DecodedAddonPaste,
@@ -30,12 +23,13 @@ import {
   rawFacts,
   type AttemptFacts,
 } from './addon-import.service.helpers';
+import { pasteSections } from './addon-import.paste-run';
 import {
-  buildPasteResult,
-  pasteSections,
-  runPaste,
-  shouldApplyBinding,
-} from './addon-import.paste-run';
+  bindPaste,
+  loadImportCharacter,
+  runForCharacter,
+  type LoadedCharacter,
+} from './addon-import.run';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -96,16 +90,10 @@ export class AddonImportService {
     const request = parseImportRequest(body, facts);
     const paste = decodeImportPaste(request.importString);
     recordPasteFacts(facts, paste);
-    const character = await this.loadCharacter(characterId);
+    const character = await loadImportCharacter(this.db, characterId);
     // Codex P2: bind EVERY section (the decoder also requires one exporter);
     // any section's reject rejects the whole paste before anything runs.
-    const binding = bindEverySection(
-      pasteSections(paste).map((s) => s.payload),
-      character.binding,
-      { dryRun: request.dryRun, confirm: request.confirm },
-    );
-    const [firstError] = binding.errors;
-    if (firstError) throw firstError;
+    const binding = bindPaste(paste, character, request);
     return this.run(userId, character, paste, binding, request);
   }
 
@@ -117,51 +105,9 @@ export class AddonImportService {
     binding: AddonBindingResult,
     request: AddonImportRequestDto,
   ): Promise<AddonImportResultDto> {
-    return this.db.transaction(async (tx) => {
-      const ctx = {
-        tx,
-        userId,
-        characterId: character.id,
-        gameId: character.gameId,
-        region: character.binding.region as WowRegion,
-      };
-      const runs = await runPaste(ctx, paste, request.dryRun);
-      // Lead ruling: a stale export writes NOTHING — binding updates too
-      // (a mixed paste skips them only when EVERY section is stale).
-      if (!request.dryRun && shouldApplyBinding(runs)) {
-        const [head] = runs;
-        await applyBinding(
-          { ...ctx, sha256: head?.decoded.sha256 ?? '' },
-          binding,
-        );
-      }
-      return buildPasteResult(runs, binding);
-    });
-  }
-
-  /** The row the binding reads: owner-checked already, plus slug + GUID. */
-  private async loadCharacter(characterId: string): Promise<LoadedCharacter> {
-    const [row] = await this.db
-      .select({ c: schema.characters, slug: schema.games.slug })
-      .from(schema.characters)
-      .innerJoin(schema.games, eq(schema.games.id, schema.characters.gameId))
-      .where(eq(schema.characters.id, characterId))
-      .limit(1);
-    if (!row) throw new AddonImportError('WRONG_GAME');
-    const { c } = row;
-    return {
-      id: c.id,
-      gameId: c.gameId,
-      binding: {
-        gameSlug: row.slug,
-        name: c.name,
-        region: c.region,
-        ruleset: c.ruleset,
-        class: c.class,
-        level: c.level,
-        addonGuid: c.addonGuid,
-      },
-    };
+    return this.db.transaction((tx) =>
+      runForCharacter(tx, userId, character, paste, binding, request),
+    );
   }
 
   private async finish(
@@ -226,8 +172,3 @@ function auditRow(
   };
 }
 
-interface LoadedCharacter {
-  id: string;
-  gameId: number;
-  binding: AddonBindingCharacter;
-}
