@@ -169,4 +169,51 @@ describe('Event notice expiry (TDB:196)', () => {
     expect(notice.expiresAt?.toISOString()).toBe(newEnd.toISOString());
     await expectReapedOnlyAfter(member, 'event_delayed', newEnd);
   });
+
+  // REVIEW-B R5: the notice keeps its send-time expiresAt, but the sweep must
+  // not reap it while the event is still running past that instant.
+  async function lateNoticeFor(start: Date, end: Date) {
+    const event = await createEvent(start, end);
+    const late = await createMember('outlive_late');
+    const other = await createMember('outlive_other');
+    await signUp(event.id, late);
+    await signUp(event.id, other);
+    await testApp.app.get(RunningLateService).notifyRunningLate(
+      {
+        id: event.id,
+        title: event.title,
+        duration: event.duration,
+        creatorId: event.creatorId,
+      },
+      late,
+      'Late Player',
+    );
+    return { eventId: event.id, other };
+  }
+
+  it('a running_late notice outlives its expiresAt while extended_until runs on', async () => {
+    const start = new Date(Date.now() - 10 * MIN);
+    const end = new Date(start.getTime() + 120 * MIN);
+    const { eventId, other } = await lateNoticeFor(start, end);
+    const extendedUntil = new Date(end.getTime() + 60 * MIN);
+    await testApp.db
+      .update(schema.events)
+      .set({ extendedUntil })
+      .where(eq(schema.events.id, eventId));
+
+    await expectReapedOnlyAfter(other, 'running_late', extendedUntil);
+  });
+
+  it('a running_late notice outlives its expiresAt after the event is pushed back', async () => {
+    const start = new Date(Date.now() - 10 * MIN);
+    const end = new Date(start.getTime() + 120 * MIN);
+    const { eventId, other } = await lateNoticeFor(start, end);
+    const newEnd = new Date(end.getTime() + 30 * MIN);
+    await testApp.db
+      .update(schema.events)
+      .set({ duration: [start, newEnd] as [Date, Date] })
+      .where(eq(schema.events.id, eventId));
+
+    await expectReapedOnlyAfter(other, 'running_late', newEnd);
+  });
 });
