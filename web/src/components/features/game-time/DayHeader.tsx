@@ -4,7 +4,6 @@ import { DAYS, FULL_DAYS } from './game-time-grid.utils';
 interface DayHeaderProps {
     dayIndex: number;
     fullDayNames?: boolean | undefined;
-    todayIndex?: number | undefined;
     dateLabel?: string | undefined;
     noStickyOffset?: boolean | undefined;
     isHeaderHidden: boolean;
@@ -18,14 +17,13 @@ interface DayHeaderProps {
 
 /** Single day column header for the game-time grid */
 export function DayHeader({
-    dayIndex, fullDayNames, todayIndex,
+    dayIndex, fullDayNames,
     dateLabel, noStickyOffset, isHeaderHidden, onClick, isAllActive, isAway,
 }: DayHeaderProps): JSX.Element {
     // An away day always takes the SHORT name ("Sat · away", ROK-1585 artboard).
     const dayName = (fullDayNames && !isAway ? FULL_DAYS[dayIndex] : DAYS[dayIndex]) ?? '';
     const displayDay = isAway ? `${dayName} · away` : dayName;
-    const isToday = todayIndex === dayIndex;
-    const colorClass = isAway && !isToday ? 'bg-overlay/40 text-muted' : getDayColorClass(isToday);
+    const colorClass = isAway ? 'bg-overlay/40 text-muted' : 'bg-surface text-muted';
     const interactiveClass = onClick ? 'cursor-pointer hover:brightness-125' : '';
 
     return (
@@ -43,11 +41,6 @@ export function DayHeader({
             <DayLabel displayDay={displayDay} dateLabel={dateLabel} />
         </div>
     );
-}
-
-function getDayColorClass(isToday: boolean): string {
-    if (isToday) return 'bg-emerald-500/15 text-emerald-300';
-    return 'bg-surface text-muted';
 }
 
 function DayWithDate({ day, sub }: { day: string; sub: JSX.Element }): JSX.Element {

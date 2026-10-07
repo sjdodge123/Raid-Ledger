@@ -178,15 +178,6 @@ describe('GameTimeGrid — part 3', () => {
             expect(screen.getByText('Raid Night')).toBeInTheDocument();
         });
 
-        it('clicking event block calls onEventClick', () => {
-            const onEventClick = vi.fn();
-            render(<GameTimeGrid slots={[]} events={mockEvents} onEventClick={onEventClick} />);
-
-            fireEvent.click(screen.getByTestId('event-block-1-0'));
-            expect(onEventClick).toHaveBeenCalledTimes(1);
-            expect(onEventClick.mock.calls[0]?.[0]).toMatchObject({ eventId: 1 });
-        });
-
         it('event blocks do not make cells mutate on contact (ROK-1426)', () => {
             const onChange = vi.fn();
             render(<GameTimeGrid slots={[]} events={mockEvents} onChange={onChange} />);

@@ -57,12 +57,7 @@ export interface GameTimeGridProps {
     className?: string;
     tzLabel?: string;
     events?: import('@raid-ledger/contract').GameTimeEventBlock[];
-    onEventClick?: (event: import('@raid-ledger/contract').GameTimeEventBlock, anchorRect: DOMRect) => void;
     previewBlocks?: GameTimePreviewBlock[] | undefined;
-    /** Day index for today (0=Sun, 6=Sat) — highlights the column green */
-    todayIndex?: number;
-    /** Fractional current hour (e.g., 15.5 = 3:30 PM) — red time indicator line */
-    currentHour?: number;
     /** Visible hour range (default [0, 24]) — use [6, 24] in modals */
     hourRange?: [number, number] | undefined;
     /** ISO date string for the start of the displayed week (e.g., "2026-02-08") */

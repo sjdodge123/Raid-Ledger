@@ -59,12 +59,12 @@ function useBlockEditing(
  * Interactive grids edit availability as blocks with drag handles (ROK-1426).
  */
 export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
-    const { slots, onChange, className, tzLabel, onEventClick, previewBlocks, todayIndex, currentHour, onCellClick, fullDayNames, compact, noStickyOffset } = props;
+    const { slots, onChange, className, tzLabel, previewBlocks, onCellClick, fullDayNames, compact, noStickyOffset } = props;
     const { vis, maps, dates, displayEvents, isHeaderHidden, isInteractive, handleDayClick, isDayAllActive } = useGridHooks(props);
     const [hoveredCell, setHoveredCell] = useState<string | null>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
-    const needsMeasure = (props.events?.length ?? 0) > 0 || (previewBlocks?.length ?? 0) > 0 || todayIndex !== undefined || isInteractive;
+    const needsMeasure = (props.events?.length ?? 0) > 0 || (previewBlocks?.length ?? 0) > 0 || isInteractive;
     const gridDims = useGridMeasurement(gridRef, wrapperRef, needsMeasure, vis.rangeStart, vis.rangeEnd);
     const view = useSlotView(maps.slotMap);
     const { blocks, editor, cellStatus } = useBlockEditing(slots, onChange, vis.HOURS, isInteractive, gridDims?.rowHeight, view.getSlotStatus);
@@ -82,7 +82,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                 <GridBody
                     gridRef={gridRef} gridLineBackground={glowBg} setHoveredCell={setHoveredCell}
                     tzLabel={tzLabel} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden}
-                    dayDates={dates.dayDates} fullDayNames={fullDayNames} todayIndex={todayIndex}
+                    dayDates={dates.dayDates} fullDayNames={fullDayNames}
                     HOURS={vis.HOURS} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} compact={compact}
                     getSlotStatus={cellStatus} isCellLocked={view.isCellLocked}
                     eventCellSet={maps.eventCellSet} hoveredCell={hoveredCell} hoverDay={hoverDay} hoverHour={hoverHour}
@@ -92,7 +92,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                     isDayAllActive={isInteractive ? isDayAllActive : undefined}
                     awayDays={props.awayDays}
                 />
-                <GridOverlayLayer todayIndex={todayIndex} currentHour={currentHour} gridDims={gridDims} HOURS={vis.HOURS} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} onEventClick={onEventClick} previewBlocks={previewBlocks} />
+                <GridOverlayLayer gridDims={gridDims} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} previewBlocks={previewBlocks} />
                 {isInteractive && gridDims && (
                     <SlotBlockLayer
                         blocks={blocks} editor={editor} gridDims={gridDims} hours={vis.HOURS}

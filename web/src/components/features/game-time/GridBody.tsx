@@ -31,7 +31,6 @@ export interface GridBodyProps extends CellRenderProps {
     isHeaderHidden: boolean;
     dayDates: string[] | null;
     fullDayNames?: boolean | undefined;
-    todayIndex?: number | undefined;
     HOURS: number[];
     /** Callback when a day header is clicked (for whole-day toggle) */
     onDayClick?: ((dayIndex: number) => void) | undefined;
@@ -43,7 +42,7 @@ export interface GridBodyProps extends CellRenderProps {
 export function GridBody({
     gridRef, gridLineBackground, setHoveredCell,
     tzLabel, noStickyOffset, isHeaderHidden,
-    dayDates, fullDayNames, todayIndex,
+    dayDates, fullDayNames,
     HOURS, onDayClick, isDayAllActive, ...cellProps
 }: GridBodyProps): JSX.Element {
     // ROK-1426: the grid NEVER captures touch gestures any more. Editing happens
@@ -57,7 +56,7 @@ export function GridBody({
             data-testid="game-time-grid"
         >
             <TzCorner tzLabel={tzLabel} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} />
-            <DayHeaders dayDates={dayDates} fullDayNames={fullDayNames} todayIndex={todayIndex} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} onDayClick={onDayClick} isDayAllActive={isDayAllActive} awayDays={cellProps.awayDays} />
+            <DayHeaders dayDates={dayDates} fullDayNames={fullDayNames} noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden} onDayClick={onDayClick} isDayAllActive={isDayAllActive} awayDays={cellProps.awayDays} />
             {HOURS.map((hour) => <HourRow key={`row-${hour}`} hour={hour} {...cellProps} />)}
         </div>
     );
@@ -76,9 +75,9 @@ function TzCorner({ tzLabel, noStickyOffset, isHeaderHidden }: {
     );
 }
 
-function DayHeaders({ dayDates, fullDayNames, todayIndex, noStickyOffset, isHeaderHidden, onDayClick, isDayAllActive, awayDays }: {
+function DayHeaders({ dayDates, fullDayNames, noStickyOffset, isHeaderHidden, onDayClick, isDayAllActive, awayDays }: {
     dayDates: string[] | null;
-    fullDayNames?: boolean | undefined; todayIndex?: number | undefined;
+    fullDayNames?: boolean | undefined;
     noStickyOffset?: boolean | undefined; isHeaderHidden: boolean; onDayClick?: ((dayIndex: number) => void) | undefined;
     isDayAllActive?: ((dayIndex: number) => boolean) | undefined; awayDays?: ReadonlySet<number> | undefined;
 }): JSX.Element {
@@ -87,7 +86,6 @@ function DayHeaders({ dayDates, fullDayNames, todayIndex, noStickyOffset, isHead
             {DAYS.map((day, i) => (
                 <DayHeader
                     key={day} dayIndex={i} fullDayNames={fullDayNames}
-                    todayIndex={todayIndex}
                     dateLabel={dayDates?.[i]}
                     noStickyOffset={noStickyOffset} isHeaderHidden={isHeaderHidden}
                     onClick={onDayClick ? () => onDayClick(i) : undefined}
