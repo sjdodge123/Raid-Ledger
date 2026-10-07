@@ -123,4 +123,18 @@ describe('recordAttempt', () => {
     expect(db.insert).toHaveBeenCalledTimes(1);
     expect(db.update).not.toHaveBeenCalled();
   });
+
+  it('ROK-1738 D8: finalising writes the created/updated character id', async () => {
+    const { service, db, where } = makeDb(0);
+    const set = jest.fn().mockReturnValue({ where });
+    db.update.mockReturnValue({ set });
+    const id = '00000000-0000-4000-8000-0000000000aa';
+    await service.recordAttempt(
+      { ...ROW, characterId: id, result: 'applied' },
+      41,
+    );
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ characterId: id, result: 'applied' }),
+    );
+  });
 });

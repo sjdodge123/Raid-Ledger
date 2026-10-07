@@ -2362,3 +2362,8 @@ same day (#1278, #1279, #1280).
 
 - **nit** — `api/src/plugins/wow-common/forever.settings.ts`: plugin-owned setting keys must be cast `as SettingKey` because `SettingKey` (`api/src/drizzle/schema/app-settings.ts`) is a closed union of core keys. Precedent: `api/src/ai/llm-provider-registry.ts`. Not a failure, a typing gap. Suggested: add a generic `PluginSettingKey` (template-literal or branded string) accepted by `SettingsService.get/set`, and drop the casts.
 - **low** — `web/src/plugins/wow/components/talent-display.tsx:171`, `web/src/plugins/wow/components/character-detail-sections.tsx:109`: the Forever "use the addon" hints still read the static `wow-variant-config.ts` `armoryImport === false`, not the runtime capability ROK-1717 added. Once an admin turns Forever Armory on, the hints keep showing. Suggested: read `useArmoryCapabilities()` there too, as part of ROK-1722.
+
+### 2026-10-07 — feat/rok-1738-ledgerlink-create-character (operator ruling Q6, surfaced during the ROK-1738 spec)
+
+- **[low]** `api/src/characters/characters-create.helpers.ts` (`createCharacter` / `createCharacterWithin`) — `games.maxCharactersPerUser` is seeded (`api/src/games-lookup/seed-games.data.ts`) but never enforced on any create path: manual Add Character and the new LedgerLink id-less import (`POST /plugins/wow/characters/addon-import`, which creates through `CharactersService.createWithin`) both ignore it. Out of scope for ROK-1738 by operator ruling Q6 (create via core = same as manual add).
+  Suggested: enforce the per-game cap once in core `prepareIdentityCreate`/`insertCharacterTx` (count the user's rows for the game in the same tx) so both create paths inherit it; map it to a contract error code the import dialog can show.
