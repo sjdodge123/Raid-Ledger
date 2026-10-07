@@ -1,7 +1,8 @@
 import type { JSX } from 'react';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { getGameTimeBlockStyle } from '../../../../constants/game-colors';
-import { votedLabel, type SlotMark } from '../slot-marks.utils';
+import { formatHour } from '../game-time-grid.utils';
+import { marksOutsideHours, votedLabel, type SlotMark } from '../slot-marks.utils';
 import { blockGeometry, type HourRange } from './group-day.utils';
 
 /**
@@ -60,5 +61,26 @@ export function SlotBlock({ mark, hours }: { mark: SlotMark; hours: number[] }):
                 {votedLabel(mark.votes)}
             </span>
         </div>
+    );
+}
+
+/**
+ * "1 more suggested outside 5 PM – 11 PM" (TDB:1795 / ROK-1584, discovery
+ * option A). The phone day shows a fixed window, so a slot outside it draws no
+ * block (`SlotBlock` → null) while the week strip's "● N" still counts it. This
+ * line is read off the same marks map the strip counts, so blocks + N always
+ * add up to the strip. Nothing when every mark of the day is on screen.
+ */
+export function OutsideHoursHint({ slotMarks, dayOfWeek, hours }: {
+    slotMarks?: Map<string, SlotMark> | undefined; dayOfWeek: number; hours: number[];
+}): JSX.Element | null {
+    const outside = marksOutsideHours(slotMarks, dayOfWeek, hours).length;
+    const first = hours[0];
+    const last = hours[hours.length - 1];
+    if (outside === 0 || first === undefined || last === undefined) return null;
+    return (
+        <p data-testid="phone-group-outside-hint" className="flex-none px-1 pt-1 text-[11px] text-muted">
+            {`${outside} more suggested outside ${formatHour(first)} – ${formatHour(last)}`}
+        </p>
     );
 }
