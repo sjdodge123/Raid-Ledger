@@ -15,18 +15,27 @@
  *
  * The actual deactivation goes through `DiscordNotificationService.deactivateUser`
  * (idempotent), so audit-trail and cascade behaviour matches the reactive path.
+ *
+ * ROK-1714: the same member fetch also refreshes `users.avatar` from each
+ * member's GLOBAL avatar hash (including clearing it when the avatar was
+ * removed). This is not a new deactivation layer and adds no listener — it
+ * reuses the list this sweep already pulls once a day.
  */
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { and, isNotNull, isNull, not, like } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull, not, like, sql } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import type { GuildMemberAvatars } from '../discord-bot/discord-bot-client.guild.helpers';
+import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
 
 const JOB_NAME = 'GuildReconciliationService_reconcileGuildMembers';
+
+type ActiveUser = { id: number; discordId: string; avatar: string | null };
 
 @Injectable()
 export class GuildReconciliationService {
@@ -54,24 +63,25 @@ export class GuildReconciliationService {
    * failure). Public so the integration test can call it directly.
    */
   async runReconciliation(): Promise<void | false> {
-    const guildIds = await this.fetchCurrentGuildMemberIds();
-    if (!guildIds) {
+    const members = await this.fetchCurrentGuildMembers();
+    if (!members) {
       this.logger.warn(
         '[ROK-1282] Reconciliation skipped — Discord bot disconnected',
       );
       return false;
     }
     const candidates = await this.loadActiveDbUsers();
-    const gaps = candidates.filter((u) => !guildIds.has(u.discordId));
+    const gaps = candidates.filter((u) => !members.has(u.discordId));
     await this.deactivateGap(gaps);
     this.logger.log(
       `[ROK-1282] Reconciliation deactivated ${gaps.length} user(s) ` +
-        `(checked ${candidates.length} active DB user(s) against ${guildIds.size} guild member(s))`,
+        `(checked ${candidates.length} active DB user(s) against ${members.size} guild member(s))`,
     );
+    await this.syncAvatars(candidates, members);
   }
 
   /**
-   * Pull the current guild member list.
+   * Pull the current guild member list (Discord ID → global avatar hash).
    *
    * Returns null ONLY when the bot is disconnected (`getGuild()` returned
    * null inside the helper) — that's a benign no-op heartbeat. Discord API
@@ -80,8 +90,8 @@ export class GuildReconciliationService {
    * Codex P2 (2026-05-14): the previous blanket catch hid every fault as
    * "bot disconnected", masking silent breakage.
    */
-  private async fetchCurrentGuildMemberIds(): Promise<Set<string> | null> {
-    return this.botClient.listAllGuildMemberIds();
+  private async fetchCurrentGuildMembers(): Promise<GuildMemberAvatars | null> {
+    return this.botClient.listAllGuildMemberAvatars();
   }
 
   /**
@@ -89,13 +99,12 @@ export class GuildReconciliationService {
    * Excludes both `local:%` (email-only accounts) and `unlinked:%`
    * (previously linked users who unlinked) — neither is guild-trackable.
    */
-  private async loadActiveDbUsers(): Promise<
-    { id: number; discordId: string }[]
-  > {
+  private async loadActiveDbUsers(): Promise<ActiveUser[]> {
     const rows = await this.db
       .select({
         id: schema.users.id,
         discordId: schema.users.discordId,
+        avatar: schema.users.avatar,
       })
       .from(schema.users)
       .where(
@@ -108,7 +117,7 @@ export class GuildReconciliationService {
       );
     // SQL isNotNull(discordId) above guarantees non-null; Drizzle still infers
     // `string | null` from the nullable column, so assert the narrowed type.
-    return rows as { id: number; discordId: string }[];
+    return rows as ActiveUser[];
   }
 
   /** Deactivate each gap via the shared notification path (idempotent). */
@@ -121,6 +130,52 @@ export class GuildReconciliationService {
           `[ROK-1282] Failed to deactivate user ${u.id}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
+    }
+  }
+
+  /**
+   * ROK-1714: write each still-in-guild member's global avatar hash onto
+   * their row when it differs (a removed avatar clears it to NULL). Runs
+   * after deactivation so a failure here can never block Layer 3.
+   */
+  private async syncAvatars(
+    candidates: ActiveUser[],
+    members: GuildMemberAvatars,
+  ): Promise<void> {
+    const stale = candidates.filter(
+      (u) => members.has(u.discordId) && members.get(u.discordId) !== u.avatar,
+    );
+    let updated = 0;
+    for (const u of stale) {
+      const avatar = members.get(u.discordId) ?? null;
+      if (await this.writeAvatar(u.id, avatar)) updated++;
+    }
+    this.logger.log(`[ROK-1714] Avatar sync updated ${updated} user(s)`);
+  }
+
+  /** Conditional write; true when the row actually changed. Never throws. */
+  private async writeAvatar(
+    userId: number,
+    avatar: string | null,
+  ): Promise<boolean> {
+    try {
+      const rows = await this.db
+        .update(schema.users)
+        .set({ avatar, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.users.id, userId),
+            sql`${schema.users.avatar} IS DISTINCT FROM ${avatar}`,
+          ),
+        )
+        .returning({ id: schema.users.id });
+      if (rows.length > 0) invalidateAuthUser(userId);
+      return rows.length > 0;
+    } catch (err: unknown) {
+      this.logger.warn(
+        `[ROK-1714] Failed to sync avatar for user ${userId}: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return false;
     }
   }
 }

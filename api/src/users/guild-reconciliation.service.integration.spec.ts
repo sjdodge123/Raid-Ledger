@@ -7,7 +7,9 @@
  *   - already-deactivated users are not re-touched,
  *   - users with `local:%` / `unlinked:%` placeholder ids are skipped
  *     (they were never guild-tracked),
- *   - bot disconnected → no-op (returns false).
+ *   - bot disconnected → no-op (returns false),
+ *   - ROK-1714: in-guild members' global avatar hash is synced onto the
+ *     row (changed → updated, removed → NULL, unchanged → untouched).
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
@@ -54,14 +56,43 @@ async function getDeactivatedAt(userId: number): Promise<Date | string | null> {
 }
 
 function mockGuildMembers(ids: string[]): void {
+  mockGuildAvatars(ids.map((id) => [id, null]));
+}
+
+function mockGuildAvatars(entries: [string, string | null][]): void {
   listSpy = jest
-    .spyOn(botClient, 'listAllGuildMemberIds')
-    .mockResolvedValue(new Set(ids));
+    .spyOn(botClient, 'listAllGuildMemberAvatars')
+    .mockResolvedValue(new Map(entries));
+}
+
+async function readAvatarRow(
+  userId: number,
+): Promise<{ avatar: string | null; updatedAt: Date }> {
+  const [row] = await testApp.db
+    .select({
+      avatar: schema.users.avatar,
+      updatedAt: schema.users.updatedAt,
+    })
+    .from(schema.users)
+    .where(eq(schema.users.id, userId))
+    .limit(1);
+  return defined(row, `user ${userId}`);
+}
+
+async function createUserWithAvatar(
+  discordId: string,
+  avatar: string,
+): Promise<number> {
+  const user = await createUserWithDiscordId(`u-${discordId}`, discordId);
+  await testApp.db.execute(
+    /* sql */ `UPDATE users SET avatar = '${avatar}', updated_at = '2025-01-01T00:00:00Z' WHERE id = ${user.id}`,
+  );
+  return user.id;
 }
 
 function mockBotDisconnected(): void {
   listSpy = jest
-    .spyOn(botClient, 'listAllGuildMemberIds')
+    .spyOn(botClient, 'listAllGuildMemberAvatars')
     .mockResolvedValue(null);
 }
 
@@ -139,10 +170,52 @@ describe('GuildReconciliationService.runReconciliation (ROK-1282)', () => {
     const survivor = await createUserWithDiscordId('survivor', '888888');
     const apiFault = new Error('DiscordAPIError: Missing Permissions');
     listSpy = jest
-      .spyOn(botClient, 'listAllGuildMemberIds')
+      .spyOn(botClient, 'listAllGuildMemberAvatars')
       .mockRejectedValue(apiFault);
 
     await expect(service.runReconciliation()).rejects.toBe(apiFault);
     expect(await getDeactivatedAt(survivor.id)).toBeNull();
+  });
+});
+
+describe('GuildReconciliationService avatar sync (ROK-1714)', () => {
+  it("writes the guild member's new global avatar hash onto the row", async () => {
+    const userId = await createUserWithAvatar('911111', 'oldhash');
+    mockGuildAvatars([['911111', 'newhash']]);
+
+    await service.runReconciliation();
+
+    expect((await readAvatarRow(userId)).avatar).toBe('newhash');
+  });
+
+  it('clears users.avatar to NULL when the member removed their avatar', async () => {
+    const userId = await createUserWithAvatar('922222', 'deadhash');
+    mockGuildAvatars([['922222', null]]);
+
+    await service.runReconciliation();
+
+    expect((await readAvatarRow(userId)).avatar).toBeNull();
+  });
+
+  it('leaves an unchanged row alone (updated_at not bumped)', async () => {
+    const userId = await createUserWithAvatar('933333', 'samehash');
+    const before = (await readAvatarRow(userId)).updatedAt;
+    mockGuildAvatars([['933333', 'samehash']]);
+
+    await service.runReconciliation();
+
+    const after = await readAvatarRow(userId);
+    expect(after.avatar).toBe('samehash');
+    expect(after.updatedAt).toStrictEqual(before);
+  });
+
+  it('does not touch the avatar of a user deactivated for leaving the guild', async () => {
+    const userId = await createUserWithAvatar('944444', 'leaverhash');
+    mockGuildAvatars([]);
+
+    await service.runReconciliation();
+
+    expect(await getDeactivatedAt(userId)).not.toBeNull();
+    expect((await readAvatarRow(userId)).avatar).toBe('leaverhash');
   });
 });

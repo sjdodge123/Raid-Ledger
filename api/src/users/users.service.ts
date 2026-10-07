@@ -50,7 +50,7 @@ export class UsersService {
   async createOrUpdate(profile: {
     discordId: string;
     username: string;
-    avatar?: string;
+    avatar?: string | null;
   }) {
     const existing = await this.findByDiscordId(profile.discordId);
     if (existing) {
@@ -58,7 +58,7 @@ export class UsersService {
         .update(schema.users)
         .set({
           username: profile.username,
-          avatar: profile.avatar,
+          avatar: profile.avatar ?? null,
           updatedAt: new Date(),
         })
         .where(eq(schema.users.discordId, profile.discordId))
@@ -70,7 +70,7 @@ export class UsersService {
       .values({
         discordId: profile.discordId,
         username: profile.username,
-        avatar: profile.avatar,
+        avatar: profile.avatar ?? null,
       })
       .returning();
     this.invalidateCountCache();
@@ -109,7 +109,7 @@ export class UsersService {
     userId: number,
     discordId: string,
     username: string,
-    avatar?: string,
+    avatar: string | null = null,
   ) {
     const existingWithDiscord = await this.findByDiscordId(discordId);
     if (existingWithDiscord && existingWithDiscord.id !== userId) {
@@ -155,7 +155,7 @@ export class UsersService {
   }
 
   /** Re-link a previously unlinked Discord account. */
-  async relinkDiscord(userId: number, username: string, avatar?: string) {
+  async relinkDiscord(userId: number, username: string, avatar: string | null) {
     const user = await this.findById(userId);
     if (!user?.discordId?.startsWith('unlinked:')) return user;
     const rawDiscordId = user.discordId.replace('unlinked:', '');

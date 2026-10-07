@@ -242,7 +242,7 @@ export class DiscordAuthController {
       userId,
       discordProfile.id,
       discordProfile.username,
-      discordProfile.avatar,
+      discordProfile.avatar ?? null,
     );
     this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
       userId,
@@ -285,7 +285,7 @@ export class DiscordAuthController {
   private async performLinkExchange(
     code: string,
     userId: number,
-  ): Promise<{ id: string; username: string; avatar?: string }> {
+  ): Promise<{ id: string; username: string; avatar: string | null }> {
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) throw new Error('Discord OAuth is not configured');
     const redirectUri = oauthConfig.callbackUrl.replace(

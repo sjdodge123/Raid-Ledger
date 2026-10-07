@@ -25,7 +25,8 @@ import {
   searchGuildMembers as searchGuildMembersHelper,
   listGuildMembers as listGuildMembersHelper,
   isGuildMember as isGuildMemberHelper,
-  listAllGuildMemberIds as listAllGuildMemberIdsHelper,
+  listAllGuildMemberAvatars as listAllGuildMemberAvatarsHelper,
+  type GuildMemberAvatars,
   kickGuildMember as kickGuildMemberHelper,
   listGuildTextChannels as listGuildTextChannelsHelper,
   listGuildVoiceChannels as listGuildVoiceChannelsHelper,
@@ -276,12 +277,12 @@ export class DiscordBotClientService {
   }
 
   /**
-   * Fetch every member of the guild and return their Discord IDs as a
-   * Set (ROK-1282). Returns null when the bot is disconnected — caller
+   * Fetch every guild member as Discord ID → global avatar hash (ROK-1282,
+   * ROK-1714). Returns null when the bot is disconnected — caller
    * (`GuildReconciliationService`) treats null as a no-op.
    */
-  async listAllGuildMemberIds(): Promise<Set<string> | null> {
-    return listAllGuildMemberIdsHelper(this.getGuild());
+  async listAllGuildMemberAvatars(): Promise<GuildMemberAvatars | null> {
+    return listAllGuildMemberAvatarsHelper(this.getGuild());
   }
 
   /** Check bot permissions in the guild. */

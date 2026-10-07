@@ -369,5 +369,47 @@ describe('DiscordAuthStrategy', () => {
       expect(err).toBeInstanceOf(Error);
       expect((err as Error).message).toBe('Failed to validate Discord user');
     });
+
+    // ROK-1714: a removed Discord avatar arrives as `null`; it must reach
+    // the service as `null` (clears the column), never `undefined` (which
+    // Drizzle skips, leaving the dead hash in place).
+    it('passes a null avatar through as null, not undefined (ROK-1714)', async () => {
+      mockSettingsService.getDiscordOAuthConfig.mockResolvedValue({
+        clientId: 'cid',
+        clientSecret: 'csec',
+        callbackUrl: 'https://new.example/cb',
+      });
+      mockAuthService.validateDiscordUser.mockResolvedValue({
+        id: 7,
+        username: 'bare',
+        role: 'user',
+      });
+      passport.use.mockClear();
+      await strategy.reloadConfig();
+      const calls = passport.use.mock.calls.filter((a) => a[0] === 'discord');
+      const internal = calls[calls.length - 1][1] as {
+        _verify: (
+          a: string,
+          r: string,
+          p: { id: string; username: string; avatar: string | null },
+          d: (err: unknown, user?: unknown) => void,
+        ) => void;
+      };
+      const done = jest.fn();
+      await new Promise<void>((resolve) => {
+        done.mockImplementation(() => resolve());
+        internal._verify(
+          'a',
+          'r',
+          { id: 'd-1', username: 'bare', avatar: null },
+          done,
+        );
+      });
+      expect(mockAuthService.validateDiscordUser.mock.calls[0]).toStrictEqual([
+        'd-1',
+        'bare',
+        null,
+      ]);
+    });
   });
 });

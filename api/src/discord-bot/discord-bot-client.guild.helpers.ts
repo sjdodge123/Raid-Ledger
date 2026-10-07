@@ -87,18 +87,23 @@ export async function kickGuildMember(
   }
 }
 
+/** Discord user ID → global avatar hash (null = no avatar) (ROK-1714). */
+export type GuildMemberAvatars = Map<string, string | null>;
+
 /**
- * Fetch every member of the guild and return their Discord IDs as a Set
- * (ROK-1282). Used by GuildReconciliationService to diff DB users against
- * actual guild membership. Returns null when the bot is disconnected
+ * Fetch every member of the guild and return a Map of Discord ID → GLOBAL
+ * avatar hash (ROK-1282, ROK-1714). Keys drive GuildReconciliationService's
+ * membership diff; values refresh `users.avatar`. Uses `m.user.avatar`, never
+ * the guild-specific `m.avatar` — the `/avatars/<userId>/<hash>` CDN path
+ * only serves global hashes. Returns null when the bot is disconnected
  * (caller should treat as a no-op, not an error).
  */
-export async function listAllGuildMemberIds(
+export async function listAllGuildMemberAvatars(
   guild: Guild | null,
-): Promise<Set<string> | null> {
+): Promise<GuildMemberAvatars | null> {
   if (!guild) return null;
   const members = await guild.members.fetch();
-  return new Set(members.map((m) => m.user.id));
+  return new Map(members.map((m) => [m.user.id, m.user.avatar ?? null]));
 }
 
 /** ROK-1352: List category channels (parents for ephemeral voice channels). */
