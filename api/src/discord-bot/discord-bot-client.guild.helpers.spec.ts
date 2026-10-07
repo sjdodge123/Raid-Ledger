@@ -11,6 +11,7 @@ import { ChannelType } from 'discord.js';
 import { Collection } from 'discord.js';
 import type { Guild } from 'discord.js';
 import {
+  listAllGuildMemberAvatars,
   listGuildForumChannels,
   listGuildTextChannels,
 } from './discord-bot-client.guild.helpers';
@@ -85,5 +86,44 @@ describe('listGuildTextChannels (ROK-1518)', () => {
 
   it('returns an empty list when the bot has no guild', () => {
     expect(listGuildTextChannels(null)).toEqual([]);
+  });
+});
+
+describe('listAllGuildMemberAvatars (ROK-1282, ROK-1714)', () => {
+  function memberGuild(
+    members: {
+      id: string;
+      guildAvatar: string | null;
+      avatar: string | null;
+    }[],
+  ): Guild {
+    const all = new Collection<string, unknown>();
+    for (const m of members) {
+      all.set(m.id, {
+        avatar: m.guildAvatar,
+        user: { id: m.id, avatar: m.avatar },
+      });
+    }
+    return {
+      members: { fetch: jest.fn().mockResolvedValue(all) },
+    } as unknown as Guild;
+  }
+
+  it('maps each member id to the GLOBAL user avatar, never the guild avatar', async () => {
+    const guild = memberGuild([
+      { id: 'u-1', guildAvatar: 'guild-only-hash', avatar: 'global-hash' },
+      { id: 'u-2', guildAvatar: 'guild-only-hash', avatar: null },
+    ]);
+
+    const result = await listAllGuildMemberAvatars(guild);
+
+    expect(result && [...result.entries()]).toStrictEqual([
+      ['u-1', 'global-hash'],
+      ['u-2', null],
+    ]);
+  });
+
+  it('returns null when the bot is disconnected (no guild)', async () => {
+    expect(await listAllGuildMemberAvatars(null)).toBeNull();
   });
 });

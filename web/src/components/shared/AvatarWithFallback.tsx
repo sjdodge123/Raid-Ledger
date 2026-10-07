@@ -12,6 +12,10 @@ interface AvatarWithFallbackProps {
     user?: AvatarUser | null;
     /** Game ID for context-aware avatar resolution (ROK-222) */
     gameId?: number | string | undefined;
+    /** Image loading hint (ROK-1714) */
+    loading?: 'lazy' | 'eager' | undefined;
+    /** Alt text (defaults to username; pass "" for decorative avatars) (ROK-1714) */
+    alt?: string | undefined;
 }
 
 function InitialsFallback({ username, sizeClassName }: { username: string; sizeClassName: string }) {
@@ -35,12 +39,15 @@ export function AvatarWithFallback({
     sizeClassName = 'h-8 w-8',
     user,
     gameId,
+    loading,
+    alt,
 }: AvatarWithFallbackProps) {
-    const [hasError, setHasError] = useState(false);
+    // ROK-1714: tracked per URL, so a recycled row with a new src gets a fresh load attempt.
+    const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
     const effectiveUrl = user ? resolveAvatar(user, gameId).url : (avatarUrl ?? null);
 
-    if (!effectiveUrl || hasError) {
+    if (!effectiveUrl || failedUrl === effectiveUrl) {
         return <InitialsFallback username={username} sizeClassName={sizeClassName} />;
     }
 
@@ -48,9 +55,10 @@ export function AvatarWithFallback({
         <div className={`${sizeClassName} flex-shrink-0 overflow-hidden rounded-full bg-overlay`}>
             <img
                 src={effectiveUrl}
-                alt={username}
+                alt={alt ?? username}
                 className="h-full w-full object-cover"
-                onError={() => setHasError(true)}
+                loading={loading}
+                onError={() => setFailedUrl(effectiveUrl)}
             />
         </div>
     );

@@ -1,4 +1,5 @@
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
+import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 
 interface VoiceRosterProps {
   participants: AdHocParticipantDto[];
@@ -18,18 +19,10 @@ function formatDuration(seconds: number | null): string {
 }
 
 function ParticipantAvatar({ participant }: { participant: AdHocParticipantDto }) {
-  if (participant.discordAvatarHash) {
-    return (
-      <img
-        src={`https://cdn.discordapp.com/avatars/${participant.discordUserId}/${participant.discordAvatarHash}.png?size=32`}
-        alt="" className="w-6 h-6 rounded-full flex-shrink-0" />
-    );
-  }
-  return (
-    <div className="w-6 h-6 rounded-full bg-dim flex-shrink-0 flex items-center justify-center text-xs text-muted">
-      {participant.discordUsername.charAt(0).toUpperCase()}
-    </div>
-  );
+  const hash = participant.discordAvatarHash;
+  const url = hash ? `https://cdn.discordapp.com/avatars/${participant.discordUserId}/${hash}.png?size=32` : null;
+  // ROK-1714: a stale hash falls back to initials instead of a broken glyph.
+  return <AvatarWithFallback avatarUrl={url} username={participant.discordUsername} alt="" sizeClassName="w-6 h-6" />;
 }
 
 function ParticipantName({ participant, isActive }: { participant: AdHocParticipantDto; isActive: boolean }) {

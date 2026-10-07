@@ -38,7 +38,7 @@ export class AuthService {
   async validateDiscordUser(
     discordId: string,
     username: string,
-    avatar?: string,
+    avatar: string | null = null,
   ) {
     const unlinked =
       await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
@@ -63,7 +63,7 @@ export class AuthService {
     const user = await this.usersService.createOrUpdate({
       discordId,
       username,
-      avatar: avatar || undefined,
+      avatar: avatar || null,
     });
     this.emitDiscordLogin(user.id, discordId);
     // ROK-1537: fleet-only first-login admin; a no-op outside a fleet env.
@@ -74,7 +74,7 @@ export class AuthService {
     userId: number,
     discordId: string,
     username: string,
-    avatar?: string,
+    avatar: string | null = null,
   ) {
     const relinked = await this.usersService.relinkDiscord(
       userId,

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { DiscordMemberSearchResult } from '../../lib/api-client';
 import { useEvent } from '../../hooks/use-events';
 import { copyWithToast } from '../../lib/clipboard';
+import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 
 interface MemberListProps {
     members: DiscordMemberSearchResult[];
@@ -14,15 +15,9 @@ interface MemberListProps {
 }
 
 function MemberAvatar({ member }: { member: DiscordMemberSearchResult }) {
-    if (member.avatar) {
-        return <img src={`https://cdn.discordapp.com/avatars/${member.discordId}/${member.avatar}.png?size=32`}
-            alt="" className="w-7 h-7 rounded-full shrink-0" />;
-    }
-    return (
-        <div className="w-7 h-7 rounded-full bg-indigo-500/30 flex items-center justify-center shrink-0">
-            <span className="text-xs font-bold text-indigo-300">{member.username[0]?.toUpperCase()}</span>
-        </div>
-    );
+    const url = member.avatar ? `https://cdn.discordapp.com/avatars/${member.discordId}/${member.avatar}.png?size=32` : null;
+    // ROK-1714: a stale hash falls back to neutral-token initials instead of a broken glyph.
+    return <AvatarWithFallback avatarUrl={url} username={member.username} alt="" sizeClassName="w-7 h-7" />;
 }
 
 function statusColor(status: string | null): string {

@@ -4,6 +4,7 @@ import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { SeriesBadge } from './SeriesBadge';
+import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 import { COVER_INTRINSIC, coverSrcSetProps } from '../../lib/igdb-image';
 
 interface MobileEventCardProps {
@@ -49,11 +50,7 @@ function AvatarStack({ signupAvatars }: { signupAvatars: Array<{ url: string | n
         <div className="flex -space-x-1.5" data-testid="mobile-event-avatars">
             {signupAvatars.map((avatar, i) => (
                 <div key={i} className="w-5 h-5 rounded-full border border-surface bg-overlay overflow-hidden">
-                    {avatar.url ? (
-                        <img src={avatar.url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                        <div className="w-full h-full flex items-center justify-center text-[8px] text-muted font-medium">?</div>
-                    )}
+                    <AvatarWithFallback avatarUrl={avatar.url} username="?" alt="" sizeClassName="w-full h-full text-[8px]!" />
                 </div>
             ))}
         </div>

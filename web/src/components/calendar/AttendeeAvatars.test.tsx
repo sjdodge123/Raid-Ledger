@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { AttendeeAvatars } from './AttendeeAvatars';
 
 const mockSignups = [
@@ -87,4 +87,15 @@ it('resolves character avatars with numeric game context', () => {
 describe('AttendeeAvatars', () => {
     attendeeavatarsGroup1();
     attendeeavatarsGroup2();
+});
+
+describe('AttendeeAvatars — dead avatar (ROK-1714)', () => {
+    it('swaps a broken avatar image for initials', () => {
+        render(<AttendeeAvatars signups={[{ id: 9, username: 'halfdead', avatar: 'deadhash', discordId: '111' }]} totalCount={1} />);
+
+        fireEvent.error(screen.getByRole('img', { name: 'halfdead' }));
+
+        expect(screen.queryByRole('img', { name: 'halfdead' }), 'broken img should be replaced').toBeNull();
+        expect(screen.queryByText('H'), 'initials fallback should render after the img error').not.toBeNull();
+    });
 });
