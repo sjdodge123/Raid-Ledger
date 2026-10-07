@@ -15,6 +15,7 @@ import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { Switch } from '../../../components/ui/switch';
 import { useForeverConfig } from '../hooks/use-forever-config';
+import { ForeverProbePanel } from './forever-probe-panel';
 
 type SaveFn = ReturnType<typeof useForeverConfig>['update']['mutateAsync'];
 
@@ -77,6 +78,7 @@ export function ForeverSettingsSection(): JSX.Element | null {
             <h3 id="wow-forever-settings-heading" className="text-base font-semibold text-foreground">WoW Forever</h3>
             <PrefixForm key={config.data.namespacePrefix} saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
             <ArmoryToggle saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
+            <ForeverProbePanel />
         </section>
     );
 }

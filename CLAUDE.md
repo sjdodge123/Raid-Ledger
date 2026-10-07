@@ -262,8 +262,10 @@ For ANY fix to a flaky/intermittent integration test, FIRST reproduce in isolati
 **Escalate to `--full`** (the complete local suite) only when:
 - The diff touches `drizzle/migrations/**` or container/infra (`Dockerfile*`, `nginx/**`, `docker-entrypoint*`) — high blast radius.
 - The diff touches `package.json` / `package-lock.json` (any workspace). GitHub's path filter treats dependency files as `code` (lint) but NOT `api`/`web`, so GitHub **skips unit + integration** for a deps-only change — `--static` would defer behavioral coverage to a job that never runs.
-- It's a `packages/contract/**` change or a large cross-workspace refactor.
+- It's a **breaking** `packages/contract/**` change (tightening, removing or renaming a field, or changing a schema that parses stored data) or a large cross-workspace refactor.
 - The operator explicitly asks for a full local run.
+
+**Additive contract changes run `--static` (operator ruling 2026-10-07)** — new schemas, new optional fields, new exports. GitHub's path filter maps `packages/contract/**` to the `api`, `web`, `contract` and `smoke_tests` jobs (`.github/workflows/ci.yml`), so unit, integration, the contract specs and Playwright all run before auto-merge; a local `--full` only moves discovery ~45 min earlier. Pair the `--static` gate with the story's own NEW integration spec(s) run alone on the fleet via `rl_run_on_runner` (~2–3 min; needs the Redis sidecar — memory `reference_rl_runner_no_redis`), because a wrong new spec is the most common miss. A breaking change stays `--full`: neither gate catches old stored JSON failing a tightened schema, so it needs the full local run plus a test that seeds old-shape data.
 
 Skills (`/push`, `/build`, `/fix-batch`, `/bulk`) default to `--static` and self-escalate on those signals. CI-job mapping, conditional-step path lists, the full flag inventory and the `SKIP_BACKUP_INTEGRATION` gating: `docs/runbooks/local-ci-gate.md`.
 
