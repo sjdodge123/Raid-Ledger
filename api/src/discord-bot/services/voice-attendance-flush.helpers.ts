@@ -252,7 +252,12 @@ async function resolveMultiBindingEvents(
   return merged;
 }
 
-/** Extract unique gameIds from bindings; null means "all games". */
+/**
+ * Extract unique gameIds from bindings; null means "all games". A general-lobby
+ * binding or a null-game monitor makes the WHOLE channel all-games on purpose
+ * (ROK-842; operator ruling on TDB:223): adding a game monitor to a lobby
+ * channel must not quietly narrow attendance for every other game.
+ */
 function extractGameIds(bindings: BindingSlim[]): number[] | null {
   const ids = new Set<number>();
   for (const b of bindings) {

@@ -34,13 +34,15 @@ export interface ActiveScheduledEvent {
   id: number;
   extendedUntil: Date | null;
   scheduledEnd: Date;
-  matchedBy: 'binding' | 'game' | 'sibling';
+  matchedBy: 'game' | 'anchored';
   discordScheduledEventId: string | null;
 }
 
 /**
  * Check if a scheduled (non-ad-hoc) event is currently active for the same
- * game/binding, suppressing ad-hoc spawns while scheduled events run.
+ * game or anchored to the same voice channel, suppressing ad-hoc spawns while
+ * scheduled events run. `bindingId` is kept for the callers' signature; the
+ * match is by game + channel (TDB:222).
  * Returns the matching scheduled event projection or undefined.
  */
 export async function findActiveScheduledEvent(
@@ -50,11 +52,7 @@ export async function findActiveScheduledEvent(
   now: Date,
   channelId?: string,
 ): Promise<ActiveScheduledEvent | undefined> {
-  const bindingClause = buildBindingClause(
-    bindingId,
-    effectiveGameId,
-    channelId,
-  );
+  const bindingClause = buildBindingClause(effectiveGameId, channelId);
   const [match] = await db
     .select({
       id: tables.events.id,
@@ -66,8 +64,8 @@ export async function findActiveScheduledEvent(
         (value: string) => new Date(value.endsWith('Z') ? value : `${value}Z`),
       ),
       matchedBy: sql<
-        'binding' | 'game' | 'sibling'
-      >`CASE WHEN ${tables.events.channelBindingId} = ${bindingId} THEN 'binding' WHEN ${tables.events.gameId} = ${effectiveGameId ?? null} THEN 'game' ELSE 'sibling' END`,
+        'game' | 'anchored'
+      >`CASE WHEN ${tables.events.gameId} = ${effectiveGameId ?? null} THEN 'game' ELSE 'anchored' END`,
       discordScheduledEventId: tables.events.discordScheduledEventId,
     })
     .from(tables.events)

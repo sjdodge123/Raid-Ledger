@@ -201,7 +201,7 @@ describe('AdHocEventService — lifecycle', () => {
           id: 42,
           extendedUntil: null,
           scheduledEnd: eventEnd,
-          matchedBy: 'binding',
+          matchedBy: 'anchored',
         },
       ]);
       mocks.db.returning.mockResolvedValueOnce([{ id: 42 }]);
