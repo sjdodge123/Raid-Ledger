@@ -7,7 +7,6 @@ import { getTimezoneAbbr, getTimezoneOffsetMinutes } from '../lib/timezone-utils
 
 export interface UseGameTimeEditorOptions {
     enabled?: boolean;
-    rolling?: boolean;
 }
 
 export type GameTimePreset = 'morning' | 'afternoon' | 'evening' | 'night';
@@ -15,8 +14,6 @@ export type GameTimePreset = 'morning' | 'afternoon' | 'evening' | 'night';
 export interface UseGameTimeEditorReturn {
     slots: GameTimeSlot[];
     events: GameTimeEventBlock[];
-    nextWeekEvents?: GameTimeEventBlock[] | undefined;
-    nextWeekSlots?: GameTimeSlot[] | undefined;
     isLoading: boolean;
     weekStart: string;
     isDirty: boolean;
@@ -40,35 +37,23 @@ const PRESET_HOUR_RANGES: Record<GameTimePreset, [number, number]> = {
     night: [0, 6],
 };
 
-/**
- * Compute the ISO date string for next week's Sunday.
- */
-function getNextWeekStart(): string {
-    const now = new Date();
-    const day = now.getDay();
-    const nextSunday = new Date(now);
-    nextSunday.setDate(now.getDate() - day + 7);
-    nextSunday.setHours(0, 0, 0, 0);
-    return nextSunday.toISOString().slice(0, 10);
-}
-
 function isAvailableSlot(s: GameTimeSlot): boolean {
     return s.status === 'available' || !s.status;
 }
 
+/** The editable template view: template slots only, commitments shown as plain availability. */
 function deriveDisplaySlots(
     editSlots: GameTimeSlot[] | null,
     gameTimeData: ReturnType<typeof useGameTime>['data'],
-    rolling: boolean,
 ): GameTimeSlot[] {
     if (editSlots !== null) return editSlots;
     if (!gameTimeData?.slots) return [];
     return gameTimeData.slots
-        .filter((s: GameTimeSlot) => rolling || s.fromTemplate !== false)
+        .filter((s: GameTimeSlot) => s.fromTemplate !== false)
         .map((s: GameTimeSlot) => ({
             dayOfWeek: s.dayOfWeek,
             hour: s.hour,
-            status: (!rolling && (s.status === 'committed' || s.status === 'freed'))
+            status: (s.status === 'committed' || s.status === 'freed')
                 ? 'available'
                 : (s.status ?? 'available'),
         }));
@@ -98,21 +83,15 @@ function togglePresetSlots(
     return [...current, ...toAdd];
 }
 
-function useGameTimeQueries(enabled: boolean, rolling: boolean) {
+function useGameTimeQueries(enabled: boolean) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const tzOffset = useMemo(() => getTimezoneOffsetMinutes(resolved), [resolved]);
-    const nextWeekStart = useMemo(() => getNextWeekStart(), []);
 
     const { data: gameTimeData, isLoading } = useGameTime({ enabled, tzOffset });
-    const { data: nextWeekData } = useGameTime({
-        enabled: enabled && rolling,
-        week: nextWeekStart,
-        tzOffset,
-    });
 
     const tzLabel = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
 
-    return { gameTimeData, nextWeekData, isLoading, tzLabel };
+    return { gameTimeData, isLoading, tzLabel };
 }
 
 function useCurrentTime() {
@@ -122,11 +101,6 @@ function useCurrentTime() {
         return () => clearInterval(interval);
     }, []);
     return { todayIndex: now.getDay(), currentHour: now.getHours() + now.getMinutes() / 60 };
-}
-
-function deriveNextWeekSlots(nextWeekData: ReturnType<typeof useGameTime>['data']): GameTimeSlot[] | undefined {
-    if (!nextWeekData?.slots) return undefined;
-    return nextWeekData.slots.map((s: GameTimeSlot) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: s.status ?? 'available' }));
 }
 
 function useSaveHandler(slots: GameTimeSlot[], saveGameTime: ReturnType<typeof useSaveGameTime>, setEditSlots: (v: GameTimeSlot[] | null) => void) {
@@ -139,18 +113,15 @@ function useSaveHandler(slots: GameTimeSlot[], saveGameTime: ReturnType<typeof u
 
 export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTimeEditorReturn {
     const enabled = options?.enabled ?? true;
-    const rolling = options?.rolling ?? false;
 
-    const { gameTimeData, nextWeekData, isLoading, tzLabel } = useGameTimeQueries(enabled, rolling);
+    const { gameTimeData, isLoading, tzLabel } = useGameTimeQueries(enabled);
     const saveGameTime = useSaveGameTime();
     const saveOverrides = useSaveGameTimeOverrides();
     const [editSlots, setEditSlots] = useState<GameTimeSlot[] | null>(null);
     const { todayIndex, currentHour } = useCurrentTime();
 
-    const slots = useMemo(() => deriveDisplaySlots(editSlots, gameTimeData, rolling), [editSlots, gameTimeData, rolling]);
+    const slots = useMemo(() => deriveDisplaySlots(editSlots, gameTimeData), [editSlots, gameTimeData]);
     const events = useMemo<GameTimeEventBlock[]>(() => (gameTimeData?.events as GameTimeEventBlock[]) ?? [], [gameTimeData]);
-    const nextWeekEvents = useMemo(() => nextWeekData?.events as GameTimeEventBlock[] | undefined, [nextWeekData]);
-    const nextWeekSlots = useMemo(() => deriveNextWeekSlots(nextWeekData), [nextWeekData]);
 
     const applyPreset = useCallback((dayOfWeek: number, preset: GameTimePreset) => {
         const [start, end] = PRESET_HOUR_RANGES[preset];
@@ -160,7 +131,7 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     const save = useSaveHandler(slots, saveGameTime, setEditSlots);
 
     return {
-        slots, events, nextWeekEvents, nextWeekSlots, isLoading,
+        slots, events, isLoading,
         weekStart: gameTimeData?.weekStart ?? '', isDirty: editSlots !== null,
         handleChange: useCallback((newSlots: GameTimeSlot[]) => setEditSlots(newSlots), []),
         applyPreset, save, clear: useCallback(() => setEditSlots([]), []), discard: useCallback(() => setEditSlots(null), []),

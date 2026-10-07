@@ -107,7 +107,7 @@ function ProfileContent({ characters, charactersLoading, gamesAvailable, isAuthe
             <TimezoneSection />
             <NotificationPreferencesSection />
             <div id="game-time" className="bg-surface border border-edge-subtle rounded-xl p-6 scroll-mt-8">
-                <GameTimePanel mode="profile" rolling enabled={isAuthenticated} />
+                <GameTimePanel mode="profile" enabled={isAuthenticated} />
             </div>
             <CharactersSection characters={characters} isLoading={charactersLoading} gamesAvailable={gamesAvailable}
                 onAdd={onAdd} onEdit={onEdit} />

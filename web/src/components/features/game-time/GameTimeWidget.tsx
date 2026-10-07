@@ -180,7 +180,7 @@ function EventDetailCard({ title, coverUrl, gameName, gameId, timeLabel, creator
 
 function useGameTimeWidgetData(props: GameTimeWidgetProps) {
     const { eventStartTime, eventEndTime, eventTitle, gameName, gameSlug, gameId, coverUrl, description, creatorUsername, attendees, attendeeCount } = props;
-    const editor = useGameTimeEditor({ enabled: true, rolling: false });
+    const editor = useGameTimeEditor({ enabled: true });
     const hasOverlap = useMemo(() => checkGameTimeOverlap(editor.slots, eventStartTime, eventEndTime), [editor.slots, eventStartTime, eventEndTime]);
     const previewBlocks = useMemo<GameTimePreviewBlock[]>(() => {
         const dayHours = collectDayHours(eventStartTime, eventEndTime);

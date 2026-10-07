@@ -1,33 +1,24 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import type { JSX } from 'react';
 import { useGameTimeEditor } from '../../../hooks/use-game-time-editor';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { GameTimeGrid } from './GameTimeGrid';
-import type { GameTimePreviewBlock } from './GameTimeGrid';
-import type { GameTimeEventBlock } from '@raid-ledger/contract';
-import { EventBlockPopover } from './EventBlockPopover';
 import { PHONE_MQ } from '../../../lib/breakpoints';
 import { PhoneWindowToggle } from './phone/PhoneWindowToggle';
 import { useDesktopProfileWindow } from './use-desktop-profile-window';
 import { awayDatesInWeek } from './phone/away-days';
 
 interface GameTimePanelProps {
-    /** Controls header/buttons: 'profile' has save/clear, 'modal' has confirm-on-close, 'picker' is read-only */
-    mode: 'profile' | 'modal' | 'picker';
-    /** For modal mode: the event being previewed as a dashed block */
-    previewBlocks?: GameTimePreviewBlock[];
-    /** Hour range to display (default [0, 24]). Use [6, 24] in modals. Profile mode owns its own window. */
-    hourRange?: [number, number];
-    /** Enable rolling/continual week (default true for non-profile modes) */
-    rolling?: boolean;
-    /** Called when user clicks an event block */
-    onEventClick?: (event: GameTimeEventBlock) => void;
+    /**
+     * The profile's weekly-template editor is the only mode. The rolling
+     * 'modal' / 'picker' modes had no mount and were removed (TDB:1933).
+     */
+    mode: 'profile';
     /** Whether auth is confirmed (for useGameTime enabled) */
     enabled?: boolean;
 }
 
 type Editor = ReturnType<typeof useGameTimeEditor>;
-type PopoverState = { event: GameTimeEventBlock; anchorRect: DOMRect } | null;
 
 function ProfileHeader(): JSX.Element {
     return (
@@ -83,29 +74,12 @@ function ProfileWeek({ editor, isMobile }: { editor: Editor; isMobile: boolean }
     );
 }
 
-export function GameTimePanel({
-    mode, previewBlocks, hourRange, rolling = true, onEventClick, enabled = true,
-}: GameTimePanelProps): JSX.Element {
-    const editor = useGameTimeEditor({ enabled, rolling: mode === 'profile' ? false : rolling });
+export function GameTimePanel({ enabled = true }: GameTimePanelProps): JSX.Element {
+    const editor = useGameTimeEditor({ enabled });
     const isMobile = useMediaQuery(PHONE_MQ);
-    const [popoverEvent, setPopoverEvent] = useState<PopoverState>(null);
-    const handleEventClick = useCallback((event: GameTimeEventBlock, anchorRect: DOMRect) => {
-        if (onEventClick) onEventClick(event); else setPopoverEvent({ event, anchorRect });
-    }, [onEventClick]);
 
     if (editor.isLoading) {
         return <div className="flex items-center justify-center py-12"><div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" /></div>;
     }
-    if (mode === 'profile') return <ProfileWeek editor={editor} isMobile={isMobile} />;
-
-    const isReadOnly = mode === 'picker';
-    return (
-        <div>
-            <GameTimeGrid slots={editor.slots} onChange={isReadOnly ? undefined : editor.handleChange} readOnly={isReadOnly}
-                tzLabel={editor.tzLabel} hourRange={hourRange} compact events={editor.events} onEventClick={handleEventClick}
-                previewBlocks={previewBlocks} todayIndex={editor.todayIndex} currentHour={editor.currentHour}
-                nextWeekEvents={editor.nextWeekEvents} nextWeekSlots={editor.nextWeekSlots} weekStart={editor.weekStart} />
-            {popoverEvent && <EventBlockPopover event={popoverEvent.event} anchorRect={popoverEvent.anchorRect} onClose={() => setPopoverEvent(null)} />}
-        </div>
-    );
+    return <ProfileWeek editor={editor} isMobile={isMobile} />;
 }

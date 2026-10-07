@@ -53,7 +53,7 @@ function GameTimeStepGrid({ slots, handleChange, tzLabel }: {
 }
 
 export function GameTimeStep() {
-    const { slots, isLoading, isDirty, handleChange, save, tzLabel } = useGameTimeEditor({ enabled: true, rolling: false });
+    const { slots, isLoading, isDirty, handleChange, save, tzLabel } = useGameTimeEditor({ enabled: true });
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     useAutoSaveOnUnmount(save, isDirty);
 
