@@ -69,7 +69,15 @@ export async function findActiveScheduledEvent(
       discordScheduledEventId: tables.events.discordScheduledEventId,
     })
     .from(tables.events)
-    .where(and(bindingClause, ...buildTimeConditions(now)))
+    .where(and(bindingClause, ...buildTimeConditions(now, effectiveGameId)))
+    // A same-game match wins over a cross-game channel anchor so the
+    // suppression write extends the event the joining players belong to
+    // (REVIEW-B R4); then the most recently started, then id, for determinism.
+    .orderBy(
+      sql`CASE WHEN ${tables.events.gameId} = ${effectiveGameId ?? null} THEN 0 ELSE 1 END`,
+      sql`lower(${tables.events.duration}) DESC`,
+      sql`${tables.events.id} DESC`,
+    )
     .limit(1);
   return match;
 }

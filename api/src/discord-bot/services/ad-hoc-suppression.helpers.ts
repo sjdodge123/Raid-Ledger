@@ -174,16 +174,47 @@ function buildChannelAnchorClause(channelId: string) {
                   AND cbng.channel_type = 'voice' AND cbng.channel_id = ${channelId}))`;
 }
 
-/** Build the time-window WHERE conditions for scheduled event suppression. */
-export function buildTimeConditions(now: Date) {
+/**
+ * Build the time-window WHERE conditions for scheduled event suppression.
+ *
+ * Same-game (and null-game) matches keep the 30-min post-end look-back and the
+ * `extended_until` term — the window the suppression extension rolls forward.
+ * A game join's cross-game match (an event for another game anchored to the
+ * channel, TDB:224) only counts while the event is genuinely live
+ * (`upper(duration) >= now`): an ended game-Y raid must not keep suppressing a
+ * game-X group in the same channel (REVIEW-B R4 MAJOR).
+ */
+export function buildTimeConditions(
+  now: Date,
+  effectiveGameId?: number | null,
+) {
   const lookbackMs = 30 * 60 * 1000;
   const lookbackTime = new Date(now.getTime() - lookbackMs);
+  const nowTs = sql`${now.toISOString()}::timestamptz`;
+  const sameGameWindow = sql`(upper(${tables.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${tables.events.extendedUntil} >= ${nowTs})`;
+  const window =
+    effectiveGameId == null
+      ? sameGameWindow
+      : sql`((${tables.events.gameId} = ${effectiveGameId} AND ${sameGameWindow})
+          OR (${tables.events.gameId} IS DISTINCT FROM ${effectiveGameId} AND upper(${tables.events.duration}) >= ${nowTs}))`;
   return [
     eq(tables.events.isAdHoc, false),
     sql`${tables.events.cancelledAt} IS NULL`,
-    sql`lower(${tables.events.duration}) <= ${now.toISOString()}::timestamptz`,
-    sql`(upper(${tables.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${tables.events.extendedUntil} >= ${now.toISOString()}::timestamptz)`,
+    sql`lower(${tables.events.duration}) <= ${nowTs}`,
+    window,
   ] as const;
+}
+
+/**
+ * A game join matched an event for ANOTHER game through the channel anchor
+ * (`matchedBy='anchored'` with a non-null join game). It suppresses the spawn
+ * but never extends that event's window (REVIEW-B R4 MAJOR).
+ */
+export function isCrossGameAnchor(
+  effectiveGameId: number | null | undefined,
+  matchedBy: 'game' | 'anchored',
+): boolean {
+  return effectiveGameId != null && matchedBy === 'anchored';
 }
 
 /**
@@ -280,6 +311,7 @@ export async function suppressScheduled(
   logger.debug(
     `[voice-spawn] suppressed binding=${bindingId} channel=${channelId ?? '-'} game=${effectiveGameId ?? '-'} event=${scheduled.id} match=${scheduled.matchedBy} window=${scheduled.extendedUntil?.toISOString() ?? 'none'}`,
   );
+  if (isCrossGameAnchor(effectiveGameId, scheduled.matchedBy)) return true;
   await applySuppressionPlan(db, scheduled, plan, now, onExtended);
   return true;
 }
