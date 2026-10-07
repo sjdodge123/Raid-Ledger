@@ -71,7 +71,7 @@ describe('backup modals are the shared Modal (tech-debt [28])', () => {
         expect(dialog).toHaveTextContent('s3cret-pass');
         fireEvent.click(backdropOf(dialog));
         expect(onClose).not.toHaveBeenCalled();
-        expect(screen.getByRole('dialog', { name: 'Discard your changes?' })).toHaveTextContent(/won't be shown again/);
+        expect(screen.getByRole('dialog', { name: 'Leave without copying the password?' })).toHaveTextContent(/won't be shown again/);
         expect(screen.getByRole('dialog', { name: 'Instance Reset Complete' })).toHaveTextContent('s3cret-pass');
     });
 
@@ -81,6 +81,38 @@ describe('backup modals are the shared Modal (tech-debt [28])', () => {
         fireEvent.click(backdropOf(expectAriaModal('Delete Backup')));
         fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
         expect(onClose).not.toHaveBeenCalled();
+    });
+});
+
+describe('ResetModal result view — the password confirm names what is lost (TDB:1928)', () => {
+    beforeEach(() => { localStorage.clear(); });
+
+    it('TDB:1928 — Escape on the password view asks to leave without copying, not to discard changes', () => {
+        render(<ResetModal onClose={vi.fn()} onConfirm={vi.fn()} isPending={false} result={{ password: 's3cret-pass' }} />);
+        fireEvent.keyDown(document, { key: 'Escape' });
+        const confirm = screen.getByRole('dialog', { name: 'Leave without copying the password?' });
+        expect(confirm).toHaveTextContent('Stay');
+        expect(confirm).toHaveTextContent('Leave');
+        expect(screen.queryByRole('dialog', { name: 'Discard your changes?' })).toBeNull();
+        expect(screen.queryByText('Keep editing')).toBeNull();
+    });
+
+    it('TDB:1928 — Stay keeps the password on screen', () => {
+        localStorage.setItem('raid_ledger_token', 'tok');
+        render(<ResetModal onClose={vi.fn()} onConfirm={vi.fn()} isPending={false} result={{ password: 's3cret-pass' }} />);
+        fireEvent.keyDown(document, { key: 'Escape' });
+        fireEvent.click(screen.getByRole('button', { name: 'Stay' }));
+        expect(screen.queryByRole('dialog', { name: 'Leave without copying the password?' })).toBeNull();
+        expect(screen.getByRole('dialog', { name: 'Instance Reset Complete' })).toHaveTextContent('s3cret-pass');
+        expect(localStorage.getItem('raid_ledger_token')).toBe('tok');
+    });
+
+    it('TDB:1928 — Leave on the password confirm signs out toward login', () => {
+        localStorage.setItem('raid_ledger_token', 'tok');
+        render(<ResetModal onClose={vi.fn()} onConfirm={vi.fn()} isPending={false} result={{ password: 's3cret-pass' }} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
+        expect(localStorage.getItem('raid_ledger_token')).toBeNull();
     });
 });
 

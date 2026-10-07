@@ -20,6 +20,8 @@ import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 
 const KEYWORD_DISCARD = 'Closing now clears the confirmation keyword you typed.';
 const PASSWORD_DISCARD = "The new admin password won't be shown again. Copy it before you leave for the login page.";
+/** TDB:1928 — nothing is edited here, so the confirm names what is lost. */
+const PASSWORD_DISCARD_COPY = { title: 'Leave without copying the password?', keepLabel: 'Stay', discardLabel: 'Leave' } as const;
 const noop = (): void => undefined;
 
 /** Escape / backdrop / × do nothing while the action runs (Cancel is disabled too). */
@@ -146,7 +148,7 @@ function ResetResultView({ result }: { result: { password: string } }) {
     };
 
     return (
-        <Modal isOpen onClose={goToLogin} closeGuard={closeGuard} discardMessage={PASSWORD_DISCARD} maxWidth="max-w-lg"
+        <Modal isOpen onClose={goToLogin} closeGuard={closeGuard} discardMessage={PASSWORD_DISCARD} discardCopy={PASSWORD_DISCARD_COPY} maxWidth="max-w-lg"
             title="Instance Reset Complete" footer={<Button variant="secondary" onClick={goToLogin}>Go to Login</Button>}>
             <p className="text-sm text-muted">The instance has been reset to factory defaults. Use these credentials to log in:</p>
             <ResetCredentials password={result.password} copied={copied} onCopy={onCopy} />

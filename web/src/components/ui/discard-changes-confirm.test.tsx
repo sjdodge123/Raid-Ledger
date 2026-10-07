@@ -28,6 +28,19 @@ describe('DiscardChangesConfirm', () => {
         expect(body).not.toHaveTextContent("Your changes haven't been saved yet.");
     });
 
+    it('takes a caller title and button labels (TDB:1928) and keeps their roles', () => {
+        const onKeep = vi.fn();
+        const onDiscard = vi.fn();
+        render(<DiscardChangesConfirm isOpen onKeep={onKeep} onDiscard={onDiscard}
+            copy={{ title: 'Leave without copying the password?', keepLabel: 'Stay', discardLabel: 'Leave' }} />);
+        expect(screen.getByRole('dialog', { name: 'Leave without copying the password?' })).toBeInTheDocument();
+        expect(screen.queryByText('Discard your changes?')).toBeNull();
+        expect(screen.getByTestId('discard-changes-keep')).toHaveTextContent('Stay');
+        expect(screen.getByTestId('discard-changes-discard')).toHaveTextContent('Leave');
+        fireEvent.click(screen.getByTestId('discard-changes-discard'));
+        expect(onDiscard).toHaveBeenCalledTimes(1);
+    });
+
     it('gives Keep editing the initial focus', async () => {
         setup();
         await waitFor(() => expect(screen.getByTestId('discard-changes-keep')).toHaveFocus());
