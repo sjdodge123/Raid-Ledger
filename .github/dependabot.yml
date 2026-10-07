@@ -30,6 +30,14 @@ updates:
       # nestjs updates still flow through the `nestjs` group below.
       - dependency-name: "@nestjs/*"
         update-types: ["version-update:semver-major"]
+      # msw 3 is a breaking major for the web test harness: it removed
+      # `onUnhandledRequest` from server.listen options, which
+      # web/src/test/setup.ts uses (#1494 failed lint on TS2353). Migrating the
+      # MSW setup + handlers behind 2,800+ web tests is a story of its own
+      # (TECH-DEBT-BACKLOG 2026-10-07); closed #1494 on 2026-10-07 by operator
+      # ruling. Minor and patch msw 2.x updates still flow.
+      - dependency-name: "msw"
+        update-types: ["version-update:semver-major"]
     groups:
       nestjs:
         patterns:
