@@ -38,6 +38,12 @@ interface BottomSheetProps {
     closeGuard?: DirtyCloseGuard;
     /** What is unsaved, in the caller's words (the confirm's message). */
     discardMessage?: string;
+    /**
+     * Opened from inside an open `Modal` (ROK-1738): lifts the sheet to the
+     * Modal layer so it renders above its host instead of under it
+     * (`BOTTOM_SHEET` < `MODAL`; the later portal wins at equal z-index).
+     */
+    stacked?: boolean;
 }
 
 const DEFAULT_MAX_HEIGHT = '60vh';
@@ -186,13 +192,13 @@ function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: 
     return { sheetRef, drag, ...useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight) };
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage }: BottomSheetProps) {
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage, stacked = false }: BottomSheetProps) {
     const requestClose = closeGuard?.requestClose ?? onClose;
     useResetGuardOnClose(isOpen, closeGuard);
     const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
 
     const sheet = createPortal(
-        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
+        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: stacked ? Z_INDEX.MODAL : Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={requestClose} aria-hidden="true" />
             <div
                 ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}

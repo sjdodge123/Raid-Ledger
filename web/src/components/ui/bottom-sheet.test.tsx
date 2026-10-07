@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { axe } from 'vitest-axe';
 import { BottomSheet } from './bottom-sheet';
+import { Z_INDEX } from '../../lib/z-index';
 
 /** The visible viewport (`visualViewport`, via `bottom-sheet-viewport`); tests set it here. */
 const viewport = vi.hoisted(() => ({ height: 0, offsetTop: 0 }));
@@ -619,5 +620,20 @@ describe('BottomSheet — focus restore on close', () => {
         screen.getByRole('button', { name: 'Confirm' }).focus();
         rerender(<Host open={false} />);
         expect(screen.getByRole('button', { name: 'Confirm' })).toHaveFocus();
+    });
+});
+
+describe('BottomSheet — stacked (ROK-1738)', () => {
+    /** The fixed overlay layer that carries the z-index (the dialog's parent). */
+    const layer = () => screen.getByRole('dialog').parentElement as HTMLElement;
+
+    it('sits on the bottom-sheet layer by default', () => {
+        render(<BottomSheet isOpen={true} onClose={() => {}}>x</BottomSheet>);
+        expect(layer().style.zIndex).toBe(String(Z_INDEX.BOTTOM_SHEET));
+    });
+
+    it('lifts to the Modal layer when stacked over an open Modal', () => {
+        render(<BottomSheet isOpen={true} onClose={() => {}} stacked>x</BottomSheet>);
+        expect(layer().style.zIndex).toBe(String(Z_INDEX.MODAL));
     });
 });

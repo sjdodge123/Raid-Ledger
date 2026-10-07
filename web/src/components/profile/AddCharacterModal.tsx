@@ -222,6 +222,7 @@ function CharacterModalFormBody({ formId, s, editingCharacter, onClose, effectiv
 }) {
     return (
         <form id={formId} onSubmit={(e) => { e.preventDefault(); handleCharacterSubmit(s, editingCharacter, onClose); }} className="space-y-4">
+            {!s.isEditing && <PluginSlot name="character-create:header-actions" context={{ onClose, gameSlug: currentSlug }} />}
             {s.isEditing ? (
                 <div><p className="mb-1.5 text-sm font-medium text-secondary">Game</p><div className="px-3 py-2 bg-panel/50 border border-edge/50 rounded-lg text-muted text-sm">{effectiveGameName}</div></div>
             ) : (
