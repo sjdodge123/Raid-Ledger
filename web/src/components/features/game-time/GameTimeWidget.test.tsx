@@ -13,14 +13,6 @@ vi.mock('../../../hooks/use-game-time-editor', () => ({
     useGameTimeEditor: (options?: unknown) => useGameTimeEditorMock(options),
 }));
 
-// Mock useCancelSignup (used by EventBlockPopover)
-vi.mock('../../../hooks/use-signups', () => ({
-    useCancelSignup: () => ({
-        mutateAsync: vi.fn(),
-        isPending: false,
-    }),
-}));
-
 function makeEditorData(overrides: Record<string, unknown> = {}) {
     return {
         slots: [],

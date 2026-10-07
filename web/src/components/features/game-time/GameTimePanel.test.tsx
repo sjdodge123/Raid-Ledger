@@ -116,13 +116,6 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 2', () => {
             expect(eventBlocks).toHaveLength(0);
         });
 
-        it('profile mode does not render event popover', () => {
-            renderPanel({ mode: 'profile' });
-
-            // EventBlockPopover should not exist in profile mode
-            expect(screen.queryByTestId('event-popover')).not.toBeInTheDocument();
-        });
-
     });
 
 });

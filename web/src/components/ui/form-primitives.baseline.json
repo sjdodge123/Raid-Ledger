@@ -31,7 +31,6 @@
     "components/events/player-card.tsx": 1,
     "components/events/signup-confirmation-modal.tsx": 5,
     "components/events/signup-role-picker.tsx": 1,
-    "components/features/game-time/EventBlockPopover.tsx": 3,
     "components/features/game-time/GameTimePanel.tsx": 3,
     "components/features/game-time/GameTimeWidget.tsx": 2,
     "components/features/game-time/SelectedBlockInspector.tsx": 4,

@@ -192,7 +192,7 @@ light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Stil
 
 ### 2.3 Game-time widget tokens
 
-`--gt-widget-bg`, `--gt-widget-border`, `--gt-split-bg`, `--gt-past-highlight`, `--gt-hover-glow`,
+`--gt-widget-bg`, `--gt-widget-border`, `--gt-split-bg`, `--gt-hover-glow`,
 `--gt-proximity-line`. Declared on `html` (`index.css:96`), re-declared per theme. They exist because the
 game-time grid paints via **inline styles** computed per cell, where Tailwind classes cannot reach. Note
 `--gt-proximity-line` is a bare RGB triple, used as `rgb(var(--gt-proximity-line) / <a>)`. Game-time grid
