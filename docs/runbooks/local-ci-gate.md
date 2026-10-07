@@ -35,7 +35,7 @@
 ## Gate / e2e flags
 
 - `--static`: **lite gate (default for most stories)** — build + typecheck + lint + conditional migration/container only. Defers unit, integration, Playwright, and Discord smoke to GitHub CI. ~3–4 min.
-- `--full` (or no flag): complete local suite — adds unit, integration, and auto-scoped e2e on top of `--static`. Use for migration/infra/contract/deps/large changes.
+- `--full` (or no flag): complete local suite — adds unit, integration, and auto-scoped e2e on top of `--static`. Use for migration/infra/deps/large changes and **breaking** contract changes; additive contract changes use `--static` + the story's new integration specs on the fleet (CLAUDE.md, operator ruling 2026-10-07).
 - Default (auto, when running `--full`): e2e is diff + env gated. Backend-only branches pass through in seconds; UI/bot branches get the right coverage automatically.
 - `--no-e2e`: run build/tsc/lint/unit/integration but skip Playwright + smoke (pre-deploy static checks where you'll run e2e separately).
 - `--with-e2e`: force-run e2e even if the diff detector says no triggering files changed (paranoid pre-push, or shared-component changes the detector won't flag).
