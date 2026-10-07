@@ -151,7 +151,7 @@ describe('PugInviteService', () => {
         provide: ChannelResolverService,
         useValue: {
           resolveChannelForEvent: jest.fn().mockResolvedValue('channel-789'),
-          resolveVoiceChannelForEvent: jest
+          resolveVoiceChannelHonoringOverride: jest
             .fn()
             .mockResolvedValue('channel-789'),
         },
@@ -629,7 +629,9 @@ describe('PugInviteService', () => {
     });
 
     it('should skip voice channel field when no channel resolved', async () => {
-      channelResolver.resolveVoiceChannelForEvent.mockResolvedValue(null);
+      channelResolver.resolveVoiceChannelHonoringOverride.mockResolvedValue(
+        null,
+      );
       setupMemberFoundPath();
 
       await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
@@ -641,6 +643,26 @@ describe('PugInviteService', () => {
         (f) => f.name === 'Voice Channel',
       );
       expect(voiceField).toBeUndefined();
+    });
+  });
+
+  describe('PUG invite voice override (TDB:174a)', () => {
+    it('hands the PUG path the event voice override', async () => {
+      const overridden = {
+        ...mockEvent,
+        notificationChannelOverride: 'override-voice',
+      };
+      let n = 0;
+      mockDb.select.mockImplementation(() =>
+        createSelectChain(n++ === 0 ? [overridden] : [mockPugSlot]),
+      );
+      mockDb.update.mockReturnValue(createUpdateChain());
+
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
+
+      expect(
+        channelResolver.resolveVoiceChannelHonoringOverride,
+      ).toHaveBeenCalledWith(1, undefined, undefined, 'override-voice');
     });
   });
 
