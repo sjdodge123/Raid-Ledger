@@ -191,7 +191,8 @@ describe('DiscordAuthController — link callback is bound to the hop browser (R
     expect(onlyRedirect(res)).toEqual([
       `${CLIENT_URL}/profile/integrations?linked=success`,
     ]);
-    expect(m.linkDiscord).toHaveBeenCalledWith(7, 'victim-d', 'v', undefined);
+    // ROK-1714: Discord reporting no avatar now clears it (null), not "leave as is".
+    expect(m.linkDiscord).toHaveBeenCalledWith(7, 'victim-d', 'v', null);
     expect(res.clearCookie).toHaveBeenCalledWith(
       STATE_COOKIE,
       expect.objectContaining({ httpOnly: true, sameSite: 'lax', path: '/' }),
