@@ -12,6 +12,13 @@
  * `idx_characters_addon_guid` is unique per game + region. Nothing relies on
  * the demo seed except the boot-seeded game row (resolved by slug, else skip).
  * Every character created is deleted in `afterAll`.
+ *
+ * ROK-1738 — "Import LedgerLink character" at the top of Add Character (the
+ * id-less create route): paste an export for a character not on the account →
+ * create banner → Import → lands on `/characters/:id`; and an export with no
+ * ruleset → the picker gates Import until a ruleset is picked. The import
+ * dialog stacks over Add Character (Modal ≥1024px, `stacked` BottomSheet below);
+ * the created id is claimed from the apply response before any UI assertion.
  */
 import { deflateSync, inflateSync } from 'node:zlib';
 import { randomBytes } from 'node:crypto';
@@ -52,11 +59,12 @@ function goldenCharPayload(): { who: Record<string, unknown> } & Record<string, 
     return JSON.parse(inflateSync(Buffer.from(token.slice(HEADER.length), 'base64')).toString('utf8'));
 }
 
-/** The golden char export re-pointed at `fullName` with a fresh GUID, re-encoded as a paste. */
-function buildImportString(fullName: string): string {
+/** The golden char export re-pointed at `fullName` with a fresh GUID (plus `whoOverrides`), re-encoded as a paste. */
+function buildImportString(fullName: string, whoOverrides: Record<string, unknown> = {}): string {
     const golden = goldenCharPayload();
     const guid = `Player-4395-${randomBytes(4).toString('hex').toUpperCase()}`;
-    const who = { ...golden.who, guid, fullName, raw: { getUnitName: fullName, unitName: [fullName, null] } };
+    const raw = { getUnitName: fullName, unitName: [fullName, null] };
+    const who = { ...golden.who, guid, fullName, raw, ...whoOverrides };
     const body = deflateSync(Buffer.from(JSON.stringify({ ...golden, who }), 'utf8')).toString('base64');
     return `${HEADER}${body}`;
 }
@@ -97,6 +105,44 @@ async function pasteAndCheck(page: Page, dialog: Locator, value: string): Promis
     await dialog.getByRole('button', { name: 'Check string' }).click();
     const res = await preview;
     return { status: res.status(), body: await res.text() };
+}
+
+const CREATE_TITLE = 'Import LedgerLink character';
+
+/** Open Add Character with no game picked, then its "Import LedgerLink character" dialog (stacked over it). */
+async function openCreateImport(page: Page): Promise<{ add: Locator; dialog: Locator }> {
+    await page.goto('/profile/gaming/characters');
+    await page.getByRole('button', { name: 'Add Character' }).click();
+    const add = page.getByRole('dialog', { name: 'Add Character' });
+    await expect(add).toBeVisible({ timeout: 15_000 });
+    await expect(add.getByTestId('add-manually-divider'), 'the import entry sits above the manual form').toHaveText(/or add manually/);
+    await add.getByRole('button', { name: CREATE_TITLE }).click();
+    const dialog = page.getByRole('dialog', { name: CREATE_TITLE });
+    await expect(dialog, 'the import dialog opens over Add Character').toBeVisible({ timeout: 10_000 });
+    return { add, dialog };
+}
+
+/** Press Import, claim the created id from the apply response (before any assertion), and return it. */
+async function applyAndClaim(page: Page, dialog: Locator): Promise<string> {
+    const applied = page.waitForResponse((r) => {
+        if (r.request().method() !== 'POST' || !new URL(r.url()).pathname.endsWith('/characters/addon-import')) return false;
+        return (r.request().postDataJSON() as { dryRun?: boolean } | null)?.dryRun === false;
+    }, { timeout: 20_000 });
+    await dialog.getByRole('button', { name: 'Import', exact: true }).click();
+    const res = await applied;
+    const body = (await res.json()) as { target?: { characterId?: string | null } };
+    const id = body.target?.characterId;
+    if (id) createdIds.push(id);
+    expect(res.status(), `the create import should apply: ${JSON.stringify(body)}`).toBe(200);
+    expect(id, 'the apply response names the created character').toBeTruthy();
+    return String(id);
+}
+
+/** After a create import: Add Character is closed and the new character's page is open. */
+async function expectLandedOn(page: Page, add: Locator, id: string, fullName: string): Promise<void> {
+    await expect(page, 'a confirmed import navigates to the new character').toHaveURL(new RegExp(`/characters/${id}(?:[?#].*)?$`), { timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: fullName, level: 1 })).toBeVisible({ timeout: 15_000 });
+    await expect(add, 'the import closes Add Character').toHaveCount(0);
 }
 
 test.describe('Addon Import string dialog (ROK-1724)', () => {
@@ -188,5 +234,48 @@ test.describe('Addon Import string dialog (ROK-1724)', () => {
             page.getByRole('button', { name: 'Import string' }),
             "another player's Forever character has no Import string button",
         ).toHaveCount(0);
+    });
+
+    test('create: Add Character → Import LedgerLink character → create banner → Import → character page (ROK-1738)', async ({ page }, testInfo) => {
+        const fullName = uniqueName(testInfo, 'Smokecreate');
+        const { add, dialog } = await openCreateImport(page);
+        const checked = await pasteAndCheck(page, dialog, buildImportString(fullName));
+        expect(checked.status, `the create preview should succeed: ${checked.body}`).toBe(200);
+        await expect(dialog.getByTestId('addon-import-error'), 'a new character\'s export should not be rejected').toHaveCount(0);
+
+        const banner = dialog.getByTestId('addon-import-target');
+        await expect(banner, 'a character not on the account is a create').toHaveAttribute('data-action', 'create');
+        // char-normal.json: region 1 (US), ruleset normal, PALADIN 60.
+        await expect(banner).toContainText(`Creates ${fullName} · US`);
+        await expect(banner).toContainText('Level 60 Paladin');
+        await expect(dialog.getByTestId('addon-import-ruleset-picker'), 'the export names its ruleset → no picker').toHaveCount(0);
+
+        const id = await applyAndClaim(page, dialog);
+        await expectLandedOn(page, add, id, fullName);
+    });
+
+    test('create: an export with no ruleset needs a pick before Import (ROK-1738)', async ({ page }, testInfo) => {
+        const fullName = uniqueName(testInfo, 'Smokepick');
+        const { add, dialog } = await openCreateImport(page);
+        const checked = await pasteAndCheck(page, dialog, buildImportString(fullName, { ruleset: null }));
+        expect(checked.status, `the null-ruleset preview should succeed: ${checked.body}`).toBe(200);
+
+        const banner = dialog.getByTestId('addon-import-target');
+        await expect(banner).toHaveAttribute('data-action', 'create');
+        await expect(banner, 'the banner says the export has no ruleset').toContainText('ruleset not in export');
+        const picker = dialog.getByTestId('addon-import-ruleset-picker');
+        await expect(picker, 'a null-ruleset export shows the picker').toBeVisible();
+        const importButton = dialog.getByRole('button', { name: 'Import', exact: true });
+        await expect(importButton, 'Import waits for a ruleset').toBeDisabled();
+
+        await picker.getByText('PvP', { exact: true }).click();
+        await expect(picker.getByRole('radio', { name: 'PvP' }), 'the picked ruleset is checked').toBeChecked();
+        await expect(importButton, 'a picked ruleset enables Import').toBeEnabled();
+
+        const id = await applyAndClaim(page, dialog);
+        await expectLandedOn(page, add, id, fullName);
+        const token = await getAdminToken();
+        const created = (await apiGet(token, `/characters/${id}`)) as { ruleset?: string | null } | null;
+        expect(created?.ruleset, 'the character is created with the picked ruleset').toBe('pvp');
     });
 });
