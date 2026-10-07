@@ -30,12 +30,14 @@ import {
   addGameInterest,
   assertConditionNeverMet,
   awaitProcessing,
+  channelForGame,
   createEvent,
   deleteEvent,
   futureTime,
   getNotificationsFor,
 } from '../fixtures.js';
 import type { ApiClient } from '../api.js';
+import { resolveConfiguredGame } from '../configured-game.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 interface EventResponse {
@@ -81,13 +83,12 @@ const shortNoticeSuppressesBothPaths: SmokeTest = {
   name: 'Same-day event suppresses recruitment bump + DM (ROK-1240)',
   category: 'embed',
   async run(ctx: TestContext) {
-    const gameId = ctx.mmoGameId ?? ctx.games[0]?.id;
-    if (!gameId) {
-      console.log(
-        '    SKIP: No game available for short-notice suppression test',
-      );
-      return;
-    }
+    // A missing game throws a named precondition — never a hollow PASS.
+    const gameId = ctx.mmoGameId ?? (await resolveConfiguredGame(ctx)).id;
+    // The bump is routed by game binding first, so watch the channel the
+    // game is bound to (pool) — the default channel only when unbound.
+    const watchedChannelId = channelForGame(ctx, gameId);
+    console.log(`    ROK-1240: gameId=${gameId}, watching channel ${watchedChannelId}`);
 
     // Wire up game interest so the recipient WOULD be DM'd if the
     // suppression rule didn't fire. Without this the negative
@@ -116,9 +117,9 @@ const shortNoticeSuppressesBothPaths: SmokeTest = {
       // Negative assertion #1: channel must NOT receive the bump.
       // 8s window is plenty — the cron path is synchronous.
       await assertConditionNeverMet(
-        () => hasRecruitmentBumpInChannel(ctx.defaultChannelId, event.title),
+        () => hasRecruitmentBumpInChannel(watchedChannelId, event.title),
         8_000,
-        `Channel received "Spots still available" embed for short-notice event "${event.title}" — expected suppression`,
+        `Channel ${watchedChannelId} received "Spots still available" embed for short-notice event "${event.title}" — expected suppression`,
         { intervalMs: 2000 },
       );
 
