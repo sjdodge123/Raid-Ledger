@@ -125,7 +125,7 @@ describe('ExecutionBuffer.flush — missing parent (ROK-1328 guarantee)', () => 
 
     const rebinds = await buffer.flush(deps);
 
-    expect(rebinds).toEqual(new Map([[1, 9]]));
+    expect(rebinds).toEqual(new Map([[1, job(9, 'Job_1')]]));
     expect(deps.reresolve).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledTimes(1);
     expect(values).toHaveBeenCalledWith([

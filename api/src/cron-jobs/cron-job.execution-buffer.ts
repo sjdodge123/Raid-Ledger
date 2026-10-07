@@ -39,8 +39,11 @@ type Db = PostgresJsDatabase<typeof schema>;
 /** Most rows kept queued; on overflow the oldest are dropped. */
 export const MAX_QUEUED_EXECUTIONS = 1000;
 
-/** Stale cached `cron_jobs.id` → the re-created row it was rebound to. */
-export type ParentRebinds = Map<number, number>;
+/**
+ * Stale cached `cron_jobs.id` → the re-created row it was rebound to. The
+ * full row travels so a rebound last_run_at can take the fresh schedule.
+ */
+export type ParentRebinds = Map<number, CronJobRow>;
 
 /** One queued execution-history row. */
 export interface QueuedExecution {
@@ -148,7 +151,7 @@ async function bindLiveParents(
     }
     const job = fresh.get(row.jobName);
     if (!job) continue;
-    rebinds.set(row.job.id, job.id);
+    rebinds.set(row.job.id, job);
     out.push({ ...row, job });
   }
   return out;
@@ -191,7 +194,7 @@ async function insertEachRow(
         deps.logger,
       );
       if (!job) continue;
-      if (job.id !== row.job.id) rebinds.set(row.job.id, job.id);
+      if (job.id !== row.job.id) rebinds.set(row.job.id, job);
       landed.push({ ...row, job });
     } catch (err) {
       deps.logger.warn(

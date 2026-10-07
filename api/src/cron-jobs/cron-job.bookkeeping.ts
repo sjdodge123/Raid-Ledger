@@ -84,8 +84,8 @@ export class CronRunBookkeeping {
       reresolve: this.reresolve,
       onInserted: this.countWritten,
     });
-    for (const [staleId, freshId] of rebinds) {
-      this.lastRun.rebind(staleId, freshId);
+    for (const [staleId, fresh] of rebinds) {
+      this.lastRun.rebind(staleId, fresh);
     }
     await this.lastRun.flush(this.db, this.logger);
   }

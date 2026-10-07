@@ -11,8 +11,8 @@ const VALUES = {
   durationMs: 0,
 };
 
-const row = (cronExpression: string) =>
-  ({ id: 7, name: 'Job_7', cronExpression, lastRunAt: null }) as never;
+const row = (cronExpression: string, id = 7) =>
+  ({ id, name: 'Job_7', cronExpression, lastRunAt: null }) as never;
 
 function setup() {
   const db = createDrizzleMock();
@@ -50,7 +50,9 @@ describe('CronRunBookkeeping.flush — re-created job (ROK-1380)', () => {
   it('moves a last_run_at queued under a stale id to the rebound fresh id', async () => {
     const { book } = setup();
     book.recordDeps.deferRun(row('*/5 * * * *'), 'Job_7', VALUES);
-    jest.spyOn(book.executions, 'flush').mockResolvedValue(new Map([[7, 9]]));
+    jest
+      .spyOn(book.executions, 'flush')
+      .mockResolvedValue(new Map([[7, row('*/5 * * * *', 9)]]));
     let keysAtFlush: number[] = [];
     jest.spyOn(book.lastRun, 'flush').mockImplementation(() => {
       keysAtFlush = [...book.lastRun.pending.keys()];
@@ -75,10 +77,27 @@ describe('CronRunBookkeeping.flush — re-created job (ROK-1380)', () => {
       cronExpression: '* * * * *',
     });
 
-    book.lastRun.rebind(7, 9);
+    book.lastRun.rebind(7, { id: 9, cronExpression: '* * * * *' });
 
     expect([...book.lastRun.pending.keys()]).toEqual([9]);
     expect(book.lastRun.pending.get(9)?.lastRunAt).toBe(newer);
+  });
+});
+
+describe('LastRunBuffer.rebind — re-created job on a new schedule (ROK-1380)', () => {
+  it('keeps the run timestamp but takes the FRESH row’s cron expression', () => {
+    const { book } = setup();
+    book.lastRun.pending.set(7, {
+      lastRunAt: FINISH,
+      cronExpression: '*/5 * * * *',
+    });
+
+    book.lastRun.rebind(7, { id: 9, cronExpression: '0 0 1 1 *' });
+
+    expect(book.lastRun.pending.get(9)).toEqual({
+      lastRunAt: FINISH,
+      cronExpression: '0 0 1 1 *',
+    });
   });
 });
 

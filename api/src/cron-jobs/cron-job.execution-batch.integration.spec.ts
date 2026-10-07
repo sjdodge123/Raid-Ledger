@@ -12,14 +12,19 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { asc, eq } from 'drizzle-orm';
 import { CronJobService } from './cron-job.service';
+import { computeNextRun } from './cron-job.helpers';
 import type { CronRunBookkeeping } from './cron-job.bookkeeping';
 import { at, nonEmpty } from '../common/testing/narrow';
 
-async function insertJob(testApp: TestApp, name: string): Promise<number> {
+async function insertJob(
+  testApp: TestApp,
+  name: string,
+  cronExpression = '*/5 * * * *',
+): Promise<number> {
   const [job] = nonEmpty(
     await testApp.db
       .insert(schema.cronJobs)
-      .values({ name, source: 'core', cronExpression: '*/5 * * * *' })
+      .values({ name, source: 'core', cronExpression })
       .returning(),
     'job',
   );
@@ -32,6 +37,14 @@ function readExecutions(testApp: TestApp, jobId: number) {
     .from(schema.cronJobExecutions)
     .where(eq(schema.cronJobExecutions.cronJobId, jobId))
     .orderBy(asc(schema.cronJobExecutions.id));
+}
+
+async function readJob(testApp: TestApp, jobId: number) {
+  const [job] = await testApp.db
+    .select()
+    .from(schema.cronJobs)
+    .where(eq(schema.cronJobs.id, jobId));
+  return job;
 }
 
 async function deleteJob(testApp: TestApp, jobId: number): Promise<void> {
@@ -132,6 +145,22 @@ function describeBatching() {
     expect({ lastRunAt: fresh?.lastRunAt ?? null }).toEqual({
       lastRunAt: row?.finishedAt,
     });
+  });
+
+  it('derives a rebound last_run_at’s next_run_at from the FRESH schedule', async () => {
+    const name = 'test:batch-recreate-reschedule';
+    const staleId = await insertJob(testApp, name); // every 5 minutes
+    await svc.executeWithTracking(name, ok);
+    await deleteJob(testApp, staleId);
+    const yearly = '0 0 1 1 *';
+    const freshId = await insertJob(testApp, name, yearly);
+
+    await svc.flushLastRunUpdates();
+
+    const fresh = await readJob(testApp, freshId);
+    expect(fresh?.nextRunAt?.toISOString()).toBe(
+      computeNextRun(yearly)?.toISOString(),
+    );
   });
 
   it('counts rows for pruning when the flush writes them, not when queued', async () => {

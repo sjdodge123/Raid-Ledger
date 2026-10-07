@@ -120,16 +120,24 @@ export class LastRunBuffer {
 
   /**
    * Move a write queued under a stale cached id to the re-created job the
-   * execution flush rebound it to (ROK-1380). An already-queued newer value
-   * for the fresh id wins.
+   * execution flush rebound it to (ROK-1380). Only the run timestamp moves:
+   * next_run_at is derived from the FRESH row's expression, since the flush
+   * overwrites next_run_at and the deleted row's schedule may differ. An
+   * already-queued newer value for the fresh id wins.
    */
-  rebind(staleId: number, freshId: number): void {
+  rebind(
+    staleId: number,
+    fresh: Pick<CronJobRow, 'id' | 'cronExpression'>,
+  ): void {
     const queued = this.pending.get(staleId);
     if (!queued) return;
     this.pending.delete(staleId);
-    const current = this.pending.get(freshId);
+    const current = this.pending.get(fresh.id);
     if (current && current.lastRunAt >= queued.lastRunAt) return;
-    this.pending.set(freshId, queued);
+    this.pending.set(fresh.id, {
+      lastRunAt: queued.lastRunAt,
+      cronExpression: fresh.cronExpression,
+    });
   }
 
   /** Write every queued value in one batched UPDATE and drain the buffer. */
