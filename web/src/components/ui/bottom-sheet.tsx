@@ -4,6 +4,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
 import { useBodyScrollLock } from '../../hooks/use-body-scroll-lock';
 import { useTabTrap } from '../../hooks/use-focus-trap';
+import { useEscapeLayer } from '../../hooks/use-escape-layer';
 import { useResetGuardOnClose, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { SHEET_VH_VAR, toVisiblePx, useVisibleViewport } from './bottom-sheet-viewport';
 import { DiscardChangesConfirm } from './discard-changes-confirm';
@@ -38,6 +39,13 @@ interface BottomSheetProps {
     closeGuard?: DirtyCloseGuard;
     /** What is unsaved, in the caller's words (the confirm's message). */
     discardMessage?: string;
+    /**
+     * Opened from inside an open `Modal` (ROK-1738): lifts the sheet to
+     * `Z_INDEX.MODAL_STACKED`, strictly above every Modal, so it renders above
+     * its host whatever order the portals mounted in (`BOTTOM_SHEET` < `MODAL`).
+     * Its discard confirm goes one above that.
+     */
+    stacked?: boolean;
 }
 
 const DEFAULT_MAX_HEIGHT = '60vh';
@@ -80,14 +88,6 @@ function useSheetFocus(isOpen: boolean, sheetRef: React.RefObject<HTMLDivElement
             if (!focusMovedToAnotherDialog(sheet)) previous?.focus?.();
         };
     }, [isOpen, sheetRef]);
-}
-
-function useSheetKeyboard(isOpen: boolean, onClose: () => void) {
-    useEffect(() => {
-        const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose(); };
-        window.addEventListener('keydown', handleEscape);
-        return () => window.removeEventListener('keydown', handleEscape);
-    }, [isOpen, onClose]);
 }
 
 function useDragHandlers(
@@ -178,21 +178,32 @@ function useSheetControls(isOpen: boolean, requestClose: () => void, maxHeight: 
     const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
     if (isOpen !== prevIsOpen) { setPrevIsOpen(isOpen); if (!isOpen) setExpanded(initiallyExpanded); }
 
-    useSheetKeyboard(isOpen, requestClose);
     useBodyScrollLock(isOpen);
     const drag = useDragHandlers(sheetRef, expanded, setExpanded, requestClose, initiallyExpanded);
     useSheetFocus(isOpen, sheetRef);
     useTabTrap(isOpen, sheetRef);
+    // Escape closes only the top overlay — not the Modal this sheet is stacked over (ROK-1738).
+    useEscapeLayer(isOpen, requestClose);
     return { sheetRef, drag, ...useSheetHeights(expanded ? EXPANDED_HEIGHT : maxHeight) };
 }
 
-export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage }: BottomSheetProps) {
+/** The confirm is a Modal (Z_INDEX.MODAL > BOTTOM_SHEET); over a stacked sheet it goes one above MODAL_STACKED. */
+function SheetDiscardConfirm({ guard, message, stacked }: { guard: DirtyCloseGuard; message?: string | undefined; stacked: boolean }) {
+    return (
+        <DiscardChangesConfirm
+            isOpen={guard.confirming} onKeep={guard.keep} onDiscard={guard.discard} message={message}
+            zIndex={stacked ? Z_INDEX.MODAL_STACKED + 1 : undefined}
+        />
+    );
+}
+
+export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFAULT_MAX_HEIGHT, initiallyExpanded = false, ariaLabel, footer, closeGuard, discardMessage, stacked = false }: BottomSheetProps) {
     const requestClose = closeGuard?.requestClose ?? onClose;
     useResetGuardOnClose(isOpen, closeGuard);
     const { sheetRef, drag, activeMaxHeight, layerSize } = useSheetControls(isOpen, requestClose, maxHeight, initiallyExpanded);
 
     const sheet = createPortal(
-        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
+        <div className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`} style={{ zIndex: stacked ? Z_INDEX.MODAL_STACKED : Z_INDEX.BOTTOM_SHEET, ...layerSize }}>
             <div className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`} onClick={requestClose} aria-hidden="true" />
             <div
                 ref={sheetRef} role={isOpen ? 'dialog' : undefined} aria-modal={isOpen ? 'true' : undefined} aria-label={isOpen ? (ariaLabel || title || 'Bottom sheet') : undefined}
@@ -210,8 +221,6 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = DEFA
         </div>,
         document.body,
     );
-    // The confirm is a Modal (Z_INDEX.MODAL > BOTTOM_SHEET), so it stacks above the sheet.
-    const confirm = closeGuard
-        && <DiscardChangesConfirm isOpen={closeGuard.confirming} onKeep={closeGuard.keep} onDiscard={closeGuard.discard} message={discardMessage} />;
+    const confirm = closeGuard && <SheetDiscardConfirm guard={closeGuard} message={discardMessage} stacked={stacked} />;
     return <>{sheet}{confirm}</>;
 }

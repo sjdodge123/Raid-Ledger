@@ -136,3 +136,15 @@ describe('plugin-registry — part 2', () => {
     });
 
 });
+
+describe('plugin-registry — character-create:header-actions (ROK-1738)', () => {
+    beforeEach(() => clearRegistry());
+
+    it('registers a filler for the Add Character header slot', () => {
+        const Filler = () => null;
+        registerPlugin('blizzard', { icon: '/b.jpg', color: 'blue', label: 'WoW' }).registerSlot('character-create:header-actions', Filler);
+        expect(getSlotRegistrations('character-create:header-actions')).toEqual([
+            expect.objectContaining({ pluginSlug: 'blizzard', component: Filler }),
+        ]);
+    });
+});

@@ -24,6 +24,7 @@ import { Input } from '../../components/ui/input';
 import { useDirtyCloseGuard, type DirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { StretchedCardDemo } from './stretched-card-demo';
+import { StackedSheetDemo } from './stacked-sheet-demo';
 
 const DEMO_BTN = 'px-3 py-2 rounded-lg text-sm font-medium bg-panel border border-edge text-secondary hover:bg-overlay transition-colors';
 
@@ -203,6 +204,7 @@ export function OverlaysSection(): JSX.Element {
                     <ModalDemo />
                     <FormModalDemo />
                     <BottomSheetDemo />
+                    <StackedSheetDemo triggerClass={DEMO_BTN} />
                     <FormSheetDemo />
                     <CollapsibleDemo />
                     <StretchedCardDemo />

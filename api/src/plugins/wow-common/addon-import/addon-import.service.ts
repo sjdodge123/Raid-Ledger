@@ -1,41 +1,38 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { Inject, Injectable } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AddonImportRequestDto,
   AddonImportResultDto,
-  WowRegion,
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { CharactersService } from '../../../characters/characters.service';
-import type { AddonImportAuditInsert } from '../../../drizzle/schema';
 import {
   ADDON_IMPORT_PENDING,
   AddonImportAuditService,
 } from './addon-import.audit';
-import type {
-  AddonBindingCharacter,
-  AddonBindingResult,
-} from './addon-import.binding';
-import { bindEverySection } from './addon-import.binding-paste';
-import { applyBinding } from './addon-import-binding.apply';
+import type { AddonBindingResult } from './addon-import.binding';
 import {
   decodeImportPaste,
   type DecodedAddonPaste,
 } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import {
+  auditRow,
+  finishAttempt,
+  recordPasteFacts,
+} from './addon-import.finish';
+import {
   parseImportRequest,
   rawFacts,
   type AttemptFacts,
 } from './addon-import.service.helpers';
 import {
-  buildPasteResult,
-  pasteSections,
-  runPaste,
-  shouldApplyBinding,
-} from './addon-import.paste-run';
+  bindPaste,
+  loadImportCharacter,
+  runForCharacter,
+  type LoadedCharacter,
+} from './addon-import.run';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -47,8 +44,6 @@ import {
  */
 @Injectable()
 export class AddonImportService {
-  private readonly logger = new Logger(AddonImportService.name);
-
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -96,16 +91,10 @@ export class AddonImportService {
     const request = parseImportRequest(body, facts);
     const paste = decodeImportPaste(request.importString);
     recordPasteFacts(facts, paste);
-    const character = await this.loadCharacter(characterId);
+    const character = await loadImportCharacter(this.db, characterId);
     // Codex P2: bind EVERY section (the decoder also requires one exporter);
     // any section's reject rejects the whole paste before anything runs.
-    const binding = bindEverySection(
-      pasteSections(paste).map((s) => s.payload),
-      character.binding,
-      { dryRun: request.dryRun, confirm: request.confirm },
-    );
-    const [firstError] = binding.errors;
-    if (firstError) throw firstError;
+    const binding = bindPaste(paste, character, request);
     return this.run(userId, character, paste, binding, request);
   }
 
@@ -117,117 +106,24 @@ export class AddonImportService {
     binding: AddonBindingResult,
     request: AddonImportRequestDto,
   ): Promise<AddonImportResultDto> {
-    return this.db.transaction(async (tx) => {
-      const ctx = {
-        tx,
-        userId,
-        characterId: character.id,
-        gameId: character.gameId,
-        region: character.binding.region as WowRegion,
-      };
-      const runs = await runPaste(ctx, paste, request.dryRun);
-      // Lead ruling: a stale export writes NOTHING — binding updates too
-      // (a mixed paste skips them only when EVERY section is stale).
-      if (!request.dryRun && shouldApplyBinding(runs)) {
-        const [head] = runs;
-        await applyBinding(
-          { ...ctx, sha256: head?.decoded.sha256 ?? '' },
-          binding,
-        );
-      }
-      return buildPasteResult(runs, binding);
-    });
+    return this.db.transaction((tx) =>
+      runForCharacter(tx, userId, character, paste, binding, request),
+    );
   }
 
-  /** The row the binding reads: owner-checked already, plus slug + GUID. */
-  private async loadCharacter(characterId: string): Promise<LoadedCharacter> {
-    const [row] = await this.db
-      .select({ c: schema.characters, slug: schema.games.slug })
-      .from(schema.characters)
-      .innerJoin(schema.games, eq(schema.games.id, schema.characters.gameId))
-      .where(eq(schema.characters.id, characterId))
-      .limit(1);
-    if (!row) throw new AddonImportError('WRONG_GAME');
-    const { c } = row;
-    return {
-      id: c.id,
-      gameId: c.gameId,
-      binding: {
-        gameSlug: row.slug,
-        name: c.name,
-        region: c.region,
-        ruleset: c.ruleset,
-        class: c.class,
-        level: c.level,
-        addonGuid: c.addonGuid,
-      },
-    };
-  }
-
-  private async finish(
+  private finish(
     userId: number,
     characterId: string,
     facts: AttemptFacts,
     result: string,
     perSection: string[],
   ): Promise<void> {
-    const section = facts.sections.map((s) => s.section).join('+');
-    this.logger.log(
-      `addon-import userId=${userId} section=${section || (facts.section ?? '-')} sha256=${facts.sha256 ?? '-'} size=${facts.sizeBytes} dryRun=${facts.dryRun} result=${result}`,
-    );
-    if (facts.sections.length > 1) {
-      // ROK-1737: one row per section; the paste still holds ONE reservation.
-      const rows = facts.sections.map((s, i) => ({
-        ...auditRow(userId, characterId, facts, perSection[i] ?? result),
-        section: s.section,
-        payloadSha256: s.sha256,
-        sizeBytes: s.sizeBytes,
-      }));
-      await this.audit.recordSections(rows, facts.auditId);
-      return;
-    }
-    await this.audit.recordAttempt(
-      auditRow(userId, characterId, facts, result),
-      facts.auditId,
-    );
+    return finishAttempt(this.audit, {
+      userId,
+      characterId,
+      facts,
+      result,
+      perSection,
+    });
   }
-}
-
-/** Audit facts from a decoded paste. */
-function recordPasteFacts(facts: AttemptFacts, paste: DecodedAddonPaste): void {
-  const sections = pasteSections(paste);
-  const [first] = sections;
-  if (!first) throw new AddonImportError('BAD_HEADER');
-  facts.section = first.payload.section;
-  facts.sha256 = first.sha256;
-  if (sections.length > 1) {
-    facts.sections = sections.map((s) => ({
-      section: s.payload.section,
-      sha256: s.sha256,
-      sizeBytes: s.inputBytes,
-    }));
-  }
-}
-
-function auditRow(
-  userId: number,
-  characterId: string,
-  facts: AttemptFacts,
-  result: string,
-): AddonImportAuditInsert {
-  return {
-    userId,
-    characterId,
-    section: facts.section,
-    payloadSha256: facts.sha256,
-    sizeBytes: facts.sizeBytes,
-    dryRun: facts.dryRun,
-    result,
-  };
-}
-
-interface LoadedCharacter {
-  id: string;
-  gameId: number;
-  binding: AddonBindingCharacter;
 }

@@ -5,6 +5,7 @@ import {
   type AddonImportRequestDto,
   type AddonImportResultDto,
 } from '@raid-ledger/contract';
+import type { z } from 'zod';
 import { handleValidationError } from '../../../common/validation.util';
 import type { AddonBindingResult } from './addon-import.binding';
 import type { DecodedAddonImport } from './addon-import.decoder';
@@ -67,11 +68,24 @@ export function rawFacts(body: unknown): AttemptFacts {
  * plain Zod parse would answer an oversized paste with 400 instead of the
  * contract's 413 `TOO_LARGE`. The string is trimmed first, as the decoder
  * does, so trailing whitespace from a copy never trips the cap.
+ * ROK-1738: `schema` picks the request shape — the per-character route's
+ * strict `AddonImportRequestSchema` (default) or the create route's
+ * `AddonImportNewRequestSchema` (adds the optional picked `ruleset`).
  */
 export function parseImportRequest(
   body: unknown,
   facts: AttemptFacts,
-): AddonImportRequestDto {
+): AddonImportRequestDto;
+export function parseImportRequest<T>(
+  body: unknown,
+  facts: AttemptFacts,
+  schema: z.ZodType<T>,
+): T;
+export function parseImportRequest(
+  body: unknown,
+  facts: AttemptFacts,
+  schema: z.ZodType<unknown> = AddonImportRequestSchema,
+): unknown {
   if (facts.sizeBytes > ADDON_IMPORT_MAX_BYTES) {
     throw new AddonImportError('TOO_LARGE');
   }
@@ -80,7 +94,7 @@ export function parseImportRequest(
     b && typeof b === 'object' && typeof b.importString === 'string'
       ? { ...b, importString: b.importString.trim() }
       : body;
-  const parsed = AddonImportRequestSchema.safeParse(input);
+  const parsed = schema.safeParse(input);
   if (!parsed.success) handleValidationError(parsed.error);
   return parsed.data;
 }

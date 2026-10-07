@@ -7,6 +7,8 @@ export type PluginSlotName =
     | 'character-detail:header-badges'
     /** Owner-only actions in the character page header (ROK-1724). */
     | 'character-detail:owner-actions'
+    /** Actions above the Add Character form, create only (ROK-1738); context `{ onClose, gameSlug }`. */
+    | 'character-create:header-actions'
     | 'character-create:import-form'
     | 'character-create:inline-import'
     | 'event-create:content-browser'

@@ -5,8 +5,8 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../../test/mocks/server';
 import { createTestQueryClient } from '../../../../test/render-helpers';
-import { AddonImportRequestError, useAddonImportApply, useAddonImportPreview } from './use-addon-import';
-import { CHARACTER_ID, CHAR_STRING, IMPORT_URL, charResult } from './addon-import.test-fixtures';
+import { AddonImportRequestError, useAddonImportApply, useAddonImportNewApply, useAddonImportNewPreview, useAddonImportPreview } from './use-addon-import';
+import { CHARACTER_ID, CHAR_STRING, CREATED_ID, IMPORT_URL, NEW_IMPORT_URL, charResult, newCharResult } from './addon-import.test-fixtures';
 
 function setup() {
     const queryClient = createTestQueryClient();
@@ -15,9 +15,9 @@ function setup() {
     return { wrapper, invalidate };
 }
 
-function captureBodies(status = 200, reply: Record<string, unknown> = charResult()) {
+function captureBodies(status = 200, reply: Record<string, unknown> = charResult(), url = IMPORT_URL) {
     const bodies: unknown[] = [];
-    server.use(http.post(IMPORT_URL, async ({ request }) => {
+    server.use(http.post(url, async ({ request }) => {
         bodies.push(await request.json());
         return HttpResponse.json(reply, { status });
     }));
@@ -75,6 +75,51 @@ describe('useAddonImportApply', () => {
         result.current.mutate({ importString: CHAR_STRING });
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.error?.code).toBe('RATE_LIMITED');
+        expect(invalidate).not.toHaveBeenCalled();
+    });
+});
+
+describe('create route (ROK-1738)', () => {
+    it('preview posts dryRun:true to the id-less route, sends no ruleset unless given, and keeps the target', async () => {
+        const bodies = captureBodies(200, newCharResult({ ruleset: null }), NEW_IMPORT_URL);
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportNewPreview(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: true }]);
+        expect(result.current.data?.target).toMatchObject({ action: 'create', characterId: null, ruleset: null });
+        expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it('apply posts dryRun:false with the picked ruleset and refreshes the character lists', async () => {
+        const bodies = captureBodies(200, newCharResult({ characterId: CREATED_ID, ruleset: 'pvp' }, { status: 'applied' }), NEW_IMPORT_URL);
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportNewApply(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING, ruleset: 'pvp' });
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: false, ruleset: 'pvp' }]);
+        expect(result.current.data?.target.characterId).toBe(CREATED_ID);
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['me', 'characters'] });
+        expect(invalidate).toHaveBeenCalledWith({ queryKey: ['characters'] });
+        expect(invalidate, 'the profile caches the main character too').toHaveBeenCalledWith({ queryKey: ['userProfile'] });
+    });
+
+    it('treats a success body without a target as off-contract', async () => {
+        captureBodies(200, charResult(), NEW_IMPORT_URL);
+        const { wrapper } = setup();
+        const { result } = renderHook(() => useAddonImportNewPreview(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error).toMatchObject({ status: 200, code: null });
+    });
+
+    it('keeps a new error code (CHARACTER_CLAIMED) from the body', async () => {
+        captureBodies(422, { code: 'CHARACTER_CLAIMED', message: 'claimed' }, NEW_IMPORT_URL);
+        const { wrapper, invalidate } = setup();
+        const { result } = renderHook(() => useAddonImportNewApply(), { wrapper });
+        result.current.mutate({ importString: CHAR_STRING });
+        await waitFor(() => expect(result.current.isError).toBe(true));
+        expect(result.current.error).toMatchObject({ status: 422, code: 'CHARACTER_CLAIMED' });
         expect(invalidate).not.toHaveBeenCalled();
     });
 });

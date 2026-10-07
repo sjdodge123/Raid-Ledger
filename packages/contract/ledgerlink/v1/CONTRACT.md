@@ -185,7 +185,7 @@ Body: `{ code, message }` — `message` never echoes the paste. HTTP 413 for
 | `DECODED_TOO_LARGE` | A page inflates past 1 MiB. |
 | `INVALID_PAYLOAD` | JSON violates the schema (unknown key, wrong type, out of range, header/section mismatch, duplicate member, structural limit), or the sections of a mixed paste come from different characters / exports. Message names the field **path** only (prefixed with the section in a mixed paste). |
 | `PAGES_INCOMPLETE` | > 10 tokens, a guild page missing/duplicated, mixed `m`, pages from different exports, a second char/raid string or a second guild export in one paste. |
-| `WRONG_GAME` · `REGION_MISMATCH` · `NAME_MISMATCH` · `NOT_IN_GUILD` · `GUID_CONFIRM_REQUIRED` · `RATE_LIMITED` | Apply-time checks against the Raid Ledger character/account — the string itself is well-formed. Not addon-format bugs. |
+| `WRONG_GAME` · `REGION_MISMATCH` · `NAME_MISMATCH` · `NOT_IN_GUILD` · `GUID_CONFIRM_REQUIRED` · `RATE_LIMITED` · `CHARACTER_CLAIMED` · `RULESET_REQUIRED` | Apply-time checks against the Raid Ledger character/account — the string itself is well-formed. Not addon-format bugs. |
 
 ## 8. Fixtures
 

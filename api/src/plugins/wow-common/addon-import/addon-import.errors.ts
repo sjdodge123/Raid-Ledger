@@ -27,6 +27,8 @@ const DEFAULT_MESSAGES: Record<AddonImportErrorCode, string> = {
   GUID_CONFIRM_REQUIRED:
     'The in-game character changed — confirm to re-link it.',
   RATE_LIMITED: 'Too many imports — try again later.',
+  CHARACTER_CLAIMED: 'That character is already claimed by another player.',
+  RULESET_REQUIRED: 'Choose which ruleset this character plays on.',
 };
 
 /** 413 `TOO_LARGE`, 429 `RATE_LIMITED`, everything else 422 (contract). */
