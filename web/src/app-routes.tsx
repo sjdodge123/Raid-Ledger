@@ -23,7 +23,7 @@ import {
   AvatarPanel, IntegrationsPanel, AccountPanel,
   AdminSettingsLayout, AdminSetupWizard,
   GeneralPanel, RolesPanel, DemoDataPanel,
-  IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, PluginsPanel, PluginIntegrationPanel,
+  IgdbPanel, SteamPanel, ItadPanel, CooptimusPanel, CalendarSyncPanel, PluginsPanel, PluginIntegrationPanel,
   CronJobsPanel, BackupsPanel, LogsPanel,
   DiscordOverviewPage, DiscordAuthPage,
   DiscordConnectionPage, DiscordChannelsPage,
@@ -59,6 +59,19 @@ function ProfileRoutes() {
   );
 }
 
+/** Core admin integration panels (a fragment, called inline like ProfileRoutes). */
+function AdminIntegrationRoutes() {
+  return (
+    <>
+      <Route path="integrations/igdb" element={<IgdbPanel />} />
+      <Route path="integrations/steam" element={<SteamPanel />} />
+      <Route path="integrations/itad" element={<ItadPanel />} />
+      <Route path="integrations/cooptimus" element={<CooptimusPanel />} />
+      <Route path="integrations/calendar-sync" element={<CalendarSyncPanel />} />
+    </>
+  );
+}
+
 function AdminSettingsRoutes() {
   return (
     <Route path="/admin/settings" element={<AdminSettingsLayout />}>
@@ -69,10 +82,7 @@ function AdminSettingsRoutes() {
       <Route path="general/cron-jobs" element={<CronJobsPanel />} />
       <Route path="general/backups" element={<BackupsPanel />} />
       <Route path="general/logs" element={<LogsPanel />} />
-      <Route path="integrations/igdb" element={<IgdbPanel />} />
-      <Route path="integrations/steam" element={<SteamPanel />} />
-      <Route path="integrations/itad" element={<ItadPanel />} />
-      <Route path="integrations/cooptimus" element={<CooptimusPanel />} />
+      {AdminIntegrationRoutes()}
       <Route path="discord" element={<DiscordOverviewPage />} />
       <Route path="discord/auth" element={<DiscordAuthPage />} />
       <Route path="discord/connection" element={<DiscordConnectionPage />} />

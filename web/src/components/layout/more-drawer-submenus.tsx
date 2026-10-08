@@ -8,6 +8,7 @@ import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { useItadSettings } from '../../hooks/admin/use-itad-settings';
 import { useCooptimusSettings } from '../../hooks/admin/use-cooptimus-settings';
+import { useAdminCalendarSyncSettings } from '../../hooks/use-admin-calendar-sync';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
@@ -129,12 +130,14 @@ function useAdminNavSections() {
     const { igdbStatus, steamStatus, oauthStatus, discordBotStatus } = useAdminSettings();
     const { itadStatus } = useItadSettings();
     const { cooptimusStatus } = useCooptimusSettings();
+    const calendarSync = useAdminCalendarSyncSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: { configured: igdbStatus.data?.configured ?? false, loading: igdbStatus.isLoading },
         steam: { configured: steamStatus.data?.configured ?? false, loading: steamStatus.isLoading },
         itad: { configured: itadStatus.data?.configured ?? false, loading: itadStatus.isLoading },
         cooptimus: { configured: cooptimusStatus.data?.configured ?? false, loading: cooptimusStatus.isLoading },
+        calendarSync: { configured: calendarSync.data?.enabled ?? false, loading: calendarSync.isLoading },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
     const discordItems = isDiscordActive
