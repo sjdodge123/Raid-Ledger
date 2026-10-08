@@ -115,3 +115,15 @@ describe('web/src/components/discord uses theme tokens only (AC9)', () => {
         ).toEqual([]);
     });
 });
+
+describe('a bare URL in JSX text does not hide the rest of its line (B66 m1)', () => {
+    it('still sees a write affordance after an unquoted https:// URL', () => {
+        const source = stripComments(`<p>See https://discord.com ${'<' + 'input'} /></p>`);
+        expect(source.includes('<' + 'input'), source).toBe(true);
+    });
+
+    it('still sees a hard-coded colour after an unquoted https:// URL', () => {
+        const source = stripComments(`<p>See https://x.dev <b className="text-${ARBITRARY_VALUE}fff]">x</b></p>`);
+        expect(hexLiterals(source)).toHaveLength(1);
+    });
+});

@@ -23,3 +23,10 @@ describe('away/*.tsx tokens', () => {
         expect(code.match(BANNED)?.[0] ?? null).toBeNull();
     });
 });
+
+describe('a bare URL in JSX text does not hide the rest of its line (B66 m1)', () => {
+    it('still sees a banned red after an unquoted https:// URL', () => {
+        const code = stripComments('<p>See https://discord.com <span className="text-red-500">x</span></p>');
+        expect(code.match(BANNED)?.[0] ?? null).toBe('red-500');
+    });
+});
