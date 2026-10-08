@@ -15,7 +15,7 @@ import { stripComments } from '../common/testing/strip-comments';
  * millisecond span) is a quantity, not an id. ROK-1374's 4 TB install-size
  * cap (`4_000_000_000_000`, 13 digits) is the case that set the floor.
  *
- * Comments are stripped BEFORE matching (ROK-1314: a guard whose own
+ * TS/TSX comments are stripped BEFORE matching (ROK-1314: a guard whose own
  * explanatory prose trips it is a guard that gets deleted). Test files are out
  * of scope on purpose — the assertions in
  * `discord-bot-client.helpers.spec.ts` are exactly where the expected integer
@@ -48,6 +48,17 @@ const SCANNED_EXTENSIONS = ['.ts', '.tsx', '.md'];
 // counts DIGITS, so a separator never pads a shorter number over the floor.
 const LONG_NUMBER = /\b\d(?:_?\d){14,}n?\b/;
 
+/**
+ * The text a file is scanned as. Only JS/TS goes through the comment stripper:
+ * markdown prose is never quoted, so the stripper would read a bare
+ * `https://…?permissions=<digits>` as a line comment and hide the exact literal
+ * this guard exists to catch (B66 M1). Every other extension is scanned raw.
+ */
+const JS_EXTENSIONS = ['.ts', '.tsx'];
+function scannableText(file: string, raw: string): string {
+  return JS_EXTENSIONS.includes(path.extname(file)) ? stripComments(raw) : raw;
+}
+
 const isTestFile = (p: string): boolean =>
   /\.(spec|test)\.[tj]sx?$/.test(p) ||
   p.includes(`${path.sep}__tests__${path.sep}`) ||
@@ -79,7 +90,7 @@ function findLongNumberLiterals(): string[] {
   return files.flatMap((file) => {
     const rel = path.relative(REPO_ROOT, file);
     if (ALLOWLIST.some((a) => a.file === rel)) return [];
-    return stripComments(fs.readFileSync(file, 'utf8'))
+    return scannableText(file, fs.readFileSync(file, 'utf8'))
       .split('\n')
       .flatMap((line, i) => {
         const hit = LONG_NUMBER.exec(line);
@@ -100,6 +111,9 @@ describe('no hardcoded Discord permission integer (ROK-1471 AC15)', () => {
     expect(count).toBeGreaterThan(50);
   });
 });
+
+const INVITE =
+  'https://discord.com/oauth2/authorize?client_id=1&permissions=589674583247891&scope=bot';
 
 describe('stripComments (ROK-1314: strip before matching)', () => {
   it('blanks block, JSX and line comments', () => {
@@ -123,6 +137,25 @@ describe('stripComments (ROK-1314: strip before matching)', () => {
         "const u = 'https://discord.com/oauth2/authorize?permissions=589674583247891';",
       ),
     ).toMatch(LONG_NUMBER);
+  });
+
+  it('catches a bare (unquoted) invite URL in markdown prose (B66 M1)', () => {
+    expect(scannableText('README.md', `Invite: ${INVITE}`)).toMatch(LONG_NUMBER);
+    expect(scannableText('README.md', `- [Invite](${INVITE})`)).toMatch(
+      LONG_NUMBER,
+    );
+  });
+
+  it('catches a bare invite URL in a JSX text node (B66 M1)', () => {
+    expect(scannableText('Invite.tsx', `<p>Invite ${INVITE}</p>`)).toMatch(
+      LONG_NUMBER,
+    );
+  });
+
+  it('still ignores the literal inside a real // comment in code', () => {
+    expect(
+      scannableText('invite.ts', `const a = 1; // ${INVITE}`),
+    ).not.toMatch(LONG_NUMBER);
   });
 
   it('preserves line numbers so the failure names the right line', () => {

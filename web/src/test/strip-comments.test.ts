@@ -66,6 +66,15 @@ describe('stripComments — comments are blanked', () => {
         expect(out.indexOf(TOKEN)).toBe(source.indexOf(TOKEN));
     });
 
+    it('keeps a bare URL in JSX text — a :// is never a comment (B66 M1)', () => {
+        const source = `<p>See https://discord.com/x ${TOKEN}</p>`;
+        expect(stripComments(source)).toBe(source);
+    });
+
+    it('still blanks a real comment that holds a URL', () => {
+        expect(stripComments(`a; // see https://x.dev/${TOKEN}`)).toBe('a;' + ' '.repeat(22 + TOKEN.length));
+    });
+
     it('blanks a JSX {/* x */} comment and keeps the braces', () => {
         expect(stripComments('{/* x */}<div />')).toBe('{       }<div />');
     });

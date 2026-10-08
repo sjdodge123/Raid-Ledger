@@ -41,6 +41,11 @@ describe('stripComments — literals are kept whole', () => {
     expect(stripComments(source)).toContain(TOKEN);
   });
 
+  it('keeps a bare URL in JSX text — a :// is never a comment (B66 M1)', () => {
+    const source = `<p>See https://discord.com/x ${TOKEN}</p>`;
+    expect(stripComments(source)).toBe(source);
+  });
+
   it('keeps a whole URL string verbatim', () => {
     const source = `fetch('https://discord.com/api?permissions=8');`;
     expect(stripComments(source)).toBe(source);
@@ -75,6 +80,12 @@ describe('stripComments — comments are blanked', () => {
 
   it('blanks a JSX {/* x */} comment and keeps the braces', () => {
     expect(stripComments('{/* x */}<div />')).toBe('{       }<div />');
+  });
+
+  it('still blanks a real comment that holds a URL', () => {
+    expect(stripComments(`a; // see https://x.dev/${TOKEN}`)).toBe(
+      'a;' + ' '.repeat(22 + TOKEN.length),
+    );
   });
 
   it('strips a doc comment that names the token', () => {
