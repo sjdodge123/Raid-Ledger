@@ -3,7 +3,7 @@ import { defined } from '../test/defined';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { AA_SMALL_TEXT, composite, contrastRatio, stripComments } from './wcag-contrast';
-import { lightSchemes, lightTextRules } from './light-scheme-css';
+import { lightSchemes, lightTextRules, parseSchemeGroup } from './light-scheme-css';
 import { stripComments as stripCodeComments } from '../test/form-primitives-count';
 
 /**
@@ -44,6 +44,8 @@ const TINT_500: Record<string, string> = {
     indigo: '#6366f1',
     cyan: '#06b6d4',
     blue: '#3b82f6',
+    teal: '#14b8a6',
+    gray: '#6b7280',
 };
 
 /**
@@ -55,7 +57,7 @@ const REQUIRED = [
     'emerald-300', 'amber-300', 'red-300', 'indigo-300',
     'emerald-400', 'emerald-500', 'amber-400', 'red-400', 'yellow-400', 'yellow-500',
     'green-400', 'green-500', 'purple-400', 'indigo-400', 'cyan-300', 'cyan-400',
-    'blue-300', 'blue-400',
+    'blue-300', 'blue-400', 'teal-400', 'gray-400',
 ];
 
 /** Plain, opacity-variant (`/60`) and `hover:` repaints scoped to the light scheme set. */
@@ -144,5 +146,35 @@ describe('raw Tailwind accent hues on light (ROK-1586)', () => {
             ratio,
             `light ${cls} (painted ${painted}) is ${ratio}:1 on ${where} (${bg}) — needs ${AA_SMALL_TEXT}:1`,
         ).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+/**
+ * The WoW item fallback tooltip keeps a fixed `bg-gray-900` (#111827) in every scheme, so the
+ * light repaints of its raw hues would be ~1.7–2.7:1 there (gray-700, green-800, blue-700,
+ * violet-700, yellow-800). A light-scoped `.bg-gray-900 .text-{hue}-400` rule per hue keeps the
+ * dark shade inside it.
+ */
+const KEEP_DARK_HUES = ['gray-400', 'green-400', 'blue-400', 'purple-400', 'yellow-400'];
+const GRAY_900 = '#111827';
+
+function keepDarkRule(cls: string): RegExpExecArray | null {
+    return new RegExp(`:is\\(([^()]*)\\)\\s+\\.bg-gray-900\\s+\\.text-${cls}\\s*\\{\\s*color:\\s*(#[0-9a-fA-F]{6})\\s*;?\\s*\\}`).exec(css);
+}
+
+describe('raw text on a fixed dark panel stays dark on light', () => {
+    it.each(KEEP_DARK_HUES)('a light-scoped .bg-gray-900 .text-%s rule keeps it legible on #111827', (cls) => {
+        const rule = keepDarkRule(cls);
+        expect(rule, `no light-scoped \`.bg-gray-900 .text-${cls}\` keep-dark rule in index.css — the light repaint paints it on the dark tooltip`).not.toBeNull();
+        const names = parseSchemeGroup(rule?.[1] ?? '')?.sort();
+        expect(names, `the text-${cls} keep-dark rule is not scoped to exactly the light schemes`).toEqual(SCHEMES.map((s) => s.name).sort());
+        const ratio = contrastRatio(rule?.[2] ?? '#000000', GRAY_900);
+        expect(ratio, `keep-dark text-${cls} is ${ratio}:1 on ${GRAY_900} — needs ${AA_SMALL_TEXT}:1`).toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+
+    it.each(KEEP_DARK_HUES)('the item fallback tooltip still paints text-%s inside a bg-gray-900 root', (cls) => {
+        const src = stripCodeComments(readFileSync(join(SRC, 'plugins/wow/components/item-fallback-tooltip.tsx'), 'utf-8'));
+        expect(src, 'the tooltip root no longer carries bg-gray-900 — re-check the keep-dark rules').toMatch(/className="[^"]*\bbg-gray-900\b/);
+        expect(src, `the tooltip no longer uses text-${cls} — its keep-dark rule may be dead`).toMatch(new RegExp(`\\btext-${cls}\\b`));
     });
 });

@@ -76,9 +76,6 @@ function amberFillUses(): { where: string; cls: string }[] {
 
 const USES = amberFillUses();
 
-/** Unrepainted on 2026-10-01 and logged in TECH-DEBT-BACKLOG.md. Delete an entry when its rule lands. */
-const KNOWN_UNREPAINTED = ['bg-amber-500/5', 'hover:bg-amber-500/10'];
-
 describe('raw amber fills on the light schemes (TDB:1493)', () => {
     it('reads the light block and the markup', () => {
         expect([...LIGHT].sort()).toEqual(['celestial', 'dawn', 'holy', 'light', 'quest-log', 'sky']);
@@ -95,16 +92,11 @@ describe('raw amber fills on the light schemes (TDB:1493)', () => {
     });
 
     it('every bg-amber-500/NN and hover:bg-amber-500/NN (NN ≤ 30) in shipped markup has a light rule', () => {
-        const missing = USES.filter((u) => !FILLS.has(u.cls) && !KNOWN_UNREPAINTED.includes(u.cls));
+        const missing = USES.filter((u) => !FILLS.has(u.cls));
         expect(
             missing.map((u) => `${u.where} ${u.cls}`),
             'these amber tints have NO light rule in index.css — they paint raw amber-500 alpha on a light panel',
         ).toEqual([]);
-    });
-
-    it.each(KNOWN_UNREPAINTED)('known gap %s is still used and still unrepainted (else drop it from the list)', (cls) => {
-        expect(USES.some((u) => u.cls === cls), `${cls} is no longer used`).toBe(true);
-        expect(FILLS.has(cls), `${cls} now has a light rule`).toBe(false);
     });
 
     it('bg-amber-500/20 paints the amber-100 wash', () => {
@@ -118,6 +110,19 @@ describe('raw amber fills on the light schemes (TDB:1493)', () => {
         if (!base || !hover) return;
         const step = contrastRatio(composite(base.rgb, panel, base.alpha), composite(hover.rgb, panel, hover.alpha));
         expect(step, `hover step is ${step}:1 over ${panel} — invisible`).toBeGreaterThanOrEqual(1.03);
+    });
+
+    // hover:bg-amber-500/10 sits on a bare panel or surface (no amber base), so the hover fill
+    // itself must step off both. amber-100 is ~1.01 on light / holy (1.00 on the quest-log /
+    // dawn surfaces); amber-200 is 1.01 on the quest-log panel and celestial surface.
+    it.each(SCHEMES)('hover:bg-amber-500/10 is a visible step over the panel and surface on $name', ({ panel, surface }) => {
+        const hover = FILLS.get('hover:bg-amber-500/10');
+        expect(hover, 'hover:bg-amber-500/10 has no light rule in index.css').toBeDefined();
+        if (!hover) return;
+        for (const [name, base] of [['panel', panel], ['surface', surface]] as const) {
+            const step = contrastRatio(base, composite(hover.rgb, base, hover.alpha));
+            expect(step, `hover:bg-amber-500/10 (${hover.rgb} @ ${hover.alpha}) is ${step}:1 over the ${name} ${base} — invisible`).toBeGreaterThanOrEqual(1.03);
+        }
     });
 });
 

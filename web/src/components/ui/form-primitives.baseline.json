@@ -1,7 +1,6 @@
 {
     "components/ErrorFallback.tsx": 1,
     "components/admin/DemoDataCard.tsx": 2,
-    "components/admin/DynamicCategoryCard.tsx": 1,
     "components/admin/PluginCard.tsx": 4,
     "components/admin/UpdateBanner.tsx": 1,
     "components/admin/admin-settings-layout.tsx": 1,

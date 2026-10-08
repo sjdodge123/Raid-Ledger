@@ -14,6 +14,7 @@ import type {
     AdminCategoryListSuggestionDto,
     DiscoveryCategorySuggestionDto,
 } from '@raid-ledger/contract';
+import { Button, type ButtonVariant } from '../ui/button';
 
 /** Axis order is locked by contract: [co_op, pvp, rpg, survival, strategy, social, mmo]. */
 const AXIS_LABELS = ['Co-op', 'PvP', 'RPG', 'Surv', 'Strat', 'Social', 'MMO'];
@@ -169,7 +170,7 @@ interface CardAction {
     label: string;
     onClick: () => void;
     disabled?: boolean | undefined;
-    className: string;
+    variant: ButtonVariant;
 }
 
 /** Per-action button of the card footer — variant carries the styling (ROK-1530 D6). */
@@ -177,26 +178,14 @@ function CardActionButton({
     label,
     onClick,
     disabled,
-    className,
+    variant,
 }: CardAction): JSX.Element {
     return (
-        <button
-            type="button"
-            onClick={onClick}
-            disabled={disabled}
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${className}`}
-        >
+        <Button type="button" size="sm" variant={variant} onClick={onClick} disabled={disabled}>
             {label}
-        </button>
+        </Button>
     );
 }
-
-const APPROVE_CLASSES =
-    'bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground';
-const REJECT_CLASSES =
-    'bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-600/50 disabled:opacity-50 disabled:cursor-not-allowed';
-const EDIT_CLASSES =
-    'bg-overlay hover:bg-faint text-foreground border border-edge disabled:opacity-50 disabled:cursor-not-allowed';
 
 /**
  * Footer action descriptors. Approve/Reject only apply to a pending
@@ -215,19 +204,19 @@ function cardActions({
             label: 'Approve',
             onClick: () => onApprove?.(suggestion.id),
             disabled: decided,
-            className: APPROVE_CLASSES,
+            variant: 'primary',
         },
         {
             label: 'Reject',
             onClick: () => onReject?.(suggestion.id),
             disabled: decided,
-            className: REJECT_CLASSES,
+            variant: 'destructive-soft',
         },
         {
             label: 'Edit',
             onClick: () => onEdit?.(suggestion),
             disabled: isBusy,
-            className: EDIT_CLASSES,
+            variant: 'secondary',
         },
     ];
 }

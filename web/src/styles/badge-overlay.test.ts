@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { at } from '../test/defined';
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { join, resolve } from 'path';
 
 /**
  * Static analysis of the badge-overlay CSS rules (ROK-493).
@@ -120,5 +120,45 @@ describe('badge-overlay CSS — selectors & coverage (ROK-493)', () => {
         for (const line of selectorLines) {
             expect(line).toContain('[data-scheme="light"]');
         }
+    });
+});
+
+/**
+ * Every class a cover-art badge paints that index.css repaints for the light schemes needs a
+ * `.badge-overlay` restore, or the badge shows the light-family shade on the dark art. The
+ * desktop event card's cover carries the SeriesBadge, the LiveBadge, the Game Time badge and
+ * the status badge (STATUS_STYLES).
+ */
+const SRC = resolve(__dirname, '..');
+const read = (f: string) => readFileSync(join(SRC, f), 'utf-8');
+const COLOR_CLASS = /(?<![\w:-])(?:text|bg|border)-[a-z]+-\d{2,3}(?:\/\d{1,3})?(?![\w-])/g;
+
+function coverBadgeClasses(): string[] {
+    const sources = [
+        read('components/events/SeriesBadge.tsx'),
+        read('components/events/LiveBadge.tsx'),
+        /function GameTimeBadge\(\)[\s\S]*?\n}/.exec(read('components/events/event-card.tsx'))?.[0] ?? '',
+        /STATUS_STYLES[^{]*\{[^}]*\}/.exec(read('lib/event-utils.ts'))?.[0] ?? '',
+    ];
+    return [...new Set(sources.flatMap((src) => src.match(COLOR_CLASS) ?? []))].sort();
+}
+
+const COVER_CLASSES = coverBadgeClasses();
+const esc = (cls: string) => cls.replace('/', '\\/');
+const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const isLightRepainted = (cls: string) =>
+    new RegExp(`:is\\(\\[data-scheme="light"\\][^()]*\\)\\s+\\.${reEsc(esc(cls))}\\s*\\{`).test(css);
+
+describe('badge-overlay CSS — every repainted cover-badge class is restored', () => {
+    it('the scan reads the cover badges: it finds the SeriesBadge and status classes', () => {
+        expect(COVER_CLASSES).toEqual(expect.arrayContaining(['text-indigo-300', 'border-indigo-500/30', 'text-emerald-500', 'text-cyan-300']));
+    });
+
+    it.each(COVER_CLASSES)('cover-art badge class %s keeps its dark-theme colour on light', (cls) => {
+        if (!isLightRepainted(cls)) return;
+        expect(
+            css.includes(`:is(.badge-overlay, .badge-overlay *).${esc(cls)} {`),
+            `${cls} is repainted for the light schemes but has no .badge-overlay restore — the cover-art badge paints the light shade on dark art`,
+        ).toBe(true);
     });
 });
