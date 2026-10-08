@@ -94,8 +94,10 @@ async function blockEveryDay(userId: number): Promise<void> {
 /**
  * The local dates whose {@link BLOCK_HOUR} block falls wholly inside the read's
  * horizon, oldest first — computed from the wall clock, independently of the
- * implementation's own day enumeration. Throws when fewer than two qualify:
- * callers compare a first and a second date.
+ * implementation's own day enumeration. Throws when fewer than two qualify;
+ * the {@link HORIZON_DAYS}-day horizon always yields at least 13, so only a
+ * shorter horizon could trip it. The absence tests compare a first and a
+ * second date.
  */
 function eligibleLocalDates(timeZone: string): [string, string, ...string[]] {
   const now = Date.now();
