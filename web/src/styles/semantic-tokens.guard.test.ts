@@ -134,7 +134,7 @@ function ownLightBlocks(name: string): string[] {
  * TDB:1770 (2026-10-08), the dark rows' mirror: light semantic text must clear AA on every
  * light scheme's OWN surface, panel and the token's /10 tint over that panel. A light scheme
  * that declares its own token value is measured with it — shared red-700 #b91c1c was 4.12:1
- * on celestial's danger tint and 4.39:1 on quest-log's, so both declare a darker danger.
+ * on celestial's danger tint and 4.39:1 on quest-log's, so both declare red-800 #991b1b (5.25 / 5.58).
  */
 function lightTextRows(): Array<readonly [string, string, string, string]> {
     return lightSchemes(css).flatMap(({ name, surface, panel }) => SEMANTIC_ROLES.flatMap((token) => {
