@@ -21,7 +21,7 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
   let service: EmbedPosterService;
   let channelResolver: jest.Mocked<ChannelResolverService>;
   let clientService: jest.Mocked<DiscordBotClientService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select' | 'update', jest.Mock>;
 
   const mockMessage = { id: 'msg-123' };
   const mockEmbed = new EmbedBuilder().setTitle('Test');

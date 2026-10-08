@@ -181,7 +181,7 @@ describe('reconcileOccupancy', () => {
     const inserts = m.only('insert');
     expect(inserts).toHaveLength(1);
     expect(inserts[0].table).toBe(table);
-    expect(inserts[0].values).toEqual([
+    expect(inserts[0]?.values).toEqual([
       {
         presenceMessageId: ROW,
         discordUserId: 'u1',
@@ -209,7 +209,7 @@ describe('reconcileOccupancy', () => {
 
     const updates = m.only('update');
     expect(updates).toHaveLength(1);
-    expect(updates[0].set).toEqual({ leftAt: NOW });
+    expect(updates[0]?.set).toEqual({ leftAt: NOW });
     const sql = render(updates[0].where);
     expect(sql).toContain('"left_at" is null');
     expect(sql).toContain('in ($2)');
@@ -243,7 +243,7 @@ describe('the stay carries what the room reads them as playing (P2-2)', () => {
       NOW,
     );
 
-    expect(m.only('insert')[0].values).toEqual([
+    expect(m.only('insert')[0]?.values).toEqual([
       {
         presenceMessageId: ROW,
         discordUserId: 'u1',
@@ -274,7 +274,7 @@ describe('the stay carries what the room reads them as playing (P2-2)', () => {
 
     const updates = m.only('update');
     expect(updates).toHaveLength(1);
-    expect(updates[0].set).toEqual({ gameId: 9, activityName: 'Valheim' });
+    expect(updates[0]?.set).toEqual({ gameId: 9, activityName: 'Valheim' });
     expect(render(updates[0].where)).toContain('"left_at" is null');
   });
 
@@ -323,7 +323,7 @@ describe('closeAllOccupancy', () => {
 
     const updates = m.only('update');
     expect(updates).toHaveLength(1);
-    expect(updates[0].set).toEqual({ leftAt: NOW });
+    expect(updates[0]?.set).toEqual({ leftAt: NOW });
     const sql = render(updates[0].where);
     expect(sql).toContain('"presence_message_id" = $1');
     // Without this clause a second empty flush would rewrite `left_at` on

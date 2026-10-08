@@ -564,7 +564,7 @@ describe('PresenceGameDetectorService', () => {
       // 1 member, gameId not null → majority (1/1 = 100%)
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ gameId: 7, gameName: 'Dota 2' });
-      expect(result[0].memberIds).toContain('u1');
+      expect(result[0]?.memberIds).toContain('u1');
     });
   });
 });

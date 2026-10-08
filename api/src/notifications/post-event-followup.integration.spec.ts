@@ -22,6 +22,7 @@ import {
   resolvePostEventFollowupRecipients,
   findFollowupCandidateEvents,
 } from './post-event-followup.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -73,24 +74,30 @@ async function mkEvent(
  * import, so a raw id like 999 fails the constraint.
  */
 async function mkLineupMatch(testApp: TestApp): Promise<number> {
-  const [lineup] = await testApp.db
-    .insert(schema.communityLineups)
-    .values({
-      title: 'Reschedule Poll',
-      publicSlug: 'resched-poll',
-      createdBy: testApp.seed.adminUser.id,
-    })
-    .returning();
-  const [match] = await testApp.db
-    .insert(schema.communityLineupMatches)
-    .values({
-      lineupId: lineup.id,
-      gameId: testApp.seed.game.id,
-      status: 'scheduling',
-      thresholdMet: true,
-      voteCount: 1,
-    })
-    .returning();
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'Reschedule Poll',
+        publicSlug: 'resched-poll',
+        createdBy: testApp.seed.adminUser.id,
+      })
+      .returning(),
+    'lineup',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: lineup.id,
+        gameId: testApp.seed.game.id,
+        status: 'scheduling',
+        thresholdMet: true,
+        voteCount: 1,
+      })
+      .returning(),
+    'match',
+  );
   return match.id;
 }
 

@@ -227,7 +227,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-sc1', 'SC1', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].sessionCount).toBe(1);
+      expect(result.participants[0]?.sessionCount).toBe(1);
     });
 
     it('sessionCount increments after rejoin', () => {
@@ -236,7 +236,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-sc2', 'SC2', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].sessionCount).toBe(2);
+      expect(result.participants[0]?.sessionCount).toBe(2);
     });
 
     it('userId is null when user is not linked to a Raid Ledger account', () => {
@@ -259,7 +259,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-id-check', 'IDCheckUser', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].id).toBe('discord-id-check');
+      expect(result.participants[0]?.id).toBe('discord-id-check');
     });
   });
 
@@ -273,7 +273,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       const result20 = service.getActiveRoster(20);
 
       expect(result10.participants).toHaveLength(1);
-      expect(result10.participants[0].discordUserId).toBe('discord-X');
+      expect(result10.participants[0]?.discordUserId).toBe('discord-X');
 
       expect(result20.participants).toHaveLength(2);
       expect(result20.eventId).toBe(20);

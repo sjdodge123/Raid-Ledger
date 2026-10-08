@@ -30,6 +30,7 @@ import { flushChannel } from './channel-presence-flush';
 import { listOccupancy } from './channel-presence-occupancy.helpers';
 import type { RoomResolveDeps } from './channel-presence-room.helpers';
 import { findOpenRow } from './channel-presence-store.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -126,20 +127,26 @@ const CONFIG = { minPlayers: 2, gracePeriod: 60 };
 
 /** Seed a game and a `general-lobby` binding, and wire the fake transport. */
 async function seedRecapRoom(db: Db): Promise<RecapRoom> {
-  const [game] = await db
-    .insert(schema.games)
-    .values({ name: 'Deep Rock Galactic', slug: 'rok1499e2e-drg' })
-    .returning();
-  const [row] = await db
-    .insert(schema.channelBindings)
-    .values({
-      guildId: GUILD_ID,
-      channelId: VOICE_CHANNEL_ID,
-      channelType: 'voice',
-      bindingPurpose: 'general-lobby',
-      config: CONFIG,
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await db
+      .insert(schema.games)
+      .values({ name: 'Deep Rock Galactic', slug: 'rok1499e2e-drg' })
+      .returning(),
+    'game',
+  );
+  const [row] = nonEmpty(
+    await db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: GUILD_ID,
+        channelId: VOICE_CHANNEL_ID,
+        channelType: 'voice',
+        bindingPurpose: 'general-lobby',
+        config: CONFIG,
+      })
+      .returning(),
+    'row',
+  );
   const transport = fakeTransport();
   const binding: ResolvedBinding = {
     bindingId: row.id,

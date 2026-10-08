@@ -323,8 +323,8 @@ describe('resolveRoom — participant union', () => {
       lobbyBinding({ minPlayers: 2 }),
     );
 
-    expect(mockBuildEmbedEventData.mock.calls[0][1]).toBe(88);
-    expect(mockBuildEmbedEventData.mock.calls[0][2]).toEqual([
+    expect(mockBuildEmbedEventData.mock.calls[0]?.[1]).toBe(88);
+    expect(mockBuildEmbedEventData.mock.calls[0]?.[2]).toEqual([
       { discordUserId: 'u1', discordUsername: 'Ana', isActive: true },
       { discordUserId: 'u9', discordUsername: 'Zoe', isActive: false },
       { discordUserId: 'u2', discordUsername: 'Ben', isActive: true },
@@ -440,7 +440,7 @@ describe('resolveRoom — DEMO_MODE override event hints (D12)', () => {
     );
 
     expect(room.groups.map((g) => g.eventId)).toEqual([42]);
-    expect(mockBuildEmbedEventData.mock.calls[0][1]).toBe(42);
+    expect(mockBuildEmbedEventData.mock.calls[0]?.[1]).toBe(42);
   });
 
   it('prefers the real linked event over a member-declared eventId', async () => {
@@ -609,8 +609,8 @@ describe('resolveRoom — art on the DEMO_MODE seam path', () => {
       },
     );
 
-    expect(room.groups[0].gameName).toBe('Valheim');
-    expect(room.groups[0].game).toEqual({
+    expect(room.groups[0]?.gameName).toBe('Valheim');
+    expect(room.groups[0]?.game).toEqual({
       id: 5,
       name: 'Valheim',
       coverUrl: '//img.example/vh.png',

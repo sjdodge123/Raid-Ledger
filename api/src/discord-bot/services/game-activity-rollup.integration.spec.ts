@@ -17,6 +17,7 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { aggregateRollups } from './game-activity-rollup.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /** Early-March session — well outside any lookback anchored on LOOKBACK. */
 const EARLY_START = new Date('2026-03-05T10:00:00Z');
@@ -45,20 +46,26 @@ describe('aggregateRollups — full-bucket recompute (ROK-1465)', () => {
   });
 
   beforeEach(async () => {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name: 'Rollup Recompute', slug: 'rollup-recompute' })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Rollup Recompute', slug: 'rollup-recompute' })
+        .returning(),
+      'game',
+    );
     gameId = game.id;
 
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'd:rollup-recompute',
-        username: 'rollup-recompute',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'd:rollup-recompute',
+          username: 'rollup-recompute',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     userId = user.id;
   });
 

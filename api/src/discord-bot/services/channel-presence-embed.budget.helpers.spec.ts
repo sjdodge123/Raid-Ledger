@@ -30,6 +30,7 @@ import {
 import { buildChannelPresenceEmbeds } from './channel-presence-embed.helpers';
 import type { ResolvedRoom, RoomGroup } from './channel-presence-room.helpers';
 import type { EmbedContext } from './discord-embed.factory';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /** A group embed whose description scales with the roster cap in force. */
 function groupEmbed(descChars: number, badges: boolean): ChannelEmbed {
@@ -91,7 +92,7 @@ describe('applyBudget — under the budget', () => {
     expect(messageChars(embeds)).toBeLessThanOrEqual(MESSAGE_CHAR_BUDGET);
     expect(render).toHaveBeenCalledTimes(1);
     expect(render).toHaveBeenCalledWith(ROSTER_NAME_CAP);
-    expect(embeds[1].data.fields).toHaveLength(2);
+    expect(embeds[1]?.data.fields).toHaveLength(2);
     expect(warn).not.toHaveBeenCalled();
   });
 });
@@ -112,9 +113,9 @@ describe('applyBudget — rung 1: badge fields go first', () => {
 
     expect(messageChars(embeds)).toBeLessThanOrEqual(MESSAGE_CHAR_BUDGET);
     expect(render).toHaveBeenCalledTimes(1);
-    expect(embeds[0].data.fields).toHaveLength(1);
+    expect(embeds[0]?.data.fields).toHaveLength(1);
     expect(embeds.slice(1).flatMap((e) => e.data.fields ?? [])).toEqual([]);
-    expect(embeds[1].data.description).toHaveLength(ROSTER_NAME_CAP * 225);
+    expect(embeds[1]?.data.description).toHaveLength(ROSTER_NAME_CAP * 225);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 });
@@ -133,7 +134,7 @@ describe('applyBudget — rung 2: then the roster cap', () => {
     expect(render).toHaveBeenCalledTimes(2);
     expect(render).toHaveBeenLastCalledWith(DEGRADED_ROSTER_CAP);
     expect(embeds).toHaveLength(6);
-    expect(embeds[1].data.description).toHaveLength(DEGRADED_ROSTER_CAP * 250);
+    expect(embeds[1]?.data.description).toHaveLength(DEGRADED_ROSTER_CAP * 250);
     expect(messageChars(embeds)).toBeLessThanOrEqual(MESSAGE_CHAR_BUDGET);
     expect(warn).toHaveBeenCalledTimes(1);
   });
@@ -241,7 +242,7 @@ describe('applyBudget — the real render at its worst case (AC10)', () => {
   });
 
   it('names the groups it could not render rather than dropping them silently', () => {
-    const [lead] = applyBudget(render);
+    const [lead] = nonEmpty(applyBudget(render), 'lead');
     expect((lead.data.fields ?? []).map((f) => f.name)).toContain(
       '+3 more groups',
     );
@@ -265,7 +266,7 @@ describe('applyBudget — the real render at its worst case (AC10)', () => {
 
     expect(messageChars(embeds)).toBeLessThanOrEqual(MESSAGE_CHAR_BUDGET);
     expect(embeds).toHaveLength(MAX_MESSAGE_EMBEDS);
-    expect(embeds[1].data.description).toContain('+37 more');
+    expect(embeds[1]?.data.description).toContain('+37 more');
     expect(embeds.slice(1).flatMap((e) => e.data.fields ?? [])).toEqual([]);
   });
 });

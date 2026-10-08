@@ -89,7 +89,7 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
     expect(mocked.markEmpty).toHaveBeenCalledTimes(1);
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
     const embeds = mocked.editEmbeds.mock.calls[0][3];
-    expect(embeds[0].data.title).toContain('session ended');
+    expect(embeds[0]?.data.title).toContain('session ended');
     expect(mocked.closeRow).not.toHaveBeenCalled();
   });
 
@@ -181,7 +181,7 @@ describe('ChannelPresenceEmbedService — D8 rejoin inside the grace, and the ev
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
     const embeds = mocked.editEmbeds.mock.calls[0][3];
     expect(embeds).toHaveLength(2);
-    expect(embeds[1].data.author?.name).toContain('ENDED');
+    expect(embeds[1]?.data.author?.name).toContain('ENDED');
   });
 });
 

@@ -544,7 +544,7 @@ describe('createScheduledEvent — reschedule-poll entry guard (ROK-1391)', () =
   function armDb(live: LiveRow) {
     mocks.mockDb.select.mockReturnValue(mocks.createSelectChain([live]));
     const returning = jest.fn().mockResolvedValue([{ id: 42 }]);
-    const chain: Record<string, jest.Mock> = {
+    const chain: Record<'returning' | 'set' | 'where', jest.Mock> = {
       set: jest.fn(),
       where: jest.fn(),
       returning,

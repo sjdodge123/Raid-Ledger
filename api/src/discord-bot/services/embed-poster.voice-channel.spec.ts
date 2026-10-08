@@ -19,7 +19,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
   let channelResolver: jest.Mocked<ChannelResolverService>;
   let clientService: jest.Mocked<DiscordBotClientService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
 
   const mockMessage = { id: 'msg-123' };
   const mockEmbed = new EmbedBuilder().setTitle('Test');

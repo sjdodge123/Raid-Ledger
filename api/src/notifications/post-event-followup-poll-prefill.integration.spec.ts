@@ -27,6 +27,7 @@ import {
   handlePollClick,
   type PostEventFollowupDeps,
 } from '../discord-bot/listeners/post-event-followup-interaction.handlers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const HOUR = 60 * 60 * 1000;
 let seq = 0;
@@ -46,15 +47,21 @@ async function mkUser(testApp: TestApp) {
 
 /** An ended event with one attendee + the M2 sentinel row the cron creates. */
 async function mkEndedEventWithSentinel(testApp: TestApp, creatorId: number) {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Ended Event',
-      creatorId,
-      gameId: testApp.seed.game.id,
-      duration: [new Date(Date.now() - 3 * HOUR), new Date(Date.now() - HOUR)],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Ended Event',
+        creatorId,
+        gameId: testApp.seed.game.id,
+        duration: [
+          new Date(Date.now() - 3 * HOUR),
+          new Date(Date.now() - HOUR),
+        ],
+      })
+      .returning(),
+    'event',
+  );
   const attendee = await mkUser(testApp);
   await testApp.db
     .insert(schema.eventSignups)
@@ -67,28 +74,34 @@ async function mkEndedEventWithSentinel(testApp: TestApp, creatorId: number) {
 
 /** A real lineup + match so `match_id`'s FK resolves against actual rows. */
 async function mkMatch(testApp: TestApp, creatorId: number) {
-  const [lineup] = await testApp.db
-    .insert(schema.communityLineups)
-    .values({
-      title: 'Follow-up poll',
-      status: 'decided',
-      visibility: 'public',
-      createdBy: creatorId,
-      phaseDurationOverride: { standalone: true },
-      publicSlug: generatePublicSlug(),
-      publicShareEnabled: false,
-    })
-    .returning();
-  const [match] = await testApp.db
-    .insert(schema.communityLineupMatches)
-    .values({
-      lineupId: lineup.id,
-      gameId: testApp.seed.game.id,
-      status: 'scheduling',
-      thresholdMet: true,
-      voteCount: 0,
-    })
-    .returning();
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'Follow-up poll',
+        status: 'decided',
+        visibility: 'public',
+        createdBy: creatorId,
+        phaseDurationOverride: { standalone: true },
+        publicSlug: generatePublicSlug(),
+        publicShareEnabled: false,
+      })
+      .returning(),
+    'lineup',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: lineup.id,
+        gameId: testApp.seed.game.id,
+        status: 'scheduling',
+        thresholdMet: true,
+        voteCount: 0,
+      })
+      .returning(),
+    'match',
+  );
   return { lineupId: lineup.id, matchId: match.id };
 }
 

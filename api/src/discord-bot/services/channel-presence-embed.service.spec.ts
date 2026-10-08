@@ -481,13 +481,13 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
     );
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
     const embeds = mocked.editEmbeds.mock.calls[0][3];
-    expect(embeds[0].data.title).toContain('session ended');
+    expect(embeds[0]?.data.title).toContain('session ended');
     // The ticket's symptom, asserted directly: a session that really happened
     // must never be reported as none.
     expect(embeds[0].data.description).not.toBe('No session started.');
-    expect(embeds[0].data.description).toContain('1 session');
+    expect(embeds[0]?.data.description).toContain('1 session');
     expect(embeds).toHaveLength(2);
-    expect(embeds[1].data.author?.name).toContain('ENDED');
+    expect(embeds[1]?.data.author?.name).toContain('ENDED');
     // The rest of the D8 ladder is untouched.
     expect(mocked.markEmpty).toHaveBeenCalledTimes(1);
   });

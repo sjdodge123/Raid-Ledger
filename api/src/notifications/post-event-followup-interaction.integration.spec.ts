@@ -34,6 +34,7 @@ import {
   type FollowupInteractionEvent,
   type PostEventFollowupDeps,
 } from '../discord-bot/listeners/post-event-followup-interaction.handlers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -116,9 +117,12 @@ async function getEvent(testApp: TestApp, eventId: number) {
 }
 
 async function countEvents(testApp: TestApp): Promise<number> {
-  const [row] = await testApp.db
-    .select({ n: sql<number>`count(*)::int` })
-    .from(schema.events);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.events),
+    'row',
+  );
   return Number(row.n);
 }
 
@@ -276,7 +280,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       expect(sendEmbedDM).toHaveBeenCalledTimes(1);
       const buttons = sentButtons();
       expect(buttons).toHaveLength(1);
-      expect(buttons[0].custom_id).toBe('pef_schedule:502');
+      expect(buttons[0]?.custom_id).toBe('pef_schedule:502');
     });
 
     it('M3-AC1: no prompt when the organizer opted out of post_event_followup discord', async () => {
@@ -604,7 +608,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       );
       expect(inputs.map((i) => i.userId)).not.toContain(creator.id);
       expect(inputs.every((i) => i.type === 'post_event_followup')).toBe(true);
-      expect(inputs[0].payload).toEqual({ eventId: 4242 });
+      expect(inputs[0]?.payload).toEqual({ eventId: 4242 });
       expect(
         (await getSentinel(testApp, ev.id)).attendeesNotifiedAt,
       ).not.toBeNull();
@@ -704,7 +708,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
         .where(eq(schema.notifications.type, 'post_event_followup'));
       expect(rows.map((r) => r.userId).sort()).toEqual([...recipients].sort());
       expect(rows.map((r) => r.userId)).not.toContain(creator.id);
-      expect(rows[0].payload).toEqual({ eventId: 4242 });
+      expect(rows[0]?.payload).toEqual({ eventId: 4242 });
     });
   });
 });

@@ -18,6 +18,7 @@ import { JUST_CHATTING_TITLE } from './channel-presence-embed.helpers';
 import { MAX_GROUP_EMBEDS } from './channel-presence-embed.lead.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const CLIENT_URL = 'https://rl.example';
 const OPENED_AT = new Date('2026-09-02T20:55:00Z');
@@ -105,7 +106,7 @@ describe('buildRecapEmbeds — the lead embed', () => {
   });
 
   it('reports the session count and the window spanned by the sessions', () => {
-    const [lead] = render([COD, DRG]);
+    const [lead] = nonEmpty(render([COD, DRG]), 'lead');
     expect(lead.description).toBe(
       `2 sessions · ${token('2026-09-02T21:02:00Z')}–${token(
         '2026-09-02T23:47:00Z',
@@ -114,7 +115,7 @@ describe('buildRecapEmbeds — the lead embed', () => {
   });
 
   it('singularises a lone session', () => {
-    const [lead] = render([DRG]);
+    const [lead] = nonEmpty(render([DRG]), 'lead');
     expect(lead.description).toBe(
       `1 session · ${token('2026-09-02T21:30:00Z')}–${token(
         '2026-09-02T22:42:00Z',
@@ -125,27 +126,30 @@ describe('buildRecapEmbeds — the lead embed', () => {
   it('says nothing started when the room never spawned a session', () => {
     const embeds = render([]);
     expect(embeds).toHaveLength(1);
-    expect(embeds[0].description).toBe('No session started.');
+    expect(embeds[0]?.description).toBe('No session started.');
   });
 
   it('carries no "no game detected" field — the room is empty (D3)', () => {
-    const [lead] = render([COD, DRG]);
+    const [lead] = nonEmpty(render([COD, DRG]), 'lead');
     expect(lead.fields ?? []).toHaveLength(0);
   });
 
   it('timestamps from opened_at, so re-rendering the recap is idempotent', () => {
-    const [lead] = render([COD, DRG]);
+    const [lead] = nonEmpty(render([COD, DRG]), 'lead');
     const again = render([COD, DRG], NOW + 600_000)[0];
     expect(lead.timestamp).toBe(OPENED_AT.toISOString());
     expect(again.timestamp).toBe(lead.timestamp);
   });
 
   it('falls back to a generic channel name when the channel is gone', () => {
-    const [lead] = buildRecapEmbeds(
-      { channelName: null, events: [], openedAt: OPENED_AT, endedAt: null },
-      CONTEXT,
-      NOW,
-    ).map((e) => e.data);
+    const [lead] = nonEmpty(
+      buildRecapEmbeds(
+        { channelName: null, events: [], openedAt: OPENED_AT, endedAt: null },
+        CONTEXT,
+        NOW,
+      ).map((e) => e.data),
+      'lead',
+    );
     expect(lead.title).toBe('\u{1F50A} Voice channel · session ended');
   });
 });
@@ -229,7 +233,7 @@ describe('buildRecapEmbeds — a session still live when the room emptied (D8)',
   });
 
   it('closes the lead window at the recap clock too', () => {
-    const [lead] = render([live], closedAt);
+    const [lead] = nonEmpty(render([live], closedAt), 'lead');
     expect(lead.description).toBe(
       `1 session · ${token('2026-09-02T21:00:00Z')}–${token(
         '2026-09-02T22:30:00Z',
@@ -246,7 +250,7 @@ describe('buildRecapEmbeds — a session still live when the room emptied (D8)',
     const later = render([live], closedAt + 90_000, closedAt);
 
     expect(later[0].description).toBe(first[0].description);
-    expect(later[1].author?.name).toBe('■ ENDED · Quick Play · 1h 30m');
+    expect(later[1]?.author?.name).toBe('■ ENDED · Quick Play · 1h 30m');
   });
 });
 
@@ -301,32 +305,41 @@ const NAMES = '**roknua** · **hiphoptobop** · **vex**';
 
 describe('buildRecapEmbeds — the room line', () => {
   it('still says nothing happened when the room recap has no members', () => {
-    const [lead] = renderRoom({ spanMs: SPAN_MS, members: [], activities: [] });
+    const [lead] = nonEmpty(
+      renderRoom({ spanMs: SPAN_MS, members: [], activities: [] }),
+      'lead',
+    );
     expect(lead.description).toBe('No session started.');
   });
 
   it('describes a room whose occupants produced no game', () => {
-    const [lead] = renderRoom({
-      spanMs: SPAN_MS,
-      members: THREE_PLAYING.members,
-      activities: [],
-    });
+    const [lead] = nonEmpty(
+      renderRoom({
+        spanMs: SPAN_MS,
+        members: THREE_PLAYING.members,
+        activities: [],
+      }),
+      'lead',
+    );
     expect(lead.description).toBe(
       `3 in voice \u00b7 no game detected\n${NAMES}`,
     );
   });
 
   it('singularises a lone occupant', () => {
-    const [lead] = renderRoom({
-      spanMs: SPAN_MS,
-      members: [{ displayName: 'roknua', seconds: 10_500 }],
-      activities: [],
-    });
+    const [lead] = nonEmpty(
+      renderRoom({
+        spanMs: SPAN_MS,
+        members: [{ displayName: 'roknua', seconds: 10_500 }],
+        activities: [],
+      }),
+      'lead',
+    );
     expect(lead.description).toBe('1 in voice · no game detected\n**roknua**');
   });
 
   it('lists what the room played, in the order the summariser ranked it', () => {
-    const [lead] = renderRoom(THREE_PLAYING);
+    const [lead] = nonEmpty(renderRoom(THREE_PLAYING), 'lead');
     expect(lead.description).toBe(
       '3 in voice · Path of Exile 2 (2h 48m) · WoW Classic (3h 29m) · ' +
         `Slay the Spire II (1h 44m)\n${NAMES}`,
@@ -334,14 +347,17 @@ describe('buildRecapEmbeds — the room line', () => {
   });
 
   it('caps a busy room at five games and counts the rest', () => {
-    const [lead] = renderRoom({
-      spanMs: SPAN_MS,
-      members: THREE_PLAYING.members,
-      activities: Array.from({ length: 8 }, (_, i) => ({
-        name: `Game ${String(i)}`,
-        seconds: 3600,
-      })),
-    });
+    const [lead] = nonEmpty(
+      renderRoom({
+        spanMs: SPAN_MS,
+        members: THREE_PLAYING.members,
+        activities: Array.from({ length: 8 }, (_, i) => ({
+          name: `Game ${String(i)}`,
+          seconds: 3600,
+        })),
+      }),
+      'lead',
+    );
     expect(lead.description).toBe(
       '3 in voice · Game 0 (1h) · Game 1 (1h) · Game 2 (1h) · Game 3 (1h) · ' +
         `Game 4 (1h) · +3 more\n${NAMES}`,
@@ -351,7 +367,7 @@ describe('buildRecapEmbeds — the room line', () => {
 
 describe('buildRecapEmbeds — the room title', () => {
   it('keeps the session line underneath when a group did qualify', () => {
-    const [lead] = renderRoom(THREE_PLAYING, [DRG]);
+    const [lead] = nonEmpty(renderRoom(THREE_PLAYING, [DRG]), 'lead');
     expect(lead.description).toBe(
       '3 in voice · Path of Exile 2 (2h 48m) · WoW Classic (3h 29m) · ' +
         `Slay the Spire II (1h 44m)\n${NAMES}\n` +
@@ -362,23 +378,29 @@ describe('buildRecapEmbeds — the room title', () => {
   });
 
   it('puts how long the room was open in the title', () => {
-    const [lead] = renderRoom(THREE_PLAYING);
+    const [lead] = nonEmpty(renderRoom(THREE_PLAYING), 'lead');
     expect(lead.title).toBe('\u{1F50A} General · session ended · 2h 55m');
   });
 
   it('renders a sub-minute room as "<1m", never "0m" (ROK-1692)', () => {
-    const [lead] = renderRoom({
-      spanMs: 20_000,
-      members: [{ displayName: 'Pariah', seconds: 20 }],
-      activities: [{ name: 'Valheim', seconds: 20 }],
-    });
+    const [lead] = nonEmpty(
+      renderRoom({
+        spanMs: 20_000,
+        members: [{ displayName: 'Pariah', seconds: 20 }],
+        activities: [{ name: 'Valheim', seconds: 20 }],
+      }),
+      'lead',
+    );
     expect(lead.title).toBe('\u{1F50A} General · session ended · <1m');
     expect(lead.description).toContain('Valheim (<1m)');
     expect(`${lead.title} ${lead.description}`).not.toContain('0m');
   });
 
   it('leaves the title alone when the room never opened for measurable time', () => {
-    const [lead] = renderRoom({ spanMs: 0, members: [], activities: [] });
+    const [lead] = nonEmpty(
+      renderRoom({ spanMs: 0, members: [], activities: [] }),
+      'lead',
+    );
     expect(lead.title).toBe('\u{1F50A} General · session ended');
   });
 });
@@ -448,7 +470,10 @@ describe('buildRecapEmbeds — the participant line', () => {
   });
 
   it('adds no participant line when the room recap has no members', () => {
-    const [lead] = renderRoom({ spanMs: SPAN_MS, members: [], activities: [] });
+    const [lead] = nonEmpty(
+      renderRoom({ spanMs: SPAN_MS, members: [], activities: [] }),
+      'lead',
+    );
     expect(lead.description).toBe('No session started.');
   });
 });

@@ -30,6 +30,7 @@ import { makeDiscordApiError } from './scheduled-event.service.spec-helpers';
 // makes the spec compile-fail until dev step c lands. The import itself is
 // the assertion that `scheduled-event.gc.ts` will exist.
 import { gcStaleRLScheduledEvents } from './scheduled-event.gc';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const MAX_SCHEDULED_EVENTS_REACHED = 30038;
 const FUTURE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -142,16 +143,19 @@ async function seedStaleRLEvents(count = 5): Promise<SeededEvent[]> {
 async function seedCandidate(): Promise<number> {
   const futureStart = new Date(Date.now() + FUTURE_MS);
   const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-  const [row] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'New Raid Night',
-      creatorId: testApp.seed.adminUser.id,
-      gameId: testApp.seed.game.id,
-      duration: [futureStart, futureEnd] as [Date, Date],
-      isAdHoc: false,
-    })
-    .returning({ id: schema.events.id });
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'New Raid Night',
+        creatorId: testApp.seed.adminUser.id,
+        gameId: testApp.seed.game.id,
+        duration: [futureStart, futureEnd] as [Date, Date],
+        isAdHoc: false,
+      })
+      .returning({ id: schema.events.id }),
+    'row',
+  );
   return row.id;
 }
 
@@ -202,13 +206,16 @@ describe('ROK-1332 — capacity-recovery integration', () => {
 
     // The candidate retry attempt produced a new SE id and persisted it.
     expect(mockGuild.scheduledEvents.create).toHaveBeenCalledTimes(2);
-    const [candidateRow] = await testApp.db
-      .select({
-        discordScheduledEventId: schema.events.discordScheduledEventId,
-      })
-      .from(schema.events)
-      .where(eq(schema.events.id, candidateId))
-      .limit(1);
+    const [candidateRow] = nonEmpty(
+      await testApp.db
+        .select({
+          discordScheduledEventId: schema.events.discordScheduledEventId,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, candidateId))
+        .limit(1),
+      'candidateRow',
+    );
     expect(candidateRow.discordScheduledEventId).toBe('new-se-after-gc');
   });
 
@@ -401,17 +408,20 @@ describe('ROK-1332 — capacity-recovery integration', () => {
     const now = new Date();
     const futureStart = new Date(now.getTime() + FUTURE_MS);
     const futureEnd = new Date(futureStart.getTime() + 3 * 60 * 60 * 1000);
-    const [evt] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'Palworld Event',
-        creatorId: testApp.seed.adminUser.id,
-        gameId: testApp.seed.game.id,
-        duration: [futureStart, futureEnd] as [Date, Date],
-        discordScheduledEventId: 'bound-se',
-        isAdHoc: false,
-      })
-      .returning({ id: schema.events.id });
+    const [evt] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'Palworld Event',
+          creatorId: testApp.seed.adminUser.id,
+          gameId: testApp.seed.game.id,
+          duration: [futureStart, futureEnd] as [Date, Date],
+          discordScheduledEventId: 'bound-se',
+          isAdHoc: false,
+        })
+        .returning({ id: schema.events.id }),
+      'evt',
+    );
 
     // Guild shows: the bound SE, an unbound DUPLICATE (same title+start, the
     // timeout-after-success orphan), and a genuine operator SE. The guild SE
@@ -471,13 +481,16 @@ describe('ROK-1332 — capacity-recovery integration', () => {
     );
 
     // The bound event row keeps its binding — only the duplicate was deleted.
-    const [row] = await testApp.db
-      .select({
-        discordScheduledEventId: schema.events.discordScheduledEventId,
-      })
-      .from(schema.events)
-      .where(eq(schema.events.id, evt.id))
-      .limit(1);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({
+          discordScheduledEventId: schema.events.discordScheduledEventId,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, evt.id))
+        .limit(1),
+      'row',
+    );
     expect(row.discordScheduledEventId).toBe('bound-se');
   });
 

@@ -552,7 +552,7 @@ describe('AdHocNotificationService', () => {
         }
       ).signupMentions;
       expect(lastMentions).toHaveLength(1);
-      expect(lastMentions[0].username).toBe('P1');
+      expect(lastMentions[0]?.username).toBe('P1');
       expect(lastMentions[0].status).toBeUndefined();
     });
 

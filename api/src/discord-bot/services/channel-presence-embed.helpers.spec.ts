@@ -34,6 +34,7 @@ import {
 } from './channel-presence-embed.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { ResolvedRoom, RoomGroup } from './channel-presence-room.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const CLIENT_URL = 'https://rl.example';
 const START = '2026-09-02T18:00:00Z';
@@ -136,7 +137,7 @@ describe('buildChannelPresenceEmbeds — render 1: single game, threshold met', 
   it('keeps the lead embed even with a single group (trap 3)', () => {
     const embeds = render(subject);
     expect(embeds).toHaveLength(2);
-    expect(embeds[0].title).toBe('\u{1F50A} General · 3 in voice');
+    expect(embeds[0]?.title).toBe('\u{1F50A} General · 3 in voice');
     expect(embeds[0].color).toBe(EMBED_COLORS.SYSTEM);
   });
 
@@ -173,9 +174,9 @@ describe('buildChannelPresenceEmbeds — render 2: two qualifying groups', () =>
   it('emits one embed per group behind the lead', () => {
     const embeds = render(subject);
     expect(embeds).toHaveLength(3);
-    expect(embeds[0].description).toBe('2 sessions running.');
+    expect(embeds[0]?.description).toBe('2 sessions running.');
     expect(embeds[1].title).toBe(COD);
-    expect(embeds[2].title).toBe('Deep Rock Galactic');
+    expect(embeds[2]?.title).toBe('Deep Rock Galactic');
   });
 
   it('preserves the order resolveRoom already sorted into', () => {
@@ -205,7 +206,7 @@ describe('buildChannelPresenceEmbeds — render 3: mixed room', () => {
   });
 
   it('lists undetected members on the lead embed as bold names, not a roster', () => {
-    const [lead] = render(subject);
+    const [lead] = nonEmpty(render(subject), 'lead');
     const field = (lead.fields ?? [])[0];
     expect(field?.name).toBe('In channel · no game detected');
     expect(field?.value).toBe('**tinnitus** · **vex**');
@@ -237,7 +238,7 @@ describe('buildChannelPresenceEmbeds — render 4: Just Chatting', () => {
   it('keeps the lead embed and reports one running session (trap 4)', () => {
     const embeds = render(subject);
     expect(embeds).toHaveLength(2);
-    expect(embeds[0].description).toBe('1 session running.');
+    expect(embeds[0]?.description).toBe('1 session running.');
   });
 
   it('counts the members as "in voice", never as "playing"', () => {
@@ -316,14 +317,20 @@ describe('buildChannelPresenceEmbeds — rosters are names, never mentions', () 
 
 describe('buildChannelPresenceEmbeds — lead embed copy', () => {
   it('falls back to a generic channel name when the channel is gone', () => {
-    const [lead] = render(room({ channelName: null, memberCount: 2 }));
+    const [lead] = nonEmpty(
+      render(room({ channelName: null, memberCount: 2 })),
+      'lead',
+    );
     expect(lead.title).toBe('\u{1F50A} Voice channel · 2 in voice');
   });
 
   it('reports no tracked game when the room renders no group at all', () => {
     // The genuine pre-detection state: presence produced nothing to print, so
     // there is no roster beneath the lead for this line to contradict.
-    const [lead] = render(room({ memberCount: 2, groups: [] }));
+    const [lead] = nonEmpty(
+      render(room({ memberCount: 2, groups: [] })),
+      'lead',
+    );
     expect(lead.description).toBe('Nobody on a tracked game yet.');
   });
 
@@ -332,25 +339,33 @@ describe('buildChannelPresenceEmbeds — lead embed copy', () => {
     // so it is `qualifying`, but its event does not exist yet. Before ROK-1446
     // this window was invisible, which is why D3 never named it. The lead must
     // not deny the roster printed directly beneath it.
-    const [lead] = render(
-      room({
-        memberCount: 3,
-        groups: [qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua'])],
-      }),
+    const [lead] = nonEmpty(
+      render(
+        room({
+          memberCount: 3,
+          groups: [
+            qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua']),
+          ],
+        }),
+      ),
+      'lead',
     );
     expect(lead.description).toBe('1 group forming.');
     expect(lead.description).not.toContain('Nobody');
   });
 
   it('pluralises when more than one group is forming', () => {
-    const [lead] = render(
-      room({
-        memberCount: 5,
-        groups: [
-          qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua']),
-          qualifyingNoEvent(9, 'Deep Rock', ['tinnitus', 'a']),
-        ],
-      }),
+    const [lead] = nonEmpty(
+      render(
+        room({
+          memberCount: 5,
+          groups: [
+            qualifyingNoEvent(4, 'Valheim', ['morrow', 'vex', 'roknua']),
+            qualifyingNoEvent(9, 'Deep Rock', ['tinnitus', 'a']),
+          ],
+        }),
+      ),
+      'lead',
     );
     expect(lead.description).toBe('2 groups forming.');
   });
@@ -360,20 +375,26 @@ describe('buildChannelPresenceEmbeds — lead embed copy', () => {
     // (`\u25CC NEEDS 1 MORE`, Path of Exile 2) and no events. `qualifying` is
     // false for a dropped group, so the `forming` guard missed it and the lead
     // denied the roster printed one embed lower.
-    const [lead] = render(
-      room({ memberCount: 2, groups: [short(4, 'Valheim', ['morrow'])] }),
+    const [lead] = nonEmpty(
+      render(
+        room({ memberCount: 2, groups: [short(4, 'Valheim', ['morrow'])] }),
+      ),
+      'lead',
     );
     expect(lead.description).toBe('1 group gathering players.');
     expect(lead.description).not.toContain('Nobody');
   });
 
   it('does not claim a shared game when undetected members are present', () => {
-    const [lead] = render(
-      room({
-        memberCount: 4,
-        groups: [evented(7, COD, ['a', 'b', 'c'])],
-        undetectedNames: ['vex'],
-      }),
+    const [lead] = nonEmpty(
+      render(
+        room({
+          memberCount: 4,
+          groups: [evented(7, COD, ['a', 'b', 'c'])],
+          undetectedNames: ['vex'],
+        }),
+      ),
+      'lead',
     );
     expect(lead.description).toBe('1 session running.');
   });
@@ -381,14 +402,17 @@ describe('buildChannelPresenceEmbeds — lead embed copy', () => {
 
 describe('buildChannelPresenceEmbeds — lead copy for pre-session rooms (ROK-1521)', () => {
   it('pluralises when several sub-threshold groups are gathering', () => {
-    const [lead] = render(
-      room({
-        memberCount: 3,
-        groups: [
-          short(4, 'Valheim', ['morrow']),
-          short(9, 'Deep Rock', ['vex']),
-        ],
-      }),
+    const [lead] = nonEmpty(
+      render(
+        room({
+          memberCount: 3,
+          groups: [
+            short(4, 'Valheim', ['morrow']),
+            short(9, 'Deep Rock', ['vex']),
+          ],
+        }),
+      ),
+      'lead',
     );
     expect(lead.description).toBe('2 groups gathering players.');
   });
@@ -422,8 +446,9 @@ describe('buildChannelPresenceEmbeds — Discord limits', () => {
     const groups = Array.from({ length: 10 }, (_, i) =>
       short(100 + i, `Game ${i}`, [`p${i}`]),
     );
-    const [lead] = render(
-      room({ memberCount: 11, groups, undetectedNames: ['vex'] }),
+    const [lead] = nonEmpty(
+      render(room({ memberCount: 11, groups, undetectedNames: ['vex'] })),
+      'lead',
     );
     expect((lead.fields ?? []).map((f) => f.name)).toEqual([
       'In channel · no game detected',

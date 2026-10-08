@@ -228,7 +228,7 @@ describe('openRow — insert shape and failure handling', () => {
     await openRow(m.db, { ...OPEN_INPUT, bindingId: null });
 
     expect(m.only('insert')[0].table).toBe(table);
-    expect(m.only('insert')[0].values).toEqual({
+    expect(m.only('insert')[0]?.values).toEqual({
       guildId: 'g-1',
       voiceChannelId: 'vc-1',
       bindingId: null,
@@ -372,7 +372,7 @@ describe('closeRow / savePayloadHash (writes that need a live row)', () => {
 
     await closeRow(m.db, 'row-1', 'missing');
 
-    expect(m.only('update')[0].set).toEqual({ leftAt: expect.any(Date) });
+    expect(m.only('update')[0]?.set).toEqual({ leftAt: expect.any(Date) });
   });
 
   it('stores the D5 payload hash on the open row only', async () => {
