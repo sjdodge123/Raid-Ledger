@@ -21,10 +21,7 @@ import {
   waitFor,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import {
-  createMemberAndLogin,
-  createFutureEvent,
-} from '../events/signups.integration.spec-helpers';
+import { createFutureEvent } from '../events/signups.integration.spec-helpers';
 import {
   LFG_EXPIRY_JOB_NAME,
   LFG_EXPIRY_CRON_EXPRESSION,
@@ -44,9 +41,10 @@ import {
   type LfgGroupSummaryDto,
   type LfgGroupDetailDto,
   type LfgHeartedGameDto,
+  createMembers,
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
-import { at, nonEmpty } from '../common/testing/narrow';
+import { at } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -87,14 +85,9 @@ function convert(token: string, gameId: number, body: object) {
     .send(body);
 }
 
-/** Create N logged-in members with predictable usernames. */
-async function members(...names: string[]) {
-  const out: Array<{ userId: number; token: string; username: string }> = [];
-  for (const name of names) {
-    const m = await createMemberAndLogin(testApp, name, `${name}@test.local`);
-    out.push({ ...m, username: name });
-  }
-  return out;
+/** Logged-in members, one per name, as a positional tuple. */
+function members<N extends string[]>(...names: N) {
+  return createMembers(testApp, ...names);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -103,9 +96,7 @@ async function members(...names: string[]) {
 
 describe('LFG → LFM transition', () => {
   it('derives lfg at one intent and lfm at two — the +1 IS another intent', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock');
 
     const first = await postIntent(a.token, game.id);
@@ -145,9 +136,7 @@ describe('LFG → LFM transition', () => {
   });
 
   it('GET /lfg groups active intents by game, ordered by activeCount desc', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const busy = await createGame(testApp, 'Busy Game');
     const quiet = await createGame(testApp, 'Quiet Game');
     await postIntent(a.token, busy.id);
@@ -172,7 +161,7 @@ describe('LFG → LFM transition', () => {
   });
 
   it('re-posting an active intent returns the existing row without duplicating it', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Valheim');
 
     const created = await postIntent(a.token, game.id);
@@ -187,7 +176,7 @@ describe('LFG → LFM transition', () => {
   });
 
   it('returns 200 with an empty derived group for a game nobody is looking for', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Lonely Game');
 
     const res = await getGroup(a.token, game.id);
@@ -202,7 +191,7 @@ describe('LFG → LFM transition', () => {
   });
 
   it('404s a POST for a game that does not exist', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     // Positive control: the same route must succeed for a real game, so a
     // 404 here proves the game lookup — not a missing route.
     const real = await createGame(testApp, 'Real Game');
@@ -228,9 +217,7 @@ describe('LFG → LFM transition', () => {
 
 describe('+1 expiry refresh', () => {
   it('pushes expires_at ~LFG_EXPIRY_DAYS (7) days out for EVERY active intent on the game', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Helldivers');
 
     const aIntent = (await postIntent(a.token, game.id))
@@ -256,7 +243,7 @@ describe('+1 expiry refresh', () => {
   });
 
   it('does NOT refresh the group clock on a re-post by an existing holder', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Grounded');
 
     const intent = (await postIntent(a.token, game.id))
@@ -272,7 +259,7 @@ describe('+1 expiry refresh', () => {
   });
 
   it('revives a stale intent in place rather than inserting a duplicate', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Terraria');
 
     const intent = (await postIntent(a.token, game.id))
@@ -292,7 +279,7 @@ describe('+1 expiry refresh', () => {
   });
 
   it('stores visibility as local and never honours a client-supplied value', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Relay Game');
 
     const plain = await postIntent(a.token, game.id);
@@ -301,7 +288,7 @@ describe('+1 expiry refresh', () => {
       'local',
     );
 
-    const [b] = nonEmpty(await members('bravo'), 'b');
+    const [b] = await members('bravo');
     const smuggled = await postIntent(b.token, game.id, {
       visibility: 'cross-community',
     });
@@ -323,7 +310,7 @@ describe('+1 expiry refresh', () => {
 
 describe('event-signup clearing', () => {
   it('clears the signer intent for the event game and leaves other games alone', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const target = await createGame(testApp, 'Signup Game');
     const other = await createGame(testApp, 'Untouched Game');
     await postIntent(a.token, target.id);
@@ -352,7 +339,7 @@ describe('event-signup clearing', () => {
   });
 
   it('leaves intents alone when the signed-up event has no game', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Gameless Event Game');
     await postIntent(a.token, game.id);
 
@@ -405,9 +392,7 @@ describe('expiry cron', () => {
   });
 
   it('flips past-expiry intents to expired and drops them out of GET /lfg', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const stale = await createGame(testApp, 'Stale Game');
     const live = await createGame(testApp, 'Live Game');
     const staleIntent = (await postIntent(a.token, stale.id))
@@ -440,7 +425,7 @@ describe('expiry cron', () => {
 
 describe('concurrency guard', () => {
   it('yields exactly one row when the same user double-posts in flight', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Race Game');
 
     const [r1, r2] = await Promise.all([
@@ -469,9 +454,7 @@ describe('concurrency guard', () => {
 
 describe('conversion', () => {
   it('converts every active intent on the game and records poll provenance', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Convert Game');
     await postIntent(a.token, game.id);
     await postIntent(b.token, game.id);
@@ -494,7 +477,7 @@ describe('conversion', () => {
   });
 
   it('is idempotent — a second convert reports zero converted, not an error', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Twice Game');
     await postIntent(a.token, game.id);
     const eventId = await createFutureEvent(testApp, adminToken, {
@@ -513,7 +496,7 @@ describe('conversion', () => {
   });
 
   it('400s when neither or both of pollId/eventId are supplied', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Bad Body Game');
     await postIntent(a.token, game.id);
     const eventId = await createFutureEvent(testApp, adminToken, {
@@ -535,9 +518,7 @@ describe('conversion', () => {
   });
 
   it('403s a bystander who holds no active intent on the game', async () => {
-    const roster = await members('alpha', 'bystander');
-    const a = at(roster, 0);
-    const bystander = at(roster, 1);
+    const [a, bystander] = await members('alpha', 'bystander');
     const game = await createGame(testApp, 'Members Only Game');
     await postIntent(a.token, game.id);
     const eventId = await createFutureEvent(testApp, adminToken, {
@@ -559,10 +540,7 @@ describe('conversion', () => {
 
 describe('excluded holders', () => {
   it('never lets a deactivated or banned holder inflate a group into lfm', async () => {
-    const roster = await members('alpha', 'gone', 'banned');
-    const a = at(roster, 0);
-    const gone = at(roster, 1);
-    const banned = at(roster, 2);
+    const [a, gone, banned] = await members('alpha', 'gone', 'banned');
     const game = await createGame(testApp, 'Exclusion Game');
     await postIntent(a.token, game.id);
     await postIntent(gone.token, game.id);
@@ -590,9 +568,7 @@ describe('excluded holders', () => {
 
 describe('DELETE /lfg/:gameId', () => {
   it("marks the caller's intent cleared and never touches anyone else's", async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Withdraw Game');
     await postIntent(a.token, game.id);
     await postIntent(b.token, game.id);
@@ -615,7 +591,7 @@ describe('DELETE /lfg/:gameId', () => {
   });
 
   it('404s when the caller holds no active intent for the game', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const held = await createGame(testApp, 'Held Game');
     const notHeld = await createGame(testApp, 'Nothing To Withdraw');
     await postIntent(a.token, held.id);
@@ -640,9 +616,7 @@ describe('DELETE /lfg/:gameId', () => {
 
 describe('GET /lfg/hearted', () => {
   it('lists manually hearted games without an own intent, and writes nothing', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const wanted = await createGame(testApp, 'Wanted Game');
     const alreadyPosted = await createGame(testApp, 'Already Posted Game');
     const fromSteam = await createGame(testApp, 'Steam Import Game');
@@ -675,9 +649,7 @@ describe('GET /lfg/hearted', () => {
 
 describe('viability signal', () => {
   it('reports the Co-Optimus threshold and flips isViable only once it is met', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const coop = await createGame(testApp, 'Coop Game', {
       cooptimusOnlineMax: 2,
     });
@@ -704,9 +676,7 @@ describe('viability signal', () => {
   });
 
   it('never guesses a threshold for a game with no Co-Optimus data', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const unknown = await createGame(testApp, 'Unknown Coop Game', {
       cooptimusOnlineMax: null,
     });
@@ -741,10 +711,7 @@ describe('LFM transition events (ROK-1454 AC1)', () => {
     emitter.on(LFG_EVENTS.LFM_REACHED, onReached);
     emitter.on(LFG_EVENTS.GROUP_CHANGED, onChanged);
     try {
-      const roster = await members('alpha', 'bravo', 'charlie');
-      const a = at(roster, 0);
-      const b = at(roster, 1);
-      const c = at(roster, 2);
+      const [a, b, c] = await members('alpha', 'bravo', 'charlie');
       const game = await createGame(testApp, 'Deep Rock');
 
       // First hand: LFG is quiet — no event of either kind.

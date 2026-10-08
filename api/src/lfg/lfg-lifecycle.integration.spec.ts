@@ -17,10 +17,7 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
-import {
-  createMemberAndLogin,
-  createFutureEvent,
-} from '../events/signups.integration.spec-helpers';
+import { createFutureEvent } from '../events/signups.integration.spec-helpers';
 import {
   DAY_MS,
   createGame,
@@ -30,8 +27,8 @@ import {
   readIntentsForGame,
   setExpiresAt,
   type LfgIntentResponseDto,
+  createMembers,
 } from './lfg.integration.spec-helpers';
-import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -66,12 +63,9 @@ function getGroup(token: string, gameId: number) {
     .set('Authorization', `Bearer ${token}`);
 }
 
-async function members(...names: string[]) {
-  const out: Array<{ userId: number; token: string }> = [];
-  for (const name of names) {
-    out.push(await createMemberAndLogin(testApp, name, `${name}@test.local`));
-  }
-  return out;
+/** Logged-in members, one per name, as a positional tuple. */
+function members<N extends string[]>(...names: N) {
+  return createMembers(testApp, ...names);
 }
 
 /** Post an intent and immediately push it past its expiry (unswept by cron). */
@@ -91,10 +85,7 @@ async function postAndExpire(
 
 describe('+1 refresh eligibility', () => {
   it('leaves a lapsed-but-unswept intent expired when the group refreshes', async () => {
-    const roster = await members('alpha', 'stale', 'charlie');
-    const a = at(roster, 0);
-    const stale = at(roster, 1);
-    const c = at(roster, 2);
+    const [a, stale, c] = await members('alpha', 'stale', 'charlie');
     const game = await createGame(testApp, 'Refresh Game');
     await postIntent(a.token, game.id);
     const lapsed = await postAndExpire(stale.token, game.id);
@@ -112,10 +103,7 @@ describe('+1 refresh eligibility', () => {
   });
 
   it('leaves a deactivated holder out of the group refresh', async () => {
-    const roster = await members('alpha', 'gone', 'charlie');
-    const a = at(roster, 0);
-    const gone = at(roster, 1);
-    const c = at(roster, 2);
+    const [a, gone, c] = await members('alpha', 'gone', 'charlie');
     const game = await createGame(testApp, 'Deactivated Refresh Game');
     await postIntent(a.token, game.id);
     const goneIntent = (await postIntent(gone.token, game.id))
@@ -134,9 +122,7 @@ describe('+1 refresh eligibility', () => {
   });
 
   it('still refreshes every eligible member on the +1', async () => {
-    const roster = await members('alpha', 'bravo');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
+    const [a, b] = await members('alpha', 'bravo');
     const game = await createGame(testApp, 'Happy Refresh Game');
     const first = (await postIntent(a.token, game.id))
       .body as LfgIntentResponseDto;
@@ -158,10 +144,7 @@ describe('+1 refresh eligibility', () => {
 
 describe('conversion eligibility', () => {
   it('converts only live, eligible rows and counts only those', async () => {
-    const roster = await members('alpha', 'stale', 'gone');
-    const a = at(roster, 0);
-    const stale = at(roster, 1);
-    const gone = at(roster, 2);
+    const [a, stale, gone] = await members('alpha', 'stale', 'gone');
     const game = await createGame(testApp, 'Selective Convert Game');
     await postIntent(a.token, game.id);
     await postAndExpire(stale.token, game.id);
@@ -200,10 +183,7 @@ describe('conversion eligibility', () => {
 
 describe('conversion authority', () => {
   it('403s an old participant whose only row converted into a different target', async () => {
-    const roster = await members('alpha', 'bravo', 'charlie');
-    const a = at(roster, 0);
-    const b = at(roster, 1);
-    const c = at(roster, 2);
+    const [a, b, c] = await members('alpha', 'bravo', 'charlie');
     const game = await createGame(testApp, 'Second Group Game');
     await postIntent(a.token, game.id);
     const firstEvent = await createFutureEvent(testApp, adminToken, {
@@ -239,7 +219,7 @@ describe('conversion authority', () => {
 
 describe('conversion request validation', () => {
   it('names the offending field instead of the XOR message (N2)', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Bad Field Game');
     await postIntent(a.token, game.id);
 
@@ -256,7 +236,7 @@ describe('conversion request validation', () => {
   });
 
   it('still reports the XOR rule when neither id is supplied', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'No Field Game');
     await postIntent(a.token, game.id);
 
@@ -270,7 +250,7 @@ describe('conversion request validation', () => {
 
 describe('conversion provenance — missing target', () => {
   it('404s a nonexistent pollId instead of raising an FK 500', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Ghost Poll Game');
     await postIntent(a.token, game.id);
 
@@ -282,7 +262,7 @@ describe('conversion provenance — missing target', () => {
   });
 
   it('404s a nonexistent eventId', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Ghost Event Game');
     await postIntent(a.token, game.id);
 
@@ -294,7 +274,7 @@ describe('conversion provenance — missing target', () => {
 
 describe('conversion provenance — mismatched game', () => {
   it('400s an event that belongs to a different game', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Own Game');
     const other = await createGame(testApp, 'Other Game');
     await postIntent(a.token, game.id);
@@ -310,7 +290,7 @@ describe('conversion provenance — mismatched game', () => {
   });
 
   it('400s a poll that belongs to a different game', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Own Poll Game');
     const other = await createGame(testApp, 'Other Poll Game');
     await postIntent(a.token, game.id);
@@ -326,7 +306,7 @@ describe('conversion provenance — mismatched game', () => {
   });
 
   it('accepts a poll for the route game (positive control)', async () => {
-    const [a] = nonEmpty(await members('alpha'), 'a');
+    const [a] = await members('alpha');
     const game = await createGame(testApp, 'Matching Poll Game');
     await postIntent(a.token, game.id);
     const pollId = await createLineupMatch(

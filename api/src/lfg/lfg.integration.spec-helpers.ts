@@ -12,6 +12,7 @@ import { and, asc, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { type TestApp } from '../common/testing/test-app';
 import { nonEmpty } from '../common/testing/narrow';
+import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 
 /** Scheduler-registry name the expiry cron must register under (AC9). */
 export const LFG_EXPIRY_JOB_NAME = 'LfgExpiryService_expireIntents';
@@ -379,4 +380,43 @@ export async function addQuickPlayParticipant(
     discordUsername: `player-${userId}`,
     joinedAt,
   });
+}
+
+/** A logged-in member created by {@link createMembers}. */
+export type LfgMember = { userId: number; token: string; username: string };
+
+/** One {@link LfgMember} per name, positionally: two names give a pair. */
+export type MembersFor<N extends string[]> = { [K in keyof N]: LfgMember };
+
+/**
+ * A type guard, not a runtime check: {@link createMembers} pushes exactly one
+ * member per name, so this only lets the compiler see the positional tuple
+ * without a cast.
+ */
+function isOnePerName<N extends string[]>(
+  out: LfgMember[],
+  names: N,
+): out is MembersFor<N> {
+  return out.length === names.length;
+}
+
+/**
+ * Create one logged-in member per name (username = name, email
+ * `<name>@test.local`), typed positionally so
+ * `const [a, b] = await createMembers(testApp, 'alpha', 'bravo')` binds two
+ * defined members.
+ */
+export async function createMembers<N extends string[]>(
+  testApp: TestApp,
+  ...names: N
+): Promise<MembersFor<N>> {
+  const out: LfgMember[] = [];
+  for (const name of names) {
+    const m = await createMemberAndLogin(testApp, name, `${name}@test.local`);
+    out.push({ ...m, username: name });
+  }
+  if (!isOnePerName(out, names)) {
+    throw new Error(`Expected ${names.length} members, got ${out.length}`);
+  }
+  return out;
 }

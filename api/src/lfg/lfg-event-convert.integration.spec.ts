@@ -21,7 +21,6 @@ import {
   waitFor,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import { LfgSignupListener } from './lfg-signup.listener';
 import {
   createGame,
@@ -29,6 +28,7 @@ import {
   readIntent,
   readIntentsForGame,
   setExpiresAt,
+  createMembers,
 } from './lfg.integration.spec-helpers';
 import { nonEmpty } from '../common/testing/narrow';
 
@@ -51,27 +51,9 @@ afterEach(async () => {
 
 type Member = { userId: number; token: string };
 
-/** One `Member` per name, positionally: `members('a', 'b')` is `[Member, Member]`. */
-type MembersFor<N extends string[]> = { [K in keyof N]: Member };
-
-function isOnePerName<N extends string[]>(
-  out: Member[],
-  names: N,
-): out is MembersFor<N> {
-  return out.length === names.length;
-}
-
-async function members<N extends string[]>(
-  ...names: N
-): Promise<MembersFor<N>> {
-  const out: Member[] = [];
-  for (const name of names) {
-    out.push(await createMemberAndLogin(testApp, name, `${name}@test.local`));
-  }
-  if (!isOnePerName(out, names)) {
-    throw new Error(`Expected ${names.length} members, got ${out.length}`);
-  }
-  return out;
+/** Logged-in members, one per name, as a positional tuple. */
+function members<N extends string[]>(...names: N) {
+  return createMembers(testApp, ...names);
 }
 
 async function raiseHand(m: Member, gameId: number): Promise<void> {
