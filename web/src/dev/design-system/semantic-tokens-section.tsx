@@ -93,7 +93,7 @@ function ButtonFillComparison(): JSX.Element {
                 </StateFrame>
             </DoBlock>
             <DontBlock title="tokenise a solid button fill">
-                <StateFrame label="bg-success text-white" note="Needs a raw text-white label (text-foreground goes #0f172a on light, 2.32:1), and no hover step reaches it.">
+                <StateFrame label="bg-success text-white" note="Needs a raw text-white label (text-foreground goes #0f172a on light, 2.32:1) — which the dark family repaints with --color-status-solid-label #0f172a (TDB:2052) — and no hover step reaches it.">
                     <button type="button" className="px-3 py-1 text-xs rounded bg-success text-white" data-testid="ds-button-token">Lock in</button>
                 </StateFrame>
             </DontBlock>

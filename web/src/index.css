@@ -62,7 +62,9 @@
     --color-warning: #f59e0b;
     /* amber-500 — needs attention, partial agreement, admin */
     --color-danger: #f87171;
-    /* red-400 — destructive, conflict, "few people free"; 5.29 panel, 6.45 surface, 4.62 /10 tint (red-500 #ef4444 was 3.89 / 4.74 / 3.56). White on a solid bg-danger is 2.77:1 — no shipped bg-danger carries a label */
+    /* red-400 — destructive, conflict, "few people free"; 5.29 panel, 6.45 surface, 4.62 /10 tint (red-500 #ef4444 was 3.89 / 4.74 / 3.56). White on a solid bg-danger is 2.77:1, so a solid label takes --color-status-solid-label */
+    --color-status-solid-label: #0f172a;
+    /* label on a solid bg-success / bg-warning / bg-danger + text-white (TDB:2052): 7.04 / 8.31 / 6.45:1 on the dark fills, where white is 2.54 / 2.15 / 2.77:1 */
 
     --color-secondary: #cbd5e1;
     /* slate-300 */
@@ -125,6 +127,8 @@ html {
     /* amber-800   — 7.09:1; 6.47 panel, 6.36 hero, 5.58 /10 tint (amber-700 #b45309 was 4.02 on the tint) */
     --color-danger: #b91c1c;
     /* red-700     — 6.47:1; 5.91 panel, 5.80 hero, 4.99 /10 tint (red-600 #dc2626 was 4.41 / 4.33 / 3.78) */
+    --color-status-solid-label: #ffffff;
+    /* white on the light status fills: 7.68 / 7.09 / 6.47:1 (TDB:2052) — every light scheme inherits it, with or without its own fill */
     --color-secondary: #334155;
     --color-foreground: #0f172a;
     --color-edge: #cbd5e1;
@@ -849,15 +853,17 @@ body {
     --color-foreground: #0f172a;
 }
 
-/* --- Solid status fills: dark label on the dark family (TDB:2052, ruling 2026-10-08) ---
-   bg-success / bg-warning keep their token fill in both families (ROK-1472). A raw
-   text-white label clears AA on the light values (#065f46 7.68:1, #92400e 7.09:1) but not
-   on the dark ones (#10b981 2.54:1, #f59e0b 2.15:1), so every scheme OUTSIDE the light
-   family paints the #0f172a brand dark label: computed 7.04:1 on #10b981, 8.31:1 on
-   #f59e0b. Negating the light list reaches every dark scheme, present and future.
+/* --- Solid status fills: the scheme's own label (TDB:2052, ruling 2026-10-08) ---
+   bg-success / bg-warning / bg-danger keep their token fill in both families (ROK-1472).
+   A raw text-white label clears AA on the light fills (#065f46 7.68:1, #92400e 7.09:1,
+   #b91c1c 6.47:1) but not on the dark ones (#10b981 2.54:1, #f59e0b 2.15:1, #f87171
+   2.77:1), so it paints --color-status-solid-label: #0f172a in @theme (7.04 / 8.31 /
+   6.45:1), #ffffff in the shared light block. A custom property resolves from the
+   NEAREST ancestor that sets it, so a scoped <div data-scheme="light"> under a dark root
+   (/dev/design-system side by side) pairs its light fills with white — no html coupling.
    Unlayered, so it beats the text-white utility — brand-fill-forced-white.guard.test.ts. */
-html:not(:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"])) :is(.bg-success, .bg-warning).text-white {
-    color: #0f172a;
+:is(.bg-success, .bg-warning, .bg-danger).text-white {
+    color: var(--color-status-solid-label);
 }
 
 /* --- Primary fill on light (ROK-1472, operator ruling 2026-10-04) ---

@@ -22,17 +22,17 @@ contrast on every scheme.
 ## 1. Accent shade pairs
 
 **Accent tokens first.** These are not rewritten per class — the variable itself flips, so
-every utility and every opacity modifier follows. Declared in `@theme` (`:50-62`) and the
-shared light block (`:114-124`) only; contrast on `#ffffff` is recomputed by
+every utility and every opacity modifier follows. Declared in `@theme` (`:50-66`) and the shared light block (`:118-130`) only; contrast on `#ffffff` is recomputed by
 `web/src/styles/semantic-tokens.guard.test.ts`.
 
 | You write | Dark paints | Light paints | Anchor |
 |---|---|---|---|
-| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#065f46` emerald-800, 7.68:1 (7.01 panel, 6.02 own /10 tint; worst tinted scheme celestial 5.69 / 4.91 — TDB:1793; was `#047857`, 4.38 on its tint) | `:58` / `:120` |
-| `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:60` / `:122` |
-| `bg-danger` / `text-danger` / `bg-danger/50` … | `#f87171` red-400, 5.29:1 on panel (6.45 surface, ≥4.62 own /10 tint on every dark scheme; red-500 `#ef4444` was 3.89 on panel — TDB:1770 ruling 2026-10-08). White on a solid dark `bg-danger` is 2.77:1, so a solid danger fill carries no label | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint) | `:62` / `:124` |
-| `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:114` |
-| `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:115` |
+| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#065f46` emerald-800, 7.68:1 (7.01 panel, 6.02 own /10 tint; worst tinted scheme celestial 5.69 / 4.91 — TDB:1793; was `#047857`, 4.38 on its tint) | `:60` / `:124` |
+| `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:62` / `:126` |
+| `bg-danger` / `text-danger` / `bg-danger/50` … | `#f87171` red-400, 5.29:1 on panel (6.45 surface, ≥4.62 own /10 tint on every dark scheme; red-500 `#ef4444` was 3.89 on panel — TDB:1770 ruling 2026-10-08). White on a solid dark `bg-danger` is 2.77:1, so a solid danger label takes `--color-status-solid-label` | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint); celestial `#ad1c1c` (`:366`) and quest-log `#b51c1c` (`:1316`) declare their own — `#b91c1c` was 4.12 / 4.39 on their /10 tints (TDB:1770) | `:64` / `:128` |
+| `text-white` on a solid `bg-success` / `bg-warning` / `bg-danger` | `--color-status-solid-label` `#0f172a`, 7.04 / 8.31 / 6.45:1 (white 2.54 / 2.15 / 2.77) | `#ffffff`, 7.68 / 7.09 / 6.47:1 | `:66` / `:130`, rule `:858-869` |
+| `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:118` |
+| `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:119` |
 
 `bg-X/N` on a token compiles to `color-mix(in oklab, var(--color-X) N%, transparent)`, so
 it is correct at any alpha in both families.
@@ -57,7 +57,7 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `text-cyan-300` / `-400` | `#67e8f9` / `#22d3ee` | `#155e75` cyan-800, worst 5.0:1 | `:706-707` |
 | `text-blue-400` / `-300` | `#60a5fa` / `#93c5fd` | `#1d4ed8` blue-700, worst 4.51:1 | `:710-711` |
 | `text-teal-400` | `#2dd4bf` | `#115e59` teal-800, worst 5.04:1 (celestial; teal-700 is 3.64) | `:708` |
-| `text-gray-400` | `#9ca3af` | `#374151` gray-700, worst 6.18:1 (celestial, raw `/20` chip) — inside a fixed `bg-gray-900` panel `:826` keeps `#9ca3af` (6.99:1 on `#111827`; `:827-830` keep green / blue / purple / yellow-400 the same way) | `:709` |
+| `text-gray-400` | `#9ca3af` | `#374151` gray-700, worst 6.18:1 (celestial, raw `/20` chip) — inside a fixed `bg-gray-900` panel `:834` keeps `#9ca3af` (6.99:1 on `#111827`; `:827-830` keep green / blue / purple / yellow-400 the same way) | `:709` |
 | `bg-<hue>-500/10` tint | the raw 10% hue | `<hue>-100` at 0.4–0.5 alpha | `:732-756` |
 | `bg-indigo-500/15` / `bg-green-500/15` / `bg-teal-500/15` / `bg-purple-500/15` (cron category chips) | the raw 15% hue | `<hue>-100` at 0.6 alpha | `:757-760` |
 | `bg-amber-500/5` | the raw 5% hue | `amber-100` at 0.35 alpha (a wash — its border carries the edge) | `:738` |
@@ -67,7 +67,7 @@ schemes' surface, panel and `-500/10` tint (celestial binds).
 | `bg-amber-500/70`, `bg-red-500/50` (any unlisted alpha) | the raw hue | **no override** → use `bg-warning/70` / `bg-danger/50` | — |
 | `border-<hue>-500/30` | the raw 30% hue | `<hue>-300` at 0.5–0.7 alpha (indigo / teal / purple `/30` at `:787-789`) | `:776-791` |
 | `bg-gray-500/15` / `border-gray-500/30` (the "Other" cron chip) | the raw hue | **same, by design** — a `gray-100` wash is a 1.01 step on light and holy; raw gray-500 at 15% keeps 1.17–1.20 | — |
-| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:850-868`, design-system.md §6.10 |
+| `bg-emerald-600` (button fill) | `#059669` | `#047857` emerald-700, 5.48:1 under the white label; hover on the same element (`hover:bg-emerald-500` / `-700`) `#065f46` emerald-800, 7.68:1 — ruling 2026-10-04 (ROK-1472). Skips a disabled / aria-disabled element carrying its own `disabled:bg-*` / `aria-disabled:bg-*` so that paint wins (opacity-only disabled and loading primaries keep the fill); non-button uses (badges, dots, toggle tracks) step too | `:871-889`, design-system.md §6.10 |
 
 `web/src/styles/light-fill.guard.test.ts` fails when shipped markup writes a
 `bg-amber-500/NN` or `hover:bg-amber-500/NN` (NN ≤ 30) that has no light rule — there are no listed
@@ -80,22 +80,23 @@ Only the hues listed at `:732-760` get the tint treatment — `red`, `amber`, `e
 `bg-purple-500/10` surface has **no** light-family mapping; gray fills and borders stay raw.
 
 **Text on an accent fill.** Solid accent buttons keep their hue in both families, so the
-label would go near-black on light (`--color-foreground` is `#0f172a` there). `:832-840`
+label would go near-black on light (`--color-foreground` is `#0f172a` there). `:840-848`
 forces `--color-foreground: #ffffff` for `.text-foreground` on `.bg-blue-600`,
 `.bg-indigo-600`, `.bg-emerald-600`, `.bg-purple-600`, `.bg-red-600`, `.bg-red-500`,
 `.bg-amber-600`, `.bg-violet-600` and Discord's `#5865F2`. Use `text-foreground` on a
 solid accent button — not `text-white`, which opts out of that rule's bookkeeping.
 **`Button brandColor` is not in that list** (ruling 2026-10-04, ROK-1472): it emits
-`data-brand-label="light|dark"` from `brandLabelFor` (`web/src/lib/brand-label.ts`) and `:871-875`
+`data-brand-label="light|dark"` from `brandLabelFor` (`web/src/lib/brand-label.ts`) and `:892-896`
 paints white or `#0f172a` — whichever has the higher contrast on the runtime fill — on every scheme.
 **Exception — a token fill takes `text-white`:** `bg-success` (and any other token fill) is
 not in that list, so `text-foreground` on it goes `#0f172a` on light. Write `text-white`
 (`JourneyHero.tsx:163`), and keep solid *button* fills on the raw `bg-emerald-600` so the
 forced-white rule still applies (`JourneyHero.tsx:173-175`). That `text-white` is white on
-light only: `:850-859` paints `color: #0f172a` on `.bg-success.text-white` and
-`.bg-warning.text-white` in every scheme outside the light family (TDB:2052, ruling
-2026-10-08) — white is 2.54 / 2.15:1 on dark `#10b981` / `#f59e0b`, `#0f172a` is 7.04 / 8.31:1;
-light keeps white at 7.68 / 7.09:1. Guarded by `brand-fill-forced-white.guard.test.ts`.
+light only: `:858-869` paints `color: var(--color-status-solid-label)` on `.bg-success` /
+`.bg-warning` / `.bg-danger` + `.text-white` — `#0f172a` from `@theme`, `#ffffff` from the shared
+light block (TDB:2052, ruling 2026-10-08): white is 2.54 / 2.15 / 2.77:1 on dark `#10b981` /
+`#f59e0b` / `#f87171`, `#0f172a` is 7.04 / 8.31 / 6.45:1; light keeps white at 7.68 / 7.09 / 6.47:1.
+A custom property resolves from the nearest ancestor, so a scoped light subtree under a dark root keeps white. Guarded by `brand-fill-forced-white.guard.test.ts`.
 
 **Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
 on the theme surface, so the light family's contrast bumps are wrong there. Put
@@ -114,7 +115,7 @@ class with no restore here (the `SeriesBadge` indigo, the status badge's emerald
   shadow — a shadow on `#020617` is invisible.
 - **Light:** the surface steps are ~4% apart (`#ffffff` → `#f1f5f9`), so the light family
   adds the shadow the dark family does not need: `.bg-panel` / `.bg-panel/50` /
-  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:877-887`), and `.glass-card` becomes
+  `.bg-panel/80` get `0 1px 2px rgba(0,0,0,.06)` (`:898-908`), and `.glass-card` becomes
   near-opaque — `color-mix(in srgb, var(--color-surface) 90%, transparent)` plus
   `0 1px 3px rgba(0,0,0,.08)`, rising to 95% / `.1` on hover (`:677-686`).
 - You get this by using `bg-panel` / `.glass-card`. A hand-rolled `shadow-lg` (20 uses in

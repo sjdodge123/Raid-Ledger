@@ -17,6 +17,7 @@ import { join, resolve, sep } from 'path';
 import { stripComments as stripCodeComments } from '../test/form-primitives-count';
 import { BRAND_LABEL_HEX } from '../lib/brand-label';
 import { AA_SMALL_TEXT, contrastRatio } from './wcag-contrast';
+import { lightSchemes } from './light-scheme-css';
 
 const LIGHT_SCHEMES = ['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial'];
 const FORCED_WHITE = /--color-foreground:\s*#ffffff/i;
@@ -124,8 +125,8 @@ const SRC = resolve(__dirname, '..');
  * Price" chip), cyan-500 #00b8db (2.37:1; at /90, 2.34:1 — the "You own" chip)
  * and amber-500 #f59e0b (2.15:1). A solid status fill is `bg-success` /
  * `bg-warning` + `text-white`: white on light (#065f46 7.68:1, #92400e 7.09:1), and
- * the #0f172a dark label on the dark family, where white is 2.54 / 2.15:1 on
- * #10b981 / #f59e0b (TDB:2052 — the dark-family rule asserted below);
+ * the #0f172a --color-status-solid-label on the dark family, where white is 2.54 / 2.15:1
+ * on #10b981 / #f59e0b (TDB:2052 — the status-label rule asserted below);
  * a cyan-500 / cyan-600 label is `text-foreground` (the #0f172a rule above).
  */
 const WHITE_UNSAFE_FILL = /(^|\s)bg-(cyan-600|cyan-500(\/\d+)?|emerald-500(\/\d+)?|amber-500(\/\d+)?)(\s|$)/;
@@ -145,53 +146,90 @@ function whiteOnMidFillLabels(): string[] {
 
 describe('mid-tone fills never carry a text-white label (ROK-1472)', () => {
     it('no class string in web/src pairs bg-cyan-600 / bg-cyan-500 / bg-emerald-500 / bg-amber-500 with text-white', () => {
-        expect(whiteOnMidFillLabels(), 'white is 2.2–3.6:1 on these fills on the light schemes — use bg-success / bg-warning (white on light, the dark-family rule paints #0f172a on dark), or text-foreground on cyan-600')
+        expect(whiteOnMidFillLabels(), 'white is 2.2–3.6:1 on these fills on the light schemes — use bg-success / bg-warning (white on light, --color-status-solid-label #0f172a on dark), or text-foreground on cyan-600')
             .toEqual([]);
     });
 });
 
-/** `html:not(:is(<light schemes>)) :is(<fills>).text-white` — the dark-family label selector shape (TDB:2052). */
-const DARK_FAMILY_LABEL = /^html:not\(:is\(([^)]*)\)\)\s*:is\(([^)]*)\)\.text-white$/;
+/** `:is(<fills>).text-white` — the status-label selector shape (TDB:2052). */
+const STATUS_LABEL = /^:is\(([^)]*)\)\.text-white$/;
+const STATUS_FILLS = ['success', 'warning', 'danger'] as const;
 
-interface DarkFamilyLabelRule extends ForcedWhiteRule { color: string }
-
-/** Every unlayered rule with the dark-family label shape that paints an opaque `color:`. */
-function darkFamilyLabelRules(src: string): DarkFamilyLabelRule[] {
-    const rules: DarkFamilyLabelRule[] = [];
-    for (const [, selector, body] of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-        const shape = DARK_FAMILY_LABEL.exec(defined(selector, 'rule selector').trim());
-        const color = /(?:^|[;\s])color:\s*(#[0-9a-f]{6})/i.exec(defined(body, 'rule body'))?.[1];
-        if (!shape || !color) continue;
-        const fills = defined(shape[2], 'fill group').split(',').map((s) => s.trim());
-        rules.push({ schemes: defined(shape[1], 'scheme group'), fills, color: color.toLowerCase() });
+/** Every depth-0 (unlayered, unscoped by any at-rule) rule as `[selector, body]`. */
+function topLevelRules(src: string): Array<[string, string]> {
+    const rules: Array<[string, string]> = [];
+    let depth = 0;
+    let selStart = 0;
+    let open = 0;
+    for (let i = 0; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === ';' && depth === 0) selStart = i + 1;
+        else if (ch === '{' && depth++ === 0) open = i;
+        else if (ch === '}' && --depth === 0) {
+            rules.push([src.slice(selStart, open).trim(), src.slice(open + 1, i)]);
+            selStart = i + 1;
+        }
     }
     return rules;
 }
 
-/** Dark-family (`@theme`) value of `--color-<token>`. */
-const darkToken = (token: string): string =>
-    defined(new RegExp(`--color-${token}:\\s*(#[0-9a-f]{6})`, 'i').exec(/@theme\s*\{([^}]*)\}/.exec(css)?.[1] ?? '')?.[1], `dark --color-${token}`);
+const TOP = topLevelRules(css);
 
-describe('index.css dark-family label on solid success / warning (TDB:2052, ruling 2026-10-08)', () => {
-    const rule = darkFamilyLabelRules(css).find((r) => r.fills.includes('.bg-success'));
+/** `--color-<name>` declared directly in a block body, lower-cased, or undefined. */
+const declaredIn = (body: string, name: string): string | undefined =>
+    new RegExp(`--color-${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(body)?.[1]?.toLowerCase();
 
-    it('paints a dark label on .bg-success.text-white and .bg-warning.text-white outside the light family', () => {
-        expect(rule, 'no `html:not(:is(<light schemes>)) :is(.bg-success, …).text-white { color: … }` rule — white is 2.54:1 on dark #10b981').toBeDefined();
-        expect(rule?.fills, 'the dark-family label rule must list .bg-warning (white 2.15:1 on dark #f59e0b)').toContain('.bg-warning');
+const THEME = TOP.find(([sel]) => sel === '@theme')?.[1] ?? '';
+const SHARED_LIGHT = TOP.find(([sel, body]) => /^:is\(\[data-scheme="light"\][^)]*\)$/.test(sel) && /--color-surface:/.test(body))?.[1] ?? '';
+const LIGHT_NAMES = lightSchemes(css).map(({ name }) => name);
+const DARK_NAMES = TOP.flatMap(([sel]) => /^\[data-scheme="([a-z-]+)"\]$/.exec(sel)?.[1] ?? []).filter((n) => !LIGHT_NAMES.includes(n));
+
+/** The blocks a scheme resolves a token through, nearest first: own block(s), shared light block, `@theme`. */
+function chain(scheme: string): string[] {
+    const own = TOP.filter(([sel]) => sel === `[data-scheme="${scheme}"]` || sel === `[data-variant="${scheme}"]`).map(([, body]) => body);
+    return LIGHT_NAMES.includes(scheme) ? [...own, SHARED_LIGHT, THEME] : [...own, THEME];
+}
+
+const resolve1 = (scheme: string, name: string): string =>
+    defined(chain(scheme).map((body) => declaredIn(body, name)).find((v) => v !== undefined), `${scheme} --color-${name}`);
+
+/** [scheme, fill token, label hex, fill hex] for every scheme × solid status fill. */
+const LABEL_ON_FILL = ['default-dark', ...DARK_NAMES, ...LIGHT_NAMES].flatMap((scheme) =>
+    STATUS_FILLS.map((token) => [scheme, token, resolve1(scheme, 'status-solid-label'), resolve1(scheme, token)] as const),
+);
+
+describe('index.css status-solid label on solid success / warning / danger (TDB:2052, ruling 2026-10-08)', () => {
+    const rule = TOP.find(([sel]) => STATUS_LABEL.test(sel) && sel.includes('.bg-success'));
+
+    it('paints var(--color-status-solid-label) on .bg-success / .bg-warning / .bg-danger + text-white, unlayered and unscoped', () => {
+        expect(rule, 'no top-level `:is(.bg-success, …).text-white { color: var(--color-status-solid-label) }` rule — white is 2.54:1 on dark #10b981 (inside @layer it would lose to the text-white utility)').toBeDefined();
+        const fills = defined(STATUS_LABEL.exec(rule?.[0] ?? '')?.[1] ?? '', 'fill group').split(',').map((f) => f.trim());
+        for (const token of STATUS_FILLS) expect(fills, `the status-label rule must list .bg-${token}`).toContain(`.bg-${token}`);
+        expect(rule?.[1] ?? '', 'the rule must paint the scheme-scoped token, not a hex keyed off <html>').toMatch(/(?:^|[;\s])color:\s*var\(--color-status-solid-label\)/);
     });
 
-    it('negates exactly the six light schemes, so every dark scheme gets the label and no light one does', () => {
-        for (const scheme of LIGHT_SCHEMES) {
-            expect(rule?.schemes ?? '', `the dark-family rule must exclude data-scheme="${scheme}" (white is AA there)`)
-                .toContain(`[data-scheme="${scheme}"]`);
+    it('declares the label in both families: #0f172a in @theme, #ffffff in the shared light block', () => {
+        expect(declaredIn(THEME, 'status-solid-label'), 'dark default (@theme) --color-status-solid-label').toBe('#0f172a');
+        expect(declaredIn(SHARED_LIGHT, 'status-solid-label'), 'shared light :is([data-scheme="light"]…) --color-status-solid-label').toBe('#ffffff');
+    });
+
+    it('resolves every dark scheme and all six light schemes', () => {
+        expect(new Set(LABEL_ON_FILL.map(([scheme]) => scheme))).toEqual(new Set(['default-dark', ...DARK_NAMES, ...LIGHT_NAMES]));
+        expect(LIGHT_NAMES, 'light schemes read from index.css').toEqual(expect.arrayContaining(['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial']));
+        expect(DARK_NAMES.length, 'dark [data-scheme] blocks read from index.css').toBeGreaterThanOrEqual(8);
+    });
+
+    it('a dark scheme that repaints a status fill declares its own label (a nested light column would otherwise pair it with white)', () => {
+        for (const scheme of DARK_NAMES) {
+            const own = TOP.filter(([sel]) => sel === `[data-scheme="${scheme}"]`).map(([, body]) => body).join('\n');
+            const repaints = STATUS_FILLS.some((token) => declaredIn(own, token) !== undefined);
+            if (repaints) expect(declaredIn(own, 'status-solid-label'), `${scheme} repaints a status fill without its own --color-status-solid-label`).toBeDefined();
         }
-        expect(rule?.schemes.match(/\[data-scheme=/g) ?? [], 'the :not() list must hold the six light schemes and nothing else').toHaveLength(LIGHT_SCHEMES.length);
     });
 
-    it.each(['success', 'warning'])('the label clears AA on the dark bg-%s', (token) => {
-        const fill = darkToken(token);
-        const ratio = contrastRatio(rule?.color ?? '#ffffff', fill);
-        expect(ratio, `the dark-family label ${rule?.color} is ${ratio}:1 on dark bg-${token} ${fill} — needs ${AA_SMALL_TEXT}:1`)
+    it.each(LABEL_ON_FILL)('%s: the status label clears AA on solid bg-%s', (scheme, token, label, fill) => {
+        const ratio = contrastRatio(label, fill);
+        expect(ratio, `${scheme}: --color-status-solid-label ${label} is ${ratio}:1 on bg-${token} ${fill} — needs ${AA_SMALL_TEXT}:1`)
             .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });
