@@ -44,20 +44,20 @@ describe('getRatingClasses — yellow tier (>= 50, < 75)', () => {
 
 describe('getRatingClasses — red tier (< 50)', () => {
     it('returns red classes for rating 49', () => {
-        expect(getRatingClasses(49)).toBe('bg-red-500/90 text-white');
+        expect(getRatingClasses(49)).toBe('bg-red-700 text-white');
     });
 
     it('returns red classes for rating 0', () => {
-        expect(getRatingClasses(0)).toBe('bg-red-500/90 text-white');
+        expect(getRatingClasses(0)).toBe('bg-red-700 text-white');
     });
 
     it('returns red classes for rating 49.9 (below yellow threshold)', () => {
-        expect(getRatingClasses(49.9)).toBe('bg-red-500/90 text-white');
+        expect(getRatingClasses(49.9)).toBe('bg-red-700 text-white');
     });
 
     it('returns red classes for negative rating', () => {
         // Defensive: negative ratings should fall through to red
-        expect(getRatingClasses(-1)).toBe('bg-red-500/90 text-white');
+        expect(getRatingClasses(-1)).toBe('bg-red-700 text-white');
     });
 });
 
