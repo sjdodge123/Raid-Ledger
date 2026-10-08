@@ -23,10 +23,13 @@ async function fetchCalendarSyncSettings(): Promise<AdminCalendarSyncSettings> {
     return AdminCalendarSyncSettingsSchema.parse(raw);
 }
 
-function putCalendarSyncSettings(body: UpdateAdminCalendarSyncSettings): Promise<unknown> {
-    return adminFetch<unknown>(PATH, {
+/** The saved settings when the server answers with the full shape, else `null`. */
+async function putCalendarSyncSettings(body: UpdateAdminCalendarSyncSettings): Promise<AdminCalendarSyncSettings | null> {
+    const raw = await adminFetch<unknown>(PATH, {
         method: 'PUT', body: JSON.stringify(body),
     }, 'Failed to save Calendar Sync settings');
+    const parsed = AdminCalendarSyncSettingsSchema.safeParse(raw);
+    return parsed.success ? parsed.data : null;
 }
 
 /** Query the admin Calendar Sync settings (kill switch, client ids, `hasSecret`, redirect URIs). */
@@ -41,17 +44,17 @@ export function useAdminCalendarSyncSettings() {
 
 /**
  * Save a partial update. Omitted field = unchanged, `''` = clear. When the
- * server answers with the full settings shape the cache takes it directly;
- * otherwise the query refetches.
+ * server answers with the full settings shape the cache takes it directly and
+ * the mutation resolves with it; otherwise it resolves `null` and the query
+ * refetches.
  */
 export function useUpdateAdminCalendarSyncSettings() {
     const queryClient = useQueryClient();
-    return useMutation<unknown, Error, UpdateAdminCalendarSyncSettings>({
+    return useMutation<AdminCalendarSyncSettings | null, Error, UpdateAdminCalendarSyncSettings>({
         mutationFn: putCalendarSyncSettings,
-        onSuccess: (data) => {
-            const parsed = AdminCalendarSyncSettingsSchema.safeParse(data);
-            if (parsed.success) {
-                queryClient.setQueryData([...CALENDAR_SYNC_SETTINGS_KEY], parsed.data);
+        onSuccess: (saved) => {
+            if (saved) {
+                queryClient.setQueryData([...CALENDAR_SYNC_SETTINGS_KEY], saved);
                 return;
             }
             void queryClient.invalidateQueries({ queryKey: [...CALENDAR_SYNC_SETTINGS_KEY] });

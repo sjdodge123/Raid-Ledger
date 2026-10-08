@@ -18,8 +18,14 @@ describe('buildProviderUpdate (ROK-1591)', () => {
 });
 
 describe('buildCalendarSyncUpdate (ROK-1591)', () => {
-    it('is empty for an untouched draft and never carries enabled', () => {
+    it('is empty for an untouched draft', () => {
         const draft = draftFromSettings(calendarSyncSettingsFixture);
         expect(buildCalendarSyncUpdate(draft, calendarSyncSettingsFixture)).toEqual({});
+    });
+
+    it('carries enabled only when the switch differs from the saved value', () => {
+        const draft = { ...draftFromSettings(calendarSyncSettingsFixture), enabled: true };
+        expect(buildCalendarSyncUpdate(draft, calendarSyncSettingsFixture)).toEqual({ enabled: true });
+        expect(buildCalendarSyncUpdate(draft, { ...calendarSyncSettingsFixture, enabled: true })).toEqual({});
     });
 });

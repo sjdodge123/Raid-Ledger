@@ -22,7 +22,12 @@ export interface ProviderDraft {
     secretCleared: boolean;
 }
 
-export type CalendarSyncDraft = Record<CalendarSyncFormProvider, ProviderDraft>;
+/** The whole form: the kill switch and both providers save through one PUT. */
+export interface CalendarSyncDraft {
+    enabled: boolean;
+    google: ProviderDraft;
+    microsoft: ProviderDraft;
+}
 type ProviderUpdate = NonNullable<UpdateAdminCalendarSyncSettings['google']>;
 
 function providerDraft(clientId: string | null): ProviderDraft {
@@ -31,6 +36,7 @@ function providerDraft(clientId: string | null): ProviderDraft {
 
 export function draftFromSettings(settings: AdminCalendarSyncSettings): CalendarSyncDraft {
     return {
+        enabled: settings.enabled,
         google: providerDraft(settings.google.clientId),
         microsoft: providerDraft(settings.microsoft.clientId),
     };
@@ -47,12 +53,13 @@ export function buildProviderUpdate(draft: ProviderDraft, savedClientId: string 
     return Object.keys(update).length > 0 ? update : undefined;
 }
 
-/** The PUT body for the credentials form. Never carries `enabled` — the Switch saves that on its own. */
+/** The PUT body: only what changed — the switch, a client id, a typed or removed secret. */
 export function buildCalendarSyncUpdate(
     draft: CalendarSyncDraft,
     settings: AdminCalendarSyncSettings,
 ): UpdateAdminCalendarSyncSettings {
     const body: UpdateAdminCalendarSyncSettings = {};
+    if (draft.enabled !== settings.enabled) body.enabled = draft.enabled;
     for (const provider of CALENDAR_SYNC_FORM_PROVIDERS) {
         const update = buildProviderUpdate(draft[provider], settings[provider].clientId);
         if (update) body[provider] = update;
@@ -60,9 +67,14 @@ export function buildCalendarSyncUpdate(
     return body;
 }
 
-/** After a successful save: keep the typed ids, forget the typed secrets. */
+/**
+ * After a successful save whose response did not parse as the settings shape:
+ * keep the switch and the typed ids, forget the typed secrets. (A parsed
+ * response resets the draft with `draftFromSettings` instead.)
+ */
 export function settleDraftAfterSave(draft: CalendarSyncDraft): CalendarSyncDraft {
     return {
+        enabled: draft.enabled,
         google: providerDraft(draft.google.clientId.trim()),
         microsoft: providerDraft(draft.microsoft.clientId.trim()),
     };

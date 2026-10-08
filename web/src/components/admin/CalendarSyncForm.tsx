@@ -1,22 +1,24 @@
 /**
  * Admin → Integrations → Calendar Sync form (ROK-1591).
  *
- * The kill switch is a `Switch` that saves on its own (it applies
- * immediately). The provider credentials are a form saved through the shared
- * `IntegrationFormActions`. Secrets are never prefilled: a saved one shows a
- * "Saved" chip, an empty box is left alone on save, and "Remove saved secret"
- * sends `''`. Redirect URIs come from the server (built from `CLIENT_URL`)
- * and are copy-only.
+ * One form, one save path: the kill switch `Switch` and the provider
+ * credentials are a single draft, and Save sends ONE PUT carrying whatever
+ * changed (`enabled`, client ids, secrets) — the same shape as the Discord Bot
+ * form's Enable toggle. While the save is pending every control is locked
+ * (`<fieldset disabled>`); Save stays a `Button loading`. Secrets are never
+ * prefilled: a saved one shows a "Saved" chip, an empty box is left alone on
+ * save, and "Remove saved secret" sends `''`. Redirect URIs come from the
+ * server (built from `CLIENT_URL`) and are copy-only.
  */
 import { useState } from 'react';
 import type { AdminCalendarSyncSettings } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
 import { useUpdateAdminCalendarSyncSettings } from '../../hooks/use-admin-calendar-sync';
-import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Switch } from '../ui/switch';
 import { CopyableInput, FormTextField, PasswordInput } from './admin-form-helpers';
 import { IntegrationFormActions } from './integration-form-actions';
+import { SavedSecretStatus } from './saved-secret-status';
 import {
     CALENDAR_SYNC_FORM_PROVIDERS,
     buildCalendarSyncUpdate,
@@ -42,22 +44,13 @@ function CalendarSyncInstructions() {
                 <li>Create an OAuth client in {PROVIDER_COPY.google.console} and/or {PROVIDER_COPY.microsoft.console}</li>
                 <li>Add the provider&apos;s redirect URI below to that client exactly as shown</li>
                 <li>Paste the client ID and secret here and save</li>
-                <li>Turn Calendar Sync on so members can connect their calendars</li>
+                <li>Turn Calendar Sync on and save so members can connect their calendars</li>
             </ol>
         </div>
     );
 }
 
-function KillSwitch({ enabled }: { enabled: boolean }) {
-    const update = useUpdateAdminCalendarSyncSettings();
-    const handleChange = async (next: boolean) => {
-        try {
-            await update.mutateAsync({ enabled: next });
-            toast.success(next ? 'Calendar Sync turned on' : 'Calendar Sync turned off');
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update Calendar Sync');
-        }
-    };
+function KillSwitch({ checked, saved, onChange }: { checked: boolean; saved: boolean; onChange: (next: boolean) => void }) {
     return (
         <div className="flex items-start justify-between gap-4">
             <div>
@@ -65,35 +58,14 @@ function KillSwitch({ enabled }: { enabled: boolean }) {
                 <p id="calendar-sync-enabled-hint" className="text-xs text-muted mt-1">
                     Off by default. While off, members cannot connect a calendar and nothing syncs.
                 </p>
+                {checked !== saved && (
+                    <p data-testid="calendar-sync-enabled-unsaved" className="text-xs text-warning mt-1">
+                        Not saved yet — press Save Configuration to apply.
+                    </p>
+                )}
             </div>
-            <Switch checked={enabled} onChange={(next) => { void handleChange(next); }} label="Enable Calendar Sync"
-                aria-describedby="calendar-sync-enabled-hint" disabled={update.isPending} testId="calendar-sync-enabled" />
-        </div>
-    );
-}
-
-function SavedSecretStatus({ name, hasSecret, cleared, onClearedChange }: {
-    name: string; hasSecret: boolean; cleared: boolean; onClearedChange: (cleared: boolean) => void;
-}) {
-    if (!hasSecret) return <p className="text-xs text-muted">No secret saved yet.</p>;
-    if (cleared) {
-        return (
-            <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs text-warning">The saved secret will be removed when you save.</p>
-                <Button variant="ghost" size="sm" onClick={() => onClearedChange(false)}>Undo</Button>
-            </div>
-        );
-    }
-    return (
-        <div className="flex flex-wrap items-center gap-2">
-            <span data-testid={`calendar-sync-${name.toLowerCase()}-secret-saved`}
-                className="inline-flex items-center rounded-full border border-success/30 bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
-                Saved
-            </span>
-            <Button variant="ghost" size="sm" onClick={() => onClearedChange(true)}
-                aria-label={`Remove saved ${name} client secret`}>
-                Remove saved secret
-            </Button>
+            <Switch checked={checked} onChange={onChange} label="Enable Calendar Sync"
+                aria-describedby="calendar-sync-enabled-hint" testId="calendar-sync-enabled" />
         </div>
     );
 }
@@ -111,8 +83,9 @@ function SecretField({ provider, draft, hasSecret, onChange }: {
                     placeholder={hasSecret ? 'Type a new secret to replace the saved one' : 'Paste the client secret'}
                     showPassword={revealed} onToggleShow={() => setRevealed(!revealed)} fieldLabel={`${name} client secret`} />
             </Field>
-            <SavedSecretStatus name={name} hasSecret={hasSecret} cleared={draft.secretCleared}
-                onClearedChange={(secretCleared) => onChange({ ...draft, secretCleared })} />
+            <SavedSecretStatus secretLabel={`${name} client secret`} hasSecret={hasSecret} cleared={draft.secretCleared}
+                onClearedChange={(secretCleared) => onChange({ ...draft, secretCleared })}
+                testId={`calendar-sync-${provider}-secret-saved`} />
         </div>
     );
 }
@@ -138,40 +111,43 @@ function ProviderSection({ provider, draft, settings, onChange }: {
     );
 }
 
-function useCredentialsForm(settings: AdminCalendarSyncSettings) {
+function useCalendarSyncForm(settings: AdminCalendarSyncSettings) {
     const update = useUpdateAdminCalendarSyncSettings();
     const [draft, setDraft] = useState<CalendarSyncDraft>(() => draftFromSettings(settings));
     const setProvider = (provider: CalendarSyncFormProvider, next: ProviderDraft) =>
         setDraft((prev) => ({ ...prev, [provider]: next }));
+    const setEnabled = (enabled: boolean) => setDraft((prev) => ({ ...prev, enabled }));
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         const body = buildCalendarSyncUpdate(draft, settings);
         if (Object.keys(body).length === 0) { toast.success('No changes to save'); return; }
         try {
-            await update.mutateAsync(body);
-            setDraft(settleDraftAfterSave(draft));
+            const saved = await update.mutateAsync(body);
+            // Reset from what the server stored, not from the submit-time draft.
+            setDraft((current) => (saved ? draftFromSettings(saved) : settleDraftAfterSave(current)));
             toast.success('Calendar Sync settings saved');
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to save Calendar Sync settings');
         }
     };
-    return { draft, setProvider, handleSave, isSaving: update.isPending };
+    return { draft, setProvider, setEnabled, handleSave, isSaving: update.isPending };
 }
 
 export function CalendarSyncForm({ settings }: { settings: AdminCalendarSyncSettings }) {
-    const form = useCredentialsForm(settings);
+    const form = useCalendarSyncForm(settings);
     return (
-        <div className="space-y-6">
-            <KillSwitch enabled={settings.enabled} />
-            <CalendarSyncInstructions />
-            <form onSubmit={form.handleSave} className="space-y-6" aria-label="Calendar Sync provider credentials">
+        <form onSubmit={form.handleSave} className="space-y-6" aria-label="Calendar Sync settings">
+            {/* min-w-0: a fieldset's default min-content width would push the copy fields off a phone. */}
+            <fieldset disabled={form.isSaving} className="min-w-0 space-y-6">
+                <KillSwitch checked={form.draft.enabled} saved={settings.enabled} onChange={form.setEnabled} />
+                <CalendarSyncInstructions />
                 {CALENDAR_SYNC_FORM_PROVIDERS.map((provider) => (
                     <ProviderSection key={provider} provider={provider} draft={form.draft[provider]}
                         settings={settings} onChange={(next) => form.setProvider(provider, next)} />
                 ))}
-                <IntegrationFormActions showTest={false} showClear={false} onTest={NO_TEST} onClear={NO_TEST}
-                    isPending={{ save: form.isSaving, test: false, clear: false }} />
-            </form>
-        </div>
+            </fieldset>
+            <IntegrationFormActions showTest={false} showClear={false} onTest={NO_TEST} onClear={NO_TEST}
+                isPending={{ save: form.isSaving, test: false, clear: false }} />
+        </form>
     );
 }

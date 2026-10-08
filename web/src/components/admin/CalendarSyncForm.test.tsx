@@ -56,8 +56,8 @@ beforeEach(() => {
     Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
 });
 
-describe('CalendarSyncPanel — kill switch', () => {
-    it('defaults off and a toggle round-trip PUTs { enabled: true } and turns the card Online', async () => {
+describe('CalendarSyncPanel — kill switch (one save path)', () => {
+    it('defaults off; a toggle saves nothing until Save, then PUTs { enabled: true } and turns the card Online', async () => {
         const puts = await renderPanel(calendarSyncSettingsFixture);
         const toggle = screen.getByRole('switch', { name: 'Enable Calendar Sync' });
         expect(toggle).toHaveAttribute('aria-checked', 'false');
@@ -65,9 +65,56 @@ describe('CalendarSyncPanel — kill switch', () => {
 
         fireEvent.click(toggle);
 
+        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByTestId('calendar-sync-enabled-unsaved')).toBeInTheDocument();
+        expect(puts).toEqual([]);
+        expect(screen.getByText('Offline')).toBeInTheDocument();
+
+        save();
+
         await waitFor(() => expect(puts).toEqual([{ enabled: true }]));
-        await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
-        expect(screen.getByText('Online')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('Online')).toBeInTheDocument());
+        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        expect(screen.queryByTestId('calendar-sync-enabled-unsaved')).not.toBeInTheDocument();
+    });
+
+    it('sends the switch and typed credentials in ONE PUT, so nothing typed is lost to a toggle', async () => {
+        const puts = await renderPanel(calendarSyncSettingsFixture);
+        fireEvent.change(screen.getByLabelText('Google client ID'), { target: { value: 'gid' } });
+        fireEvent.change(googleSecret(), { target: { value: 'gsecret' } });
+        fireEvent.click(screen.getByRole('switch', { name: 'Enable Calendar Sync' }));
+        save();
+
+        await waitFor(() => expect(puts).toHaveLength(1));
+        expect(puts[0]).toEqual({ enabled: true, google: { clientId: 'gid', clientSecret: 'gsecret' } });
+        await screen.findByTestId('calendar-sync-google-secret-saved');
+    });
+
+    it('locks the switch and inputs while the save is pending, then resets the draft from the PUT response', async () => {
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(
+            http.get(CALENDAR_SYNC_SETTINGS_URL, () => HttpResponse.json(calendarSyncSettingsFixture)),
+            http.put(CALENDAR_SYNC_SETTINGS_URL, async () => {
+                await gate;
+                return HttpResponse.json({ ...calendarSyncSettingsFixture, google: { clientId: 'server-stored-id', hasSecret: false } });
+            }),
+        );
+        renderWithProviders(<CalendarSyncPanel />);
+        const toggle = await screen.findByRole('switch', { name: 'Enable Calendar Sync' });
+        const clientId = screen.getByLabelText('Google client ID');
+        fireEvent.change(clientId, { target: { value: 'typed-id' } });
+        save();
+
+        await waitFor(() => expect(toggle).toBeDisabled());
+        expect(clientId).toBeDisabled();
+        expect(googleSecret()).toBeDisabled();
+
+        release();
+
+        await waitFor(() => expect(toggle).toBeEnabled());
+        expect(clientId).toBeEnabled();
+        expect(clientId).toHaveValue('server-stored-id');
     });
 });
 
