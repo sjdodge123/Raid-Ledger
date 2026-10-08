@@ -11,6 +11,7 @@
  * this file exists to catch.
  */
 import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   convertHolderIntent,
@@ -327,13 +328,18 @@ describe('convertHolderIntent (ROK-1625)', () => {
     );
 
     expect(converted).toBe(1);
-    // TDB:953 — stamped by the DB's `now()` (an SQL chunk), never a JS Date.
+    // TDB:953 — stamped by the DB's `statement_timestamp()` (an SQL chunk),
+    // never a JS Date, and never `now()` — that is the TX start (Codex P2).
     expect(mockDb.set).toHaveBeenCalledWith({
       status: 'converted',
       convertedToPollId: null,
       convertedToEventId: 42,
       convertedAt: expect.any(SQL),
     });
+    const { convertedAt } = mockDb.set.mock.calls[0][0] as { convertedAt: SQL };
+    expect(new PgDialect().sqlToQuery(convertedAt).sql).toBe(
+      'statement_timestamp()',
+    );
   });
 
   it('reports 0 when no live hand matched (already converted)', async () => {

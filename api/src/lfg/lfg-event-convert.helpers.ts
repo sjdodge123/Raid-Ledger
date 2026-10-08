@@ -58,7 +58,7 @@ async function convertLiveRows(
       status: 'converted',
       convertedToPollId: null,
       convertedToEventId: eventId,
-      convertedAt: sql`now()`, // TDB:953 — DB clock, as `posted_at`
+      convertedAt: sql`statement_timestamp()`, // TDB:953 — DB clock at the UPDATE, not tx start
     })
     .where(liveGroupRow(tx, gameId, new Date()))
     .returning({ userId: schema.lfgIntents.userId });

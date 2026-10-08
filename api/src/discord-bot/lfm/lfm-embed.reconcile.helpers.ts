@@ -90,9 +90,11 @@ export async function reconcileRow(
  * the same game crossing the floor, used to pass the live check below and
  * re-render the old message AS the new group: the conversion was never
  * rendered, and the new group never got a post of its own. A conversion
- * stamped after this row's `posted_at` is its group's ending, whatever the
- * live read says now; closing the row frees the partial unique index, so
- * `reconcileUntrackedGroups` posts the new group fresh in the same CONNECTED.
+ * stamped after this row's `posted_at` (less `OWN_CONVERSION_GRACE`, for the
+ * LFG-Now spawn that converts before its row is inserted) is its group's
+ * ending, whatever the live read says now; closing the row frees the
+ * partial unique index, so `reconcileUntrackedGroups` posts the new group
+ * fresh in the same CONNECTED.
  *
  * @param db - Drizzle handle.
  * @param row - The `open` row being reconciled.
