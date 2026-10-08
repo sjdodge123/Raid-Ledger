@@ -117,8 +117,8 @@ html {
        semantic-tokens.guard.test.ts, which recomputes them from these values — warning
        and danger are ALSO asserted on the panel, the JourneyHero card and their own
        /10 tint over the panel (ROK-1586 fleet plan 2026-09-22-2005-3f02). */
-    --color-success: #047857;
-    /* emerald-700 — 5.48:1 (emerald-600 #059669 was 3.77:1, sub-AA for small text) */
+    --color-success: #065f46;
+    /* emerald-800 — 7.68:1; 7.01 panel, 6.02 /10 tint; every tinted light scheme clears AA on its own panel and /10 tint, worst celestial 5.69 / 4.91 (TDB:1793 ruling; emerald-700 #047857 was 4.38 on the tint and 4.06 / 3.59 on celestial) */
     --color-warning: #92400e;
     /* amber-800   — 7.09:1; 6.47 panel, 6.36 hero, 5.58 /10 tint (amber-700 #b45309 was 4.02 on the tint) */
     --color-danger: #b91c1c;
@@ -699,7 +699,7 @@ body {
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #166534; }  /* green-800: 7.13 / 6.51 / 6.01 */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #065f46; }  /* emerald-800: worst 5.27 (celestial tint) — emerald-700 is 3.76 there */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #065f46; }  /* emerald-800: worst 5.27 (celestial tint) — emerald-700 is 3.76 there */
-:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #065f46; }  /* emerald-800: worst 5.27 (celestial tint); #047857 (success) is 3.76 there */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #065f46; }  /* emerald-800: worst 5.27 (celestial tint); #047857 is 3.76 there (light success is #065f46 too, TDB:1793) */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #6d28d9; }  /* violet-700: worst 4.73 (celestial tint) — violet-600 is 3.79 there */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-300 { color: #4338ca; }  /* indigo-700: worst 5.25 (celestial tint) — indigo-600 is 4.18 there */
 :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4338ca; }  /* indigo-700: worst 5.25 (celestial tint) — indigo-600 is 4.18 there */
@@ -849,7 +849,7 @@ body {
 
 /* --- Primary fill on light (ROK-1472, operator ruling 2026-10-04) ---
    emerald-600 #059669 is 3.77:1 with the forced-white label; emerald-700 #047857
-   (= the light --color-success) is 5.48:1. Its hover goes DARKER, emerald-800
+   (the light --color-success until TDB:1793 moved that to #065f46) is 5.48:1. Its hover goes DARKER, emerald-800
    #065f46 (7.68:1) — scoped to elements that also carry .bg-emerald-600, so other
    hover:bg-emerald-500 uses keep their paint. quest-log's !important gold wins.
    Unlayered, so these beat every @layer utilities variant: both skip a :disabled /

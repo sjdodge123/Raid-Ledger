@@ -85,7 +85,7 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
 | `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
-| `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#047857` | Free / confirmed / "on" / primary state (ROK-1586) |
+| `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#065f46` | Free / confirmed / "on" / primary state (ROK-1586). Light is emerald-800 (TDB:1793, operator ruling D:1714): 7.68 surface / 7.01 panel / 6.02 own /10 tint, and AA on every tinted light scheme's own panel and tint (worst celestial 5.69 / 4.91) — `semantic-tokens.guard.test.ts` |
 | `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#92400e` | Partial agreement, needs attention, admin (ROK-1586) |
 | `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586) |
 
@@ -93,7 +93,7 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 blocks only — see checklist item 7. The dark values are the Tailwind shades they replaced
 (emerald-500 / amber-500 / red-500). The light values are darker than the `-600` the old
 `.text-*-400` overrides use, because `-600` fails WCAG AA for small text: on `#ffffff`
-success `#047857` is 5.48:1, warning `#92400e` (amber-800) 7.09:1, danger `#b91c1c` (red-700) 6.47:1
+success `#065f46` (emerald-800, TDB:1793) is 7.68:1, warning `#92400e` (amber-800) 7.09:1, danger `#b91c1c` (red-700) 6.47:1
 (`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1 — for warning and
 danger also on the panel, the JourneyHero card and their own `/10` tint over the panel — and pins the
 two-block declaration of success/warning/danger/busy). The opacity modifier works at any alpha
@@ -147,7 +147,7 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   (`JourneyHero.tsx:173-175`).
 - **Text on a `bg-success` fill is `text-white`, not `text-foreground`.** `bg-success` is not in the
   forced-white list, so `text-foreground` would turn `#0f172a` on the six light schemes; `text-white` is
-  what the dark family already paints, and the light fill (`#047857`) is darker than the dark one, so the
+  what the dark family already paints, and the light fill (`#065f46`, white 7.68:1) is darker than the dark one, so the
   label only gains contrast there (`JourneyHero.tsx:163`). This is the one
   exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
 - **DON'T put `text-white` on a raw `bg-emerald-500` / `bg-amber-500` / `bg-cyan-500` (any `/NN`) or `bg-cyan-600`.** None is
@@ -460,7 +460,7 @@ button" and tests query that name. It is neither the toggle chip above (it has n
 **Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:737`) and border
 (`:781`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
 `text-amber-400` on a new ON label until that is fixed. The removable chip is tokens only, so it flips with `success` (`#10b981` →
-`#047857`); check both families in the gallery's side-by-side view.
+`#065f46`); check both families in the gallery's side-by-side view.
 
 ### 4.4 Modal vs bottom sheet
 
@@ -709,7 +709,7 @@ that (2026-08-20) so a filter group reads as one control family. Don't paint a c
 resolves to nothing (§6.3); `SearchInput` replaces it. Don't add a headless combobox library — `Combobox` is
 the in-house one (operator ruling, ROK-1646).
 
-**Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
+**Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#065f46`); the
 solid `primary`/`destructive` fills keep their hue with the label forced white on light, and `primary` steps to
 emerald-700 `#047857` with a darker `#065f46` hover there (§6.10).
 Native control chrome follows root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the

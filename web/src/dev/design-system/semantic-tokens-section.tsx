@@ -26,7 +26,7 @@ interface SemanticRow {
 
 const SEMANTIC_ROWS: SemanticRow[] = [
     { name: 'success', solid: 'bg-success', border: 'border-success/30', tint: 'bg-success/10', text: 'text-success',
-        dark: '#10b981', light: '#047857', role: 'Free · confirmed · primary action' },
+        dark: '#10b981', light: '#065f46', role: 'Free · confirmed · primary action' },
     { name: 'warning', solid: 'bg-warning', border: 'border-warning/30', tint: 'bg-warning/10', text: 'text-warning',
         dark: '#f59e0b', light: '#92400e', role: 'Partial agreement · needs attention · admin' },
     { name: 'danger', solid: 'bg-danger', border: 'border-danger/30', tint: 'bg-danger/10', text: 'text-danger',
@@ -82,7 +82,7 @@ const BUTTON = 'px-3 py-1 text-xs rounded text-foreground';
  * Rule D-6: a SOLID button fill stays a raw hue. `index.css:785-790` forces the
  * white label off `.bg-emerald-600.text-foreground` on the six light schemes;
  * `bg-success` is not in that list, so its demo carries a raw `text-white` (the
- * success-fill rule) — `text-foreground` there is #0f172a, 3.26:1 on #047857.
+ * success-fill rule) — `text-foreground` there is #0f172a, 2.32:1 on #065f46.
  */
 function ButtonFillComparison(): JSX.Element {
     return (
@@ -93,7 +93,7 @@ function ButtonFillComparison(): JSX.Element {
                 </StateFrame>
             </DoBlock>
             <DontBlock title="tokenise a solid button fill">
-                <StateFrame label="bg-success text-white" note="Needs a raw text-white label (text-foreground goes #0f172a on light, 3.26:1), and no hover step reaches it.">
+                <StateFrame label="bg-success text-white" note="Needs a raw text-white label (text-foreground goes #0f172a on light, 2.32:1), and no hover step reaches it.">
                     <button type="button" className="px-3 py-1 text-xs rounded bg-success text-white" data-testid="ds-button-token">Lock in</button>
                 </StateFrame>
             </DontBlock>
