@@ -9,17 +9,12 @@
  * scoped to the connection id THIS run seeded (`data-connection-id`).
  */
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPost, apiPut, getAdminToken } from './api-helpers';
+import { apiDelete, apiPost, apiPut, getAdminToken } from './api-helpers';
 
 const PAGE = '/profile/gaming/calendars';
 const SETTINGS = '/admin/settings/calendar-sync';
 
-/**
- * TODO(ROK-1592 2d): confirm the seed endpoint's shape. Assumed:
- * `POST /admin/test/calendar/seed-connection` (DEMO_MODE + admin) with an
- * optional `{ accountLabel }`, answering `{ id: number }` for a
- * `demo-fake:` connection owned by the caller.
- */
+/** DEMO_MODE + admin: `{ accountLabel? }` → 201 `{ id }`, a `demo-fake:` row owned by the caller. */
 async function seedConnection(token: string, accountLabel: string): Promise<number> {
     const res = (await apiPost(token, '/admin/test/calendar/seed-connection', { accountLabel })) as { id: number };
     expect(typeof res.id).toBe('number');
@@ -27,17 +22,13 @@ async function seedConnection(token: string, accountLabel: string): Promise<numb
 }
 
 let token: string;
-let switchWasOn = false;
 
+// The kill switch is GLOBAL and desktop + mobile run in parallel on one DB, so
+// it is only ever turned ON (idempotent) and never restored: a per-project
+// afterAll would switch it off under the other project. Fleet/CI envs are disposable.
 test.beforeAll(async () => {
     token = await getAdminToken();
-    const settings = (await apiGet(token, SETTINGS)) as { enabled: boolean };
-    switchWasOn = settings.enabled;
-    if (!switchWasOn) await apiPut(token, SETTINGS, { enabled: true });
-});
-
-test.afterAll(async () => {
-    if (!switchWasOn) await apiPut(token, SETTINGS, { enabled: false });
+    await apiPut(token, SETTINGS, { enabled: true });
 });
 
 test('connected card → Manage → Disconnect → confirm removes the connection', async ({ page }, testInfo) => {
