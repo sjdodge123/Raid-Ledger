@@ -19,9 +19,15 @@ describe('stripComments — literals are kept whole', () => {
   it.each([
     ['a // inside a single-quoted string', `const u = 'a//b'; ${TOKEN}`],
     ['a URL inside a double-quoted string', `const u = "x//y"; ${TOKEN}`],
-    ['an escaped slash pair in a regex literal', `const re = /^https?:\\/\\//; ${TOKEN}`],
+    [
+      'an escaped slash pair in a regex literal',
+      `const re = /^https?:\\/\\//; ${TOKEN}`,
+    ],
     ['// inside a template literal', `const t = \`a // b\`; ${TOKEN}`],
-    ['// and ${} inside a template literal', `const t = \`\${x} // \${y}\`; ${TOKEN}`],
+    [
+      '// and ${} inside a template literal',
+      `const t = \`\${x} // \${y}\`; ${TOKEN}`,
+    ],
     ['/* inside a string', `const s = '/*'; ${TOKEN}; const e = '*/';`],
     ['an escaped quote inside a string', `const s = 'it\\'s // x'; ${TOKEN}`],
     ['a nested quote of the other kind', `const s = "it's // x"; ${TOKEN}`],

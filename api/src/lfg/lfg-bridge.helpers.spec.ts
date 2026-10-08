@@ -18,6 +18,7 @@ import {
   groupOffersByUser,
   type BridgeCandidate,
 } from './lfg-bridge.helpers';
+import { stripComments } from '../common/testing/strip-comments';
 
 function candidate(
   userId: number,
@@ -120,13 +121,6 @@ describe('bridgeDedupKey (ROK-1457)', () => {
 });
 
 // ─── Source guards ──────────────────────────────────────────────────────────
-
-/** Block comments, then line comments — `://` in a URL is left alone. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
-}
 
 const BRIDGE_SOURCES = [
   resolve(__dirname, 'lfg-bridge.helpers.ts'),

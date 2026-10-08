@@ -14,13 +14,10 @@
  */
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { stripComments } from '../common/testing/strip-comments';
 
 const SRC = resolve(__dirname, '..');
 const read = (rel: string): string => readFileSync(resolve(SRC, rel), 'utf-8');
-
-/** Strip comments — these guards discuss the hazard in prose right beside it. */
-const codeOnly = (src: string): string =>
-  src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
 /** Every module that writes a shared discover cache entry. */
 const CACHE_WRITERS = [
@@ -31,7 +28,7 @@ const CACHE_WRITERS = [
 
 describe('ROK-1314 F2 — discover caches are viewer-neutral', () => {
   it.each(CACHE_WRITERS)('%s never references a viewer', (file) => {
-    const code = codeOnly(read(file));
+    const code = stripComments(read(file));
     // If a cache writer ever needs one of these, personalization has moved
     // below the cache boundary and the entry is no longer shareable.
     expect(code).not.toMatch(/viewerId/);
@@ -41,7 +38,7 @@ describe('ROK-1314 F2 — discover caches are viewer-neutral', () => {
   });
 
   it('the personalization layer sits ABOVE the row builder, not inside it', () => {
-    const code = codeOnly(read('igdb/igdb-personalization.helpers.ts'));
+    const code = stripComments(read('igdb/igdb-personalization.helpers.ts'));
     // buildDiscoverRows owns every setex; the overlay must consume its result
     // rather than be threaded into it.
     const buildCall = code.indexOf('buildDiscoverRows(');

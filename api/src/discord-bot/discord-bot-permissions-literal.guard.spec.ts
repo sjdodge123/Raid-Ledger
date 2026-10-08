@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { stripComments } from '../common/testing/strip-comments';
 
 /**
  * ROK-1471 D14a / AC15 — no hardcoded Discord permission integer in source.
@@ -51,27 +52,6 @@ const isTestFile = (p: string): boolean =>
   /\.(spec|test)\.[tj]sx?$/.test(p) ||
   p.includes(`${path.sep}__tests__${path.sep}`) ||
   p.includes(`${path.sep}testing${path.sep}`);
-
-/**
- * Remove block comments, JSX comments and line comments from source text.
- *
- * `//` is only treated as a comment when NOT preceded by `:`, so a URL such as
- * `https://discord.com/...?permissions=<n>` keeps its query string and stays
- * scannable — stripping it would let the exact literal this guard exists to
- * catch hide inside a hardcoded invite link.
- *
- * @param source - Raw file contents.
- * @returns The contents with comment text blanked out, line count preserved.
- */
-export function stripComments(source: string): string {
-  const withoutBlocks = source.replace(/\/\*[\s\S]*?\*\//g, (m) =>
-    m.replace(/[^\n]/g, ' '),
-  );
-  return withoutBlocks
-    .split('\n')
-    .map((line) => line.replace(/(^|[^:])\/\/.*$/, '$1'))
-    .join('\n');
-}
 
 /** Recursively collect scannable, non-test files under a directory. */
 function collectFiles(dir: string): string[] {

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ALL_QUEUE_NAMES } from './queue-registry';
 import { defined } from '../common/testing/narrow';
+import { stripComments } from '../common/testing/strip-comments';
 
 const API_SRC_DIR = path.resolve(__dirname, '..');
 const REGISTRY_FILE = path.resolve(__dirname, 'queue-registry.ts');
@@ -39,12 +40,6 @@ function collectCallsiteIdentifiers(): Set<string> {
     }
   }
   return identifiers;
-}
-
-function stripComments(src: string): string {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
 function collectRegistryImportedIdentifiers(): Set<string> {
