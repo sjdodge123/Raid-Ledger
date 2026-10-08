@@ -2,7 +2,8 @@
  * K1 provider row (ROK-1594): "Google Calendar · Sign in with Google · Connect".
  * Only Google ships in this phase; the other K1 rows stay hidden until their
  * stories (spec Q13). When the server has no Google client configured the
- * row stays, with Connect disabled and an admin hint.
+ * row stays, with Connect disabled and an admin hint. It also stays once an
+ * account is connected (Q15: several Google accounts per user).
  */
 import type { JSX } from 'react';
 import { Button } from '../../ui/button';
@@ -20,8 +21,11 @@ export function ProviderTile({ label }: { label: string }): JSX.Element {
     );
 }
 
-/** Google's K1 row; `available` is `overview.providers.google.available`. */
-export function CalendarProviderRow({ available }: { available: boolean }): JSX.Element {
+/**
+ * Google's K1 row; `available` is `overview.providers.google.available`.
+ * `another`: an account is already connected, so the row offers a further one.
+ */
+export function CalendarProviderRow({ available, another = false }: { available: boolean; another?: boolean }): JSX.Element {
     const start = useStartGoogleConnect();
     return (
         <div className={CALENDAR_ROW} data-testid="calendar-provider-google">
@@ -29,7 +33,7 @@ export function CalendarProviderRow({ available }: { available: boolean }): JSX.
             <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-foreground">{C.google.name}</p>
                 <p className="text-xs text-muted" data-testid="calendar-provider-google-hint">
-                    {available ? C.google.hint : C.google.notConfigured}
+                    {!available ? C.google.notConfigured : another ? C.google.hintAnother : C.google.hint}
                 </p>
                 {start.isError && <p role="alert" className="text-xs text-danger">{C.google.startFailed}</p>}
             </div>

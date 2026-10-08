@@ -119,6 +119,42 @@ function useStatefulDisconnect(status = 202): number[] {
     return deleted;
 }
 
+/** Swap `window.location` for one whose `assign` is a spy; returns the spy and a restore. */
+function spyOnAssign(): { assign: ReturnType<typeof vi.fn>; restore: () => void } {
+    const realLocation = window.location;
+    const assign = vi.fn();
+    Object.defineProperty(window, 'location', { configurable: true, writable: true, value: { ...realLocation, assign } });
+    return {
+        assign,
+        restore: () => Object.defineProperty(window, 'location', { configurable: true, writable: true, value: realLocation }),
+    };
+}
+
+describe('CalendarsPage — connected keeps the Google row (Q15)', () => {
+    it('connected: the card AND the Google row render; the row offers another account', async () => {
+        useOverview(calendarsOverviewVariants.connected);
+        renderPage();
+        expect(await screen.findByTestId('calendar-connection-status')).toHaveTextContent('Connected · raider@example.com');
+        expect(screen.getByText(C.connectedHeading)).toBeInTheDocument();
+        expect(screen.getByText(C.addHeading)).toBeInTheDocument();
+        expect(screen.getByTestId('calendar-provider-google-hint')).toHaveTextContent(C.google.hintAnother);
+        expect(screen.getByTestId('calendar-connect-google')).toBeEnabled();
+    });
+
+    it('connect another: Connect from the connected state GETs start and assigns the consent URL', async () => {
+        const { assign, restore } = spyOnAssign();
+        try {
+            useOverview(calendarsOverviewVariants.connected);
+            renderPage();
+            await screen.findByTestId('calendar-connection-card');
+            fireEvent.click(screen.getByTestId('calendar-connect-google'));
+            await waitFor(() => expect(assign).toHaveBeenCalledWith(GOOGLE_CONSENT_URL_FIXTURE));
+        } finally {
+            restore();
+        }
+    });
+});
+
 describe('CalendarsPage — connected card + Disconnect', () => {
     it('desktop: card → Manage menu → Disconnect → confirm → DELETE → overview refetched', async () => {
         const deleted = useStatefulDisconnect();
@@ -130,8 +166,8 @@ describe('CalendarsPage — connected card + Disconnect', () => {
         fireEvent.click(within(menu).getByRole('menuitem', { name: C.disconnect }));
         fireEvent.click(await screen.findByTestId('calendar-disconnect-confirm'));
         await waitFor(() => expect(deleted).toEqual([7]));
-        expect(await screen.findByTestId('calendar-connect-google')).toBeInTheDocument();
-        expect(screen.queryByTestId('calendar-connection-card')).toBeNull();
+        await waitFor(() => expect(screen.queryByTestId('calendar-connection-card')).toBeNull());
+        expect(screen.getByTestId('calendar-provider-google-hint')).toHaveTextContent(C.google.hint);
         expect(toast.success).toHaveBeenCalledWith(C.toastDisconnected);
     });
 

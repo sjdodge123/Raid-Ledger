@@ -27,6 +27,7 @@ export const CALENDARS_COPY = {
         name: 'Google Calendar',
         tile: 'G',
         hint: 'Sign in with Google',
+        hintAnother: 'Connect another Google account',
         notConfigured: 'Not set up on this server yet. Ask an admin.',
         connect: 'Connect',
         connecting: 'Connecting…',

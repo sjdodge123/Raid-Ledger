@@ -1,5 +1,5 @@
 /**
- * Profile → Calendars (ROK-1594): connect Google (K1), the connected card
+ * Profile → Calendars (ROK-1594): connect Google (K1), the connected card(s)
  * with Manage → Disconnect (K2), and the K4 desktop shell — the same cards in
  * a two-column grid from 1024px. Nothing renders but a notice when the admin
  * kill switch is off; the nav entries hide on the same flag.
@@ -26,6 +26,7 @@ function OAuthErrorBanner({ code, onDismiss }: { code: string; onDismiss: () => 
     return (
         <div role="alert" data-testid="calendar-oauth-error" data-error-code={code}
             className="flex items-start gap-3 rounded-lg border border-danger/30 bg-danger/10 p-3">
+            {/* Body is text-foreground, not §4.7's text-danger, for contrast on the tint; border + tint carry the tone. */}
             <p className="flex-1 text-sm text-foreground">{oauthErrorMessage(code)}</p>
             <Button variant="ghost" size="sm" onClick={onDismiss}>{C.dismiss}</Button>
         </div>
@@ -65,15 +66,15 @@ export function CalendarsPage(): JSX.Element {
         <PageFrame lede={C.lede}>
             {errorCode && <OAuthErrorBanner code={errorCode} onDismiss={dismissError} />}
             <div className="grid gap-4 lg:grid-cols-2">
-                {google.length > 0 ? (
+                {google.length > 0 && (
                     <Section heading={C.connectedHeading}>
                         {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} />)}
                     </Section>
-                ) : (
-                    <Section heading={C.addHeading}>
-                        <CalendarProviderRow available={data.providers.google.available} />
-                    </Section>
                 )}
+                {/* Q15: several Google accounts are allowed, so the row stays once one is connected. */}
+                <Section heading={C.addHeading}>
+                    <CalendarProviderRow available={data.providers.google.available} another={google.length > 0} />
+                </Section>
             </div>
             <PrivacyNote />
         </PageFrame>
