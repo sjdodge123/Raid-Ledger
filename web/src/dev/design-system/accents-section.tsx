@@ -6,7 +6,7 @@
  * the mapping is read where it can actually be *seen* in both families (turn on
  * "Side by side" and every swatch below renders twice).
  *
- * You write ONE class; `index.css:687-704` rewrites it for the six light
+ * You write ONE class; `index.css:702-721` rewrites it for the six light
  * schemes, to a shade that clears 4.5:1 on the surface, the panel and the hue's
  * own -500/10 tint (`styles/raw-hue-light.guard.test.ts` enforces it). The literal hexes below are documented values, the sanctioned
  * exception to "never hardcode a colour" — every swatch itself paints via the
@@ -28,20 +28,22 @@ interface AccentRow {
  * schemes (celestial's #e4ddd0 panel binds every hue).
  */
 const TEXT_ACCENTS: AccentRow[] = [
-    { cls: 'text-emerald-400', dark: '#34d399', light: '#065f46', note: 'emerald-800 · 7.7 / 7.0 / 6.4 · worst 5.3 · :696' },
-    { cls: 'text-emerald-300', dark: '#6ee7b7', light: '#065f46', note: 'emerald-800 · :697' },
-    { cls: 'text-emerald-500', dark: '#10b981', light: '#065f46', note: 'emerald-800 · worst 5.3 · :698' },
-    { cls: 'text-red-400', dark: '#f87171', light: '#991b1b', note: 'red-800 · 8.3 / 7.6 / 6.7 · worst 5.5 · :689' },
-    { cls: 'text-red-300', dark: '#fca5a5', light: '#991b1b', note: 'red-800 · :688' },
-    { cls: 'text-amber-400', dark: '#fbbf24', light: '#92400e', note: 'amber-800 = warning · 7.1 / 6.5 / 6.0 · worst 5.0 · :691' },
-    { cls: 'text-amber-300', dark: '#fcd34d', light: '#92400e', note: 'amber-800 = warning · :690' },
-    { cls: 'text-yellow-400', dark: '#facc15', light: '#854d0e', note: 'yellow-800 · 6.9 / 6.3 / 5.9 · worst 4.9 · :692' },
-    { cls: 'text-green-400', dark: '#4ade80', light: '#166534', note: 'green-800 · 7.1 / 6.5 / 6.0 · worst 5.0 · :694' },
-    { cls: 'text-purple-400', dark: '#c084fc', light: '#6d28d9', note: 'violet-700 · 7.1 / 6.5 / 5.8 · worst 4.7 · :699' },
-    { cls: 'text-indigo-400', dark: '#818cf8', light: '#4338ca', note: 'indigo-700 · 7.9 / 7.2 / 6.4 · worst 5.3 · :701' },
-    { cls: 'text-indigo-300', dark: '#a5b4fc', light: '#4338ca', note: 'indigo-700 · :700' },
-    { cls: 'text-cyan-400', dark: '#22d3ee', light: '#155e75', note: 'cyan-800 · 7.3 / 6.6 / 6.1 · worst 5.0 · :703' },
-    { cls: 'text-blue-400', dark: '#60a5fa', light: '#1d4ed8', note: 'blue-700 · 6.7 / 6.1 / 5.5 · worst 4.5 · :705' },
+    { cls: 'text-emerald-400', dark: '#34d399', light: '#065f46', note: 'emerald-800 · 7.7 / 7.0 / 6.4 · worst 5.3 · :710' },
+    { cls: 'text-emerald-300', dark: '#6ee7b7', light: '#065f46', note: 'emerald-800 · :711' },
+    { cls: 'text-emerald-500', dark: '#10b981', light: '#065f46', note: 'emerald-800 · worst 5.3 · :712' },
+    { cls: 'text-red-400', dark: '#f87171', light: '#991b1b', note: 'red-800 · 8.3 / 7.6 / 6.7 · worst 5.5 · :703' },
+    { cls: 'text-red-300', dark: '#fca5a5', light: '#991b1b', note: 'red-800 · :702' },
+    { cls: 'text-amber-400', dark: '#fbbf24', light: '#92400e', note: 'amber-800 = warning · 7.1 / 6.5 / 6.0 · worst 5.0 · :705' },
+    { cls: 'text-amber-300', dark: '#fcd34d', light: '#92400e', note: 'amber-800 = warning · :704' },
+    { cls: 'text-yellow-400', dark: '#facc15', light: '#854d0e', note: 'yellow-800 · 6.9 / 6.3 / 5.9 · worst 4.9 · :706' },
+    { cls: 'text-green-400', dark: '#4ade80', light: '#166534', note: 'green-800 · 7.1 / 6.5 / 6.0 · worst 5.0 · :708' },
+    { cls: 'text-purple-400', dark: '#c084fc', light: '#6d28d9', note: 'violet-700 · 7.1 / 6.5 / 5.8 · worst 4.7 · :713' },
+    { cls: 'text-indigo-400', dark: '#818cf8', light: '#4338ca', note: 'indigo-700 · 7.9 / 7.2 / 6.4 · worst 5.3 · :715' },
+    { cls: 'text-indigo-300', dark: '#a5b4fc', light: '#4338ca', note: 'indigo-700 · :714' },
+    { cls: 'text-cyan-400', dark: '#22d3ee', light: '#155e75', note: 'cyan-800 · 7.3 / 6.6 / 6.1 · worst 5.0 · :717' },
+    { cls: 'text-teal-400', dark: '#2dd4bf', light: '#115e59', note: 'teal-800 · worst 5.0 · :718' },
+    { cls: 'text-gray-400', dark: '#9ca3af', light: '#374151', note: 'gray-700 · worst 6.2 · kept gray-400 inside bg-gray-900 (:836) · :719' },
+    { cls: 'text-blue-400', dark: '#60a5fa', light: '#1d4ed8', note: 'blue-700 · 6.7 / 6.1 / 5.5 · worst 4.5 · :721' },
 ];
 
 function AccentTextRow({ row }: { row: AccentRow }): JSX.Element {
@@ -73,7 +75,7 @@ function AccentTextTable(): JSX.Element {
     );
 }
 
-/** Tinted surfaces: `-500/10` fill + `-500/30` border, remapped at `:723-758` / `:759-773`. */
+/** Tinted surfaces: `-500/10` fill + `-500/30` border, remapped at `:742-770` / `:786-801`. */
 function TintedSurfaces(): JSX.Element {
     const hues = ['emerald', 'amber', 'red', 'indigo'];
     return (
