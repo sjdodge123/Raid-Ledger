@@ -104,7 +104,7 @@ describe('Event Reminders & Notifications (integration)', () => {
         .returning();
 
       expect(first).toBeDefined();
-      expect(first.eventId).toBe(event.id);
+      expect(first?.eventId).toBe(event.id);
 
       // Duplicate insert — should be a no-op (onConflictDoNothing)
       const duplicateResult = await testApp.db

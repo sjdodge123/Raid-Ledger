@@ -217,7 +217,7 @@ function describeSchedulingThreshold(): void {
 
     const dms = await thresholdNotifsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
-    expect(dms[0].message).toBe(
+    expect(dms[0]?.message).toBe(
       `3 of 3 members have voted on your ${poll.gameName} poll`,
     );
     expect(dms[0]?.payload).toMatchObject({
@@ -264,7 +264,7 @@ function describeSchedulingThreshold(): void {
     const dms = await thresholdNotifsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
     // 2 of 2 — the explicit threshold, not the 3 members on the match.
-    expect(dms[0].message).toBe(
+    expect(dms[0]?.message).toBe(
       `2 of 2 members have voted on your ${poll.gameName} poll`,
     );
   });

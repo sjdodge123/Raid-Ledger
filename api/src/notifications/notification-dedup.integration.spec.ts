@@ -17,6 +17,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { NotificationDedupService } from './notification-dedup.service';
+import { at } from '../common/testing/narrow';
 
 describe('Notification Dedup (integration)', () => {
   let testApp: TestApp;
@@ -170,7 +171,7 @@ describe('Notification Dedup (integration)', () => {
         WHERE dedup_key = ${dedupKey}
       `);
       expect(dbRows.length).toBe(1);
-      expect(dbRows[0].expires_at).toBeNull();
+      expect(at(dbRows, 0).expires_at).toBeNull();
 
       // Simulate Redis restart
       const keys = await redis.keys('*');

@@ -16,6 +16,7 @@ import {
   shapeWeeklyRecap,
   type WeeklyRecapRow,
 } from './weekly-digest-recap.helpers';
+import { at } from '../common/testing/narrow';
 
 function render(respectActivityOptOut?: boolean): string {
   const query = buildWeeklyRecapQuery(
@@ -160,7 +161,7 @@ describe('fetchWeeklyRecap', () => {
     ]);
     const recap = await fetchWeeklyRecap(db);
     expect(recap).toEqual({ eventsRun: 1, playersAttended: 2, attendances: 3 });
-    const sent = new PgDialect().sqlToQuery(execute.mock.calls[0][0]).sql;
+    const sent = new PgDialect().sqlToQuery(at(execute.mock.calls, 0)[0]).sql;
     expect(sent).toContain('show_activity');
   });
 
@@ -168,7 +169,7 @@ describe('fetchWeeklyRecap', () => {
     const { db, execute } = mockDb([]);
     const recap = await fetchWeeklyRecap(db, { respectActivityOptOut: false });
     expect(recap).toEqual({ eventsRun: 0, playersAttended: 0, attendances: 0 });
-    const sent = new PgDialect().sqlToQuery(execute.mock.calls[0][0]).sql;
+    const sent = new PgDialect().sqlToQuery(at(execute.mock.calls, 0)[0]).sql;
     expect(sent).not.toContain('show_activity');
   });
 });

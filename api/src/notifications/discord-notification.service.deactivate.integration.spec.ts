@@ -42,14 +42,17 @@ afterEach(() => resetAfterEach());
 // ── factories ───────────────────────────────────────────────────────────────
 
 async function createMember(username: string) {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${username}@test.local`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${username}@test.local`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'member user',
+  );
   return user;
 }
 
@@ -65,22 +68,28 @@ async function createEventAt(
 ) {
   const start = new Date(startTimeMs);
   const end = new Date(startTimeMs + durationMs);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId,
-      duration: [start, end] as [Date, Date],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId,
+        duration: [start, end] as [Date, Date],
+      })
+      .returning(),
+    'event',
+  );
   return event;
 }
 
 async function createSignup(eventId: number, userId: number) {
-  const [signup] = await testApp.db
-    .insert(schema.eventSignups)
-    .values({ eventId, userId, status: 'going' })
-    .returning();
+  const [signup] = nonEmpty(
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({ eventId, userId, status: 'going' })
+      .returning(),
+    'signup',
+  );
   return signup;
 }
 
