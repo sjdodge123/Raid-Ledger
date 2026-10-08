@@ -83,7 +83,6 @@ export const handlers = [
         HttpResponse.json({
             communityName: 'Test Community',
             communityLogoUrl: null,
-            communityAccentColor: null,
         }),
     ),
 

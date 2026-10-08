@@ -1,7 +1,7 @@
 /**
  * BrandingSection (ROK-1653 G3a, forms ruling 1): the community name is a
- * labelled Field, the logo goes through FilePicker, the accent through the
- * swatches + ColorInput, and Save/Reset are shared Buttons.
+ * labelled Field, the logo goes through FilePicker, and Save/Reset are shared
+ * Buttons. The community accent colour was removed (TDB:991).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -19,7 +19,7 @@ vi.mock('../../hooks/use-branding', () => ({
     useBranding: () => ({
         brandingQuery: {
             isLoading: false,
-            data: { communityName: 'Night Raiders', communityAccentColor: '#10B981', communityLogoUrl: null },
+            data: { communityName: 'Night Raiders', communityLogoUrl: null },
         },
         ...mocks,
     }),
@@ -44,20 +44,27 @@ describe('BrandingSection — community name', () => {
     });
 });
 
-describe('BrandingSection — accent colour', () => {
-    it('a clicked swatch becomes aria-pressed and its hex fills the ColorInput', async () => {
+describe('BrandingSection — no accent colour (TDB:991)', () => {
+    it('renders no Accent Color card, colour picker, swatches or brand-fill sample', () => {
+        const { container } = render(<BrandingSection />);
+        expect(screen.queryByRole('heading', { name: 'Accent Color' }), 'the Accent Color card must be gone').toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Accent colour' }), 'the accent hex field must be gone').toBeNull();
+        expect(container.querySelector('input[type=color]'), 'the accent colour well must be gone').toBeNull();
+        expect(screen.queryByRole('button', { name: 'Emerald' }), 'the accent preset swatches must be gone').toBeNull();
+        expect(container.querySelector('[data-brand-fill]'), 'the accent Sample Button must be gone').toBeNull();
+    });
+
+    it('Save sends only the community name', async () => {
         const user = userEvent.setup();
         render(<BrandingSection />);
-        const emerald = screen.getByRole('button', { name: 'Emerald' });
-        const blue = screen.getByRole('button', { name: 'Blue' });
-        expect(emerald).toHaveAttribute('aria-pressed', 'true');
-        expect(blue).toHaveAttribute('aria-pressed', 'false');
+        const input = screen.getByRole('textbox', { name: 'Community name' });
+        await user.clear(input);
+        await user.type(input, 'Dawn Raiders');
 
-        await user.click(blue);
+        await user.click(screen.getByRole('button', { name: 'Save Changes' }));
 
-        expect(blue).toHaveAttribute('aria-pressed', 'true');
-        expect(emerald).toHaveAttribute('aria-pressed', 'false');
-        expect(screen.getByRole('textbox', { name: 'Accent colour' })).toHaveValue('#3B82F6');
+        expect(mocks.updateBranding.mutate).toHaveBeenCalledTimes(1);
+        expect(mocks.updateBranding.mutate.mock.calls[0]?.[0]).toEqual({ communityName: 'Dawn Raiders' });
     });
 });
 

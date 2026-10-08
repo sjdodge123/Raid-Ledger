@@ -1,30 +1,11 @@
 import { useState, useCallback } from 'react';
 import { useBranding } from '../../hooks/use-branding';
 import { API_BASE_URL } from '../../lib/config';
-import { brandLabelFor } from '../../lib/brand-label';
 import { LOGO_ACCEPT_MIME, LOGO_FORMAT_HINT } from '../../constants/branding';
 import { Button } from '../ui/button';
-import { ColorInput } from '../ui/color-input';
 import { Field } from '../ui/field';
 import { FilePicker } from '../ui/file-picker';
 import { Input } from '../ui/input';
-
-/** Preset accent colors for quick selection */
-const PRESET_COLORS = [
-    { name: 'Emerald', hex: '#10B981' },
-    { name: 'Blue', hex: '#3B82F6' },
-    { name: 'Purple', hex: '#8B5CF6' },
-    { name: 'Rose', hex: '#F43F5E' },
-    { name: 'Amber', hex: '#F59E0B' },
-    { name: 'Cyan', hex: '#06B6D4' },
-    { name: 'Indigo', hex: '#6366F1' },
-    { name: 'Pink', hex: '#EC4899' },
-];
-
-const DEFAULT_ACCENT = '#10B981';
-
-/** Hexes compare case-insensitively: presets are uppercase, ColorInput reports lowercase. */
-const sameHex = (a: string, b: string): boolean => a.toLowerCase() === b.toLowerCase();
 
 function SectionCard({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
     return (
@@ -73,46 +54,16 @@ function LogoSection({ logoUrl, onUpload, isUploading }: {
     );
 }
 
-function ColorPresets({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
-    return (
-        <div className="flex flex-wrap gap-2">
-            {PRESET_COLORS.map(({ name, hex }) => {
-                const pressed = sameHex(value, hex);
-                // The fill is the preset's own colour (candidate user data), not a theme colour, so it stays an
-                // inline style; brandColor is reserved for provider fills (design-system.md, ruling 3).
-                return (
-                    <Button key={hex} variant="ghost" iconOnly aria-label={name} aria-pressed={pressed} style={{ backgroundColor: hex }} onClick={() => onChange(hex)}
-                        className={`border-2 ${pressed ? 'border-foreground' : 'border-transparent hover:border-edge'}`} />
-                );
-            })}
-        </div>
-    );
-}
-
-function AccentColorSection({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-    return (
-        <SectionCard title="Accent Color" hint="Primary accent used for buttons and highlights.">
-            <ColorPresets value={value} onChange={onChange} />
-            <ColorInput label="Accent colour" value={value} onChange={onChange} />
-        </SectionCard>
-    );
-}
-
-function BrandingPreview({ nameValue, logoUrl, colorValue }: { nameValue: string; logoUrl: string | null; colorValue: string }) {
+function BrandingPreview({ nameValue, logoUrl }: { nameValue: string; logoUrl: string | null }) {
     return (
         <SectionCard title="Preview" hint="">
             <div className="bg-backdrop/80 rounded-lg border border-edge/30 p-6">
-                <div className="flex items-center gap-3 mb-4 pb-4 border-b border-edge/30">
+                <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-surface/30">
                         {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" width={32} height={32} /> : <span className="text-base">&#x2694;&#xFE0F;</span>}
                     </div>
                     <span className="font-bold text-foreground">{nameValue || 'Raid Ledger'}</span>
                 </div>
-                {/* Not a control: a static sample of the accent fill. data-brand-fill + data-brand-label is the
-                    Button brandColor idiom, so the label is whichever of white / dark reads on the fill (ROK-1472). */}
-                <span data-brand-fill="" data-brand-label={brandLabelFor(colorValue)} className="inline-flex px-4 py-2 rounded-lg text-sm font-medium text-foreground" style={{ backgroundColor: colorValue }}>
-                    Sample Button
-                </span>
             </div>
         </SectionCard>
     );
@@ -134,43 +85,38 @@ function BrandingActions({ hasChanges, onSave, isSaving, onReset, isResetting }:
 }
 
 /**
- * Branding section — community name, logo, and accent color.
+ * Branding section — community name and logo. The community accent colour was
+ * removed (TDB:991): nothing outside this section ever painted with it.
  * Extracted from the former standalone panel (ROK-271).
  */
 function useBrandingState() {
     const { brandingQuery, updateBranding, uploadLogo, resetBranding } = useBranding();
     const branding = brandingQuery.data;
     const [nameValue, setNameValue] = useState('');
-    const [colorValue, setColorValue] = useState(DEFAULT_ACCENT);
     const [nameInitialized, setNameInitialized] = useState(false);
-    const [colorInitialized, setColorInitialized] = useState(false);
 
     if (branding && !nameInitialized) { setNameValue(branding.communityName || ''); setNameInitialized(true); }
-    if (branding && !colorInitialized) { setColorValue(branding.communityAccentColor || DEFAULT_ACCENT); setColorInitialized(true); }
 
     const hasNameChange = branding ? nameValue.trim() !== (branding.communityName || '') : false;
-    const hasColorChange = branding ? !sameHex(colorValue, branding.communityAccentColor || DEFAULT_ACCENT) : false;
     const logoUrl = branding?.communityLogoUrl ? `${API_BASE_URL}${branding.communityLogoUrl}` : null;
 
     const handleSave = useCallback(() => {
-        const updates: { communityName?: string; communityAccentColor?: string } = {};
-        if (hasNameChange) updates.communityName = nameValue.trim();
-        if (hasColorChange) updates.communityAccentColor = colorValue;
-        updateBranding.mutate(updates, { onSuccess: (data) => { setNameValue(data.communityName || ''); setColorValue(data.communityAccentColor || DEFAULT_ACCENT); } });
-    }, [hasNameChange, hasColorChange, nameValue, colorValue, updateBranding]);
+        if (!hasNameChange) return;
+        updateBranding.mutate({ communityName: nameValue.trim() }, { onSuccess: (data) => setNameValue(data.communityName || '') });
+    }, [hasNameChange, nameValue, updateBranding]);
 
     const handleLogoUpload = useCallback(([file]: File[]) => { if (file) uploadLogo.mutate(file); }, [uploadLogo]);
 
     const handleReset = useCallback(() => {
-        resetBranding.mutate(undefined, { onSuccess: (data) => { setNameValue(data.communityName || ''); setColorValue(data.communityAccentColor || DEFAULT_ACCENT); } });
+        resetBranding.mutate(undefined, { onSuccess: (data) => setNameValue(data.communityName || '') });
     }, [resetBranding]);
 
-    return { brandingQuery, nameValue, setNameValue, colorValue, setColorValue, hasNameChange, hasColorChange,
+    return { brandingQuery, nameValue, setNameValue, hasNameChange,
         logoUrl, handleSave, handleLogoUpload, handleReset, uploadLogo, updateBranding, resetBranding };
 }
 
 /**
- * Branding section -- community name, logo, and accent color.
+ * Branding section -- community name and logo.
  */
 export function BrandingSection() {
     const h = useBrandingState();
@@ -183,9 +129,8 @@ export function BrandingSection() {
         <>
             <CommunityNameSection value={h.nameValue} onChange={h.setNameValue} />
             <LogoSection logoUrl={h.logoUrl} onUpload={h.handleLogoUpload} isUploading={h.uploadLogo.isPending} />
-            <AccentColorSection value={h.colorValue} onChange={h.setColorValue} />
-            <BrandingPreview nameValue={h.nameValue} logoUrl={h.logoUrl} colorValue={h.colorValue} />
-            <BrandingActions hasChanges={h.hasNameChange || h.hasColorChange} onSave={h.handleSave} isSaving={h.updateBranding.isPending} onReset={h.handleReset} isResetting={h.resetBranding.isPending} />
+            <BrandingPreview nameValue={h.nameValue} logoUrl={h.logoUrl} />
+            <BrandingActions hasChanges={h.hasNameChange} onSave={h.handleSave} isSaving={h.updateBranding.isPending} onReset={h.handleReset} isResetting={h.resetBranding.isPending} />
         </>
     );
 }

@@ -79,9 +79,10 @@ test.describe('Admin General panel', () => {
             page.getByRole('heading', { name: 'Community Logo', level: 3 }),
         ).toBeVisible();
 
+        // The community accent colour was removed (TDB:991) — its card must stay gone.
         await expect(
             page.getByRole('heading', { name: 'Accent Color', level: 3 }),
-        ).toBeVisible();
+        ).toHaveCount(0);
 
         // Save/Reset branding buttons are present (do NOT click Reset)
         await expect(page.getByRole('button', { name: 'Save Changes' })).toBeVisible();
