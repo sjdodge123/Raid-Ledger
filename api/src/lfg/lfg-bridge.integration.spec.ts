@@ -231,7 +231,7 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
     await decide(lineupId, winner.id);
 
     expect(await bridgeNotifications(u3)).toEqual([]);
-    const [row, ...extra] = await bridgeNotifications(u1);
+    const [row, ...extra] = nonEmpty(await bridgeNotifications(u1), 'row');
     expect(extra).toEqual([]);
     expect(row.type).toBe('community_lineup');
     expect(row.payload).toMatchObject({

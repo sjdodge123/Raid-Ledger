@@ -28,7 +28,7 @@ import { LFG_NOW_SPAWN_THRESHOLD } from '../discord-bot/lfg-now/lfg-now.constant
 import { LfgQuickPlayListener } from './lfg-quickplay.listener';
 import { findOpenLfgNowEventId } from './lfg-playing.helpers';
 import { LFG_EVENTS } from './lfg.constants';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -115,7 +115,7 @@ async function intentOf(who: Member, gameId: number): Promise<IntentRow> {
     (r) => r.userId === who.userId,
   );
   expect(rows).toHaveLength(1);
-  return rows[0];
+  return at(rows, 0);
 }
 
 /**

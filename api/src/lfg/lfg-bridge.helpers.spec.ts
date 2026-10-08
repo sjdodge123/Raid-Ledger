@@ -19,7 +19,7 @@ import {
   type BridgeCandidate,
 } from './lfg-bridge.helpers';
 import { stripComments } from '../common/testing/strip-comments';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 function candidate(
   userId: number,
@@ -150,7 +150,7 @@ describe('bridge source guards (ROK-1457)', () => {
   });
 
   it('T-5b: the selector reuses eligibleUser()/liveIntent() instead of re-spelling them', () => {
-    const src = readStripped(BRIDGE_SOURCES[0]);
+    const src = readStripped(at(BRIDGE_SOURCES, 0));
     expect(src).not.toMatch(/isNull\s*\(\s*schema\.users\.deactivatedAt/);
     expect(src).not.toMatch(/isNull\s*\(\s*schema\.users\.bannedAt/);
     expect(src).not.toMatch(/deactivated_at\s+IS\s+NULL/i);
