@@ -46,19 +46,25 @@ describe('buildRosterEtas', () => {
   });
 
   it('reports a sharing member who never measured as no_speed, not as a zero wait', () => {
-    const [row] = buildRosterEtas([person({ mbps: null })], SIZE, 999);
+    const [row] = nonEmpty(
+      buildRosterEtas([person({ mbps: null })], SIZE, 999),
+      'row',
+    );
     expect(row.status).toBe('no_speed');
     expect(row.estimatedDownloadMinutes).toBeNull();
   });
 
   it('reports a sharing member as no_speed when the game has no known size', () => {
-    const [row] = buildRosterEtas([person()], null, 999);
+    const [row] = nonEmpty(buildRosterEtas([person()], null, 999), 'row');
     expect(row.status).toBe('no_speed');
     expect(row.estimatedDownloadMinutes).toBeNull();
   });
 
   it('reports a member who has not opted in as not_shared with no minutes, even though a figure exists', () => {
-    const [row] = buildRosterEtas([person({ shareEtaAt: null })], SIZE, 999);
+    const [row] = nonEmpty(
+      buildRosterEtas([person({ shareEtaAt: null })], SIZE, 999),
+      'row',
+    );
     expect(row.status).toBe('not_shared');
     expect(row.estimatedDownloadMinutes).toBeNull();
   });

@@ -58,17 +58,20 @@ async function createEvent(
 ) {
   const start = new Date(Date.now() + 86_400_000);
   const end = new Date(start.getTime() + TWO_HOURS_MS);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      gameId: testApp.seed.game.id,
-      duration: [start, end],
-      maxAttendees: 10,
-      creatorId: testApp.seed.adminUser.id,
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        gameId: testApp.seed.game.id,
+        duration: [start, end],
+        maxAttendees: 10,
+        creatorId: testApp.seed.adminUser.id,
+        ...overrides,
+      })
+      .returning(),
+    'event',
+  );
   return event;
 }
 
@@ -136,10 +139,13 @@ async function lockInAtNewTime(eventId: number, matchId: number, start: Date) {
 }
 
 async function readEvent(eventId: number) {
-  const [row] = await testApp.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId));
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId)),
+    `event ${eventId}`,
+  );
   return row;
 }
 

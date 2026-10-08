@@ -53,16 +53,19 @@ describe('applyStatusUpdate — conditional UPDATE race guard (ROK-1150)', () =>
   });
 
   async function seedLineup(status: 'building' | 'voting'): Promise<LineupRow> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Race Guard Test',
-        createdBy: creatorId,
-        status,
-        visibility: 'public',
-        publicSlug: Math.random().toString(36).slice(2, 12),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Race Guard Test',
+          createdBy: creatorId,
+          status,
+          visibility: 'public',
+          publicSlug: Math.random().toString(36).slice(2, 12),
+        })
+        .returning(),
+      'lineup',
+    );
     return lineup;
   }
 

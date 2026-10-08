@@ -28,7 +28,7 @@ import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { TiebreakerService } from './tiebreaker.service';
 import * as bracket from './tiebreaker-bracket.helpers';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 interface TiedLineupSetup {
   lineupId: number;
@@ -137,11 +137,14 @@ function describeTiebreakerDismiss() {
   }
 
   async function getLineup(lineupId: number) {
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId))
-      .limit(1);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId))
+        .limit(1),
+      `lineup ${lineupId}`,
+    );
     return row;
   }
 
@@ -307,7 +310,7 @@ function describeTiebreakerDismiss() {
     expect(rows[0]?.status).toBe('active');
     expect(detail.status).toBe('active');
     const lineup = await getLineup(lineupId);
-    expect(lineup.activeTiebreakerId).toBe(rows[0].id);
+    expect(lineup.activeTiebreakerId).toBe(at(rows, 0).id);
   });
 }
 

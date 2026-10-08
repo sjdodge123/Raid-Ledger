@@ -38,7 +38,7 @@ import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
 // in this story. Importing here is what makes the test fail (compile-time)
 // until the service file is added.
 import { StandalonePollReminderService } from './standalone-poll-reminder.service';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 interface StandaloneSetup {
   lineupId: number;
@@ -317,8 +317,8 @@ function describeStandalonePollReminders() {
 
   it('does NOT fire a 1h DM to a member who already voted on a slot', async () => {
     const { memberIds, matchId } = await setupStandalonePoll('voted', 0.5, 2);
-    const voter = memberIds[0];
-    const nonVoter = memberIds[1];
+    const voter = at(memberIds, 0);
+    const nonVoter = at(memberIds, 1);
     await castScheduleVote(matchId, voter);
 
     await reminderService.runReminders();
@@ -463,10 +463,13 @@ function describeStandalonePollReminders() {
       `;
       await testApp.db.execute(migrationSql);
 
-      const [after] = await testApp.db
-        .select()
-        .from(schema.communityLineups)
-        .where(eq(schema.communityLineups.id, lineup.id));
+      const [after] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.communityLineups)
+          .where(eq(schema.communityLineups.id, lineup.id)),
+        'after',
+      );
 
       expect(after.phaseDeadline).not.toBeNull();
       const expected = new Date(createdAt.getTime() + 36 * HOUR_MS).getTime();
