@@ -540,6 +540,47 @@ describe('conversionSincePosted — scoping and order (TDB:953 review)', () => {
 });
 
 /**
+ * TDB:953 Codex P2 (r2) — an older group's corpse AND this row's own later
+ * conversion both match; the flat `converted_at ASC` returned the corpse.
+ */
+describe('latestConversionTarget — own later conversion vs an older corpse (Codex P2)', () => {
+  it("returns the row's OWN later conversion, not the corpse the expires_at leg admits", async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const oldEvent = await createFutureEvent(testApp, adminToken);
+    const ownEvent = await createFutureEvent(testApp, adminToken);
+    const future = new Date(Date.now() + 7 * DAY_MS);
+    // Converted before this message existed; its hands outlive the post.
+    const bosco = await member('bosco');
+    await seedStamped(bosco, game.id, oldEvent, future, STAMP_10_MIN_AGO);
+    await post(game.id, 'msg-1');
+    const row = await openRowFor(game.id);
+    await seedStamped(await member('karl'), game.id, ownEvent, future);
+
+    await expect(
+      latestConversionTarget(testApp.db, game.id, row.postedAt),
+    ).resolves.toEqual({ eventId: ownEvent });
+  });
+});
+
+describe('conversionSincePosted — strictly-later vs a grace-window corpse (Codex P2)', () => {
+  it('a conversion strictly after the post outranks one stamped inside the grace', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const corpseEvent = await createFutureEvent(testApp, adminToken);
+    const ownEvent = await createFutureEvent(testApp, adminToken);
+    const future = new Date(Date.now() + 7 * DAY_MS);
+    // Stamped just before the post: inside OWN_CONVERSION_GRACE.
+    await seedStamped(await member('bosco'), game.id, corpseEvent, future);
+    await post(game.id, 'msg-1');
+    const row = await openRowFor(game.id);
+    await seedStamped(await member('karl'), game.id, ownEvent, future);
+
+    await expect(conversionSincePosted(testApp.db, row)).resolves.toEqual({
+      eventId: ownEvent,
+    });
+  });
+});
+
+/**
  * TDB:953 case (1) — the whole CONNECTED walk against real Postgres.
  *
  * Group A's message is posted, A converts through the real `convertGroup`
