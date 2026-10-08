@@ -16,6 +16,7 @@ import { readdirSync, readFileSync } from 'fs';
 import { join, resolve, sep } from 'path';
 import { stripComments as stripCodeComments } from '../test/form-primitives-count';
 import { BRAND_LABEL_HEX } from '../lib/brand-label';
+import { AA_SMALL_TEXT, contrastRatio } from './wcag-contrast';
 
 const LIGHT_SCHEMES = ['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial'];
 const FORCED_WHITE = /--color-foreground:\s*#ffffff/i;
@@ -121,8 +122,10 @@ const SRC = resolve(__dirname, '..');
  * index.css repaints them there: cyan-600 #0092b8 (white 3.62:1), emerald-500
  * #10b981 (2.53:1; at /90 over a light card #18c289, 2.3:1 — the /games "Best
  * Price" chip), cyan-500 #00b8db (2.37:1; at /90, 2.34:1 — the "You own" chip)
- * and amber-500 #f59e0b (2.15:1). A solid status fill is
- * `bg-success` / `bg-warning` (light #065f46 7.68:1, #92400e 7.09:1 under white);
+ * and amber-500 #f59e0b (2.15:1). A solid status fill is `bg-success` /
+ * `bg-warning` + `text-white`: white on light (#065f46 7.68:1, #92400e 7.09:1), and
+ * the #0f172a dark label on the dark family, where white is 2.54 / 2.15:1 on
+ * #10b981 / #f59e0b (TDB:2052 — the dark-family rule asserted below);
  * a cyan-500 / cyan-600 label is `text-foreground` (the #0f172a rule above).
  */
 const WHITE_UNSAFE_FILL = /(^|\s)bg-(cyan-600|cyan-500(\/\d+)?|emerald-500(\/\d+)?|amber-500(\/\d+)?)(\s|$)/;
@@ -142,7 +145,53 @@ function whiteOnMidFillLabels(): string[] {
 
 describe('mid-tone fills never carry a text-white label (ROK-1472)', () => {
     it('no class string in web/src pairs bg-cyan-600 / bg-cyan-500 / bg-emerald-500 / bg-amber-500 with text-white', () => {
-        expect(whiteOnMidFillLabels(), 'white is 2.2–3.6:1 on these fills on the light schemes — use bg-success / bg-warning, or text-foreground on cyan-600')
+        expect(whiteOnMidFillLabels(), 'white is 2.2–3.6:1 on these fills on the light schemes — use bg-success / bg-warning (white on light, the dark-family rule paints #0f172a on dark), or text-foreground on cyan-600')
             .toEqual([]);
+    });
+});
+
+/** `html:not(:is(<light schemes>)) :is(<fills>).text-white` — the dark-family label selector shape (TDB:2052). */
+const DARK_FAMILY_LABEL = /^html:not\(:is\(([^)]*)\)\)\s*:is\(([^)]*)\)\.text-white$/;
+
+interface DarkFamilyLabelRule extends ForcedWhiteRule { color: string }
+
+/** Every unlayered rule with the dark-family label shape that paints an opaque `color:`. */
+function darkFamilyLabelRules(src: string): DarkFamilyLabelRule[] {
+    const rules: DarkFamilyLabelRule[] = [];
+    for (const [, selector, body] of src.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const shape = DARK_FAMILY_LABEL.exec(defined(selector, 'rule selector').trim());
+        const color = /(?:^|[;\s])color:\s*(#[0-9a-f]{6})/i.exec(defined(body, 'rule body'))?.[1];
+        if (!shape || !color) continue;
+        const fills = defined(shape[2], 'fill group').split(',').map((s) => s.trim());
+        rules.push({ schemes: defined(shape[1], 'scheme group'), fills, color: color.toLowerCase() });
+    }
+    return rules;
+}
+
+/** Dark-family (`@theme`) value of `--color-<token>`. */
+const darkToken = (token: string): string =>
+    defined(new RegExp(`--color-${token}:\\s*(#[0-9a-f]{6})`, 'i').exec(/@theme\s*\{([^}]*)\}/.exec(css)?.[1] ?? '')?.[1], `dark --color-${token}`);
+
+describe('index.css dark-family label on solid success / warning (TDB:2052, ruling 2026-10-08)', () => {
+    const rule = darkFamilyLabelRules(css).find((r) => r.fills.includes('.bg-success'));
+
+    it('paints a dark label on .bg-success.text-white and .bg-warning.text-white outside the light family', () => {
+        expect(rule, 'no `html:not(:is(<light schemes>)) :is(.bg-success, …).text-white { color: … }` rule — white is 2.54:1 on dark #10b981').toBeDefined();
+        expect(rule?.fills, 'the dark-family label rule must list .bg-warning (white 2.15:1 on dark #f59e0b)').toContain('.bg-warning');
+    });
+
+    it('negates exactly the six light schemes, so every dark scheme gets the label and no light one does', () => {
+        for (const scheme of LIGHT_SCHEMES) {
+            expect(rule?.schemes ?? '', `the dark-family rule must exclude data-scheme="${scheme}" (white is AA there)`)
+                .toContain(`[data-scheme="${scheme}"]`);
+        }
+        expect(rule?.schemes.match(/\[data-scheme=/g) ?? [], 'the :not() list must hold the six light schemes and nothing else').toHaveLength(LIGHT_SCHEMES.length);
+    });
+
+    it.each(['success', 'warning'])('the label clears AA on the dark bg-%s', (token) => {
+        const fill = darkToken(token);
+        const ratio = contrastRatio(rule?.color ?? '#ffffff', fill);
+        expect(ratio, `the dark-family label ${rule?.color} is ${ratio}:1 on dark bg-${token} ${fill} — needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });

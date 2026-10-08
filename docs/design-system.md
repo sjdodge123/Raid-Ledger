@@ -730,7 +730,9 @@ text-xs rounded-full` with a tinted background.
 **DON'T** show a zero-count badge — `FilterCountBadge` renders nothing at `count <= 0`.
 
 **Light / Dark** — a solid-fill badge keeps the same fill in both by design (§6.10) whether it is a raw hue or,
-as here, the `success` token — with one exception: every `bg-emerald-600` (buttons, and also badges, dots
+as here, the `success` token; on a `bg-success` / `bg-warning` fill the `text-white` label is white on light
+and the `#0f172a` dark label on dark (TDB:2052 — white is 2.54 / 2.15:1 on dark `#10b981` / `#f59e0b`,
+`#0f172a` 7.04 / 8.31:1). One fill exception: every `bg-emerald-600` (buttons, and also badges, dots
 and toggle tracks such as `VetoGameCard`, the healer role colour, `identity-sections`) steps to emerald-700
 `#047857` on the light schemes. That is intended: the darker green keeps or gains contrast on a light
 surface, and a forced-white label on it is 5.48:1 (3.77:1 on `#059669`). A tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
@@ -1013,7 +1015,12 @@ them; do not fix them as scope creep.
     `web/src/styles/primary-fill-light.guard.test.ts`. The `/10 /30 /50` alpha variants keep their own
     washes; quest-log's `!important` gold button wins over all of it. This is still why solid button fills
     were NOT tokenised by ROK-1586 (§2.2). A `Button brandColor` label is NOT forced white: it is white or
-    `#0f172a` by contrast on every scheme (§4.11, `brand-fill-forced-white.guard.test.ts`).
+    `#0f172a` by contrast on every scheme (§4.11, `brand-fill-forced-white.guard.test.ts`). A solid
+    `bg-success` / `bg-warning` status fill (the `/games` rating, Best Price, On Sale and owner badges,
+    `FilterCountBadge`, `JourneyHero`'s done check, the schedule view's today circle) keeps the same token
+    fill in both families with a `text-white` label: white on light (7.68 / 7.09:1), `#0f172a` on every
+    dark scheme (7.04 / 8.31:1; white was 2.54 / 2.15:1) — `index.css:850-859`, TDB:2052, operator ruling
+    2026-10-08, same guard. Same fill in both families, white label on light, dark label on dark.
 
 11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal-frame.tsx:98`) vs
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both

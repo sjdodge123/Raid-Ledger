@@ -91,7 +91,11 @@ paints white or `#0f172a` — whichever has the higher contrast on the runtime f
 **Exception — a token fill takes `text-white`:** `bg-success` (and any other token fill) is
 not in that list, so `text-foreground` on it goes `#0f172a` on light. Write `text-white`
 (`JourneyHero.tsx:163`), and keep solid *button* fills on the raw `bg-emerald-600` so the
-forced-white rule still applies (`JourneyHero.tsx:173-175`).
+forced-white rule still applies (`JourneyHero.tsx:173-175`). That `text-white` is white on
+light only: `:850-859` paints `color: #0f172a` on `.bg-success.text-white` and
+`.bg-warning.text-white` in every scheme outside the light family (TDB:2052, ruling
+2026-10-08) — white is 2.54 / 2.15:1 on dark `#10b981` / `#f59e0b`, `#0f172a` is 7.04 / 8.31:1;
+light keeps white at 7.68 / 7.09:1. Guarded by `brand-fill-forced-white.guard.test.ts`.
 
 **Badges over imagery are the exception.** A badge on cover art sits on the artwork, not
 on the theme surface, so the light family's contrast bumps are wrong there. Put

@@ -847,6 +847,17 @@ body {
     --color-foreground: #0f172a;
 }
 
+/* --- Solid status fills: dark label on the dark family (TDB:2052, ruling 2026-10-08) ---
+   bg-success / bg-warning keep their token fill in both families (ROK-1472). A raw
+   text-white label clears AA on the light values (#065f46 7.68:1, #92400e 7.09:1) but not
+   on the dark ones (#10b981 2.54:1, #f59e0b 2.15:1), so every scheme OUTSIDE the light
+   family paints the #0f172a brand dark label: computed 7.04:1 on #10b981, 8.31:1 on
+   #f59e0b. Negating the light list reaches every dark scheme, present and future.
+   Unlayered, so it beats the text-white utility — brand-fill-forced-white.guard.test.ts. */
+html:not(:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"])) :is(.bg-success, .bg-warning).text-white {
+    color: #0f172a;
+}
+
 /* --- Primary fill on light (ROK-1472, operator ruling 2026-10-04) ---
    emerald-600 #059669 is 3.77:1 with the forced-white label; emerald-700 #047857
    (the light --color-success until TDB:1793 moved that to #065f46) is 5.48:1. Its hover goes DARKER, emerald-800
