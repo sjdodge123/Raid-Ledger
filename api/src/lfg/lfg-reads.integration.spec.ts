@@ -71,6 +71,7 @@ import {
   type LfgSuggestionDto,
   type LfgSuggestionsResponseDto,
 } from './lfg-reads.integration.spec-helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -188,7 +189,7 @@ describe('GET /lfg/:gameId/overlap', () => {
     });
     expect(body.windows.length).toBeGreaterThan(0);
     expect(body.windows.length).toBeLessThanOrEqual(OVERLAP_WINDOW_CAP);
-    const [window] = body.windows;
+    const [window] = nonEmpty(body.windows, 'window');
     expect(new Date(window.start).getTime()).toBe(atUtcHour(day, 19).getTime());
     expect(new Date(window.end).getTime()).toBe(atUtcHour(day, 21).getTime());
     expect(window.availableCount).toBe(2);
@@ -201,7 +202,7 @@ describe('GET /lfg/:gameId/overlap', () => {
   it('serialises window bounds as offset-bearing ISO instants', async () => {
     const { game, a } = await sharedBlock();
 
-    const [window] = (await overlapOf(a.token, game.id)).windows;
+    const window = at((await overlapOf(a.token, game.id)).windows, 0);
 
     expect(window.start).toMatch(ISO_WITH_OFFSET);
     expect(window.end).toMatch(ISO_WITH_OFFSET);
@@ -218,7 +219,7 @@ describe('GET /lfg/:gameId/overlap', () => {
     // so the read degrades to the maximum coverage of 2 rather than returning
     // nothing. `totalCount` still reports the whole roster.
     expect(body.memberCount).toBe(3);
-    const [window] = body.windows;
+    const [window] = nonEmpty(body.windows, 'window');
     expect(window.availableCount).toBe(2);
     expect(window.totalCount).toBe(3);
     expect([...window.members].sort(byId)).toEqual(
@@ -281,7 +282,7 @@ describe('GET /lfg/:gameId/overlap', () => {
 
     // Without the tsrange row the only shared hour is 19:00. With it the pair
     // shares 19:00–21:00, which outranks every 1-hour recurrence on length.
-    const [window] = (await overlapOf(a.token, game.id)).windows;
+    const window = at((await overlapOf(a.token, game.id)).windows, 0);
     expect(new Date(window.start).getTime()).toBe(atUtcHour(day, 19).getTime());
     expect(new Date(window.end).getTime()).toBe(atUtcHour(day, 21).getTime());
     expect(window.availableCount).toBe(2);
@@ -318,7 +319,7 @@ describe('GET /lfg/:gameId/overlap', () => {
   it('ignores an `available` row scoped to a DIFFERENT game', async () => {
     const { game, a, day } = await scopedRangeGame(-1);
 
-    const [window] = (await overlapOf(a.token, game.id)).windows;
+    const window = at((await overlapOf(a.token, game.id)).windows, 0);
 
     expect(new Date(window.start).getTime()).toBe(atUtcHour(day, 19).getTime());
     expect(new Date(window.end).getTime()).toBe(atUtcHour(day, 20).getTime());
@@ -327,7 +328,7 @@ describe('GET /lfg/:gameId/overlap', () => {
   it('honours an `available` row scoped to THIS game', async () => {
     const { game, a, day } = await scopedRangeGame(1);
 
-    const [window] = (await overlapOf(a.token, game.id)).windows;
+    const window = at((await overlapOf(a.token, game.id)).windows, 0);
 
     expect(new Date(window.start).getTime()).toBe(atUtcHour(day, 19).getTime());
     expect(new Date(window.end).getTime()).toBe(atUtcHour(day, 21).getTime());
@@ -344,7 +345,7 @@ describe('GET /lfg/:gameId/overlap', () => {
     const body = await overlapOf(a.token, game.id);
 
     expect(body.memberCount).toBe(2);
-    expect([...body.windows[0].members].sort(byId)).toEqual(
+    expect([...at(body.windows, 0).members].sort(byId)).toEqual(
       [a.userId, b.userId].sort(byId),
     );
   });
@@ -410,9 +411,9 @@ describe('GET /lfg/:gameId/history', () => {
       attendedCount: 1,
       durationMinutes: 120,
     });
-    expect(body.entries[0].participantIds).toEqual([a.userId]);
-    expect(body.entries[0].startedAt).toMatch(ISO_WITH_OFFSET);
-    expect(body.entries[0].endedAt).toMatch(ISO_WITH_OFFSET);
+    expect(body.entries[0]?.participantIds).toEqual([a.userId]);
+    expect(body.entries[0]?.startedAt).toMatch(ISO_WITH_OFFSET);
+    expect(body.entries[0]?.endedAt).toMatch(ISO_WITH_OFFSET);
     expect(body.entries[1]).toMatchObject({
       isAdHoc: false,
       title: 'Old Raid',
@@ -420,7 +421,7 @@ describe('GET /lfg/:gameId/history', () => {
       signedUpCount: 1,
       durationMinutes: 180,
     });
-    expect(body.entries[1].participantIds).toEqual([a.userId]);
+    expect(body.entries[1]?.participantIds).toEqual([a.userId]);
   });
 
   it('reports signedUpCount with a zero attendedCount when attendance was never recorded', async () => {
@@ -429,7 +430,7 @@ describe('GET /lfg/:gameId/history', () => {
     const eventId = await pastEvent(game.id, a.userId, 30);
     await signupViaDb(testApp, eventId, a.userId);
 
-    const [entry] = (await historyOf(a.token, game.id)).entries;
+    const entry = at((await historyOf(a.token, game.id)).entries, 0);
 
     expect(entry).toMatchObject({
       eventId,
@@ -456,7 +457,7 @@ describe('GET /lfg/:gameId/history', () => {
     await markAttendance(testApp, eventId, a.userId, 'no_show');
     await markAttendance(testApp, eventId, ghost, 'excused');
 
-    const [entry] = (await historyOf(a.token, game.id)).entries;
+    const entry = at((await historyOf(a.token, game.id)).entries, 0);
 
     expect(entry).toMatchObject({
       eventId,
@@ -475,7 +476,7 @@ describe('GET /lfg/:gameId/history', () => {
     await signupViaDb(testApp, eventId, ghost);
     await markAttendance(testApp, eventId, a.userId, 'attended');
 
-    const [entry] = (await historyOf(a.token, game.id)).entries;
+    const entry = at((await historyOf(a.token, game.id)).entries, 0);
 
     expect(entry.attendedCount).toBe(1);
     expect(entry.participantIds).toEqual([a.userId]);
@@ -569,7 +570,7 @@ describe('GET /lfg/:gameId/history', () => {
     await markAttended(testApp, eventId, gone);
     await deactivateUser(testApp, gone);
 
-    const [entry] = (await historyOf(a.token, game.id)).entries;
+    const entry = at((await historyOf(a.token, game.id)).entries, 0);
 
     expect(entry.attendedCount).toBe(1);
     expect(entry.participantIds).toEqual([a.userId]);
@@ -586,7 +587,7 @@ describe('GET /lfg/:gameId/history', () => {
     const entries = (await historyOf(a.token, game.id)).entries;
 
     expect(entries).toHaveLength(HISTORY_CAP);
-    expect(entries[0].eventId).toBe(created[0]);
+    expect(at(entries, 0).eventId).toBe(created[0]);
     expect(entries.map((e) => e.eventId)).not.toContain(
       created[HISTORY_CAP + 1],
     );
@@ -630,7 +631,7 @@ describe('GET /lfg/:gameId/suggestions', () => {
       'played',
     ]);
     // Ranking: reason count desc — the three-reason user leads.
-    expect(body.suggestions[0].userId).toBe(everything);
+    expect(at(body.suggestions, 0).userId).toBe(everything);
     expect(byUser.get(player)!.lastPlayedAt).toMatch(ISO_WITH_OFFSET);
     expect(byUser.get(owner)!.lastPlayedAt).toBeNull();
   });
