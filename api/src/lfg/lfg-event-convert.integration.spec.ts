@@ -51,10 +51,25 @@ afterEach(async () => {
 
 type Member = { userId: number; token: string };
 
-async function members(...names: string[]): Promise<Member[]> {
+/** One `Member` per name, positionally: `members('a', 'b')` is `[Member, Member]`. */
+type MembersFor<N extends string[]> = { [K in keyof N]: Member };
+
+function isOnePerName<N extends string[]>(
+  out: Member[],
+  names: N,
+): out is MembersFor<N> {
+  return out.length === names.length;
+}
+
+async function members<N extends string[]>(
+  ...names: N
+): Promise<MembersFor<N>> {
   const out: Member[] = [];
   for (const name of names) {
     out.push(await createMemberAndLogin(testApp, name, `${name}@test.local`));
+  }
+  if (!isOnePerName(out, names)) {
+    throw new Error(`Expected ${names.length} members, got ${out.length}`);
   }
   return out;
 }
