@@ -25,10 +25,13 @@
  * the stripper, run over this very file, could misread.
  *
  * A regex literal is recognised only where one can start (after an operator,
- * an opening bracket, a keyword or a line start), which tells it apart from
- * division.
+ * an opening bracket, an arrow `=>`, a keyword or a line start), which tells
+ * it apart from division. Known residual: a regex right after `)` (`if (ok)
+ * /re/.test(s)`) is read as division, so a quote or `//` inside it can open a
+ * fake string or comment — `)` is left out because `(a + b) / 2` is far
+ * commoner.
  */
-const REGEX_LITERAL = String.raw`(?<=(?:^|[(,=:[!&|?{};]|\b(?:return|typeof|case|throw|await|yield|void|delete))\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*`;
+const REGEX_LITERAL = String.raw`(?<=(?:^|=>|[(,=:[!&|?{};]|\b(?:return|typeof|case|throw|await|yield|void|delete))\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*`;
 const QUOTED_STRING = String.raw`\x27(?:\\.|[^\x27\\\n])*\x27|\x22(?:\\.|[^\x22\\\n])*\x22`;
 const TEMPLATE_LITERAL = String.raw`\x60(?:\\.|\$\{(?:[^{}\x60]|\x60(?:\\.|[^\x60\\])*\x60)*\}|[^\x60\\])*\x60`;
 const COMMENT = String.raw`(\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*)`;

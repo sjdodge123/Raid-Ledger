@@ -19,6 +19,7 @@ describe('stripComments — literals are kept whole', () => {
         ['a // inside a single-quoted string', `const u = 'a//b'; ${TOKEN}`],
         ['a URL inside a double-quoted string', `const u = "x//y"; ${TOKEN}`],
         ['an escaped slash pair in a regex literal', `const re = /^https?:\\/\\//; ${TOKEN}`],
+        ['a regex literal returned by an arrow (B66 m3)', `const isUrl = (s) => /^https?:\\/\\//.test(s); ${TOKEN}`],
         ['// inside a template literal', `const t = \`a // b\`; ${TOKEN}`],
         ['// and ${} inside a template literal', `const t = \`\${x} // \${y}\`; ${TOKEN}`],
         ['/* inside a string', `const s = '/*'; ${TOKEN}; const e = '*/';`],
