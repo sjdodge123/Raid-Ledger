@@ -2390,6 +2390,10 @@ same day (#1278, #1279, #1280).
 
 - **[low]** Event creator row ("by <name>" on /events cards) and the event-detail header user link — these avatar `<img>`s keep their ad-hoc `onError` → `display:none` (out of ROK-1714's scope as "already guarded"), so a dead Discord avatar leaves an empty avatar slot instead of initials (seen on fleet env rok-1714, event 71, SmokeTestBot). Not a broken glyph, but inconsistent with the AvatarWithFallback surfaces. Suggested: route both through `AvatarWithFallback` (one small web PR + a component test firing `error`).
 - **[nit]** Fleet demo seed: the dead-avatar demo users (ShadowMage/HealzForDayz/TankMaster) have `discord_id` NULL, so no CDN URL is built and they can't exercise the dead-image path in UI plans. Suggested: give one demo user a synthetic `discord_id` + dead hash in `demo-data-generator.ts`.
+
+### 2026-10-08 — fix/b71-r6-contract-prune (surfaced during the B71 `--full` gate, task 4f729635dad3)
+
+- **[low]** `api/src/discord-bot/lfm/lfm-embed.integration.spec.ts:313` "reconcile provenance lookups (D9) › resolvePollTarget turns the match id into the /schedule/:matchId link parts" — `expect(second.id).not.toBe(first.lineupId)  Expected: not 22`. The assertion compares a match id to a lineup id; they come from independent serial sequences and coincide whenever both tables have handed out the same count (seen at 22). Pre-existing: B71 doesn't touch `lfm/`; an `only_integration` rerun at the same HEAD passed (fa2fc8c32058). Suggested: assert the link uses the match id (`toBe(second.id)` on the produced path) instead of asserting the two ids differ, or seed the match so its id is provably distinct.
 ### 2026-10-02 — light raw-hue repaints (surfaced while adding the WoW item tooltip's text-gray-400 keep-dark rule)
 ### 2026-10-02 — light raw-hue repaints branch (review NIT deferred)
 

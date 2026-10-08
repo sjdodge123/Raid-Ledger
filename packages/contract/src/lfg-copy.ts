@@ -8,11 +8,6 @@
  * ruling on ROK-1505 is that the board is aligned with the chips; two copies of
  * this sentence is exactly how the two web surfaces drifted before ROK-1478.
  *
- * Deliberately NOT `pages/lfg/lfg-copy.ts::lookingLine`, which has no
- * `max(1, …)` clamp and falls back to different prose when the threshold is
- * null — reusing it would silently change the group page (ROK-1478 AC7
- * forbids that).
- *
  * Emoji-free on purpose: `nowLine` and `chipLabel` stay in web because they
  * carry the 🔥 / 🎯 the Discord surface does not want.
  */

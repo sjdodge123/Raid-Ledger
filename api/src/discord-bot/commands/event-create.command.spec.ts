@@ -91,7 +91,6 @@ function makeModuleProviders(mockDb: { select: jest.Mock; insert: jest.Mock }) {
         getBranding: jest.fn().mockResolvedValue({
           communityName: 'Test Guild',
           communityLogoPath: null,
-          communityAccentColor: null,
         }),
       },
     },

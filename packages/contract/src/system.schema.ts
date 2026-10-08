@@ -33,8 +33,6 @@ export const SystemStatusSchema = z.object({
     communityName: z.string().optional(),
     /** Community logo URL path (ROK-271) */
     communityLogoUrl: z.string().optional(),
-    /** Community accent color hex (ROK-271) */
-    communityAccentColor: z.string().optional(),
     /** True when admin onboarding wizard has been completed (ROK-204) */
     onboardingCompleted: z.boolean().optional(),
     /** Available authentication providers (ROK-267) */

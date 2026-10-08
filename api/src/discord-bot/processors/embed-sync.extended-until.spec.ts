@@ -146,7 +146,6 @@ beforeEach(async () => {
           getBranding: jest.fn().mockResolvedValue({
             communityName: null,
             communityLogoPath: null,
-            communityAccentColor: null,
           }),
           getClientUrl: jest.fn().mockResolvedValue(null),
           getDefaultTimezone: jest.fn().mockResolvedValue(null),

@@ -31,6 +31,7 @@ export const SETTING_KEYS = {
   RELAY_TOKEN: 'relay_token',
   COMMUNITY_NAME: 'community_name',
   COMMUNITY_LOGO_PATH: 'community_logo_path',
+  /** Legacy (TDB:991): no reader or writer; kept so clearBranding deletes the stale row. */
   COMMUNITY_ACCENT_COLOR: 'community_accent_color',
   GITHUB_PAT: 'github_pat',
   ONBOARDING_COMPLETED: 'onboarding_completed',

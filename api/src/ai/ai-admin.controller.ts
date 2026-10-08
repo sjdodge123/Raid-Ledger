@@ -30,10 +30,9 @@ import type {
   AiTestConnectionDto,
   AiUsageDto,
 } from '@raid-ledger/contract';
-import type { AiModelDto } from '@raid-ledger/contract';
 
 /**
- * Admin endpoints for AI plugin status, models, and usage.
+ * Admin endpoints for AI plugin status and usage.
  */
 @Controller('admin/ai')
 @UseGuards(AuthGuard('jwt'), AdminGuard, PluginActiveGuard)
@@ -57,17 +56,6 @@ export class AiAdminController {
     const modelSetting = await this.settings.get(AI_SETTING_KEYS.MODEL);
     const model = this.resolveDisplayModel(provider?.key, modelSetting);
     return buildStatusResponse(provider, model, isAvailable);
-  }
-
-  /** GET /admin/ai/models — list models from the active provider. */
-  @Get('models')
-  async getModels(): Promise<AiModelDto[]> {
-    const models = await this.withTimeout(this.llmService.listModels(), []);
-    return models.map((m) => ({
-      id: m.id,
-      name: m.name,
-      family: m.capabilities?.[0],
-    }));
   }
 
   /** POST /admin/ai/test-connection — test provider connectivity. */

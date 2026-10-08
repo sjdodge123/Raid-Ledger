@@ -5,7 +5,6 @@ import { toast } from '../lib/toast';
 interface BrandingData {
     communityName: string | null;
     communityLogoUrl: string | null;
-    communityAccentColor: string | null;
 }
 
 /**
@@ -28,7 +27,7 @@ function useBrandingMutations() {
     };
 
     const updateBranding = useMutation({
-        mutationFn: (data: { communityName?: string; communityAccentColor?: string }) =>
+        mutationFn: (data: { communityName?: string }) =>
             fetchApi<BrandingData>('/admin/branding', { method: 'PATCH', body: JSON.stringify(data) }),
         onSuccess: (data: BrandingData) => onBrandingSuccess(data, 'Branding updated'),
         onError: (err: Error) => toast.error(err.message || 'Failed to update branding'),

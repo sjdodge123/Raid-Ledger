@@ -144,3 +144,25 @@ export function deriveBindingPurpose(
       : 'general-lobby'
     : 'game-announcements';
 }
+
+/**
+ * AC5 — drop config keys that no longer apply once the purpose resolves. Pure;
+ * returns a fresh object. `allowJustChatting` is General-Lobby-only; a text
+ * announcements channel carries none of the voice-monitor tuning keys.
+ *
+ * Shared by the api write path (the backstop) and the admin edit form, so the
+ * client and server prune cannot drift apart (TDB:261).
+ */
+export function pruneConfigForPurpose(
+  config: ChannelBindingConfig | null | undefined,
+  purpose: BindingPurpose,
+): ChannelBindingConfig {
+  const pruned: ChannelBindingConfig = { ...(config ?? {}) };
+  if (purpose !== 'general-lobby') delete pruned.allowJustChatting;
+  if (purpose === 'game-announcements') {
+    delete pruned.minPlayers;
+    delete pruned.autoClose;
+    delete pruned.gracePeriod;
+  }
+  return pruned;
+}

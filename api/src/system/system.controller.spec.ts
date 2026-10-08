@@ -24,7 +24,6 @@ function describeSystemController() {
       getBranding: jest.fn().mockResolvedValue({
         communityName: null,
         communityLogoPath: null,
-        communityAccentColor: null,
       }),
       get: jest.fn().mockResolvedValue(null),
     };
@@ -270,7 +269,6 @@ function describeSystemController() {
       (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
         communityName: 'My Guild',
         communityLogoPath: null,
-        communityAccentColor: '#10B981',
       });
 
       const result = await controller.getBranding();
@@ -278,7 +276,6 @@ function describeSystemController() {
       expect(result).toEqual({
         communityName: 'My Guild',
         communityLogoUrl: null,
-        communityAccentColor: '#10B981',
       });
     });
 
@@ -286,7 +283,6 @@ function describeSystemController() {
       (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
         communityName: null,
         communityLogoPath: null,
-        communityAccentColor: null,
       });
 
       const result = await controller.getBranding();
@@ -298,12 +294,25 @@ function describeSystemController() {
       (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
         communityName: 'My Guild',
         communityLogoPath: '/data/uploads/branding/logo.png',
-        communityAccentColor: null,
       });
 
       const result = await controller.getBranding();
 
       expect(result.communityLogoUrl).toBe('/uploads/branding/logo.png');
+    });
+
+    it('does not expose communityAccentColor (TDB:991)', async () => {
+      (mockSettingsService.getBranding as jest.Mock).mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: null,
+        communityAccentColor: '#10B981', // legacy-shaped value must not leak
+      });
+
+      const branding = await controller.getBranding();
+      const status = await controller.getStatus();
+
+      expect(branding).not.toHaveProperty('communityAccentColor');
+      expect(status).not.toHaveProperty('communityAccentColor');
     });
   }
   describe('getBranding', () => describeGetBranding());
