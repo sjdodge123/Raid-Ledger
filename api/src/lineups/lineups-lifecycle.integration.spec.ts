@@ -19,6 +19,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { applyStatusUpdate } from './lineups-lifecycle.helpers';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
@@ -37,36 +38,45 @@ describe('applyStatusUpdate — conditional UPDATE race guard (ROK-1150)', () =>
   });
 
   beforeEach(async () => {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:race-${Date.now()}@lifecycle.local`,
-        username: 'race-creator',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:race-${Date.now()}@lifecycle.local`,
+          username: 'race-creator',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     creatorId = user.id;
   });
 
   async function seedLineup(status: 'building' | 'voting'): Promise<LineupRow> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Race Guard Test',
-        createdBy: creatorId,
-        status,
-        visibility: 'public',
-        publicSlug: Math.random().toString(36).slice(2, 12),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Race Guard Test',
+          createdBy: creatorId,
+          status,
+          visibility: 'public',
+          publicSlug: Math.random().toString(36).slice(2, 12),
+        })
+        .returning(),
+      'lineup',
+    );
     return lineup;
   }
 
   async function readStatus(id: number): Promise<string> {
-    const [row] = await testApp.db
-      .select({ status: schema.communityLineups.status })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.communityLineups.status })
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'row',
+    );
     return row.status;
   }
 

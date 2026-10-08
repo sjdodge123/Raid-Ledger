@@ -16,6 +16,7 @@ import {
 } from '../common/testing/integration-helpers';
 import { sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 function describeVoting() {
   let testApp: TestApp;
@@ -38,14 +39,17 @@ function describeVoting() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@test.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@test.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@test.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -83,13 +87,16 @@ function describeVoting() {
   async function createAdditionalGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Game ${i + 1}`,
-          slug: `game-${i + 1}-${Date.now()}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Game ${i + 1}`,
+            slug: `game-${i + 1}-${Date.now()}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;
@@ -126,13 +133,13 @@ function describeVoting() {
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       expect(res.status).toBe(200);
       const body = res.body as {
         entries: { gameId: number; voteCount: number }[];
       };
-      const entry = body.entries.find((e) => e.gameId === games[0].id);
+      const entry = body.entries.find((e) => e.gameId === at(games, 0).id);
       expect(entry!.voteCount).toBe(1);
     });
 
@@ -144,19 +151,19 @@ function describeVoting() {
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       // Vote again (toggle off)
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       expect(res.status).toBe(200);
       const body = res.body as {
         entries: { gameId: number; voteCount: number }[];
       };
-      const entry = body.entries.find((e) => e.gameId === games[0].id);
+      const entry = body.entries.find((e) => e.gameId === at(games, 0).id);
       expect(entry!.voteCount).toBe(0);
     });
 
@@ -169,7 +176,7 @@ function describeVoting() {
         const res = await testApp.request
           .post(`/lineups/${lineupId}/vote`)
           .set('Authorization', `Bearer ${token}`)
-          .send({ gameId: games[i].id });
+          .send({ gameId: at(games, i).id });
         expect(res.status).toBe(200);
       }
     });
@@ -188,14 +195,14 @@ function describeVoting() {
         await testApp.request
           .post(`/lineups/${lineupId}/vote`)
           .set('Authorization', `Bearer ${token}`)
-          .send({ gameId: games[i].id });
+          .send({ gameId: at(games, i).id });
       }
 
       // Attempt a 4th vote
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[3].id });
+        .send({ gameId: at(games, 3).id });
 
       expect(res.status).toBe(400);
     });
@@ -209,20 +216,20 @@ function describeVoting() {
         await testApp.request
           .post(`/lineups/${lineupId}/vote`)
           .set('Authorization', `Bearer ${token}`)
-          .send({ gameId: games[i].id });
+          .send({ gameId: at(games, i).id });
       }
 
       // Toggle off the first vote
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       // Now a 4th game should be allowed (only 2 votes remain)
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[3].id });
+        .send({ gameId: at(games, 3).id });
 
       expect(res.status).toBe(200);
     });
@@ -258,7 +265,7 @@ function describeVoting() {
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       expect(res.status).toBe(400);
     });
@@ -268,7 +275,7 @@ function describeVoting() {
 
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       expect(res.status).toBe(401);
     });
@@ -286,11 +293,11 @@ function describeVoting() {
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[2].id });
+        .send({ gameId: at(games, 2).id });
 
       // Fetch lineup detail as the same member
       const res = await testApp.request
@@ -300,8 +307,8 @@ function describeVoting() {
       expect(res.status).toBe(200);
       expect(res.body.myVotes).toBeDefined();
       expect(res.body.myVotes).toHaveLength(2);
-      expect(res.body.myVotes).toContain(games[0].id);
-      expect(res.body.myVotes).toContain(games[2].id);
+      expect(res.body.myVotes).toContain(at(games, 0).id);
+      expect(res.body.myVotes).toContain(at(games, 2).id);
     });
 
     it('should return empty myVotes when user has not voted', async () => {
@@ -328,7 +335,7 @@ function describeVoting() {
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[1].id });
+        .send({ gameId: at(games, 1).id });
 
       const res = await testApp.request
         .get('/lineups/active')
@@ -362,7 +369,7 @@ function describeVoting() {
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       const res = await testApp.request
         .get(`/lineups/${lineupId}`)
@@ -372,7 +379,7 @@ function describeVoting() {
       // myVotes is the new field that does not exist yet
       expect(res.body).toHaveProperty('myVotes');
       expect(Array.isArray(res.body.myVotes)).toBe(true);
-      expect(res.body.myVotes).toContain(games[0].id);
+      expect(res.body.myVotes).toContain(at(games, 0).id);
       // matchThreshold should also be present
       expect(res.body).toHaveProperty('matchThreshold');
       expect(typeof res.body.matchThreshold).toBe('number');
@@ -437,11 +444,11 @@ function describeVoting() {
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${m1}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${m2}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       // Transition to decided (voting → scheduling → decided)
       await advanceToDecided(lineupId, adminToken);
@@ -449,7 +456,7 @@ function describeVoting() {
       const matches = await queryMatches(lineupId);
       expect(matches.length).toBeGreaterThan(0);
 
-      const topMatch = matches.find((m) => m.game_id === games[0].id);
+      const topMatch = matches.find((m) => m.game_id === at(games, 0).id);
       expect(topMatch).toBeDefined();
       expect(topMatch!.vote_count).toBe(2);
     });
@@ -505,11 +512,11 @@ function describeVoting() {
         const { token } = await loginAsMember(`belowVoter${i}`);
         voters.push(token);
       }
-      for (let i = 0; i < 4; i++) {
+      for (const [i, voterToken] of voters.entries()) {
         await testApp.request
           .post(`/lineups/${lid}/vote`)
-          .set('Authorization', `Bearer ${voters[i]}`)
-          .send({ gameId: allGames[i].id });
+          .set('Authorization', `Bearer ${voterToken}`)
+          .send({ gameId: at(allGames, i).id });
       }
 
       await advanceToDecided(lid, adminToken);
@@ -521,14 +528,17 @@ function describeVoting() {
     });
 
     it('should categorize fit based on game maxPlayers vs voter count', async () => {
-      const [smallGame] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: 'Small Game',
-          slug: `small-game-${Date.now()}`,
-          playerCount: { min: 1, max: 2 },
-        })
-        .returning();
+      const [smallGame] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: 'Small Game',
+            slug: `small-game-${Date.now()}`,
+            playerCount: { min: 1, max: 2 },
+          })
+          .returning(),
+        'smallGame',
+      );
 
       const createRes = await createLineup(adminToken, {
         matchThreshold: 10,
@@ -566,16 +576,16 @@ function describeVoting() {
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${v1}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
       await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${v2}`)
-        .send({ gameId: games[0].id });
+        .send({ gameId: at(games, 0).id });
 
       await advanceToDecided(lineupId, adminToken);
 
       const matches = await queryMatches(lineupId);
-      const match = matches.find((m) => m.game_id === games[0].id);
+      const match = matches.find((m) => m.game_id === at(games, 0).id);
       expect(match).toBeDefined();
 
       const members = await queryMatchMembers(match!.id);
@@ -666,7 +676,7 @@ function describeVoting() {
         const voteRes = await testApp.request
           .post(`/lineups/${lineupId}/vote`)
           .set('Authorization', `Bearer ${token}`)
-          .send({ gameId: allGames[i].id });
+          .send({ gameId: at(allGames, i).id });
         expect(voteRes.status).toBe(200);
       }
     });
@@ -690,7 +700,7 @@ function describeVoting() {
         const voteRes = await testApp.request
           .post(`/lineups/${lineupId}/vote`)
           .set('Authorization', `Bearer ${token}`)
-          .send({ gameId: allGames[i].id });
+          .send({ gameId: at(allGames, i).id });
         expect(voteRes.status).toBe(200);
       }
 
@@ -698,7 +708,7 @@ function describeVoting() {
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: allGames[5].id });
+        .send({ gameId: at(allGames, 5).id });
 
       expect(res.status).toBe(400);
     });
@@ -722,7 +732,7 @@ function describeVoting() {
         const voteRes = await testApp.request
           .post(`/lineups/${lineupId}/vote`)
           .set('Authorization', `Bearer ${token}`)
-          .send({ gameId: allGames[i].id });
+          .send({ gameId: at(allGames, i).id });
         expect(voteRes.status).toBe(200);
       }
 
@@ -730,7 +740,7 @@ function describeVoting() {
       const res = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: allGames[5].id });
+        .send({ gameId: at(allGames, 5).id });
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('Maximum 5 votes per lineup reached');
@@ -754,14 +764,14 @@ function describeVoting() {
       const vote1 = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: allGames[0].id });
+        .send({ gameId: at(allGames, 0).id });
       expect(vote1.status).toBe(200);
 
       // Second vote should fail
       const vote2 = await testApp.request
         .post(`/lineups/${lineupId}/vote`)
         .set('Authorization', `Bearer ${token}`)
-        .send({ gameId: allGames[1].id });
+        .send({ gameId: at(allGames, 1).id });
       expect(vote2.status).toBe(400);
       expect(vote2.body.message).toContain(
         'Maximum 1 votes per lineup reached',
@@ -788,7 +798,7 @@ function describeVoting() {
         const voteRes = await testApp.request
           .post(`/lineups/${lineupId}/vote`)
           .set('Authorization', `Bearer ${token}`)
-          .send({ gameId: allGames[i].id });
+          .send({ gameId: at(allGames, i).id });
         expect(voteRes.status).toBe(200);
       }
     });

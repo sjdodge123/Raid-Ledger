@@ -35,6 +35,7 @@ import { RoleGapAlertService } from '../../notifications/role-gap-alert.service'
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { APP_EVENT_EVENTS } from '../../discord-bot/discord-bot.constants';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
+import { nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -57,17 +58,20 @@ async function createEvent(
 ) {
   const start = new Date(Date.now() + 86_400_000);
   const end = new Date(start.getTime() + TWO_HOURS_MS);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      gameId: testApp.seed.game.id,
-      duration: [start, end],
-      maxAttendees: 10,
-      creatorId: testApp.seed.adminUser.id,
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        gameId: testApp.seed.game.id,
+        duration: [start, end],
+        maxAttendees: 10,
+        creatorId: testApp.seed.adminUser.id,
+        ...overrides,
+      })
+      .returning(),
+    'event',
+  );
   return event;
 }
 
@@ -96,14 +100,17 @@ async function loginAsMember(
 ): Promise<{ token: string; userId: number }> {
   const bcrypt = await import('bcrypt');
   const hash = await bcrypt.hash('MemberPass1!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${tag}@test.local`,
-      username: tag,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${tag}@test.local`,
+        username: tag,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email: `${tag}@test.local`,
     passwordHash: hash,
@@ -132,10 +139,13 @@ async function lockInAtNewTime(eventId: number, matchId: number, start: Date) {
 }
 
 async function readEvent(eventId: number) {
-  const [row] = await testApp.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId));
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId)),
+    `event ${eventId}`,
+  );
   return row;
 }
 
@@ -186,27 +196,33 @@ describe(
  *  id (a valid FK target for events.reschedulingPollId). */
 async function createPollMatch(): Promise<number> {
   const slug = `sup${Math.random().toString(36).slice(2, 10)}`;
-  const [lineup] = await testApp.db
-    .insert(schema.communityLineups)
-    .values({
-      title: 'Suppression Test Poll',
-      status: 'decided',
-      createdBy: testApp.seed.adminUser.id,
-      publicSlug: slug,
-      publicShareEnabled: false,
-      phaseDurationOverride: { standalone: true },
-    })
-    .returning();
-  const [match] = await testApp.db
-    .insert(schema.communityLineupMatches)
-    .values({
-      lineupId: lineup.id,
-      gameId: testApp.seed.game.id,
-      status: 'scheduling',
-      thresholdMet: true,
-      voteCount: 0,
-    })
-    .returning();
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'Suppression Test Poll',
+        status: 'decided',
+        createdBy: testApp.seed.adminUser.id,
+        publicSlug: slug,
+        publicShareEnabled: false,
+        phaseDurationOverride: { standalone: true },
+      })
+      .returning(),
+    'lineup',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: lineup.id,
+        gameId: testApp.seed.game.id,
+        status: 'scheduling',
+        thresholdMet: true,
+        voteCount: 0,
+      })
+      .returning(),
+    'match',
+  );
   return match.id;
 }
 

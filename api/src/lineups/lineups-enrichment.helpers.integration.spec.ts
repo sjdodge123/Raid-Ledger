@@ -20,6 +20,7 @@ import {
   countUnlinkedSteamMembers,
   findUnlinkedSteamMembers,
 } from './lineups-enrichment.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeAudienceScopedEnrichment() {
   let testApp: TestApp;
@@ -40,16 +41,19 @@ function describeAudienceScopedEnrichment() {
     steamId: string | null;
     displayName?: string | null;
   }): Promise<typeof schema.users.$inferSelect> {
-    const [row] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${opts.username}@test.local`,
-        username: opts.username,
-        displayName: opts.displayName ?? null,
-        steamId: opts.steamId,
-        role: 'member',
-      })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${opts.username}@test.local`,
+          username: opts.username,
+          displayName: opts.displayName ?? null,
+          steamId: opts.steamId,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return row;
   }
 

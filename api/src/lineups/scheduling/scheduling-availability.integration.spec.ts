@@ -25,6 +25,7 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /** Sunday 00:00 UTC — grid day 0. */
 const WEEK_START = '2026-03-01T00:00:00.000Z';
@@ -81,17 +82,20 @@ function describeSchedulingAvailability() {
   ): Promise<{ id: number; token: string }> {
     const email = `avail-${suffix}@test.local`;
     const hash = await bcrypt.hash('AvailPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:avail-${suffix}`,
-        username: `avail-${suffix}`,
-        role: 'member',
-        // Confirmed just now, so the member counts as FRESH (not stale) and
-        // therefore lands in `availableCount` rather than `staleCount`.
-        gameTimeConfirmedAt: new Date(),
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:avail-${suffix}`,
+          username: `avail-${suffix}`,
+          role: 'member',
+          // Confirmed just now, so the member counts as FRESH (not stale) and
+          // therefore lands in `availableCount` rather than `staleCount`.
+          gameTimeConfirmedAt: new Date(),
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -106,27 +110,33 @@ function describeSchedulingAvailability() {
   async function seedPoll(
     creatorId: number,
   ): Promise<{ lineupId: number; matchId: number }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: `Availability Poll ${generatePublicSlug()}`,
-        createdBy: creatorId,
-        status: 'decided',
-        visibility: 'public',
-        publicSlug: generatePublicSlug(),
-        includeSchedulingPhase: true,
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: `Availability Poll ${generatePublicSlug()}`,
+          createdBy: creatorId,
+          status: 'decided',
+          visibility: 'public',
+          publicSlug: generatePublicSlug(),
+          includeSchedulingPhase: true,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     await testApp.db.insert(schema.communityLineupMatchMembers).values({
       matchId: match.id,
       userId: creatorId,
@@ -152,19 +162,25 @@ function describeSchedulingAvailability() {
       end: EVENT_END,
     },
   ): Promise<{ signupId: number; eventId: number }> {
-    const [event] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'ROK-1570 fixture raid',
-        creatorId: userId,
-        gameId: testApp.seed.game.id,
-        duration: [new Date(window.start), new Date(window.end)],
-      })
-      .returning();
-    const [signup] = await testApp.db
-      .insert(schema.eventSignups)
-      .values({ eventId: event.id, userId, status })
-      .returning();
+    const [event] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'ROK-1570 fixture raid',
+          creatorId: userId,
+          gameId: testApp.seed.game.id,
+          duration: [new Date(window.start), new Date(window.end)],
+        })
+        .returning(),
+      'event',
+    );
+    const [signup] = nonEmpty(
+      await testApp.db
+        .insert(schema.eventSignups)
+        .values({ eventId: event.id, userId, status })
+        .returning(),
+      'signup',
+    );
     return { signupId: signup.id, eventId: event.id };
   }
 

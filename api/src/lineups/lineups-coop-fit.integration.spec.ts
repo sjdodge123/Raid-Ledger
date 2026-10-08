@@ -31,6 +31,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeCoopFitPayloads() {
   let testApp: TestApp;
@@ -57,16 +58,19 @@ function describeCoopFitPayloads() {
     name: string,
     overrides: Partial<typeof schema.games.$inferInsert> = {},
   ): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Math.random()
-          .toString(36)
-          .slice(2, 8)}`,
-        ...overrides,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: `${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Math.random()
+            .toString(36)
+            .slice(2, 8)}`,
+          ...overrides,
+        })
+        .returning(),
+      'game',
+    );
     return game.id;
   }
 
@@ -290,22 +294,28 @@ function describeCoopFitPayloads() {
 
       // Two extra voters so voterCount (3) exceeds the cooptimus cap (1)
       // while staying far inside the IGDB max (100).
-      const [u1] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'rok1401:voter-1',
-          username: 'rok1401-voter-1',
-          role: 'member',
-        })
-        .returning();
-      const [u2] = await testApp.db
-        .insert(schema.users)
-        .values({
-          discordId: 'rok1401:voter-2',
-          username: 'rok1401-voter-2',
-          role: 'member',
-        })
-        .returning();
+      const [u1] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'rok1401:voter-1',
+            username: 'rok1401-voter-1',
+            role: 'member',
+          })
+          .returning(),
+        'u1',
+      );
+      const [u2] = nonEmpty(
+        await testApp.db
+          .insert(schema.users)
+          .values({
+            discordId: 'rok1401:voter-2',
+            username: 'rok1401-voter-2',
+            role: 'member',
+          })
+          .returning(),
+        'u2',
+      );
 
       await testApp.request
         .patch(`/lineups/${lineupId}/status`)

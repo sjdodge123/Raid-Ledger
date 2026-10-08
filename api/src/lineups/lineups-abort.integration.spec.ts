@@ -27,6 +27,7 @@ import * as schema from '../drizzle/schema';
 import { LineupsService } from './lineups.service';
 import { TiebreakerService } from './tiebreaker/tiebreaker.service';
 import type { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeLineupAbort() {
   let testApp: TestApp;
@@ -63,14 +64,17 @@ function describeLineupAbort() {
   async function loginAsOperator(): Promise<string> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('OperatorPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:abort-op@test.local',
-        username: 'abort-op',
-        role: 'operator',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:abort-op@test.local',
+          username: 'abort-op',
+          role: 'operator',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'abort-op@test.local',
       passwordHash: hash,
@@ -85,14 +89,17 @@ function describeLineupAbort() {
   async function loginAsMember(): Promise<string> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:abort-mem@test.local',
-        username: 'abort-mem',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:abort-mem@test.local',
+          username: 'abort-mem',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'abort-mem@test.local',
       passwordHash: hash,
@@ -147,16 +154,20 @@ function describeLineupAbort() {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('archived');
 
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'row',
+    );
     expect(row.status).toBe('archived');
 
     const log = await findActivityLog(id, 'lineup_aborted');
     expect(log).toHaveLength(1);
-    expect(log[0].metadata).toMatchObject({ reason: 'Test reason' });
-    expect(log[0].actorId).toBe(testApp.seed.adminUser.id);
+    const [entry] = nonEmpty(log, 'lineup_aborted log row');
+    expect(entry.metadata).toMatchObject({ reason: 'Test reason' });
+    expect(entry.actorId).toBe(testApp.seed.adminUser.id);
   });
 
   // ── AC 2 — operator abort without body ─────────────────────────────
@@ -171,7 +182,7 @@ function describeLineupAbort() {
 
     const log = await findActivityLog(id, 'lineup_aborted');
     expect(log).toHaveLength(1);
-    expect(log[0].metadata).toMatchObject({ reason: null });
+    expect(log[0]?.metadata).toMatchObject({ reason: null });
   });
 
   // ── AC 3 — member is forbidden ─────────────────────────────────────
@@ -183,10 +194,13 @@ function describeLineupAbort() {
     const res = await postAbort(memberToken, id, { reason: 'nope' });
     expect(res.status).toBe(403);
 
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'row',
+    );
     expect(row.status).toBe('building');
   });
 
@@ -211,10 +225,13 @@ function describeLineupAbort() {
     const res = await postAbort(adminToken, id, { reason: 'x'.repeat(501) });
     expect(res.status).toBe(400);
 
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'row',
+    );
     expect(row.status).toBe('building');
   });
 
@@ -229,16 +246,19 @@ function describeLineupAbort() {
       .set({ status: 'voting' })
       .where(eq(schema.communityLineups.id, id));
 
-    const [tb] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId: id,
-        mode: 'veto',
-        status: 'active',
-        tiedGameIds: [testApp.seed.game.id],
-        originalVoteCount: 1,
-      })
-      .returning();
+    const [tb] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId: id,
+          mode: 'veto',
+          status: 'active',
+          tiedGameIds: [testApp.seed.game.id],
+          originalVoteCount: 1,
+        })
+        .returning(),
+      'tb',
+    );
     await testApp.db
       .update(schema.communityLineups)
       .set({ activeTiebreakerId: tb.id })
@@ -247,16 +267,22 @@ function describeLineupAbort() {
     const res = await postAbort(adminToken, id, { reason: 'cancel TB' });
     expect(res.status).toBe(200);
 
-    const [tbAfter] = await testApp.db
-      .select()
-      .from(schema.communityLineupTiebreakers)
-      .where(eq(schema.communityLineupTiebreakers.id, tb.id));
+    const [tbAfter] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupTiebreakers)
+        .where(eq(schema.communityLineupTiebreakers.id, tb.id)),
+      'tbAfter',
+    );
     expect(['dismissed', 'resolved']).toContain(tbAfter.status);
 
-    const [lineup] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'lineup',
+    );
     expect(lineup.status).toBe('archived');
     expect(lineup.activeTiebreakerId).toBeNull();
   });
@@ -290,10 +316,13 @@ function describeLineupAbort() {
     }
 
     // The failed CAS left the drifted row untouched — it is NOT archived.
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'row',
+    );
     expect(row.status).toBe('voting');
   });
 
@@ -305,28 +334,34 @@ function describeLineupAbort() {
     // Create an event and link it to a match row for this lineup.
     const start = new Date(Date.now() + 24 * 60 * 60 * 1000);
     const end = new Date(Date.now() + 25 * 60 * 60 * 1000);
-    const [event] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'Linked Event for abort test',
-        gameId: testApp.seed.game.id,
-        duration: [start, end],
-        maxAttendees: 10,
-        creatorId: testApp.seed.adminUser.id,
-      })
-      .returning();
+    const [event] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'Linked Event for abort test',
+          gameId: testApp.seed.game.id,
+          duration: [start, end],
+          maxAttendees: 10,
+          creatorId: testApp.seed.adminUser.id,
+        })
+        .returning(),
+      'event',
+    );
 
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: id,
-        gameId: testApp.seed.game.id,
-        linkedEventId: event.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: id,
+          gameId: testApp.seed.game.id,
+          linkedEventId: event.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
 
     // Stamp the event with the match id (post-insert to satisfy FK).
     await testApp.db
@@ -341,10 +376,13 @@ function describeLineupAbort() {
     // on the linked event. The match's `linkedEventId` itself does not
     // need to be nulled — the contract is that the linked event no longer
     // points back to the lineup as a scheduling poll target.
-    const [eventAfter] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, event.id));
+    const [eventAfter] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id)),
+      'eventAfter',
+    );
     expect(eventAfter.reschedulingPollId ?? null).toBeNull();
   });
 

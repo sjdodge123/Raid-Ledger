@@ -30,6 +30,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('Scheduling poll page — terminal states (integration, ROK-1545)', () => {
   let testApp: TestApp;
@@ -54,14 +55,17 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
   ): Promise<{ id: number; token: string }> {
     const email = `pollstate-${suffix}@test.local`;
     const hash = await bcrypt.hash('PollStatePass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username: `pollstate-${suffix}`,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: `pollstate-${suffix}`,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -85,26 +89,32 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     visibility: 'public' | 'private' = 'public',
     extraMemberIds: number[] = [],
   ): Promise<SeededPoll> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Terminal State Poll',
-        createdBy: testApp.seed.adminUser.id,
-        status: 'decided',
-        visibility,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Terminal State Poll',
+          createdBy: testApp.seed.adminUser.id,
+          status: 'decided',
+          visibility,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     await testApp.db.insert(schema.communityLineupMatchMembers).values(
       [testApp.seed.adminUser.id, ...extraMemberIds].map((userId) => ({
         matchId: match.id,
@@ -113,14 +123,17 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
       })),
     );
     const slotTime = new Date('2099-04-01T19:00:00.000Z');
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId: match.id,
-        proposedTime: slotTime,
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId: match.id,
+          proposedTime: slotTime,
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot',
+    );
     return {
       lineupId: lineup.id,
       matchId: match.id,
@@ -197,12 +210,15 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     // `lower(duration)` string fed to `new Date()` parses as the jest
     // worker's LOCAL time, so under a non-UTC TZ the expectation itself
     // would drift by the host offset (TDB:1489) and mask a reader regression.
-    const [event] = await testApp.db
-      .select({
-        start: sql<string>`to_char(lower(${schema.events.duration}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
-      })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId));
+    const [event] = nonEmpty(
+      await testApp.db
+        .select({
+          start: sql<string>`to_char(lower(${schema.events.duration}), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId)),
+      'event',
+    );
     expect(event.start).toBe(poll.slotTime.toISOString());
     expect(res.body.lockedInTime).not.toBeNull();
     expect(res.body.lockedInTime).toBe(event.start);
@@ -223,10 +239,13 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     expect(cancel.status).toBe(200);
 
     // Persisted on the match row (migration 0184), not just in the notification.
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
     expect(match.cancellationReason).toBe(reason);
 
     const res = await getPoll(poll, adminToken);
@@ -267,10 +286,13 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     const res = await getPoll(poll, adminToken);
 
     expect(res.status).toBe(200);
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
     expect(match.status).toBe('scheduling');
     expect(match.linkedEventId).toBeNull();
     expect(res.body.pollStatus).toBe('closed');

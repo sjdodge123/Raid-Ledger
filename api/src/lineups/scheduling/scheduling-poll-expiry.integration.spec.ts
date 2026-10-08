@@ -30,6 +30,7 @@ import { NotificationService } from '../../notifications/notification.service';
 import { NotificationDedupService } from '../../notifications/notification-dedup.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
 import { SchedulingPollExpiryService } from './scheduling-poll-expiry.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -81,51 +82,63 @@ function describeSchedulingPollExpiry(): void {
 
   async function createUser(label: string, deactivated = false) {
     const suffix = `${label}-${++tag}`;
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:expiry-${suffix}`,
-        username: `expiry-${suffix}`,
-        role: 'member',
-        deactivatedAt: deactivated ? new Date() : null,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:expiry-${suffix}`,
+          username: `expiry-${suffix}`,
+          role: 'member',
+          deactivatedAt: deactivated ? new Date() : null,
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function insertLineupAndMatch(creatorId: number, opts: SeedOptions) {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name: `Expiry Game ${++tag}`, slug: `expiry-${tag}` })
-      .returning();
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Expiry Poll',
-        status: 'decided',
-        visibility: 'public',
-        createdBy: creatorId,
-        includeSchedulingPhase: true,
-        phaseDeadline: opts.nullDeadline
-          ? null
-          : new Date(Date.now() + opts.deadlineHours * HOUR_MS),
-        phaseDurationOverride: { standalone: true },
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-        embedMessageId: opts.embedMessageId ?? null,
-        embedChannelId: opts.embedMessageId ? 'chan-1' : null,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: `Expiry Game ${++tag}`, slug: `expiry-${tag}` })
+        .returning(),
+      'game',
+    );
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Expiry Poll',
+          status: 'decided',
+          visibility: 'public',
+          createdBy: creatorId,
+          includeSchedulingPhase: true,
+          phaseDeadline: opts.nullDeadline
+            ? null
+            : new Date(Date.now() + opts.deadlineHours * HOUR_MS),
+          phaseDurationOverride: { standalone: true },
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+          embedMessageId: opts.embedMessageId ?? null,
+          embedChannelId: opts.embedMessageId ? 'chan-1' : null,
+        })
+        .returning(),
+      'match',
+    );
     return { lineupId: lineup.id, matchId: match.id };
   }
 
@@ -135,14 +148,17 @@ function describeSchedulingPollExpiry(): void {
     const ids = await insertLineupAndMatch(creatorId, opts);
     const slotIds: number[] = [];
     for (const s of opts.slots ?? [{ hours: 20, votes: 1 }]) {
-      const [slot] = await testApp.db
-        .insert(schema.communityLineupScheduleSlots)
-        .values({
-          matchId: ids.matchId,
-          proposedTime: new Date(Date.now() + s.hours * HOUR_MS),
-          suggestedBy: 'user',
-        })
-        .returning();
+      const [slot] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineupScheduleSlots)
+          .values({
+            matchId: ids.matchId,
+            proposedTime: new Date(Date.now() + s.hours * HOUR_MS),
+            suggestedBy: 'user',
+          })
+          .returning(),
+        'slot',
+      );
       slotIds.push(slot.id);
       for (let i = 0; i < s.votes; i++) {
         const userId = await createUser(`${label}-v${i}`);
@@ -181,7 +197,7 @@ function describeSchedulingPollExpiry(): void {
 
     const dms = warningsTo(poll.creatorId);
     expect(dms).toHaveLength(1);
-    expect(dms[0].payload).toMatchObject({
+    expect(dms[0]?.payload).toMatchObject({
       subtype: 'scheduling_poll_expiry_warning',
       lineupId: poll.lineupId,
       matchId: poll.matchId,
@@ -211,17 +227,20 @@ function describeSchedulingPollExpiry(): void {
   it('does not warn a locked-in poll', async () => {
     const poll = await seedPoll('locked', { deadlineHours: 11 });
     const creator = await createUser('evt');
-    const [event] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'Locked',
-        creatorId: creator,
-        duration: [
-          new Date(Date.now() + 20 * HOUR_MS),
-          new Date(Date.now() + 22 * HOUR_MS),
-        ],
-      })
-      .returning();
+    const [event] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'Locked',
+          creatorId: creator,
+          duration: [
+            new Date(Date.now() + 20 * HOUR_MS),
+            new Date(Date.now() + 22 * HOUR_MS),
+          ],
+        })
+        .returning(),
+      'event',
+    );
     await testApp.db
       .update(schema.communityLineupMatches)
       .set({ linkedEventId: event.id })

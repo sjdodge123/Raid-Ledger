@@ -143,12 +143,15 @@ describe('setStar', () => {
 
     // A lock taken after the read would leave the race wide open. Stated as a
     // pair of booleans so a MISSING lock reports `[false, false]` rather than
-    // a `received value must be a number` matcher error.
+    // a `received value must be a number` matcher error. A missing read or
+    // write falls back to -Infinity, so it reports `false` the same way.
     expect(db.execute).toHaveBeenCalledTimes(1);
-    const lockedAt = db.execute.mock.invocationCallOrder[0];
+    const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
+    const readAt = db.select.mock.invocationCallOrder[0] ?? -Infinity;
+    const writeAt = db.update.mock.invocationCallOrder[0] ?? -Infinity;
     expect({
-      beforeTheRead: lockedAt < db.select.mock.invocationCallOrder[0],
-      beforeTheWrite: lockedAt < db.update.mock.invocationCallOrder[0],
+      beforeTheRead: lockedAt < readAt,
+      beforeTheWrite: lockedAt < writeAt,
     }).toEqual({ beforeTheRead: true, beforeTheWrite: true });
   });
 

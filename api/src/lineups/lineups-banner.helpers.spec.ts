@@ -74,8 +74,8 @@ describe('buildBannerResponse', () => {
     // ROK-1348: public lineup — eligible pool == totalMembers.
     expect(banner.votingEligibleCount).toBe(15);
     expect(banner.entries).toHaveLength(2);
-    expect(banner.entries[0].ownerCount).toBe(3);
-    expect(banner.entries[1].ownerCount).toBe(0);
+    expect(banner.entries[0]?.ownerCount).toBe(3);
+    expect(banner.entries[1]?.ownerCount).toBe(0);
   });
 
   it('includes voteCount per entry', () => {
@@ -93,7 +93,7 @@ describe('buildBannerResponse', () => {
     );
 
     const banner = result as LineupBannerResponseDto;
-    expect(banner.entries[0].voteCount).toBe(5);
+    expect(banner.entries[0]?.voteCount).toBe(5);
     expect(banner.totalVoters).toBe(3);
   });
 

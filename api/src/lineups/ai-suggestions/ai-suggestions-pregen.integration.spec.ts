@@ -43,6 +43,7 @@ import { LlmQuotaExhaustedError } from '../../ai/llm-errors';
 import { GameTasteService } from '../../game-taste/game-taste.service';
 import { computeVoterSetHash } from './voter-scope.helpers';
 import { quotaCooldownKey } from './quota-cooldown.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /**
  * The new pre-gen queue name. Resolved at runtime against the registry
@@ -152,15 +153,18 @@ function describePreGen() {
   }
 
   async function createGame(tag: string): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: `Pregen Game ${tag}`,
-        slug: `pregen-game-${tag}-${Date.now()}-${Math.random()
-          .toString(36)
-          .slice(2, 7)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: `Pregen Game ${tag}`,
+          slug: `pregen-game-${tag}-${Date.now()}-${Math.random()
+            .toString(36)
+            .slice(2, 7)}`,
+        })
+        .returning(),
+      'game',
+    );
     return game.id;
   }
 
@@ -464,12 +468,15 @@ function describePreGen() {
     // must force-regenerate (NOT noop_fresh) because a row already exists.
     await processor.process({ data: { lineupId, reason: 'mutation' } });
 
-    const [row] = await testApp.db
-      .select({ generatedAt: schema.lineupAiSuggestions.generatedAt })
-      .from(schema.lineupAiSuggestions)
-      .where(eq(schema.lineupAiSuggestions.lineupId, lineupId))
-      .orderBy(desc(schema.lineupAiSuggestions.generatedAt))
-      .limit(1);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ generatedAt: schema.lineupAiSuggestions.generatedAt })
+        .from(schema.lineupAiSuggestions)
+        .where(eq(schema.lineupAiSuggestions.lineupId, lineupId))
+        .orderBy(desc(schema.lineupAiSuggestions.generatedAt))
+        .limit(1),
+      'row',
+    );
     // Regenerated → generated_at advanced past the seeded (old) timestamp.
     expect(new Date(row.generatedAt).getTime()).toBeGreaterThan(
       oldStamp.getTime(),
@@ -552,14 +559,17 @@ function describePreGen() {
       gameId: number;
       name: string;
     }> {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Quota Candidate ${Date.now()}`,
-          slug: `quota-candidate-${Date.now()}`,
-          playerCount: { min: 1, max: 16 },
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Quota Candidate ${Date.now()}`,
+            slug: `quota-candidate-${Date.now()}`,
+            playerCount: { min: 1, max: 16 },
+          })
+          .returning(),
+        'game',
+      );
       return { gameId: game.id, name: game.name };
     }
 

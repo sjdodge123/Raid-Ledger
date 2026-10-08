@@ -52,12 +52,15 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
     const action = await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
 
     // Stated as booleans so a MISSING lock reports `false` rather than a
-    // `received value must be a number` matcher error.
+    // `received value must be a number` matcher error. A missing read or
+    // insert falls back to -Infinity, so it reports `false` the same way.
     const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
+    const readAt = db.select.mock.invocationCallOrder[0] ?? -Infinity;
+    const insertAt = db.insert.mock.invocationCallOrder[0] ?? -Infinity;
     expect({
       action,
-      beforeTheRead: lockedAt < db.select.mock.invocationCallOrder[0],
-      beforeTheWrite: lockedAt < db.insert.mock.invocationCallOrder[0],
+      beforeTheRead: lockedAt < readAt,
+      beforeTheWrite: lockedAt < insertAt,
     }).toEqual({ action: 'added', beforeTheRead: true, beforeTheWrite: true });
   });
 
@@ -67,9 +70,10 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
     const action = await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
 
     const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
+    const deleteAt = db.delete.mock.invocationCallOrder[0] ?? -Infinity;
     expect({
       action,
-      beforeTheDelete: lockedAt < db.delete.mock.invocationCallOrder[0],
+      beforeTheDelete: lockedAt < deleteAt,
     }).toEqual({ action: 'removed', beforeTheDelete: true });
   });
 });

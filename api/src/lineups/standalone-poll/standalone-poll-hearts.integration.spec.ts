@@ -22,6 +22,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
+import { nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -40,14 +41,17 @@ const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 /** A member who exists only to carry a vote row — no login needed. */
 async function createMember(tag: string): Promise<number> {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${tag}@test.local`,
-      username: tag,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${tag}@test.local`,
+        username: tag,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   return user.id;
 }
 
@@ -63,10 +67,13 @@ async function openPoll(): Promise<number> {
 
 /** Add a proposed time slot to the poll's match. */
 async function addSlot(matchId: number, proposedTime: Date): Promise<number> {
-  const [slot] = await testApp.db
-    .insert(schema.communityLineupScheduleSlots)
-    .values({ matchId, proposedTime, suggestedBy: 'user' })
-    .returning();
+  const [slot] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupScheduleSlots)
+      .values({ matchId, proposedTime, suggestedBy: 'user' })
+      .returning(),
+    'slot',
+  );
   return slot.id;
 }
 
@@ -83,16 +90,19 @@ async function addVote(
 
 /** The event the lock-in signs the winning slot's voters up to. */
 async function createEvent(start: Date): Promise<number> {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Locked In',
-      gameId: testApp.seed.game.id,
-      duration: [start, new Date(start.getTime() + TWO_HOURS_MS)],
-      maxAttendees: 10,
-      creatorId: testApp.seed.adminUser.id,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Locked In',
+        gameId: testApp.seed.game.id,
+        duration: [start, new Date(start.getTime() + TWO_HOURS_MS)],
+        maxAttendees: 10,
+        creatorId: testApp.seed.adminUser.id,
+      })
+      .returning(),
+    'event',
+  );
   return event.id;
 }
 

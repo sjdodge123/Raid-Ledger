@@ -17,6 +17,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { at } from '../../common/testing/narrow';
 jest.mock('./scheduling-query.helpers', () => ({
   ...jest.requireActual('./scheduling-query.helpers'),
   findScheduleSlots: jest.fn().mockResolvedValue([]),
@@ -318,8 +319,8 @@ describe('SchedulingPollEmbedService.onMatchEnteredScheduling (ROK-1473)', () =>
     );
     // Fresh data: the embed was built twice, once per render.
     expect(buildSchedulingPollEmbed).toHaveBeenCalledTimes(2);
-    const sendOrder = sendEmbed.mock.invocationCallOrder[0];
-    const editOrder = editEmbed.mock.invocationCallOrder[0];
+    const sendOrder = at(sendEmbed.mock.invocationCallOrder, 0);
+    const editOrder = at(editEmbed.mock.invocationCallOrder, 0);
     expect(editOrder).toBeGreaterThan(sendOrder);
   });
 

@@ -4,6 +4,7 @@
  */
 import { NotFoundException } from '@nestjs/common';
 import { buildDetailResponse } from './lineups-response.helpers';
+import { at } from '../common/testing/narrow';
 
 const NOW = new Date('2026-03-22T20:00:00Z');
 
@@ -162,7 +163,7 @@ describe('buildDetailResponse', () => {
     expect(result.totalMembers).toBe(15);
     expect(result.entries).toHaveLength(1);
 
-    const entry = result.entries[0];
+    const entry = at(result.entries, 0);
     expect(entry.gameId).toBe(42);
     expect(entry.ownerCount).toBe(8);
     expect(entry.totalMembers).toBe(15);
@@ -217,7 +218,7 @@ describe('buildDetailResponse', () => {
 
     const result = await buildDetailResponse(mockDb as any, 1);
 
-    const entry = result.entries[0];
+    const entry = at(result.entries, 0);
     expect(entry.ownerCount).toBe(0);
     expect(entry.totalMembers).toBe(10);
     expect(entry.nonOwnerCount).toBe(10);
@@ -297,7 +298,7 @@ describe('buildDetailResponse', () => {
 
     const result = await buildDetailResponse(mockDb as any, 1);
 
-    const entry = result.entries[0];
+    const entry = at(result.entries, 0);
     // Displayed ownerCount stays community-wide.
     expect(entry.ownerCount).toBe(8);
     // eligible pool = 3 (creator + 2 invitees); all 3 own → 0 non-owners.
@@ -361,7 +362,7 @@ describe('buildDetailResponse', () => {
 
     const result = await buildDetailResponse(mockDb as any, 1);
 
-    const entry = result.entries[0];
+    const entry = at(result.entries, 0);
     expect(entry.ownerCount).toBe(10);
     // Pre-fix this clamped to max(0, 3 - 10) = 0; correct value is 3.
     expect(entry.nonOwnerCount).toBe(3);

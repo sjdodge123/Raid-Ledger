@@ -34,6 +34,7 @@ import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { NotificationService } from '../../notifications/notification.service';
 import { NotificationDedupService } from '../../notifications/notification-dedup.service';
 import { SchedulingPollNudgeService } from './scheduling-poll-nudge.service';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Mirrors POLL_NUDGE_TTL_SECONDS — asserted verbatim so a ms/s slip fails. */
@@ -45,7 +46,7 @@ interface PollSetup {
   gameId: number;
   gameName: string;
   creatorId: number;
-  memberIds: number[];
+  memberIds: readonly [number, ...number[]];
 }
 
 interface SeedOptions {
@@ -101,15 +102,18 @@ function describeSchedulingPollNudge(): void {
     opts: { deactivated?: boolean } = {},
   ): Promise<number> {
     const suffix = `${label}-${++tag}`;
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:nudge-${suffix}`,
-        username: `nudge-${suffix}`,
-        role: 'member',
-        deactivatedAt: opts.deactivated ? new Date() : null,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:nudge-${suffix}`,
+          username: `nudge-${suffix}`,
+          role: 'member',
+          deactivatedAt: opts.deactivated ? new Date() : null,
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
@@ -117,10 +121,13 @@ function describeSchedulingPollNudge(): void {
     label: string,
   ): Promise<{ id: number; name: string }> {
     const name = `Nudge Game ${label}-${++tag}`;
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug: `nudge-${label}-${tag}` })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name, slug: `nudge-${label}-${tag}` })
+        .returning(),
+      'game',
+    );
     return { id: game.id, name: game.name };
   }
 
@@ -130,24 +137,27 @@ function describeSchedulingPollNudge(): void {
     opts: SeedOptions,
   ): Promise<number> {
     const deadlineHours = opts.deadlineHours ?? null;
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Nudge Scheduling Poll',
-        status: opts.lineupStatus ?? 'decided',
-        visibility: 'public',
-        createdBy: creatorId,
-        includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
-        phaseDeadline:
-          deadlineHours === null
-            ? null
-            : new Date(Date.now() + deadlineHours * HOUR_MS),
-        phaseDurationOverride:
-          (opts.standalone ?? true) ? { standalone: true } : null,
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Nudge Scheduling Poll',
+          status: opts.lineupStatus ?? 'decided',
+          visibility: 'public',
+          createdBy: creatorId,
+          includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
+          phaseDeadline:
+            deadlineHours === null
+              ? null
+              : new Date(Date.now() + deadlineHours * HOUR_MS),
+          phaseDurationOverride:
+            (opts.standalone ?? true) ? { standalone: true } : null,
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
     return lineup.id;
   }
 
@@ -162,16 +172,19 @@ function describeSchedulingPollNudge(): void {
     const creatorId = await createUser(`${label}-creator`);
     const game = await createGame(label);
     const lineupId = await insertLineup(creatorId, opts);
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId,
-        gameId: game.id,
-        status: opts.matchStatus ?? 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId,
+          gameId: game.id,
+          status: opts.matchStatus ?? 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
 
     const memberIds: number[] = [];
     for (let i = 0; i < (opts.members ?? 1); i++) {
@@ -187,7 +200,7 @@ function describeSchedulingPollNudge(): void {
       gameId: game.id,
       gameName: game.name,
       creatorId,
-      memberIds,
+      memberIds: nonEmpty(memberIds, 'member ids'),
     };
   }
 
@@ -213,14 +226,17 @@ function describeSchedulingPollNudge(): void {
     matchId: number,
     hoursFromNow: number,
   ): Promise<number> {
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date(Date.now() + hoursFromNow * HOUR_MS),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date(Date.now() + hoursFromNow * HOUR_MS),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
     return slot.id;
   }
 
@@ -267,7 +283,8 @@ function describeSchedulingPollNudge(): void {
 
   it('does NOT nudge a member who voted on a still-future slot', async () => {
     const poll = await seedPoll('future-vote', { members: 2 });
-    const [voter, nonVoter] = poll.memberIds;
+    const voter = at(poll.memberIds, 0);
+    const nonVoter = at(poll.memberIds, 1);
     const futureSlot = await addSlot(poll.matchId, 96);
     await castVote(futureSlot, voter);
 
@@ -291,7 +308,7 @@ function describeSchedulingPollNudge(): void {
     const dms = dmsForUser(member);
     expect(dms.length).toBe(1);
     // A future slot still exists -> normal copy, not the stalled variant.
-    expect(dms[0].title).toBe('Scheduling poll waiting on you');
+    expect(dms[0]?.title).toBe('Scheduling poll waiting on you');
   });
 
   // ── 4. stalled poll copy variant ───────────────────────────────────
@@ -313,7 +330,7 @@ function describeSchedulingPollNudge(): void {
         matchId: poll.matchId,
       }),
     });
-    expect(dms[0].message).toContain(poll.gameName);
+    expect(dms[0]?.message).toContain(poll.gameName);
   });
 
   // ── 4b. never-had-slots copy variant ───────────────────────────────
@@ -330,7 +347,7 @@ function describeSchedulingPollNudge(): void {
       title: 'Scheduling poll needs times',
       message: expect.stringContaining('No days have been proposed'),
     });
-    expect(dms[0].message).toContain(poll.gameName);
+    expect(dms[0]?.message).toContain(poll.gameName);
   });
 
   // ── 5. member grace period ─────────────────────────────────────────

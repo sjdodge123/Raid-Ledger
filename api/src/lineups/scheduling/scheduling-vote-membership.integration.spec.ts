@@ -27,6 +27,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 describe('Scheduling poll voting — open-roster member enrollment (integration)', () => {
   let testApp: TestApp;
@@ -50,14 +51,17 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
   ): Promise<{ id: number; token: string }> {
     const email = `voter-${suffix}@test.local`;
     const hash = await bcrypt.hash('VoterPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username: `voter-${suffix}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: `voter-${suffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -80,39 +84,48 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     matchId: number;
     slotId: number;
   }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Open Roster Poll',
-        createdBy: testApp.seed.adminUser.id,
-        status: 'decided',
-        visibility,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Open Roster Poll',
+          createdBy: testApp.seed.adminUser.id,
+          status: 'decided',
+          visibility,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     await testApp.db.insert(schema.communityLineupMatchMembers).values({
       matchId: match.id,
       userId: testApp.seed.adminUser.id,
       source: 'voted',
     });
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId: match.id,
-        proposedTime: new Date('2099-04-01T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId: match.id,
+          proposedTime: new Date('2099-04-01T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot',
+    );
     return { lineupId: lineup.id, matchId: match.id, slotId: slot.id };
   }
 
@@ -167,7 +180,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     expect(rows).toHaveLength(1);
     // 'bandwagon' — joined after the decide-time snapshot; 'voted' is
     // reserved for game-phase voters (DecidedView matched-voter math).
-    expect(rows[0].source).toBe('bandwagon');
+    expect(rows[0]?.source).toBe('bandwagon');
 
     // Bug A regression: the poll page now counts the voter as a member,
     // so the "N of M have voted" denominator can never undercount voters.
@@ -188,14 +201,17 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
   it('re-voting and multi-slot voting keep a single member row', async () => {
     const voter = await createVoter('idempotent');
     const { lineupId, matchId, slotId } = await seedPoll();
-    const [slot2] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date('2099-04-02T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [slot2] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date('2099-04-02T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot2',
+    );
 
     await postVote(voter.token, lineupId, matchId, slotId);
     await postVote(voter.token, lineupId, matchId, slot2.id);
@@ -241,11 +257,11 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const afterFlip = await voteRows(voter.id);
     expect(afterFlip).toHaveLength(1);
-    expect(afterFlip[0].slotId).toBe(slotId);
-    expect(afterFlip[0].stance).toBe('no');
+    expect(at(afterFlip, 0).slotId).toBe(slotId);
+    expect(afterFlip[0]?.stance).toBe('no');
     // Answering "that time does not work" is still an answer.
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).not.toBeNull();
 
     // Pressing "no" again is the misclick escape hatch: back to not-answered.
@@ -282,7 +298,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const rows = await memberRows(matchId, voter.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe('bandwagon');
+    expect(rows[0]?.source).toBe('bandwagon');
   });
 
   // ── ROK-1544: the vote IS the submit — server-stamped scheduling_submitted_at
@@ -296,41 +312,47 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const rows = await memberRows(matchId, voter.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].schedulingSubmittedAt).not.toBeNull();
+    expect(at(rows, 0).schedulingSubmittedAt).not.toBeNull();
   });
 
   it('a second vote does NOT re-stamp — the stamp marks the first answer', async () => {
     const voter = await createVoter('restamp');
     const { lineupId, matchId, slotId } = await seedPoll();
-    const [slot2] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date('2099-04-03T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [slot2] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date('2099-04-03T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot2',
+    );
 
     await postVote(voter.token, lineupId, matchId, slotId);
-    const [first] = await memberRows(matchId, voter.id);
+    const [first] = nonEmpty(await memberRows(matchId, voter.id), 'first');
     expect(first.schedulingSubmittedAt).not.toBeNull();
 
     await postVote(voter.token, lineupId, matchId, slot2.id);
-    const [second] = await memberRows(matchId, voter.id);
+    const [second] = nonEmpty(await memberRows(matchId, voter.id), 'second');
     expect(second.schedulingSubmittedAt).toEqual(first.schedulingSubmittedAt);
   });
 
   it('withdrawing the LAST vote clears the stamp; withdrawing one of two does not', async () => {
     const voter = await createVoter('withdraw');
     const { lineupId, matchId, slotId } = await seedPoll();
-    const [slot2] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date('2099-04-04T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [slot2] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date('2099-04-04T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot2',
+    );
 
     await postVote(voter.token, lineupId, matchId, slotId);
     await postVote(voter.token, lineupId, matchId, slot2.id);
@@ -338,14 +360,14 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     // One of two withdrawn — they still have an answer on record.
     await postVote(voter.token, lineupId, matchId, slot2.id);
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).not.toBeNull();
 
     // The last one withdrawn — back to "has not answered".
     const off = await postVote(voter.token, lineupId, matchId, slotId);
     expect(off.body).toEqual({ voted: false, stance: null });
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).toBeNull();
   });
 
@@ -359,7 +381,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
       .set('Authorization', `Bearer ${voter.token}`);
     expect(res.status).toBeLessThan(300);
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).toBeNull();
   });
 
@@ -374,7 +396,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     expect(res.status).toBe(201);
 
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).not.toBeNull();
   });
 
@@ -392,28 +414,37 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     const pollA = await seedPoll();
     // Second match under the same lineup with its own slot. Needs a second
     // game — (lineup_id, game_id) is unique on matches.
-    const [gameB] = await testApp.db
-      .insert(schema.games)
-      .values({ name: 'Cross Match Game B', slug: 'cross-match-game-b' })
-      .returning();
-    const [matchB] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: pollA.lineupId,
-        gameId: gameB.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
-    const [slotB] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId: matchB.id,
-        proposedTime: new Date('2099-06-01T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [gameB] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Cross Match Game B', slug: 'cross-match-game-b' })
+        .returning(),
+      'gameB',
+    );
+    const [matchB] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: pollA.lineupId,
+          gameId: gameB.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'matchB',
+    );
+    const [slotB] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId: matchB.id,
+          proposedTime: new Date('2099-06-01T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slotB',
+    );
 
     // Vote against match A's URL with match B's slot — must be rejected.
     const res = await postVote(
@@ -496,14 +527,17 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
   /** Add a slot whose time is already behind us. */
   async function addPastSlot(matchId: number): Promise<number> {
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date(Date.now() - 60 * 60 * 1000),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date(Date.now() - 60 * 60 * 1000),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
     return slot.id;
   }
 

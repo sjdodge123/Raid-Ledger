@@ -22,6 +22,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { toggleVote } from './lineups-voting.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 type Db = TestApp['db'];
 type VoteKey = { lineupId: number; userId: number; gameId: number };
@@ -60,8 +61,9 @@ async function raceBehindBlocker(
   await db
     .transaction(async (tx) => {
       await tx.insert(schema.communityLineupVotes).values(held);
-      const [{ pid }] = await tx.execute<{ pid: number }>(
-        sql`SELECT pg_backend_pid() AS pid`,
+      const [{ pid }] = nonEmpty(
+        await tx.execute<{ pid: number }>(sql`SELECT pg_backend_pid() AS pid`),
+        'backend pid row',
       );
       settled = Promise.allSettled(toggles.map((t) => t()));
       await waitFor(async () => {
@@ -80,20 +82,26 @@ async function seedVotingLineup(
   db: Db,
   userId: number,
 ): Promise<{ lineupId: number; gameB: number }> {
-  const [other] = await db
-    .insert(schema.games)
-    .values({ name: 'Toggle Race B', slug: `toggle-race-b-${Date.now()}` })
-    .returning();
-  const [lineup] = await db
-    .insert(schema.communityLineups)
-    .values({
-      title: 'Toggle race',
-      status: 'voting',
-      visibility: 'public',
-      createdBy: userId,
-      publicSlug: `tglrace${Date.now() % 1e8}`,
-    })
-    .returning();
+  const [other] = nonEmpty(
+    await db
+      .insert(schema.games)
+      .values({ name: 'Toggle Race B', slug: `toggle-race-b-${Date.now()}` })
+      .returning(),
+    'other',
+  );
+  const [lineup] = nonEmpty(
+    await db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'Toggle race',
+        status: 'voting',
+        visibility: 'public',
+        createdBy: userId,
+        publicSlug: `tglrace${Date.now() % 1e8}`,
+      })
+      .returning(),
+    'lineup',
+  );
   return { lineupId: lineup.id, gameB: other.id };
 }
 

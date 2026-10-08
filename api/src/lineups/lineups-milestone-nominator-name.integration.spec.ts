@@ -15,6 +15,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { getEntryDetails } from './lineups-milestone.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeMilestoneNominatorName() {
   let testApp: TestApp;
@@ -52,23 +53,29 @@ function describeMilestoneNominatorName() {
     username: string,
     displayName: string | null,
   ): Promise<number> {
-    const [row] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${username}@test.local`,
-        username,
-        displayName,
-        role: 'member',
-      })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${username}@test.local`,
+          username,
+          displayName,
+          role: 'member',
+        })
+        .returning(),
+      'row',
+    );
     return row.id;
   }
 
   async function insertGame(slug: string): Promise<number> {
-    const [row] = await testApp.db
-      .insert(schema.games)
-      .values({ name: slug, slug, coverUrl: null, igdbId: null })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: slug, slug, coverUrl: null, igdbId: null })
+        .returning(),
+      'row',
+    );
     return row.id;
   }
 
@@ -80,14 +87,17 @@ function describeMilestoneNominatorName() {
    * room for a 13-digit id.
    */
   async function insertLineup(createdBy: number): Promise<number> {
-    const [row] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Milestone name lineup',
-        createdBy,
-        publicSlug: `ls-${createdBy}`,
-      })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Milestone name lineup',
+          createdBy,
+          publicSlug: `ls-${createdBy}`,
+        })
+        .returning(),
+      'row',
+    );
     return row.id;
   }
 
@@ -105,7 +115,10 @@ function describeMilestoneNominatorName() {
     const lineupId = await insertLineup(namelessId);
     await nominate(lineupId, namelessId, 'milestone-name-g1');
 
-    const [entry] = await getEntryDetails(testApp.db, lineupId);
+    const [entry] = nonEmpty(
+      await getEntryDetails(testApp.db, lineupId),
+      'entry',
+    );
 
     expect(entry.nominatorName).toBe('halo_fan');
     expect(entry.nominatorName).not.toBe('Unknown');
@@ -116,7 +129,10 @@ function describeMilestoneNominatorName() {
     const lineupId = await insertLineup(namedId);
     await nominate(lineupId, namedId, 'milestone-name-g2');
 
-    const [entry] = await getEntryDetails(testApp.db, lineupId);
+    const [entry] = nonEmpty(
+      await getEntryDetails(testApp.db, lineupId),
+      'entry',
+    );
 
     expect(entry.nominatorName).toBe('Rock and Stone');
   });

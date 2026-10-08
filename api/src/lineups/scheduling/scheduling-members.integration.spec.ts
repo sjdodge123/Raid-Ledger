@@ -21,6 +21,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { GAME_TIME_FRESHNESS_DAYS } from '../../users/game-time-freshness.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 function describeSchedulingMembers() {
   let testApp: TestApp;
@@ -42,14 +43,17 @@ function describeSchedulingMembers() {
   ): Promise<{ id: number; token: string }> {
     const email = `members-${suffix}@test.local`;
     const hash = await bcrypt.hash('MembersPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:members-${suffix}`,
-        username: `members-${suffix}`,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:members-${suffix}`,
+          username: `members-${suffix}`,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -65,27 +69,33 @@ function describeSchedulingMembers() {
     creatorId: number,
     visibility: 'public' | 'private' = 'public',
   ): Promise<{ lineupId: number; matchId: number }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: `Members Poll ${generatePublicSlug()}`,
-        createdBy: creatorId,
-        status: 'decided',
-        visibility,
-        publicSlug: generatePublicSlug(),
-        includeSchedulingPhase: true,
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: `Members Poll ${generatePublicSlug()}`,
+          createdBy: creatorId,
+          status: 'decided',
+          visibility,
+          publicSlug: generatePublicSlug(),
+          includeSchedulingPhase: true,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     await testApp.db.insert(schema.communityLineupMatchMembers).values({
       matchId: match.id,
       userId: creatorId,

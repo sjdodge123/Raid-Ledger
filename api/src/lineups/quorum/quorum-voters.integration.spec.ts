@@ -20,6 +20,7 @@ import {
   loadExpectedVoters,
   loadQuorumGatingVoters,
 } from './quorum-voters.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
@@ -42,14 +43,17 @@ describe('quorum voter resolution (ROK-1150)', () => {
   });
 
   async function makeUser(tag: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}-${Math.random().toString(36).slice(2, 8)}`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}-${Math.random().toString(36).slice(2, 8)}`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
@@ -57,13 +61,16 @@ describe('quorum voter resolution (ROK-1150)', () => {
     creator = await makeUser('quorum-creator');
     alice = await makeUser('quorum-alice');
     bob = await makeUser('quorum-bob');
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Quorum Game',
-        slug: `quorum-game-${Math.random().toString(36).slice(2, 8)}`,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Quorum Game',
+          slug: `quorum-game-${Math.random().toString(36).slice(2, 8)}`,
+        })
+        .returning(),
+      'game',
+    );
     gameId = game.id;
   });
 
@@ -72,17 +79,20 @@ describe('quorum voter resolution (ROK-1150)', () => {
     status: 'building' | 'voting',
     phaseDeadline: Date | null,
   ): Promise<LineupRow> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Quorum Test',
-        createdBy: creator,
-        visibility,
-        status,
-        phaseDeadline,
-        publicSlug: Math.random().toString(36).slice(2, 12),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Quorum Test',
+          createdBy: creator,
+          visibility,
+          status,
+          phaseDeadline,
+          publicSlug: Math.random().toString(36).slice(2, 12),
+        })
+        .returning(),
+      'lineup',
+    );
     return lineup;
   }
 
@@ -214,10 +224,13 @@ describe('quorum voter resolution (ROK-1150)', () => {
       await invite(lineup.id, [alice, bob]);
       await vote(lineup.id, alice);
 
-      const [fresh] = await testApp.db
-        .select()
-        .from(schema.communityLineups)
-        .where(eq(schema.communityLineups.id, lineup.id));
+      const [fresh] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.communityLineups)
+          .where(eq(schema.communityLineups.id, lineup.id)),
+        'fresh',
+      );
 
       expect(sorted(await loadQuorumGatingVoters(testApp.db, fresh))).toEqual(
         sorted([creator, alice]),
