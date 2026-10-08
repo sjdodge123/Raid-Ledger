@@ -25,7 +25,7 @@ export function BracketProgress({ matchups }: Props): JSX.Element | null {
         >
             <span className="uppercase tracking-wider text-muted">Bracket progress</span>
             <span className="text-foreground tabular-nums">
-                Voted in <span className="font-semibold text-emerald-300">{done}</span> of {total} matchups
+                Voted in <span className="font-semibold text-success">{done}</span> of {total} matchups
             </span>
         </div>
     );

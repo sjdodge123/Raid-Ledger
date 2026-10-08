@@ -16,7 +16,7 @@ function GameSlot({ name, isWinner }: { name: string; isWinner: boolean }): JSX.
     return (
         <span
             data-testid="matchup-game-name"
-            className={`text-sm font-medium ${isWinner ? 'text-emerald-400' : 'text-foreground'}`}
+            className={`text-sm font-medium ${isWinner ? 'text-success' : 'text-foreground'}`}
         >
             {name}
         </span>
@@ -57,7 +57,7 @@ export function BracketMatchupCard({ matchup, lineupId }: Props): JSX.Element {
                         </button>
                     )}
                     {matchup.isCompleted && matchup.winnerGameId === matchup.gameA.gameId && (
-                        <span data-testid="matchup-winner" className="ml-2 text-xs text-emerald-400">Winner</span>
+                        <span data-testid="matchup-winner" className="ml-2 text-xs text-success">Winner</span>
                     )}
                 </div>
                 <span className="text-xs text-dim">vs</span>
@@ -78,7 +78,7 @@ export function BracketMatchupCard({ matchup, lineupId }: Props): JSX.Element {
                         </button>
                     )}
                     {matchup.isCompleted && matchup.winnerGameId === matchup.gameB?.gameId && (
-                        <span data-testid="matchup-winner" className="ml-2 text-xs text-emerald-400">Winner</span>
+                        <span data-testid="matchup-winner" className="ml-2 text-xs text-success">Winner</span>
                     )}
                 </div>
             </div>

@@ -46,7 +46,7 @@ export function VetoGameCard({
             data-eliminated={isEliminated ? 'true' : undefined}
             aria-label={isMyVeto ? `You eliminated ${gameName}` : undefined}
             className={`relative bg-panel border rounded-lg p-3 transition-colors ${
-                isWinner ? 'border-emerald-500' : isEliminated ? 'border-red-500/40 opacity-60' : 'border-edge'
+                isWinner ? 'border-success' : isEliminated ? 'border-danger/40 opacity-60' : 'border-edge'
             }`}
         >
             {isEliminated && (
@@ -54,14 +54,14 @@ export function VetoGameCard({
                     data-testid="strikethrough-overlay"
                     className="absolute inset-0 flex items-center justify-center pointer-events-none"
                 >
-                    <div className="w-full h-0.5 bg-red-500 rotate-[-5deg]" />
+                    <div className="w-full h-0.5 bg-danger rotate-[-5deg]" />
                 </div>
             )}
 
             {isWinner && (
                 <div
                     data-testid="veto-winner"
-                    className="absolute -top-2 -right-2 px-2 py-0.5 text-xs font-bold bg-emerald-600 text-white rounded-full"
+                    className="absolute -top-2 -right-2 px-2 py-0.5 text-xs font-bold bg-success text-white rounded-full"
                 >
                     Winner
                 </div>
@@ -101,7 +101,7 @@ export function VetoGameCard({
             )}
 
             {isMyVeto && (
-                <div className="mt-2 text-xs text-red-400 font-medium">Your veto</div>
+                <div className="mt-2 text-xs text-danger font-medium">Your veto</div>
             )}
         </div>
     );
