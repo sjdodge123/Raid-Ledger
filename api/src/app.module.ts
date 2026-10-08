@@ -54,6 +54,7 @@ import { CommunityInsightsModule } from './community-insights/community-insights
 import { SlowQueriesModule } from './slow-queries/slow-queries.module';
 import { CspReportModule } from './csp-report/csp-report.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
+import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
 
 @Module({
   imports: [
@@ -109,6 +110,7 @@ import { GamesLookupModule } from './games-lookup/games-lookup.module';
     SlowQueriesModule,
     CspReportModule,
     GamesLookupModule,
+    CalendarSyncModule,
   ],
   controllers: [AppController],
   providers: [
