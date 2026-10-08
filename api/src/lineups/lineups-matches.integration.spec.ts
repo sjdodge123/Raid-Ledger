@@ -90,10 +90,10 @@ async function loginAsMember(
 }
 
 async function createGame(name: string, slug: string) {
-  const [game] = await testApp.db
-    .insert(schema.games)
-    .values({ name, slug })
-    .returning();
+  const [game] = nonEmpty(
+    await testApp.db.insert(schema.games).values({ name, slug }).returning(),
+    'game',
+  );
   return game;
 }
 
