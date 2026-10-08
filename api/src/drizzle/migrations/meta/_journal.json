@@ -1408,6 +1408,13 @@
       "when": 1791483040367,
       "tag": "0201_lfg_intents_converted_at",
       "breakpoints": true
+    },
+    {
+      "idx": 202,
+      "version": "7",
+      "when": 1791495918371,
+      "tag": "0202_calendar_sync_foundation",
+      "breakpoints": true
     }
   ]
 }
