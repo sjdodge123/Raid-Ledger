@@ -61,8 +61,9 @@ async function raceBehindBlocker(
   await db
     .transaction(async (tx) => {
       await tx.insert(schema.communityLineupVotes).values(held);
-      const [{ pid }] = await tx.execute<{ pid: number }>(
-        sql`SELECT pg_backend_pid() AS pid`,
+      const [{ pid }] = nonEmpty(
+        await tx.execute<{ pid: number }>(sql`SELECT pg_backend_pid() AS pid`),
+        'backend pid row',
       );
       settled = Promise.allSettled(toggles.map((t) => t()));
       await waitFor(async () => {

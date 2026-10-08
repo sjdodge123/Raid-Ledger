@@ -10,6 +10,7 @@
  */
 import { BadRequestException } from '@nestjs/common';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { defined } from '../common/testing/narrow';
 import {
   findUserStar,
   isGameNominated,
@@ -145,10 +146,18 @@ describe('setStar', () => {
     // pair of booleans so a MISSING lock reports `[false, false]` rather than
     // a `received value must be a number` matcher error.
     expect(db.execute).toHaveBeenCalledTimes(1);
-    const lockedAt = db.execute.mock.invocationCallOrder[0];
+    const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
+    const readAt = defined(
+      db.select.mock.invocationCallOrder[0],
+      'the row read',
+    );
+    const writeAt = defined(
+      db.update.mock.invocationCallOrder[0],
+      'the row write',
+    );
     expect({
-      beforeTheRead: lockedAt < db.select.mock.invocationCallOrder[0],
-      beforeTheWrite: lockedAt < db.update.mock.invocationCallOrder[0],
+      beforeTheRead: lockedAt < readAt,
+      beforeTheWrite: lockedAt < writeAt,
     }).toEqual({ beforeTheRead: true, beforeTheWrite: true });
   });
 

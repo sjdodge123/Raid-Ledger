@@ -227,7 +227,7 @@ function describeParticipants() {
     expect(res.status).toBe(200);
     const participants = res.body.participants as ParticipantRow[];
     expect(participants).toHaveLength(1);
-    expect(participants[0].userId).toBe(testApp.seed.adminUser.id);
+    expect(participants[0]?.userId).toBe(testApp.seed.adminUser.id);
     expect(participants[0]?.role).toBe('creator');
     expect(participants[0]?.status).toBe('waiting');
   });

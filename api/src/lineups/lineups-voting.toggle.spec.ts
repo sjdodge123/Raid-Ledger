@@ -10,6 +10,7 @@
  * that makes it hold — the lock comes before any row is read or written.
  */
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { defined } from '../common/testing/narrow';
 import { STAR_LOCK_CLASS, toggleVote } from './lineups-voting.helpers';
 
 type Db = Parameters<typeof toggleVote>[0];
@@ -54,10 +55,18 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
     // Stated as booleans so a MISSING lock reports `false` rather than a
     // `received value must be a number` matcher error.
     const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
+    const readAt = defined(
+      db.select.mock.invocationCallOrder[0],
+      'the vote read',
+    );
+    const insertAt = defined(
+      db.insert.mock.invocationCallOrder[0],
+      'the insert',
+    );
     expect({
       action,
-      beforeTheRead: lockedAt < db.select.mock.invocationCallOrder[0],
-      beforeTheWrite: lockedAt < db.insert.mock.invocationCallOrder[0],
+      beforeTheRead: lockedAt < readAt,
+      beforeTheWrite: lockedAt < insertAt,
     }).toEqual({ action: 'added', beforeTheRead: true, beforeTheWrite: true });
   });
 
@@ -67,9 +76,13 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
     const action = await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
 
     const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
+    const deleteAt = defined(
+      db.delete.mock.invocationCallOrder[0],
+      'the delete',
+    );
     expect({
       action,
-      beforeTheDelete: lockedAt < db.delete.mock.invocationCallOrder[0],
+      beforeTheDelete: lockedAt < deleteAt,
     }).toEqual({ action: 'removed', beforeTheDelete: true });
   });
 });

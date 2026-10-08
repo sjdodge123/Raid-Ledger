@@ -298,7 +298,7 @@ function describePrivateLineups() {
       .from(schema.communityLineupVotes)
       .where(eq(schema.communityLineupVotes.lineupId, lineupId));
     expect(votesAfter).toHaveLength(1);
-    expect(votesAfter[0].userId).toBe(invitee.id);
+    expect(votesAfter[0]?.userId).toBe(invitee.id);
   });
 
   // ── I6: carryover skips private decided lineups ──────────────
