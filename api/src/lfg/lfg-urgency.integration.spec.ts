@@ -34,7 +34,7 @@ import {
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
 import { listLiveNowHands } from '../discord-bot/lfg-now/lfg-now-spawn.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 /**
  * The week horizon expressed the way every assertion below measures — in
@@ -78,6 +78,17 @@ async function members(...names: string[]) {
     out.push(await createMemberAndLogin(testApp, name, `${name}@test.local`));
   }
   return out;
+}
+
+/** Two logged-in members, typed as a pair so both bindings are defined. */
+async function memberPair(
+  first: string,
+  second: string,
+): Promise<
+  [{ userId: number; token: string }, { userId: number; token: string }]
+> {
+  const out = await members(first, second);
+  return [at(out, 0), at(out, 1)];
 }
 
 /**
@@ -231,7 +242,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // MUTATION: change that filter to `inArray(urgency, ['now','tonight'])` and
   // this fails 2-vs-1.
   it('does not count a tonight hand toward the now-spawn threshold', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const [a, b] = await memberPair('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock');
 
     await postIntent(a.token, game.id, { urgency: 'now', ttlMinutes: 30 });
@@ -240,7 +251,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
     const hands = await listLiveNowHands(testApp.db, game.id);
 
     expect(hands).toHaveLength(1);
-    expect(hands[0].userId).toBe(a.userId);
+    expect(hands[0]?.userId).toBe(a.userId);
   });
 
   // ROK-1616 AC7 — `ttl_minutes` is a now-only column. Accepting one here
@@ -406,7 +417,7 @@ describe('AC4 — LFM_REACHED is urgency-blind', () => {
   // MUTATION: add an urgency term to `groupColumns`' `activeCount` (e.g. count
   // only `week` rows) and this fails — no LFM_REACHED is emitted at all.
   it('emits exactly one LFM_REACHED for two now hands, and no GROUP_CHANGED', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const [a, b] = await memberPair('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock', {
       cooptimusOnlineMax: 2,
     });
@@ -447,7 +458,7 @@ describe('AC4 — LFM_REACHED is urgency-blind', () => {
   // MUTATION: make `activeCount` count only `now` rows and this fails with no
   // LFM_REACHED and `activeCount: 1`.
   it('crosses the threshold on a mixed group and reports nowCount 1', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const [a, b] = await memberPair('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock', {
       cooptimusOnlineMax: 2,
     });
@@ -493,7 +504,7 @@ describe('AC8 — per-row refresh horizons', () => {
   // `computeExpiresAt(now)` and this fails reporting 10080 minutes on a row
   // that asked for 60.
   it('refreshes the week row to 7 days and the now row to its own TTL only', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const [a, b] = await memberPair('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock');
     const now = (
       await postIntent(a.token, game.id, {
@@ -521,7 +532,7 @@ describe('AC8 — per-row refresh horizons', () => {
   // MUTATION: drop the `urgency = 'week'` UPDATE from `refreshGroupExpiry` and
   // this fails reporting the wound-down 5 minutes.
   it('still refreshes a weekly cohort to a full 7 days', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const [a, b] = await memberPair('alpha', 'bravo');
     const game = await createGame(testApp, 'Deep Rock');
     const first = (await postIntent(a.token, game.id))
       .body as LfgIntentResponseDto;

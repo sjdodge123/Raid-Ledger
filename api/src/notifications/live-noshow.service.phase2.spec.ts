@@ -4,6 +4,7 @@ import { NotificationService } from './notification.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { at } from '../common/testing/narrow';
 
 /**
  * Build a select chain where .from().where().limit() is the terminal,
@@ -440,7 +441,7 @@ describe('LiveNoShowService — phase2', () => {
       const callArg = nudgeCall![0] as {
         payload: { absentPlayers: Array<{ role: string | null }> };
       };
-      expect(callArg.payload.absentPlayers[0].role).toBeNull();
+      expect(at(callArg.payload.absentPlayers, 0).role).toBeNull();
     });
 
     it('should use singular message format for single absent player', async () => {

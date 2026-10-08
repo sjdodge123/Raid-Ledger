@@ -16,21 +16,24 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { LiveNoShowService } from './live-noshow.service';
 import { ActiveEventCacheService } from '../events/active-event-cache.service';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 const MIN = 60 * 1000;
 
 /** Create a member with a resolvable discord ID (needed for presence checks). */
 async function createPlayer(testApp: TestApp, username: string) {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `discord-${username}`,
-      username,
-      displayName: username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `discord-${username}`,
+        username,
+        displayName: username,
+        role: 'member',
+      })
+      .returning(),
+    'created player',
+  );
   return user;
 }
 
@@ -43,15 +46,18 @@ async function createLiveEvent(
 ) {
   const start = new Date(Date.now() - minutesSinceStart * MIN);
   const end = new Date(start.getTime() + 3 * 60 * MIN);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: "Baldur's Gate 3",
-      creatorId,
-      duration: [start, end] as [Date, Date],
-      maxAttendees,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: "Baldur's Gate 3",
+        creatorId,
+        duration: [start, end] as [Date, Date],
+        maxAttendees,
+      })
+      .returning(),
+    'created live event',
+  );
   return event;
 }
 
@@ -142,7 +148,7 @@ async function escalations(testApp: TestApp, creatorId: number) {
  * order is not part of the contract, so assertions must not depend on it.
  */
 function escalatedNames(rows: Array<{ payload: unknown }>): string[] {
-  const payload = rows[rows.length - 1].payload as {
+  const payload = at(rows, -1).payload as {
     absentPlayers: Array<{ displayName: string }>;
   };
   return payload.absentPlayers.map((p) => p.displayName).sort();
