@@ -1,5 +1,5 @@
 {
-  "__total": 1013,
+  "__total": 1012,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 3,
   "components/admin/DemoDataCard.tsx": 11,
@@ -106,7 +106,6 @@
   "components/lineups/cycle-4/scheduling-action-button.ts": 5,
   "components/lineups/cycle-4/scheduling-sheet-row.tsx": 2,
   "components/lineups/cycle-4/sticky-hero-buttons.tsx": 8,
-  "components/lineups/decided/DecidedView.tsx": 1,
   "components/lineups/decided/LeftoverVotersRow.tsx": 2,
   "components/lineups/decided/LfgBridgePrompt.tsx": 7,
   "components/lineups/decided/MatchCard.tsx": 8,

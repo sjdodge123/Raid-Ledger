@@ -98,7 +98,7 @@ function YourMatches({
   if (matches.length === 0) return null;
   return (
     <section data-testid="decided-your-matches-section" className="mt-3 mb-2">
-      <div className="text-[10px] uppercase tracking-wider text-emerald-300 mb-1">
+      <div className="text-[10px] uppercase tracking-wider text-success mb-1">
         Your matches ({matches.length})
       </div>
       {matches.map((m) => (
