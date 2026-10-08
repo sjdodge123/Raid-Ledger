@@ -6,9 +6,12 @@
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
-import { appSettings } from '../drizzle/schema';
+import { appSettings, calendarConnections } from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
-import { reencryptAllSettings } from '../../scripts/reencrypt-settings';
+import {
+  reencryptAllSettings,
+  reencryptCalendarCredentials,
+} from '../../scripts/reencrypt-settings';
 import { deriveKey, encryptWithKey, decryptWithKey } from './encryption.util';
 import { nonEmpty } from '../common/testing/narrow';
 
@@ -66,6 +69,44 @@ function describeReencryptSettings() {
       // Decrypting with the old key should fail (data was re-encrypted)
       expect(() => decryptWithKey(dbRow.encryptedValue, oldKey)).toThrow();
     }
+  });
+
+  it('re-encrypts calendar_connections credentials from old key to new key (ROK-1592)', async () => {
+    const oldKey = deriveKey(OLD_SECRET);
+    const newKey = deriveKey(NEW_SECRET);
+    const creds = JSON.stringify({
+      kind: 'oauth',
+      accessToken: 'ya29.rotate-access',
+      refreshToken: 'rotate-refresh',
+      expiresAt: '2100-01-01T00:00:00.000Z',
+      scopes: ['openid'],
+    });
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(calendarConnections)
+        .values({
+          userId: testApp.seed.adminUser.id,
+          provider: 'google',
+          accountSubject: 'rotate-sub',
+          credentialsEncrypted: encryptWithKey(creds, oldKey),
+        })
+        .returning(),
+      'calendar connection',
+    );
+
+    expect(await reencryptCalendarCredentials(testApp.db, oldKey, newKey)).toBe(
+      1,
+    );
+
+    const [after] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(calendarConnections)
+        .where(eq(calendarConnections.id, row.id)),
+      'rotated connection',
+    );
+    expect(decryptWithKey(after.credentialsEncrypted, newKey)).toBe(creds);
+    expect(() => decryptWithKey(after.credentialsEncrypted, oldKey)).toThrow();
   });
 
   it('should handle empty app_settings table gracefully', async () => {
