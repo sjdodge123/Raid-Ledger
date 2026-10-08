@@ -45,6 +45,9 @@ import {
   type GoogleStub,
 } from './calendar-oauth.integration.spec-helpers';
 
+const sentryActual =
+  jest.requireActual<typeof import('@sentry/nestjs')>('@sentry/nestjs');
+
 let testApp: TestApp;
 let user: { userId: number; token: string };
 let userSeq = 0;
@@ -245,10 +248,15 @@ describe('GET /calendar-sync/oauth/:provider/callback — errors', () => {
     expect(await rowsOf(user.userId)).toHaveLength(0);
   });
 
-  it('the upsert throws a non-provider error → 302 ?error=unavailable, the fresh grant is revoked, logged by class only', async () => {
+  it('the upsert throws a non-provider error → 302 ?error=unavailable, the fresh grant is revoked, captured in Sentry, logged by class only', async () => {
+    const thrown = new TypeError('db down SECRET-DETAIL');
     jest
       .spyOn(connectHelpers, 'upsertCalendarConnection')
-      .mockRejectedValue(new TypeError('db down SECRET-DETAIL'));
+      .mockRejectedValue(thrown);
+    // The real module object: the controller's namespace import reads through it.
+    const captured = jest
+      .spyOn(sentryActual, 'captureException')
+      .mockImplementation(() => 'event-id');
     const logged = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
@@ -260,6 +268,7 @@ describe('GET /calendar-sync/oauth/:provider/callback — errors', () => {
     const lines = JSON.stringify(logged.mock.calls);
     expect(lines).toContain('TypeError');
     expect(lines).not.toContain('SECRET-DETAIL');
+    expect(captured).toHaveBeenCalledWith(thrown);
     expect(await rowsOf(user.userId)).toHaveLength(0);
   });
 

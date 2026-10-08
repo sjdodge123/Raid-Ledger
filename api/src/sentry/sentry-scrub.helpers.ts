@@ -7,8 +7,10 @@
  *
  * - Any key matching SECRET_KEY, at any depth, in `request`, `extra`,
  *   `contexts` and `breadcrumbs`, becomes REDACTED.
- * - Inside `request` only, the OAuth `code` and `state` params too. Elsewhere
- *   `code` is a Discord / Postgres error code that triage needs.
+ * - Inside `request` and transaction `spans` only, the OAuth `code` and
+ *   `state` params too (a span's description/data/attributes carry the
+ *   request URL). Elsewhere `code` is a Discord / Postgres error code that
+ *   triage needs.
  * - Every string (URLs, query strings, messages, exception values) loses its
  *   secret query params and JSON-ish `"…token": "…"` values.
  */
@@ -25,6 +27,9 @@ const MAX_DEPTH = 12;
 
 export interface ScrubbableEvent {
   request?: unknown;
+  /** Transaction events (beforeSendTransaction). */
+  spans?: unknown;
+  transaction?: string;
   extra?: unknown;
   contexts?: unknown;
   breadcrumbs?: unknown;
@@ -82,6 +87,7 @@ function scrubValue(value: unknown, walk: Walk, depth: number): unknown {
 export function scrubSecrets<T extends ScrubbableEvent>(event: T): T {
   const seen = new WeakSet<object>();
   scrubValue(event.request, { inRequest: true, seen }, 0);
+  scrubValue(event.spans, { inRequest: true, seen }, 0);
   for (const part of [event.extra, event.contexts, event.breadcrumbs]) {
     scrubValue(part, { inRequest: false, seen }, 0);
   }
@@ -90,6 +96,9 @@ export function scrubSecrets<T extends ScrubbableEvent>(event: T): T {
   }
   if (typeof event.message === 'string') {
     event.message = scrubString(event.message);
+  }
+  if (typeof event.transaction === 'string') {
+    event.transaction = scrubString(event.transaction);
   }
   return event;
 }

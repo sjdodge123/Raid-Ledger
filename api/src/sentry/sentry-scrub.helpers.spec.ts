@@ -85,6 +85,28 @@ describe('scrubSecrets', () => {
     });
   });
 
+  it('ROK-1592: transaction spans lose code + state in description, data and attributes', () => {
+    const url =
+      '/api/calendar-sync/oauth/google/callback?code=4/SPAN-CODE&state=SPAN-STATE';
+    const event = {
+      transaction: `GET ${url}`,
+      spans: [
+        {
+          description: `GET ${url}`,
+          data: {
+            'http.url': url,
+            'http.query': 'code=4/SPAN-CODE&state=SPAN-STATE',
+            state: 'SPAN-STATE',
+          },
+          attributes: { 'url.full': `https://rl.test${url}` },
+        },
+      ],
+    };
+    const json = JSON.stringify(scrubSecrets(event));
+    expect(json).not.toMatch(/SPAN-CODE|SPAN-STATE/);
+    expect(json).toContain(`callback?code=${REDACTED}&state=${REDACTED}`);
+  });
+
   it('returns the same event object and survives cycles', () => {
     const extra: Record<string, unknown> = { token: SECRET };
     extra.self = extra;

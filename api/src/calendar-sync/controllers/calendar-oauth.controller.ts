@@ -27,6 +27,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import * as Sentry from '@sentry/nestjs';
 import type { Request as ExpressRequest, Response } from 'express';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
@@ -203,10 +204,14 @@ export class CalendarOAuthController {
     return 'connected';
   }
 
-  /** Never a 500: unexpected errors land on `?error=unavailable`. */
+  /**
+   * Never a 500: unexpected errors land on `?error=unavailable`. They still
+   * reach Sentry (`scrubSecrets` strips tokens/code/state in beforeSend).
+   */
   private failureCode(err: unknown): CalendarOAuthErrorCode {
     const known = knownErrorCode(err);
     if (known) return known;
+    Sentry.captureException(err);
     this.logger.error(
       `calendar oauth callback failed unexpectedly (${errorClass(err)})`,
     );

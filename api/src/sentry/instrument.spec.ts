@@ -143,19 +143,13 @@ function describeSentryInstrumentTs() {
       expect(regex.test('pg_catalog.pg_type')).toBe(true);
     });
 
-    describe('ROK-1592: beforeSendTransaction scrub', () => {
-      type Txn = { request?: { url?: string } };
-      it('redacts the OAuth callback code + state from a transaction request URL', () => {
-        const hook = initConfig(sentryInitMock)['beforeSendTransaction'];
-        expect(typeof hook).toBe('function');
-        const out = (hook as (e: Txn) => Txn | null)({
-          request: {
-            url: 'https://rl.test/api/calendar-sync/oauth/google/callback?code=4/SECRET-CODE&state=SECRET-STATE',
-          },
-        });
-        expect(JSON.stringify(out)).not.toMatch(/SECRET-CODE|SECRET-STATE/);
-        expect(out?.request?.url).toContain('/oauth/google/callback?code=');
+    it('ROK-1592: beforeSendTransaction runs scrubSecrets (spans: scrub spec)', () => {
+      const hook = initConfig(sentryInitMock)['beforeSendTransaction'];
+      const url = '/cb?code=SECRET-CODE&state=SECRET-STATE';
+      const out = (hook as (e: object) => unknown)({
+        spans: [{ description: url }],
       });
+      expect(JSON.stringify(out)).not.toMatch(/SECRET-CODE|SECRET-STATE/);
     });
 
     describe('beforeSend filter', () => {
