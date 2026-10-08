@@ -46,6 +46,7 @@
  */
 import { readFileSync, readdirSync, statSync } from 'fs';
 import * as path from 'path';
+import { stripComments } from './testing/strip-comments';
 
 const SRC_ROOT = path.resolve(__dirname, '..');
 
@@ -78,13 +79,6 @@ function lifecycleStartBodies(code: string): string[] {
     bodies.push(code.slice(start, i));
   }
   return bodies;
-}
-
-/** Strip block and line comments so prose cannot satisfy or trip the scan. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
 /** Recursively collect non-spec `.ts` files under `dir`. */

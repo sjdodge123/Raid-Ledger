@@ -12,13 +12,7 @@
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
-
-/** Strip block and line comments before scanning. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-}
+import { stripComments } from './common/testing/strip-comments';
 
 /** Every bootstrap file the middleware could plausibly come back to. */
 const BOOTSTRAP_FILES = ['main.ts', 'main.helpers.ts'];

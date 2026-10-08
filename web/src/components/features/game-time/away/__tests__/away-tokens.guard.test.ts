@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { stripComments } from '../../../../../test/strip-comments';
 
 /**
  * Token guard for the away panel (ROK-1585 AC5/AC9): the legacy absence UI
@@ -9,9 +10,6 @@ import { resolve } from 'node:path';
  */
 const DIR = resolve(__dirname, '..');
 const BANNED = /red-600|red-500|red-300|bg-red-|#[0-9a-fA-F]{3,8}\b/;
-
-const stripComments = (src: string): string =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 describe('away/*.tsx tokens', () => {
     const files = readdirSync(DIR).filter((f) => f.endsWith('.tsx'));
@@ -23,5 +21,12 @@ describe('away/*.tsx tokens', () => {
     it.each(files)('%s uses no banned reds or raw hex', (file) => {
         const code = stripComments(readFileSync(resolve(DIR, file), 'utf8'));
         expect(code.match(BANNED)?.[0] ?? null).toBeNull();
+    });
+});
+
+describe('a bare URL in JSX text does not hide the rest of its line (B66 m1)', () => {
+    it('still sees a banned red after an unquoted https:// URL', () => {
+        const code = stripComments('<p>See https://discord.com <span className="text-red-500">x</span></p>');
+        expect(code.match(BANNED)?.[0] ?? null).toBe('red-500');
     });
 });

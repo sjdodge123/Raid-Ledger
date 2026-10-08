@@ -21,8 +21,8 @@ const TEST_FILE = /\.(test|spec)\.tsx?$/;
 
 /**
  * The (trimmed) code lines where a token-bearing URL sits next to an API or
- * navigation sink. Lines, not numbers: stripComments drops block-comment
- * newlines, so a line number would point at the wrong place in the file.
+ * navigation sink. Returned as trimmed lines so a failure names the code
+ * itself.
  */
 export function tokenUrlLines(src: string): string[] {
     return stripComments(src)

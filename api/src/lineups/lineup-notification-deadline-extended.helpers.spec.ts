@@ -17,6 +17,7 @@ import {
   resolveEmbedCtx,
 } from './lineup-notification-dispatch.helpers';
 import type { EmbedContext } from './lineup-notification-embed.helpers';
+import { stripComments } from '../common/testing/strip-comments';
 
 jest.mock('./lineup-notification-dispatch.helpers', () => ({
   postChannelEmbed: jest.fn(),
@@ -105,12 +106,12 @@ describe('buildDeadlineExtendedEmbed', () => {
   });
 
   it('never grows its own chrome — no colour, author or footer setter', () => {
-    const source = readFileSync(
-      join(__dirname, 'lineup-notification-deadline-extended.helpers.ts'),
-      'utf8',
-    )
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/^\s*\/\/.*$/gm, '');
+    const source = stripComments(
+      readFileSync(
+        join(__dirname, 'lineup-notification-deadline-extended.helpers.ts'),
+        'utf8',
+      ),
+    );
     const setters = ['set' + 'Color', 'set' + 'Author', 'set' + 'Footer'];
     for (const setter of setters) {
       expect(source).not.toContain(`.${setter}(`);

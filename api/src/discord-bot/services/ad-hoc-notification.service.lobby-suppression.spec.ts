@@ -35,6 +35,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { stripComments } from '../../common/testing/strip-comments';
 
 /**
  * The bound VOICE channel and the resolved TEXT channel are deliberately
@@ -111,11 +112,6 @@ async function buildNotificationModule() {
     ],
   }).compile();
   return { service: module.get(AdHocNotificationService), mockDb, ...svc };
-}
-
-/** Drop block comments and whole-line `//` comments before a source scan. */
-function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
 /** Queue the event row then the games row `buildEmbedEventData` reads. */

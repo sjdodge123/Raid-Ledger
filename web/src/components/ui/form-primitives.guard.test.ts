@@ -58,11 +58,11 @@ describe('form-primitives guard — mutation tests', () => {
     });
 
     it('keeps a block comment\'s newlines, so an offset maps to its source line', () => {
-        expect(stripComments('a/* x\ny */b')).toBe('a\nb');
+        expect(stripComments('a/* x\ny */b')).toBe('a    \n    b');
     });
 
     it('is string-literal safe: a // inside a string is not a comment', () => {
-        expect(stripComments("const u = 'https://x.dev'; // gone")).toBe("const u = 'https://x.dev'; ");
+        expect(stripComments("const u = 'https://x.dev'; // gone")).toBe(`const u = 'https://x.dev'; ${' '.repeat(7)}`);
         expect(countRawFormElements('<a href="http://x">x</a><input />')).toBe(1);
         expect(countRawFormElements('const t = `a // b`; <button />')).toBe(1);
     });

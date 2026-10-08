@@ -10,7 +10,13 @@ import {
   LFG_BOARD_INTRO_TITLE,
 } from './lfg-board.constants';
 
-/** Strip block and line comments — a guard must not trip on its own prose. */
+/**
+ * Strip block and line comments — a guard must not trip on its own prose.
+ * Deliberately NOT the shared `common/testing/strip-comments` helper (B66 m4):
+ * this runs over a Discord markdown copy constant, not TS source, so a
+ * literal-aware JS tokenizer is the wrong tool (an apostrophe in the copy
+ * would open a "string"). Whole-line `//` only, so a URL in the copy is kept.
+ */
 function stripComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }

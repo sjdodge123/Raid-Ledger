@@ -41,6 +41,7 @@ import {
   LFG_INVITE_RECIPIENT_WINDOW_HOURS,
   LFG_INVITE_SKIP_REASON,
 } from './lfg-invite.constants';
+import { stripComments } from '../common/testing/strip-comments';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -401,14 +402,11 @@ describe('POST /lfg/:gameId/invites — eligibility (AC5, D10)', () => {
   });
 
   it('T-A5 source guard: the helpers reuse eligibleUser() and inline no second literal', () => {
-    const source = readFileSync(
-      join(__dirname, 'lfg-invite.helpers.ts'),
-      'utf8',
-    )
-      // Strip comments FIRST — the file's own explanation of this rule
-      // would otherwise trip it (memory feedback_source_scanning_guards_strip_comments).
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/\/\/.*$/gm, '');
+    // Strip comments FIRST — the file's own explanation of this rule
+    // would otherwise trip it (memory feedback_source_scanning_guards_strip_comments).
+    const source = stripComments(
+      readFileSync(join(__dirname, 'lfg-invite.helpers.ts'), 'utf8'),
+    );
     expect(source).toContain('eligibleUser()');
     expect(source).not.toContain('deactivatedAt');
     expect(source).not.toContain('bannedAt');

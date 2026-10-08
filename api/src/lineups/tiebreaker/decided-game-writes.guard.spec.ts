@@ -20,6 +20,7 @@
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
+import { stripComments } from '../../common/testing/strip-comments';
 
 const API_SRC = resolve(__dirname, '..', '..');
 const SKIP_DIRS = new Set(['migrations', 'scripts', 'node_modules']);
@@ -61,13 +62,6 @@ function listSourceFiles(dir: string, out: string[] = []): string[] {
     }
   }
   return out;
-}
-
-/** Block comments, then line comments — `://` in a URL is left alone. */
-export function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 }
 
 /** Balanced-paren bodies of every `token` call in `source`. */
