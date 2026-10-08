@@ -36,7 +36,6 @@ describe('DiscordNotificationProcessor', () => {
   const mockSettingsService = {
     getBranding: jest.fn().mockResolvedValue({
       communityName: 'Test Community',
-      communityAccentColor: '#38bdf8',
     }),
   };
 
@@ -275,7 +274,6 @@ describe('DiscordNotificationProcessor', () => {
     it('should use "Raid Ledger" as community name fallback when null', async () => {
       mockSettingsService.getBranding.mockResolvedValueOnce({
         communityName: null,
-        communityAccentColor: null,
       });
       const job = buildJob();
 

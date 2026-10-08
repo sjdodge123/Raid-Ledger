@@ -274,8 +274,6 @@ export class SettingsService
   setCommunityLogoPath = (filePath: string) =>
     this.set(SETTING_KEYS.COMMUNITY_LOGO_PATH, filePath);
   clearCommunityLogoPath = () => this.delete(SETTING_KEYS.COMMUNITY_LOGO_PATH);
-  setCommunityAccentColor = (color: string) =>
-    this.set(SETTING_KEYS.COMMUNITY_ACCENT_COLOR, color);
   clearBranding = () => _clearBranding(this);
 
   // ─── GitHub ───────────────────────────────────────────────────

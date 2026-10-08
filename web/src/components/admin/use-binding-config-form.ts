@@ -7,31 +7,9 @@ import type {
 import {
   classifyBindingTriple,
   deriveBindingPurpose,
+  pruneConfigForPurpose,
   type BindingPurpose,
 } from "@raid-ledger/contract";
-
-interface ConfigValues {
-  minPlayers: number;
-  autoClose: boolean;
-  gracePeriod: number;
-  allowJustChatting: boolean;
-}
-
-/** AC5 — only emit config keys the resolved purpose actually uses. */
-function configForPurpose(
-  purpose: BindingPurpose,
-  v: ConfigValues,
-): UpdateChannelBindingDto["config"] {
-  if (purpose === "game-announcements") return {};
-  return {
-    minPlayers: v.minPlayers,
-    autoClose: v.autoClose,
-    gracePeriod: v.gracePeriod,
-    ...(purpose === "general-lobby" && {
-      allowJustChatting: v.allowJustChatting,
-    }),
-  };
-}
 
 function toInitialGame(binding: ChannelBindingDto): IgdbGameDto | null {
   if (binding.gameId == null) return null;
@@ -74,12 +52,10 @@ export function useBindingConfigForm(binding: ChannelBindingDto) {
 
   const buildDto = (finalPurpose: BindingPurpose): UpdateChannelBindingDto => {
     const dto: UpdateChannelBindingDto = {
-      config: configForPurpose(finalPurpose, {
-        minPlayers,
-        autoClose,
-        gracePeriod,
-        allowJustChatting,
-      }),
+      config: pruneConfigForPurpose(
+        { minPlayers, autoClose, gracePeriod, allowJustChatting },
+        finalPurpose,
+      ),
     };
     if (finalPurpose !== binding.bindingPurpose)
       dto.bindingPurpose = finalPurpose;

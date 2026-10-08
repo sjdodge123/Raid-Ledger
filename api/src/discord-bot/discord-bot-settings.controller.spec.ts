@@ -59,7 +59,6 @@ function buildModule() {
           getBranding: jest.fn().mockResolvedValue({
             communityName: 'Test Community',
             communityLogoPath: null,
-            communityAccentColor: null,
           }),
           getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
         },
@@ -611,7 +610,6 @@ describe('DiscordBotSettingsController — sendTestMessage: execution', () => {
     jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
       communityName: 'My Guild',
       communityLogoPath: null,
-      communityAccentColor: null,
     });
     jest
       .spyOn(settingsService, 'getClientUrl')
@@ -634,7 +632,6 @@ describe('DiscordBotSettingsController — sendTestMessage: execution', () => {
     jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
       communityName: 'My Guild',
       communityLogoPath: null,
-      communityAccentColor: null,
     });
     jest
       .spyOn(settingsService, 'getClientUrl')

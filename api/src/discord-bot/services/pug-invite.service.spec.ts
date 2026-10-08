@@ -162,7 +162,6 @@ describe('PugInviteService', () => {
           getBranding: jest.fn().mockResolvedValue({
             communityName: 'Test Guild',
             communityLogoPath: null,
-            communityAccentColor: null,
           }),
           getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
           getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),

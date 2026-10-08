@@ -20,7 +20,7 @@ import { StateFrame } from './design-system-bits';
  * (plugins/discord/register.ts) — brandColor takes data like this, never a theme colour.
  */
 const DISCORD_BRAND = '#5865F2';
-/** Stands in for a community's saved accent (BrandingSection) — caller data, not a theme value. */
+/** A sample caller-supplied colour for the ColorInput demo — caller data, not a theme value. */
 const DEMO_ACCENT = '#10b981';
 
 interface Picks { name: string; count: number }

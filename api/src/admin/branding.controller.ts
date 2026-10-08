@@ -141,35 +141,23 @@ export class BrandingController implements OnModuleInit {
       communityLogoUrl: branding.communityLogoPath
         ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
         : null,
-      communityAccentColor: branding.communityAccentColor,
     };
   }
 
   /**
-   * Update branding text/color settings.
-   * Admin-only endpoint.
+   * Update branding text settings. Admin-only endpoint.
+   * A legacy `communityAccentColor` key from an old client is ignored, not
+   * rejected — the accent colour was dropped (TDB:991).
    */
   @Patch()
   @UseGuards(AuthGuard('jwt'), AdminGuard)
-  async updateBranding(
-    @Body() body: { communityName?: string; communityAccentColor?: string },
-  ) {
+  async updateBranding(@Body() body: { communityName?: string }) {
     if (body.communityName !== undefined) {
       const trimmed = body.communityName.trim();
       if (trimmed.length === 0 || trimmed.length > 60) {
         throw new BadRequestException('Community name must be 1-60 characters');
       }
       await this.settingsService.setCommunityName(trimmed);
-    }
-
-    if (body.communityAccentColor !== undefined) {
-      const color = body.communityAccentColor.trim();
-      if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
-        throw new BadRequestException(
-          'Accent color must be a valid hex color (e.g., #10B981)',
-        );
-      }
-      await this.settingsService.setCommunityAccentColor(color);
     }
 
     this.logger.log('Branding settings updated');
@@ -238,10 +226,6 @@ export class BrandingController implements OnModuleInit {
     await this.settingsService.clearBranding();
     this.logger.log('Branding reset to defaults');
 
-    return {
-      communityName: null,
-      communityLogoUrl: null,
-      communityAccentColor: null,
-    };
+    return { communityName: null, communityLogoUrl: null };
   }
 }

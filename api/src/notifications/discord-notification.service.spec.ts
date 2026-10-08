@@ -38,7 +38,6 @@ describe('DiscordNotificationService', () => {
   const mockSettingsService = {
     getBranding: jest.fn().mockResolvedValue({
       communityName: 'Test Community',
-      communityAccentColor: '#38bdf8',
     }),
   };
 

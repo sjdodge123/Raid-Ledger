@@ -48,7 +48,6 @@ export class SystemController {
     branding: {
       communityName: string | null;
       communityLogoPath: string | null;
-      communityAccentColor: string | null;
     },
     onboardingCompletedRaw: string | null,
     demoMode: boolean,
@@ -66,7 +65,6 @@ export class SystemController {
       communityLogoUrl: branding.communityLogoPath
         ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
         : undefined,
-      communityAccentColor: branding.communityAccentColor ?? undefined,
       onboardingCompleted: onboardingCompletedRaw === 'true',
       authProviders: this.buildAuthProviders(adapterEntries, adapterConfigured),
     };
@@ -98,7 +96,6 @@ export class SystemController {
       communityLogoUrl: branding.communityLogoPath
         ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
         : null,
-      communityAccentColor: branding.communityAccentColor,
     };
   }
 

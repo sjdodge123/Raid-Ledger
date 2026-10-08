@@ -78,19 +78,18 @@ export async function bothExist(
 
 /** Get community branding settings. */
 export async function getBranding(svc: SettingsCore): Promise<BrandingConfig> {
-  const [name, logo, color] = await Promise.all([
+  const [name, logo] = await Promise.all([
     svc.get(SETTING_KEYS.COMMUNITY_NAME),
     svc.get(SETTING_KEYS.COMMUNITY_LOGO_PATH),
-    svc.get(SETTING_KEYS.COMMUNITY_ACCENT_COLOR),
   ]);
-  return {
-    communityName: name,
-    communityLogoPath: logo,
-    communityAccentColor: color,
-  };
+  return { communityName: name, communityLogoPath: logo };
 }
 
-/** Clear all branding settings. */
+/**
+ * Clear all branding settings. Also deletes the legacy `community_accent_color`
+ * row (TDB:991: the accent colour was dropped, no migration — app_settings is
+ * key/value, so a stale row is inert and a reset removes it).
+ */
 export async function clearBranding(svc: SettingsCore): Promise<void> {
   await Promise.all([
     svc.delete(SETTING_KEYS.COMMUNITY_NAME),
