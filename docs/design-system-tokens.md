@@ -145,7 +145,7 @@ does not: `GradientOverlay`'s `from-black/80 to-transparent`
 (`components/games/game-card-parts.tsx:66`) stays dark in both families because it exists
 to make white title text legible over the *image*, not over the theme surface. Anything
 layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
-`text-dim` — `#64748b` dark, `#5a697f` light (the same slate, a step darker so it clears AA on
+`text-dim` — `#8291a7` dark (5.57 surface / 4.57 panel, TDB:2050; slate-500 `#64748b` was 3.75 / 3.07), `#5a697f` light (the same slate, a step darker so it clears AA on
 the light panel and overlay; the tinted schemes' own dims — sky `#4E6E8B`, dawn `#8A6045`, holy `#576E93`,
 celestial `#6D5E4B`, quest-log `#756247` — clear AA on their own surface and panel, ROK-1472; quest-log's
 `--color-muted` moved with it to `#685640`, 6.33 surface / 5.56 panel) — so an image-less tile reads as the same quiet slate in

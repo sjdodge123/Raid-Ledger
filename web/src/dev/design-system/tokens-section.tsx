@@ -27,7 +27,7 @@ const SURFACE_TOKENS: TokenRow[] = [
 
 const TEXT_TOKENS: TokenRow[] = [
     { token: '--color-faint', cls: 'text-faint', dark: '#475569', light: '#cbd5e1', role: 'Decorative only, aria-hidden — never text' },
-    { token: '--color-dim', cls: 'text-dim', dark: '#64748b', light: '#5a697f', role: 'Placeholders, disabled' },
+    { token: '--color-dim', cls: 'text-dim', dark: '#8291a7', light: '#5a697f', role: 'Placeholders, disabled' },
     { token: '--color-muted', cls: 'text-muted', dark: '#94a3b8', light: '#475569', role: 'Secondary / label text' },
     { token: '--color-secondary', cls: 'text-secondary', dark: '#cbd5e1', light: '#334155', role: 'Body text' },
     { token: '--color-foreground', cls: 'text-foreground', dark: '#ffffff', light: '#0f172a', role: 'Primary text, headings' },

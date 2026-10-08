@@ -43,8 +43,8 @@
     /* Neutral scale — dual-purpose (text & bg) */
     --color-faint: #475569;
     /* slate-600 */
-    --color-dim: #64748b;
-    /* slate-500 */
+    --color-dim: #8291a7;
+    /* slate, between 500 and 400: 5.57 surface / 4.57 panel (TDB:2050; slate-500 #64748b was 3.75 / 3.07) — overlay stays 3.23, accepted; still a visible step under muted — faint-decorative.guard.test.ts */
     --color-muted: #94a3b8;
     /* slate-400 */
     --color-busy: #8b5cf6;
