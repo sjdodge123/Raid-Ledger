@@ -12,6 +12,7 @@ import {
   type MockDb,
 } from '../../common/testing/drizzle-mock';
 import * as schema from '../../drizzle/schema';
+import { at } from '../../common/testing/narrow';
 
 // ─── Test module builder ─────────────────────────────────────────────────────
 
@@ -553,7 +554,7 @@ describe('AdHocNotificationService', () => {
       ).signupMentions;
       expect(lastMentions).toHaveLength(1);
       expect(lastMentions[0]?.username).toBe('P1');
-      expect(lastMentions[0].status).toBeUndefined();
+      expect(at(lastMentions, 0).status).toBeUndefined();
     });
 
     // ROK-1243: edit-in-place failure does not throw or kill the flusher.

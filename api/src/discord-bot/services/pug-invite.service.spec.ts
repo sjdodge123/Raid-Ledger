@@ -4,6 +4,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { at } from '../../common/testing/narrow';
 
 /** Create a Collection-like object that has a .find() method (mimics discord.js Collection). */
 function createMockCollection(
@@ -584,7 +585,7 @@ describe('PugInviteService', () => {
       await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       expect(clientService.sendEmbedDM).toHaveBeenCalled();
-      const [, embed] = clientService.sendEmbedDM.mock.calls[0];
+      const [, embed] = at(clientService.sendEmbedDM.mock.calls, 0);
       const embedData = embed.toJSON();
 
       // ROK-1462 D1: the title carries the event name (no longer the body),
@@ -599,7 +600,7 @@ describe('PugInviteService', () => {
 
       await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
-      const [, embed, row] = clientService.sendEmbedDM.mock.calls[0];
+      const [, embed, row] = at(clientService.sendEmbedDM.mock.calls, 0);
       const embedData = embed.toJSON();
 
       // ROK-1462 D1: the event link is a View Event link button, and the
@@ -617,7 +618,7 @@ describe('PugInviteService', () => {
 
       await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
-      const [, embed] = clientService.sendEmbedDM.mock.calls[0];
+      const [, embed] = at(clientService.sendEmbedDM.mock.calls, 0);
       const embedData = embed.toJSON();
 
       const voiceField = embedData.fields?.find(
@@ -635,7 +636,7 @@ describe('PugInviteService', () => {
 
       await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
-      const [, embed] = clientService.sendEmbedDM.mock.calls[0];
+      const [, embed] = at(clientService.sendEmbedDM.mock.calls, 0);
       const embedData = embed.toJSON();
 
       const voiceField = embedData.fields?.find(
@@ -755,7 +756,7 @@ describe('PugInviteService', () => {
 
     /** The embed handed to `sendEmbedDM`, as raw API JSON. */
     function sentEmbedJson(): { description?: string } {
-      const call = clientService.sendEmbedDM.mock.calls[0];
+      const call = at(clientService.sendEmbedDM.mock.calls, 0);
       const embed = call[1] as { toJSON: () => { description?: string } };
       return embed.toJSON();
     }

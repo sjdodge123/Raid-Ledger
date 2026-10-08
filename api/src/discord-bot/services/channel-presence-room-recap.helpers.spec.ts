@@ -15,6 +15,7 @@ import {
   type ActivitySegment,
   type OccupancySegment,
 } from './channel-presence-room-recap.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const OPENED_AT = new Date('2026-09-13T18:00:00Z');
 const ENDED_AT = new Date('2026-09-13T21:00:00Z');
@@ -214,9 +215,9 @@ describe('summariseRoom — activities', () => {
     expect(recap.activities).toEqual([
       { name: "Baldur's Gate 3", seconds: THREE_HOURS },
     ]);
-    expect(recap.activities[0].seconds * 1000).toBeLessThanOrEqual(
-      recap.spanMs,
-    );
+    expect(
+      nonEmpty(recap.activities, 'activities')[0].seconds * 1000,
+    ).toBeLessThanOrEqual(recap.spanMs);
   });
 });
 

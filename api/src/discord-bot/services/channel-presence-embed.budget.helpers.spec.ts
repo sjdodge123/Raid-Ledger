@@ -30,7 +30,7 @@ import {
 import { buildChannelPresenceEmbeds } from './channel-presence-embed.helpers';
 import type { ResolvedRoom, RoomGroup } from './channel-presence-room.helpers';
 import type { EmbedContext } from './discord-embed.factory';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 /** A group embed whose description scales with the roster cap in force. */
 function groupEmbed(descChars: number, badges: boolean): ChannelEmbed {
@@ -160,7 +160,7 @@ describe('applyBudget — Discord’s hard limits (AC10)', () => {
       return [embed];
     });
 
-    expect((embeds[0].data.fields ?? []).map((f) => f.value)).toEqual([
+    expect((at(embeds, 0).data.fields ?? []).map((f) => f.value)).toEqual([
       EMPTY_FIELD_VALUE,
       EMPTY_FIELD_VALUE,
       '**Valheim**',

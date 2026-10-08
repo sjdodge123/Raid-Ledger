@@ -12,6 +12,7 @@ import {
   type ScheduledEventMocks,
 } from './scheduled-event.service.spec-helpers';
 import { buildScheduledEventName } from './scheduled-event.helpers';
+import { defined } from '../../common/testing/narrow';
 
 // ROK-1350: create writes the SE under buildScheduledEventName (title + game),
 // so idempotency mocks must name the pre-existing/confirmed SE the same way —
@@ -319,7 +320,7 @@ describe('updateScheduledEvent', () => {
     const selectChain = mocks.createSelectChain([
       { discordScheduledEventId: 'deleted-se-id' },
     ]);
-    selectChain.limit
+    defined(selectChain.limit, 'select chain limit')
       .mockResolvedValueOnce([{ discordScheduledEventId: 'deleted-se-id' }])
       .mockResolvedValueOnce([{ discordScheduledEventId: null }])
       .mockResolvedValue([]);

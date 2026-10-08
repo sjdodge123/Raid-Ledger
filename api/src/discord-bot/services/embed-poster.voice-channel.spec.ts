@@ -13,6 +13,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import { EMBED_STATES } from '../discord-bot.constants';
+import { at } from '../../common/testing/narrow';
 
 describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   let service: EmbedPosterService;
@@ -177,7 +178,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     await service.postEmbed(42, baseEvent, 3);
 
-    const eventDataArg = embedFactory.buildEventEmbed.mock.calls[0][0];
+    const eventDataArg = at(embedFactory.buildEventEmbed.mock.calls, 0)[0];
     // voiceChannelId should not be present (undefined) since resolver returned null
     expect(eventDataArg.voiceChannelId).toBeUndefined();
   });

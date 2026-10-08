@@ -77,17 +77,20 @@ async function insertPresenceRow(
   bindingId: string,
   openedAt: Date,
 ): Promise<PresenceRow> {
-  const [row] = await db
-    .insert(schema.discordChannelPresenceMessages)
-    .values({
-      guildId: GUILD_ID,
-      voiceChannelId: VOICE_CHANNEL_ID,
-      bindingId,
-      textChannelId: TEXT_CHANNEL_ID,
-      messageId: 'rok1499-message',
-      openedAt,
-    })
-    .returning();
+  const [row] = nonEmpty(
+    await db
+      .insert(schema.discordChannelPresenceMessages)
+      .values({
+        guildId: GUILD_ID,
+        voiceChannelId: VOICE_CHANNEL_ID,
+        bindingId,
+        textChannelId: TEXT_CHANNEL_ID,
+        messageId: 'rok1499-message',
+        openedAt,
+      })
+      .returning(),
+    'presence row',
+  );
   return row;
 }
 

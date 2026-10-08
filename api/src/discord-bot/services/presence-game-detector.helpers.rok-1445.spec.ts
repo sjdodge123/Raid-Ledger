@@ -13,6 +13,7 @@
  * general-lobby path, exactly as AC7/AC12 require.
  */
 import { applyConsensus, groupByGame } from './presence-game-detector.helpers';
+import { at } from '../../common/testing/narrow';
 
 const COD4 = { gameId: 4, gameName: 'Call of Duty 4' };
 const DEEP_ROCK = { gameId: 9, gameName: 'Deep Rock Galactic' };
@@ -101,7 +102,7 @@ describe('applyConsensus — ROK-1445', () => {
       ]);
 
       expect(groups).toHaveLength(1);
-      expect(groups[0].gameId).toBeNull();
+      expect(at(groups, 0).gameId).toBeNull();
       expect(membersOf(groups, null)).toEqual(['m1', 'm2', 'm3']);
     });
 

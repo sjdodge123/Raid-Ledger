@@ -9,6 +9,7 @@ import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { CapacityStillSaturatedError } from './scheduled-event.helpers';
 import * as dbHelpers from './scheduled-event.db-helpers';
+import { at } from '../../common/testing/narrow';
 
 jest.mock('./scheduled-event.db-helpers', () => ({
   ...jest.requireActual('./scheduled-event.db-helpers'),
@@ -208,7 +209,7 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
       // setReconcileBackoff called once with all 3 ids (none processed) and an
       // expiresAt ≈ now + 1h.
       expect(setReconcileBackoffMock).toHaveBeenCalledTimes(1);
-      const [, ids, expiresAt] = setReconcileBackoffMock.mock.calls[0];
+      const [, ids, expiresAt] = at(setReconcileBackoffMock.mock.calls, 0);
       expect(ids).toEqual([1, 2, 3]);
       const diff = expiresAt.getTime() - Date.now();
       const oneHourMs = 60 * 60 * 1000;
@@ -232,7 +233,7 @@ describe('ScheduledEventReconciliationService (ROK-755)', () => {
       expect(
         mocks.scheduledEventService.createScheduledEvent,
       ).toHaveBeenCalledTimes(2);
-      const [, ids] = setReconcileBackoffMock.mock.calls[0];
+      const [, ids] = at(setReconcileBackoffMock.mock.calls, 0);
       // First candidate (id=1) was processed; remaining are [2, 3].
       expect(ids).toEqual([2, 3]);
     });
