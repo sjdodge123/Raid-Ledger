@@ -89,6 +89,13 @@ function readStored(
   }
 }
 
+/** `calendar_connections_user_provider_subject_uq`. */
+const CONNECTION_KEY = [
+  calendarConnections.userId,
+  calendarConnections.provider,
+  calendarConnections.accountSubject,
+];
+
 /** The single statement that cannot duplicate: insert, or update on the key. */
 async function writeConnection(
   db: Db,
@@ -107,11 +114,7 @@ async function writeConnection(
       status: 'active',
     })
     .onConflictDoUpdate({
-      target: [
-        calendarConnections.userId,
-        calendarConnections.provider,
-        calendarConnections.accountSubject,
-      ],
+      target: CONNECTION_KEY,
       set: {
         credentialsEncrypted,
         // A grant without an email keeps the stored label (undefined = skip).
