@@ -15,9 +15,10 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { SettingsService } from '../../settings/settings.service';
 import type { CalendarAccountProvider } from './calendar-provider.interface';
 import { GoogleCalendarAdapter } from './google/google.adapter';
+import { FAKE_SUBJECT_PREFIX } from './testing/fake-calendar.provider';
 
 /** `account_subject` prefix of a DEMO_MODE fake connection (L15). */
-export const DEMO_FAKE_SUBJECT_PREFIX = 'demo-fake:';
+export const DEMO_FAKE_SUBJECT_PREFIX = FAKE_SUBJECT_PREFIX;
 
 /**
  * DI token for the in-memory fake (`testing/fake-calendar.provider`). The
