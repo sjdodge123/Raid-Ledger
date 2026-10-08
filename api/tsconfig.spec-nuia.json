@@ -11,6 +11,7 @@
   "include": ["src/**/*.spec*.ts", "src/**/*.test-fixtures.ts", "src/common/testing/**/*.ts", "test/**/*.ts"],
   "exclude": [
     "src/discord-bot/services/**",
-    "src/lfg/**", "src/notifications/**"
+    "src/discord-bot/services/**",
+    "src/notifications/post-event*"
   ]
 }
