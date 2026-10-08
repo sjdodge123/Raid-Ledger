@@ -10,7 +10,6 @@
  * that makes it hold — the lock comes before any row is read or written.
  */
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
-import { defined } from '../common/testing/narrow';
 import { STAR_LOCK_CLASS, toggleVote } from './lineups-voting.helpers';
 
 type Db = Parameters<typeof toggleVote>[0];
@@ -53,16 +52,11 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
     const action = await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
 
     // Stated as booleans so a MISSING lock reports `false` rather than a
-    // `received value must be a number` matcher error.
+    // `received value must be a number` matcher error. A missing read or
+    // insert falls back to -Infinity, so it reports `false` the same way.
     const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
-    const readAt = defined(
-      db.select.mock.invocationCallOrder[0],
-      'the vote read',
-    );
-    const insertAt = defined(
-      db.insert.mock.invocationCallOrder[0],
-      'the insert',
-    );
+    const readAt = db.select.mock.invocationCallOrder[0] ?? -Infinity;
+    const insertAt = db.insert.mock.invocationCallOrder[0] ?? -Infinity;
     expect({
       action,
       beforeTheRead: lockedAt < readAt,
@@ -76,10 +70,7 @@ describe('toggleVote — voter lock (TDB:1064)', () => {
     const action = await toggleVote(db as unknown as Db, LINEUP, USER, GAME, 3);
 
     const lockedAt = db.execute.mock.invocationCallOrder[0] ?? Infinity;
-    const deleteAt = defined(
-      db.delete.mock.invocationCallOrder[0],
-      'the delete',
-    );
+    const deleteAt = db.delete.mock.invocationCallOrder[0] ?? -Infinity;
     expect({
       action,
       beforeTheDelete: lockedAt < deleteAt,

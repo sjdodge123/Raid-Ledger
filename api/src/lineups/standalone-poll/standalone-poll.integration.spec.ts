@@ -175,6 +175,39 @@ async function waitForNotification(
   return undefined;
 }
 
+/** The one lineup row the test created; throws when there is none. */
+async function firstLineup() {
+  const rows = await testApp.db.select().from(schema.communityLineups).limit(1);
+  return nonEmpty(rows, 'lineup')[0];
+}
+
+/** The one match row the test created; throws when there is none. */
+async function firstMatch() {
+  const rows = await testApp.db
+    .select()
+    .from(schema.communityLineupMatches)
+    .limit(1);
+  return nonEmpty(rows, 'match')[0];
+}
+
+/** The match row with `id`; throws when there is none. */
+async function matchById(id: number) {
+  const rows = await testApp.db
+    .select()
+    .from(schema.communityLineupMatches)
+    .where(eq(schema.communityLineupMatches.id, id));
+  return nonEmpty(rows, `match ${id}`)[0];
+}
+
+/** The event row with `id`; throws when there is none. */
+async function eventById(id: number) {
+  const rows = await testApp.db
+    .select()
+    .from(schema.events)
+    .where(eq(schema.events.id, id));
+  return nonEmpty(rows, `event ${id}`)[0];
+}
+
 // ── ROK-977 AC1: POST with valid gameId creates lineup + match ───────
 
 function describeCreatePoll() {
@@ -201,10 +234,7 @@ function describeCreatePoll() {
     });
 
     const lineupId = res.body.lineupId as number;
-    const [lineup] = nonEmpty(
-      await testApp.db.select().from(schema.communityLineups).limit(1),
-      'lineup',
-    );
+    const lineup = await firstLineup();
 
     expect(lineup).toBeDefined();
     expect(lineup.id).toBe(lineupId);
@@ -217,10 +247,7 @@ function describeCreatePoll() {
     });
 
     const matchId = res.body.id as number;
-    const [match] = nonEmpty(
-      await testApp.db.select().from(schema.communityLineupMatches).limit(1),
-      'match',
-    );
+    const match = await firstMatch();
 
     expect(match).toBeDefined();
     expect(match.id).toBe(matchId);
@@ -322,10 +349,7 @@ function describePhaseDuration() {
 
     // Verify the lineup has a phaseDeadline in DB
     const lineupId = res.body.lineupId as number;
-    const [lineup] = nonEmpty(
-      await testApp.db.select().from(schema.communityLineups).limit(1),
-      'lineup',
-    );
+    const lineup = await firstLineup();
 
     expect(lineup.id).toBe(lineupId);
     expect(lineup.phaseDeadline).not.toBeNull();
@@ -345,10 +369,7 @@ function describePhaseDuration() {
     expect(res.status).toBe(201);
 
     const lineupId = res.body.lineupId as number;
-    const [lineup] = nonEmpty(
-      await testApp.db.select().from(schema.communityLineups).limit(1),
-      'lineup',
-    );
+    const lineup = await firstLineup();
 
     expect(lineup.id).toBe(lineupId);
     // A null deadline used to opt the poll out of BOTH the deadline
@@ -403,10 +424,7 @@ function describeLinkedEvent() {
 
     // Verify linkedEventId stored on the match
     const matchId = res.body.id as number;
-    const [match] = nonEmpty(
-      await testApp.db.select().from(schema.communityLineupMatches).limit(1),
-      'match',
-    );
+    const match = await firstMatch();
 
     expect(match.id).toBe(matchId);
     expect(match.linkedEventId).toBe(event.id);
@@ -445,13 +463,7 @@ function describeLinkedPollThreshold() {
     });
     expect(res.status).toBe(201);
 
-    const [match] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.communityLineupMatches)
-        .where(eq(schema.communityLineupMatches.id, res.body.id as number)),
-      'match',
-    );
+    const match = await matchById(res.body.id as number);
     expect(match.minVoteThreshold).toBe(3);
   });
 
@@ -467,13 +479,7 @@ function describeLinkedPollThreshold() {
     });
     expect(res.status).toBe(201);
 
-    const [match] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.communityLineupMatches)
-        .where(eq(schema.communityLineupMatches.id, res.body.id as number)),
-      'match',
-    );
+    const match = await matchById(res.body.id as number);
     expect(match.minVoteThreshold).toBe(5);
   });
 
@@ -483,13 +489,7 @@ function describeLinkedPollThreshold() {
     });
     expect(res.status).toBe(201);
 
-    const [match] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.communityLineupMatches)
-        .where(eq(schema.communityLineupMatches.id, res.body.id as number)),
-      'match',
-    );
+    const match = await matchById(res.body.id as number);
     expect(match.minVoteThreshold).toBeNull();
   });
 
@@ -502,13 +502,7 @@ function describeLinkedPollThreshold() {
     });
     expect(res.status).toBe(201);
 
-    const [match] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.communityLineupMatches)
-        .where(eq(schema.communityLineupMatches.id, res.body.id as number)),
-      'match',
-    );
+    const match = await matchById(res.body.id as number);
     expect(match.minVoteThreshold).toBeNull();
   });
 }
@@ -579,13 +573,7 @@ function describeReschedulingPollId() {
 
     // Read the event back from DB and verify reschedulingPollId is set
     const matchId = res.body.id as number;
-    const [updatedEvent] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, event.id)),
-      'updatedEvent',
-    );
+    const updatedEvent = await eventById(event.id);
 
     // This will fail because the column does not exist yet
     expect((updatedEvent as Record<string, unknown>).reschedulingPollId).toBe(
@@ -603,13 +591,7 @@ function describeReschedulingPollId() {
     expect(res.status).toBe(201);
 
     // The event should have reschedulingPollId as null (column exists but unset)
-    const [updatedEvent] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, event.id)),
-      'updatedEvent',
-    );
+    const updatedEvent = await eventById(event.id);
 
     // Will fail until the column is added — then should be null
     expect(updatedEvent).toHaveProperty('reschedulingPollId');
@@ -759,13 +741,7 @@ function describeRescheduleLockIn() {
 
     await lockInAtNewTime(event.id, matchId, newStart);
 
-    const [after] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, event.id)),
-      'after',
-    );
+    const after = await eventById(event.id);
     expect(after.id).toBe(event.id);
     expect(after.cancelledAt).toBeNull();
     expect(new Date(after.duration[0]).getTime()).toBe(newStart.getTime());
@@ -823,13 +799,7 @@ function describePollExpiry() {
       .send({ status: 'archived' });
 
     // After archival, the event's rescheduling_poll_id should be cleared
-    const [updatedEvent] = nonEmpty(
-      await testApp.db
-        .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, event.id)),
-      'updatedEvent',
-    );
+    const updatedEvent = await eventById(event.id);
 
     // Event should NOT be cancelled (poll expired, not completed)
     expect(updatedEvent.cancelledAt).toBeNull();
