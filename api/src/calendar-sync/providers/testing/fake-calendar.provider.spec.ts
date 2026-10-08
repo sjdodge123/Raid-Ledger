@@ -1,5 +1,5 @@
 import { ProviderAuthError } from '../calendar-provider.errors';
-import { describeCalendarProviderConformance } from './calendar-provider.conformance';
+import { describeCalendarProviderConformance } from './calendar-provider.conformance.spec-helpers';
 import {
   FAKE_DEFAULT_SCOPES,
   FAKE_SUBJECT_PREFIX,
