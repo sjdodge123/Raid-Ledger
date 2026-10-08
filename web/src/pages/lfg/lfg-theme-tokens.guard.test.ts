@@ -31,6 +31,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { stripComments } from '../../test/strip-comments';
 
 /** `web/src`, resolved from this file's location. */
 const WEB_SRC = resolve(__dirname, '../..');
@@ -44,13 +45,7 @@ const SWEPT_FILES = ['components/events/lfg-summary-banner.tsx'];
  * prose, and a naive scan would flag its own explanation (the repeat failure
  * mode recorded for the ROK-1314 guards).
  */
-const codeOnly = (src: string): string =>
-    src
-        // Keep the newline count so reported line numbers match the real file.
-        .replace(/\/\*[\s\S]*?\*\//g, (block) =>
-            '\n'.repeat((block.match(/\n/g) ?? []).length),
-        )
-        .replace(/\/\/[^\n]*/g, '');
+const codeOnly = stripComments;
 
 /** Every non-test source file in the swept set, as `[relativePath, code]`. */
 function sweptSources(): [string, string][] {

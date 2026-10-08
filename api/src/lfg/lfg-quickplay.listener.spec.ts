@@ -23,6 +23,7 @@ import { LFG_EVENTS } from './lfg.constants';
 import { LfgQuickPlayListener } from './lfg-quickplay.listener';
 import { findOpenLfgNowEventId } from './lfg-playing.helpers';
 import { convertHolderIntent } from './lfg-write.helpers';
+import { stripComments } from '../common/testing/strip-comments';
 
 jest.mock('./lfg-playing.helpers', () => ({
   findOpenLfgNowEventId: jest.fn(),
@@ -35,13 +36,6 @@ const findOpen = findOpenLfgNowEventId as jest.MockedFunction<
 const convertHolder = convertHolderIntent as jest.MockedFunction<
   typeof convertHolderIntent
 >;
-
-/** Block comments, then line comments — `://` in a URL is left alone. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
-}
 
 interface Harness {
   db: MockDb;

@@ -23,21 +23,9 @@
  */
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative } from 'path';
+import { stripComments } from '../../common/testing/strip-comments';
 
 const API_SRC = join(__dirname, '..', '..');
-
-/**
- * Strip block and line comments before scanning.
- *
- * String literals are deliberately LEFT IN: stripping them would need a regex
- * that also understands regex literals (which contain quotes), and a scan that
- * over-reports a forbidden token inside a string is the safe direction to err.
- */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-}
 
 /** Every `.ts` file under `api/src`, excluding specs. */
 function sourceFiles(dir: string, acc: string[] = []): string[] {

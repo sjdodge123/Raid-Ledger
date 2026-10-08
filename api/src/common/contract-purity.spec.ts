@@ -18,6 +18,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import * as path from 'path';
 import { defined } from './testing/narrow';
+import { stripComments } from './testing/strip-comments';
 
 const CONTRACT_SRC = path.resolve(__dirname, '../../../packages/contract/src');
 const CONTRACT_PACKAGE_JSON = path.resolve(CONTRACT_SRC, '../package.json');
@@ -36,13 +37,6 @@ const SPECIFIER_PATTERNS: ReadonlyArray<RegExp> = [
   /\bimport\s*['"]([^'"]+)['"]/g,
   /\b(?:require|import)\s*\(\s*['"]([^'"]+)['"]\s*\)/g,
 ];
-
-/** Strip block and line comments so prose cannot satisfy or trip the scan. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:])\/\/.*$/gm, '$1');
-}
 
 /** Module specifiers imported, re-exported or required by `source`. */
 function extractSpecifiers(source: string): string[] {

@@ -16,6 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { stripComments } from '../../test/strip-comments';
 
 /**
  * Resolved from `process.cwd()` (vitest runs from `web/`) rather than
@@ -33,16 +34,6 @@ function sourceFiles(dir: string): string[] {
         else if (/\.tsx?$/.test(entry.name)) out.push(full);
     }
     return out;
-}
-
-/**
- * Removes block and line comments. The `[^:]` guard keeps `https://…` inside
- * string literals intact, so stripping cannot corrupt the code being scanned.
- */
-function stripComments(source: string): string {
-    return source
-        .replace(/\/\*[\s\S]*?\*\//g, ' ')
-        .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
 /** Assembled from fragments so this list never matches itself. */
@@ -122,5 +113,17 @@ describe('web/src/components/discord uses theme tokens only (AC9)', () => {
             hexLiterals(source),
             `${file} hard-codes a colour — AC9 allows theme tokens only`,
         ).toEqual([]);
+    });
+});
+
+describe('a bare URL in JSX text does not hide the rest of its line (B66 m1)', () => {
+    it('still sees a write affordance after an unquoted https:// URL', () => {
+        const source = stripComments(`<p>See https://discord.com ${'<' + 'input'} /></p>`);
+        expect(source.includes('<' + 'input'), source).toBe(true);
+    });
+
+    it('still sees a hard-coded colour after an unquoted https:// URL', () => {
+        const source = stripComments(`<p>See https://x.dev <b className="text-${ARBITRARY_VALUE}fff]">x</b></p>`);
+        expect(hexLiterals(source)).toHaveLength(1);
     });
 });

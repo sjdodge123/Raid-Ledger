@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { at, defined } from '../test/defined';
+import { stripComments } from '../test/strip-comments';
 
 /**
  * ROK-1366 review fix: the fragment token must be gone from the address bar
@@ -13,9 +14,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const IMPORT_RE = /^import\s+(?:[^'"]*?from\s+)?['"]([^'"]+)['"]/gm;
 
 function importsOf(file: string): string[] {
-    const src = readFileSync(join(here, file), 'utf8')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/^\s*\/\/.*$/gm, '');
+    const src = stripComments(readFileSync(join(here, file), 'utf8'));
     return [...src.matchAll(IMPORT_RE)].map((m) => defined(m[1], 'import specifier'));
 }
 
@@ -79,14 +78,13 @@ function indexHtmlScripts(): ScriptTag[] {
 
 const srcOf = (tag: ScriptTag): string | null => /\bsrc\s*=\s*["']([^"']+)["']/i.exec(tag.attrs)?.[1] ?? null;
 const hasAttr = (tag: ScriptTag, name: string): boolean => new RegExp(`(^|\\s)${name}(\\s|=|$)`, 'i').test(tag.attrs);
-const stripJsComments = (src: string): string => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 /** Non-test source files under web/src that mention the tooltips.js URL (comments stripped). */
 function srcFilesLoadingTooltips(): string[] {
     const srcRoot = join(here, '..');
     return (readdirSync(srcRoot, { recursive: true }) as string[])
         .filter((f) => /\.(ts|tsx)$/.test(f) && !/\.(test|spec)\.tsx?$/.test(f))
-        .filter((f) => TOOLTIPS_URL_RE.test(stripJsComments(readFileSync(join(srcRoot, f), 'utf8'))))
+        .filter((f) => TOOLTIPS_URL_RE.test(stripComments(readFileSync(join(srcRoot, f), 'utf8'))))
         .map((f) => f.split('\\').join('/'));
 }
 
@@ -100,7 +98,7 @@ describe('ROK-1366: index.html runs nothing that can read the fragment before th
         const early = scripts.slice(0, entry);
         expect(early.map(srcOf).filter(Boolean), 'these execute before the fragment strip').toEqual([]);
         for (const tag of early) {
-            expect(stripJsComments(tag.body), 'inline script ahead of the entry reads the URL').not.toMatch(
+            expect(stripComments(tag.body), 'inline script ahead of the entry reads the URL').not.toMatch(
                 /\blocation\b|\bhref\b|document\.URL/,
             );
         }
@@ -109,7 +107,7 @@ describe('ROK-1366: index.html runs nothing that can read the fragment before th
     it('loads no external script at all besides the module entry', () => {
         const external = scripts.map(srcOf).filter((src) => src !== null && src !== ENTRY_SRC);
         expect(external, 'inject third-party scripts from the entry, after the strip').toEqual([]);
-        expect(scripts.some((tag) => TOOLTIPS_URL_RE.test(stripJsComments(tag.body)))).toBe(false);
+        expect(scripts.some((tag) => TOOLTIPS_URL_RE.test(stripComments(tag.body)))).toBe(false);
     });
 });
 

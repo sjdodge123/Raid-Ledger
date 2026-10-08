@@ -15,6 +15,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { LFG_COPY } from './lfg-copy';
+import { stripComments } from '../../test/strip-comments';
 
 /** Resolved from THIS file, not the cwd — vitest runs from `web/`. */
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -32,13 +33,6 @@ function sourceFiles(dir: string): string[] {
         if (/\.(test|spec)\.tsx?$/.test(entry)) return [];
         return [full];
     });
-}
-
-/** Drop block and line comments so a guard never trips on its own prose. */
-function stripComments(source: string): string {
-    return source
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/^[^'"`\n]*\/\/.*$/gm, '');
 }
 
 describe('LFG copy sweep (ROK-1616 AC5)', () => {

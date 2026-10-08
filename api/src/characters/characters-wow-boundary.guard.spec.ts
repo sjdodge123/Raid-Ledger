@@ -6,6 +6,7 @@
  */
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative } from 'path';
+import { stripComments } from '../common/testing/strip-comments';
 
 const ROOT = __dirname;
 
@@ -26,13 +27,6 @@ function listSourceFiles(dir: string, out: string[] = []): string[] {
       out.push(full);
   }
   return out;
-}
-
-/** Block comments, then line comments — `://` in a URL is left alone. */
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, '$1');
 }
 
 function offendingTokens(source: string): string[] {

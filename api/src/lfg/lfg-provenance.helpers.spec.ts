@@ -24,6 +24,7 @@ import {
   convertedToTarget,
   listConvertedGroupMembers,
 } from './lfg-provenance.helpers';
+import { stripComments } from '../common/testing/strip-comments';
 
 /** Compile a drizzle condition to the SQL text + bound params Postgres sees. */
 function compile(cond: unknown): { sql: string; params: unknown[] } {
@@ -182,9 +183,7 @@ describe('the module never reaches for the live predicate family', () => {
     // Strip comments FIRST: this file's own doc comment explains why it must
     // not compose `liveIntent`, and a naive scan trips on that explanation
     // (the exact defect that landed twice in ROK-1314).
-    const code = source
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .replace(/(^|[^:])\/\/.*$/gm, '$1');
+    const code = stripComments(source);
 
     expect(code).not.toMatch(/liveIntent/);
   });
