@@ -14,19 +14,7 @@
  * `listConvertedGroupMembers` unchanged — the converted path must never
  * compose the live predicate family (that is the defect round 1 shipped).
  */
-import {
-  and,
-  count,
-  desc,
-  eq,
-  gt,
-  gte,
-  isNotNull,
-  isNull,
-  notExists,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, count, eq, gte, isNull, notExists, sql } from 'drizzle-orm';
 import type { LfgMemberDto } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
@@ -290,51 +278,13 @@ export async function readConvertedGroup(
   return listConvertedGroupMembers(db, gameId, target);
 }
 
-/**
- * Newest conversion provenance for a game, or null (D9).
- *
- * Used only by the restart reconcile, where the transition payload is long
- * gone and the row itself is the only surviving evidence of what happened.
- * Newest first, because an older group for the same game converted months ago.
- *
- * @param db - Drizzle handle.
- * @param gameId - Game whose open row is being reconciled.
- * @returns The most recent conversion target, or null when none exists.
- * @param postedAfter - When the message being reconciled was posted; only
- *   provenance whose hands expire after that can belong to its group.
- */
-export async function latestConversionTarget(
-  db: LfgDb,
-  gameId: number,
-  postedAfter: Date,
-): Promise<LfgConversionTarget | null> {
-  const [row] = await db
-    .select({
-      pollId: schema.lfgIntents.convertedToPollId,
-      eventId: schema.lfgIntents.convertedToEventId,
-    })
-    .from(schema.lfgIntents)
-    .where(
-      and(
-        eq(schema.lfgIntents.gameId, gameId),
-        eq(schema.lfgIntents.status, 'converted'),
-        // The row's group was live when its message was posted, and conversion
-        // never resets the clock, so ITS hands still expire after `postedAfter`.
-        // A corpse from an older group of the same game does not, and must not
-        // be mistaken for this group's conversion (E6 at reconcile time).
-        gt(schema.lfgIntents.expiresAt, postedAfter),
-        or(
-          isNotNull(schema.lfgIntents.convertedToPollId),
-          isNotNull(schema.lfgIntents.convertedToEventId),
-        ),
-      ),
-    )
-    .orderBy(desc(schema.lfgIntents.id))
-    .limit(1);
-  if (!row) return null;
-  if (row.pollId !== null) return { pollId: row.pollId };
-  return { eventId: row.eventId as number };
-}
+// TDB:953 — the two provenance lookups live in their own file for the line
+// cap, and are re-exported HERE so this module stays the one data-access
+// surface the unit specs mock (`jest.mock('./lfm-embed.db-helpers')`).
+export {
+  conversionSincePosted,
+  latestConversionTarget,
+} from './lfm-embed.provenance.helpers';
 
 /**
  * Resolve the SCHEDULED poll link.

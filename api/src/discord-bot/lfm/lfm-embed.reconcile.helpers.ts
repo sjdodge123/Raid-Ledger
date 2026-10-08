@@ -10,12 +10,14 @@
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfmGroupView } from './lfm-embed.helpers';
 import {
+  convertedView,
   endedView,
   liveFloorFor,
   liveView,
   sessionView,
 } from './lfm-embed.views';
 import {
+  conversionSincePosted,
   listOpenLfmMessages,
   loadLfmGame,
   type LfmGameRow,
@@ -83,6 +85,15 @@ export async function reconcileRow(
  * for the rest of the session. That is precisely the failure D3 exists to
  * prevent, so the session read has to come before the group is judged dead.
  *
+ * TDB:953 — the CONVERSION is checked SECOND, still before the floor. A
+ * group that converted while the bot was down, followed by a NEW group for
+ * the same game crossing the floor, used to pass the live check below and
+ * re-render the old message AS the new group: the conversion was never
+ * rendered, and the new group never got a post of its own. A conversion
+ * stamped after this row's `posted_at` is its group's ending, whatever the
+ * live read says now; closing the row frees the partial unique index, so
+ * `reconcileUntrackedGroups` posts the new group fresh in the same CONNECTED.
+ *
  * @param db - Drizzle handle.
  * @param row - The `open` row being reconciled.
  * @param game - Its game, already loaded.
@@ -97,6 +108,8 @@ export async function reconcileView(
   // the same helper, so the hot path and the reconcile cannot disagree.
   const session = await sessionView(db, game);
   if (session) return session;
+  const converted = await conversionSincePosted(db, row);
+  if (converted) return convertedView(db, game, converted);
   const liveGroup = await liveView(db, game);
   if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
   return endedView(db, game, row);
