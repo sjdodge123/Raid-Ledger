@@ -16,8 +16,8 @@ interface AdminPluginCardProps {
 }
 
 const STATUS_STYLES = {
-    active: 'bg-emerald-500/20 text-emerald-400',
-    inactive: 'bg-amber-500/20 text-amber-400',
+    active: 'bg-success/10 text-success',
+    inactive: 'bg-warning/10 text-warning',
     not_installed: 'bg-gray-500/20 text-gray-400',
 } as const;
 

@@ -12,8 +12,8 @@ interface PluginCardProps {
 }
 
 const STATUS_STYLES = {
-    active: 'bg-emerald-500/20 text-emerald-400',
-    inactive: 'bg-amber-500/20 text-amber-400',
+    active: 'bg-success/10 text-success',
+    inactive: 'bg-warning/10 text-warning',
     not_installed: 'bg-gray-500/20 text-gray-400',
 } as const;
 
@@ -85,7 +85,7 @@ function IntegrationHealth({ integrations }: { integrations: PluginInfoDto['inte
         <div className="flex flex-wrap gap-3 mb-3 text-sm">
             {integrations.map((i) => (
                 <div key={i.key} className="flex items-center gap-1.5">
-                    <div className={`w-2 h-2 rounded-full ${i.configured ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                    <div className={`w-2 h-2 rounded-full ${i.configured ? 'bg-success' : 'bg-danger'}`} />
                     <span className="text-secondary">{i.name}</span>
                 </div>
             ))}
@@ -109,7 +109,7 @@ function PluginActions({ plugin, onInstall, onUninstall, onActivate, onDeactivat
                     <button onClick={() => onActivate(plugin.slug)} disabled={isPending}
                         className="px-3 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Activate</button>
                     <button onClick={() => onUninstall(plugin.slug)} disabled={isPending}
-                        className="px-3 py-2.5 text-sm bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium rounded-lg transition-colors border border-red-600/50">Uninstall</button>
+                        className="px-3 py-2.5 text-sm bg-danger/10 hover:bg-danger/15 text-danger font-medium rounded-lg transition-colors border border-danger/50">Uninstall</button>
                 </>
             )}
         </div>

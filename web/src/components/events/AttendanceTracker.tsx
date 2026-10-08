@@ -9,9 +9,9 @@ interface AttendanceTrackerProps {
 }
 
 const ATTENDANCE_OPTIONS: { value: AttendanceStatus; label: string; color: string }[] = [
-    { value: 'attended', label: 'Attended', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-    { value: 'no_show', label: 'No Show', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
-    { value: 'excused', label: 'Excused', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+    { value: 'attended', label: 'Attended', color: 'bg-success/10 text-success border-success/30' },
+    { value: 'no_show', label: 'No Show', color: 'bg-danger/10 text-danger border-danger/30' },
+    { value: 'excused', label: 'Excused', color: 'bg-warning/10 text-warning border-warning/30' },
     { value: 'unmarked', label: 'Unmarked', color: 'bg-dim/20 text-muted border-dim/30' },
 ];
 
@@ -29,9 +29,9 @@ function AttendanceLoadingSkeleton() {
 function AttendanceSummaryBar({ summary }: { summary: { attended: number; noShow: number; excused: number; unmarked: number } }) {
     return (
         <div className="flex items-center gap-4 text-sm">
-            <span className="text-emerald-400">{summary.attended} attended</span>
-            <span className="text-red-400">{summary.noShow} no-show</span>
-            <span className="text-amber-400">{summary.excused} excused</span>
+            <span className="text-success">{summary.attended} attended</span>
+            <span className="text-danger">{summary.noShow} no-show</span>
+            <span className="text-warning">{summary.excused} excused</span>
             <span className="text-muted">{summary.unmarked} unmarked</span>
         </div>
     );
@@ -55,9 +55,9 @@ function AttendanceProgressBar({ summary }: { summary: { attended: number; excus
     if (summary.totalSignups <= 0) return null;
     return (
         <div className="h-2 rounded-full bg-overlay overflow-hidden flex">
-            <ProgressSegment count={summary.attended} total={summary.totalSignups} className="bg-emerald-500" />
-            <ProgressSegment count={summary.excused} total={summary.totalSignups} className="bg-amber-500" />
-            <ProgressSegment count={summary.noShow} total={summary.totalSignups} className="bg-red-500" />
+            <ProgressSegment count={summary.attended} total={summary.totalSignups} className="bg-success" />
+            <ProgressSegment count={summary.excused} total={summary.totalSignups} className="bg-warning" />
+            <ProgressSegment count={summary.noShow} total={summary.totalSignups} className="bg-danger" />
         </div>
     );
 }
