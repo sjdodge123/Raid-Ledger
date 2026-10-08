@@ -1,16 +1,15 @@
 // ROK-1161 phase 8 ratchet: specs + test infra under noUncheckedIndexedAccess.
 // `exclude` lists the spec dirs that are NOT yet clean. Each later phase-8 PR
 // deletes the lines for the dirs it converts, or narrows one to the subtree
-// still left. Imported app files are pulled in too; tsconfig.build.json already
+// still left, and adds each converted subtree to CONVERTED in
+// src/common/testing/spec-nuia-ratchet.guard.spec.ts so a merge cannot put
+// it back. Imported app files are pulled in too; tsconfig.build.json already
 // gates them ON. When `exclude` is empty, set the flag in tsconfig.json itself
-// and delete this file, plus the CI lint-job step and the validate-ci
-// run_typecheck line that run it.
+// and delete this file and that guard, plus the CI lint-job step and the
+// validate-ci run_typecheck line that run it.
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "noUncheckedIndexedAccess": true, "noEmit": true, "incremental": false },
   "include": ["src/**/*.spec*.ts", "src/**/*.test-fixtures.ts", "src/common/testing/**/*.ts", "test/**/*.ts"],
-  "exclude": [
-    "src/discord-bot/services/**",
-    "src/notifications/post-event*"
-  ]
+  "exclude": []
 }
