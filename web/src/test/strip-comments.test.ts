@@ -80,3 +80,23 @@ describe('stripComments — comments are blanked', () => {
         expect(stripComments('{/* x */}<div />')).toBe('{       }<div />');
     });
 });
+
+describe('stripComments — Codex B66 review (colon comments, regex after if)', () => {
+    it.each([
+        ['a comment glued to a case colon', `case 'x':// ROK-123 ${TOKEN}`],
+        ['a comment glued to default:', `default:// ${TOKEN}`],
+        ['a comment after an identifier label', `case Kind.A:// ${TOKEN}`],
+    ])('blanks %s (the :// exception is URL-only)', (_label, source) => {
+        expect(stripComments(source)).not.toContain(TOKEN);
+    });
+
+    it('keeps a regex literal right after an if (...) condition', () => {
+        const source = `if (ok) /'/.test(s); const z = 'a//b'; ${TOKEN}`;
+        expect(stripComments(source)).toContain(TOKEN);
+    });
+
+    it('still reads / after ) and ] as division', () => {
+        expect(stripComments('r = (a + b) / 2 / n; // c')).toBe('r = (a + b) / 2 / n;     ');
+        expect(stripComments('r = arr[0] / 2; // c')).toBe('r = arr[0] / 2;     ');
+    });
+});

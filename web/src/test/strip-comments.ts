@@ -8,9 +8,12 @@
  * or regex literal as a comment and blanked the real code after it — so a
  * forbidden token placed there passed the guard.
  *
- * A `//` directly after `:` is never a comment opener: TypeScript has no
- * legal `://` in a code position, but unquoted prose does — a bare `https://…`
- * in JSX text (B66 M1). Skipping it keeps that URL, so a token in it is caught.
+ * A URL scheme (`https://host`: a scheme word, `:`, `//`, then a non-space)
+ * is never a comment opener — unquoted prose holds one, a bare `https://…` in
+ * JSX text (B66 M1), and keeping it means a token in it is caught. Any other
+ * `//` after a colon (`case 'x':// note`, `default:// note`) is still a
+ * comment (Codex B66 review). Residual: a label glued to an unspaced comment
+ * (`case A://note`) reads as a URL and is kept — over-reports, the safe side.
  * Markdown and other non-JS files must not go through this stripper at all —
  * scan them raw.
  *
@@ -28,15 +31,17 @@
  *
  * A regex literal is recognised only where one can start (after an operator,
  * an opening bracket, an arrow `=>`, a keyword or a line start), which tells
- * it apart from division. Known residual: a regex right after `)` (`if (ok)
- * /re/.test(s)`) is read as division, so a quote or `//` inside it can open a
- * fake string or comment — `)` is left out because `(a + b) / 2` is far
- * commoner.
+ * it apart from division. After `)` only an `if`/`while`/`for (...)` head
+ * (one nesting level) starts a regex: anywhere else, per the grammar, `/`
+ * after `)` or `]` IS division (`foo() /re/` divides), so it stays division.
+ * Residual: a deeper-nested condition (`if (a(b(c))) /re/`) is read as
+ * division, so a quote or `//` inside that regex can open a fake string or
+ * comment.
  */
-const REGEX_LITERAL = String.raw`(?<=(?:^|=>|[(,=:[!&|?{};]|\b(?:return|typeof|case|throw|await|yield|void|delete))\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*`;
+const REGEX_LITERAL = String.raw`(?<=(?:^|=>|[(,=:[!&|?{};]|\b(?:return|typeof|case|throw|await|yield|void|delete)|\b(?:if|while|for)\s*\((?:[^()\n]|\([^()\n]*\))*\))\s*)\/(?![*/])(?:\\.|\[(?:\\.|[^\]\\\n])*\]|[^/\\\n[])+\/[dgimsuyv]*`;
 const QUOTED_STRING = String.raw`\x27(?:\\.|[^\x27\\\n])*\x27|\x22(?:\\.|[^\x22\\\n])*\x22`;
 const TEMPLATE_LITERAL = String.raw`\x60(?:\\.|\$\{(?:[^{}\x60]|\x60(?:\\.|[^\x60\\])*\x60)*\}|[^\x60\\])*\x60`;
-const COMMENT = String.raw`(\/\*[\s\S]*?\*\/|(?<!:)\/\/[^\n]*)`;
+const COMMENT = String.raw`(\/\*[\s\S]*?\*\/|(?!(?<=\b(?!default:)[a-zA-Z][a-zA-Z0-9+.-]*:)\/\/[^\s/])\/\/[^\n]*)`;
 const LITERAL_OR_COMMENT_RE = new RegExp(
     [REGEX_LITERAL, QUOTED_STRING, TEMPLATE_LITERAL, COMMENT].join('|'),
     'gm',
