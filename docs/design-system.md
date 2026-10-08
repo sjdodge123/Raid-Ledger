@@ -159,8 +159,9 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
 - **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
 
 **Semantic-hue ratchet (TDB:1770, ROK-1586).** `web/src/styles/semantic-hue.guard.test.ts` counts every raw
-`emerald` / `green` / `amber` / `yellow` / `red` / `rose` utility (`text-` `bg-` `border-` `ring-` `fill-` `stroke-`
-`from-` `to-` `via-` `divide-` `outline-` `accent-` `placeholder-` `decoration-`, any shade, any `/NN`) per shipped
+`emerald` / `green` / `amber` / `yellow` / `red` / `rose` utility (`text-` `bg-` `border-` `border-{t,r,b,l,x,y,s,e}-`
+`shadow-` `ring-` `fill-` `stroke-` `from-` `to-` `via-` `divide-` `outline-` `accent-` `placeholder-` `decoration-`,
+any shade, any `/NN`) per shipped
 `.ts` / `.tsx` under `web/src` — `*.test.*`, `*.spec.*`, `web/src/test/**` and `web/src/dev/**` excluded, comments
 stripped by `web/src/test/strip-comments.ts` — against `semantic-hue.baseline.json` (`{path: count}` plus `__total`,
 which must equal the sum). It works like the form-primitives guard (§4.11): a file not in the baseline fails, a
@@ -172,7 +173,9 @@ tooltip and faction colours) is named with a one-line reason in `semantic-hue.ca
 may enter the baseline, it keeps but never raises its count, and an entry whose file has no raw hue left fails as
 stale. Solid accent button fills (above) stay in the baseline unannotated. **KPI:** `__total` — 1111 raw sites by
 grep on `212790e4d`, 1092 once comments are stripped (the S0 baseline), 1039 after S0 moved the status pills (`LineupStatusBadge`,
-`AttendanceTracker`, the three `PluginCard`s, `TiebreakerBadge`, `ConfirmationPill`) onto `bg-<token>/10` tints.
+`AttendanceTracker`, the three `PluginCard`s, `TiebreakerBadge`, `ConfirmationPill`) onto `bg-<token>/10` tints,
+then **1061** once S0's review widened the counted set to the prefixes listed above (directional borders and
+`shadow-` were added; +22, a definition change, not a regression — compare totals only under the same set).
 
 Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
 --include='*.tsx'`, excluding tests):

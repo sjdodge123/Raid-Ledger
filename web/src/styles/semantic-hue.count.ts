@@ -2,8 +2,9 @@
  * Raw semantic-hue counter for the semantic-hue ratchet (ROK-1586, TDB:1770).
  *
  * Counts every raw emerald / green / amber / yellow / red / rose Tailwind
- * utility — text, bg, border, ring, fill, stroke, gradient stops, divide,
- * outline, accent, placeholder, decoration; any shade, any `/NN` alpha — per
+ * utility — text, bg, border (and the directional `border-{t,r,b,l,x,y,s,e}-`),
+ * shadow, ring, fill, stroke, gradient stops, divide, outline, accent,
+ * placeholder, decoration; any shade, any `/NN` alpha — per
  * shipped `.ts` / `.tsx` file under `web/src`, after stripping comments with
  * the shared B66 stripper. Tests, `test/**` and the DEMO-only `dev/**` are out
  * of scope. Shared by `semantic-hue.guard.test.ts` and the generator
@@ -19,7 +20,7 @@ export type CategoricalAllowlist = Record<string, string>;
 
 export const TOTAL_KEY = '__total';
 
-const UTILITY = 'text|bg|border|ring|fill|stroke|from|to|via|divide|outline|accent|placeholder|decoration';
+const UTILITY = 'text|bg|border-[trblxyse]|border|shadow|ring|fill|stroke|from|to|via|divide|outline|accent|placeholder|decoration';
 const HUE = 'emerald|green|amber|yellow|red|rose';
 const RAW_SEMANTIC_HUE = new RegExp(String.raw`(?:${UTILITY})-(?:${HUE})-\d{2,3}(?:\/\d+)?`, 'g');
 const HINT = 'use text-success/bg-danger/… or add it to semantic-hue.categorical.json with a reason';

@@ -79,6 +79,13 @@ describe('semantic-hue ratchet — mutation tests', () => {
         expect(countSemanticHues('text-success bg-danger/10 border-warning/40 text-blue-400 bg-emerald text-red')).toBe(0);
     });
 
+    it('counts directional borders and shadow colours, and still ignores them on a token', () => {
+        expect(countSemanticHues('border-l-red-500')).toBe(1);
+        expect(countSemanticHues('shadow-emerald-500/30')).toBe(1);
+        expect(countSemanticHues('border-t-emerald-500 border-x-amber-400 border-e-rose-300 hover:shadow-red-500/20')).toBe(4);
+        expect(countSemanticHues('border-l-primary border-t-success shadow-danger/30 shadow-lg')).toBe(0);
+    });
+
     it('ignores hues inside line, block and JSX comments but keeps string literals', () => {
         expect(countSemanticHues('// text-red-400\n/* bg-emerald-500 */\n{/* border-amber-300 */}\nconst c = "text-rose-400";')).toBe(1);
     });
