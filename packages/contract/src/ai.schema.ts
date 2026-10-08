@@ -1,16 +1,5 @@
 import { z } from 'zod';
 
-/** Schema for an AI model available from a provider. */
-export const AiModelSchema = z.object({
-    id: z.string(),
-    name: z.string(),
-    parameterSize: z.string().optional(),
-    quantization: z.string().optional(),
-    family: z.string().optional(),
-});
-
-export type AiModelDto = z.infer<typeof AiModelSchema>;
-
 /** Schema for the AI provider status response. */
 export const AiStatusSchema = z.object({
     provider: z.string(),
