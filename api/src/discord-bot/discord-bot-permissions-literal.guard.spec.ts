@@ -140,7 +140,9 @@ describe('stripComments (ROK-1314: strip before matching)', () => {
   });
 
   it('catches a bare (unquoted) invite URL in markdown prose (B66 M1)', () => {
-    expect(scannableText('README.md', `Invite: ${INVITE}`)).toMatch(LONG_NUMBER);
+    expect(scannableText('README.md', `Invite: ${INVITE}`)).toMatch(
+      LONG_NUMBER,
+    );
     expect(scannableText('README.md', `- [Invite](${INVITE})`)).toMatch(
       LONG_NUMBER,
     );
@@ -153,9 +155,9 @@ describe('stripComments (ROK-1314: strip before matching)', () => {
   });
 
   it('still ignores the literal inside a real // comment in code', () => {
-    expect(
-      scannableText('invite.ts', `const a = 1; // ${INVITE}`),
-    ).not.toMatch(LONG_NUMBER);
+    expect(scannableText('invite.ts', `const a = 1; // ${INVITE}`)).not.toMatch(
+      LONG_NUMBER,
+    );
   });
 
   it('preserves line numbers so the failure names the right line', () => {
