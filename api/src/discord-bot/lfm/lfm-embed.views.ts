@@ -48,7 +48,7 @@ interface ViewLogger {
  * the group drops below two. This is the ONE seam where a row's `post_kind`
  * reaches the view computation (an explicit amendment to ROK-1471 D2/D9's
  * "surface invisible to the state machine"): both `viewForChange` and the
- * service's `reconcileView` are fed `liveFloorFor(row.postKind)`.
+ * reconcile's `reconcileView` are fed `liveFloorFor(row.postKind)`.
  *
  * @param postKind - The row's pinned surface (`lfg_group_messages.post_kind`,
  *   a plain `text` column holding one of `LFG_POST_KINDS`).
@@ -132,7 +132,7 @@ export async function playingView(
  * A game with an open LFG-born session renders `playing`, whatever else the
  * caller was about to read. Both callers go through here on purpose: the hot
  * path ({@link viewForChange}) and the restart reconcile
- * (`LfmEmbedService.reconcileView`) previously each held their own opinion, and
+ * (the reconcile's `reconcileView`) previously each held their own opinion, and
  * only the reconcile's was right — which is exactly how the round-2 fleet gate
  * failed. The spawn converts every intent, so the live read returns an EMPTY
  * group; letting it win paints `0 looking` over `▸ PLAYING NOW` and stamps
@@ -165,7 +165,7 @@ export async function sessionView(
  * restored it. Measured on the fleet: `planning-artifacts/diag-ROK-1494-ac7.md`
  * §A, the 00:59:07.751 render on message …575.
  *
- * {@link viewForChange} and `LfmEmbedService.reconcileView` already ask
+ * {@link viewForChange} and the reconcile's `reconcileView` already ask
  * {@link sessionView} first; this was the third caller that did not.
  *
  * **It was not the last.** ROK-1523's board-retire pass reached for `liveView`
@@ -230,7 +230,7 @@ export function expiredView(
  * The view of a group that has fallen below its floor: it ENDED, and the only
  * surviving evidence of how is the provenance FK a conversion wrote.
  *
- * Shared by `LfmEmbedService.reconcileView` and ROK-1523's retire, so a group
+ * Shared by the reconcile's `reconcileView` and ROK-1523's retire, so a group
  * that ended unseen renders the same ending from either writer.
  *
  * @param db - Drizzle handle.
