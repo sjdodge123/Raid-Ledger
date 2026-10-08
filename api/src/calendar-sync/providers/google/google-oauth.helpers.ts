@@ -216,9 +216,12 @@ function parseRetryAfterMs(raw: string | null, nowMs = Date.now()): number {
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
   const parts = token.split('.');
-  if (parts.length !== 3) throw idTokenError('format');
+  const payload = parts[1];
+  if (parts.length !== 3 || payload === undefined) {
+    throw idTokenError('format');
+  }
   try {
-    const text = Buffer.from(parts[1], 'base64url').toString('utf8');
+    const text = Buffer.from(payload, 'base64url').toString('utf8');
     return asRecord(JSON.parse(text));
   } catch {
     throw idTokenError('payload');
