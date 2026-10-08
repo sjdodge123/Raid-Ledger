@@ -46,7 +46,7 @@ import {
   type LfgHeartedGameDto,
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -103,7 +103,9 @@ async function members(...names: string[]) {
 
 describe('LFG → LFM transition', () => {
   it('derives lfg at one intent and lfm at two — the +1 IS another intent', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const game = await createGame(testApp, 'Deep Rock');
 
     const first = await postIntent(a.token, game.id);
@@ -143,7 +145,9 @@ describe('LFG → LFM transition', () => {
   });
 
   it('GET /lfg groups active intents by game, ordered by activeCount desc', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const busy = await createGame(testApp, 'Busy Game');
     const quiet = await createGame(testApp, 'Quiet Game');
     await postIntent(a.token, busy.id);
@@ -224,7 +228,9 @@ describe('LFG → LFM transition', () => {
 
 describe('+1 expiry refresh', () => {
   it('pushes expires_at ~LFG_EXPIRY_DAYS (7) days out for EVERY active intent on the game', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const game = await createGame(testApp, 'Helldivers');
 
     const aIntent = (await postIntent(a.token, game.id))
@@ -280,7 +286,7 @@ describe('+1 expiry refresh', () => {
     const rows = await readIntentsForGame(testApp, game.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe('active');
-    expect(daysFromNow(rows[0].expires_at)).toBeGreaterThan(
+    expect(daysFromNow(at(rows, 0).expires_at)).toBeGreaterThan(
       LFG_EXPIRY_DAYS - 1,
     );
   });
@@ -399,7 +405,9 @@ describe('expiry cron', () => {
   });
 
   it('flips past-expiry intents to expired and drops them out of GET /lfg', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const stale = await createGame(testApp, 'Stale Game');
     const live = await createGame(testApp, 'Live Game');
     const staleIntent = (await postIntent(a.token, stale.id))
@@ -461,7 +469,9 @@ describe('concurrency guard', () => {
 
 describe('conversion', () => {
   it('converts every active intent on the game and records poll provenance', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const game = await createGame(testApp, 'Convert Game');
     await postIntent(a.token, game.id);
     await postIntent(b.token, game.id);
@@ -525,7 +535,9 @@ describe('conversion', () => {
   });
 
   it('403s a bystander who holds no active intent on the game', async () => {
-    const [a, bystander] = await members('alpha', 'bystander');
+    const roster = await members('alpha', 'bystander');
+    const a = at(roster, 0);
+    const bystander = at(roster, 1);
     const game = await createGame(testApp, 'Members Only Game');
     await postIntent(a.token, game.id);
     const eventId = await createFutureEvent(testApp, adminToken, {
@@ -547,7 +559,10 @@ describe('conversion', () => {
 
 describe('excluded holders', () => {
   it('never lets a deactivated or banned holder inflate a group into lfm', async () => {
-    const [a, gone, banned] = await members('alpha', 'gone', 'banned');
+    const roster = await members('alpha', 'gone', 'banned');
+    const a = at(roster, 0);
+    const gone = at(roster, 1);
+    const banned = at(roster, 2);
     const game = await createGame(testApp, 'Exclusion Game');
     await postIntent(a.token, game.id);
     await postIntent(gone.token, game.id);
@@ -575,7 +590,9 @@ describe('excluded holders', () => {
 
 describe('DELETE /lfg/:gameId', () => {
   it("marks the caller's intent cleared and never touches anyone else's", async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const game = await createGame(testApp, 'Withdraw Game');
     await postIntent(a.token, game.id);
     await postIntent(b.token, game.id);
@@ -623,7 +640,9 @@ describe('DELETE /lfg/:gameId', () => {
 
 describe('GET /lfg/hearted', () => {
   it('lists manually hearted games without an own intent, and writes nothing', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const wanted = await createGame(testApp, 'Wanted Game');
     const alreadyPosted = await createGame(testApp, 'Already Posted Game');
     const fromSteam = await createGame(testApp, 'Steam Import Game');
@@ -645,7 +664,7 @@ describe('GET /lfg/hearted', () => {
       gameName: 'Wanted Game',
       activeCount: 1,
     });
-    expect(rows[0].heartedAt).toEqual(expect.any(String));
+    expect(rows[0]?.heartedAt).toEqual(expect.any(String));
     expect(await countGameInterests(testApp)).toBe(interestsBefore);
   });
 });
@@ -656,7 +675,9 @@ describe('GET /lfg/hearted', () => {
 
 describe('viability signal', () => {
   it('reports the Co-Optimus threshold and flips isViable only once it is met', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const coop = await createGame(testApp, 'Coop Game', {
       cooptimusOnlineMax: 2,
     });
@@ -683,7 +704,9 @@ describe('viability signal', () => {
   });
 
   it('never guesses a threshold for a game with no Co-Optimus data', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const unknown = await createGame(testApp, 'Unknown Coop Game', {
       cooptimusOnlineMax: null,
     });
@@ -718,7 +741,10 @@ describe('LFM transition events (ROK-1454 AC1)', () => {
     emitter.on(LFG_EVENTS.LFM_REACHED, onReached);
     emitter.on(LFG_EVENTS.GROUP_CHANGED, onChanged);
     try {
-      const [a, b, c] = await members('alpha', 'bravo', 'charlie');
+      const roster = await members('alpha', 'bravo', 'charlie');
+      const a = at(roster, 0);
+      const b = at(roster, 1);
+      const c = at(roster, 2);
       const game = await createGame(testApp, 'Deep Rock');
 
       // First hand: LFG is quiet — no event of either kind.
