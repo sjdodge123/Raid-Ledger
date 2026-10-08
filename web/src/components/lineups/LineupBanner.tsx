@@ -159,7 +159,7 @@ function BannerActions({ id, status, onNominate, canStartAnother, onStartAnother
                     type="button"
                     onClick={onStartAnother}
                     data-testid="start-another-lineup"
-                    className="px-4 py-2 text-sm font-medium bg-panel text-amber-300 border border-amber-500/40 rounded-lg hover:bg-amber-500/10 transition-colors"
+                    className="px-4 py-2 text-sm font-medium bg-panel text-warning border border-warning/40 rounded-lg hover:bg-warning/10 transition-colors"
                 >
                     Start another lineup
                 </button>

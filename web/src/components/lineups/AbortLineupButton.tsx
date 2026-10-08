@@ -17,7 +17,7 @@ function AbortTrigger({ onClick }: { onClick: () => void }): JSX.Element {
         <button
             type="button"
             onClick={onClick}
-            className="inline-flex items-center gap-1 text-xs text-danger px-2.5 py-1.5 rounded border border-danger/40 hover:bg-danger/10 active:bg-danger/10 transition-colors flex-shrink-0 whitespace-nowrap min-h-[32px]"
+            className="inline-flex items-center gap-1 text-xs text-danger px-2.5 py-1.5 rounded border border-danger/40 hover:bg-danger/10 active:bg-danger/20 transition-colors flex-shrink-0 whitespace-nowrap min-h-[32px]"
             aria-label="Abort Lineup"
         >
             <svg
