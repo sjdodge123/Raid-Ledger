@@ -34,7 +34,7 @@ import {
   type FollowupInteractionEvent,
   type PostEventFollowupDeps,
 } from '../discord-bot/listeners/post-event-followup-interaction.handlers';
-import { nonEmpty } from '../common/testing/narrow';
+import { defined, nonEmpty } from '../common/testing/narrow';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -45,15 +45,18 @@ async function mkUser(
   overrides: Partial<typeof schema.users.$inferInsert> = {},
 ) {
   discordSeq += 1;
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `70000000000000${String(discordSeq).padStart(4, '0')}`,
-      username: `u${discordSeq}`,
-      role: 'member',
-      ...overrides,
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `70000000000000${String(discordSeq).padStart(4, '0')}`,
+        username: `u${discordSeq}`,
+        role: 'member',
+        ...overrides,
+      })
+      .returning(),
+    'inserted user',
+  );
   return user;
 }
 
@@ -62,15 +65,21 @@ async function mkEvent(
   creatorId: number,
   overrides: Partial<typeof schema.events.$inferInsert> = {},
 ) {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Ended Event',
-      creatorId,
-      duration: [new Date(Date.now() - 3 * HOUR), new Date(Date.now() - HOUR)],
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Ended Event',
+        creatorId,
+        duration: [
+          new Date(Date.now() - 3 * HOUR),
+          new Date(Date.now() - HOUR),
+        ],
+        ...overrides,
+      })
+      .returning(),
+    'inserted event',
+  );
   return event;
 }
 
@@ -108,11 +117,14 @@ async function getSentinel(testApp: TestApp, eventId: number) {
 }
 
 async function getEvent(testApp: TestApp, eventId: number) {
-  const [row] = await testApp.db
-    .select()
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1),
+    'events row',
+  );
   return row;
 }
 
@@ -338,7 +350,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       expect(await countEvents(testApp)).toBe(before);
       expect(deps.create).not.toHaveBeenCalled();
       expect(deps.createMany).not.toHaveBeenCalled();
-      const sentinel = await getSentinel(testApp, ev.id);
+      const sentinel = defined(await getSentinel(testApp, ev.id), 'sentinel');
       expect(sentinel.choice).toBeNull();
       expect(sentinel.attendeesNotifiedAt).toBeNull();
     });
@@ -385,7 +397,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       await handleScheduleClick(deps, interaction, evShape(ev));
 
       expect(interaction.editReply).toHaveBeenCalledTimes(2);
-      const sentinel = await getSentinel(testApp, ev.id);
+      const sentinel = defined(await getSentinel(testApp, ev.id), 'sentinel');
       expect(sentinel.choice).toBeNull();
       expect(sentinel.attendeesNotifiedAt).toBeNull();
     });
@@ -429,7 +441,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       expect(actingUserId).toBe(creator.id);
       const row = await getEvent(testApp, ev.id);
       expect(row.reschedulingPollId).toBeNull();
-      const sentinel = await getSentinel(testApp, ev.id);
+      const sentinel = defined(await getSentinel(testApp, ev.id), 'sentinel');
       expect(sentinel.choice).toBe('poll');
       expect(sentinel.attendeesNotifiedAt).not.toBeNull();
     });
@@ -485,14 +497,14 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       await handlePollClick(deps, first, evShape(ev));
       expect(first.editReply.mock.calls[0][0].content).toMatch(/try again/i);
       expect(deps.createMany).not.toHaveBeenCalled();
-      let sentinel = await getSentinel(testApp, ev.id);
+      let sentinel = defined(await getSentinel(testApp, ev.id), 'sentinel');
       expect(sentinel.choice).toBeNull();
       expect(sentinel.attendeesNotifiedAt).toBeNull();
 
       await handlePollClick(deps, mockInteraction(), evShape(ev));
       expect(create).toHaveBeenCalledTimes(2);
       expect(deps.createMany).toHaveBeenCalledTimes(1);
-      sentinel = await getSentinel(testApp, ev.id);
+      sentinel = defined(await getSentinel(testApp, ev.id), 'sentinel');
       expect(sentinel.choice).toBe('poll');
     });
 
@@ -505,7 +517,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
 
       expect(deps.create).not.toHaveBeenCalled();
       expect(deps.createMany).not.toHaveBeenCalled();
-      const sentinel = await getSentinel(testApp, ev.id);
+      const sentinel = defined(await getSentinel(testApp, ev.id), 'sentinel');
       expect(sentinel.choice).toBeNull();
     });
   });
@@ -544,7 +556,7 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       expect(interaction.editReply.mock.calls[0][0].content).toMatch(
         /only the organizer/i,
       );
-      const sentinel = await getSentinel(testApp, ev.id);
+      const sentinel = defined(await getSentinel(testApp, ev.id), 'sentinel');
       expect(sentinel.choice).toBeNull();
       expect(sentinel.attendeesNotifiedAt).toBeNull();
     });
@@ -610,7 +622,8 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       expect(inputs.every((i) => i.type === 'post_event_followup')).toBe(true);
       expect(inputs[0]?.payload).toEqual({ eventId: 4242 });
       expect(
-        (await getSentinel(testApp, ev.id)).attendeesNotifiedAt,
+        defined(await getSentinel(testApp, ev.id), 'sentinel')
+          .attendeesNotifiedAt,
       ).not.toBeNull();
     });
 
@@ -629,13 +642,17 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
         { lineupId: 1, matchId: 2, subtype: 'post_event_poll' },
         creator.id,
       );
-      const stampedAt = (await getSentinel(testApp, ev.id)).attendeesNotifiedAt;
+      const stampedAt = defined(
+        await getSentinel(testApp, ev.id),
+        'sentinel',
+      ).attendeesNotifiedAt;
       await runFollowupFanout(deps, ev.id, { eventId: 4242 }, creator.id);
 
       expect(createMany).toHaveBeenCalledTimes(1);
-      expect((await getSentinel(testApp, ev.id)).attendeesNotifiedAt).toEqual(
-        stampedAt,
-      );
+      expect(
+        defined(await getSentinel(testApp, ev.id), 'sentinel')
+          .attendeesNotifiedAt,
+      ).toEqual(stampedAt);
     });
 
     it('M4-AC7: a creator mismatch (forged followupForEventId) fans out nothing and rolls the claim back', async () => {
@@ -652,7 +669,8 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
 
       expect(createMany).not.toHaveBeenCalled();
       expect(
-        (await getSentinel(testApp, ev.id)).attendeesNotifiedAt,
+        defined(await getSentinel(testApp, ev.id), 'sentinel')
+          .attendeesNotifiedAt,
       ).toBeNull();
     });
 
@@ -686,7 +704,8 @@ describe('Post-event follow-up interactions + fan-out (integration)', () => {
       ).rejects.toThrow('boom');
 
       expect(
-        (await getSentinel(testApp, ev.id)).attendeesNotifiedAt,
+        defined(await getSentinel(testApp, ev.id), 'sentinel')
+          .attendeesNotifiedAt,
       ).toBeNull();
     });
 
