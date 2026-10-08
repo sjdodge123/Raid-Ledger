@@ -52,6 +52,9 @@ export * from './preferences.schema.js';
 
 // Game Time Templates (ROK-189)
 export * from './game-time.schema.js';
+// Calendar Sync connections, overview + admin kill switch (ROK-1591)
+export * from './calendar-sync.schema.js';
+export * from './calendar-sync-admin.schema.js';
 
 // Admin (ROK-193)
 export * from './admin.schema.js';

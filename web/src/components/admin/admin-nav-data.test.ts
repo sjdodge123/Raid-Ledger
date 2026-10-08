@@ -19,9 +19,10 @@ const allOfflineStatuses = {
 };
 
 describe('buildCoreIntegrationItems', () => {
-    it('returns 4 items (IGDB, Steam, ITAD, and Co-Optimus)', () => {
+    it('returns 5 items (IGDB, Steam, ITAD, Co-Optimus and Calendar Sync)', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        expect(items).toHaveLength(4);
+        expect(items).toHaveLength(5);
+        expect(items.map((i) => i.label)).toEqual(['IGDB / Twitch', 'Steam', 'ITAD', 'Co-Optimus', 'Calendar Sync']);
     });
 
     it('includes Co-Optimus with correct path (ROK-1397)', () => {
@@ -106,6 +107,22 @@ function makePlugin(overrides: Partial<PluginInfoDto> & { slug: string; name: st
         ...overrides,
     };
 }
+
+describe('buildCoreIntegrationItems — Calendar Sync (ROK-1591)', () => {
+    it('includes Calendar Sync with correct path, offline by default (ROK-1591)', () => {
+        const items = buildCoreIntegrationItems(allOfflineStatuses);
+        const calendarSync = items.find((i) => i.label === 'Calendar Sync');
+        expect(calendarSync?.to).toBe('/admin/settings/integrations/calendar-sync');
+        expect(calendarSync?.status).toBe('offline');
+    });
+
+    it('sets Calendar Sync online when the kill switch is on, loading while loading (ROK-1591)', () => {
+        const on = buildCoreIntegrationItems({ ...allOfflineStatuses, calendarSync: { configured: true, loading: false } });
+        expect(on.find((i) => i.label === 'Calendar Sync')?.status).toBe('online');
+        const loading = buildCoreIntegrationItems({ ...allOfflineStatuses, calendarSync: { configured: false, loading: true } });
+        expect(loading.find((i) => i.label === 'Calendar Sync')?.status).toBe('loading');
+    });
+});
 
 describe('buildPluginIntegrationItems — part 1', () => {
     it('returns empty array for empty plugin list', () => {

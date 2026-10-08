@@ -27,6 +27,7 @@ import { RadioGroup } from '../../components/ui/radio-group';
 import { Slider } from '../../components/ui/slider';
 import { SearchInput } from '../../components/ui/search-input';
 import { Combobox } from '../../components/ui/combobox';
+import { SavedSecretStatus } from '../../components/admin/saved-secret-status';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 import { PickerStates } from './forms-pickers-demo';
 import { RecipeStates } from './forms-recipes-demo';
@@ -193,6 +194,25 @@ function SearchStates(): JSX.Element {
 }
 
 /** The form primitives in every state they ship in. */
+/** §4.11 write-only secret saved-state row — the shipped component (CalendarSyncForm), not a copy. */
+function SavedSecretStates(): JSX.Element {
+    const [cleared, setCleared] = useState(false);
+    return (
+        <>
+            <StateFrame label="Write-only secret — saved" note="Never prefilled. Remove only queues the removal; Save sends ''. Try Remove → Undo.">
+                <Field label="Client secret" className="w-full">
+                    <PasswordInput label="client secret" placeholder="Type a new secret to replace the saved one" />
+                </Field>
+                <SavedSecretStatus secretLabel="demo client secret" hasSecret cleared={cleared} onClearedChange={setCleared} />
+            </StateFrame>
+            <StateFrame label="Write-only secret — none / pending removal" note="text-muted when nothing is stored; text-warning + Undo while a removal waits for Save.">
+                <SavedSecretStatus secretLabel="empty client secret" hasSecret={false} cleared={false} onClearedChange={() => undefined} />
+                <SavedSecretStatus secretLabel="removed client secret" hasSecret cleared onClearedChange={() => undefined} />
+            </StateFrame>
+        </>
+    );
+}
+
 export function FormsSection(): JSX.Element {
     return (
         <Section
@@ -205,6 +225,7 @@ export function FormsSection(): JSX.Element {
                     <ButtonVariants />
                     <FieldStates />
                     <InputVariants />
+                    <SavedSecretStates />
                     <SelectTextareaStates />
                     <ChoiceStates />
                     <SearchStates />

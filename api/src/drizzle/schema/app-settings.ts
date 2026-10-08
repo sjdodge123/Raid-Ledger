@@ -76,6 +76,14 @@ export const SETTING_KEYS = {
   DISCORD_EMOJI_CLASS_EVOKER: 'discord_emoji_class_evoker',
   /** ROK-293: Whether ad-hoc voice channel events are enabled */
   AD_HOC_EVENTS_ENABLED: 'ad_hoc_events_enabled',
+  /** ROK-1591: Calendar Sync master kill switch. Unset ⇒ off. */
+  CALENDAR_SYNC_ENABLED: 'calendar_sync_enabled',
+  /** ROK-1591: Google OAuth client for Calendar Sync (secret encrypted at rest). */
+  CALENDAR_GOOGLE_CLIENT_ID: 'calendar_google_client_id',
+  CALENDAR_GOOGLE_CLIENT_SECRET: 'calendar_google_client_secret',
+  /** ROK-1591: Microsoft OAuth client for Calendar Sync (secret encrypted at rest). */
+  CALENDAR_MICROSOFT_CLIENT_ID: 'calendar_microsoft_client_id',
+  CALENDAR_MICROSOFT_CLIENT_SECRET: 'calendar_microsoft_client_secret',
   /** ROK-1471: LFG forum-board master toggle (default off). */
   LFG_BOARD_ENABLED: 'lfg_board_enabled',
   /** ROK-1471: id of the bot-created LFG forum channel; unset until created. */
