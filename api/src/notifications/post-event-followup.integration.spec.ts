@@ -37,15 +37,18 @@ async function mkUser(
   overrides: Partial<typeof schema.users.$inferInsert> = {},
 ) {
   discordSeq += 1;
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `70000000000000${String(discordSeq).padStart(4, '0')}`,
-      username: `u${discordSeq}`,
-      role: 'member',
-      ...overrides,
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `70000000000000${String(discordSeq).padStart(4, '0')}`,
+        username: `u${discordSeq}`,
+        role: 'member',
+        ...overrides,
+      })
+      .returning(),
+    'user',
+  );
   return user;
 }
 
@@ -55,15 +58,21 @@ async function mkEvent(
   creatorId: number,
   overrides: Partial<typeof schema.events.$inferInsert> = {},
 ) {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Ended Event',
-      creatorId,
-      duration: [new Date(Date.now() - 3 * HOUR), new Date(Date.now() - HOUR)],
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Ended Event',
+        creatorId,
+        duration: [
+          new Date(Date.now() - 3 * HOUR),
+          new Date(Date.now() - HOUR),
+        ],
+        ...overrides,
+      })
+      .returning(),
+    'event',
+  );
   return event;
 }
 
