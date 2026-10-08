@@ -55,7 +55,7 @@ function ProbeBody({ mode, viewport }: { mode: ProbeMode; viewport: number }) {
             </div>
             <div
                 data-testid="viewport-probe-end"
-                className="flex h-12 items-center justify-center bg-danger font-mono text-sm font-bold text-foreground"
+                className="flex h-12 items-center justify-center bg-danger font-mono text-sm font-bold text-white"
             >
                 END OF PAGE · the document ends here
             </div>

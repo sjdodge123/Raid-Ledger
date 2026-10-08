@@ -54,13 +54,17 @@
 
     /* Semantic accents (ROK-1586) — tokenised so a scheme can repaint the
        MEANING, not the hue. Dark family values match the Tailwind shades these
-       replaced: emerald-500 / amber-500 / red-500. */
+       replaced — emerald-500 / amber-500 — except danger, lifted to red-400 so it
+       reads as text (TDB:1770 ruling). semantic-tokens.guard.test.ts measures all
+       three on every dark scheme's surface, panel and /10 tint. */
     --color-success: #10b981;
     /* emerald-500 — primary action, "free", "on", confirmed */
     --color-warning: #f59e0b;
     /* amber-500 — needs attention, partial agreement, admin */
-    --color-danger: #ef4444;
-    /* red-500 — destructive, conflict, "few people free" */
+    --color-danger: #f87171;
+    /* red-400 — destructive, conflict, "few people free"; 5.29 panel, 6.45 surface, 4.62 /10 tint (red-500 #ef4444 was 3.89 / 4.74 / 3.56). White on a solid bg-danger is 2.77:1, so a solid label takes --color-status-solid-label */
+    --color-status-solid-label: #0f172a;
+    /* label on a solid bg-success / bg-warning / bg-danger + text-white (TDB:2052): 7.04 / 8.31 / 6.45:1 on the dark fills, where white is 2.54 / 2.15 / 2.77:1 */
 
     --color-secondary: #cbd5e1;
     /* slate-300 */
@@ -123,6 +127,8 @@ html {
     /* amber-800   — 7.09:1; 6.47 panel, 6.36 hero, 5.58 /10 tint (amber-700 #b45309 was 4.02 on the tint) */
     --color-danger: #b91c1c;
     /* red-700     — 6.47:1; 5.91 panel, 5.80 hero, 4.99 /10 tint (red-600 #dc2626 was 4.41 / 4.33 / 3.78) */
+    --color-status-solid-label: #ffffff;
+    /* white on the light status fills: 7.68 / 7.09 / 6.47:1 (TDB:2052) — every light scheme inherits it, with or without its own fill */
     --color-secondary: #334155;
     --color-foreground: #0f172a;
     --color-edge: #cbd5e1;
@@ -357,6 +363,8 @@ html {
     --color-dim: #6D5E4B;
     /* AA as text, ROK-1472 ruling 2026-10-04: 5.12 surface / 4.64 panel (was #8A7860) — faint-decorative.guard.test.ts */
     --color-muted: #6A5840;
+    --color-danger: #991b1b;
+    /* TDB:1770: red-800, the end of the red-700 → red-800 line, for headroom (the lightest AA step #ad1c1c sat at 4.50 on the tint): 6.80 surface / 6.15 panel / 5.25 /10 tint (#b91c1c was 5.29 / 4.79 / 4.12); white on it 8.31 — semantic-tokens.guard.test.ts */
     --color-secondary: #3D3560;
     --color-foreground: #1A1A2E;
     --color-edge: #B8A88A;
@@ -847,6 +855,19 @@ body {
     --color-foreground: #0f172a;
 }
 
+/* --- Solid status fills: the scheme's own label (TDB:2052, ruling 2026-10-08) ---
+   bg-success / bg-warning / bg-danger keep their token fill in both families (ROK-1472).
+   A raw text-white label clears AA on the light fills (#065f46 7.68:1, #92400e 7.09:1,
+   #b91c1c 6.47:1) but not on the dark ones (#10b981 2.54:1, #f59e0b 2.15:1, #f87171
+   2.77:1), so it paints --color-status-solid-label: #0f172a in @theme (7.04 / 8.31 /
+   6.45:1), #ffffff in the shared light block. A custom property resolves from the
+   NEAREST ancestor that sets it, so a scoped <div data-scheme="light"> under a dark root
+   (/dev/design-system side by side) pairs its light fills with white — no html coupling.
+   Unlayered, so it beats the text-white utility — brand-fill-forced-white.guard.test.ts. */
+:is(.bg-success, .bg-warning, .bg-danger).text-white {
+    color: var(--color-status-solid-label);
+}
+
 /* --- Primary fill on light (ROK-1472, operator ruling 2026-10-04) ---
    emerald-600 #059669 is 3.77:1 with the forced-white label; emerald-700 #047857
    (the light --color-success until TDB:1793 moved that to #065f46) is 5.48:1. Its hover goes DARKER, emerald-800
@@ -1292,6 +1313,7 @@ body {
     --color-faint: #c9b896;
     --color-dim: #756247;   /* 5.28 surface / 4.63 panel (ROK-1472; was #a89070, 2.75 / 2.42) */
     --color-muted: #685640; /* 6.33 surface / 5.56 panel (ROK-1472; was #8b7355, 4.05 / 3.55) */
+    --color-danger: #991b1b; /* TDB:1770: red-800 for headroom (lightest AA step #b51c1c sat at 4.51): 7.50 surface / 6.58 panel / 5.58 /10 tint (#b91c1c was 4.39 on the tint); white 8.31 */
     --color-secondary: #5c4a32;
     --color-foreground: #2c1810;
     --color-edge: #d4c4a0;
