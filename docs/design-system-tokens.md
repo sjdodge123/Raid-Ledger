@@ -28,7 +28,7 @@ shared light block (`:114-124`) only; contrast on `#ffffff` is recomputed by
 
 | You write | Dark paints | Light paints | Anchor |
 |---|---|---|---|
-| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#047857` emerald-700, 5.48:1 | `:58` / `:120` |
+| `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#065f46` emerald-800, 7.68:1 (7.01 panel, 6.02 own /10 tint; worst tinted scheme celestial 5.69 / 4.91 — TDB:1793; was `#047857`, 4.38 on its tint) | `:58` / `:120` |
 | `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:60` / `:122` |
 | `bg-danger` / `text-danger` / `bg-danger/50` … | `#ef4444` red-500 | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint) | `:62` / `:124` |
 | `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:114` |
@@ -145,7 +145,7 @@ does not: `GradientOverlay`'s `from-black/80 to-transparent`
 (`components/games/game-card-parts.tsx:66`) stays dark in both families because it exists
 to make white title text legible over the *image*, not over the theme surface. Anything
 layered on top of the art needs `.badge-overlay` (§1). `CoverPlaceholder` draws in
-`text-dim` — `#64748b` dark, `#5a697f` light (the same slate, a step darker so it clears AA on
+`text-dim` — `#8291a7` dark (5.57 surface / 4.57 panel, TDB:2050; slate-500 `#64748b` was 3.75 / 3.07), `#5a697f` light (the same slate, a step darker so it clears AA on
 the light panel and overlay; the tinted schemes' own dims — sky `#4E6E8B`, dawn `#8A6045`, holy `#576E93`,
 celestial `#6D5E4B`, quest-log `#756247` — clear AA on their own surface and panel, ROK-1472; quest-log's
 `--color-muted` moved with it to `#685640`, 6.33 surface / 5.56 panel) — so an image-less tile reads as the same quiet slate in

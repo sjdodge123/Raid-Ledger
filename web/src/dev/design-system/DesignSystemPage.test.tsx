@@ -361,14 +361,14 @@ describe('DesignSystemPage — ROK-1586 sections', () => {
         expect(within(success).getByTitle('bg-success')).toHaveClass('bg-success');
         expect(within(success).getByTitle('border-success/30')).toHaveClass('border-success/30');
         expect(within(success).getByText('#10b981')).toBeInTheDocument();
-        expect(within(success).getByText('#047857')).toBeInTheDocument();
+        expect(within(success).getByText('#065f46')).toBeInTheDocument();
         for (const name of ['warning', 'danger', 'busy', 'slot']) {
             expect(screen.getByTestId(`ds-semantic-${name}`)).toBeInTheDocument();
         }
         // D-6: the solid button fill stays raw, shown beside the token it must not become.
         expect(screen.getByTestId('ds-button-raw')).toHaveClass('bg-emerald-600');
         expect(screen.getByTestId('ds-button-token')).toHaveClass('bg-success', 'text-white');
-        expect(screen.getByTestId('ds-button-token'), '#0f172a on light #047857 is 3.26:1 — the success fill takes a white label')
+        expect(screen.getByTestId('ds-button-token'), '#0f172a on light #065f46 is 2.32:1 — the success fill takes a white label')
             .not.toHaveClass('text-foreground');
     });
 

@@ -261,3 +261,28 @@ describe('quest-log: --color-dim and --color-muted are readable text (ROK-1472)'
         expect(luminance(dim), `quest-log dim ${dim} must stay lighter than muted ${muted}`).toBeGreaterThan(luminance(muted));
     });
 });
+
+/** A `--color-{token}` hex from the `@theme { … }` block — the default-dark values. */
+function darkToken(token: string): string {
+    const block = /@theme\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
+    return (new RegExp(`--color-${token}:\\s*(#[0-9a-fA-F]{6})`).exec(block)?.[1] ?? '').toLowerCase();
+}
+
+describe('default-dark --color-dim is readable text (TDB:2050)', () => {
+    // Ruling D:1721: dark dim #8291a7 — 5.57 surface / 4.57 panel (slate-500 #64748b was 3.75 / 3.07).
+    const cases = (['surface', 'panel'] as const).map((bg) => [bg, darkToken(bg)] as const);
+
+    it.each(cases)('dark --color-dim clears AA on --color-%s', (bg, hex) => {
+        const dim = darkToken('dim');
+        expect(dim, '@theme declares no --color-dim').toMatch(/^#[0-9a-f]{6}$/);
+        expect(hex, `@theme declares no --color-${bg}`).toMatch(/^#[0-9a-f]{6}$/);
+        const ratio = contrastRatio(dim, hex);
+        expect(ratio, `dark --color-dim ${dim} is ${ratio}:1 on --color-${bg} (${hex}); readable text needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+
+    it('keeps dark dim a visible step under muted', () => {
+        const [dim, muted] = [darkToken('dim'), darkToken('muted')];
+        expect(luminance(dim), `dark dim ${dim} must stay dimmer than muted ${muted}`).toBeLessThan(luminance(muted));
+    });
+});

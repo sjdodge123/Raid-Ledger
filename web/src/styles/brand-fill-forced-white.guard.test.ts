@@ -122,7 +122,7 @@ const SRC = resolve(__dirname, '..');
  * #10b981 (2.53:1; at /90 over a light card #18c289, 2.3:1 — the /games "Best
  * Price" chip), cyan-500 #00b8db (2.37:1; at /90, 2.34:1 — the "You own" chip)
  * and amber-500 #f59e0b (2.15:1). A solid status fill is
- * `bg-success` / `bg-warning` (light #047857 5.48:1, #92400e 7.09:1 under white);
+ * `bg-success` / `bg-warning` (light #065f46 7.68:1, #92400e 7.09:1 under white);
  * a cyan-500 / cyan-600 label is `text-foreground` (the #0f172a rule above).
  */
 const WHITE_UNSAFE_FILL = /(^|\s)bg-(cyan-600|cyan-500(\/\d+)?|emerald-500(\/\d+)?|amber-500(\/\d+)?)(\s|$)/;

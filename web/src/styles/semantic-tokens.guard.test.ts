@@ -3,6 +3,7 @@ import { defined } from '../test/defined';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { AA_SMALL_TEXT, composite, contrastRatio, stripComments } from './wcag-contrast';
+import { lightSchemes } from './light-scheme-css';
 
 /**
  * Semantic colour-token guard (ROK-1586 slice 2).
@@ -80,12 +81,22 @@ function lightBackgrounds(token: string): Array<[string, string]> {
     ];
 }
 
+/** Roles measured on every real background of the shared light block. */
+const SEMANTIC_ROLES = ['success', 'warning', 'danger'] as const;
+
 /**
- * Roles measured on every real background. `success` is deliberately NOT here yet:
- * its light value #047857 is 4.35:1 on its own /10 tint over the panel — a known gap
- * reported to the Lead (2026-09-22), not silently fixed in this change.
+ * TDB:1793 (ruling D:1714): light success is #065f46 so it clears AA as text on every
+ * light scheme's OWN surface, panel and /10 tint over that panel — no per-scheme override.
+ * #047857 was 4.38 on the shared tint and 4.06 / 3.59 on celestial's panel / tint.
  */
-const SEMANTIC_ROLES = ['warning', 'danger'] as const;
+const SUCCESS_ON_SCHEMES = lightSchemes(css).flatMap(({ name, surface, panel }) => {
+    const success = declaredValue(lightBlock, 'success') as string;
+    return [
+        [name, 'surface', surface],
+        [name, 'panel', panel],
+        [name, 'bg-success/10 tint over its panel', composite(success, panel, 0.1)],
+    ] as const;
+});
 
 const TEXT_ON_BACKGROUND = SEMANTIC_ROLES.flatMap((token) =>
     lightBackgrounds(token).map(([name, bg]) => [token, name, bg] as const),
@@ -147,5 +158,21 @@ describe('semantic colour tokens (ROK-1586)', () => {
         expect(ratio, `white text on light bg-${token} ${value} is ${ratio}:1 — needs ${AA_SMALL_TEXT}:1`).toBeGreaterThanOrEqual(
             AA_SMALL_TEXT,
         );
+    });
+});
+
+describe('light --color-success on every light scheme (TDB:1793)', () => {
+    it('reads all six light schemes out of index.css', () => {
+        expect(SUCCESS_ON_SCHEMES.map(([name]) => name)).toEqual(
+            expect.arrayContaining(['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial']),
+        );
+        for (const [name, bg, hex] of SUCCESS_ON_SCHEMES) expect(hex, `${name} has no resolved ${bg}`).toMatch(/^#[0-9a-f]{6}$/i);
+    });
+
+    it.each(SUCCESS_ON_SCHEMES)('light text-success clears AA on %s %s', (name, bg, hex) => {
+        const value = declaredValue(lightBlock, 'success') as string;
+        const ratio = contrastRatio(value, hex);
+        expect(ratio, `light --color-success ${value} as text is ${ratio}:1 on ${name} ${bg} (${hex}) — needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });

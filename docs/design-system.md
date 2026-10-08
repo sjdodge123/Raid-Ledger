@@ -76,7 +76,7 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-panel` | `bg-panel` | `#1e293b` | `#f1f5f9` | Inset panels, inputs, chips (off) |
 | `--color-overlay` | `bg-overlay` | `#334155` | `#e2e8f0` | Hover fill on panel-level surfaces |
 | `--color-faint` | `text-faint` | `#475569` | `#cbd5e1` | Decorative only (separators, icons), always `aria-hidden`. Never readable text (1.2–1.9:1 on every light scheme) |
-| `--color-dim` | `text-dim` | `#64748b` | `#5a697f` | Placeholders, disabled text, the quietest readable text (light: 5.58 surface / 5.10 panel / 4.53 overlay). Tinted light schemes declare their own, darkened to AA on their own surface / panel by operator ruling 2026-10-04 (ROK-1472): sky `#4E6E8B` 5.35 / 4.64, dawn `#8A6045` 4.93 / 4.61, holy `#576E93` 5.18 / 4.62, celestial `#6D5E4B` 5.12 / 4.64, quest-log `#756247` 5.28 / 4.63 (was `#a89070` 2.75 / 2.42; darkened together with its `--color-muted` so dim stays one step lighter) |
+| `--color-dim` | `text-dim` | `#8291a7` | `#5a697f` | Placeholders, disabled text, the quietest readable text (dark: 5.57 surface / 4.57 panel, 3.23 overlay accepted — TDB:2050, slate-500 `#64748b` was 3.75 / 3.07; light: 5.58 surface / 5.10 panel / 4.53 overlay). Tinted light schemes declare their own, darkened to AA on their own surface / panel by operator ruling 2026-10-04 (ROK-1472): sky `#4E6E8B` 5.35 / 4.64, dawn `#8A6045` 4.93 / 4.61, holy `#576E93` 5.18 / 4.62, celestial `#6D5E4B` 5.12 / 4.64, quest-log `#756247` 5.28 / 4.63 (was `#a89070` 2.75 / 2.42; darkened together with its `--color-muted` so dim stays one step lighter) |
 | `--color-muted` | `text-muted` | `#94a3b8` | `#475569` | Secondary/label text (most common). quest-log declares its own, `#685640` 6.33 surface / 5.56 panel (was `#8b7355` 4.05 / 3.55; operator ruling 2026-10-04, ROK-1472) |
 | `--color-secondary` | `text-secondary` | `#cbd5e1` | `#334155` | Body text |
 | `--color-foreground` | `text-foreground` | `#ffffff` | `#0f172a` | Primary text, headings |
@@ -85,7 +85,7 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-edge-subtle` | `border-edge-subtle` | `#1e293b` | `#e2e8f0` | Hairline divider |
 | `--color-busy` | `bg-busy` `text-busy` `before:bg-busy` | `#8b5cf6` | `#7c3aed` | Someone is committed elsewhere in this hour (ROK-1584) |
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
-| `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#047857` | Free / confirmed / "on" / primary state (ROK-1586) |
+| `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#065f46` | Free / confirmed / "on" / primary state (ROK-1586). Light is emerald-800 (TDB:1793, operator ruling D:1714): 7.68 surface / 7.01 panel / 6.02 own /10 tint, and AA on every tinted light scheme's own panel and tint (worst celestial 5.69 / 4.91) — `semantic-tokens.guard.test.ts` |
 | `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#92400e` | Partial agreement, needs attention, admin (ROK-1586) |
 | `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586) |
 
@@ -93,7 +93,7 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 blocks only — see checklist item 7. The dark values are the Tailwind shades they replaced
 (emerald-500 / amber-500 / red-500). The light values are darker than the `-600` the old
 `.text-*-400` overrides use, because `-600` fails WCAG AA for small text: on `#ffffff`
-success `#047857` is 5.48:1, warning `#92400e` (amber-800) 7.09:1, danger `#b91c1c` (red-700) 6.47:1
+success `#065f46` (emerald-800, TDB:1793) is 7.68:1, warning `#92400e` (amber-800) 7.09:1, danger `#b91c1c` (red-700) 6.47:1
 (`web/src/styles/semantic-tokens.guard.test.ts` recomputes these and fails below 4.5:1 — for warning and
 danger also on the panel, the JourneyHero card and their own `/10` tint over the panel — and pins the
 two-block declaration of success/warning/danger/busy). The opacity modifier works at any alpha
@@ -147,13 +147,13 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   (`JourneyHero.tsx:173-175`).
 - **Text on a `bg-success` fill is `text-white`, not `text-foreground`.** `bg-success` is not in the
   forced-white list, so `text-foreground` would turn `#0f172a` on the six light schemes; `text-white` is
-  what the dark family already paints, and the light fill (`#047857`) is darker than the dark one, so the
+  what the dark family already paints, and the light fill (`#065f46`, white 7.68:1) is darker than the dark one, so the
   label only gains contrast there (`JourneyHero.tsx:163`). This is the one
   exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
 - **DON'T put `text-white` on a raw `bg-emerald-500` / `bg-amber-500` / `bg-cyan-500` (any `/NN`) or `bg-cyan-600`.** None is
   repainted on the light schemes and white measures 2.2–3.6:1 on them (the `/games` "Best Price" chip was
   2.3:1, "You own" 2.34:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,
-  `WishlistBadge`, the rating chip); a cyan chip is solid `bg-cyan-500` / `bg-cyan-600` + `text-foreground`
+  `WishlistBadge`, the rating chip); a cyan CTA that must read the same in both families is `bg-cyan-700 hover:bg-cyan-800 text-white` (white 5.28 / 7.22:1; "Schedule a Game", TDB:2050 — `text-foreground` there would go `#0f172a` on light, 3.38:1); a cyan chip is solid `bg-cyan-500` / `bg-cyan-600` + `text-foreground`
   (`YouOwnBadge`; `#0f172a` on light, 7.55:1); `brand-fill-forced-white.guard.test.ts` fails the pairing.
 - **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
 
@@ -460,7 +460,7 @@ button" and tests query that name. It is neither the toggle chip above (it has n
 **Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:737`) and border
 (`:781`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
 `text-amber-400` on a new ON label until that is fixed. The removable chip is tokens only, so it flips with `success` (`#10b981` →
-`#047857`); check both families in the gallery's side-by-side view.
+`#065f46`); check both families in the gallery's side-by-side view.
 
 ### 4.4 Modal vs bottom sheet
 
@@ -710,7 +710,7 @@ that (2026-08-20) so a filter group reads as one control family. Don't paint a c
 resolves to nothing (§6.3); `SearchInput` replaces it. Don't add a headless combobox library — `Combobox` is
 the in-house one (operator ruling, ROK-1646).
 
-**Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#047857`); the
+**Light / Dark** — the frame is tokens and flips; the ring flips with `success` (`#10b981` → `#065f46`); the
 solid `primary`/`destructive` fills keep their hue with the label forced white on light, and `primary` steps to
 emerald-700 `#047857` with a darker `#065f46` hover there (§6.10).
 Native control chrome follows root-only `color-scheme` (`:617-631`) — check sliders and checkboxes at the
