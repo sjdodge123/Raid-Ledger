@@ -310,6 +310,20 @@ describeBackup('Backup auth enforcement (integration)', () => {
  * inverse check used by the sanitization assertions: a sanitized table
  * should NOT appear here, even though its schema row will.
  */
+/** app_settings keys (with created_at) for a failure message; [] otherwise. */
+async function appSettingsKeys(
+  db: TestApp['db'],
+  table: string,
+): Promise<string[]> {
+  if (table !== 'app_settings') return [];
+  const rows = await db.execute<{ k: string }>(
+    sql.raw(
+      `SELECT key || ' @ ' || created_at::text AS k FROM app_settings ORDER BY created_at`,
+    ),
+  );
+  return rows.map((r) => r.k);
+}
+
 async function getDataSegmentTables(dumpFile: string): Promise<string[]> {
   const { stdout } = await execFileAsync('pg_restore', ['--list', dumpFile]);
   const tables: string[] = [];
@@ -452,14 +466,24 @@ describeBackup('Backup sanitization (integration, ROK-1279)', () => {
 
   it('restored dump has 0 rows in the 4 sanitized tables, > 0 in games', async () => {
     // Seed: admin user exists (with local_credentials) + an active session
-    // would normally exist, but the truncate + re-seed in beforeEach already
-    // gave us a fresh local_credentials row. Take a backup and restore into
-    // the SAME DB (test DB is sacrificial across the integration run).
+    // would normally exist, but the truncate + re-seed in the previous test's
+    // afterEach already gave us a fresh local_credentials row. Take a backup
+    // and restore into the SAME DB (test DB is sacrificial across the run).
     const createRes = await testApp.request
       .post('/admin/backups')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(createRes.status).toBe(201);
     const filename = createRes.body.backup.filename as string;
+
+    // Deterministic half (TDB:1069/1163): the dump being restored carries no
+    // data segment for the 4 tables, so any row counted below was NOT
+    // restored from it — it survived the restore or was written after it.
+    const restoredData = await getDataSegmentTables(
+      path.join(TEST_BACKUP_DIR, 'daily', filename),
+    );
+    expect(
+      SANITIZED_EXCLUDED_TABLES.filter((t) => restoredData.includes(t)),
+    ).toEqual([]);
 
     // Restore via the existing endpoint to make data match the dump.
     const restoreRes = await testApp.request
@@ -473,7 +497,11 @@ describeBackup('Backup sanitization (integration, ROK-1279)', () => {
       const rows = await testApp.db.execute<{ count: string }>(
         sql.raw(`SELECT COUNT(*)::text AS count FROM "${table}"`),
       );
-      expect(Number(rows[0]?.count ?? '-1')).toBe(0);
+      // Same strict 0; on failure, name the app_settings keys (TDB:1069
+      // diagnostic) so the writer can be identified from the CI log.
+      const count = Number(rows[0]?.count ?? '-1');
+      const keys = count !== 0 ? await appSettingsKeys(testApp.db, table) : [];
+      expect({ table, count, keys }).toEqual({ table, count: 0, keys: [] });
     }
     const gamesCount = await testApp.db.execute<{ count: string }>(
       sql.raw(`SELECT COUNT(*)::text AS count FROM "games"`),

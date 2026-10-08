@@ -121,7 +121,7 @@ describe('buildBindingClause — effectiveGameId null safety (ROK-968)', () => {
   });
 });
 
-describe('buildBindingClause — series-linked sibling suppression (ROK-1390)', () => {
+describe('buildBindingClause — channel anchors on the game path (ROK-1390, TDB:224)', () => {
   let db: MockDb;
   const now = new Date('2026-03-24T20:00:00Z');
 
@@ -129,11 +129,11 @@ describe('buildBindingClause — series-linked sibling suppression (ROK-1390)', 
     db = createDrizzleMock();
   });
 
-  it('matches series-linked siblings by recurrence_group_id in the suppression subquery (RED)', async () => {
+  it('matches series-linked channel anchors by recurrence_group_id', async () => {
     // A live series event bound to the same physical voice channel — possibly
     // under a general-lobby purpose after a bind flip — must still suppress
-    // quick-play. The sibling subquery has to reach series-linked rows by their
-    // recurrence_group_id, not only binding_purpose='game-voice-monitor'.
+    // quick-play, for any game (TDB:224). The channel anchor reaches series
+    // rows by recurrence_group_id; behaviour is pinned in the integration spec.
     db.limit.mockResolvedValueOnce([]);
 
     await findActiveScheduledEvent(
@@ -148,7 +148,7 @@ describe('buildBindingClause — series-linked sibling suppression (ROK-1390)', 
     expect(sqlText).toContain('recurrence_group_id');
   });
 
-  it('preserves the base channel_bindings sibling match (GREEN pin)', async () => {
+  it('scopes the channel anchor through channel_bindings (GREEN pin)', async () => {
     db.limit.mockResolvedValueOnce([]);
 
     await findActiveScheduledEvent(

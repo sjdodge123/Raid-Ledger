@@ -14,6 +14,10 @@ import {
   channelForGame,
   awaitProcessing,
 } from '../fixtures.js';
+import {
+  resolveConfiguredGame,
+  withThrowawayCharacter,
+} from '../configured-game.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 function mmoOverrides(ctx: TestContext) {
@@ -251,44 +255,58 @@ const eventDeleteCleansEmbed: SmokeTest = {
  * When the event creator (auto-signed-up without character) signs up again
  * via web with a character selected, the character info must appear in
  * the signup response and the roster endpoint.
+ *
+ * The assertion body, run against whichever game + character the test picked.
  */
+async function assertCharacterOnDuplicateSignup(
+  ctx: TestContext,
+  gameId: number,
+  charId: string,
+  role: string,
+): Promise<void> {
+  const ev = await createEvent(ctx.api, 'flow-char-dup', {
+    gameId,
+    slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
+  });
+  try {
+    await pollForEmbed(
+      channelForGame(ctx, gameId),
+      (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
+      ctx.config.timeoutMs,
+    );
+    // Re-signup (duplicate path) with character + preferred role
+    const res = await signup(ctx.api, ev.id, {
+      characterId: charId,
+      preferredRoles: [role],
+    }) as { character?: { id?: string; name?: string } | null };
+    if (!res.character || !res.character.id) {
+      throw new Error(
+        `Expected character data in signup response, got: ${JSON.stringify(res.character)}`,
+      );
+    }
+    if (res.character.id !== charId) {
+      throw new Error(`Expected characterId=${charId}, got ${res.character.id}`);
+    }
+  } finally {
+    await deleteEvent(ctx.api, ev.id);
+  }
+}
+
 const characterOnDuplicateSignup: SmokeTest = {
   name: 'ROK-868: character data preserved on duplicate web signup',
   category: 'flow',
   async run(ctx) {
-    if (!ctx.testCharId || !ctx.mmoGameId) {
-      console.log('    SKIP: No MMO game + character available (no characters in CI)');
-      return;
-    }
-    const ev = await createEvent(ctx.api, 'flow-char-dup', {
-      gameId: ctx.mmoGameId,
-      slotConfig: { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 1 },
-    });
-    try {
-      await pollForEmbed(
-        channelForGame(ctx, ctx.mmoGameId),
-        (msg) => msg.embeds.some((e) => e.title?.includes(ev.title)),
-        ctx.config.timeoutMs,
-      );
-      // Re-signup (duplicate path) with character + preferred role
+    if (ctx.testCharId && ctx.mmoGameId) {
       const role = ctx.testCharRole ?? 'dps';
-      const res = await signup(ctx.api, ev.id, {
-        characterId: ctx.testCharId,
-        preferredRoles: [role],
-      }) as { character?: { id?: string; name?: string } | null };
-      if (!res.character || !res.character.id) {
-        throw new Error(
-          `Expected character data in signup response, got: ${JSON.stringify(res.character)}`,
-        );
-      }
-      if (res.character.id !== ctx.testCharId) {
-        throw new Error(
-          `Expected characterId=${ctx.testCharId}, got ${res.character.id}`,
-        );
-      }
-    } finally {
-      await deleteEvent(ctx.api, ev.id);
+      return assertCharacterOnDuplicateSignup(ctx, ctx.mmoGameId, ctx.testCharId, role);
     }
+    // No admin character (CI, fresh fleet envs): use a test-local throwaway on
+    // a registry MMO game. Never written to ctx — see configured-game.ts.
+    const game = await resolveConfiguredGame(ctx, { hasRoles: true });
+    console.log(`    ROK-868: throwaway character on gameId=${game.id} ("${game.name}")`);
+    await withThrowawayCharacter(ctx.api, game.id, 'Smoke-868-', (char) =>
+      assertCharacterOnDuplicateSignup(ctx, game.id, char.id, char.role ?? 'dps'),
+    );
   },
 };
 

@@ -110,8 +110,10 @@ describe('GET /lfg/offers', () => {
 
     // Positive control on the same endpoint: a session AFTER the intent does
     // produce an offer, so the empty result above proves the time gate rather
-    // than a broken query.
-    const now = new Date();
+    // than a broken query. M4: clear the DB clock — the intent's created_at
+    // comes from Postgres, so a Node-clock `new Date()` can tie or trail it
+    // (TDB:512 / TDB:2098), mirroring AC7c below.
+    const now = new Date(Date.now() + 60_000);
     const freshEvent = await createQuickPlayEvent(
       testApp,
       testApp.seed.adminUser.id,

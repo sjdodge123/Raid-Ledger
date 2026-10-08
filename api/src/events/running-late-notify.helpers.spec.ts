@@ -67,6 +67,19 @@ describe('notifyAttendeeRunningLate', () => {
     );
   });
 
+  it('expires every notice at the event end (TDB:196)', async () => {
+    mockDb.where.mockResolvedValue([{ userId: 1 }, { userId: 109 }]);
+    await run();
+    const created = notificationService.createMany.mock.calls[0][0] as Array<{
+      userId: number;
+      expiresAt?: Date;
+    }>;
+    expect(created).toHaveLength(2);
+    for (const n of created) {
+      expect(n.expiresAt?.toISOString()).toBe('2026-07-15T03:00:00.000Z');
+    }
+  });
+
   it('includes the host even without a signup row and dedupes', async () => {
     mockDb.where.mockResolvedValue([{ userId: 109 }, { userId: 109 }]);
     await run();

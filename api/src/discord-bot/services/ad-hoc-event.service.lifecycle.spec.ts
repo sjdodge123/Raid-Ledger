@@ -201,7 +201,9 @@ describe('AdHocEventService — lifecycle', () => {
           id: 42,
           extendedUntil: null,
           scheduledEnd: eventEnd,
-          matchedBy: 'binding',
+          // Same-game match: a cross-game channel anchor suppresses but
+          // never extends (REVIEW-B R4), so the extension path needs 'game'.
+          matchedBy: 'game',
         },
       ]);
       mocks.db.returning.mockResolvedValueOnce([{ id: 42 }]);

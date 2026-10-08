@@ -1,3 +1,4 @@
+import { eventBoundNoticeStillLive } from './notification-expiry.helpers';
 import { defined } from '../common/defined.helpers';
 import {
   Inject,
@@ -294,12 +295,14 @@ export class NotificationService {
 
   /** Delete expired notifications. */
   async cleanupExpired(): Promise<number> {
+    const now = new Date();
     const result = await this.db
       .delete(schema.notifications)
       .where(
         and(
           not(isNull(schema.notifications.expiresAt)),
-          lt(schema.notifications.expiresAt, new Date()),
+          lt(schema.notifications.expiresAt, now),
+          not(eventBoundNoticeStillLive(now)),
         ),
       )
       .returning();
