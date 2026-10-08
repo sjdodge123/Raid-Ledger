@@ -30,7 +30,7 @@ shared light block (`:114-124`) only; contrast on `#ffffff` is recomputed by
 |---|---|---|---|
 | `bg-success` / `text-success` / `bg-success/10` … | `#10b981` emerald-500 | `#065f46` emerald-800, 7.68:1 (7.01 panel, 6.02 own /10 tint; worst tinted scheme celestial 5.69 / 4.91 — TDB:1793; was `#047857`, 4.38 on its tint) | `:58` / `:120` |
 | `bg-warning` / `text-warning` / `bg-warning/70` … | `#f59e0b` amber-500 | `#92400e` amber-800, 7.09:1 (≥5.58 on panel, hero, /10 tint) | `:60` / `:122` |
-| `bg-danger` / `text-danger` / `bg-danger/50` … | `#ef4444` red-500 | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint) | `:62` / `:124` |
+| `bg-danger` / `text-danger` / `bg-danger/50` … | `#f87171` red-400, 5.29:1 on panel (6.45 surface, ≥4.62 own /10 tint on every dark scheme; red-500 `#ef4444` was 3.89 on panel — TDB:1770 ruling 2026-10-08). White on a solid dark `bg-danger` is 2.77:1, so a solid danger fill carries no label | `#b91c1c` red-700, 6.47:1 (≥4.99 on panel, hero, /10 tint) | `:62` / `:124` |
 | `bg-busy` / `text-busy` | `#8b5cf6` violet-500 | `#7c3aed` violet-600 | `:50` / `:114` |
 | `border-slot` / `outline-slot` | `#22d3ee` cyan-400 | `#0e7490` cyan-700 | `:52` / `:115` |
 

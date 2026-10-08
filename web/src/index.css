@@ -54,13 +54,15 @@
 
     /* Semantic accents (ROK-1586) — tokenised so a scheme can repaint the
        MEANING, not the hue. Dark family values match the Tailwind shades these
-       replaced: emerald-500 / amber-500 / red-500. */
+       replaced — emerald-500 / amber-500 — except danger, lifted to red-400 so it
+       reads as text (TDB:1770 ruling). semantic-tokens.guard.test.ts measures all
+       three on every dark scheme's surface, panel and /10 tint. */
     --color-success: #10b981;
     /* emerald-500 — primary action, "free", "on", confirmed */
     --color-warning: #f59e0b;
     /* amber-500 — needs attention, partial agreement, admin */
-    --color-danger: #ef4444;
-    /* red-500 — destructive, conflict, "few people free" */
+    --color-danger: #f87171;
+    /* red-400 — destructive, conflict, "few people free"; 5.29 panel, 6.45 surface, 4.62 /10 tint (red-500 #ef4444 was 3.89 / 4.74 / 3.56). White on a solid bg-danger is 2.77:1 — no shipped bg-danger carries a label */
 
     --color-secondary: #cbd5e1;
     /* slate-300 */

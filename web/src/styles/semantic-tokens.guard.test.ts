@@ -98,6 +98,32 @@ const SUCCESS_ON_SCHEMES = lightSchemes(css).flatMap(({ name, surface, panel }) 
     ] as const;
 });
 
+/** Light-family scheme names — every other `[data-scheme]` block is a dark scheme. */
+const LIGHT_NAMES = new Set(lightSchemes(css).map(({ name }) => name));
+
+/**
+ * TDB:1770 ruling 2026-10-08: dark semantic text must clear AA on every dark scheme's
+ * surface, panel and the token's own /10 tint over that panel. Dark `--color-danger`
+ * red-500 #ef4444 was 3.89:1 on the default-dark panel, so it is red-400 #f87171.
+ * A dark scheme block that declares its own token value is measured with that value.
+ */
+function darkTextRows(): Array<readonly [string, string, string, string]> {
+    const schemes: Array<[string, string]> = [['default-dark', themeBlock]];
+    for (const [, name, body] of css.matchAll(/(?:^|\n)\[data-scheme="([a-z-]+)"\]\s*\{([^}]*)\}/g)) {
+        if (!LIGHT_NAMES.has(defined(name, 'scheme name'))) schemes.push([name as string, defined(body, 'scheme body')]);
+    }
+    return schemes.flatMap(([name, body]) => SEMANTIC_ROLES.flatMap((token) => {
+        const value = declaredValue(body, token) ?? (declaredValue(themeBlock, token) as string);
+        const panel = declaredValue(body, 'panel');
+        const surface = declaredValue(body, 'surface');
+        if (panel === null || surface === null) return [];
+        const row = (label: string, bg: string) => [token, name, label, `${value}|${bg}`] as const;
+        return [row('surface', surface), row('panel', panel), row(`bg-${token}/10 tint over its panel`, composite(value, panel, 0.1))];
+    }));
+}
+
+const DARK_TEXT = darkTextRows();
+
 const TEXT_ON_BACKGROUND = SEMANTIC_ROLES.flatMap((token) =>
     lightBackgrounds(token).map(([name, bg]) => [token, name, bg] as const),
 );
@@ -173,6 +199,21 @@ describe('light --color-success on every light scheme (TDB:1793)', () => {
         const value = declaredValue(lightBlock, 'success') as string;
         const ratio = contrastRatio(value, hex);
         expect(ratio, `light --color-success ${value} as text is ${ratio}:1 on ${name} ${bg} (${hex}) — needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+describe('dark semantic text on every dark scheme (TDB:1770 ruling 2026-10-08)', () => {
+    it('reads default-dark and the eight dark schemes out of index.css', () => {
+        expect(new Set(DARK_TEXT.map(([, name]) => name))).toEqual(
+            new Set(['default-dark', 'space', 'underwater', 'obsidian', 'ember', 'arctic', 'bloodmoon', 'forest', 'fel']),
+        );
+    });
+
+    it.each(DARK_TEXT)('dark text-%s clears AA on %s %s', (token, name, bgLabel, pair) => {
+        const [fg, bg] = pair.split('|') as [string, string];
+        const ratio = contrastRatio(fg, bg);
+        expect(ratio, `dark --color-${token} ${fg} as text is ${ratio}:1 on ${name} ${bgLabel} (${bg}) — needs ${AA_SMALL_TEXT}:1`)
             .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });
