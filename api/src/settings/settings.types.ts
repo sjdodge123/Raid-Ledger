@@ -28,7 +28,6 @@ export interface BlizzardConfig {
 export interface BrandingConfig {
   communityName: string | null;
   communityLogoPath: string | null;
-  communityAccentColor: string | null;
 }
 
 export interface DiscordBotConfig {

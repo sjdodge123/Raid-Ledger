@@ -83,7 +83,6 @@ function buildProviders(mockDb: Record<string, jest.Mock>) {
         getBranding: jest.fn().mockResolvedValue({
           communityName: 'Test Guild',
           communityLogoPath: null,
-          communityAccentColor: null,
         }),
         getClientUrl: jest.fn().mockResolvedValue(null),
         getDefaultTimezone: jest.fn().mockResolvedValue(null),

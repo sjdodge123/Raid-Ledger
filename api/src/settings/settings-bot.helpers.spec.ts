@@ -2,6 +2,8 @@ import {
   getClientUrl,
   getTrustedClientUrl,
   getDiscordOAuthConfig,
+  getBranding,
+  clearBranding,
   DEFAULT_CLIENT_URL,
   type SettingsCore,
 } from './settings-bot.helpers';
@@ -195,6 +197,29 @@ describe('getDiscordOAuthConfig — callbackUrl fallback chain (ROK-1325)', () =
     expect(config).not.toBeNull();
     expect(config!.callbackUrl).toBe(
       'http://localhost:3000/auth/discord/callback',
+    );
+  });
+});
+
+describe('branding — dropped accent colour (TDB:991)', () => {
+  it('getBranding ignores a legacy community_accent_color row', async () => {
+    const svc = mockSettingsCore({
+      [SETTING_KEYS.COMMUNITY_NAME]: 'Night Raiders',
+      [SETTING_KEYS.COMMUNITY_ACCENT_COLOR]: '#10B981',
+    });
+    const branding = await getBranding(svc);
+    expect(branding).toEqual({
+      communityName: 'Night Raiders',
+      communityLogoPath: null,
+    });
+    expect(branding).not.toHaveProperty('communityAccentColor');
+  });
+
+  it('clearBranding still deletes the legacy accent row', async () => {
+    const svc = mockSettingsCore();
+    await clearBranding(svc);
+    expect(svc.delete).toHaveBeenCalledWith(
+      SETTING_KEYS.COMMUNITY_ACCENT_COLOR,
     );
   });
 });
