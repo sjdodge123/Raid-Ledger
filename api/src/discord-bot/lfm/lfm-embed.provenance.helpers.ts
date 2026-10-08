@@ -43,10 +43,12 @@ function toTarget(row: {
  * `lfg-now-spawn.helpers.ts`) while `postText` (`lfm-embed.post.helpers.ts`)
  * is still awaiting `sendEmbed`, and only then does `insertLfmMessage` stamp
  * `posted_at`. So that group's stamp normally lands one Discord round-trip
- * BEFORE its own row. Two minutes covers the round-trip; an older group's
- * corpse (converted before this group even formed) falls outside it.
+ * BEFORE its own row. Thirty seconds covers that round-trip (a 2-minute
+ * window admitted the PREVIOUS group's conversion whenever the next group
+ * posted inside it — Codex r3); an older group's corpse (converted before
+ * this group even formed) falls outside it.
  */
-export const OWN_CONVERSION_GRACE = sql.raw(`interval '2 minutes'`);
+export const OWN_CONVERSION_GRACE = sql.raw(`interval '30 seconds'`);
 
 /**
  * TDB:953 — the ORDER BY both lookups share, in two tiers (Codex P2 on r2).

@@ -67,11 +67,11 @@ describe('conversionSincePosted (TDB:953)', () => {
     );
   });
 
-  it('matches stamped rows from two minutes before the post — the LFG-Now spawn order', async () => {
+  it('matches stamped rows from thirty seconds before the post — the LFG-Now spawn order', async () => {
     await conversionSincePosted(mockDb as unknown as LfgDb, row);
 
     expect(whereText()).toContain(
-      `"lfg_intents"."converted_at" > "lfg_group_messages"."posted_at" - interval '2 minutes'`,
+      `"lfg_intents"."converted_at" > "lfg_group_messages"."posted_at" - interval '30 seconds'`,
     );
     // Above the floor an `expires_at` leg would admit an older corpse.
     expect(whereText()).not.toContain('expires_at');
