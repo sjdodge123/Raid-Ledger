@@ -74,6 +74,14 @@ export const lfgIntents = pgTable(
       () => events.id,
       { onDelete: 'set null' },
     ),
+    /**
+     * TDB:953 — WHEN the group converted. Stamped with SQL `now()` in the same
+     * UPDATE that flips `status` to `converted` (every writer), so it shares a
+     * clock with `lfg_group_messages.posted_at` (`defaultNow()`, also
+     * zone-less) — the LFM reconcile compares the two. NULL on rows converted
+     * before this column existed (no backfill, ruled 2026-10-08).
+     */
+    convertedAt: timestamp('converted_at'),
   },
   (table) => [
     check(

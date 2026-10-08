@@ -7,6 +7,7 @@
  */
 import { ConflictException, Logger } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { SQL } from 'drizzle-orm';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   createAndConvertGroup,
@@ -78,10 +79,12 @@ describe('createAndConvertGroup', () => {
     expect(createEvent.mock.invocationCallOrder[0]).toBeLessThan(
       db.update.mock.invocationCallOrder[0],
     );
+    // TDB:953 — stamped by the DB's `now()` (an SQL chunk), never a JS Date.
     expect(db.set).toHaveBeenCalledWith({
       status: 'converted',
       convertedToPollId: null,
       convertedToEventId: EVENT.id,
+      convertedAt: expect.any(SQL),
     });
   });
 });

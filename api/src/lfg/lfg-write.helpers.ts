@@ -290,6 +290,7 @@ export async function convertGroup(
       status: 'converted',
       convertedToPollId: target.pollId ?? null,
       convertedToEventId: target.eventId ?? null,
+      convertedAt: sql`now()`, // TDB:953 — DB clock, as `posted_at`
     })
     .where(liveGroupRow(db, gameId, new Date()))
     .returning({ id: schema.lfgIntents.id });
@@ -326,6 +327,7 @@ export async function convertHolderIntent(
       status: 'converted',
       convertedToPollId: null,
       convertedToEventId: target.eventId,
+      convertedAt: sql`now()`, // TDB:953 — DB clock, as `posted_at`
     })
     .where(
       and(liveGroupRow(db, gameId, now), eq(schema.lfgIntents.userId, userId)),
