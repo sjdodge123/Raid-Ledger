@@ -37,7 +37,7 @@ function SheetItem({
   testId?: string;
 }): JSX.Element {
   const tone = danger
-    ? 'text-rose-300 hover:bg-red-500/20'
+    ? 'text-danger hover:bg-danger/10'
     : 'text-secondary hover:bg-panel hover:text-foreground';
   return (
     <button

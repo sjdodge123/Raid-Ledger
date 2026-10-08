@@ -72,11 +72,11 @@ function hourglassColor(remainingMs: number, deadlineIso: string, startIso?: str
   const totalMs = startIso
     ? new Date(deadlineIso).getTime() - new Date(startIso).getTime()
     : 0;
-  if (totalMs <= 0) return 'text-emerald-500'; // can't compute, default green
+  if (totalMs <= 0) return 'text-success'; // can't compute, default green
   const pct = Math.max(0, remainingMs) / totalMs;
-  if (pct > 0.5) return 'text-emerald-500';
-  if (pct > 0.2) return 'text-yellow-500';
-  return 'text-red-500';
+  if (pct > 0.5) return 'text-success';
+  if (pct > 0.2) return 'text-warning';
+  return 'text-danger';
 }
 
 /** Hourglass icon that spins 360° every 5 seconds. */

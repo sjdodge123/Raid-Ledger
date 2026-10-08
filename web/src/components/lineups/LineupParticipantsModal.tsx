@@ -37,7 +37,7 @@ const STATUS_LABELS: Record<LineupParticipantDto['status'], string> = {
 };
 
 const STATUS_CLS: Record<LineupParticipantDto['status'], string> = {
-  voted: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  voted: 'bg-success/10 text-success border-success/30',
   nominated: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
   waiting: 'bg-overlay/40 text-muted border-edge',
 };
@@ -99,12 +99,12 @@ function ModalBody({
   }
   if (isError) {
     return (
-      <div className="text-sm text-red-400" data-testid="participants-error">
+      <div className="text-sm text-danger" data-testid="participants-error">
         Couldn’t load participants.{' '}
         <button
           type="button"
           onClick={onRetry}
-          className="underline hover:text-red-300"
+          className="underline hover:no-underline"
         >
           Retry
         </button>

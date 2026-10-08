@@ -22,8 +22,8 @@ import { coverSrcSetProps } from '../../lib/igdb-image';
 function PulsingDot(): JSX.Element {
     return (
         <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
         </span>
     );
 }
@@ -39,7 +39,7 @@ function StatusBar({ targetDate, phaseDeadline, status }: {
         <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
                 <PulsingDot />
-                <span className="text-xs font-semibold text-emerald-400 tracking-wider uppercase">
+                <span className="text-xs font-semibold text-success tracking-wider uppercase">
                     COMMUNITY LINEUP
                 </span>
             </div>
@@ -64,7 +64,7 @@ function BannerHeading({ banner }: { banner: LineupBannerResponseDto }): JSX.Ele
             {banner.visibility === 'private' && (
                 <span
                     data-testid="lineup-private-badge"
-                    className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded border border-amber-500/40 bg-amber-500/10 text-amber-300"
+                    className="px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded border border-warning/40 bg-warning/10 text-warning"
                 >
                     Private
                 </span>

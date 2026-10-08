@@ -59,7 +59,7 @@ export function GraceCountdownBanner(props: Props): JSX.Element | null {
   return (
     <div
       data-testid="grace-countdown-banner"
-      className="mb-4 px-4 py-3 rounded-lg border border-amber-500/40 bg-amber-500/10 text-amber-50"
+      className="mb-4 px-4 py-3 rounded-lg border border-warning/40 bg-warning/10 text-foreground"
       role="status"
       aria-live="polite"
     >
