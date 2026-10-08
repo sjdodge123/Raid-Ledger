@@ -19,6 +19,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
 import { eq, sql } from 'drizzle-orm';
+import { nonEmpty } from '../common/testing/narrow';
 
 // ── Shared state ──────────────────────────────────────────────
 let testApp: TestApp;
@@ -39,14 +40,17 @@ afterEach(async () => {
 async function loginAsOperator(): Promise<string> {
   const bcrypt = await import('bcrypt');
   const hash = await bcrypt.hash('OperatorPass1!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: 'local:operator@test.local',
-      username: 'operator',
-      role: 'operator',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: 'local:operator@test.local',
+        username: 'operator',
+        role: 'operator',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email: 'operator@test.local',
     passwordHash: hash,
@@ -63,14 +67,17 @@ async function loginAsMember(
 ): Promise<{ token: string; userId: number }> {
   const bcrypt = await import('bcrypt');
   const hash = await bcrypt.hash('MemberPass1!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${tag}@test.local`,
-      username: tag,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${tag}@test.local`,
+        username: tag,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email: `${tag}@test.local`,
     passwordHash: hash,
@@ -720,7 +727,7 @@ function describeMatchingRaceAndIdempotency() {
       .where(eq(schema.communityLineupMatches.lineupId, lineupId));
     expect(matches).toHaveLength(1);
     expect(schedulingIds).toEqual([matches[0].id]);
-    expect(matches[0].status).toBe('scheduling');
+    expect(matches[0]?.status).toBe('scheduling');
 
     const members = await testApp.db
       .select()
@@ -924,7 +931,7 @@ function describeMatchingRaceAndIdempotency() {
         SELECT 1 FROM community_lineup_matches WHERE id = m.match_id
       )
     `);
-    expect(orphans[0].count).toBe(0);
+    expect(orphans[0]?.count).toBe(0);
   });
 }
 describe(

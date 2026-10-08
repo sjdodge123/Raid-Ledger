@@ -25,6 +25,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('Schedule vote provenance (integration)', () => {
   let testApp: TestApp;
@@ -46,34 +47,43 @@ describe('Schedule vote provenance (integration)', () => {
     matchId: number;
     slotId: number;
   }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Vote Source Poll',
-        createdBy: testApp.seed.adminUser.id,
-        status: 'decided',
-        visibility: 'public',
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId: match.id,
-        proposedTime: new Date('2099-04-01T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Vote Source Poll',
+          createdBy: testApp.seed.adminUser.id,
+          status: 'decided',
+          visibility: 'public',
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId: match.id,
+          proposedTime: new Date('2099-04-01T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot',
+    );
     return { lineupId: lineup.id, matchId: match.id, slotId: slot.id };
   }
 
@@ -127,7 +137,7 @@ describe('Schedule vote provenance (integration)', () => {
     expect(res.body).toEqual({ voted: true, stance: 'yes' });
     const rows = await voteRows(poll.slotId);
     expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe('web');
+    expect(rows[0]?.source).toBe('web');
   });
 
   it("records source='discord' when the voter arrived from the card", async () => {
@@ -139,8 +149,8 @@ describe('Schedule vote provenance (integration)', () => {
     expect(res.body).toEqual({ voted: true, stance: 'yes' });
     const rows = await voteRows(poll.slotId);
     expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe('discord');
-    expect(rows[0].stance).toBe('yes');
+    expect(rows[0]?.source).toBe('discord');
+    expect(rows[0]?.stance).toBe('yes');
   });
 
   it('a stance flip overwrites the source with the flip’s own', async () => {
@@ -154,9 +164,9 @@ describe('Schedule vote provenance (integration)', () => {
     expect(res.body).toEqual({ voted: false, stance: 'no' });
     const rows = await voteRows(poll.slotId);
     expect(rows).toHaveLength(1);
-    expect(rows[0].stance).toBe('no');
+    expect(rows[0]?.stance).toBe('no');
     // Keeping 'discord' here would credit the card for an answer the web gave.
-    expect(rows[0].source).toBe('web');
+    expect(rows[0]?.source).toBe('web');
   });
 
   it('a discord flip of a web vote is attributed to discord', async () => {
@@ -168,7 +178,7 @@ describe('Schedule vote provenance (integration)', () => {
     expect(res.status).toBe(200);
     const rows = await voteRows(poll.slotId);
     expect(rows).toHaveLength(1);
-    expect(rows[0].source).toBe('discord');
+    expect(rows[0]?.source).toBe('discord');
   });
 
   it('rejects an unknown source with 400 and writes no row', async () => {
@@ -211,8 +221,8 @@ describe('Schedule vote provenance (integration)', () => {
       expect(res.status).toBe(201);
       const rows = await voteRows((res.body as { id: number }).id);
       expect(rows).toHaveLength(1);
-      expect(rows[0].stance).toBe('yes');
-      expect(rows[0].source).toBe('discord');
+      expect(rows[0]?.stance).toBe('yes');
+      expect(rows[0]?.source).toBe('discord');
     });
 
     it("stamps the auto-vote 'web' when no source is sent", async () => {
@@ -224,7 +234,7 @@ describe('Schedule vote provenance (integration)', () => {
       expect(res.status).toBe(201);
       const rows = await voteRows((res.body as { id: number }).id);
       expect(rows).toHaveLength(1);
-      expect(rows[0].source).toBe('web');
+      expect(rows[0]?.source).toBe('web');
     });
 
     it('rejects an unknown source with 400, creating neither slot nor vote', async () => {

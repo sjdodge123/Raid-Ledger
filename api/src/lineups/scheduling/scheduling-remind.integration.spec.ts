@@ -28,6 +28,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
   let testApp: TestApp;
@@ -52,14 +53,17 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
   ): Promise<{ id: number; token: string }> {
     const email = `remind-${suffix}@test.local`;
     const hash = await bcrypt.hash('RemindPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:remind-${suffix}`,
-        username: `remind-${suffix}`,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:remind-${suffix}`,
+          username: `remind-${suffix}`,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -81,38 +85,47 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
     includeSchedulingPhase?: boolean;
     standalone?: boolean;
   }): Promise<{ lineupId: number; matchId: number; slotId: number }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: `Remind Poll ${generatePublicSlug()}`,
-        createdBy: opts.creatorId,
-        status: 'decided',
-        visibility: opts.visibility ?? 'public',
-        publicSlug: generatePublicSlug(),
-        includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
-        // ROK-977 standalone marker — the "Schedule a Game" poll variant.
-        phaseDurationOverride: opts.standalone ? { standalone: true } : null,
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: `Remind Poll ${generatePublicSlug()}`,
+          createdBy: opts.creatorId,
+          status: 'decided',
+          visibility: opts.visibility ?? 'public',
+          publicSlug: generatePublicSlug(),
+          includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
+          // ROK-977 standalone marker — the "Schedule a Game" poll variant.
+          phaseDurationOverride: opts.standalone ? { standalone: true } : null,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     await addMember(match.id, opts.creatorId, 'voted');
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId: match.id,
-        proposedTime: new Date('2099-04-01T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId: match.id,
+          proposedTime: new Date('2099-04-01T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot',
+    );
     return { lineupId: lineup.id, matchId: match.id, slotId: slot.id };
   }
 
@@ -194,7 +207,7 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
 
     const nonVoterNotifs = await remindNotifsFor(nonVoter.id);
     expect(nonVoterNotifs).toHaveLength(1);
-    expect(nonVoterNotifs[0].payload).toEqual({
+    expect(nonVoterNotifs[0]?.payload).toEqual({
       subtype: 'lineup_scheduling_reminder',
       lineupId,
       matchId,

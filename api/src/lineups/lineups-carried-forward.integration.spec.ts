@@ -15,6 +15,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -34,14 +35,17 @@ async function loginAsMember(
 ): Promise<{ token: string; userId: number }> {
   const bcrypt = await import('bcrypt');
   const hash = await bcrypt.hash('MemberPass1!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${tag}@test.local`,
-      username: tag,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${tag}@test.local`,
+        username: tag,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email: `${tag}@test.local`,
     passwordHash: hash,

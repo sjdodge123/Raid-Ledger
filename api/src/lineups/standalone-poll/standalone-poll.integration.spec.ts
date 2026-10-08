@@ -36,6 +36,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { nonEmpty } from '../../common/testing/narrow';
 
 // ── Shared state ──────────────────────────────────────────────
 let testApp: TestApp;
@@ -58,14 +59,17 @@ async function loginAsMember(
 ): Promise<{ token: string; userId: number }> {
   const bcrypt = await import('bcrypt');
   const hash = await bcrypt.hash('MemberPass1!', 4);
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${tag}@test.local`,
-      username: tag,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${tag}@test.local`,
+        username: tag,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   await testApp.db.insert(schema.localCredentials).values({
     email: `${tag}@test.local`,
     passwordHash: hash,
@@ -223,14 +227,17 @@ function describeCreatePoll() {
   });
 
   it('should return gameCoverUrl in response when game has cover', async () => {
-    const [gameWithCover] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'Cover Game',
-        slug: 'cover-game',
-        coverUrl: 'https://example.com/cover.jpg',
-      })
-      .returning();
+    const [gameWithCover] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Cover Game',
+          slug: 'cover-game',
+          coverUrl: 'https://example.com/cover.jpg',
+        })
+        .returning(),
+      'gameWithCover',
+    );
 
     const res = await postSchedulingPoll(adminToken, {
       gameId: gameWithCover.id,
@@ -393,10 +400,10 @@ function describeLinkedEvent() {
 
     // Verify linkedEventId stored on the match
     const matchId = res.body.id as number;
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .limit(1);
+    const [match] = nonEmpty(
+      await testApp.db.select().from(schema.communityLineupMatches).limit(1),
+      'match',
+    );
 
     expect(match.id).toBe(matchId);
     expect(match.linkedEventId).toBe(event.id);
@@ -435,10 +442,13 @@ function describeLinkedPollThreshold() {
     });
     expect(res.status).toBe(201);
 
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, res.body.id as number));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, res.body.id as number)),
+      'match',
+    );
     expect(match.minVoteThreshold).toBe(3);
   });
 
@@ -454,10 +464,13 @@ function describeLinkedPollThreshold() {
     });
     expect(res.status).toBe(201);
 
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, res.body.id as number));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, res.body.id as number)),
+      'match',
+    );
     expect(match.minVoteThreshold).toBe(5);
   });
 

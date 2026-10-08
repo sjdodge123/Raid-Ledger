@@ -26,6 +26,7 @@ import { LineupNotificationService } from './lineup-notification.service';
 import { generatePublicSlug } from './public-lineup-slug.helpers';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 interface PrivateLineupSetup {
   lineupId: number;
@@ -69,31 +70,37 @@ function describePrivateNotifications() {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   async function createInvitee(discordSuffix: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:${discordSuffix}`,
-        username: `inv-${discordSuffix}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:${discordSuffix}`,
+          username: `inv-${discordSuffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function setupPrivateLineup(): Promise<PrivateLineupSetup> {
     const inviteeId = await createInvitee('inv1-1115');
     const inviteeId2 = await createInvitee('inv2-1115');
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1115 private',
-        status: 'building',
-        visibility: 'private',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1115 private',
+          status: 'building',
+          visibility: 'private',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
     await testApp.db.insert(schema.communityLineupInvitees).values([
       { lineupId: lineup.id, userId: inviteeId },
       { lineupId: lineup.id, userId: inviteeId2 },
@@ -139,16 +146,19 @@ function describePrivateNotifications() {
     const { lineupId, inviteeIds } = await setupPrivateLineup();
 
     // Insert a match so the helper has data to process.
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId,
-        gameId: testApp.seed.game.id,
-        status: 'suggested',
-        thresholdMet: true,
-        voteCount: 5,
-      })
-      .returning();
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId,
+          gameId: testApp.seed.game.id,
+          status: 'suggested',
+          thresholdMet: true,
+          voteCount: 5,
+        })
+        .returning(),
+      'match',
+    );
 
     await service.notifyMatchesFound(
       lineupId,
@@ -177,16 +187,19 @@ function describePrivateNotifications() {
 
   it('notifySchedulingOpen does not post channel embed for private lineup', async () => {
     const { lineupId, inviteeIds } = await setupPrivateLineup();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 5,
-      })
-      .returning();
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 5,
+        })
+        .returning(),
+      'match',
+    );
 
     await service.notifySchedulingOpen(
       {
@@ -212,16 +225,19 @@ function describePrivateNotifications() {
 
   it('notifyEventCreated does not post channel embed for private lineup', async () => {
     const { lineupId, inviteeIds } = await setupPrivateLineup();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId,
-        gameId: testApp.seed.game.id,
-        status: 'scheduled',
-        thresholdMet: true,
-        voteCount: 5,
-      })
-      .returning();
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId,
+          gameId: testApp.seed.game.id,
+          status: 'scheduled',
+          thresholdMet: true,
+          voteCount: 5,
+        })
+        .returning(),
+      'match',
+    );
 
     await service.notifyEventCreated(
       {

@@ -95,8 +95,8 @@ describe('buildSchedulingAvailability (ROK-1559 / ROK-1560)', () => {
 
     const res = await buildSchedulingAvailability(db as never, [7], 42);
 
-    expect(res.cells[0].availableCount).toBe(0);
-    expect(res.cells[0].staleCount).toBe(1);
+    expect(res.cells[0]?.availableCount).toBe(0);
+    expect(res.cells[0]?.staleCount).toBe(1);
   });
 
   // ROK-1588: the Find-a-better-time legend reads "N fresh · N out of date ·

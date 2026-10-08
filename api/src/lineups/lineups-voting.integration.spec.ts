@@ -16,6 +16,7 @@ import {
 } from '../common/testing/integration-helpers';
 import { sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeVoting() {
   let testApp: TestApp;
@@ -38,14 +39,17 @@ function describeVoting() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@test.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@test.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@test.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -83,13 +87,16 @@ function describeVoting() {
   async function createAdditionalGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Game ${i + 1}`,
-          slug: `game-${i + 1}-${Date.now()}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Game ${i + 1}`,
+            slug: `game-${i + 1}-${Date.now()}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;
@@ -521,14 +528,17 @@ function describeVoting() {
     });
 
     it('should categorize fit based on game maxPlayers vs voter count', async () => {
-      const [smallGame] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: 'Small Game',
-          slug: `small-game-${Date.now()}`,
-          playerCount: { min: 1, max: 2 },
-        })
-        .returning();
+      const [smallGame] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: 'Small Game',
+            slug: `small-game-${Date.now()}`,
+            playerCount: { min: 1, max: 2 },
+          })
+          .returning(),
+        'smallGame',
+      );
 
       const createRes = await createLineup(adminToken, {
         matchThreshold: 10,

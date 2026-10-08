@@ -119,7 +119,7 @@ describe('mapCarriedForwardEntries', () => {
     const result = mapCarriedForwardEntries(entries, new Map());
 
     expect(result).toHaveLength(1);
-    expect(result[0].voteCount).toBe(0);
+    expect(result[0]?.voteCount).toBe(0);
   });
 });
 

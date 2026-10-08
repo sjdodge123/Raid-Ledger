@@ -16,6 +16,7 @@ import {
   buildRosterEtas,
   type RosterEtaPerson,
 } from './tie-readiness-roster-eta.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const GB = 1_000_000_000;
 /** 30 GB at 100 Mbps = (30e9 * 8) / 100e6 = 2400 s = 40 min. */
@@ -78,10 +79,13 @@ describe('buildRosterEtas', () => {
   });
 
   it('marks the viewer as no_speed rather than not_shared when they never measured', () => {
-    const [row] = buildRosterEtas(
-      [person({ userId: 7, shareEtaAt: null, mbps: null })],
-      SIZE,
-      7,
+    const [row] = nonEmpty(
+      buildRosterEtas(
+        [person({ userId: 7, shareEtaAt: null, mbps: null })],
+        SIZE,
+        7,
+      ),
+      'row',
     );
     expect(row.status).toBe('no_speed');
     expect(row.isViewer).toBe(true);

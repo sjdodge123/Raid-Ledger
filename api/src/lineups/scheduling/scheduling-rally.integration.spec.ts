@@ -36,6 +36,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findSlotInMatch, rallyCooldownKey } from './scheduling-rally.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Mirrors POLL_RALLY_COOLDOWN_SECONDS — asserted verbatim so a ms/s slip fails. */
@@ -68,14 +69,17 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     const label = `${suffix}-${++tag}`;
     const email = `rally-${label}@test.local`;
     const hash = await bcrypt.hash('RallyPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:rally-${label}`,
-        username: `rally-${label}`,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:rally-${label}`,
+          username: `rally-${label}`,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -97,29 +101,35 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     creatorId: number;
     includeSchedulingPhase?: boolean;
   }): Promise<{ lineupId: number; matchId: number; slotId: number }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: `Rally Poll ${generatePublicSlug()}`,
-        createdBy: opts.creatorId,
-        status: 'decided',
-        visibility: 'public',
-        publicSlug: generatePublicSlug(),
-        includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
-        // ROK-977 standalone marker — the "Schedule a Game" poll variant.
-        phaseDurationOverride: { standalone: true },
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: `Rally Poll ${generatePublicSlug()}`,
+          createdBy: opts.creatorId,
+          status: 'decided',
+          visibility: 'public',
+          publicSlug: generatePublicSlug(),
+          includeSchedulingPhase: opts.includeSchedulingPhase ?? true,
+          // ROK-977 standalone marker — the "Schedule a Game" poll variant.
+          phaseDurationOverride: { standalone: true },
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     await addMember(match.id, opts.creatorId);
     const slotId = await addSlot(match.id, 72);
     return { lineupId: lineup.id, matchId: match.id, slotId };
@@ -147,14 +157,17 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     matchId: number,
     hoursFromNow: number,
   ): Promise<number> {
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date(Date.now() + hoursFromNow * HOUR_MS),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date(Date.now() + hoursFromNow * HOUR_MS),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
     return slot.id;
   }
 
@@ -237,7 +250,7 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
 
     const dms = await ralliesFor(otherSlotOnly.id);
     expect(dms).toHaveLength(1);
-    expect(dms[0].payload).toMatchObject({ slotId });
+    expect(dms[0]?.payload).toMatchObject({ slotId });
     for (const quiet of [yesB, yesC, creator]) {
       expect(await ralliesFor(quiet.id)).toHaveLength(0);
     }
@@ -257,10 +270,13 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     const res = await postRally(creator.token, lineupId, matchId);
     expect(res.status).toBe(200);
 
-    const [slot] = await testApp.db
-      .select()
-      .from(schema.communityLineupScheduleSlots)
-      .where(eq(schema.communityLineupScheduleSlots.id, slotId));
+    const [slot] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupScheduleSlots)
+        .where(eq(schema.communityLineupScheduleSlots.id, slotId)),
+      'slot',
+    );
     const [dm] = await ralliesFor(silent.id);
     expect(dm).toBeDefined();
     expect(dm.type).toBe('community_lineup');
@@ -731,7 +747,7 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ pending: 1, nudged: 1, skipped: 0 });
-    const [dm] = await ralliesFor(silent.id);
+    const [dm] = nonEmpty(await ralliesFor(silent.id), 'dm');
     expect(dm.payload).toMatchObject({ slotId });
     expect(dm.message).toMatch(/^2 of 3 picked/);
     expect(await ralliesFor(answered.id)).toHaveLength(0);
@@ -796,10 +812,13 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     const creator = await createUser('tz-creator');
     const { matchId } = await seedPoll({ creatorId: creator.id });
     const instant = new Date('2026-07-04T02:30:00.000Z');
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({ matchId, proposedTime: instant, suggestedBy: 'user' })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({ matchId, proposedTime: instant, suggestedBy: 'user' })
+        .returning(),
+      'slot',
+    );
 
     const found = await findSlotInMatch(testApp.db, matchId, slot.id);
 

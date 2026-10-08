@@ -25,6 +25,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findSlotInMatch } from './scheduling-rally.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /** Far enough out that the slot is always "future" (ROK-1610's gate). */
 const FUTURE_SLOT = new Date('2099-10-10T21:00:00.000Z');
@@ -53,14 +54,17 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
   ): Promise<{ id: number; token: string }> {
     const email = `lockin-${suffix}@test.local`;
     const hash = await bcrypt.hash('LockInPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username: `lockin-${suffix}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: `lockin-${suffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db
       .insert(schema.localCredentials)
       .values({ email, passwordHash: hash, userId: user.id });
@@ -91,26 +95,32 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
      */
     lineupStatus: 'archived' | 'decided' = 'archived',
   ): Promise<SeededPoll> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Valheim',
-        createdBy: testApp.seed.adminUser.id,
-        status: lineupStatus,
-        visibility: 'public',
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Valheim',
+          createdBy: testApp.seed.adminUser.id,
+          status: lineupStatus,
+          visibility: 'public',
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     await testApp.db.insert(schema.communityLineupMatchMembers).values(
       [testApp.seed.adminUser.id, ...memberIds].map((userId) => ({
         matchId: match.id,
@@ -217,16 +227,22 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       proposedTime: string;
     }>;
     expect(slots.find((s) => s.id === poll.slotIds[0])?.proposedTime).toBe(iso);
-    const [event] = await testApp.db
-      .select({ duration: schema.events.duration })
-      .from(schema.events)
-      .where(eq(schema.events.id, created.body.eventId as number));
+    const [event] = nonEmpty(
+      await testApp.db
+        .select({ duration: schema.events.duration })
+        .from(schema.events)
+        .where(eq(schema.events.id, created.body.eventId as number)),
+      'event',
+    );
     expect(event.duration[0].toISOString()).toBe(iso);
 
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
     expect(match.status).toBe('scheduled');
     expect(match.linkedEventId).toBe(created.body.eventId);
   });

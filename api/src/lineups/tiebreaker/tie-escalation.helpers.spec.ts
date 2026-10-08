@@ -22,6 +22,7 @@ import {
   loadEscalationRecipients,
   type TieEscalationDeps,
 } from './tie-escalation.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -118,7 +119,7 @@ describe('loadOverdueActiveTiebreakers (D14)', () => {
     ]);
     const db = { execute } as unknown as Db;
 
-    const [row] = await loadOverdueActiveTiebreakers(db, NOW);
+    const [row] = nonEmpty(await loadOverdueActiveTiebreakers(db, NOW), 'row');
 
     expect(row.roundDeadline).toEqual(PAST);
     expect(row.tiedGameIds).toEqual([]);

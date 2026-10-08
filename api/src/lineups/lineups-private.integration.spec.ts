@@ -19,6 +19,7 @@ import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { findInviteeDiscordMembers } from './lineup-notification-targets.helpers';
 import { clearAuthUserCache } from '../auth/auth-user-cache';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describePrivateLineups() {
   let testApp: TestApp;
@@ -43,14 +44,17 @@ function describePrivateLineups() {
   ): Promise<{ id: number; token: string }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('Pass1Pass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,

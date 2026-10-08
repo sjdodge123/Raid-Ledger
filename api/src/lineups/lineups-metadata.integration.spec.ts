@@ -15,6 +15,7 @@ import {
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeLineupMetadata() {
   let testApp: TestApp;
@@ -33,14 +34,17 @@ function describeLineupMetadata() {
   async function loginAsMember(): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('MemberPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: 'local:member@test.local',
-        username: 'member',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: 'local:member@test.local',
+          username: 'member',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email: 'member@test.local',
       passwordHash: hash,

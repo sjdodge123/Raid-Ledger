@@ -102,7 +102,7 @@ describe('buildPollResponse', () => {
     expect(result.match.gameName).toBe('Elden Ring');
     expect(result.match.members).toHaveLength(1);
     expect(result.slots).toHaveLength(1);
-    expect(result.slots[0].votes).toHaveLength(1);
+    expect(result.slots[0]?.votes).toHaveLength(1);
     expect(result.myVotedSlotIds).toEqual([20]);
     expect(result.lineupStatus).toBe('decided');
   });
@@ -179,7 +179,7 @@ describe('buildMatchDetailDto', () => {
     expect(dto.id).toBe(10);
     expect(dto.gameName).toBe('Elden Ring');
     expect(dto.createdAt).toMatch(/^\d{4}-/);
-    expect(dto.members[0].displayName).toBe('Alice');
+    expect(dto.members[0]?.displayName).toBe('Alice');
   });
 
   it('omits lineupCreatedById when not provided (ROK-1121)', () => {

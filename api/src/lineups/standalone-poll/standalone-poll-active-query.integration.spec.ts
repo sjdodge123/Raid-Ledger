@@ -16,6 +16,7 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findActiveStandalonePolls } from './standalone-poll-query.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -41,34 +42,40 @@ function describeActiveStandalonePolls(): void {
   });
 
   async function seedPoll(shape: PollShape): Promise<number> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: `Active Query Poll ${++tag}`,
-        status: shape.lineupStatus ?? 'decided',
-        visibility: 'public',
-        createdBy: testApp.seed.adminUser.id,
-        includeSchedulingPhase: true,
-        phaseDeadline:
-          shape.deadlineHours === null
-            ? null
-            : new Date(Date.now() + shape.deadlineHours * HOUR_MS),
-        phaseDurationOverride:
-          shape.standalone === false ? {} : { standalone: true },
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: `Active Query Poll ${++tag}`,
+          status: shape.lineupStatus ?? 'decided',
+          visibility: 'public',
+          createdBy: testApp.seed.adminUser.id,
+          includeSchedulingPhase: true,
+          phaseDeadline:
+            shape.deadlineHours === null
+              ? null
+              : new Date(Date.now() + shape.deadlineHours * HOUR_MS),
+          phaseDurationOverride:
+            shape.standalone === false ? {} : { standalone: true },
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     for (const hours of shape.slotHours ?? []) {
       await testApp.db.insert(schema.communityLineupScheduleSlots).values({
         matchId: match.id,

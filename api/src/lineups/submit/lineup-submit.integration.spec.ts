@@ -30,6 +30,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
+import { nonEmpty } from '../../common/testing/narrow';
 
 interface SubmissionRow extends Record<string, unknown> {
   lineup_id: number;
@@ -70,14 +71,17 @@ function describeLineupSubmit() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('Submit1Pass!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@submit.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@submit.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@submit.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -111,15 +115,18 @@ function describeLineupSubmit() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `Submit Game ${i + 1}`,
-          slug: `submit-game-${i + 1}-${Date.now()}-${Math.random()
-            .toString(36)
-            .slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `Submit Game ${i + 1}`,
+            slug: `submit-game-${i + 1}-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;
@@ -258,7 +265,7 @@ function describeLineupSubmit() {
   it('POST /lineups/:id/submit-votes returns 403 when the lineup is still building', async () => {
     const createRes = await createPublicLineup(adminToken);
     const lineupId = createRes.body.id as number;
-    const [game] = await createGames(1);
+    const [game] = nonEmpty(await createGames(1), 'game');
     await nominate(adminToken, lineupId, game.id);
 
     const res = await testApp.request
@@ -296,7 +303,7 @@ function describeLineupSubmit() {
     const createRes = await createPublicLineup(adminToken);
     expect(createRes.status).toBe(201);
     const lineupId = createRes.body.id as number;
-    const [game] = await createGames(1);
+    const [game] = nonEmpty(await createGames(1), 'game');
     await nominate(adminToken, lineupId, game.id);
 
     const res = await testApp.request

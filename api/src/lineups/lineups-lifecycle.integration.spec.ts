@@ -19,6 +19,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { applyStatusUpdate } from './lineups-lifecycle.helpers';
 import { LineupPhaseQueueService } from './queue/lineup-phase.queue';
+import { nonEmpty } from '../common/testing/narrow';
 
 type LineupRow = typeof schema.communityLineups.$inferSelect;
 
@@ -37,14 +38,17 @@ describe('applyStatusUpdate — conditional UPDATE race guard (ROK-1150)', () =>
   });
 
   beforeEach(async () => {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:race-${Date.now()}@lifecycle.local`,
-        username: 'race-creator',
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:race-${Date.now()}@lifecycle.local`,
+          username: 'race-creator',
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     creatorId = user.id;
   });
 
@@ -63,10 +67,13 @@ describe('applyStatusUpdate — conditional UPDATE race guard (ROK-1150)', () =>
   }
 
   async function readStatus(id: number): Promise<string> {
-    const [row] = await testApp.db
-      .select({ status: schema.communityLineups.status })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.communityLineups.status })
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'row',
+    );
     return row.status;
   }
 

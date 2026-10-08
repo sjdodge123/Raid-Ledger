@@ -24,6 +24,7 @@ import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { nonEmpty } from '../common/testing/narrow';
 
 function describeAutoAdvance() {
   let testApp: TestApp;
@@ -59,14 +60,17 @@ function describeAutoAdvance() {
   ): Promise<{ token: string; userId: number }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('AutoAdvance1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${tag}@auto.local`,
-        username: tag,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${tag}@auto.local`,
+          username: tag,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     const email = `${tag}@auto.local`.toLowerCase();
     await testApp.db.insert(schema.localCredentials).values({
       email,
@@ -100,13 +104,16 @@ function describeAutoAdvance() {
   async function createGames(count: number) {
     const games: (typeof schema.games.$inferSelect)[] = [];
     for (let i = 0; i < count; i++) {
-      const [game] = await testApp.db
-        .insert(schema.games)
-        .values({
-          name: `AutoAdvance Game ${i + 1}`,
-          slug: `auto-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-        })
-        .returning();
+      const [game] = nonEmpty(
+        await testApp.db
+          .insert(schema.games)
+          .values({
+            name: `AutoAdvance Game ${i + 1}`,
+            slug: `auto-game-${i + 1}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          })
+          .returning(),
+        'game',
+      );
       games.push(game);
     }
     return games;

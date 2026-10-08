@@ -25,6 +25,7 @@ import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.se
 import { SettingsService } from '../../settings/settings.service';
 import { LINEUP_MATCH_EVENTS } from '../lineups-scheduling-hook.helpers';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const CHANNEL = 'test-channel-1473';
 const MESSAGE_ID = 'mock-msg-1473';
@@ -95,10 +96,13 @@ function describeSchedulingPollCard() {
   // ── Helpers ────────────────────────────────────────────────────────────
 
   async function createGame(name: string): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -109,16 +113,19 @@ function describeSchedulingPollCard() {
   ): Promise<{ lineupId: number; gameId: number; voterId: number }> {
     const gameId = await createGame(`PollCard-${Date.now()}`);
     const voterId = testApp.seed.adminUser.id;
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title,
-        status: 'voting',
-        visibility,
-        createdBy: voterId,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title,
+          status: 'voting',
+          visibility,
+          createdBy: voterId,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
     await testApp.db
       .insert(schema.communityLineupEntries)
       .values({ lineupId: lineup.id, gameId, nominatedBy: voterId });
@@ -245,14 +252,17 @@ function describeSchedulingPollCard() {
   it('edits the stored message on lock-in instead of posting a new card', async () => {
     const { lineupId, voterId } = await seedVotingLineup('ROK-1473 lock-in');
     const match = await decideAndAwaitCard(lineupId);
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId: match.id,
-        proposedTime: new Date(Date.now() + 86_400_000),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId: match.id,
+          proposedTime: new Date(Date.now() + 86_400_000),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
     await testApp.db
       .insert(schema.communityLineupScheduleVotes)
       .values({ slotId: slot.id, userId: voterId });
@@ -297,29 +307,35 @@ function describeSchedulingPollCard() {
   it('posts the card when a bandwagon join promotes a suggested match', async () => {
     const gameId = await createGame(`Bandwagon-${Date.now()}`);
     const creatorId = testApp.seed.adminUser.id;
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1473 bandwagon',
-        status: 'decided',
-        visibility: 'public',
-        createdBy: creatorId,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1473 bandwagon',
+          status: 'decided',
+          visibility: 'public',
+          createdBy: creatorId,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
     // voteCount 1 at 50% → the original tally had 2 voters, so a single
     // bandwagon member re-reaches 50% and trips the 35% threshold.
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId,
-        status: 'suggested',
-        thresholdMet: false,
-        voteCount: 1,
-        votePercentage: '50.00',
-      })
-      .returning();
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId,
+          status: 'suggested',
+          thresholdMet: false,
+          voteCount: 1,
+          votePercentage: '50.00',
+        })
+        .returning(),
+      'match',
+    );
 
     const result = await lineupsService.bandwagonJoin(
       lineup.id,

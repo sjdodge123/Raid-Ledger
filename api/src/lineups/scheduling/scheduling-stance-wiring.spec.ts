@@ -14,6 +14,7 @@ import { buildEmbedSlots } from './scheduling-poll-embed.helpers';
 import { buildPollResponse } from './scheduling-response.helpers';
 import { tallyStancesBySlot } from './scheduling-stance.helpers';
 import type { ScheduleVoteRow } from './scheduling-query.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /** N days from now, so every fixture slot is comfortably in the future. */
 const inDays = (d: number): Date =>
@@ -143,8 +144,8 @@ describe('buildPollResponse — the page splits stances (AC6 counts)', () => {
       false,
     );
 
-    expect(res.slots[0].votes.map((v) => v.userId)).toEqual([10, 11]);
-    expect(res.slots[0].noVotes.map((v) => v.userId)).toEqual([antiVoter]);
+    expect(res.slots[0]?.votes.map((v) => v.userId)).toEqual([10, 11]);
+    expect(res.slots[0]?.noVotes.map((v) => v.userId)).toEqual([antiVoter]);
     // The anti-voter answered, but NOT in favour of slot 1.
     expect(res.myVotedSlotIds).toEqual([]);
     expect(res.myNoSlotIds).toEqual([1]);
@@ -180,11 +181,14 @@ describe('buildEmbedSlots — the card counts yes only', () => {
   ] as unknown as Parameters<typeof buildEmbedSlots>[0];
 
   it('splits counts and keeps anti-voters out of the voter names', () => {
-    const [slot] = buildEmbedSlots(slots, [
-      row(1, 10, 'yes'),
-      row(1, 11, 'no'),
-      row(1, 12, 'no'),
-    ]);
+    const [slot] = nonEmpty(
+      buildEmbedSlots(slots, [
+        row(1, 10, 'yes'),
+        row(1, 11, 'no'),
+        row(1, 12, 'no'),
+      ]),
+      'slot',
+    );
     expect(slot.voteCount).toBe(1);
     expect(slot.noCount).toBe(2);
     expect(slot.voterNames).toEqual(['U10']);
@@ -196,11 +200,10 @@ describe('buildEmbedSlots — the card counts yes only', () => {
       ...row(1, 13, 'yes'),
       stance: 'maybe',
     } as unknown as ScheduleVoteRow;
-    const [slot] = buildEmbedSlots(slots, [
-      row(1, 10, 'yes'),
-      row(1, 11, 'no'),
-      unknown,
-    ]);
+    const [slot] = nonEmpty(
+      buildEmbedSlots(slots, [row(1, 10, 'yes'), row(1, 11, 'no'), unknown]),
+      'slot',
+    );
     expect(slot.voteCount).toBe(1);
     expect(slot.noCount).toBe(1);
     expect(slot.voterNames).toEqual(['U10']);

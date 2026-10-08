@@ -14,6 +14,7 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { buildVetoStatus } from './tiebreaker-veto.helpers';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 type TiebreakerRow = typeof schema.communityLineupTiebreakers.$inferSelect;
 
@@ -43,14 +44,17 @@ function describeVetoBadges() {
   }
 
   async function insertMember(handle: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${handle}-${Date.now()}`,
-        username: handle,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${handle}-${Date.now()}`,
+          username: handle,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
@@ -68,15 +72,18 @@ function describeVetoBadges() {
   async function insertTiebreaker(
     tiedGameIds: number[],
   ): Promise<TiebreakerRow> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1314 Veto Badges',
-        status: 'voting',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1314 Veto Badges',
+          status: 'voting',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
     const [tb] = await testApp.db
       .insert(schema.communityLineupTiebreakers)
       .values({

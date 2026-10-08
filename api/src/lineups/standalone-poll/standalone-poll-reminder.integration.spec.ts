@@ -38,6 +38,7 @@ import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
 // in this story. Importing here is what makes the test fail (compile-time)
 // until the service file is added.
 import { StandalonePollReminderService } from './standalone-poll-reminder.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 interface StandaloneSetup {
   lineupId: number;
@@ -86,22 +87,28 @@ function describeStandalonePollReminders() {
   // ── helpers ──────────────────────────────────────────────────────
 
   async function createMember(tag: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:${tag}`,
-        username: `mem-${tag}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:${tag}`,
+          username: `mem-${tag}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function createGame(name: string): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name, slug: `${name.toLowerCase()}-${Date.now()}` })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -130,30 +137,36 @@ function describeStandalonePollReminders() {
         ? null
         : new Date(Date.now() + hoursUntilDeadline * HOUR_MS);
 
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Standalone Scheduling Poll',
-        status: overrides.status ?? 'decided',
-        visibility: 'public',
-        createdBy: creatorId,
-        phaseDeadline,
-        phaseDurationOverride: { standalone: true },
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Standalone Scheduling Poll',
+          status: overrides.status ?? 'decided',
+          visibility: 'public',
+          createdBy: creatorId,
+          phaseDeadline,
+          phaseDurationOverride: { standalone: true },
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
 
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 0,
-      })
-      .returning();
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 0,
+        })
+        .returning(),
+      'match',
+    );
 
     await testApp.db.insert(schema.communityLineupMatchMembers).values(
       [creatorId, ...memberIds].map((userId) => ({
@@ -176,14 +189,17 @@ function describeStandalonePollReminders() {
     matchId: number,
     userId: number,
   ): Promise<void> {
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date(Date.now() + 7 * 24 * HOUR_MS),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date(Date.now() + 7 * 24 * HOUR_MS),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
     await testApp.db.insert(schema.communityLineupScheduleVotes).values({
       slotId: slot.id,
       userId,
@@ -320,16 +336,19 @@ function describeStandalonePollReminders() {
       20, // 24h window
       1,
     );
-    const [inviteeId] = memberIds;
+    const [inviteeId] = nonEmpty(memberIds, 'inviteeId');
     const outsider = await createLoggedInMember('retract-outsider');
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date(Date.now() + 7 * 24 * HOUR_MS),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date(Date.now() + 7 * 24 * HOUR_MS),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
     const base = `/lineups/${lineupId}/schedule/${matchId}`;
     const vote = await testApp.request
       .post(`${base}/vote`)
@@ -414,21 +433,24 @@ function describeStandalonePollReminders() {
       // deadline — mimics the production state described in the spec.
       const creatorId = testApp.seed.adminUser.id;
       const createdAt = new Date(Date.now() - 12 * HOUR_MS);
-      const [lineup] = await testApp.db
-        .insert(schema.communityLineups)
-        .values({
-          title: 'Standalone Scheduling Poll',
-          status: 'decided',
-          visibility: 'public',
-          createdBy: creatorId,
-          phaseDeadline: null,
-          phaseDurationOverride: { standalone: true },
-          createdAt,
-          updatedAt: createdAt,
-          publicSlug: generatePublicSlug(),
-          publicShareEnabled: false,
-        })
-        .returning();
+      const [lineup] = nonEmpty(
+        await testApp.db
+          .insert(schema.communityLineups)
+          .values({
+            title: 'Standalone Scheduling Poll',
+            status: 'decided',
+            visibility: 'public',
+            createdBy: creatorId,
+            phaseDeadline: null,
+            phaseDurationOverride: { standalone: true },
+            createdAt,
+            updatedAt: createdAt,
+            publicSlug: generatePublicSlug(),
+            publicShareEnabled: false,
+          })
+          .returning(),
+        'lineup',
+      );
 
       // Re-run the migration body verbatim. Idempotent on its own and
       // should leave non-standalone rows untouched.
@@ -454,10 +476,13 @@ function describeStandalonePollReminders() {
 
       // Idempotent: running the same SQL again must not change the row.
       await testApp.db.execute(migrationSql);
-      const [afterSecond] = await testApp.db
-        .select()
-        .from(schema.communityLineups)
-        .where(eq(schema.communityLineups.id, lineup.id));
+      const [afterSecond] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.communityLineups)
+          .where(eq(schema.communityLineups.id, lineup.id)),
+        'afterSecond',
+      );
       expect((afterSecond.phaseDeadline as Date).getTime()).toBe(actual);
     },
   );
@@ -492,7 +517,7 @@ function describeStandalonePollReminders() {
         (c) => c[0] === lineupId && c[1] === 'archived',
       );
       expect(archiveCalls.length).toBeGreaterThanOrEqual(1);
-      expect(archiveCalls[0][2]).toBeGreaterThan(0);
+      expect(archiveCalls[0]?.[2]).toBeGreaterThan(0);
     },
   );
 }

@@ -84,7 +84,7 @@ describe('announceTie', () => {
     const { deps } = makeDeps(db);
     await announceTie(deps, { id: 42, visibility: 'public' }, PAYLOAD);
     expect(mockPost).toHaveBeenCalledTimes(1);
-    expect(mockPost.mock.calls[0][1]).toBe('lineup-tie:42');
+    expect(mockPost.mock.calls[0]?.[1]).toBe('lineup-tie:42');
   });
 
   it('persists the returned channel and message ids (D7)', async () => {

@@ -35,6 +35,7 @@ import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { archiveAndNotifyCancel } from './scheduling-cancel.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)', () => {
   let testApp: TestApp;
@@ -59,14 +60,17 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
   ): Promise<{ id: number; token: string }> {
     const email = `cancel-${suffix}@test.local`;
     const hash = await bcrypt.hash('CancelPass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username: `cancel-${suffix}`,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username: `cancel-${suffix}`,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -85,24 +89,30 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
   async function seedMatchWithMembers(
     memberIds: number[],
   ): Promise<{ lineupId: number; matchId: number }> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Cancel Poll Lineup',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: testApp.seed.game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: memberIds.length,
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Cancel Poll Lineup',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: testApp.seed.game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: memberIds.length,
+        })
+        .returning(),
+      'match',
+    );
     if (memberIds.length > 0) {
       await testApp.db.insert(schema.communityLineupMatchMembers).values(
         memberIds.map((userId) => ({
@@ -141,10 +151,13 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
   }
 
   async function matchStatus(matchId: number): Promise<string> {
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, matchId));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, matchId)),
+      'row',
+    );
     return row.status;
   }
 

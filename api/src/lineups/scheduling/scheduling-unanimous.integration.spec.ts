@@ -39,6 +39,7 @@ import {
   UNANIMOUS_SUBTYPE,
   unanimousDedupKey,
 } from './scheduling-unanimous.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -89,14 +90,17 @@ function describeUnanimous(): void {
 
   async function createUser(label: string): Promise<number> {
     const suffix = `${label}-${++tag}`;
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:unan-${suffix}`,
-        username: `unan-${suffix}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:unan-${suffix}`,
+          username: `unan-${suffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
@@ -125,36 +129,45 @@ function describeUnanimous(): void {
     opts: SeedOptions = {},
   ): Promise<{ lineupId: number; matchId: number; gameName: string }> {
     const gameName = `Unanimous Game ${label}-${++tag}`;
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name: gameName, slug: `unan-${label}-${tag}` })
-      .returning();
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Unanimous Scheduling Poll',
-        status: opts.lineupStatus ?? 'decided',
-        phaseDeadline:
-          opts.phaseDeadlineHours === undefined
-            ? null
-            : new Date(Date.now() + opts.phaseDeadlineHours * HOUR_MS),
-        visibility: 'public',
-        createdBy: creatorId,
-        includeSchedulingPhase: true,
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: game.id,
-        status,
-        thresholdMet: true,
-        voteCount: 1,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: gameName, slug: `unan-${label}-${tag}` })
+        .returning(),
+      'game',
+    );
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Unanimous Scheduling Poll',
+          status: opts.lineupStatus ?? 'decided',
+          phaseDeadline:
+            opts.phaseDeadlineHours === undefined
+              ? null
+              : new Date(Date.now() + opts.phaseDeadlineHours * HOUR_MS),
+          visibility: 'public',
+          createdBy: creatorId,
+          includeSchedulingPhase: true,
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: game.id,
+          status,
+          thresholdMet: true,
+          voteCount: 1,
+        })
+        .returning(),
+      'match',
+    );
     return { lineupId: lineup.id, matchId: match.id, gameName };
   }
 
@@ -190,14 +203,17 @@ function describeUnanimous(): void {
     matchId: number,
     hoursFromNow: number,
   ): Promise<number> {
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date(Date.now() + hoursFromNow * HOUR_MS),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date(Date.now() + hoursFromNow * HOUR_MS),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
     return slot.id;
   }
 
@@ -248,10 +264,13 @@ function describeUnanimous(): void {
 
   /** The instant a slot actually holds, read through a typed select. */
   async function slotEpochSeconds(slotId: number): Promise<number> {
-    const [slot] = await testApp.db
-      .select()
-      .from(schema.communityLineupScheduleSlots)
-      .where(eq(schema.communityLineupScheduleSlots.id, slotId));
+    const [slot] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupScheduleSlots)
+        .where(eq(schema.communityLineupScheduleSlots.id, slotId)),
+      'slot',
+    );
     return Math.floor(new Date(slot.proposedTime).getTime() / 1000);
   }
 
@@ -265,9 +284,9 @@ function describeUnanimous(): void {
 
     const dms = await unanimousDmsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
-    expect(dms[0].type).toBe('community_lineup');
+    expect(dms[0]?.type).toBe('community_lineup');
     expect(dms[0].title).toBe(`Everyone's in for ${poll.gameName}`);
-    expect(dms[0].payload).toMatchObject({
+    expect(dms[0]?.payload).toMatchObject({
       subtype: UNANIMOUS_SUBTYPE,
       reminderWindow: `unanimous-${poll.matchId}-${poll.slotId}`,
       lineupId: poll.lineupId,
@@ -326,7 +345,7 @@ function describeUnanimous(): void {
     await castVote(poll.slotId, poll.memberIds);
     expect(await service.checkMatch(poll.matchId)).toBe(1);
 
-    const [flipper] = poll.memberIds.slice(2);
+    const [flipper] = nonEmpty(poll.memberIds.slice(2), 'flipper');
     await clearVote(poll.slotId, flipper);
     // Below 100% again: nothing to announce, and the claim is NOT given back.
     expect(await service.checkMatch(poll.matchId)).toBe(0);
@@ -476,7 +495,7 @@ function describeUnanimous(): void {
 
     const dms = await unanimousDmsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
-    expect(dms[0].payload).toMatchObject({ matchId: poll.matchId });
+    expect(dms[0]?.payload).toMatchObject({ matchId: poll.matchId });
   });
 
   it('notifies the creator even when the creator cast the completing vote', async () => {
@@ -512,10 +531,10 @@ function describeUnanimous(): void {
     await waitFor(async () => {
       const dms = await unanimousDmsFor(poll.creatorId);
       expect(dms).toHaveLength(1);
-      expect(dms[0].payload).toMatchObject({ slotId: poll.slotId });
+      expect(dms[0]?.payload).toMatchObject({ slotId: poll.slotId });
     });
     // All four members answered, so the copy counts four, not the seeded three.
-    const [dm] = await unanimousDmsFor(poll.creatorId);
+    const [dm] = nonEmpty(await unanimousDmsFor(poll.creatorId), 'dm');
     expect(dm.message).toContain('All 4 members said yes to');
   });
 }

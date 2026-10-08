@@ -32,6 +32,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
+import { nonEmpty } from '../common/testing/narrow';
 
 interface ParticipantRow {
   userId: number;
@@ -67,14 +68,17 @@ function describeParticipants() {
   ): Promise<{ id: number; token: string }> {
     const bcrypt = await import('bcrypt');
     const hash = await bcrypt.hash('Pass1Pass1!', 4);
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `local:${email}`,
-        username,
-        role,
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `local:${email}`,
+          username,
+          role,
+        })
+        .returning(),
+      'user',
+    );
     await testApp.db.insert(schema.localCredentials).values({
       email,
       passwordHash: hash,
@@ -110,10 +114,13 @@ function describeParticipants() {
    * nominate distinct games.
    */
   async function createGame(slug: string): Promise<number> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name: slug, slug, coverUrl: null, igdbId: null })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: slug, slug, coverUrl: null, igdbId: null })
+        .returning(),
+      'game',
+    );
     return game.id;
   }
 
@@ -221,8 +228,8 @@ function describeParticipants() {
     const participants = res.body.participants as ParticipantRow[];
     expect(participants).toHaveLength(1);
     expect(participants[0].userId).toBe(testApp.seed.adminUser.id);
-    expect(participants[0].role).toBe('creator');
-    expect(participants[0].status).toBe('waiting');
+    expect(participants[0]?.role).toBe('creator');
+    expect(participants[0]?.status).toBe('waiting');
   });
 
   it('role precedence: creator who also voted keeps role `creator`, status reflects the vote', async () => {
@@ -418,14 +425,17 @@ function describeParticipants() {
 
   /** Insert a proposed slot (mirrors `seedPoll` in the scheduling specs). */
   async function createSlot(matchId: number): Promise<number> {
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId,
-        proposedTime: new Date('2099-04-01T19:00:00.000Z'),
-        suggestedBy: 'system',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId,
+          proposedTime: new Date('2099-04-01T19:00:00.000Z'),
+          suggestedBy: 'system',
+        })
+        .returning(),
+      'slot',
+    );
     return slot.id;
   }
 

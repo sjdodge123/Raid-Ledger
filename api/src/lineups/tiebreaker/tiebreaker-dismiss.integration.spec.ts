@@ -28,6 +28,7 @@ import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { TiebreakerService } from './tiebreaker.service';
 import * as bracket from './tiebreaker-bracket.helpers';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
+import { nonEmpty } from '../../common/testing/narrow';
 
 interface TiedLineupSetup {
   lineupId: number;
@@ -67,25 +68,31 @@ function describeTiebreakerDismiss() {
   });
 
   async function createMember(tag: string): Promise<number> {
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:dismiss-${tag}`,
-        username: `mem-dismiss-${tag}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:dismiss-${tag}`,
+          username: `mem-dismiss-${tag}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function createGame(name: string): Promise<number> {
-    const [g] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name,
-        slug: `${name.toLowerCase()}-${Date.now()}-${Math.random()}`,
-      })
-      .returning();
+    const [g] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name,
+          slug: `${name.toLowerCase()}-${Date.now()}-${Math.random()}`,
+        })
+        .returning(),
+      'g',
+    );
     return g.id;
   }
 
@@ -96,16 +103,19 @@ function describeTiebreakerDismiss() {
     const gameAId = await createGame('TBDismissA');
     const gameBId = await createGame('TBDismissB');
 
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1262 dismiss',
-        status: 'voting',
-        visibility: 'public',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1262 dismiss',
+          status: 'voting',
+          visibility: 'public',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
 
     await testApp.db.insert(schema.communityLineupEntries).values([
       { lineupId: lineup.id, gameId: gameAId, nominatedBy: voterAId },
@@ -157,10 +167,13 @@ function describeTiebreakerDismiss() {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(200);
-    const [tb] = await testApp.db
-      .select()
-      .from(schema.communityLineupTiebreakers)
-      .where(eq(schema.communityLineupTiebreakers.lineupId, lineupId));
+    const [tb] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupTiebreakers)
+        .where(eq(schema.communityLineupTiebreakers.lineupId, lineupId)),
+      'tb',
+    );
     expect(tb.status).toBe('dismissed');
     const lineup = await getLineup(lineupId);
     expect(lineup.status).toBe('decided');
@@ -195,16 +208,19 @@ function describeTiebreakerDismiss() {
   it('returns 400 when voting lineup has no ties to dismiss', async () => {
     const voterId = await createMember('soloVoter');
     const gameId = await createGame('TBDismissSolo');
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1262 no-ties',
-        status: 'voting',
-        visibility: 'public',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1262 no-ties',
+          status: 'voting',
+          visibility: 'public',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
     await testApp.db.insert(schema.communityLineupEntries).values({
       lineupId: lineup.id,
       gameId,
@@ -227,16 +243,19 @@ function describeTiebreakerDismiss() {
   // ── Case 4: not voting → 400 ─────────────────────────────────────────
 
   it('returns 400 when lineup is not in voting status', async () => {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'ROK-1262 not-voting',
-        status: 'building',
-        visibility: 'public',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: generatePublicSlug(),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'ROK-1262 not-voting',
+          status: 'building',
+          visibility: 'public',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: generatePublicSlug(),
+        })
+        .returning(),
+      'lineup',
+    );
 
     const res = await testApp.request
       .post(`/lineups/${lineup.id}/tiebreaker/dismiss`)
@@ -285,7 +304,7 @@ function describeTiebreakerDismiss() {
 
     const rows = await getTiebreakerRows(lineupId);
     expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('active');
+    expect(rows[0]?.status).toBe('active');
     expect(detail.status).toBe('active');
     const lineup = await getLineup(lineupId);
     expect(lineup.activeTiebreakerId).toBe(rows[0].id);
