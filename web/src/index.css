@@ -363,6 +363,8 @@ html {
     --color-dim: #6D5E4B;
     /* AA as text, ROK-1472 ruling 2026-10-04: 5.12 surface / 4.64 panel (was #8A7860) — faint-decorative.guard.test.ts */
     --color-muted: #6A5840;
+    --color-danger: #ad1c1c;
+    /* TDB:1770: lightest step red-700 → red-800 that clears AA on celestial: 5.80 surface / 5.26 panel / 4.50 /10 tint (#b91c1c was 5.29 / 4.79 / 4.12); white on it 7.10 — semantic-tokens.guard.test.ts */
     --color-secondary: #3D3560;
     --color-foreground: #1A1A2E;
     --color-edge: #B8A88A;
@@ -1311,6 +1313,7 @@ body {
     --color-faint: #c9b896;
     --color-dim: #756247;   /* 5.28 surface / 4.63 panel (ROK-1472; was #a89070, 2.75 / 2.42) */
     --color-muted: #685640; /* 6.33 surface / 5.56 panel (ROK-1472; was #8b7355, 4.05 / 3.55) */
+    --color-danger: #b51c1c; /* TDB:1770: lightest red-700 → red-800 step at AA: 6.02 surface / 5.29 panel / 4.51 /10 tint (#b91c1c was 4.39 on the tint); white 6.67 */
     --color-secondary: #5c4a32;
     --color-foreground: #2c1810;
     --color-edge: #d4c4a0;

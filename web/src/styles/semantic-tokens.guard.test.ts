@@ -124,6 +124,29 @@ function darkTextRows(): Array<readonly [string, string, string, string]> {
 
 const DARK_TEXT = darkTextRows();
 
+/** Bodies of a light scheme's own `[data-scheme="x"]` / `[data-variant="x"]` blocks (quest-log is a variant). */
+function ownLightBlocks(name: string): string[] {
+    const own = new RegExp(`(?:^|\\n)\\[data-(?:scheme|variant)="${name}"\\]\\s*\\{([^}]*)\\}`, 'g');
+    return [...css.matchAll(own)].map((m) => defined(m[1], `${name} block body`));
+}
+
+/**
+ * TDB:1770 (2026-10-08), the dark rows' mirror: light semantic text must clear AA on every
+ * light scheme's OWN surface, panel and the token's /10 tint over that panel. A light scheme
+ * that declares its own token value is measured with it — shared red-700 #b91c1c was 4.12:1
+ * on celestial's danger tint and 4.39:1 on quest-log's, so both declare a darker danger.
+ */
+function lightTextRows(): Array<readonly [string, string, string, string]> {
+    return lightSchemes(css).flatMap(({ name, surface, panel }) => SEMANTIC_ROLES.flatMap((token) => {
+        const own = ownLightBlocks(name).map((body) => declaredValue(body, token)).find((v) => v !== null);
+        const value = own ?? (declaredValue(lightBlock, token) as string);
+        const row = (label: string, bg: string) => [token, name, label, `${value}|${bg}`] as const;
+        return [row('surface', surface), row('panel', panel), row(`bg-${token}/10 tint over its panel`, composite(value, panel, 0.1))];
+    }));
+}
+
+const LIGHT_TEXT = lightTextRows();
+
 const TEXT_ON_BACKGROUND = SEMANTIC_ROLES.flatMap((token) =>
     lightBackgrounds(token).map(([name, bg]) => [token, name, bg] as const),
 );
@@ -214,6 +237,20 @@ describe('dark semantic text on every dark scheme (TDB:1770 ruling 2026-10-08)',
         const [fg, bg] = pair.split('|') as [string, string];
         const ratio = contrastRatio(fg, bg);
         expect(ratio, `dark --color-${token} ${fg} as text is ${ratio}:1 on ${name} ${bgLabel} (${bg}) — needs ${AA_SMALL_TEXT}:1`)
+            .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
+    });
+});
+
+describe('light semantic text on every light scheme (TDB:1770, 2026-10-08)', () => {
+    it('reads the six light schemes × three roles × three backgrounds out of index.css', () => {
+        expect(new Set(LIGHT_TEXT.map(([, name]) => name))).toEqual(new Set(['light', 'quest-log', 'sky', 'dawn', 'holy', 'celestial']));
+        expect(LIGHT_TEXT).toHaveLength(54);
+    });
+
+    it.each(LIGHT_TEXT)('light text-%s clears AA on %s %s', (token, name, bgLabel, pair) => {
+        const [fg, bg] = pair.split('|') as [string, string];
+        const ratio = contrastRatio(fg, bg);
+        expect(ratio, `light --color-${token} ${fg} as text is ${ratio}:1 on ${name} ${bgLabel} (${bg}) — needs ${AA_SMALL_TEXT}:1`)
             .toBeGreaterThanOrEqual(AA_SMALL_TEXT);
     });
 });
