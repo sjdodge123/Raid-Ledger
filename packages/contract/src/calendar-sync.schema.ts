@@ -90,17 +90,20 @@ export type CalendarFeed = z.infer<typeof CalendarFeedSchema>;
  * `GET /users/me/calendars`. With the kill switch off: `enabled: false`,
  * every provider unavailable, no connections, `feed: null`. The record is
  * exhaustive over the provider enum, so all three keys are always present.
+ * `.strict()` like its nested shapes, so a leaked key fails the client parse.
  */
-export const CalendarsOverviewSchema = z.object({
-  enabled: z.boolean(),
-  providers: z.record(
-    CalendarProviderSchema,
-    z.object({ available: z.boolean() }),
-  ),
-  connections: z.array(CalendarConnectionSchema),
-  readSettings: CalendarReadSettingsSchema,
-  feed: CalendarFeedSchema.nullable(),
-});
+export const CalendarsOverviewSchema = z
+  .object({
+    enabled: z.boolean(),
+    providers: z.record(
+      CalendarProviderSchema,
+      z.object({ available: z.boolean() }).strict(),
+    ),
+    connections: z.array(CalendarConnectionSchema),
+    readSettings: CalendarReadSettingsSchema,
+    feed: CalendarFeedSchema.nullable(),
+  })
+  .strict();
 export type CalendarsOverview = z.infer<typeof CalendarsOverviewSchema>;
 
 /** `PATCH /users/me/calendars/:id`. */
