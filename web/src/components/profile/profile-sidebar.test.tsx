@@ -15,6 +15,11 @@ vi.mock('../../hooks/use-auth', () => ({
     useAuth: vi.fn(),
 }));
 
+// ROK-1594: the Calendars entry is covered by profile-nav-calendars.test.tsx.
+vi.mock('../../hooks/use-calendar-sync', () => ({
+    useCalendarSyncEnabled: () => false,
+}));
+
 let gameTime: { slots: Array<{ dayOfWeek: number; hour: number; status: 'available'; fromTemplate: boolean }>; gameTimeAgeDays: number | null } = { slots: [], gameTimeAgeDays: null };
 
 vi.mock('../../hooks/use-game-time', () => ({
