@@ -50,7 +50,7 @@ import { currentView, endedView, liveFloorFor } from '../lfm/lfm-embed.views';
  *
  * SHARED by the two writers that can retire a post — {@link
  * LfgBoardRetireService} on the disable itself, and
- * `LfmEmbedService.reconcileRow` when the disable's edit failed transiently and
+ * the reconcile's `reconcileRow` when the disable's edit failed transiently and
  * the reconnect has to finish the job. One definition so the retry cannot
  * disagree with the original: `closed` is terminal (so `editThread` archives
  * and `persist` closes the row) and `boardRetired` is what puts
@@ -152,7 +152,7 @@ export interface RetireRowDeps {
  *
  * THE one implementation of retire semantics, called by both writers that can
  * retire a post: {@link LfgBoardRetireService} on the disable itself, and
- * `LfmEmbedService.reconcileRow` when that edit failed transiently and the
+ * the reconcile's `reconcileRow` when that edit failed transiently and the
  * reconnect has to finish the job. Sharing the function rather than the
  * farewell view is what stops the retry disagreeing with the original — the
  * reconcile used to route this through `LfmEmbedService.editRow`, whose

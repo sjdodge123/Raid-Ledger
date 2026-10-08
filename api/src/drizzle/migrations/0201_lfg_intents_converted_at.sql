@@ -1,0 +1,1 @@
+ALTER TABLE "lfg_intents" ADD COLUMN "converted_at" timestamp;

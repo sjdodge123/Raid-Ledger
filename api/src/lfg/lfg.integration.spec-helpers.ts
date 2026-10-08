@@ -111,6 +111,7 @@ export type LfgIntentRow = {
   ttl_minutes: number | null;
   converted_to_poll_id: number | null;
   converted_to_event_id: number | null;
+  converted_at: Date | null;
 };
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
@@ -240,6 +241,7 @@ function toRow(r: typeof schema.lfgIntents.$inferSelect): LfgIntentRow {
     ttl_minutes: r.ttlMinutes,
     converted_to_poll_id: r.convertedToPollId,
     converted_to_event_id: r.convertedToEventId,
+    converted_at: r.convertedAt,
   };
 }
 

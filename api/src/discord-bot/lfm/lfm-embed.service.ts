@@ -55,24 +55,19 @@ import {
   TERMINAL_STATE,
   type LfmGroupView,
 } from './lfm-embed.helpers';
-import {
-  currentView,
-  endedView,
-  liveFloorFor,
-  liveView,
-  sessionView,
-  viewForChange,
-} from './lfm-embed.views';
+import { currentView, liveFloorFor, viewForChange } from './lfm-embed.views';
 import {
   closeLfmMessage,
   findOpenLfmMessage,
-  listOpenLfmMessages,
   listUntrackedLfmGames,
   loadLfmGame,
   recordLfmRender,
-  type LfmGameRow,
   type LfmMessageRow,
 } from './lfm-embed.db-helpers';
+import {
+  reconcileOpenRows,
+  type LfmReconcileDeps,
+} from './lfm-embed.reconcile.helpers';
 
 /** Below this many live members a group is over, not merely thinner (E12). */
 @Injectable()
@@ -243,21 +238,21 @@ export class LfmEmbedService {
   }
 
   /**
-   * One pass over the worklist. One bad row must not abort the rest.
-   *
-   * ROK-1523 — this pass is the stated recovery for a retire whose farewell
-   * edit failed transiently. It needs no board-off branch of its own: every
-   * row goes through `editRow`, which is where "board off means retire" lives
-   * for EVERY writer.
+   * D9's worklist pass, in `lfm-embed.reconcile.helpers.ts`. Delegates to the
+   * module function of the same name with this service's collaborators.
    */
-  private async reconcileOpenRows(): Promise<void> {
-    for (const row of await listOpenLfmMessages(this.db)) {
-      try {
-        await this.serialized(row.gameId, () => this.reconcileRow(row));
-      } catch (err) {
-        this.warn(`reconcile the LFM message for game ${row.gameId}`, err);
-      }
-    }
+  private reconcileOpenRows(): Promise<void> {
+    return reconcileOpenRows(this.reconcileDeps());
+  }
+
+  /** The collaborators the reconcile walk needs, bound to this service. */
+  private reconcileDeps(): LfmReconcileDeps {
+    return {
+      db: this.db,
+      serialized: (gameId, work) => this.serialized(gameId, work),
+      editRow: (row, view) => this.editRow(row, view),
+      warn: (action, err) => this.warn(action, err),
+    };
   }
 
   /**
@@ -284,17 +279,6 @@ export class LfmEmbedService {
   }
 
   /**
-   * Re-render one `open` row. A group still at or above the floor is simply
-   * re-rendered; below it the group ended offline, and the only surviving
-   * evidence of HOW is the provenance FK the conversion wrote.
-   */
-  private async reconcileRow(row: LfmMessageRow): Promise<void> {
-    const game = await loadLfmGame(this.db, row.gameId);
-    if (!game) return;
-    await this.editRow(row, await this.reconcileView(row, game));
-  }
-
-  /**
    * The collaborators {@link retireOpenRow} needs, bound to this service.
    *
    * @returns The datasource, the thread editor and this logger's warn sink.
@@ -309,36 +293,6 @@ export class LfmEmbedService {
       },
       isBoardEnabled: () => getLfgBoardEnabled(this.settingsService),
     };
-  }
-
-  /**
-   * ROK-1494 review — the LIVE SESSION is checked FIRST, before the floor.
-   *
-   * A restart during a spawned session is the one path into a terminal render
-   * that carries no `playing` payload, and every signal it reads points the
-   * wrong way: the spawn converted every intent, so the live read returns an
-   * EMPTY group (below the floor) and `latestConversionTarget` finds the
-   * spawn's own event. Reconcile therefore rendered SCHEDULED and closed the
-   * row — after which `findOpenLfmMessage` returns nothing and every later
-   * voice join early-returns out of `editForChange`, freezing the head-count
-   * for the rest of the session. That is precisely the failure D3 exists to
-   * prevent, so the session read has to come before the group is judged dead.
-   *
-   * @param row - The `open` row being reconciled.
-   * @param game - Its game, already loaded.
-   * @returns The view to render.
-   */
-  private async reconcileView(
-    row: LfmMessageRow,
-    game: LfmGameRow,
-  ): Promise<LfmGroupView> {
-    // ROK-1494 AC7 — `sessionView` is the SHARED answer; `viewForChange` asks
-    // the same helper, so the hot path and the reconcile cannot disagree.
-    const session = await sessionView(this.db, game);
-    if (session) return session;
-    const liveGroup = await liveView(this.db, game);
-    if (liveGroup.memberCount >= liveFloorFor(row.postKind)) return liveGroup;
-    return endedView(this.db, game, row);
   }
 
   /**

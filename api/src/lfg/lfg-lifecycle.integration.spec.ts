@@ -159,12 +159,19 @@ describe('conversion eligibility', () => {
     const eventId = await createFutureEvent(testApp, adminToken, {
       gameId: game.id,
     });
+    expect((await readIntent(testApp, a.userId, game.id))!.converted_at).toBe(
+      null,
+    );
     const res = await convert(a.token, game.id, { eventId });
 
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ converted: 1 });
-    expect((await readIntent(testApp, a.userId, game.id))!.status).toBe(
-      'converted',
+    const own = (await readIntent(testApp, a.userId, game.id))!;
+    expect(own.status).toBe('converted');
+    // TDB:953 — `convertGroup` stamps WHEN, on the DB clock `created_at` uses.
+    expect(own.converted_at).not.toBeNull();
+    expect(own.converted_at!.getTime()).toBeGreaterThanOrEqual(
+      own.created_at.getTime(),
     );
     expect((await readIntent(testApp, stale.userId, game.id))!.status).toBe(
       'active',

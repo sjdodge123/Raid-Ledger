@@ -141,6 +141,8 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
     const game = await createGame(testApp, 'Convert Game');
     await raiseHand(a, game.id);
     await raiseHand(b, game.id);
+    const before = await readIntentsForGame(testApp, game.id);
+    expect(before.map((r) => r.converted_at)).toEqual([null, null]);
 
     const res = await createEvent(a, { gameId: game.id, lfgGameId: game.id });
 
@@ -150,6 +152,8 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
     expect(rows).toHaveLength(2);
     for (const row of rows) {
       expect(row.status).toBe('converted');
+      // TDB:953 — `convertLiveRows` stamps WHEN each hand converted.
+      expect(row.converted_at).not.toBeNull();
       expect(row.converted_to_event_id).toBe(eventId);
       expect(row.converted_to_poll_id).toBeNull();
     }

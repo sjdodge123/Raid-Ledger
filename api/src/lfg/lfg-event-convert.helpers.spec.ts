@@ -7,6 +7,8 @@
  */
 import { ConflictException, Logger } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   createAndConvertGroup,
@@ -78,11 +80,18 @@ describe('createAndConvertGroup', () => {
     expect(createEvent.mock.invocationCallOrder[0]).toBeLessThan(
       db.update.mock.invocationCallOrder[0],
     );
+    // TDB:953 — stamped by the DB's `statement_timestamp()` (an SQL chunk),
+    // never a JS Date, and never `now()` — that is the TX start (Codex P2).
     expect(db.set).toHaveBeenCalledWith({
       status: 'converted',
       convertedToPollId: null,
       convertedToEventId: EVENT.id,
+      convertedAt: expect.any(SQL),
     });
+    const { convertedAt } = db.set.mock.calls[0][0] as { convertedAt: SQL };
+    expect(new PgDialect().sqlToQuery(convertedAt).sql).toBe(
+      'statement_timestamp()',
+    );
   });
 });
 

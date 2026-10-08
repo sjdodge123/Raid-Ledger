@@ -163,11 +163,16 @@ async function startLfgBornSession(name: string): Promise<Session> {
   expect(res.status).toBe(200);
   const eventId = res.body.eventId as number;
   expect(await findOpenLfgNowEventId(testApp.db, gameId)).toBe(eventId);
+  // TDB:953 — the starter's hand is stamped; the joiner's is not, yet.
   expect(await intentOf(a, gameId)).toMatchObject({
     status: 'converted',
     convertedToEventId: eventId,
+    convertedAt: expect.any(Date),
   });
-  expect((await intentOf(b, gameId)).status).toBe('active');
+  expect(await intentOf(b, gameId)).toMatchObject({
+    status: 'active',
+    convertedAt: null,
+  });
   const cRow = await intentOf(c, gameId);
   expect(cRow.status).toBe('active');
   return { gameId, eventId, a, b, c, cExpiresAt: cRow.expiresAt };
@@ -218,6 +223,8 @@ describe('LFG-born roster join converts the joiner (integration)', () => {
       status: b.status,
       convertedToEventId: b.convertedToEventId,
     }).toEqual({ status: 'converted', convertedToEventId: s.eventId });
+    // TDB:953 — `convertHolderIntent` stamps WHEN the joiner converted.
+    expect(b.convertedAt).not.toBeNull();
     await expectStillActive(s);
     expect(await intentOf(s.a, s.gameId)).toMatchObject({
       status: 'converted',
