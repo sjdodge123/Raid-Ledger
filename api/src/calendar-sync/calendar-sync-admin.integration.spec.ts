@@ -252,6 +252,10 @@ describe('invalid body → 400, nothing persisted', () => {
       'a client id over 512 chars',
       { enabled: true, google: { clientId: 'a'.repeat(513) } },
     ],
+    [
+      'a client secret over 512 chars',
+      { enabled: true, google: { clientSecret: 'a'.repeat(513) } },
+    ],
     ['an unknown provider', { enabled: true, apple: { clientId: 'x' } }],
   ];
 

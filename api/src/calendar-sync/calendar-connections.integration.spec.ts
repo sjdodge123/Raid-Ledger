@@ -5,7 +5,7 @@
  * provider availability, the row → CalendarConnection mapping, and that the
  * stored credentials never reach the response. Then the DB contract of
  * migration 0201: CHECK constraints, the (user, provider, subject) unique key,
- * the users-delete path, the connection → links cascade, and the deliberate
+ * the users-delete and ban+wipe paths, the connection → links cascade, and the deliberate
  * absence of an FK on `calendar_event_links.event_id` (spec L272).
  */
 import { eq, sql } from 'drizzle-orm';
@@ -352,6 +352,34 @@ describe('calendar tables — user + connection deletes', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(204);
 
+    expect(await connectionsOf(gone.userId)).toHaveLength(0);
+    expect(await linksOf(gone.userId)).toHaveLength(0);
+    expect(await connectionsOf(kept.userId)).toHaveLength(1);
+    expect(await linksOf(kept.userId)).toHaveLength(1);
+  });
+
+  // The ban+wipe path keeps the users row, so the FK cascade never fires:
+  // only the WIPE_BY_COLUMN entries (links, then connections) remove the rows.
+  it('ban with wipeData removes the user’s connections and links only', async () => {
+    const gone = await member('wipegone');
+    const kept = await member('wipekept');
+    const eventId = await createFutureEvent(testApp, adminToken);
+    const goneConn = await insertConnection(gone.userId);
+    await insertLink(goneConn.id, gone.userId, eventId);
+    const keptConn = await insertConnection(kept.userId);
+    await insertLink(keptConn.id, kept.userId, eventId);
+
+    await testApp.request
+      .post(`/users/${gone.userId}/ban`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'rok1591 wipe', wipeData: true })
+      .expect(201);
+
+    const [user] = await testApp.db
+      .select({ id: schema.users.id, bannedAt: schema.users.bannedAt })
+      .from(schema.users)
+      .where(eq(schema.users.id, gone.userId));
+    expect(user?.bannedAt).not.toBeNull();
     expect(await connectionsOf(gone.userId)).toHaveLength(0);
     expect(await linksOf(gone.userId)).toHaveLength(0);
     expect(await connectionsOf(kept.userId)).toHaveLength(1);
