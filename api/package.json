@@ -47,7 +47,7 @@
     "@sentry/nestjs": "^10.73.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.3.11",
-    "chrono-node": "^2.10.1",
+    "chrono-node": "^2.10.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "compression": "^1.8.2",
