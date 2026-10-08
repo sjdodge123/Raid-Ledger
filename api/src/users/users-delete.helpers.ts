@@ -120,6 +120,17 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
   // ROK-1724: the importer's own addon-import audit trail (CASCADE) — personal
   // rate-limit/history rows with no value once the user is wiped.
   { table: schema.addonImportAudit, column: schema.addonImportAudit.userId },
+  // ROK-1591: calendar sync rows are personal (CASCADE) and hold encrypted
+  // provider credentials — wiped on ban+wipe. Links first: each link also
+  // cascades from its connection, so the connection delete finds no children.
+  {
+    table: schema.calendarEventLinks,
+    column: schema.calendarEventLinks.userId,
+  },
+  {
+    table: schema.calendarConnections,
+    column: schema.calendarConnections.userId,
+  },
 ];
 
 /**

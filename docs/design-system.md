@@ -667,6 +667,18 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   hand-roll the triad per form (Co-Optimus keeps its own row and shorter labels, laid out the same way: full-width Save below `lg`). Secondary actions use `secondary`, not a brand or ring hue (ruling 10): Sync Now (IGDB),
   Test Permissions (Discord Bot) and Set as Active (AI providers). No per-integration `ringColor` or `*_RING`
   constant remains.
+- **Write-only secrets with a saved state** (Calendar Sync client secrets, ROK-1591; the row is
+  `components/admin/saved-secret-status.tsx` → `SavedSecretStatus`, used by `CalendarSyncForm.tsx`):
+  the `PasswordInput` is never prefilled. Under it, a saved secret shows a `Saved` chip (the §4.21 success
+  tone, tokens only: `rounded-full border border-success/30 bg-success/10 text-success text-xs`) and a ghost
+  `sm` "Remove saved secret" `Button`; pressing it swaps the row to a `text-warning` "will be removed when you
+  save" line with Undo. An empty box is omitted from the PUT; only an explicit removal sends `''`. Use this
+  when a form holds several secrets and a whole-form Clear would be too blunt. A form's enable `Switch` is part
+  of the same draft and goes out in the same single PUT on Save (as the Discord Bot form's Enable toggle does),
+  with a `text-warning` "Not saved yet" line while it differs from the stored value — never a second mutation
+  of its own. While that save is pending the controls sit in a `<fieldset disabled className="min-w-0">` and the
+  action row stays outside it, so Save is still `Button loading`. Rendered: `/dev/design-system` → *Forms* →
+  "Write-only secret" (`forms-section.tsx`).
 - **File uploads are `FilePicker`** (ruling 1): the trigger is a `Button` named by `children`; the native
   input stays hidden in the DOM (tests drive it with `userEvent.upload`). A drop zone reuses the picker's
   ref to open the same dialog instead of rendering a second `<input type="file">`. A raw file input gets
@@ -718,7 +730,7 @@ Native control chrome follows root-only `color-scheme` (`:617-631`) — check sl
 ROOT, not in a scoped preview (`design-system-tokens.md` §3). A `brandColor` fill is the caller's data and
 does not flip; its label is white or `#0f172a` by contrast on the fill, the same on every scheme (ROK-1472). Rendered: `/dev/design-system` → *Forms*
 (`web/src/dev/design-system/forms-section.tsx` + `forms-pickers-demo.tsx` + `forms-recipes-demo.tsx` — the
-segmented "All" filter, the row menu and the one-save-at-a-time row lock).
+segmented "All" filter, the row menu, the one-save-at-a-time row lock and the write-only secret saved-state row).
 
 ### 4.12 Badges with counts
 

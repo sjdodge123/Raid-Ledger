@@ -177,6 +177,9 @@ export const IgdbPanel = lazyWithRetry(() =>
 export const SteamPanel = lazyWithRetry(() =>
     import('./pages/admin/steam-panel').then((m) => ({ default: m.SteamPanel })),
 );
+export const CalendarSyncPanel = lazyWithRetry(() =>
+    import('./pages/admin/calendar-sync-panel').then((m) => ({ default: m.CalendarSyncPanel })),
+);
 export const ItadPanel = lazyWithRetry(() =>
     import('./pages/admin/itad-panel').then((m) => ({ default: m.ItadPanel })),
 );
