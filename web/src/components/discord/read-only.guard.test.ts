@@ -16,6 +16,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { stripComments } from '../../test/strip-comments';
 
 /**
  * Resolved from `process.cwd()` (vitest runs from `web/`) rather than
@@ -33,16 +34,6 @@ function sourceFiles(dir: string): string[] {
         else if (/\.tsx?$/.test(entry.name)) out.push(full);
     }
     return out;
-}
-
-/**
- * Removes block and line comments. The `[^:]` guard keeps `https://…` inside
- * string literals intact, so stripping cannot corrupt the code being scanned.
- */
-function stripComments(source: string): string {
-    return source
-        .replace(/\/\*[\s\S]*?\*\//g, ' ')
-        .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
 /** Assembled from fragments so this list never matches itself. */

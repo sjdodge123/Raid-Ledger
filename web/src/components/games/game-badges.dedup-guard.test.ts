@@ -20,6 +20,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { defined } from '../../test/defined';
+import { stripComments } from '../../test/strip-comments';
 
 /** Repo-relative `web/src` root, resolved from this file's location. */
 const WEB_SRC = resolve(__dirname, '../..');
@@ -62,8 +63,6 @@ function localComponentNames(source: string): string[] {
  * fills, once on a comment that legitimately names the locked `On Sale`
  * wording. Match code, never commentary.
  */
-const codeOnly = (src: string): string =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 
 const COMMON_GROUND_LOCAL_BADGES = [
     'AiBadge',
@@ -179,7 +178,7 @@ describe('ROK-1314 AC5 — NominationCard drops its bespoke ownership + sale tre
         // The literal must not appear in NominationCard's CODE — the label now
         // comes from the shared PriceBadge (spec §0 vocabulary lock). Comments
         // may legitimately name the locked wording when explaining why.
-        expect(codeOnly(source())).not.toMatch(/On Sale/);
+        expect(stripComments(source())).not.toMatch(/On Sale/);
     });
 
     it('renders the shared GameBadgeRow', () => {
@@ -269,7 +268,7 @@ describe('ROK-1314 — badge fills stay legible over cover art', () => {
 
 
     it('every badge fill in the shared module is at least 90% opaque', () => {
-        const source = codeOnly(readSource('components/games/game-badges.tsx'));
+        const source = stripComments(readSource('components/games/game-badges.tsx'));
         const tooSheer: string[] = [];
         for (const [match, , , alpha] of source.matchAll(OPACITY_RE)) {
             if (Number(alpha) < 90) tooSheer.push(match);
@@ -278,7 +277,7 @@ describe('ROK-1314 — badge fills stay legible over cover art', () => {
     });
 
     it('the personalized wishlist pill is an opaque fill, not a tint + border', () => {
-        const source = codeOnly(readSource('components/games/game-badges.tsx'));
+        const source = stripComments(readSource('components/games/game-badges.tsx'));
         const badge = source.slice(source.indexOf('export function YouWishlistedBadge'));
         const cls = badge.slice(0, badge.indexOf('</span>'));
         // A light fill needs DARK text; the old form paired a 20% fill with
@@ -288,7 +287,7 @@ describe('ROK-1314 — badge fills stay legible over cover art', () => {
     });
 
     it('the genre badge does not use a see-through white fill over artwork', () => {
-        const source = codeOnly(readSource('components/games/game-card-parts.tsx'));
+        const source = stripComments(readSource('components/games/game-card-parts.tsx'));
         const badge = source.slice(source.indexOf('export function GenreBadge'));
         const cls = badge.slice(0, badge.indexOf('</span>'));
         expect(cls).not.toMatch(/bg-white\/[1-5]?\d\b/);

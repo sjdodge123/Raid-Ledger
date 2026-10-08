@@ -3,10 +3,8 @@
  *
  * Extracted VERBATIM from `lfg-chip.tsx` so the events banner and the card
  * badge cannot drift apart about the same group (the sentence itself now lives
- * in the contract — see below). Deliberately NOT
- * `pages/lfg/lfg-copy.ts::lookingLine`, which has no `max(1, …)` clamp and
- * falls back to different prose when the threshold is null — reusing it would
- * silently change the group page (ROK-1478 AC7 forbids that).
+ * in the contract — see below). The group page's separate `lookingLine` copy
+ * was removed in #1251 (ROK-1573); that page now renders through `LfgHero`.
  */
 
 /**

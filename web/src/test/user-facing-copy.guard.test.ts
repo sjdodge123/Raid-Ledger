@@ -18,6 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripComments } from './strip-comments';
 
 /** Resolved from THIS file, not the cwd — vitest runs from `web/`. */
 const WEB_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -42,58 +43,6 @@ function sourceFiles(dir: string): string[] {
         if (/\.(test|spec)\.tsx?$/.test(entry)) return [];
         return [full];
     });
-}
-
-/**
- * Drop block and line comments so the guard never trips on provenance prose.
- * Quote-aware: a `//` inside a string literal is content, not a comment, and
- * a `'` earlier on the line must not hide a real trailing comment.
- */
-export function stripComments(source: string): string {
-    let out = '';
-    let quote: string | null = null;
-    let i = 0;
-    while (i < source.length) {
-        const ch = source[i];
-        const next = source[i + 1];
-        if (quote) {
-            if (ch === '\\') {
-                out += ch + (next ?? '');
-                i += 2;
-                continue;
-            }
-            if (ch === quote) quote = null;
-            // Only a template literal spans lines. Resetting at the newline
-            // stops an apostrophe in JSX text ("Don't") from opening a string
-            // that swallows every comment after it.
-            else if (ch === '\n' && quote !== '`') quote = null;
-            out += ch;
-            i += 1;
-            continue;
-        }
-        if (ch === "'" || ch === '"' || ch === '`') {
-            quote = ch;
-            out += ch;
-            i += 1;
-            continue;
-        }
-        if (ch === '/' && next === '/') {
-            while (i < source.length && source[i] !== '\n') i += 1;
-            continue;
-        }
-        if (ch === '/' && next === '*') {
-            i += 2;
-            while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) {
-                if (source[i] === '\n') out += '\n';
-                i += 1;
-            }
-            i += 2;
-            continue;
-        }
-        out += ch;
-        i += 1;
-    }
-    return out;
 }
 
 describe('user-facing copy sweep (ROK-1480)', () => {

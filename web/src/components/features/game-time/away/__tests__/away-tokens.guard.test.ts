@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { stripComments } from '../../../../../test/strip-comments';
 
 /**
  * Token guard for the away panel (ROK-1585 AC5/AC9): the legacy absence UI
@@ -9,9 +10,6 @@ import { resolve } from 'node:path';
  */
 const DIR = resolve(__dirname, '..');
 const BANNED = /red-600|red-500|red-300|bg-red-|#[0-9a-fA-F]{3,8}\b/;
-
-const stripComments = (src: string): string =>
-    src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
 describe('away/*.tsx tokens', () => {
     const files = readdirSync(DIR).filter((f) => f.endsWith('.tsx'));

@@ -8,13 +8,10 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { stripComments } from '../../test/strip-comments';
 
 const WEB_SRC = resolve(__dirname, '../..');
 const ALLOWED = /pollSubmit:\s*'Start poll'/;
-
-function stripComments(source: string): string {
-    return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-}
 
 function sweptFiles(): string[] {
     const lfg = readdirSync(resolve(WEB_SRC, 'pages/lfg'))

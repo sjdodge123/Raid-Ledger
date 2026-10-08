@@ -8,48 +8,12 @@
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { stripComments } from './strip-comments';
 
 const RAW_ELEMENT = /<(input|select|textarea|button)\b/g;
 
-type Mode = 'code' | 'line' | 'block' | "'" | '"' | '`';
-
-/** Next mode after `c` (and `n`, the following char) in `code` mode. */
-function enter(c: string, n: string): Mode {
-    if (c === '/' && n === '/') return 'line';
-    if (c === '/' && n === '*') return 'block';
-    if (c === "'" || c === '"' || c === '`') return c;
-    return 'code';
-}
-
-/**
- * Strip `//` and block comments, leaving string contents alone (a URL's `//`
- * inside quotes is not a comment). Quote strings end at a newline, so an
- * apostrophe in JSX text ("Don't") can hide at most the rest of its line.
- * A block comment's newlines are kept, so an offset in the output sits on
- * the same line number as in the source.
- */
-export function stripComments(src: string): string {
-    let out = '';
-    let mode: Mode = 'code';
-    for (let i = 0; i < src.length; i++) {
-        const c = src.charAt(i);
-        const n = src[i + 1] ?? '';
-        if (mode === 'code') {
-            mode = enter(c, n);
-            if (mode === 'line' || mode === 'block') { i++; continue; }
-            out += c;
-        } else if (mode === 'line') {
-            if (c === '\n') { mode = 'code'; out += c; }
-        } else if (mode === 'block') {
-            if (c === '*' && n === '/') { mode = 'code'; i++; }
-            else if (c === '\n') out += c;
-        } else {
-            out += c;
-            if (c === '\\') { out += n; i++; } else if (c === mode || (c === '\n' && mode !== '`')) mode = 'code';
-        }
-    }
-    return out;
-}
+/** Re-exported for the importers that predate the shared helper (B66). */
+export { stripComments };
 
 /** Raw form elements in one source text, comments excluded. */
 export function countRawFormElements(src: string): number {
