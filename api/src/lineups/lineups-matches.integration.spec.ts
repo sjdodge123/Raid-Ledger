@@ -19,7 +19,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { buildMatchesForLineup } from './lineups-matching.helpers';
 import { eq, sql } from 'drizzle-orm';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 // ── Shared state ──────────────────────────────────────────────
 let testApp: TestApp;
@@ -167,11 +167,11 @@ function describeGETMatches() {
     // game1: 5/10 = 50% -> scheduling (thresholdMet=true)
     // game2: 3/10 = 30% -> almostThere (>= 35*0.7 = 24.5%)
     // game3: 1/10 = 10% -> rallyYourCrew (< 24.5%)
-    for (let i = 0; i < 5; i++) voters[i].gameIds.push(game1.id);
-    for (let i = 0; i < 3; i++) voters[i].gameIds.push(game2.id);
-    voters[0].gameIds.push(game3.id);
+    for (const voter of voters.slice(0, 5)) voter.gameIds.push(game1.id);
+    for (const voter of voters.slice(0, 3)) voter.gameIds.push(game2.id);
+    at(voters, 0).gameIds.push(game3.id);
     // Voters 5-9 need at least one vote; give them game4
-    for (let i = 5; i < 10; i++) voters[i].gameIds.push(game4.id);
+    for (const voter of voters.slice(5, 10)) voter.gameIds.push(game4.id);
 
     const lineupId = await buildDecidedLineup({
       token: adminToken,
@@ -320,7 +320,7 @@ function describeJoin() {
     const matches = await testApp.db
       .select()
       .from(schema.communityLineupMatches);
-    const matchId = matches[0].id;
+    const matchId = at(matches, 0).id;
 
     // New member joins via bandwagon
     const newMember = await loginAsMember('bandwagon-joiner');
@@ -415,7 +415,7 @@ function describeJoin() {
     const matches = await testApp.db
       .select()
       .from(schema.communityLineupMatches);
-    const matchId = matches[0].id;
+    const matchId = at(matches, 0).id;
 
     // member already voted, so they're already a member
     const res = await testApp.request
@@ -533,7 +533,7 @@ function describeAdvance() {
     const matches = await testApp.db
       .select()
       .from(schema.communityLineupMatches);
-    const matchId = matches[0].id;
+    const matchId = at(matches, 0).id;
 
     const member = await loginAsMember('non-op');
     const res = await testApp.request
@@ -652,8 +652,8 @@ function describeCarryover() {
     );
 
     expect(carriedEntries).toHaveLength(1);
-    expect(carriedEntries[0].gameId).toBe(game1.id);
-    expect(carriedEntries[0].carriedOverFrom).toBe(oldLineupId);
+    expect(carriedEntries[0]?.gameId).toBe(game1.id);
+    expect(carriedEntries[0]?.carriedOverFrom).toBe(oldLineupId);
   });
 }
 describe('Auto-Carryover on Lineup Creation', describeCarryover);
@@ -726,13 +726,14 @@ function describeMatchingRaceAndIdempotency() {
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.lineupId, lineupId));
     expect(matches).toHaveLength(1);
-    expect(schedulingIds).toEqual([matches[0].id]);
-    expect(matches[0]?.status).toBe('scheduling');
+    const [match] = nonEmpty(matches, 'match');
+    expect(schedulingIds).toEqual([match.id]);
+    expect(match.status).toBe('scheduling');
 
     const members = await testApp.db
       .select()
       .from(schema.communityLineupMatchMembers)
-      .where(eq(schema.communityLineupMatchMembers.matchId, matches[0].id));
+      .where(eq(schema.communityLineupMatchMembers.matchId, match.id));
     expect(members).toHaveLength(voterIds.length);
     for (const member of members) {
       expect(member.source).toBe('voted');
@@ -748,7 +749,7 @@ function describeMatchingRaceAndIdempotency() {
     });
     const first = await buildMatchesForLineup(testApp.db, lineupId);
     expect(first.orphanedCards).toEqual([]);
-    const [wipedId] = first.schedulingMatchIds;
+    const [wipedId] = nonEmpty(first.schedulingMatchIds, 'scheduling match id');
     await testApp.db
       .update(schema.communityLineupMatches)
       .set({ embedChannelId: 'chan-571', embedMessageId: 'msg-571' })
@@ -764,8 +765,9 @@ function describeMatchingRaceAndIdempotency() {
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.lineupId, lineupId));
     expect(matches.map((m) => m.id)).toEqual(second.schedulingMatchIds);
-    expect(matches[0].id).not.toBe(wipedId);
-    expect(matches[0].embedMessageId).toBeNull();
+    const [match] = nonEmpty(matches, 'match');
+    expect(match.id).not.toBe(wipedId);
+    expect(match.embedMessageId).toBeNull();
   });
 
   it('5x parallel buildMatchesForLineup does not throw uq_match_member_user', async () => {
@@ -807,7 +809,7 @@ function describeMatchingRaceAndIdempotency() {
     const members = await testApp.db
       .select()
       .from(schema.communityLineupMatchMembers)
-      .where(eq(schema.communityLineupMatchMembers.matchId, matches[0].id));
+      .where(eq(schema.communityLineupMatchMembers.matchId, at(matches, 0).id));
     expect(members).toHaveLength(voterIds.length);
     const memberUserIds = members.map((m) => m.userId).sort();
     expect(memberUserIds).toEqual([...voterIds].sort());
@@ -856,7 +858,7 @@ function describeMatchingRaceAndIdempotency() {
       SELECT (last_value + CASE WHEN is_called THEN 1 ELSE 0 END)::int AS next_id
       FROM community_lineup_matches_id_seq
     `);
-    const nextMatchId = nextIdRows[0].next_id;
+    const nextMatchId = at(nextIdRows, 0).next_id;
 
     await testApp.db.insert(schema.communityLineupMatchMembers).values({
       matchId: nextMatchId,
@@ -911,14 +913,15 @@ function describeMatchingRaceAndIdempotency() {
       .from(schema.communityLineupMatches)
       .where(eq(schema.communityLineupMatches.lineupId, lineupId));
     expect(matches).toHaveLength(1);
-    expect(schedulingIds).toEqual([matches[0].id]);
+    const [match] = nonEmpty(matches, 'match');
+    expect(schedulingIds).toEqual([match.id]);
 
     // The new match must contain the orphan voter's user_id — that is the
     // "silent data loss" path the brief warns about.
     const members = await testApp.db
       .select()
       .from(schema.communityLineupMatchMembers)
-      .where(eq(schema.communityLineupMatchMembers.matchId, matches[0].id));
+      .where(eq(schema.communityLineupMatchMembers.matchId, match.id));
     expect(members.map((m) => m.userId)).toContain(orphanVoter.userId);
 
     // The cleanup migration (Commit 2) must have scrubbed all orphan rows
