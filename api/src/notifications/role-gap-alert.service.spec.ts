@@ -5,7 +5,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
 describe('RoleGapAlertService', () => {
   let service: RoleGapAlertService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
   };

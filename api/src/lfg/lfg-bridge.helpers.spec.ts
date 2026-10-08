@@ -19,6 +19,7 @@ import {
   type BridgeCandidate,
 } from './lfg-bridge.helpers';
 import { stripComments } from '../common/testing/strip-comments';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 function candidate(
   userId: number,
@@ -49,19 +50,24 @@ describe('groupOffersByUser (ROK-1457 AC6)', () => {
     const batches = groupOffersByUser(rows, 3);
 
     expect(batches).toHaveLength(1);
-    expect(batches[0].userId).toBe(7);
-    expect(batches[0].gameIds).toEqual([1, 2, 3, 4]);
-    expect(batches[0].message).toContain(
+    expect(batches[0]?.userId).toBe(7);
+    expect(batches[0]?.gameIds).toEqual([1, 2, 3, 4]);
+    expect(batches[0]?.message).toContain(
       'Valheim, Helldivers 2, Deep Rock Galactic and 1 more',
     );
-    expect(batches[0].payload.games).toHaveLength(4);
-    expect(batches[0].payload.games.map((g) => g.gameId)).toEqual([1, 2, 3, 4]);
+    expect(batches[0]?.payload.games).toHaveLength(4);
+    expect(batches[0]?.payload.games.map((g) => g.gameId)).toEqual([
+      1, 2, 3, 4,
+    ]);
   });
 
   it('names every game with no "and N more" when at or under the cap', () => {
-    const [batch] = groupOffersByUser(
-      [candidate(7, 1, 'Valheim'), candidate(7, 2, 'Helldivers 2')],
-      3,
+    const [batch] = nonEmpty(
+      groupOffersByUser(
+        [candidate(7, 1, 'Valheim'), candidate(7, 2, 'Helldivers 2')],
+        3,
+      ),
+      'batch',
     );
     expect(batch.message).toContain('Valheim, Helldivers 2 didn');
     expect(batch.message).not.toContain('more');
@@ -80,7 +86,10 @@ describe('groupOffersByUser (ROK-1457 AC6)', () => {
   });
 
   it('carries the decided-page link, lineup title, and the bridge kind marker', () => {
-    const [batch] = groupOffersByUser([candidate(1, 10, 'Valheim', 99)]);
+    const [batch] = nonEmpty(
+      groupOffersByUser([candidate(1, 10, 'Valheim', 99)]),
+      'batch',
+    );
     expect(batch.title).toBe('Friday Night — still want to play?');
     expect(batch.payload).toMatchObject({
       kind: LFG_BRIDGE_PAYLOAD_KIND,
@@ -104,7 +113,7 @@ describe('groupOffersByUser (ROK-1457 AC6)', () => {
     const rows = Array.from({ length: 5 }, (_, i) =>
       candidate(1, i + 1, `Game ${i + 1}`),
     );
-    expect(groupOffersByUser(rows)[0].message).toContain('and 2 more');
+    expect(groupOffersByUser(rows)[0]?.message).toContain('and 2 more');
   });
 });
 
@@ -141,7 +150,7 @@ describe('bridge source guards (ROK-1457)', () => {
   });
 
   it('T-5b: the selector reuses eligibleUser()/liveIntent() instead of re-spelling them', () => {
-    const src = readStripped(BRIDGE_SOURCES[0]);
+    const src = readStripped(at(BRIDGE_SOURCES, 0));
     expect(src).not.toMatch(/isNull\s*\(\s*schema\.users\.deactivatedAt/);
     expect(src).not.toMatch(/isNull\s*\(\s*schema\.users\.bannedAt/);
     expect(src).not.toMatch(/deactivated_at\s+IS\s+NULL/i);

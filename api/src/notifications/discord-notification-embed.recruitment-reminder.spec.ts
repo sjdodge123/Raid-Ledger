@@ -6,6 +6,7 @@ import { DiscordNotificationEmbedService } from './discord-notification-embed.se
 import { SettingsService } from '../settings/settings.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
+import { at, defined } from '../common/testing/narrow';
 
 jest.mock(
   'discord.js',
@@ -336,7 +337,7 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
 
       expect(rows).toBeDefined();
       expect(rows).toHaveLength(1);
-      const rowJson = rows![0].toJSON() as {
+      const rowJson = at(defined(rows, 'extra rows'), 0).toJSON() as {
         components: Array<{ label: string; customId?: string }>;
       };
       const labels = rowJson.components.map((c) => c.label);

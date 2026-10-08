@@ -11,7 +11,7 @@ import { RoleGapAlertService } from './role-gap-alert.service';
 
 describe('EventReminderService — voice channel in reminder payloads (ROK-507)', () => {
   let service: EventReminderService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;

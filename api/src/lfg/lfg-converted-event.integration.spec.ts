@@ -12,6 +12,7 @@ import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import {
   createGame,
@@ -84,16 +85,19 @@ async function scheduledEvent(
 ): Promise<typeof schema.events.$inferSelect> {
   const start = new Date(Date.now() + startsInHours * HOUR_MS);
   start.setMilliseconds(0);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId: testApp.seed.adminUser.id,
-      gameId,
-      isAdHoc: false,
-      duration: [start, new Date(start.getTime() + 2 * HOUR_MS)],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId: testApp.seed.adminUser.id,
+        gameId,
+        isAdHoc: false,
+        duration: [start, new Date(start.getTime() + 2 * HOUR_MS)],
+      })
+      .returning(),
+    'scheduled event',
+  );
   return event;
 }
 

@@ -28,6 +28,7 @@ import { LFG_NOW_SPAWN_THRESHOLD } from '../discord-bot/lfg-now/lfg-now.constant
 import { LfgQuickPlayListener } from './lfg-quickplay.listener';
 import { findOpenLfgNowEventId } from './lfg-playing.helpers';
 import { LFG_EVENTS } from './lfg.constants';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -114,7 +115,7 @@ async function intentOf(who: Member, gameId: number): Promise<IntentRow> {
     (r) => r.userId === who.userId,
   );
   expect(rows).toHaveLength(1);
-  return rows[0];
+  return at(rows, 0);
 }
 
 /**
@@ -181,21 +182,24 @@ async function startLfgBornSession(name: string): Promise<Session> {
 /** A plain Quick Play session on the game: live ad-hoc, NO `lfg_intents` link. */
 async function seedQuickPlayEvent(gameId: number, creatorId: number) {
   const now = Date.now();
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Quick Play — no LFG provenance',
-      creatorId,
-      duration: [new Date(now - 5 * 60_000), new Date(now + 55 * 60_000)] as [
-        Date,
-        Date,
-      ],
-      gameId,
-      isAdHoc: true,
-      adHocStatus: 'live',
-      channelBindingId: null,
-    })
-    .returning({ id: schema.events.id });
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Quick Play — no LFG provenance',
+        creatorId,
+        duration: [new Date(now - 5 * 60_000), new Date(now + 55 * 60_000)] as [
+          Date,
+          Date,
+        ],
+        gameId,
+        isAdHoc: true,
+        adHocStatus: 'live',
+        channelBindingId: null,
+      })
+      .returning({ id: schema.events.id }),
+    'event',
+  );
   return event.id;
 }
 

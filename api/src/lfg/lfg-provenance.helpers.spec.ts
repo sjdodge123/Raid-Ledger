@@ -25,6 +25,7 @@ import {
   listConvertedGroupMembers,
 } from './lfg-provenance.helpers';
 import { stripComments } from '../common/testing/strip-comments';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Compile a drizzle condition to the SQL text + bound params Postgres sees. */
 function compile(cond: unknown): { sql: string; params: unknown[] } {
@@ -164,10 +165,11 @@ describe('listConvertedGroupMembers — shape', () => {
   it('prefers a custom avatar over the Discord one, like listGroupMembers', async () => {
     const db = mockWithRows([{ ...ROW, customAvatarUrl: 'https://cdn/x.png' }]);
 
-    const [member] = await listConvertedGroupMembers(
-      db as unknown as LfgDb,
-      3,
-      { eventId: 5 },
+    const [member] = nonEmpty(
+      await listConvertedGroupMembers(db as unknown as LfgDb, 3, {
+        eventId: 5,
+      }),
+      'member',
     );
 
     expect(member.avatarUrl).toBe('https://cdn/x.png');

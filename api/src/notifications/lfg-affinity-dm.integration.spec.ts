@@ -15,6 +15,7 @@ import { createGame, heartGame } from '../lfg/lfg.integration.spec-helpers';
 import { LFG_EXPIRY_DAYS } from '../lfg/lfg.constants';
 import * as schema from '../drizzle/schema';
 import { LfgAffinityDmService } from './lfg-affinity-dm.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -121,22 +122,28 @@ describe('LFG affinity DMs (integration)', () => {
     const subscriberId = testApp.seed.adminUser.id;
     const game = await createGame(testApp, 'Deep Rock Galactic');
     await heartGame(testApp, subscriberId, game.id);
-    const [pastPlayer] = await testApp.db
-      .insert(schema.users)
-      .values({ discordId: 'local:past-player', username: 'past-player' })
-      .returning();
-    const [event] = await testApp.db
-      .insert(schema.events)
-      .values({
-        title: 'Last month raid',
-        gameId: game.id,
-        duration: [
-          new Date(Date.now() - 30 * DAY_MS),
-          new Date(Date.now() - 30 * DAY_MS + 3 * 60 * 60 * 1000),
-        ] as unknown as [Date, Date],
-        creatorId: subscriberId,
-      })
-      .returning();
+    const [pastPlayer] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({ discordId: 'local:past-player', username: 'past-player' })
+        .returning(),
+      'pastPlayer',
+    );
+    const [event] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'Last month raid',
+          gameId: game.id,
+          duration: [
+            new Date(Date.now() - 30 * DAY_MS),
+            new Date(Date.now() - 30 * DAY_MS + 3 * 60 * 60 * 1000),
+          ] as unknown as [Date, Date],
+          creatorId: subscriberId,
+        })
+        .returning(),
+      'event',
+    );
     await testApp.db.insert(schema.eventSignups).values({
       eventId: event.id,
       userId: pastPlayer.id,

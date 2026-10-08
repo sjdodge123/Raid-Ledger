@@ -21,6 +21,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { type TestApp } from '../common/testing/test-app';
+import { nonEmpty } from '../common/testing/narrow';
 
 // ─── Values the implementation must export from `lfg.constants.ts` ──────────
 
@@ -150,15 +151,18 @@ export async function createPlainUser(
   overrides: Partial<typeof schema.users.$inferInsert> = {},
 ): Promise<number> {
   plainUserSeq += 1;
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `plain:${username}:${plainUserSeq}`,
-      username: `${username}-${plainUserSeq}`,
-      role: 'member',
-      ...overrides,
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `plain:${username}:${plainUserSeq}`,
+        username: `${username}-${plainUserSeq}`,
+        role: 'member',
+        ...overrides,
+      })
+      .returning(),
+    'user',
+  );
   return user.id;
 }
 

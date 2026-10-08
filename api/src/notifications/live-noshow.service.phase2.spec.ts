@@ -4,6 +4,7 @@ import { NotificationService } from './notification.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { at } from '../common/testing/narrow';
 
 /**
  * Build a select chain where .from().where().limit() is the terminal,
@@ -49,7 +50,7 @@ function makeSelectFromJoinWhere(resolvedValue: unknown[]) {
 
 describe('LiveNoShowService — phase2', () => {
   let service: LiveNoShowService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;
@@ -416,7 +417,7 @@ describe('LiveNoShowService — phase2', () => {
         payload: { absentPlayers: Array<{ role: string | null }> };
       };
       expect(callArg.message).toContain('Healer');
-      expect(callArg.payload.absentPlayers[0].role).toBe('Healer');
+      expect(callArg.payload.absentPlayers[0]?.role).toBe('Healer');
     });
 
     it('should handle null role gracefully in Phase 2 message', async () => {
@@ -440,7 +441,7 @@ describe('LiveNoShowService — phase2', () => {
       const callArg = nudgeCall![0] as {
         payload: { absentPlayers: Array<{ role: string | null }> };
       };
-      expect(callArg.payload.absentPlayers[0].role).toBeNull();
+      expect(at(callArg.payload.absentPlayers, 0).role).toBeNull();
     });
 
     it('should use singular message format for single absent player', async () => {

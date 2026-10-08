@@ -42,6 +42,7 @@ import {
   LFG_INVITE_SKIP_REASON,
 } from './lfg-invite.constants';
 import { stripComments } from '../common/testing/strip-comments';
+import { nonEmpty } from '../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -224,10 +225,13 @@ describe('POST /lfg/:gameId/invites — consent (AC1, D2)', () => {
       gameId,
       declinedAt: null,
     });
-    const [notif] = await testApp.db
-      .select()
-      .from(schema.notifications)
-      .where(eq(schema.notifications.userId, u.userId));
+    const [notif] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.notifications)
+        .where(eq(schema.notifications.userId, u.userId)),
+      'notif',
+    );
     expect(notif.type).toBe(LFG_INVITE_NOTIFICATION_TYPE);
     expect(notif.payload).toMatchObject({
       gameId,

@@ -19,7 +19,7 @@ function makeSelectFromWhere(resolvedValue: unknown[]) {
 
 describe('LiveNoShowService — phase1', () => {
   let service: LiveNoShowService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;

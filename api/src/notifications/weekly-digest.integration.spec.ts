@@ -18,6 +18,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { WeeklyDigestService } from './weekly-digest.service';
 import { digestDedupKey, safeTimeZone } from './weekly-digest-schedule.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const HOUR = 3_600_000;
 
@@ -33,10 +34,17 @@ function inProgress(): [Date, Date] {
 }
 
 async function seedUser(testApp: TestApp, tag: string): Promise<number> {
-  const [u] = await testApp.db
-    .insert(schema.users)
-    .values({ discordId: `d:wd-${tag}`, username: `wd-${tag}`, role: 'member' })
-    .returning();
+  const [u] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `d:wd-${tag}`,
+        username: `wd-${tag}`,
+        role: 'member',
+      })
+      .returning(),
+    'u',
+  );
   return u.id;
 }
 
@@ -50,15 +58,18 @@ async function seedEvent(
   creatorId: number,
   opts: EventOpts = {},
 ): Promise<number> {
-  const [e] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Weekly digest recap event',
-      creatorId,
-      duration: opts.duration ?? endedAgo(24),
-      cancelledAt: opts.cancelled ? new Date() : null,
-    })
-    .returning();
+  const [e] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Weekly digest recap event',
+        creatorId,
+        duration: opts.duration ?? endedAgo(24),
+        cancelledAt: opts.cancelled ? new Date() : null,
+      })
+      .returning(),
+    'e',
+  );
   return e.id;
 }
 

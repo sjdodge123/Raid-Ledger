@@ -30,6 +30,7 @@ import {
   zonedParts,
   type LfgOverlapResponseDto,
 } from './lfg-reads.integration.spec-helpers';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 /** UTC-4/-5 — a 20:00 local block lands on the NEXT UTC calendar day. */
 const NEW_YORK = 'America/New_York';
@@ -93,9 +94,12 @@ async function blockEveryDay(userId: number): Promise<void> {
 /**
  * The local dates whose {@link BLOCK_HOUR} block falls wholly inside the read's
  * horizon, oldest first — computed from the wall clock, independently of the
- * implementation's own day enumeration.
+ * implementation's own day enumeration. Throws when fewer than two qualify;
+ * the {@link HORIZON_DAYS}-day horizon always yields at least 13, so only a
+ * shorter horizon could trip it. The absence tests compare a first and a
+ * second date.
  */
-function eligibleLocalDates(timeZone: string): string[] {
+function eligibleLocalDates(timeZone: string): [string, string, ...string[]] {
   const now = Date.now();
   const horizonEnd = now + HORIZON_DAYS * DAY_MS;
   const dates: string[] = [];
@@ -105,7 +109,7 @@ function eligibleLocalDates(timeZone: string): string[] {
     const ms = instantOfLocalHour(date, BLOCK_HOUR, timeZone).getTime();
     if (ms >= now && ms + HOUR_MS <= horizonEnd) dates.push(date);
   }
-  return dates;
+  return [at(dates, 0), at(dates, 1), ...dates.slice(2)];
 }
 
 /** Two live members of one group, both grid-blocked at 20:00 in `timeZone`. */
@@ -127,7 +131,10 @@ describe('GET /lfg/:gameId/overlap — member timezones (C1)', () => {
     const { game, a } = await pairInZone(NEW_YORK, 'Local Hour Game');
     const [firstDate] = eligibleLocalDates(NEW_YORK);
 
-    const [window] = (await overlapOf(a.token, game.id)).windows;
+    const [window] = nonEmpty(
+      (await overlapOf(a.token, game.id)).windows,
+      'window',
+    );
 
     expect(new Date(window.start).getTime()).toBe(
       instantOfLocalHour(firstDate, BLOCK_HOUR, NEW_YORK).getTime(),

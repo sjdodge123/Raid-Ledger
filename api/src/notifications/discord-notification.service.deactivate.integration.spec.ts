@@ -24,6 +24,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 import { DiscordNotificationService } from './discord-notification.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -41,14 +42,17 @@ afterEach(() => resetAfterEach());
 // ── factories ───────────────────────────────────────────────────────────────
 
 async function createMember(username: string) {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${username}@test.local`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${username}@test.local`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'member user',
+  );
   return user;
 }
 
@@ -64,22 +68,28 @@ async function createEventAt(
 ) {
   const start = new Date(startTimeMs);
   const end = new Date(startTimeMs + durationMs);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId,
-      duration: [start, end] as [Date, Date],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId,
+        duration: [start, end] as [Date, Date],
+      })
+      .returning(),
+    'event',
+  );
   return event;
 }
 
 async function createSignup(eventId: number, userId: number) {
-  const [signup] = await testApp.db
-    .insert(schema.eventSignups)
-    .values({ eventId, userId, status: 'going' })
-    .returning();
+  const [signup] = nonEmpty(
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({ eventId, userId, status: 'going' })
+      .returning(),
+    'signup',
+  );
   return signup;
 }
 
@@ -210,11 +220,14 @@ describe('DiscordNotificationService.deactivateUser() — integration (ROK-1260)
       service as unknown as { deactivateUser: (id: number) => Promise<void> }
     ).deactivateUser(member.id);
 
-    const [row] = await testApp.db
-      .select({ status: schema.eventSignups.status })
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.id, pastSignup.id))
-      .limit(1);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.eventSignups.status })
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.id, pastSignup.id))
+        .limit(1),
+      'row',
+    );
     expect(row.status).toBe('going');
   });
 

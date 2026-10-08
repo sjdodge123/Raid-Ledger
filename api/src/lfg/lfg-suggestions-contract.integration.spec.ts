@@ -39,6 +39,7 @@ import {
   markAttended,
   HOUR_MS,
 } from './lfg-reads.integration.spec-helpers';
+import { at } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -101,9 +102,9 @@ describe('GET /lfg/:gameId/suggestions — the web contract on real rows', () =>
     const hearter = await createPlainUser(testApp, 'c-hearter');
     await heartGame(testApp, hearter, game.id, 'manual');
     // One owner also played it: `played` + `owns`, with a real instant.
-    await attendedEvent(game.id, owners[0]);
+    await attendedEvent(game.id, at(owners, 0));
     // One owner already invited: the only way to observe `sent` on the wire.
-    await inviteSentNow(game.id, caller.userId, owners[1]);
+    await inviteSentNow(game.id, caller.userId, at(owners, 1));
 
     const res = await testApp.request
       .get(`/lfg/${game.id}/suggestions`)
@@ -117,11 +118,11 @@ describe('GET /lfg/:gameId/suggestions — the web contract on real rows', () =>
     const byUser = new Map(parsed.suggestions.map((s) => [s.userId, s]));
     // Every variant the service can emit is actually present in this body,
     // so a green parse is not green by omission.
-    expect(byUser.get(owners[0])!.reasons).toEqual(['played', 'owns']);
-    expect(byUser.get(owners[0])!.lastPlayedAt).toEqual(expect.any(String));
-    expect(byUser.get(owners[1])!.inviteState).toBe('sent');
-    expect(byUser.get(owners[2])!.inviteState).toBe('none');
-    expect(byUser.get(owners[2])!.lastPlayedAt).toBeNull();
+    expect(byUser.get(at(owners, 0))!.reasons).toEqual(['played', 'owns']);
+    expect(byUser.get(at(owners, 0))!.lastPlayedAt).toEqual(expect.any(String));
+    expect(byUser.get(at(owners, 1))!.inviteState).toBe('sent');
+    expect(byUser.get(at(owners, 2))!.inviteState).toBe('none');
+    expect(byUser.get(at(owners, 2))!.lastPlayedAt).toBeNull();
     expect(byUser.get(hearter)!.reasons).toEqual(['hearted']);
     expect(byUser.get(caller.userId)).toBeUndefined();
   });
@@ -147,9 +148,10 @@ describe('GET /lfg/:gameId/suggestions — the web contract on real rows', () =>
       lastPlayedAt: null,
       inviteState: 'none',
     };
-    expect(
-      LfgSuggestionsResponseSchema.parse({ gameId: 1, suggestions: [row] })
-        .suggestions[0].lastPlayedAt,
-    ).toBeNull();
+    const { suggestions } = LfgSuggestionsResponseSchema.parse({
+      gameId: 1,
+      suggestions: [row],
+    });
+    expect(at(suggestions, 0).lastPlayedAt).toBeNull();
   });
 });
