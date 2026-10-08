@@ -10,6 +10,7 @@ import type { EventEmitter2 } from '@nestjs/event-emitter';
 import { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { at } from '../common/testing/narrow';
 import {
   createAndConvertGroup,
   LFG_GROUP_GONE_MESSAGE,
@@ -56,7 +57,7 @@ describe('createAndConvertGroup', () => {
     expect(db.transaction).toHaveBeenCalledTimes(1);
     expect(db.execute).toHaveBeenCalledTimes(1);
     expect(db.execute.mock.invocationCallOrder[0]).toBeLessThan(
-      db.limit.mock.invocationCallOrder[0],
+      at(db.limit.mock.invocationCallOrder, 0),
     );
   });
 
@@ -78,7 +79,7 @@ describe('createAndConvertGroup', () => {
     expect(result).toEqual({ event: EVENT, memberIds: [USER, 44] });
     expect(createEvent).toHaveBeenCalledTimes(1);
     expect(createEvent.mock.invocationCallOrder[0]).toBeLessThan(
-      db.update.mock.invocationCallOrder[0],
+      at(db.update.mock.invocationCallOrder, 0),
     );
     // TDB:953 — stamped by the DB's `statement_timestamp()` (an SQL chunk),
     // never a JS Date, and never `now()` — that is the TX start (Codex P2).

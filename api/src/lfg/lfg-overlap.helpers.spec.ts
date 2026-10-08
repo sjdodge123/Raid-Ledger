@@ -36,7 +36,7 @@ import {
   type OverlapHour,
   type OverlapWindow,
 } from './lfg-overlap.helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 /** Monday 2026-09-07 00:00 UTC — a fixed base keeps every hour key literal. */
 const BASE = Date.UTC(2026, 8, 7);
@@ -158,7 +158,7 @@ describe('selectOverlapHours', () => {
     );
 
     expect(hours.map((h) => h.start)).toEqual([H(30)]);
-    expect([...hours[0].members].sort(byId)).toEqual([1, 2, 3]);
+    expect([...at(hours, 0).members].sort(byId)).toEqual([1, 2, 3]);
   });
 
   it('returns nothing when the best coverage is a single member', () => {

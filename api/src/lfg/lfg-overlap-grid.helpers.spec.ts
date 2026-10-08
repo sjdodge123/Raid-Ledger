@@ -31,6 +31,7 @@ import {
   zonedHourToUtc,
 } from './lfg-zoned-time.helpers';
 import type { MemberSlots } from './lfg-overlap.helpers';
+import { at } from '../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 const NEW_YORK = 'America/New_York';
@@ -206,7 +207,7 @@ describe('hoursForDay', () => {
     'UTC',
   );
   const daysOf = () => days;
-  const day = days[0];
+  const day = at(days, 0);
 
   const index = (rows: Partial<GridRows>) =>
     indexGrid({ ...emptyRows(), ...rows }, daysOf);

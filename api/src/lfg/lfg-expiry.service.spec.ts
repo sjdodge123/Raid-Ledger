@@ -14,6 +14,7 @@ import type { SQL } from 'drizzle-orm';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import { at } from '../common/testing/narrow';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { LfgExpiryService } from './lfg-expiry.service';
@@ -33,7 +34,7 @@ const GAME_IDS = [11, 22, 33];
 function sweptRows(): { id: number; gameId: number; userId: number }[] {
   return Array.from({ length: 40 }, (_, i) => ({
     id: i + 1,
-    gameId: GAME_IDS[i % GAME_IDS.length],
+    gameId: at(GAME_IDS, i % GAME_IDS.length),
     userId: 100 + (i % 6),
   }));
 }

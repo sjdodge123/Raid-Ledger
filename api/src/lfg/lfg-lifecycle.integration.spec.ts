@@ -31,7 +31,7 @@ import {
   setExpiresAt,
   type LfgIntentResponseDto,
 } from './lfg.integration.spec-helpers';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -91,7 +91,10 @@ async function postAndExpire(
 
 describe('+1 refresh eligibility', () => {
   it('leaves a lapsed-but-unswept intent expired when the group refreshes', async () => {
-    const [a, stale, c] = await members('alpha', 'stale', 'charlie');
+    const roster = await members('alpha', 'stale', 'charlie');
+    const a = at(roster, 0);
+    const stale = at(roster, 1);
+    const c = at(roster, 2);
     const game = await createGame(testApp, 'Refresh Game');
     await postIntent(a.token, game.id);
     const lapsed = await postAndExpire(stale.token, game.id);
@@ -109,7 +112,10 @@ describe('+1 refresh eligibility', () => {
   });
 
   it('leaves a deactivated holder out of the group refresh', async () => {
-    const [a, gone, c] = await members('alpha', 'gone', 'charlie');
+    const roster = await members('alpha', 'gone', 'charlie');
+    const a = at(roster, 0);
+    const gone = at(roster, 1);
+    const c = at(roster, 2);
     const game = await createGame(testApp, 'Deactivated Refresh Game');
     await postIntent(a.token, game.id);
     const goneIntent = (await postIntent(gone.token, game.id))
@@ -128,7 +134,9 @@ describe('+1 refresh eligibility', () => {
   });
 
   it('still refreshes every eligible member on the +1', async () => {
-    const [a, b] = await members('alpha', 'bravo');
+    const roster = await members('alpha', 'bravo');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
     const game = await createGame(testApp, 'Happy Refresh Game');
     const first = (await postIntent(a.token, game.id))
       .body as LfgIntentResponseDto;
@@ -150,7 +158,10 @@ describe('+1 refresh eligibility', () => {
 
 describe('conversion eligibility', () => {
   it('converts only live, eligible rows and counts only those', async () => {
-    const [a, stale, gone] = await members('alpha', 'stale', 'gone');
+    const roster = await members('alpha', 'stale', 'gone');
+    const a = at(roster, 0);
+    const stale = at(roster, 1);
+    const gone = at(roster, 2);
     const game = await createGame(testApp, 'Selective Convert Game');
     await postIntent(a.token, game.id);
     await postAndExpire(stale.token, game.id);
@@ -189,7 +200,10 @@ describe('conversion eligibility', () => {
 
 describe('conversion authority', () => {
   it('403s an old participant whose only row converted into a different target', async () => {
-    const [a, b, c] = await members('alpha', 'bravo', 'charlie');
+    const roster = await members('alpha', 'bravo', 'charlie');
+    const a = at(roster, 0);
+    const b = at(roster, 1);
+    const c = at(roster, 2);
     const game = await createGame(testApp, 'Second Group Game');
     await postIntent(a.token, game.id);
     const firstEvent = await createFutureEvent(testApp, adminToken, {

@@ -30,7 +30,7 @@ import {
   LFG_NOW_TTL_MINUTES,
   computeNowExpiresAt,
 } from './lfg.constants';
-import { nonEmpty } from '../common/testing/narrow';
+import { at, nonEmpty } from '../common/testing/narrow';
 
 const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -116,7 +116,7 @@ describe('insertIntent', () => {
 
   it('writes a week intent LFG_EXPIRY_DAYS (7) days out with no TTL when no urgency is asked for', async () => {
     await insertIntent(mockDb as unknown as LfgDb, 11, 22);
-    const [values] = writtenPayloads(mockDb.values);
+    const [values] = nonEmpty(writtenPayloads(mockDb.values), 'values');
     expect(values.urgency).toBe('week');
     expect(values.ttlMinutes).toBeNull();
     expect(horizonsFrom(mockDb.values)).toEqual([LFG_EXPIRY_DAYS * DAY_MS]);
@@ -206,7 +206,7 @@ describe('bumpIntentUrgency', () => {
     await bumpIntentUrgency(mockDb as unknown as LfgDb, row, {
       urgency: 'week',
     });
-    const [set] = writtenPayloads(mockDb.set);
+    const [set] = nonEmpty(writtenPayloads(mockDb.set), 'set');
     expect(set.urgency).toBe('week');
     expect(set.ttlMinutes).toBeNull();
     expect(horizonsFrom(mockDb.set)).toEqual([LFG_EXPIRY_DAYS * DAY_MS]);
@@ -261,7 +261,7 @@ describe('refreshGroupExpiry (A3 — per-row horizons)', () => {
     // 04:00 EDT the next morning — 20 real hours out, not 7 days and not 30
     // minutes. Stated as an absolute instant rather than a delta so a runner in
     // any zone asserts the same thing.
-    expect(writtenPayloads(mockDb.set)[1].expiresAt).toEqual(
+    expect(writtenPayloads(mockDb.set)[1]?.expiresAt).toEqual(
       new Date('2026-09-06T08:00:00.000Z'),
     );
     expect(horizonsFrom(mockDb.set)).toEqual([
@@ -277,14 +277,14 @@ describe('refreshGroupExpiry (A3 — per-row horizons)', () => {
     // 12:00 UTC is 21:00 JST on the 5th, so Tokyo's next 04:00 local is
     // 2026-09-06 04:00 JST = 2026-09-05T19:00Z — a full day earlier in UTC
     // than New York's, which is the whole point of threading the zone.
-    expect(writtenPayloads(mockDb.set)[1].expiresAt).toEqual(
+    expect(writtenPayloads(mockDb.set)[1]?.expiresAt).toEqual(
       new Date('2026-09-05T19:00:00.000Z'),
     );
   });
 
   it('AC7: a tonight row is refreshed to a tonight horizon, never a now TTL', async () => {
     await refreshGroupExpiry(mockDb as unknown as LfgDb, 22, 'UTC');
-    const tonight = writtenPayloads(mockDb.set)[1].expiresAt as Date;
+    const tonight = at(writtenPayloads(mockDb.set), 1).expiresAt as Date;
     expect(tonight).toEqual(tonightExpiresAt(NOW, 'UTC'));
     expect(tonight.getTime() - NOW.getTime()).toBeGreaterThan(60 * MINUTE_MS);
   });
