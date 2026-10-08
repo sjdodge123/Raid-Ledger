@@ -173,11 +173,7 @@ export class PugInviteService {
 
     const ctx = await loadInviteContext(this.settingsService);
     const [voiceChannelId, signupCount] = await Promise.all([
-      this.channelResolver.resolveVoiceChannelForEvent(
-        gameId,
-        event.recurrenceGroupId,
-        event.ephemeralVoiceChannelId,
-      ),
+      this.resolveVoice(event, gameId),
       // The spots line must quote the REAL roster: hardcoding 0 told a capped
       // event's invitee "N spots open · 0 of N signed up" regardless of signups.
       countSignedUp(this.db, eventId),
@@ -308,14 +304,21 @@ export class PugInviteService {
     await this.trySendDm(discordUserId, embed, row, 'PUG invite');
   }
 
-  /** The voice channel an event's invite should point at, if any. */
+  /**
+   * The voice channel an event's invite should point at, if any. Routes
+   * through the ROK-1389 single voice resolver so a voice
+   * notificationChannelOverride wins here exactly as it does for reminders,
+   * the website and embeds (TDB:174a).
+   */
   private resolveVoice(
     event: typeof schema.events.$inferSelect,
+    gameId: number | null = event.gameId ?? null,
   ): Promise<string | null> {
-    return this.channelResolver.resolveVoiceChannelForEvent(
-      event.gameId ?? null,
+    return this.channelResolver.resolveVoiceChannelHonoringOverride(
+      gameId,
       event.recurrenceGroupId,
       event.ephemeralVoiceChannelId,
+      event.notificationChannelOverride,
     );
   }
 

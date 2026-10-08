@@ -54,7 +54,7 @@
     "cookie-parser": "^1.4.7",
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
-    "drizzle-orm": "^0.45.2",
+    "drizzle-orm": "^0.45.3",
     "graphology": "^0.26.0",
     "graphology-communities-louvain": "^2.0.2",
     "graphology-types": "^0.24.8",

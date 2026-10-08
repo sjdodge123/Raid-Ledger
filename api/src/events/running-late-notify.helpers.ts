@@ -85,6 +85,8 @@ export async function notifyAttendeeRunningLate(
       title: 'Running Late',
       message: `${lateUsername} is running late to "${event.title}".`,
       payload,
+      // TDB:196: a late notice is stale once the event is over.
+      ...(event.duration[1] ? { expiresAt: event.duration[1] } : {}),
     })),
   );
 }

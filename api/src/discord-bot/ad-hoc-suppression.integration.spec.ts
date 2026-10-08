@@ -154,7 +154,7 @@ describe('ad-hoc suppression predicate scoping (Regression: ROK-1418)', () => {
       now,
       'voice-channel-C',
     );
-    expect(match).toBeDefined();
+    expect(match?.matchedBy).toBe('game');
   });
 
   // Case 2 — RED today: an event demonstrably homed in voice channel D must
@@ -231,30 +231,136 @@ describe('ad-hoc suppression predicate scoping (Regression: ROK-1418)', () => {
     expect(match).toBeDefined();
   });
 
-  // Case 5 — PIN: the ROK-959 sibling-binding path (channel-level subquery) is
-  // untouched by the fix. Event on a sibling monitor binding on the same
-  // physical channel suppresses even with no game match.
-  it('case 5 — sibling binding on the same channel still suppresses (ROK-959 pin)', async () => {
-    const now = new Date();
-    const siblingBindingId = await createVoiceBinding({
-      channelId: 'voice-channel-C',
-      bindingPurpose: 'game-voice-monitor',
-    });
-    await createScheduledEvent({
-      gameId: null,
-      start: minsFrom(now, -30),
-      end: minsFrom(now, 30),
-      channelBindingId: siblingBindingId,
+  // Case 5 (TDB:222/224) replaces the ROK-959 `channel_binding_id` pin: no
+  // production path writes that column on a scheduled event, so the pin
+  // exercised a dead term. These cases pin the ruled behaviour instead — a
+  // channel-anchored scheduled event occupies the channel for EVERY game,
+  // while an affinity-free event stays game-scoped for a game monitor.
+  describe('case 5 — channel anchors suppress a game join for any game (TDB:224)', () => {
+    /** A game id no event carries: the game-X monitor joining channel C. */
+    const otherGame = () => testApp.seed.game.id + 100_000;
+
+    it('5a — series for game Y bound to C suppresses a game-X join on C', async () => {
+      const now = new Date();
+      const recurrenceGroupId = randomUUID();
+      await createVoiceBinding({
+        channelId: 'voice-channel-C',
+        bindingPurpose: 'general-lobby',
+        recurrenceGroupId,
+      });
+      const eventId = await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+        recurrenceGroupId,
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match?.id).toBe(eventId);
+      expect(match?.matchedBy).toBe('anchored');
     });
 
-    const match = await findActiveScheduledEvent(
-      testApp.db,
-      UNRELATED_BINDING,
-      null,
-      now,
-      'voice-channel-C',
-    );
-    expect(match).toBeDefined();
+    it('5b — ephemeral anchor to C (game Y) suppresses a game-X join on C', async () => {
+      const now = new Date();
+      const eventId = await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+        ephemeralVoiceChannelId: 'voice-channel-C',
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match?.id).toBe(eventId);
+    });
+  });
+
+  // Codex B2 P2: a series bound to C whose live event runs in ephemeral D is
+  // homed in D. It occupies D for every join, and C for none.
+  it('5e — series bound to C running in ephemeral D does NOT suppress joins on C, does on D', async () => {
+    const now = new Date();
+    const recurrenceGroupId = randomUUID();
+    await createVoiceBinding({
+      channelId: 'voice-channel-C',
+      bindingPurpose: 'general-lobby',
+      recurrenceGroupId,
+    });
+    const eventId = await createScheduledEvent({
+      gameId: testApp.seed.game.id,
+      start: minsFrom(now, -30),
+      end: minsFrom(now, 30),
+      ephemeralVoiceChannelId: 'voice-channel-D',
+      recurrenceGroupId,
+    });
+    const find = (gameId: number | null, channelId: string) =>
+      findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        gameId,
+        now,
+        channelId,
+      );
+    const otherGame = testApp.seed.game.id + 100_000;
+
+    expect((await find(otherGame, 'voice-channel-C'))?.id).toBeUndefined();
+    expect((await find(null, 'voice-channel-C'))?.id).toBeUndefined();
+    expect(
+      (await find(testApp.seed.game.id, 'voice-channel-C'))?.id,
+    ).toBeUndefined();
+    expect((await find(otherGame, 'voice-channel-D'))?.id).toBe(eventId);
+    expect((await find(null, 'voice-channel-D'))?.id).toBe(eventId);
+  });
+
+  describe('case 5 — other events stay game-scoped for a game join (TDB:224)', () => {
+    const otherGame = () => testApp.seed.game.id + 100_000;
+
+    it('5c — an affinity-free game-Y event does NOT suppress a game-X join', async () => {
+      const now = new Date();
+      await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match).toBeUndefined();
+    });
+
+    it('5d — a game-Y event anchored to D does NOT suppress a game-X join on C', async () => {
+      const now = new Date();
+      await createScheduledEvent({
+        gameId: testApp.seed.game.id,
+        start: minsFrom(now, -30),
+        end: minsFrom(now, 30),
+        ephemeralVoiceChannelId: 'voice-channel-D',
+      });
+
+      const match = await findActiveScheduledEvent(
+        testApp.db,
+        UNRELATED_BINDING,
+        otherGame(),
+        now,
+        'voice-channel-C',
+      );
+      expect(match).toBeUndefined();
+    });
   });
 
   // Case 6 — PIN: ad-hoc events never suppress other ad-hoc spawns.
