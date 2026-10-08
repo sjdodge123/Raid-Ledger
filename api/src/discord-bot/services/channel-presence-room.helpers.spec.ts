@@ -23,6 +23,7 @@ import {
   type RoomResolveDeps,
   type RoomSnapshot,
 } from './channel-presence-room.helpers';
+import { at } from '../../common/testing/narrow';
 
 jest.mock('./ad-hoc-notification.helpers', () => ({
   buildEmbedEventData: jest.fn(),
@@ -330,7 +331,7 @@ describe('resolveRoom — participant union', () => {
       { discordUserId: 'u2', discordUsername: 'Ben', isActive: true },
       { discordUserId: 'u3', discordUsername: 'Cara', isActive: true },
     ]);
-    expect(room.groups[0].eventData).toBe(EVENT_DATA);
+    expect(room.groups[0]?.eventData).toBe(EVENT_DATA);
   });
 });
 
@@ -633,6 +634,6 @@ describe('resolveRoom — art on the DEMO_MODE seam path', () => {
       lobbyBinding({ minPlayers: 2 }),
     );
 
-    expect(room.groups[0].game).toBeNull();
+    expect(at(room.groups, 0).game).toBeNull();
   });
 });

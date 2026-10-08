@@ -24,6 +24,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { at } from '../../common/testing/narrow';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
 
       const result = service.getActiveRoster(10);
 
-      expect(result.participants[0].discordAvatarHash).toBeNull();
+      expect(at(result.participants, 0).discordAvatarHash).toBeNull();
     });
   });
 
@@ -183,7 +184,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       jest.setSystemTime(new Date('2026-03-01T18:01:30Z'));
 
       const result = service.getActiveRoster(10);
-      const p = result.participants[0];
+      const p = at(result.participants, 0);
 
       expect(p.totalDurationSeconds).toBeGreaterThanOrEqual(90);
     });
@@ -196,7 +197,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleLeave(10, 'discord-fin');
 
       const result = service.getActiveRoster(10);
-      const p = result.participants[0];
+      const p = at(result.participants, 0);
 
       expect(p.totalDurationSeconds).toBe(60);
     });
@@ -243,7 +244,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-unlinked', 'Guest', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].userId).toBeNull();
+      expect(at(result.participants, 0).userId).toBeNull();
     });
 
     it('joinedAt reflects the firstJoinAt time of the session', () => {
@@ -252,7 +253,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-join', 'JoinUser', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].joinedAt).toBe(joinTime.toISOString());
+      expect(at(result.participants, 0).joinedAt).toBe(joinTime.toISOString());
     });
 
     it('participant id matches discordUserId', () => {

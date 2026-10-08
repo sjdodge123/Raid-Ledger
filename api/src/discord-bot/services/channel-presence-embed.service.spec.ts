@@ -11,6 +11,7 @@
  * Every assertion below was verified by mutating the finished implementation.
  */
 import { PRESENCE_FLUSH_INTERVAL_MS } from './channel-presence-embed.service';
+import { at } from '../../common/testing/narrow';
 import {
   mocked,
   VOICE,
@@ -92,7 +93,7 @@ describe('ChannelPresenceEmbedService — D5 flush loop', () => {
     await jest.advanceTimersByTimeAsync(PRESENCE_FLUSH_INTERVAL_MS);
 
     expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
-    const [, channelId, embeds] = mocked.sendEmbeds.mock.calls[0];
+    const [, channelId, embeds] = at(mocked.sendEmbeds.mock.calls, 0);
     expect(channelId).toBe(TEXT);
     expect(embeds).toHaveLength(2);
     expect(mocked.openRow).toHaveBeenCalledTimes(1);
@@ -122,7 +123,7 @@ describe('ChannelPresenceEmbedService — D5 flush loop', () => {
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
 
     // Feed back the hash the first edit stored, exactly as the DB would.
-    const stored = mocked.savePayloadHash.mock.calls[0][2];
+    const stored = at(mocked.savePayloadHash.mock.calls, 0)[2];
     mocked.findOpenRow.mockResolvedValue(presenceRow({ payloadHash: stored }));
     service.markDirty(VOICE);
     await service.flushNow();
@@ -137,7 +138,7 @@ describe('ChannelPresenceEmbedService — D5 flush loop: re-render and resilienc
     mocked.findOpenRow.mockResolvedValue(presenceRow());
     service.markDirty(VOICE);
     await service.flushNow();
-    const stored = mocked.savePayloadHash.mock.calls[0][2];
+    const stored = at(mocked.savePayloadHash.mock.calls, 0)[2];
 
     mocked.findOpenRow.mockResolvedValue(presenceRow({ payloadHash: stored }));
     mocked.resolveRoom.mockResolvedValue(
@@ -147,7 +148,7 @@ describe('ChannelPresenceEmbedService — D5 flush loop: re-render and resilienc
     await service.flushNow();
 
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(2);
-    expect(mocked.savePayloadHash.mock.calls[1][2]).not.toBe(stored);
+    expect(at(mocked.savePayloadHash.mock.calls, 1)[2]).not.toBe(stored);
   });
 
   it('keeps the tick alive when one channel throws', async () => {
@@ -196,7 +197,7 @@ describe('ChannelPresenceEmbedService — D7 restart re-adoption', () => {
     expect(mocked.closeRow).not.toHaveBeenCalled();
     expect(mocked.sendEmbeds).not.toHaveBeenCalled();
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.editEmbeds.mock.calls[0][2]).toBe(MESSAGE);
+    expect(mocked.editEmbeds.mock.calls[0]?.[2]).toBe(MESSAGE);
   });
 
   it("closes a row whose message is gone (10008) with close_reason 'missing'", async () => {
@@ -410,7 +411,7 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
     service.markDirty(VOICE);
     await service.flushNow();
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    const stored = mocked.savePayloadHash.mock.calls[0][2];
+    const stored = at(mocked.savePayloadHash.mock.calls, 0)[2];
 
     // 90 s later: same empty room, same still-live session. Clamped to
     // `empty_since` the payload is byte-identical, so D5's dirty check issues
@@ -480,11 +481,11 @@ describe('ChannelPresenceEmbedService — the recap is stable and truthful', () 
       OPENED_AT,
     );
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    const embeds = mocked.editEmbeds.mock.calls[0][3];
+    const embeds = at(mocked.editEmbeds.mock.calls, 0)[3];
     expect(embeds[0]?.data.title).toContain('session ended');
     // The ticket's symptom, asserted directly: a session that really happened
     // must never be reported as none.
-    expect(embeds[0].data.description).not.toBe('No session started.');
+    expect(at(embeds, 0).data.description).not.toBe('No session started.');
     expect(embeds[0]?.data.description).toContain('1 session');
     expect(embeds).toHaveLength(2);
     expect(embeds[1]?.data.author?.name).toContain('ENDED');

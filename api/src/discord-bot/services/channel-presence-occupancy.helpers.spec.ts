@@ -25,6 +25,7 @@ import {
   type OpenStay,
   type RoomMember,
 } from './channel-presence-occupancy.helpers';
+import { at } from '../../common/testing/narrow';
 
 /**
  * Room members for the ledger. Names only — the `gameId` / `activityName`
@@ -167,7 +168,7 @@ describe('reconcileOccupancy', () => {
 
     await reconcileOccupancy(m.db, ROW, new Map(), NOW);
 
-    const sql = render(m.only('select')[0].where);
+    const sql = render(at(m.only('select'), 0).where);
     expect(sql).toContain('"presence_message_id" = $1');
     expect(sql).toContain('"left_at" is null');
   });
@@ -180,7 +181,7 @@ describe('reconcileOccupancy', () => {
 
     const inserts = m.only('insert');
     expect(inserts).toHaveLength(1);
-    expect(inserts[0].table).toBe(table);
+    expect(inserts[0]?.table).toBe(table);
     expect(inserts[0]?.values).toEqual([
       {
         presenceMessageId: ROW,
@@ -210,7 +211,7 @@ describe('reconcileOccupancy', () => {
     const updates = m.only('update');
     expect(updates).toHaveLength(1);
     expect(updates[0]?.set).toEqual({ leftAt: NOW });
-    const sql = render(updates[0].where);
+    const sql = render(at(updates, 0).where);
     expect(sql).toContain('"left_at" is null');
     expect(sql).toContain('in ($2)');
   });
@@ -275,7 +276,7 @@ describe('the stay carries what the room reads them as playing (P2-2)', () => {
     const updates = m.only('update');
     expect(updates).toHaveLength(1);
     expect(updates[0]?.set).toEqual({ gameId: 9, activityName: 'Valheim' });
-    expect(render(updates[0].where)).toContain('"left_at" is null');
+    expect(render(at(updates, 0).where)).toContain('"left_at" is null');
   });
 
   it('collapses a whole group switching game into ONE update', async () => {
@@ -324,7 +325,7 @@ describe('closeAllOccupancy', () => {
     const updates = m.only('update');
     expect(updates).toHaveLength(1);
     expect(updates[0]?.set).toEqual({ leftAt: NOW });
-    const sql = render(updates[0].where);
+    const sql = render(at(updates, 0).where);
     expect(sql).toContain('"presence_message_id" = $1');
     // Without this clause a second empty flush would rewrite `left_at` on
     // stays that already closed, and every member's stay would collapse to 0.
@@ -349,7 +350,7 @@ describe('listOccupancy', () => {
     const segments = await listOccupancy(m.db, ROW);
 
     expect(segments).toEqual([row]);
-    const select = m.only('select')[0];
+    const select = at(m.only('select'), 0);
     expect(render(select.where)).toContain('"presence_message_id" = $1');
     expect(select.orderBy).toHaveLength(1);
   });

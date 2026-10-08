@@ -30,7 +30,7 @@ import { flushChannel } from './channel-presence-flush';
 import { listOccupancy } from './channel-presence-occupancy.helpers';
 import type { RoomResolveDeps } from './channel-presence-room.helpers';
 import { findOpenRow } from './channel-presence-store.helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -202,10 +202,13 @@ function flushRoom(
 
 /** The presence row as the ledger now holds it, open or closed. */
 async function presenceRowById(db: Db, id: string) {
-  const [row] = await db
-    .select()
-    .from(schema.discordChannelPresenceMessages)
-    .where(eq(schema.discordChannelPresenceMessages.id, id));
+  const [row] = nonEmpty(
+    await db
+      .select()
+      .from(schema.discordChannelPresenceMessages)
+      .where(eq(schema.discordChannelPresenceMessages.id, id)),
+    'presence row',
+  );
   return row;
 }
 
@@ -316,5 +319,5 @@ describe('a brief visit end to end (integration, ROK-1692)', () => {
 function recapLead(transport: Transport): string {
   const last = transport.edited.at(-1);
   if (!last) throw new Error('No recap was published');
-  return last[0].data.description ?? '';
+  return at(last, 0).data.description ?? '';
 }
