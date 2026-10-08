@@ -26,16 +26,19 @@
  * `standalone-poll-reminders.test.ts`.
  */
 import { readLastMessages } from '../../helpers/messages.js';
+import { pollForEmbed } from '../../helpers/polling.js';
 import {
   addGameInterest,
   assertConditionNeverMet,
   awaitProcessing,
+  channelForGame,
   createEvent,
   deleteEvent,
   futureTime,
   getNotificationsFor,
 } from '../fixtures.js';
 import type { ApiClient } from '../api.js';
+import { resolveConfiguredGame } from '../configured-game.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 interface EventResponse {
@@ -77,17 +80,43 @@ async function hasRecruitmentBumpInChannel(
   );
 }
 
+/**
+ * Positive control (REVIEW-B B58): the event's own announcement embed must
+ * land in `watchedChannelId`. The bump is posted to the event's currently-
+ * bound channel (ROK-1335 `resolveBumpChannel`), so this proves the negative
+ * window below watches the channel a bump WOULD reach — and that the event
+ * has the posted embed the recruitment query requires. Without it, a bump
+ * routed elsewhere (or no embed at all) would pass the negative silently.
+ */
+async function assertEventEmbedLandsIn(
+  channelId: string,
+  eventTitle: string,
+): Promise<void> {
+  const mentions = (m: Awaited<ReturnType<typeof readLastMessages>>[number]) =>
+    m.embeds.some(
+      (e) =>
+        (e.title ?? '').includes(eventTitle) ||
+        (e.description ?? '').includes(eventTitle),
+    );
+  try {
+    await pollForEmbed(channelId, mentions, 30_000);
+  } catch {
+    throw new Error(
+      `positive control: event embed for "${eventTitle}" never reached watched channel ${channelId} — the bump negative below would be hollow`,
+    );
+  }
+}
+
 const shortNoticeSuppressesBothPaths: SmokeTest = {
   name: 'Same-day event suppresses recruitment bump + DM (ROK-1240)',
   category: 'embed',
   async run(ctx: TestContext) {
-    const gameId = ctx.mmoGameId ?? ctx.games[0]?.id;
-    if (!gameId) {
-      console.log(
-        '    SKIP: No game available for short-notice suppression test',
-      );
-      return;
-    }
+    // A missing game throws a named precondition — never a hollow PASS.
+    const gameId = ctx.mmoGameId ?? (await resolveConfiguredGame(ctx)).id;
+    // The bump is routed by game binding first, so watch the channel the
+    // game is bound to (pool) — the default channel only when unbound.
+    const watchedChannelId = channelForGame(ctx, gameId);
+    console.log(`    ROK-1240: gameId=${gameId}, watching channel ${watchedChannelId}`);
 
     // Wire up game interest so the recipient WOULD be DM'd if the
     // suppression rule didn't fire. Without this the negative
@@ -106,6 +135,7 @@ const shortNoticeSuppressesBothPaths: SmokeTest = {
 
     try {
       await awaitProcessing(ctx.api);
+      await assertEventEmbedLandsIn(watchedChannelId, event.title);
 
       // Run the recruitment cron once. Pre-fix, this would post a
       // channel embed AND insert a recruitment_reminder notification
@@ -116,9 +146,9 @@ const shortNoticeSuppressesBothPaths: SmokeTest = {
       // Negative assertion #1: channel must NOT receive the bump.
       // 8s window is plenty — the cron path is synchronous.
       await assertConditionNeverMet(
-        () => hasRecruitmentBumpInChannel(ctx.defaultChannelId, event.title),
+        () => hasRecruitmentBumpInChannel(watchedChannelId, event.title),
         8_000,
-        `Channel received "Spots still available" embed for short-notice event "${event.title}" — expected suppression`,
+        `Channel ${watchedChannelId} received "Spots still available" embed for short-notice event "${event.title}" — expected suppression`,
         { intervalMs: 2000 },
       );
 

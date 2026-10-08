@@ -158,51 +158,97 @@ export function buildNullGameAnchoredClause(channelId?: string) {
                      WHERE cbaf.recurrence_group_id = ${tables.events.recurrenceGroupId}
                        AND cbaf.channel_type = 'voice'))`;
   if (!channelId) return affinityFree;
-  return sql`(${tables.events.ephemeralVoiceChannelId} = ${channelId}
-    OR EXISTS (SELECT 1 FROM channel_bindings cbng
-                WHERE cbng.recurrence_group_id = ${tables.events.recurrenceGroupId}
-                  AND cbng.channel_type = 'voice' AND cbng.channel_id = ${channelId})
-    OR ${affinityFree})`;
+  return sql`(${buildChannelAnchorClause(channelId)} OR ${affinityFree})`;
 }
 
-/** Build the time-window WHERE conditions for scheduled event suppression. */
-export function buildTimeConditions(now: Date) {
+/**
+ * The two channel anchors (ROK-1423): the event's ephemeral channel IS this
+ * channel, or its series is bound to this channel by `recurrence_group_id`.
+ * Game-agnostic on purpose — a channel-anchored scheduled event occupies the
+ * channel for EVERY Quick Play binding on it (TDB:224 ruling).
+ *
+ * The series branch requires no ephemeral channel: an event of a series bound
+ * to C that is running in ephemeral channel D is homed in D, not C — the same
+ * invariant `buildAnchoredGameClause` enforces (Codex B2 P2).
+ */
+function buildChannelAnchorClause(channelId: string) {
+  return sql`(${tables.events.ephemeralVoiceChannelId} = ${channelId}
+    OR (${tables.events.ephemeralVoiceChannelId} IS NULL
+        AND EXISTS (SELECT 1 FROM channel_bindings cbng
+                     WHERE cbng.recurrence_group_id = ${tables.events.recurrenceGroupId}
+                       AND cbng.channel_type = 'voice' AND cbng.channel_id = ${channelId})))`;
+}
+
+/**
+ * Build the time-window WHERE conditions for scheduled event suppression.
+ *
+ * Same-game (and null-game) matches keep the 30-min post-end look-back and the
+ * `extended_until` term — the window the suppression extension rolls forward.
+ * A game join's cross-game match (an event for another game anchored to the
+ * channel, TDB:224) only counts while the event is genuinely live
+ * (`upper(duration) >= now`): an ended game-Y raid must not keep suppressing a
+ * game-X group in the same channel (REVIEW-B R4 MAJOR).
+ */
+export function buildTimeConditions(
+  now: Date,
+  effectiveGameId?: number | null,
+) {
   const lookbackMs = 30 * 60 * 1000;
   const lookbackTime = new Date(now.getTime() - lookbackMs);
+  const nowTs = sql`${now.toISOString()}::timestamptz`;
+  const sameGameWindow = sql`(upper(${tables.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${tables.events.extendedUntil} >= ${nowTs})`;
+  const window =
+    effectiveGameId == null
+      ? sameGameWindow
+      : sql`((${tables.events.gameId} = ${effectiveGameId} AND ${sameGameWindow})
+          OR (${tables.events.gameId} IS DISTINCT FROM ${effectiveGameId} AND upper(${tables.events.duration}) >= ${nowTs}))`;
   return [
     eq(tables.events.isAdHoc, false),
     sql`${tables.events.cancelledAt} IS NULL`,
-    sql`lower(${tables.events.duration}) <= ${now.toISOString()}::timestamptz`,
-    sql`(upper(${tables.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${tables.events.extendedUntil} >= ${now.toISOString()}::timestamptz)`,
+    sql`lower(${tables.events.duration}) <= ${nowTs}`,
+    window,
   ] as const;
 }
 
-/** Build the binding/game/channel OR clause for suppression. */
+/**
+ * A game join matched an event for ANOTHER game through the channel anchor
+ * (`matchedBy='anchored'` with a non-null join game). It suppresses the spawn
+ * but never extends that event's window (REVIEW-B R4 MAJOR).
+ */
+export function isCrossGameAnchor(
+  effectiveGameId: number | null | undefined,
+  matchedBy: 'game' | 'anchored',
+): boolean {
+  return effectiveGameId != null && matchedBy === 'anchored';
+}
+
+/**
+ * Build the game/channel OR clause for suppression (TDB:222/224).
+ *
+ * - Game join on a channel: an event for this game not homed elsewhere
+ *   (`buildAnchoredGameClause`) OR any event anchored to this channel,
+ *   whatever its game — the channel is occupied.
+ * - Null-game join on a channel: the channel anchors plus affinity-free
+ *   events (`buildNullGameAnchoredClause`, ROK-1423).
+ * - No channel: the bare game term, or nothing for a null game.
+ *
+ * Scheduled events never carry `events.channel_binding_id` (only the ad-hoc
+ * INSERT writes it, and suppression filters `is_ad_hoc = false`), so the old
+ * `channel_binding_id = <binding>` and ROK-1390 sibling-subquery terms were
+ * unreachable and are gone; series affinity reaches events through
+ * `channel_bindings.recurrence_group_id` instead.
+ */
 export function buildBindingClause(
-  bindingId: string,
   effectiveGameId: number | null | undefined,
   channelId?: string,
 ) {
-  // ROK-1390: match sibling bindings on the same physical voice channel that are
-  // either the game-voice-monitor purpose OR series-linked (a series bind may sit
-  // under a general-lobby purpose after a bind flip). Reaching series siblings by
-  // recurrence_group_id keeps quick-play suppressed during a live series event.
-  const siblingSubquery = channelId
-    ? sql`${tables.events.channelBindingId} IN (SELECT id FROM channel_bindings WHERE channel_id = ${channelId} AND (binding_purpose = 'game-voice-monitor' OR recurrence_group_id IS NOT NULL))`
-    : undefined;
-  if (effectiveGameId != null && siblingSubquery) {
-    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${buildAnchoredGameClause(effectiveGameId, channelId)} OR ${siblingSubquery})`;
-  }
   if (effectiveGameId != null) {
-    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${buildAnchoredGameClause(effectiveGameId, channelId)})`;
+    const game = buildAnchoredGameClause(effectiveGameId, channelId);
+    if (!channelId) return game;
+    return sql`(${game} OR ${buildChannelAnchorClause(channelId)})`;
   }
-  if (siblingSubquery) {
-    // ROK-1423: a null-game join also gets the channel-anchored + affinity-free
-    // scheduled-event suppression. `siblingSubquery` is defined iff `channelId`
-    // is set, so the anchored clause always has a channel to bind to here.
-    return sql`(${tables.events.channelBindingId} = ${bindingId} OR ${siblingSubquery} OR ${buildNullGameAnchoredClause(channelId)})`;
-  }
-  return eq(tables.events.channelBindingId, bindingId);
+  if (channelId) return buildNullGameAnchoredClause(channelId);
+  return sql`FALSE`;
 }
 
 /**
@@ -270,6 +316,7 @@ export async function suppressScheduled(
   logger.debug(
     `[voice-spawn] suppressed binding=${bindingId} channel=${channelId ?? '-'} game=${effectiveGameId ?? '-'} event=${scheduled.id} match=${scheduled.matchedBy} window=${scheduled.extendedUntil?.toISOString() ?? 'none'}`,
   );
+  if (isCrossGameAnchor(effectiveGameId, scheduled.matchedBy)) return true;
   await applySuppressionPlan(db, scheduled, plan, now, onExtended);
   return true;
 }

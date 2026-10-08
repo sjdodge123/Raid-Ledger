@@ -25,6 +25,7 @@ import {
   withdrawLfgIntent,
 } from '../fixtures.js';
 import type { ApiClient } from '../api.js';
+import { resolveConfiguredGame } from '../configured-game.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 const LFG_FIELD = '\u{1F50E} Looking for group';
@@ -107,11 +108,10 @@ const digestPostsOncePerWeek: SmokeTest = {
   name: 'Weekly digest posts to the default channel once per week (ROK-1435)',
   category: 'embed',
   async run(ctx: TestContext) {
-    const game = ctx.games[0];
-    if (!game) {
-      console.log('    SKIP: No game available for the weekly digest test');
-      return;
-    }
+    // Registry row (real name, matched in the embed); a missing game throws
+    // a named precondition — never a hollow PASS.
+    const game = await resolveConfiguredGame(ctx);
+    console.log(`    ROK-1435: digest game id=${game.id} name="${game.name}"`);
     await postLfgIntent(ctx.api, game.id);
     try {
       await awaitProcessing(ctx.api);
