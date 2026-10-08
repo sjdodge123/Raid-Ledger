@@ -10,10 +10,7 @@ import {
   toSafeConnectionView,
   withFreshCredentials,
 } from './calendar-credentials.helpers';
-import {
-  toCalendarConnection,
-  type CalendarConnectionRow,
-} from './calendar-overview.helpers';
+import { toCalendarConnection } from './calendar-overview.helpers';
 
 const NOW = Date.UTC(2026, 9, 8, 12);
 const ACCESS = 'ya29.UNIT-SECRET-ACCESS';
@@ -93,7 +90,7 @@ describe('DTO mappers never carry credentials', () => {
           readCalendarIds: [],
           writeEnabled: false,
           writeTarget: 'dedicated',
-        } as CalendarConnectionRow),
+        }),
     ],
   ])('%s output has no token, no blob', (_name, map) => {
     const json = JSON.stringify(map());
