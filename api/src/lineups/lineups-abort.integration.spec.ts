@@ -165,8 +165,9 @@ function describeLineupAbort() {
 
     const log = await findActivityLog(id, 'lineup_aborted');
     expect(log).toHaveLength(1);
-    expect(log[0]?.metadata).toMatchObject({ reason: 'Test reason' });
-    expect(log[0].actorId).toBe(testApp.seed.adminUser.id);
+    const [entry] = nonEmpty(log, 'lineup_aborted log row');
+    expect(entry.metadata).toMatchObject({ reason: 'Test reason' });
+    expect(entry.actorId).toBe(testApp.seed.adminUser.id);
   });
 
   // ── AC 2 — operator abort without body ─────────────────────────────
@@ -275,10 +276,13 @@ function describeLineupAbort() {
     );
     expect(['dismissed', 'resolved']).toContain(tbAfter.status);
 
-    const [lineup] = await testApp.db
-      .select()
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, id));
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, id)),
+      'lineup',
+    );
     expect(lineup.status).toBe('archived');
     expect(lineup.activeTiebreakerId).toBeNull();
   });
@@ -372,10 +376,13 @@ function describeLineupAbort() {
     // on the linked event. The match's `linkedEventId` itself does not
     // need to be nulled — the contract is that the linked event no longer
     // points back to the lineup as a scheduling poll target.
-    const [eventAfter] = await testApp.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, event.id));
+    const [eventAfter] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, event.id)),
+      'eventAfter',
+    );
     expect(eventAfter.reschedulingPollId ?? null).toBeNull();
   });
 
