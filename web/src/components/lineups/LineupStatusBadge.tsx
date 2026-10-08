@@ -10,8 +10,8 @@ interface LineupStatusBadgeProps {
 }
 
 const STATUS_STYLES: Record<LineupStatusDto, string> = {
-    building: 'bg-emerald-500/20 text-emerald-400',
-    voting: 'bg-amber-500/20 text-amber-400',
+    building: 'bg-success/10 text-success',
+    voting: 'bg-warning/10 text-warning',
     decided: 'bg-blue-500/20 text-blue-400',
     archived: 'bg-zinc-500/20 text-zinc-400',
 };

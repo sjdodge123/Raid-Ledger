@@ -19,8 +19,8 @@ interface Props {
 }
 
 const TONE_CLS: Record<Tone, string> = {
-    success: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-    danger: 'bg-red-500/15 text-red-300 border-red-500/40',
+    success: 'bg-success/10 text-success border-success/30',
+    danger: 'bg-danger/10 text-danger border-danger/40',
     info: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
 };
 

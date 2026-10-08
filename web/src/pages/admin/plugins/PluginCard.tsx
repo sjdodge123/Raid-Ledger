@@ -51,7 +51,7 @@ function PluginCardActions({ plugin, isPending, onInstall, onActivate, onDeactiv
                     <button onClick={() => onActivate(plugin.slug)} disabled={isPending}
                         className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors">Activate</button>
                     <button onClick={() => onUninstall(plugin.slug)} disabled={isPending}
-                        className="px-3 py-1.5 text-sm bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium rounded-lg transition-colors border border-red-600/50">Uninstall</button>
+                        className="px-3 py-1.5 text-sm bg-danger/10 hover:bg-danger/15 text-danger font-medium rounded-lg transition-colors border border-danger/50">Uninstall</button>
                 </>
             )}
         </>
@@ -116,7 +116,7 @@ function IntegrationsList({ integrations }: {
                             <div className="flex items-center gap-2">
                                 <span className="text-sm font-medium text-foreground">{integration.name}</span>
                                 <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                                    integration.configured ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'
+                                    integration.configured ? 'bg-success/10 text-success' : 'bg-gray-500/20 text-gray-400'
                                 }`}>{integration.configured ? 'Configured' : 'Not Configured'}</span>
                             </div>
                             <p className="text-xs text-muted mt-0.5">{integration.description}</p>

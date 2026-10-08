@@ -171,7 +171,8 @@ entries, and refuses a rise or a new file. A file whose hues are **categorical b
 tooltip and faction colours) is named with a one-line reason in `semantic-hue.categorical.json`; only a listed file
 may enter the baseline, it keeps but never raises its count, and an entry whose file has no raw hue left fails as
 stale. Solid accent button fills (above) stay in the baseline unannotated. **KPI:** `__total` — 1111 raw sites by
-grep on `212790e4d`, 1092 once comments are stripped (the S0 baseline).
+grep on `212790e4d`, 1092 once comments are stripped (the S0 baseline), 1039 after S0 moved the status pills (`LineupStatusBadge`,
+`AttendanceTracker`, the three `PluginCard`s, `TiebreakerBadge`, `ConfirmationPill`) onto `bg-<token>/10` tints.
 
 Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
 --include='*.tsx'`, excluding tests):

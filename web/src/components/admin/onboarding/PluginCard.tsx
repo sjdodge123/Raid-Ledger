@@ -2,8 +2,8 @@ import type { PluginInfoDto } from '@raid-ledger/contract';
 
 const STATUS_CONFIG = {
     not_installed: { label: 'Not Installed', className: 'bg-surface/50 text-muted border border-edge/50' },
-    inactive: { label: 'Installed (Inactive)', className: 'bg-amber-500/10 text-amber-400 border border-amber-500/30' },
-    active: { label: 'Active', className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
+    inactive: { label: 'Installed (Inactive)', className: 'bg-warning/10 text-warning border border-warning/30' },
+    active: { label: 'Active', className: 'bg-success/10 text-success border border-success/30' },
 } as const;
 
 interface PluginCardProps {
@@ -31,7 +31,7 @@ function PluginActionButton({ plugin, isPending, onInstall, onActivate }: Plugin
         );
     }
     return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-emerald-400">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-success">
             <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
@@ -50,7 +50,7 @@ function PluginIntegrations({ integrations }: { integrations: PluginInfoDto['int
                     <div key={i.key} className="flex items-center gap-2 text-xs">
                         {i.icon && <span className="text-sm">{i.icon}</span>}
                         <span className="text-secondary">{i.name}</span>
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${i.configured ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${i.configured ? 'bg-success/10 text-success' : 'bg-gray-500/20 text-gray-400'}`}>
                             {i.configured ? 'Online' : 'Offline'}
                         </span>
                     </div>
