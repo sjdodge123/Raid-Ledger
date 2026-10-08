@@ -162,10 +162,10 @@ describe('reconcile after a conversion the bot missed (TDB:953)', () => {
     expect(s.conversionSincePosted).not.toHaveBeenCalled();
   });
 
-  it('an older conversion (stamped at or before the post) leaves a live group in place', async () => {
+  it('an older conversion (stamped before the grace window) leaves a live group in place', async () => {
     seedOpenRow();
     const s = jest.mocked(store);
-    // The SQL lookup excludes a stamp at or before `posted_at`: null.
+    // The SQL lookup excludes a stamp older than `posted_at - grace`: null.
     s.conversionSincePosted.mockResolvedValue(null);
     // A corpse the fallback WOULD return — never consulted above the floor.
     s.latestConversionTarget.mockResolvedValue({ eventId: EVENT_ID });
