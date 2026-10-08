@@ -168,7 +168,8 @@ which must equal the sum). It works like the form-primitives guard (§4.11): a f
 count above its baseline fails, and a count **below** it fails with "lower baseline for <path> to N", so a
 conversion locks in its gain in the same commit. After converting, run `node web/scripts/semantic-hue-baseline.mjs`
 (Node ≥ 22.18 — it imports the guard's own counter, `semantic-hue.count.ts`): it lowers counts and drops emptied
-entries, and refuses a rise or a new file. A file whose hues are **categorical by design** (WoW item quality,
+entries, and refuses a rise or a new file. `--init` rewrites from scratch and refuses while a baseline exists unless
+`--force` is added — use `--init --force` only when the counted set itself changes, and say so in the PR. A file whose hues are **categorical by design** (WoW item quality,
 tooltip and faction colours) is named with a one-line reason in `semantic-hue.categorical.json`; only a listed file
 may enter the baseline, it keeps but never raises its count, and an entry whose file has no raw hue left fails as
 stale. Solid accent button fills (above) stay in the baseline unannotated. **KPI:** `__total` — 1111 raw sites by

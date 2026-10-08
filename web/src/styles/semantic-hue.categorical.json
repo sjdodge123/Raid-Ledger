@@ -1,7 +1,7 @@
 {
   "plugins/wow/components/item-detail-modal.tsx": "WoW item tooltip: quality colour, item-level yellow, stat/enchant green, set/flavour yellow (game UI convention)",
   "plugins/wow/components/item-fallback-tooltip.tsx": "WoW item tooltip: quality colour, item-level yellow, stat/enchant green, set/flavour yellow (game UI convention)",
-  "plugins/wow/components/talent-display.tsx": "WoW talent tree: gold for maxed talent points (game UI convention)",
+  "plugins/wow/components/talent-display.tsx": "WoW talent tree: gold for maxed talent points and the gold \"View on Wowhead\" external link (game UI convention)",
   "plugins/wow/components/wow-item-card.tsx": "WoW item card: item-level yellow, enchant green (game tooltip convention)",
   "plugins/wow/slots/character-detail-header-badges.tsx": "WoW faction badge: Horde red (faction colour, promises nothing)",
   "plugins/wow/slots/equipment-constants.ts": "WoW item-quality colour map (Uncommon green)",
