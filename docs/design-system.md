@@ -667,6 +667,12 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   hand-roll the triad per form (Co-Optimus keeps its own row and shorter labels, laid out the same way: full-width Save below `lg`). Secondary actions use `secondary`, not a brand or ring hue (ruling 10): Sync Now (IGDB),
   Test Permissions (Discord Bot) and Set as Active (AI providers). No per-integration `ringColor` or `*_RING`
   constant remains.
+- **Write-only secrets with a saved state** (Calendar Sync client secrets, ROK-1591; `CalendarSyncForm.tsx`):
+  the `PasswordInput` is never prefilled. Under it, a saved secret shows a `Saved` chip (the §4.21 success
+  recipe: `rounded-full border border-success/30 bg-success/10 text-success text-xs`) and a ghost `sm`
+  "Remove saved secret" `Button`; pressing it swaps the row to a `text-warning` "will be removed when you save"
+  line with Undo. An empty box is omitted from the PUT; only an explicit removal sends `''`. Use this when a
+  form holds several secrets and a whole-form Clear would be too blunt.
 - **File uploads are `FilePicker`** (ruling 1): the trigger is a `Button` named by `children`; the native
   input stays hidden in the DOM (tests drive it with `userEvent.upload`). A drop zone reuses the picker's
   ref to open the same dialog instead of rendering a second `<input type="file">`. A raw file input gets
