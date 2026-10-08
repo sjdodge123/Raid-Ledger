@@ -14,14 +14,18 @@ import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
 
 /**
- * L15: the Fake exists only when the app boots with DEMO_MODE=true (a
- * factory, so the env is read at app init, not at import). The registry and
- * the seed endpoint still check env + the `demo_mode` setting per call.
+ * L15: the Fake is always constructed (an inert in-memory object) but is
+ * reachable only through two request-time gates — the registry's
+ * `fakeAllowed()` and the seed controller's `assertDemoMode()` — that both
+ * check env `DEMO_MODE=true` AND the `demo_mode` setting on every call,
+ * exactly like the `/admin/test/*` endpoints in
+ * `admin/demo-test-core.controller.ts`. A boot-time env read would freeze
+ * demo mode at whatever the env was when the app started (the integration
+ * singleton boots before any spec sets DEMO_MODE).
  */
 const fakeProvider = {
   provide: CALENDAR_FAKE_PROVIDER,
-  useFactory: (): FakeCalendarProvider | null =>
-    process.env.DEMO_MODE === 'true' ? new FakeCalendarProvider() : null,
+  useFactory: (): FakeCalendarProvider => new FakeCalendarProvider(),
 };
 
 /**

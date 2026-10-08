@@ -49,13 +49,9 @@ let bob: { userId: number; token: string };
 let seq = 0;
 
 beforeAll(async () => {
-  // The Fake is registered only when the app BOOTS with DEMO_MODE=true (L15).
-  process.env.DEMO_MODE = 'true';
-  try {
-    testApp = await getTestApp();
-  } finally {
-    restoreDemoMode();
-  }
+  // Booted with whatever DEMO_MODE the run has (integration-setup.ts boots the
+  // singleton first anyway): demo mode is decided per request (L15).
+  testApp = await getTestApp();
 });
 
 beforeEach(async () => {

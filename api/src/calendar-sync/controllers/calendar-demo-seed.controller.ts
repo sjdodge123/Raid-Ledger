@@ -13,7 +13,6 @@ import {
   Controller,
   ForbiddenException,
   Inject,
-  Optional,
   Post,
   Request,
   UseGuards,
@@ -50,9 +49,8 @@ export class CalendarDemoSeedController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
-    @Optional()
     @Inject(CALENDAR_FAKE_PROVIDER)
-    private readonly fake: FakeCalendarProvider | null = null,
+    private readonly fake: FakeCalendarProvider,
   ) {}
 
   @Post('seed-connection')
@@ -74,8 +72,9 @@ export class CalendarDemoSeedController {
     return { id };
   }
 
+  /** Request-time gate, same checks as `DemoTestCoreController`. */
   private async assertDemoMode(): Promise<FakeCalendarProvider> {
-    if (process.env.DEMO_MODE !== 'true' || !this.fake) {
+    if (process.env.DEMO_MODE !== 'true') {
       throw new ForbiddenException(DEMO_ONLY);
     }
     if (!(await this.settings.getDemoMode())) {
