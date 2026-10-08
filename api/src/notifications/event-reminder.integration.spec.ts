@@ -28,15 +28,18 @@ async function createUser(
   username: string,
   overrides: Partial<typeof schema.users.$inferInsert> = {},
 ) {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${username}@test.local`,
-      username,
-      role: 'member',
-      ...overrides,
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${username}@test.local`,
+        username,
+        role: 'member',
+        ...overrides,
+      })
+      .returning(),
+    'inserted user',
+  );
   return user;
 }
 
@@ -50,18 +53,21 @@ async function createEvent(
 ) {
   const start = new Date(Date.now() + startOffsetMs);
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId,
-      duration: [start, end] as [Date, Date],
-      reminder15min: true,
-      reminder1hour: true,
-      reminder24hour: true,
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId,
+        duration: [start, end] as [Date, Date],
+        reminder15min: true,
+        reminder1hour: true,
+        reminder24hour: true,
+        ...overrides,
+      })
+      .returning(),
+    'inserted event',
+  );
   return event;
 }
 
@@ -283,7 +289,7 @@ function describeEventReminderPipeline() {
         .where(eq(schema.eventRemindersSent.eventId, event.id));
 
       expect(rows.length).toBe(1);
-      expect(rows[0].userId).toBe(user.id);
+      expect(rows[0]?.userId).toBe(user.id);
       expect(rows[0]?.reminderType).toBe('1hour');
     });
 
@@ -350,7 +356,7 @@ function describeEventReminderPipeline() {
 
       const result = await reminderService.getUserTimezones([user.id]);
       expect(result.length).toBe(1);
-      expect(result[0].userId).toBe(user.id);
+      expect(result[0]?.userId).toBe(user.id);
       expect(result[0]?.timezone).toBe('America/New_York');
     });
 

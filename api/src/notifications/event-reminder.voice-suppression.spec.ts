@@ -53,7 +53,7 @@ function makeSoonEvent() {
 
 /** Wire up mockDb for a full handleReminders() run with two signed-up users. */
 function wireHandleRemindersDb(
-  mockDb: Record<string, jest.Mock>,
+  mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>,
   options: {
     users: { id: number; discordId: string | null }[];
     eventId?: number;
