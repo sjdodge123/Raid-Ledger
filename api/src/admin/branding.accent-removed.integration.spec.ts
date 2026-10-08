@@ -32,7 +32,10 @@ describe('TDB:991 — branding accent colour removed', () => {
     const res = await testApp.request
       .patch('/admin/branding')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ communityName: 'Night Raiders', communityAccentColor: '#123456' });
+      .send({
+        communityName: 'Night Raiders',
+        communityAccentColor: '#123456',
+      });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({

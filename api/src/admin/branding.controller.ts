@@ -151,9 +151,7 @@ export class BrandingController implements OnModuleInit {
    */
   @Patch()
   @UseGuards(AuthGuard('jwt'), AdminGuard)
-  async updateBranding(
-    @Body() body: { communityName?: string },
-  ) {
+  async updateBranding(@Body() body: { communityName?: string }) {
     if (body.communityName !== undefined) {
       const trimmed = body.communityName.trim();
       if (trimmed.length === 0 || trimmed.length > 60) {
