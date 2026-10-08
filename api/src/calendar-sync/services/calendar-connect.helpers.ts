@@ -9,12 +9,14 @@
  * settings. When the provider omits `refresh_token` on re-consent, the stored
  * one is kept (decrypt, merge, re-encrypt).
  */
+import { Logger } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { calendarConnections } from '../../drizzle/schema';
 import { ProviderAuthError } from '../providers/calendar-provider.errors';
 import type {
+  CalendarAccountProvider,
   CalendarCredentials,
   CalendarProviderKey,
   ConnectResult,
@@ -27,6 +29,8 @@ import {
 } from './calendar-credentials.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+
+const logger = new Logger('CalendarConnect');
 
 export interface UpsertCalendarConnectionInput {
   userId: number;
@@ -150,4 +154,24 @@ export async function upsertCalendarConnection(
     encryptCalendarCredentials(creds),
   );
   return { id, outcome: existing ? 'updated' : 'created' };
+}
+
+/**
+ * Best-effort revoke of a fresh grant the upsert did not store (DB failure,
+ * or `missing_refresh_token` — then the access token is revoked, which Google
+ * accepts). A failure is logged by error class only, never a token.
+ */
+export async function revokeUnstoredGrant(
+  provider: Pick<CalendarAccountProvider, 'disconnect'>,
+  grant: OAuthTokenGrant,
+): Promise<void> {
+  try {
+    await provider.disconnect({
+      ...grant,
+      refreshToken: grant.refreshToken ?? '',
+    });
+  } catch (err) {
+    const name = err instanceof Error ? err.constructor.name : typeof err;
+    logger.warn(`revoke of an unstored calendar grant failed (${name})`);
+  }
 }

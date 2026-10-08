@@ -4,6 +4,7 @@
  * the signed state, the browser-binding cookie, the single-use nonce, the
  * encrypted upsert and the 302 landing.
  */
+import { Logger } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
@@ -21,6 +22,7 @@ import {
   GOOGLE_TOKEN_URL,
 } from './providers/google/google-oauth.helpers';
 import { buildRedirectUris } from './services/calendar-sync-admin.helpers';
+import * as connectHelpers from './services/calendar-connect.helpers';
 import { mintCalendarOAuthState } from './services/calendar-oauth-state.helpers';
 import {
   decryptCalendarCredentials,
@@ -161,6 +163,7 @@ describe('GET /users/me/calendars/oauth/:provider/start', () => {
       (await buildRedirectUris(settings())).google,
     );
     expect(s.state.length).toBeGreaterThan(20);
+    expect(s.setCookie.startsWith(`${STATE_COOKIE}=`)).toBe(true);
     expect(s.setCookie).toMatch(/HttpOnly/i);
   });
 });
@@ -231,12 +234,32 @@ describe('GET /calendar-sync/oauth/:provider/callback — errors', () => {
     expect(await rowsOf(user.userId)).toHaveLength(0);
   });
 
-  it('a first grant without a refresh token → ?error=exchange, no revoke, no row', async () => {
+  it('a first grant without a refresh token → ?error=exchange, its access token is revoked, no row', async () => {
     const { spy, landed } = await connectWith({
       token: { status: 200, json: fixture('token-no-refresh') },
     });
     expect(landed.error).toBe('exchange');
-    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toHaveLength(0);
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([
+      { token: FIXTURE_ACCESS },
+    ]);
+    expect(await rowsOf(user.userId)).toHaveLength(0);
+  });
+
+  it('the upsert throws a non-provider error → 302 ?error=unavailable, the fresh grant is revoked, logged by class only', async () => {
+    jest
+      .spyOn(connectHelpers, 'upsertCalendarConnection')
+      .mockRejectedValue(new TypeError('db down SECRET-DETAIL'));
+    const logged = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const { spy, landed } = await connectWith(OK);
+    expect(landed.error).toBe('unavailable');
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([
+      { token: FIXTURE_REFRESH },
+    ]);
+    const lines = JSON.stringify(logged.mock.calls);
+    expect(lines).toContain('TypeError');
+    expect(lines).not.toContain('SECRET-DETAIL');
     expect(await rowsOf(user.userId)).toHaveLength(0);
   });
 

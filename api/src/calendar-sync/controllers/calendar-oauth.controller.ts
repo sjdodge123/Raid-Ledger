@@ -7,7 +7,9 @@
  * - `GET /calendar-sync/oauth/:provider/callback` (public — the browser
  *   arrives from Google): verifies the state + cookie, exchanges the code and
  *   stores the connection, then 302s to `/profile/gaming/calendars` with
- *   `?connected=<provider>` or `?error=<CalendarOAuthErrorCode>`.
+ *   `?connected=<provider>` or `?error=<CalendarOAuthErrorCode>` — never a
+ *   500 (an unexpected error lands on `?error=unavailable`). A grant whose
+ *   upsert fails is revoked best-effort.
  *
  * The logic lives in the services/providers helpers; this file only routes.
  * Never log a token, code or state.
@@ -58,7 +60,10 @@ import {
   mintCalendarOAuthState,
   verifyCalendarOAuthState,
 } from '../services/calendar-oauth-state.helpers';
-import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
+import {
+  revokeUnstoredGrant,
+  upsertCalendarConnection,
+} from '../services/calendar-connect.helpers';
 
 /** Where every callback lands (L3: no `returnTo`, so no open redirect). */
 export const CALENDARS_PAGE_PATH = '/profile/gaming/calendars';
@@ -78,12 +83,17 @@ function firstString(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-/** Connect/upsert failure → callback code; anything unexpected rethrows. */
-function connectErrorCode(err: unknown): CalendarOAuthErrorCode {
+/** Known connect/upsert failure → callback code; null for anything else. */
+function knownErrorCode(err: unknown): CalendarOAuthErrorCode | null {
   if (err instanceof MissingScopesError) return 'scopes';
   if (err instanceof ProviderNotConfiguredError) return 'unavailable';
   if (err instanceof CalendarProviderError) return 'exchange';
-  throw err;
+  return null;
+}
+
+/** The class only: a message may echo a response body or a token. */
+function errorClass(err: unknown): string {
+  return err instanceof Error ? err.constructor.name : typeof err;
 }
 
 @Controller()
@@ -129,7 +139,9 @@ export class CalendarOAuthController {
     @Req() req: ExpressRequest,
     @Res() res: Response,
   ): Promise<void> {
-    const outcome = await this.complete(raw, query, req, res);
+    const outcome = await this.complete(raw, query, req, res).catch(
+      (err: unknown) => this.failureCode(err),
+    );
     if (outcome !== 'connected') {
       this.logger.warn(`calendar oauth callback failed (${outcome})`);
     }
@@ -170,23 +182,35 @@ export class CalendarOAuthController {
     userId: number,
     code: string,
     codeVerifier: string,
-  ): Promise<'connected' | CalendarOAuthErrorCode> {
+  ): Promise<'connected'> {
+    const redirectUri = await this.redirectUri(target.key);
+    const result = await target.provider.connect({
+      code,
+      codeVerifier,
+      redirectUri,
+    });
     try {
-      const redirectUri = await this.redirectUri(target.key);
-      const result = await target.provider.connect({
-        code,
-        codeVerifier,
-        redirectUri,
-      });
       await upsertCalendarConnection(this.db, {
         userId,
         provider: target.key,
         result,
       });
-      return 'connected';
     } catch (err) {
-      return connectErrorCode(err);
+      // Google already issued this grant; nothing will hold it, so end it.
+      await revokeUnstoredGrant(target.provider, result.credentials);
+      throw err;
     }
+    return 'connected';
+  }
+
+  /** Never a 500: unexpected errors land on `?error=unavailable`. */
+  private failureCode(err: unknown): CalendarOAuthErrorCode {
+    const known = knownErrorCode(err);
+    if (known) return known;
+    this.logger.error(
+      `calendar oauth callback failed unexpectedly (${errorClass(err)})`,
+    );
+    return 'unavailable';
   }
 
   /** Only OAuth providers with a registered adapter resolve (L12). */

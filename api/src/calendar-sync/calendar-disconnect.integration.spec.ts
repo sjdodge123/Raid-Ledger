@@ -196,6 +196,20 @@ describe('DELETE /users/me/calendars/:id', () => {
     expect(await connectionById(theirs.id)).toHaveLength(1);
   });
 
+  it('the last holder of a shared Google account disconnecting → revoke runs', async () => {
+    const spy = googleSpy();
+    const shared = `sub-shared-${seq}`;
+    const mine = await insertConnection(alice.userId, shared, 'refresh-shared');
+    const theirs = await insertConnection(bob.userId, shared, 'refresh-shared');
+    expect((await del(mine.id, alice.token)).status).toBe(202);
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toHaveLength(0);
+    expect((await del(theirs.id, bob.token)).status).toBe(202);
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([
+      { token: 'refresh-shared' },
+    ]);
+    expect(await connectionById(theirs.id)).toHaveLength(0);
+  });
+
   it('still works with the kill switch OFF (ruling Q-E)', async () => {
     await setCalendarSyncEnabled(testApp.app.get(SettingsService), false);
     const row = await insertConnection(

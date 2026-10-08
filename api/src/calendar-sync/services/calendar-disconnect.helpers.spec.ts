@@ -33,7 +33,7 @@ function ownRow() {
   };
 }
 
-/** First `.limit()` = the own-row load, second = the sibling probe. */
+/** First `.limit()` = the own-row load, second = the post-delete sibling probe. */
 function dbWith(own: unknown[], siblings: unknown[] = []): MockDb {
   const db = createDrizzleMock();
   db.limit.mockResolvedValueOnce(own).mockResolvedValueOnce(siblings);
@@ -59,7 +59,7 @@ beforeAll(() => {
 afterEach(() => jest.restoreAllMocks());
 
 describe('runCalendarDisconnect', () => {
-  it('own row, no sibling → marks disconnecting, revokes with the stored token, then deletes', async () => {
+  it('own row, no sibling → marks disconnecting, deletes, then revokes with the stored token', async () => {
     const db = dbWith([ownRow()]);
     const { disconnect, registry } = setup();
     await expect(run(db, registry)).resolves.toEqual({
@@ -74,9 +74,24 @@ describe('runCalendarDisconnect', () => {
     );
     expect(disconnect).toHaveBeenCalledWith(CREDS);
     expect(db.delete).toHaveBeenCalledTimes(1);
-    expect(db.delete.mock.invocationCallOrder[0]).toBeGreaterThan(
-      disconnect.mock.invocationCallOrder[0] ?? Infinity,
+    expect(disconnect.mock.invocationCallOrder[0]).toBeGreaterThan(
+      db.delete.mock.invocationCallOrder[0] ?? Infinity,
     );
+  });
+
+  it('last sibling: the account is counted AFTER the delete, and none remain → revoke runs', async () => {
+    const db = dbWith([ownRow()], []);
+    const { disconnect, registry } = setup();
+    await expect(run(db, registry)).resolves.toEqual({
+      found: true,
+      revoke: 'revoked',
+    });
+    // The sibling probe is the second .limit(); it must follow the delete, or
+    // two concurrent disconnects each see the other and both skip the revoke.
+    expect(db.limit.mock.invocationCallOrder[1]).toBeGreaterThan(
+      db.delete.mock.invocationCallOrder[0] ?? Infinity,
+    );
+    expect(disconnect).toHaveBeenCalledWith(CREDS);
   });
 
   it('a sibling row shares the account subject → revoke skipped, row still deleted', async () => {

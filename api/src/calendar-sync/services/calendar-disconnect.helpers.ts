@@ -2,17 +2,20 @@
  * ROK-1592 (plan L9, Q-D, Q-E): disconnect one of the caller's connections.
  *
  * In the request, awaited: load the row by `id AND user_id` (anything else
- * is "not found" → 404), mark it `disconnecting`, revoke best-effort, then
- * delete it (event links cascade). Shaped as the job body ROK-1596 queues.
+ * is "not found" → 404), mark it `disconnecting`, delete it (event links
+ * cascade), then revoke best-effort with the credentials already loaded.
+ * Shaped as the job body ROK-1596 queues.
  *
- * The revoke is SKIPPED when another row has the same `(provider,
+ * The revoke is SKIPPED while another row still has the same `(provider,
  * account_subject)`: two RL users may connect one Google account, and a
- * revoke would kill both grants (U8). A revoke failure never blocks the
- * delete; it is logged with its error code only. Independent of the kill
+ * revoke would kill both grants (U8). Deleting BEFORE counting the remaining
+ * rows makes two concurrent disconnects of one account safe: the last one to
+ * delete always sees zero and revokes (a double revoke is harmless). A revoke
+ * failure is logged with its error code only. Independent of the kill
  * switch (Lead ruling on Q-E): a user can always remove stored credentials.
  */
 import { Logger } from '@nestjs/common';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { calendarConnections } from '../../drizzle/schema';
@@ -65,19 +68,19 @@ async function loadOwnRow(
   return row ?? null;
 }
 
-async function hasSibling(db: Db, row: OwnRow): Promise<boolean> {
-  const siblings = await db
+/** Any row left with this account, AFTER the caller's row was deleted. */
+async function accountStillHeld(db: Db, row: OwnRow): Promise<boolean> {
+  const remaining = await db
     .select({ id: calendarConnections.id })
     .from(calendarConnections)
     .where(
       and(
         eq(calendarConnections.provider, row.provider),
         eq(calendarConnections.accountSubject, row.accountSubject),
-        ne(calendarConnections.id, row.id),
       ),
     )
     .limit(1);
-  return siblings.length > 0;
+  return remaining.length > 0;
 }
 
 /** A log-safe code: never an error message, which may echo a response body. */
@@ -116,9 +119,6 @@ export async function runCalendarDisconnect(
     .update(calendarConnections)
     .set({ status: 'disconnecting', updatedAt: new Date() })
     .where(eq(calendarConnections.id, row.id));
-  const revoke = (await hasSibling(db, row))
-    ? 'skipped_sibling'
-    : await revokeBestEffort(registry, row);
   await db
     .delete(calendarConnections)
     .where(
@@ -127,5 +127,8 @@ export async function runCalendarDisconnect(
         eq(calendarConnections.userId, input.userId),
       ),
     );
+  const revoke = (await accountStillHeld(db, row))
+    ? 'skipped_sibling'
+    : await revokeBestEffort(registry, row);
   return { found: true, revoke };
 }

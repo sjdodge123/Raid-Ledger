@@ -164,6 +164,11 @@ if (!telemetryDisabled && isProduction) {
       }
       return scrubSecrets(event); // ROK-1592: redact tokens/secrets last
     },
+    // ROK-1592: performance transactions (tracesSampleRate) carry request and
+    // span URLs too — e.g. the OAuth callback's `?code=…&state=…`.
+    beforeSendTransaction(event) {
+      return scrubSecrets(event);
+    },
     // Filter out pg_catalog type introspection queries from the Postgres driver.
     // These are normal driver behavior (OID-to-JS type mapping) and trigger
     // false-positive N+1 detections in Sentry.
