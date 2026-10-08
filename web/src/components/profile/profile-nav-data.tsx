@@ -64,14 +64,26 @@ const PREFERENCES_SECTION: NavSection = {
     ],
 };
 
-const GAMING_SECTION: NavSection = {
-    id: 'gaming', label: 'Gaming', icon: GamingIcon,
-    children: [
-        { to: '/profile/gaming/game-time', label: 'Game Time' },
-        { to: '/profile/gaming/characters', label: 'Characters' },
-        { to: '/profile/gaming/watched-games', label: 'Watched Games' },
-    ],
-};
+/** Profile → Calendars (ROK-1594); listed only while the admin kill switch is on. */
+export const CALENDARS_PATH = '/profile/gaming/calendars';
+
+function gamingSection(calendars: boolean): NavSection {
+    return {
+        id: 'gaming', label: 'Gaming', icon: GamingIcon,
+        children: [
+            { to: '/profile/gaming/game-time', label: 'Game Time' },
+            ...(calendars ? [{ to: CALENDARS_PATH, label: 'Calendars' }] : []),
+            { to: '/profile/gaming/characters', label: 'Characters' },
+            { to: '/profile/gaming/watched-games', label: 'Watched Games' },
+        ],
+    };
+}
+
+/** Feature flags that add or hide profile nav entries. */
+export interface ProfileNavOptions {
+    /** Calendar Sync is switched on (`GET /users/me/calendars` → `enabled`). */
+    calendars?: boolean;
+}
 
 const ACCOUNT_SECTION: NavSection = {
     id: 'account', label: 'Account', icon: AccountIcon,
@@ -79,6 +91,9 @@ const ACCOUNT_SECTION: NavSection = {
 };
 
 /** Build profile sidebar navigation sections for the given user (ROK-548). */
-export function getSections(userId: number): NavSection[] {
-    return [identitySection(userId), INTEGRATIONS_SECTION, PREFERENCES_SECTION, GAMING_SECTION, ACCOUNT_SECTION];
+export function getSections(userId: number, options: ProfileNavOptions = {}): NavSection[] {
+    return [
+        identitySection(userId), INTEGRATIONS_SECTION, PREFERENCES_SECTION,
+        gamingSection(options.calendars === true), ACCOUNT_SECTION,
+    ];
 }
