@@ -31,6 +31,8 @@ let service: LfmEmbedService;
 
 beforeEach(async () => {
   service = await createService();
+  // TDB:953 — no conversion stamped after the post unless a case says so.
+  jest.mocked(store).conversionSincePosted.mockResolvedValue(null);
 });
 
 describe('restart reconcile on CONNECTED (D9)', () => {
@@ -111,6 +113,88 @@ describe('restart reconcile on CONNECTED (D9)', () => {
     expect(openRow()).toMatchObject({ messageId: 'msg-1' });
     expect(jest.mocked(store).closeLfmMessage).not.toHaveBeenCalled();
     expect(jest.mocked(store).deleteLfmMessage).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * TDB:953 — a conversion stamped after the row was posted ended ITS group.
+ *
+ * The bug: group A converts while the bot is down, group B for the same game
+ * crosses the floor, and on CONNECTED the live read re-rendered A's message
+ * AS group B — A's conversion was never shown and B never got its own post.
+ * `conversionSincePosted` is the SQL `converted_at > posted_at` lookup (its
+ * predicate is pinned against real Postgres in the integration spec); here it
+ * is the fake store's answer.
+ */
+describe('reconcile after a conversion the bot missed (TDB:953)', () => {
+  it('closes the row as SCHEDULED even though a NEW group is above the floor', async () => {
+    seedOpenRow();
+    const s = jest.mocked(store);
+    s.conversionSincePosted.mockResolvedValue({ eventId: EVENT_ID });
+    s.readConvertedGroup.mockResolvedValue(['Bosco', 'Karl'].map(member));
+    s.readLiveGroup.mockResolvedValue(live(['Doretta', 'Mol', 'Ivan']));
+
+    await service.onConnected();
+
+    expect(edited().author?.name).toBe('■ SCHEDULED · 2 players');
+    expect(rowById('row-1')).toMatchObject({ state: 'converted' });
+    expect(s.conversionSincePosted).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ id: 'row-1', gameId: GAME_ID }),
+    );
+  });
+
+  it('ROK-1494 — a live session still wins over a newer conversion', async () => {
+    seedOpenRow();
+    const s = jest.mocked(store);
+    s.readOpenLfgNowEventId.mockResolvedValue(EVENT_ID);
+    s.readPlayingSession.mockResolvedValue({
+      names: ['Bosco', 'Karl'],
+      count: 2,
+      voiceChannelUrl: 'https://discord.com/channels/guild-1/voice-1',
+    });
+    s.conversionSincePosted.mockResolvedValue({ eventId: EVENT_ID });
+
+    await service.onConnected();
+
+    expect(edited().author?.name).toBe('▸ PLAYING NOW · 2 in voice');
+    expect(openRow()).toMatchObject({ state: 'open' });
+    expect(s.conversionSincePosted).not.toHaveBeenCalled();
+  });
+
+  it('an older conversion (stamped at or before the post) leaves a live group in place', async () => {
+    seedOpenRow();
+    const s = jest.mocked(store);
+    // The SQL lookup excludes a stamp at or before `posted_at`: null.
+    s.conversionSincePosted.mockResolvedValue(null);
+    // A corpse the fallback WOULD return — never consulted above the floor.
+    s.latestConversionTarget.mockResolvedValue({ eventId: EVENT_ID });
+    s.readLiveGroup.mockResolvedValue(live(['Bosco', 'Karl', 'Doretta']));
+
+    await service.onConnected();
+
+    expect(client.editEmbed.mock.calls[0]?.[1]).toBe('msg-1');
+    expect(openRow()).toMatchObject({ state: 'open', lastMemberCount: 3 });
+    expect(s.latestConversionTarget).not.toHaveBeenCalled();
+  });
+
+  it('a legacy conversion (NULL stamp) still closes via the expires_at fallback below the floor', async () => {
+    const row = seedOpenRow();
+    const s = jest.mocked(store);
+    s.conversionSincePosted.mockResolvedValue(null); // NULL never matches
+    s.readLiveGroup.mockResolvedValue(live(['Bosco']));
+    s.latestConversionTarget.mockResolvedValue({ eventId: EVENT_ID });
+    s.readConvertedGroup.mockResolvedValue(['Bosco', 'Karl'].map(member));
+
+    await service.onConnected();
+
+    expect(s.latestConversionTarget).toHaveBeenCalledWith(
+      expect.anything(),
+      GAME_ID,
+      row.postedAt,
+    );
+    expect(edited().author?.name).toBe('■ SCHEDULED · 2 players');
+    expect(rowById('row-1')).toMatchObject({ state: 'converted' });
   });
 });
 

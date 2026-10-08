@@ -31,9 +31,14 @@ import {
   createLineupMatch,
 } from '../../lfg/lfg.integration.spec-helpers';
 import * as schema from '../../drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { convertGroup } from '../../lfg/lfg-write.helpers';
+import { SettingsService } from '../../settings/settings.service';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { LfmEmbedService } from './lfm-embed.service';
 import {
   closeLfmMessage,
+  conversionSincePosted,
   findOpenLfmMessage,
   insertLfmMessage,
   latestConversionTarget,
@@ -44,7 +49,7 @@ import {
   recordLfmRender,
   resolvePollTarget,
 } from './lfm-embed.db-helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -384,5 +389,167 @@ describe('E1 reconcile — live LFM groups with no message', () => {
     await closeLfmMessage(testApp.db, row!.id, 'expired', 2);
 
     await expect(listUntrackedLfmGames(testApp.db)).resolves.toEqual([game.id]);
+  });
+});
+
+/**
+ * Seed a converted intent stamped by the DB clock — `converted_at = now()`,
+ * exactly as every conversion writer stamps it since TDB:953.
+ */
+async function seedStamped(
+  userId: number,
+  gameId: number,
+  eventId: number,
+  expiresAt: Date,
+): Promise<void> {
+  await testApp.db.insert(schema.lfgIntents).values({
+    userId,
+    gameId,
+    status: 'converted',
+    visibility: 'local',
+    expiresAt,
+    convertedToEventId: eventId,
+    convertedAt: sql`now()`,
+  });
+}
+
+/** The game's one open row, which the case needs to exist. */
+async function openRowFor(gameId: number) {
+  const row = await findOpenLfmMessage(testApp.db, gameId);
+  if (!row) throw new Error(`no open LFM row for game ${String(gameId)}`);
+  return row;
+}
+
+describe('converted_at — the provenance stamp the reconcile trusts (TDB:953)', () => {
+  // Every stamp and every `posted_at` below comes from the DB clock, in
+  // statement order — the comparison under test never sees a JS Date.
+  it('conversionSincePosted ignores a conversion stamped BEFORE the post and finds one after', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const oldEvent = await createFutureEvent(testApp, adminToken);
+    const newEvent = await createFutureEvent(testApp, adminToken);
+    const future = new Date(Date.now() + 7 * DAY_MS);
+    // An older group that converted before this message existed — its hands
+    // have NOT expired, so the old `expires_at` bound alone would admit it.
+    await seedStamped(await member('bosco'), game.id, oldEvent, future);
+    await post(game.id, 'msg-1');
+    const row = await openRowFor(game.id);
+
+    await expect(conversionSincePosted(testApp.db, row)).resolves.toBeNull();
+    // A legacy (NULL-stamped) conversion never matches the stamp check.
+    await seedConverted(await member('karl'), game.id, { eventId: newEvent });
+    await expect(conversionSincePosted(testApp.db, row)).resolves.toBeNull();
+
+    await seedStamped(await member('doretta'), game.id, newEvent, future);
+    await expect(conversionSincePosted(testApp.db, row)).resolves.toEqual({
+      eventId: newEvent,
+    });
+  });
+
+  it('latestConversionTarget: a stamp before postedAfter is excluded even while its hands are unexpired', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const eventId = await createFutureEvent(testApp, adminToken);
+    await seedStamped(
+      await member('bosco'),
+      game.id,
+      eventId,
+      new Date(Date.now() + 7 * DAY_MS),
+    );
+
+    // Pre-TDB:953 this returned the corpse: `expires_at > postedAfter` holds.
+    await expect(
+      latestConversionTarget(
+        testApp.db,
+        game.id,
+        new Date(Date.now() + 60 * 60_000),
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('latestConversionTarget keeps the expires_at fallback for a NULL-stamped legacy row', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const eventId = await createFutureEvent(testApp, adminToken);
+    await testApp.db.insert(schema.lfgIntents).values({
+      userId: await member('bosco'),
+      gameId: game.id,
+      status: 'converted',
+      visibility: 'local',
+      expiresAt: new Date(Date.now() + 7 * DAY_MS),
+      convertedToEventId: eventId,
+    });
+
+    await expect(
+      latestConversionTarget(
+        testApp.db,
+        game.id,
+        new Date(Date.now() + 60 * 60_000),
+      ),
+    ).resolves.toEqual({ eventId });
+  });
+});
+
+/**
+ * TDB:953 case (1) — the whole CONNECTED walk against real Postgres.
+ *
+ * Group A's message is posted, A converts through the real `convertGroup`
+ * while no CONNECTED handler runs, and group B forms for the SAME game above
+ * the floor. Discord I/O is stubbed at `DiscordBotClientService`; everything
+ * else — the reconcile, the close, the partial unique index, the untracked
+ * re-post — is the production path.
+ *
+ * Mutation proof: delete the `conversionSincePosted` check from
+ * `reconcileView` and the FIRST assertion fails on the row state —
+ * `Expected: "converted" Received: "open"` — because the live read (B, two
+ * hands) passes the floor and A's message is edited in place as B; with A
+ * still open the index keeps B untracked, so no second post happens either.
+ */
+describe('reconnect after a conversion the bot missed (TDB:953)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('closes the converted group row as SCHEDULED and posts the new group fresh', async () => {
+    const game = await createGame(testApp, 'Deep Rock Galactic');
+    const eventId = await createFutureEvent(testApp, adminToken);
+    await seedActive(await member('bosco'), game.id);
+    await seedActive(await member('karl'), game.id);
+    await post(game.id, 'msg-a');
+    await expect(convertGroup(testApp.db, game.id, { eventId })).resolves.toBe(
+      2,
+    );
+    await seedActive(await member('doretta'), game.id);
+    await seedActive(await member('mol'), game.id);
+
+    const client = testApp.app.get(DiscordBotClientService, { strict: false });
+    jest.spyOn(client, 'isConnected').mockReturnValue(true);
+    jest.spyOn(client, 'getGuildId').mockReturnValue('guild-1');
+    const edit = jest
+      .spyOn(client, 'editEmbed')
+      .mockResolvedValue({ id: 'msg-a' } as never);
+    const send = jest
+      .spyOn(client, 'sendEmbed')
+      .mockResolvedValue({ id: 'msg-b' } as never);
+    jest
+      .spyOn(
+        testApp.app.get(SettingsService, { strict: false }),
+        'getDiscordBotDefaultChannel',
+      )
+      .mockResolvedValue('chan-1');
+
+    await testApp.app.get(LfmEmbedService, { strict: false }).onConnected();
+
+    const rows = await testApp.db
+      .select()
+      .from(schema.lfgGroupMessages)
+      .where(eq(schema.lfgGroupMessages.gameId, game.id));
+    expect(rows.find((r) => r.messageId === 'msg-a')?.state).toBe('converted');
+    expect(edit).toHaveBeenCalledTimes(1);
+    const [, editedId, embed] = at(edit.mock.calls, 0);
+    expect(editedId).toBe('msg-a');
+    expect(embed.data.author?.name).toBe('■ SCHEDULED · 2 players');
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(await findOpenLfmMessage(testApp.db, game.id)).toMatchObject({
+      messageId: 'msg-b',
+      lastMemberCount: 2,
+    });
   });
 });
