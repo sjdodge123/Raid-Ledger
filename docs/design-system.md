@@ -158,6 +158,21 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   (`YouOwnBadge`; `#0f172a` on light, 7.55:1); `brand-fill-forced-white.guard.test.ts` fails the pairing.
 - **Exempt:** `computeHeatmapBg` — an alpha that encodes data cannot be a class.
 
+**Semantic-hue ratchet (TDB:1770, ROK-1586).** `web/src/styles/semantic-hue.guard.test.ts` counts every raw
+`emerald` / `green` / `amber` / `yellow` / `red` / `rose` utility (`text-` `bg-` `border-` `ring-` `fill-` `stroke-`
+`from-` `to-` `via-` `divide-` `outline-` `accent-` `placeholder-` `decoration-`, any shade, any `/NN`) per shipped
+`.ts` / `.tsx` under `web/src` — `*.test.*`, `*.spec.*`, `web/src/test/**` and `web/src/dev/**` excluded, comments
+stripped by `web/src/test/strip-comments.ts` — against `semantic-hue.baseline.json` (`{path: count}` plus `__total`,
+which must equal the sum). It works like the form-primitives guard (§4.11): a file not in the baseline fails, a
+count above its baseline fails, and a count **below** it fails with "lower baseline for <path> to N", so a
+conversion locks in its gain in the same commit. After converting, run `node web/scripts/semantic-hue-baseline.mjs`
+(Node ≥ 22.18 — it imports the guard's own counter, `semantic-hue.count.ts`): it lowers counts and drops emptied
+entries, and refuses a rise or a new file. A file whose hues are **categorical by design** (WoW item quality,
+tooltip and faction colours) is named with a one-line reason in `semantic-hue.categorical.json`; only a listed file
+may enter the baseline, it keeps but never raises its count, and an entry whose file has no raw hue left fails as
+stale. Solid accent button fills (above) stay in the baseline unannotated. **KPI:** `__total` — 1111 raw sites by
+grep on `212790e4d`, 1092 once comments are stripped (the S0 baseline).
+
 Measured `bg-*` use in `web/src/components` (`grep -rhoE "bg-<hue>-[0-9]+" web/src/components
 --include='*.tsx'`, excluding tests):
 
