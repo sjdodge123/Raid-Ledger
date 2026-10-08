@@ -34,14 +34,17 @@ let seq = 0;
 
 async function mkUser(testApp: TestApp) {
   seq += 1;
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `71000000000000${String(seq).padStart(4, '0')}`,
-      username: `pf${seq}`,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `71000000000000${String(seq).padStart(4, '0')}`,
+        username: `pf${seq}`,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   return user;
 }
 
@@ -140,11 +143,14 @@ function mockInteraction(): ButtonInteraction {
 }
 
 async function getSentinel(testApp: TestApp, eventId: number) {
-  const [row] = await testApp.db
-    .select()
-    .from(schema.postEventFollowupSent)
-    .where(eq(schema.postEventFollowupSent.eventId, eventId))
-    .limit(1);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.postEventFollowupSent)
+      .where(eq(schema.postEventFollowupSent.eventId, eventId))
+      .limit(1),
+    'post_event_followup_sent row',
+  );
   return row;
 }
 
