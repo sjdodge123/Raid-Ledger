@@ -31,6 +31,7 @@ import {
   setExpiresAt,
   type LfgIntentResponseDto,
 } from './lfg.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -224,7 +225,7 @@ describe('conversion authority', () => {
 
 describe('conversion request validation', () => {
   it('names the offending field instead of the XOR message (N2)', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Bad Field Game');
     await postIntent(a.token, game.id);
 
@@ -241,7 +242,7 @@ describe('conversion request validation', () => {
   });
 
   it('still reports the XOR rule when neither id is supplied', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'No Field Game');
     await postIntent(a.token, game.id);
 
@@ -255,7 +256,7 @@ describe('conversion request validation', () => {
 
 describe('conversion provenance — missing target', () => {
   it('404s a nonexistent pollId instead of raising an FK 500', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Ghost Poll Game');
     await postIntent(a.token, game.id);
 
@@ -267,7 +268,7 @@ describe('conversion provenance — missing target', () => {
   });
 
   it('404s a nonexistent eventId', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Ghost Event Game');
     await postIntent(a.token, game.id);
 
@@ -279,7 +280,7 @@ describe('conversion provenance — missing target', () => {
 
 describe('conversion provenance — mismatched game', () => {
   it('400s an event that belongs to a different game', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Own Game');
     const other = await createGame(testApp, 'Other Game');
     await postIntent(a.token, game.id);
@@ -295,7 +296,7 @@ describe('conversion provenance — mismatched game', () => {
   });
 
   it('400s a poll that belongs to a different game', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Own Poll Game');
     const other = await createGame(testApp, 'Other Poll Game');
     await postIntent(a.token, game.id);
@@ -311,7 +312,7 @@ describe('conversion provenance — mismatched game', () => {
   });
 
   it('accepts a poll for the route game (positive control)', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Matching Poll Game');
     await postIntent(a.token, game.id);
     const pollId = await createLineupMatch(

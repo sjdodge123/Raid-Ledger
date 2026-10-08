@@ -36,6 +36,7 @@ import {
   type OverlapHour,
   type OverlapWindow,
 } from './lfg-overlap.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Monday 2026-09-07 00:00 UTC — a fixed base keeps every hour key literal. */
 const BASE = Date.UTC(2026, 8, 7);
@@ -223,7 +224,10 @@ describe('groupIntoWindows', () => {
   });
 
   it('carries the supplied roster size as totalCount', () => {
-    const [window] = groupIntoWindows([hour(19, [1, 2])], 5);
+    const [window] = nonEmpty(
+      groupIntoWindows([hour(19, [1, 2])], 5),
+      'window',
+    );
 
     expect(window.availableCount).toBe(2);
     expect(window.totalCount).toBe(5);

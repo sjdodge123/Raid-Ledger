@@ -222,7 +222,7 @@ describe('DiscordNotificationEmbedService — features', () => {
       const rowJson = rows![0].toJSON() as unknown as {
         components: Array<{ customId: string }>;
       };
-      expect(rowJson.components[0].customId).toBe('event_roachout:123');
+      expect(rowJson.components[0]?.customId).toBe('event_roachout:123');
     });
 
     it('should return undefined rows for event_reminder without eventId', async () => {
@@ -394,7 +394,7 @@ describe('DiscordNotificationEmbedService — features', () => {
       const rowJson = rows![0].toJSON() as unknown as {
         components: Array<{ customId: string }>;
       };
-      expect(rowJson.components[0].customId).toBe('event_roachout:77');
+      expect(rowJson.components[0]?.customId).toBe('event_roachout:77');
     });
   });
 

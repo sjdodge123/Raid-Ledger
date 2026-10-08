@@ -25,6 +25,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { RecruitmentReminderService } from './recruitment-reminder.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 const TEST_GUILD_ID = 'guild-test-1335';
 const CHANNEL_A = 'channel-stale-A';
@@ -83,17 +84,20 @@ async function seedEventWithStaleChannel(): Promise<{ eventId: number }> {
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
   const createdAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
 
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Stale-channel raid',
-      creatorId,
-      gameId,
-      duration: [start, end] as [Date, Date],
-      maxAttendees: 20,
-      createdAt,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Stale-channel raid',
+        creatorId,
+        gameId,
+        duration: [start, end] as [Date, Date],
+        maxAttendees: 20,
+        createdAt,
+      })
+      .returning(),
+    'event',
+  );
 
   await testApp.db.insert(schema.discordEventMessages).values({
     eventId: event.id,
@@ -132,9 +136,10 @@ describe('RecruitmentReminderService — bindings-change channel routing (ROK-13
     // change. We verify the row still exists with CHANNEL_A so a future
     // refactor that moves the persistence target along with the send
     // target trips a clear signal here.
-    const [demRow] = await testApp.db
-      .select()
-      .from(schema.discordEventMessages);
+    const [demRow] = nonEmpty(
+      await testApp.db.select().from(schema.discordEventMessages),
+      'demRow',
+    );
     expect(demRow.eventId).toBe(eventId);
     expect(demRow.channelId).toBe(CHANNEL_A);
     // The bumpChannelId column records the channel the bump was ACTUALLY

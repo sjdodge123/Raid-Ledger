@@ -128,7 +128,7 @@ async function buildModule(opts: {
 }
 
 describe('EventReminderService — voice suppression (ROK-842)', () => {
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;

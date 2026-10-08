@@ -40,13 +40,13 @@ describe('timedPhase', () => {
       Promise.resolve(undefined),
     );
 
-    expect(perfLogMock.mock.calls[0][3]).toEqual({ events: 3 });
+    expect(perfLogMock.mock.calls[0]?.[3]).toEqual({ events: 3 });
   });
 
   it('reports a non-negative duration', async () => {
     await timedPhase('loadSettings', {}, () => Promise.resolve('UTC'));
 
-    expect(perfLogMock.mock.calls[0][2]).toBeGreaterThanOrEqual(0);
+    expect(perfLogMock.mock.calls[0]?.[2]).toBeGreaterThanOrEqual(0);
   });
 
   it('still times a phase that throws, and re-throws it', async () => {
@@ -58,7 +58,7 @@ describe('timedPhase', () => {
 
     // The failure must not swallow its own duration.
     expect(perfLogMock).toHaveBeenCalledTimes(1);
-    expect(perfLogMock.mock.calls[0][1]).toBe(
+    expect(perfLogMock.mock.calls[0]?.[1]).toBe(
       'EventReminderService_fetchCandidateEvents',
     );
   });

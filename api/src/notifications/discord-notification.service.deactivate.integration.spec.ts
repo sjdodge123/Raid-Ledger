@@ -24,6 +24,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { and, eq } from 'drizzle-orm';
 import { DiscordNotificationService } from './discord-notification.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -210,11 +211,14 @@ describe('DiscordNotificationService.deactivateUser() — integration (ROK-1260)
       service as unknown as { deactivateUser: (id: number) => Promise<void> }
     ).deactivateUser(member.id);
 
-    const [row] = await testApp.db
-      .select({ status: schema.eventSignups.status })
-      .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.id, pastSignup.id))
-      .limit(1);
+    const [row] = nonEmpty(
+      await testApp.db
+        .select({ status: schema.eventSignups.status })
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.id, pastSignup.id))
+        .limit(1),
+      'row',
+    );
     expect(row.status).toBe('going');
   });
 

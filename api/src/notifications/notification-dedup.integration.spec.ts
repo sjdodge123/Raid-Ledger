@@ -54,7 +54,7 @@ describe('Notification Dedup (integration)', () => {
       `);
 
       expect(result.length).toBe(1);
-      expect(result[0].tablename).toBe('notification_dedup');
+      expect(result[0]?.tablename).toBe('notification_dedup');
     });
   });
 

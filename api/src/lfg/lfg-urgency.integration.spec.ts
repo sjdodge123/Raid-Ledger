@@ -34,6 +34,7 @@ import {
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
 import { listLiveNowHands } from '../discord-bot/lfg-now/lfg-now-spawn.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 /**
  * The week horizon expressed the way every assertion below measures — in
@@ -123,7 +124,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // (`packages/contract/src/lfg.schema.ts`) and this fails on the VALUE —
   // `urgency` comes back undefined — not on a parse throw.
   it('keeps a body of just gameId on the 7-day week horizon', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
 
     const res = await postIntent(a.token, game.id);
@@ -138,7 +139,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // MUTATION: make `resolveIntentHorizon` fall through to `computeExpiresAt`
   // for `now` and this fails reporting 10080 minutes instead of 30.
   it('gives a now request with no ttlMinutes the 30-minute horizon', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
 
     const res = await postIntent(a.token, game.id, { urgency: 'now' });
@@ -152,7 +153,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // MUTATION: hard-code `LFG_DEFAULT_NOW_TTL_MINUTES` in `resolveIntentHorizon`
   // instead of reading `opts.ttlMinutes` and this fails 30-vs-60.
   it('honours an explicit 60-minute ttl', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
 
     const res = await postIntent(a.token, game.id, {
@@ -170,7 +171,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // hand back a 7-day intent the caller believes lapses in an hour.
   // MUTATION: delete the `.superRefine` block and this fails 201-vs-400.
   it('rejects ttlMinutes on a week request with a field error', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
 
     const res = await postIntent(a.token, game.id, {
@@ -188,7 +189,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   });
 
   it('rejects an unknown urgency value', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
 
     // ROK-1616: this case used `'tonight'` as its unknown value, which became
@@ -205,7 +206,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // MUTATION: revert `LfgUrgencySchema` to `['week','now']` and this fails
   // 400-vs-201.
   it('accepts a tonight request and dates it to the next 4am, ttl null', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
 
     const res = await postIntent(a.token, game.id, { urgency: 'tonight' });
@@ -247,7 +248,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
   // MUTATION: change the superRefine guard back to `=== 'week'` and this
   // fails 201-vs-400.
   it('rejects ttlMinutes on a tonight request with a field error', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
 
     const res = await postIntent(a.token, game.id, {
@@ -271,7 +272,7 @@ describe('AC2 — bump, never a second row', () => {
   // fails on the DATE comparison (10080 minutes, not 30), which is the point —
   // the row count would still be 1, so a count-only assertion proves nothing.
   it('shortens the caller own row to the now horizon and answers 200', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
     const week = (await postIntent(a.token, game.id))
       .body as LfgIntentResponseDto;
@@ -300,7 +301,7 @@ describe('AC2 — bump, never a second row', () => {
   // MUTATION: restrict the bump to `opts.urgency === 'now'` and this fails
   // reporting 30 minutes where 10080 (7 days) was expected.
   it('lengthens the same row back to 7 days when the caller picks week again', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
     const first = (await postIntent(a.token, game.id, { urgency: 'now' }))
       .body as LfgIntentResponseDto;
@@ -329,7 +330,7 @@ describe('AC3 — expiry and re-hearting', () => {
   // MUTATION: drop the `gt(expiresAt, now)` term from `liveIntent`
   // (`lfg-query.helpers.ts`) and both reads below come back populated.
   it('drops a lapsed now intent out of GET /lfg and the group read BEFORE the sweep', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
     const intent = (await postIntent(a.token, game.id, { urgency: 'now' }))
       .body as LfgIntentResponseDto;
@@ -351,7 +352,7 @@ describe('AC3 — expiry and re-hearting', () => {
   // MUTATION: replace `expireStaleIntents`'s `expires_at <= now()` with a
   // 7-day literal and this fails on the status ('active', not 'expired').
   it('flips the lapsed row to expired and announces the game exactly once', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
     const intent = (await postIntent(a.token, game.id, { urgency: 'now' }))
       .body as LfgIntentResponseDto;
@@ -377,7 +378,7 @@ describe('AC3 — expiry and re-hearting', () => {
   // MUTATION: make `expireStaleIntents` leave `status` alone and this fails
   // 200-vs-201, because the stale active row would still win the index.
   it('re-hearts into a live row after the sweep', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Deep Rock');
     const intent = (await postIntent(a.token, game.id, { urgency: 'now' }))
       .body as LfgIntentResponseDto;

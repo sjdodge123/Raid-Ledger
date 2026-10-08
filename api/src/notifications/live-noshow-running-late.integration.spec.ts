@@ -16,6 +16,7 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { LiveNoShowService } from './live-noshow.service';
 import { ActiveEventCacheService } from '../events/active-event-cache.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 const MIN = 60 * 1000;
 
@@ -101,15 +102,18 @@ async function markPhase1Reminded(
 
 /** Move a user's signup to the bench (a `roster_assignments` bench row). */
 async function benchSignup(testApp: TestApp, eventId: number, userId: number) {
-  const [signup] = await testApp.db
-    .select({ id: schema.eventSignups.id })
-    .from(schema.eventSignups)
-    .where(
-      and(
-        eq(schema.eventSignups.eventId, eventId),
-        eq(schema.eventSignups.userId, userId),
+  const [signup] = nonEmpty(
+    await testApp.db
+      .select({ id: schema.eventSignups.id })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.userId, userId),
+        ),
       ),
-    );
+    'signup',
+  );
   await testApp.db
     .insert(schema.rosterAssignments)
     .values({ eventId, signupId: signup.id, role: 'bench' });

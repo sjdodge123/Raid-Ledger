@@ -30,6 +30,7 @@ import {
   LFG_NOW_TTL_MINUTES,
   computeNowExpiresAt,
 } from './lfg.constants';
+import { nonEmpty } from '../common/testing/narrow';
 
 const MINUTE_MS = 60 * 1000;
 const DAY_MS = 24 * 60 * MINUTE_MS;
@@ -131,7 +132,7 @@ describe('insertIntent', () => {
         urgency: 'now',
         ttlMinutes: ttlMinutes as 30 | 60,
       });
-      const [values] = writtenPayloads(mockDb.values);
+      const [values] = nonEmpty(writtenPayloads(mockDb.values), 'values');
       expect(values.urgency).toBe('now');
       expect(values.ttlMinutes).toBe(ttlMinutes);
       expect(horizonsFrom(mockDb.values)).toEqual([expected]);
@@ -140,7 +141,7 @@ describe('insertIntent', () => {
 
   it('treats a now intent with no explicit TTL as 30 minutes', async () => {
     await insertIntent(mockDb as unknown as LfgDb, 11, 22, { urgency: 'now' });
-    const [values] = writtenPayloads(mockDb.values);
+    const [values] = nonEmpty(writtenPayloads(mockDb.values), 'values');
     expect(values.ttlMinutes).toBe(30);
     expect(horizonsFrom(mockDb.values)).toEqual([30 * MINUTE_MS]);
   });
@@ -163,7 +164,7 @@ describe('reviveIntent', () => {
       urgency: 'now',
       ttlMinutes: 60,
     });
-    const [set] = writtenPayloads(mockDb.set);
+    const [set] = nonEmpty(writtenPayloads(mockDb.set), 'set');
     expect(set.urgency).toBe('now');
     expect(set.ttlMinutes).toBe(60);
     expect(horizonsFrom(mockDb.set)).toEqual([60 * MINUTE_MS]);
@@ -194,7 +195,7 @@ describe('bumpIntentUrgency', () => {
       ttlMinutes: 30,
     });
     expect(result).not.toBeNull();
-    const [set] = writtenPayloads(mockDb.set);
+    const [set] = nonEmpty(writtenPayloads(mockDb.set), 'set');
     expect(set.urgency).toBe('now');
     expect(set.ttlMinutes).toBe(30);
     expect(horizonsFrom(mockDb.set)).toEqual([30 * MINUTE_MS]);

@@ -30,6 +30,7 @@ import {
   readIntentsForGame,
   setExpiresAt,
 } from './lfg.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -321,10 +322,13 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
     expect(await rosterByUser(eventId)).toEqual(
       everyone.map((id) => [id, 'player']),
     );
-    const [event] = await testApp.db
-      .select({ slotConfig: schema.events.slotConfig })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId));
+    const [event] = nonEmpty(
+      await testApp.db
+        .select({ slotConfig: schema.events.slotConfig })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId)),
+      'event',
+    );
     expect(event.slotConfig).toEqual({ type: 'generic', player: 10 });
   });
 });

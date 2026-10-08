@@ -46,6 +46,7 @@ import {
   type LfgHeartedGameDto,
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -167,7 +168,7 @@ describe('LFG → LFM transition', () => {
   });
 
   it('re-posting an active intent returns the existing row without duplicating it', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Valheim');
 
     const created = await postIntent(a.token, game.id);
@@ -182,7 +183,7 @@ describe('LFG → LFM transition', () => {
   });
 
   it('returns 200 with an empty derived group for a game nobody is looking for', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Lonely Game');
 
     const res = await getGroup(a.token, game.id);
@@ -197,7 +198,7 @@ describe('LFG → LFM transition', () => {
   });
 
   it('404s a POST for a game that does not exist', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     // Positive control: the same route must succeed for a real game, so a
     // 404 here proves the game lookup — not a missing route.
     const real = await createGame(testApp, 'Real Game');
@@ -249,7 +250,7 @@ describe('+1 expiry refresh', () => {
   });
 
   it('does NOT refresh the group clock on a re-post by an existing holder', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Grounded');
 
     const intent = (await postIntent(a.token, game.id))
@@ -265,7 +266,7 @@ describe('+1 expiry refresh', () => {
   });
 
   it('revives a stale intent in place rather than inserting a duplicate', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Terraria');
 
     const intent = (await postIntent(a.token, game.id))
@@ -278,14 +279,14 @@ describe('+1 expiry refresh', () => {
 
     const rows = await readIntentsForGame(testApp, game.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('active');
+    expect(rows[0]?.status).toBe('active');
     expect(daysFromNow(rows[0].expires_at)).toBeGreaterThan(
       LFG_EXPIRY_DAYS - 1,
     );
   });
 
   it('stores visibility as local and never honours a client-supplied value', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Relay Game');
 
     const plain = await postIntent(a.token, game.id);
@@ -294,7 +295,7 @@ describe('+1 expiry refresh', () => {
       'local',
     );
 
-    const [b] = await members('bravo');
+    const [b] = nonEmpty(await members('bravo'), 'b');
     const smuggled = await postIntent(b.token, game.id, {
       visibility: 'cross-community',
     });
@@ -316,7 +317,7 @@ describe('+1 expiry refresh', () => {
 
 describe('event-signup clearing', () => {
   it('clears the signer intent for the event game and leaves other games alone', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const target = await createGame(testApp, 'Signup Game');
     const other = await createGame(testApp, 'Untouched Game');
     await postIntent(a.token, target.id);
@@ -345,7 +346,7 @@ describe('event-signup clearing', () => {
   });
 
   it('leaves intents alone when the signed-up event has no game', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Gameless Event Game');
     await postIntent(a.token, game.id);
 
@@ -431,7 +432,7 @@ describe('expiry cron', () => {
 
 describe('concurrency guard', () => {
   it('yields exactly one row when the same user double-posts in flight', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Race Game');
 
     const [r1, r2] = await Promise.all([
@@ -446,7 +447,7 @@ describe('concurrency guard', () => {
 
     const rows = await readIntentsForGame(testApp, game.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('active');
+    expect(rows[0]?.status).toBe('active');
     expect((await getGroup(a.token, game.id)).body).toMatchObject({
       activeCount: 1,
       state: 'lfg',
@@ -483,7 +484,7 @@ describe('conversion', () => {
   });
 
   it('is idempotent — a second convert reports zero converted, not an error', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Twice Game');
     await postIntent(a.token, game.id);
     const eventId = await createFutureEvent(testApp, adminToken, {
@@ -502,7 +503,7 @@ describe('conversion', () => {
   });
 
   it('400s when neither or both of pollId/eventId are supplied', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const game = await createGame(testApp, 'Bad Body Game');
     await postIntent(a.token, game.id);
     const eventId = await createFutureEvent(testApp, adminToken, {
@@ -597,7 +598,7 @@ describe('DELETE /lfg/:gameId', () => {
   });
 
   it('404s when the caller holds no active intent for the game', async () => {
-    const [a] = await members('alpha');
+    const [a] = nonEmpty(await members('alpha'), 'a');
     const held = await createGame(testApp, 'Held Game');
     const notHeld = await createGame(testApp, 'Nothing To Withdraw');
     await postIntent(a.token, held.id);

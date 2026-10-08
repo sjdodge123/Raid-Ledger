@@ -49,7 +49,7 @@ function makeSelectFromJoinWhere(resolvedValue: unknown[]) {
 
 describe('LiveNoShowService — phase2', () => {
   let service: LiveNoShowService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;
@@ -416,7 +416,7 @@ describe('LiveNoShowService — phase2', () => {
         payload: { absentPlayers: Array<{ role: string | null }> };
       };
       expect(callArg.message).toContain('Healer');
-      expect(callArg.payload.absentPlayers[0].role).toBe('Healer');
+      expect(callArg.payload.absentPlayers[0]?.role).toBe('Healer');
     });
 
     it('should handle null role gracefully in Phase 2 message', async () => {

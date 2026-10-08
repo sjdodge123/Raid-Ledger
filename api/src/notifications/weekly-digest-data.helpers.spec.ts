@@ -26,6 +26,7 @@ import {
   type DigestSections,
   type DigestSources,
 } from './weekly-digest-data.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 function game(id: number, extra: Partial<GameDetailDto> = {}): GameDetailDto {
   return {
@@ -136,7 +137,10 @@ describe('shapeDeals', () => {
 
 describe('shapeLfg', () => {
   it('projects viewer-independent fields only — never hasOwnIntent', () => {
-    const [line] = shapeLfg([group({ hasOwnIntent: true })]).items;
+    const [line] = nonEmpty(
+      shapeLfg([group({ hasOwnIntent: true })]).items,
+      'line',
+    );
     expect(Object.keys(line).sort()).toEqual([
       'activeCount',
       'gameName',

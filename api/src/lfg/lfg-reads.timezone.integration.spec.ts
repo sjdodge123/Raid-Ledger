@@ -30,6 +30,7 @@ import {
   zonedParts,
   type LfgOverlapResponseDto,
 } from './lfg-reads.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** UTC-4/-5 — a 20:00 local block lands on the NEXT UTC calendar day. */
 const NEW_YORK = 'America/New_York';
@@ -125,9 +126,12 @@ async function pairInZone(timeZone: string, gameName: string) {
 describe('GET /lfg/:gameId/overlap — member timezones (C1)', () => {
   it('projects a local 20:00 block onto the matching UTC instant', async () => {
     const { game, a } = await pairInZone(NEW_YORK, 'Local Hour Game');
-    const [firstDate] = eligibleLocalDates(NEW_YORK);
+    const [firstDate] = nonEmpty(eligibleLocalDates(NEW_YORK), 'firstDate');
 
-    const [window] = (await overlapOf(a.token, game.id)).windows;
+    const [window] = nonEmpty(
+      (await overlapOf(a.token, game.id)).windows,
+      'window',
+    );
 
     expect(new Date(window.start).getTime()).toBe(
       instantOfLocalHour(firstDate, BLOCK_HOUR, NEW_YORK).getTime(),
