@@ -21,6 +21,7 @@ import {
   pollHeartRecipientIds,
 } from '../standalone-poll/standalone-poll-voter.helpers';
 import { createDrizzleMock } from '../../common/testing/drizzle-mock';
+import { at } from '../../common/testing/narrow';
 
 jest.mock('./scheduling-query.helpers');
 jest.mock('./scheduling-auto-signup.helpers');
@@ -115,9 +116,9 @@ describe('createLockedInEvent — the roster is yes-voters only (BLOCKER-1)', ()
       false,
     );
 
-    const signedUp = mockAutoSignup.mock.calls[0][0].voters;
+    const signedUp = at(mockAutoSignup.mock.calls, 0)[0].voters;
     expect(signedUp.map((v) => v.userId)).toEqual([10, 12]);
-    const hearted = mockAutoHeart.mock.calls[0][2];
+    const hearted = at(mockAutoHeart.mock.calls, 0)[2];
     expect(hearted.map((v) => v.userId)).toEqual([10, 12]);
   });
 });

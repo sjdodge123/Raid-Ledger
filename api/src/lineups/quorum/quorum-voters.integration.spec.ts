@@ -79,17 +79,20 @@ describe('quorum voter resolution (ROK-1150)', () => {
     status: 'building' | 'voting',
     phaseDeadline: Date | null,
   ): Promise<LineupRow> {
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Quorum Test',
-        createdBy: creator,
-        visibility,
-        status,
-        phaseDeadline,
-        publicSlug: Math.random().toString(36).slice(2, 12),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Quorum Test',
+          createdBy: creator,
+          visibility,
+          status,
+          phaseDeadline,
+          publicSlug: Math.random().toString(36).slice(2, 12),
+        })
+        .returning(),
+      'lineup',
+    );
     return lineup;
   }
 

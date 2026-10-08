@@ -6,6 +6,7 @@ import {
   buildMatchDetailDto,
   deriveIsStandalone,
 } from './scheduling-response.helpers';
+import { at } from '../../common/testing/narrow';
 
 const baseMatch = {
   id: 10,
@@ -138,7 +139,7 @@ describe('buildPollResponse — avatar fields in votes (ROK-1014)', () => {
       false,
     );
 
-    const aliceVote = result.slots[0].votes.find((v) => v.userId === 100);
+    const aliceVote = at(result.slots, 0).votes.find((v) => v.userId === 100);
     expect(aliceVote).toBeDefined();
     expect(aliceVote).toHaveProperty('avatar', 'abc123hash');
     expect(aliceVote).toHaveProperty('discordId', '123456789012345678');
@@ -159,7 +160,7 @@ describe('buildPollResponse — avatar fields in votes (ROK-1014)', () => {
       false,
     );
 
-    const bobVote = result.slots[0].votes.find((v) => v.userId === 101);
+    const bobVote = at(result.slots, 0).votes.find((v) => v.userId === 101);
     expect(bobVote).toBeDefined();
     expect(bobVote).toHaveProperty('avatar', null);
     expect(bobVote).toHaveProperty('discordId', null);
@@ -366,7 +367,7 @@ describe('distinct answerers of a slot (ROK-1617)', () => {
       false,
     );
 
-    const slot = res.slots[0];
+    const slot = at(res.slots, 0);
     // Supporters — what "picked this time" means.
     expect(slot.votes.map((v) => v.userId)).toEqual([100, 101]);
     // Answerers — what "have voted" means. The `no` is not dropped on the

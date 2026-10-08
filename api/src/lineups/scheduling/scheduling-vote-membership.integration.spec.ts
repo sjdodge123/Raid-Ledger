@@ -27,7 +27,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 describe('Scheduling poll voting — open-roster member enrollment (integration)', () => {
   let testApp: TestApp;
@@ -257,11 +257,11 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const afterFlip = await voteRows(voter.id);
     expect(afterFlip).toHaveLength(1);
-    expect(afterFlip[0].slotId).toBe(slotId);
+    expect(at(afterFlip, 0).slotId).toBe(slotId);
     expect(afterFlip[0]?.stance).toBe('no');
     // Answering "that time does not work" is still an answer.
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).not.toBeNull();
 
     // Pressing "no" again is the misclick escape hatch: back to not-answered.
@@ -312,7 +312,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
 
     const rows = await memberRows(matchId, voter.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].schedulingSubmittedAt).not.toBeNull();
+    expect(at(rows, 0).schedulingSubmittedAt).not.toBeNull();
   });
 
   it('a second vote does NOT re-stamp — the stamp marks the first answer', async () => {
@@ -331,7 +331,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     );
 
     await postVote(voter.token, lineupId, matchId, slotId);
-    const [first] = await memberRows(matchId, voter.id);
+    const [first] = nonEmpty(await memberRows(matchId, voter.id), 'first');
     expect(first.schedulingSubmittedAt).not.toBeNull();
 
     await postVote(voter.token, lineupId, matchId, slot2.id);
@@ -360,14 +360,14 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     // One of two withdrawn — they still have an answer on record.
     await postVote(voter.token, lineupId, matchId, slot2.id);
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).not.toBeNull();
 
     // The last one withdrawn — back to "has not answered".
     const off = await postVote(voter.token, lineupId, matchId, slotId);
     expect(off.body).toEqual({ voted: false, stance: null });
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).toBeNull();
   });
 
@@ -381,7 +381,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
       .set('Authorization', `Bearer ${voter.token}`);
     expect(res.status).toBeLessThan(300);
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).toBeNull();
   });
 
@@ -396,7 +396,7 @@ describe('Scheduling poll voting — open-roster member enrollment (integration)
     expect(res.status).toBe(201);
 
     expect(
-      (await memberRows(matchId, voter.id))[0].schedulingSubmittedAt,
+      at(await memberRows(matchId, voter.id), 0).schedulingSubmittedAt,
     ).not.toBeNull();
   });
 

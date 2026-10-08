@@ -25,7 +25,7 @@ import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.se
 import { SettingsService } from '../../settings/settings.service';
 import { LINEUP_MATCH_EVENTS } from '../lineups-scheduling-hook.helpers';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { defined, nonEmpty } from '../../common/testing/narrow';
 
 const CHANNEL = 'test-channel-1473';
 const MESSAGE_ID = 'mock-msg-1473';
@@ -295,7 +295,7 @@ function describeSchedulingPollCard() {
     // Give the fire-and-forget listener room to misbehave before asserting.
     await new Promise((r) => setTimeout(r, 500));
 
-    const match = await loadMatch(lineupId);
+    const match = defined(await loadMatch(lineupId), 'match');
     expect(match.status).toBe('scheduling');
     expect(pollCardSends(lineupId, match.id)).toHaveLength(0);
     expect(match.embedMessageId).toBeNull();

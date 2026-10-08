@@ -30,7 +30,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 interface SubmissionRow extends Record<string, unknown> {
   lineup_id: number;
@@ -182,7 +182,7 @@ function describeLineupSubmit() {
     await advanceToVoting(lineupId, adminToken);
 
     // Cast at least one real vote so the user is a meaningful participant.
-    await vote(member.token, lineupId, games[0].id);
+    await vote(member.token, lineupId, at(games, 0).id);
 
     const submitRes = await testApp.request
       .post(`/lineups/${lineupId}/submit-votes`)

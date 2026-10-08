@@ -277,7 +277,7 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
         .where(eq(schema.communityLineupScheduleSlots.id, slotId)),
       'slot',
     );
-    const [dm] = await ralliesFor(silent.id);
+    const [dm] = nonEmpty(await ralliesFor(silent.id), 'rally DM');
     expect(dm).toBeDefined();
     expect(dm.type).toBe('community_lineup');
     expect(dm.payload).toMatchObject({
@@ -523,10 +523,15 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     const res = await postRally(creator.token, lineupId, matchId);
     expect(res.status).toBe(200);
 
-    const [row] = await testApp.db
-      .select()
-      .from(schema.notificationDedup)
-      .where(eq(schema.notificationDedup.dedupKey, rallyCooldownKey(matchId)));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.notificationDedup)
+        .where(
+          eq(schema.notificationDedup.dedupKey, rallyCooldownKey(matchId)),
+        ),
+      'cooldown row',
+    );
     expect(row).toBeDefined();
     const elapsedMs = Date.now() - before;
     const ttlMs = new Date(row.expiresAt as Date).getTime() - before;
@@ -721,7 +726,7 @@ describe('Scheduling poll rally (integration, ROK-1618)', () => {
     // who already answered the leader.
     expect(res.body).toMatchObject({ pending: 2, nudged: 2, skipped: 0 });
     for (const m of [answered, silent]) {
-      const [dm] = await ralliesFor(m.id);
+      const [dm] = nonEmpty(await ralliesFor(m.id), 'rally DM');
       expect(dm).toBeDefined();
       expect(dm.payload).toMatchObject({ slotId: underdog });
       // The 0-yes opening: "0 of 3 picked …" reads as a bug.

@@ -35,7 +35,7 @@ import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { archiveAndNotifyCancel } from './scheduling-cancel.helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)', () => {
   let testApp: TestApp;
@@ -184,7 +184,7 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
     for (const voter of [voter1, voter2]) {
       const notifs = await findCancelNotifications(voter.id);
       expect(notifs).toHaveLength(1);
-      const n = notifs[0];
+      const n = at(notifs, 0);
       expect(n.payload).toMatchObject({
         subtype: 'scheduling_poll_cancelled',
         matchId,
@@ -221,7 +221,7 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
 
     const notifs = await findCancelNotifications(voter.id);
     expect(notifs).toHaveLength(1);
-    const n = notifs[0];
+    const n = at(notifs, 0);
     expect(n.message).not.toMatch(/Reason:/i);
     expect(n.message).toContain(testApp.seed.game.name);
     expect((n.payload as { reason?: unknown }).reason).toBeNull();
@@ -240,8 +240,8 @@ describe('Cancel scheduling poll — voter notifications (integration, ROK-1219)
 
     const notifs = await findCancelNotifications(voter.id);
     expect(notifs).toHaveLength(1);
-    expect(notifs[0].message).not.toMatch(/Reason:/i);
-    expect((notifs[0].payload as { reason?: unknown }).reason).toBeNull();
+    expect(at(notifs, 0).message).not.toMatch(/Reason:/i);
+    expect((at(notifs, 0).payload as { reason?: unknown }).reason).toBeNull();
   });
 
   // ── AC6 — reason > 500 chars rejected with 400 ────────────────────

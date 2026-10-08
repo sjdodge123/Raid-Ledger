@@ -195,10 +195,13 @@ describe('Scheduling poll manual remind (integration, ROK-1395)', () => {
     await castScheduleVote(slotId, voter.id);
 
     // The poll this feature exists for: no deadline → crons never fire.
-    const [lineup] = await testApp.db
-      .select({ phaseDeadline: schema.communityLineups.phaseDeadline })
-      .from(schema.communityLineups)
-      .where(eq(schema.communityLineups.id, lineupId));
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .select({ phaseDeadline: schema.communityLineups.phaseDeadline })
+        .from(schema.communityLineups)
+        .where(eq(schema.communityLineups.id, lineupId)),
+      'lineup',
+    );
     expect(lineup.phaseDeadline).toBeNull();
 
     const res = await postRemind(creator.token, lineupId, matchId);

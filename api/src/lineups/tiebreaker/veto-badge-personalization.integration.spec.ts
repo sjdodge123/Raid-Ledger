@@ -32,14 +32,17 @@ function describeVetoBadges() {
   async function insertGame(
     overrides: Partial<typeof schema.games.$inferInsert> = {},
   ): Promise<typeof schema.games.$inferSelect> {
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({
-        name: 'ROK-1314 Veto Game',
-        slug: `rok1314-veto-${Date.now()}-${Math.random()}`,
-        ...overrides,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'ROK-1314 Veto Game',
+          slug: `rok1314-veto-${Date.now()}-${Math.random()}`,
+          ...overrides,
+        })
+        .returning(),
+      'game',
+    );
     return game;
   }
 
@@ -84,16 +87,19 @@ function describeVetoBadges() {
         .returning(),
       'lineup',
     );
-    const [tb] = await testApp.db
-      .insert(schema.communityLineupTiebreakers)
-      .values({
-        lineupId: lineup.id,
-        mode: 'veto',
-        status: 'pending',
-        tiedGameIds,
-        originalVoteCount: 2,
-      })
-      .returning();
+    const [tb] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupTiebreakers)
+        .values({
+          lineupId: lineup.id,
+          mode: 'veto',
+          status: 'pending',
+          tiedGameIds,
+          originalVoteCount: 2,
+        })
+        .returning(),
+      'tiebreaker',
+    );
     return tb;
   }
 

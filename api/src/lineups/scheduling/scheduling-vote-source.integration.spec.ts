@@ -25,7 +25,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 describe('Schedule vote provenance (integration)', () => {
   let testApp: TestApp;
@@ -247,7 +247,7 @@ describe('Schedule vote provenance (integration)', () => {
       // Only the seeded slot survives, and it carries no vote.
       const slots = await slotRows(poll.matchId);
       expect(slots).toHaveLength(1);
-      expect(slots[0].id).toBe(poll.slotId);
+      expect(at(slots, 0).id).toBe(poll.slotId);
       expect(await voteRows(poll.slotId)).toHaveLength(0);
     });
   });
