@@ -11,6 +11,7 @@ export const HEART_PATH =
 export function getRatingClasses(rating: number): string {
     if (rating >= 75) return 'bg-success text-white';
     if (rating >= 50) return 'bg-yellow-500/90 text-black';
-    return 'bg-red-500/90 text-white';
+    // red-700 (Tailwind v4 #c10007): white is ~6.4:1 in both families; red-500/90 was ~3.4:1 (TDB:2052).
+    return 'bg-red-700 text-white';
 }
 

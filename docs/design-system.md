@@ -87,9 +87,10 @@ MUST keep all three green — a token edit that turns one red is not done, not "
 | `--color-slot` | `border-slot` `outline-slot` | `#22d3ee` | `#0e7490` | A time someone already proposed in a poll (ROK-1587/1588) |
 | `--color-success` | `bg-success` `text-success` `border-success` `ring-success` … | `#10b981` | `#065f46` | Free / confirmed / "on" / primary state (ROK-1586). Light is emerald-800 (TDB:1793, operator ruling D:1714): 7.68 surface / 7.01 panel / 6.02 own /10 tint, and AA on every tinted light scheme's own panel and tint (worst celestial 5.69 / 4.91) — `semantic-tokens.guard.test.ts` |
 | `--color-warning` | `bg-warning` `text-warning` `border-warning` … | `#f59e0b` | `#92400e` | Partial agreement, needs attention, admin (ROK-1586) |
-| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#ef4444` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586) |
+| `--color-danger` | `bg-danger` `text-danger` `border-danger` … | `#f87171` | `#b91c1c` | Conflict, destructive, "few free" (ROK-1586). Dark is red-400 so it reads as text: 5.29 panel / 6.45 surface (TDB:1770 ruling 2026-10-08; red-500 `#ef4444` was 3.89 on panel); white on a solid dark fill is 2.77:1, so a solid `bg-danger` label takes `--color-status-solid-label`. celestial and quest-log declare their own light danger, red-800 `#991b1b` — 5.25 / 5.58 on their own /10 tint (shared `#b91c1c` was 4.12 / 4.39 there; TDB:1770) |
+| `--color-status-solid-label` | never written directly — `index.css:858-869` paints it on `bg-success` / `bg-warning` / `bg-danger` + `text-white` | `#0f172a` | `#ffffff` | The label on a SOLID status fill (TDB:2052, ruling 2026-10-08): dark 7.04 / 8.31 / 6.45:1 (white was 2.54 / 2.15 / 2.77), light 7.68 / 7.09 / 6.47:1. A custom property, so a scoped `data-scheme="light"` subtree under a dark root pairs its light fills with white |
 
-**The accent rows** (`@theme` `index.css:50-62`, shared light block `:114-125`) are declared in those two
+**The accent rows** (`@theme` `index.css:50-66`, shared light block `:118-130`) are declared in those two
 blocks only — see checklist item 7. The dark values are the Tailwind shades they replaced
 (emerald-500 / amber-500 / red-500). The light values are darker than the `-600` the old
 `.text-*-400` overrides use, because `-600` fails WCAG AA for small text: on `#ffffff`
@@ -133,12 +134,12 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   alpha. The raw hues only have light mappings for the alphas hand-listed in `index.css` —
   `bg-amber-500/70` had none; `bg-warning/70` needs none.
 - **DON'T** tokenise a **solid accent button fill.** `bg-emerald-600` / `bg-red-600` stay raw because
-  `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:832-840`)
+  `index.css` keys two light-family rules to those class names: the forced-white label (`index.css:840-848`)
   and, for `bg-emerald-600`, the primary repaint — emerald-700 `#047857` (5.48:1 under the white label) with
   an emerald-800 `#065f46` hover (7.68:1) on any element that also carries `hover:bg-emerald-500` /
   `hover:bg-emerald-700`, and an emerald-900 `#064e3b` pressed fill (9.72:1) on any element that carries an
   `active:bg-*` class — the unlayered repaint otherwise beats Tailwind's `active:` and the press never shows
-  (`:850-869`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
+  (`:871-890`; operator ruling 2026-10-04, ROK-1472; `primary-fill-light.guard.test.ts`).
   Both rules are unlayered, so they skip a disabled / `aria-disabled` element that carries its own
   `disabled:bg-*` / `aria-disabled:bg-*` — otherwise they beat Tailwind v4's `@layer utilities` variant and
   that button paints enabled-green. An opacity-only disabled or `loading` primary keeps the fill and fades.
@@ -174,15 +175,15 @@ tracks that use it step to emerald-700 on light with the buttons (§4.12).
 
 **Dark shade vs light shade.** You write ONE class and `index.css` repaints it for the six light schemes:
 text `-300`/`-400` → a `-700`…`-800` shade (`:692-711`), tinted fills → a `-100` wash (`:732-760`), borders → a `-300`
-(`:776-791`); solid fills keep their hue with the label forced white on light (`:832-840`) — except the primary
+(`:784-799`); solid fills keep their hue with the label forced white on light (`:840-848`) — except the primary
 `bg-emerald-600`, which steps to emerald-700 `#047857` with a darker emerald-800 `#065f46` hover on light
-(`:850-868`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
+(`:871-889`, ROK-1472 ruling 2026-10-04; a disabled button with its own `disabled:bg-*` keeps that paint), and
 `bg-cyan-600` / `bg-cyan-500` (white is 3.62 / 2.37:1 on them), whose `text-foreground` label is forced to `#0f172a` (4.93 / 7.55:1; dawn's own
 foreground was 4.42:1; `brand-fill-forced-white.guard.test.ts`) — and `.badge-overlay` (`:793-818`) opts cover-art badges out — only badges ON the art (the desktop event card's cover); a chip on the themed surface never carries it (`badge-overlay-art-only.guard.test.ts`, ROK-1472). Every text repaint — and its `/60`–`/80` opacity variants
 and `hover:` rules — clears 4.5:1 on EVERY light scheme's own surface, panel and the hue's `-500/10` chip tint over
 that panel. Celestial's `#e4ddd0` panel is the binding case, so red, emerald, purple, indigo and teal repaint one step past
 the token values (red-800 `#991b1b`, emerald-800 `#065f46`, violet-700 `#6d28d9`, indigo-700 `#4338ca`, teal-800 `#115e59`);
-`text-gray-400` paints gray-700 `#374151`, except inside a fixed `bg-gray-900` panel where `:820-830` keeps gray-400 (and the raw green / blue / purple / yellow-400); the opacity
+`text-gray-400` paints gray-700 `#374151`, except inside a fixed `bg-gray-900` panel where `:828-838` keeps gray-400 (and the raw green / blue / purple / yellow-400); the opacity
 variants carry the AA alpha floor (red `.9`, amber `.95`). `web/src/styles/raw-hue-light.guard.test.ts` parses each
 light scheme's surface/panel out of `index.css` and enforces it (ROK-1586). Still prefer
 `text-success` / `text-warning` / `text-danger` for new semantic text.
@@ -226,7 +227,7 @@ is no `font-light`.
   `.glow-emerald` / `.glow-indigo` (`index.css:908,916`; vars at `:472-473`) glow a primary action. Themes
   restyle these — never reimplement them inline.
   - **Light / Dark:** dark separates with border + surface step; light adds the shadow it needs
-    (`:877-887`, `:622-630`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
+    (`:898-908`, `:630-638`). `bg-panel` / `.glass-card` give you both; a hand-rolled `shadow-lg` adapts
     to neither. Detail: `design-system-tokens.md` §2.
 - **Tap targets:** `min-h-[44px]` on anything touchable (WCAG 2.5.5 / Apple HIG). The form
   primitives build it in — `form-classes.ts` (fields stay 44px below `lg`), `slider.tsx` (an `h-11` hit
@@ -677,7 +678,7 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   Discord `#5865F2`) as an inline fill. It replaces the variant's classes and adds `data-brand-fill` +
   `text-foreground` + `data-brand-label="light|dark"`. **The label is picked by contrast** (operator ruling
   2026-10-04, ROK-1472): `brandLabelFor(fill)` (`web/src/lib/brand-label.ts`) returns whichever of white and
-  `#0f172a` has the higher WCAG contrast on the fill, and `index.css:871-875` paints it on EVERY scheme —
+  `#0f172a` has the higher WCAG contrast on the fill, and `index.css:892-896` paints it on EVERY scheme —
   Discord blurple gets white, a light accent (`#10b981`, `#f59e0b`) gets `#0f172a`. `[data-brand-fill]` is
   NOT in the forced-white list. A static, non-interactive sample of a runtime fill uses the same two
   attributes and the same helper. Theme colours use the variants: never pass a token or a
@@ -730,7 +731,8 @@ text-xs rounded-full` with a tinted background.
 **DON'T** show a zero-count badge — `FilterCountBadge` renders nothing at `count <= 0`.
 
 **Light / Dark** — a solid-fill badge keeps the same fill in both by design (§6.10) whether it is a raw hue or,
-as here, the `success` token — with one exception: every `bg-emerald-600` (buttons, and also badges, dots
+as here, the `success` token; on a `bg-success` / `bg-warning` / `bg-danger` fill the `text-white` label is `--color-status-solid-label`: white on light and `#0f172a`
+on dark (TDB:2052 — white is 2.54 / 2.15 / 2.77:1 on dark `#10b981` / `#f59e0b` / `#f87171`, `#0f172a` 7.04 / 8.31 / 6.45:1). One fill exception: every `bg-emerald-600` (buttons, and also badges, dots
 and toggle tracks such as `VetoGameCard`, the healer role colour, `identity-sections`) steps to emerald-700
 `#047857` on the light schemes. That is intended: the darker green keeps or gains contrast on a light
 surface, and a forced-white label on it is 5.48:1 (3.77:1 on `#059669`). A tinted pill must use `bg-<hue>-500/10` + `text-<hue>-400` to pick up the
@@ -1005,15 +1007,21 @@ them; do not fix them as scope creep.
 
 10. **Solid accent fills keep their hue in both families; the primary fill steps darker on light.**
     The `bg-emerald-500` count badge and the other solid fills do not move, label forced white on light
-    (`:832-840`). The primary `bg-emerald-600` fill is the one light step (operator ruling 2026-10-04,
+    (`:840-848`). The primary `bg-emerald-600` fill is the one light step (operator ruling 2026-10-04,
     ROK-1472): emerald-700 `#047857` (5.48:1 under the white label; emerald-600 was 3.77:1) and, on an
     element that also carries `hover:bg-emerald-500` / `hover:bg-emerald-700`, an emerald-800 `#065f46`
     hover (7.68:1; the old emerald-500 hover was ~2.5:1), and on one that carries an `active:bg-*` class an
-    emerald-900 `#064e3b` pressed fill (9.72:1, darker than rest and hover) — `:850-869`, guarded by
+    emerald-900 `#064e3b` pressed fill (9.72:1, darker than rest and hover) — `:871-890`, guarded by
     `web/src/styles/primary-fill-light.guard.test.ts`. The `/10 /30 /50` alpha variants keep their own
     washes; quest-log's `!important` gold button wins over all of it. This is still why solid button fills
     were NOT tokenised by ROK-1586 (§2.2). A `Button brandColor` label is NOT forced white: it is white or
-    `#0f172a` by contrast on every scheme (§4.11, `brand-fill-forced-white.guard.test.ts`).
+    `#0f172a` by contrast on every scheme (§4.11, `brand-fill-forced-white.guard.test.ts`). A solid `bg-success` / `bg-warning` / `bg-danger` status fill (the `/games` rating, Best Price, On Sale, owner and
+    wishlist badges, `FilterCountBadge`, `JourneyHero`'s done check, the schedule view's today circle; no shipped
+    `bg-danger` carries a label yet) keeps the same token fill in both families with a `text-white` label that
+    `index.css:858-869` repaints with `--color-status-solid-label`: white on light (7.68 / 7.09 / 6.47:1), `#0f172a`
+    on every dark scheme (7.04 / 8.31 / 6.45:1; white was 2.54 / 2.15 / 2.77:1) — TDB:2052, operator ruling
+    2026-10-08, same guard. The token resolves from the nearest ancestor that sets it, so a scoped
+    `data-scheme="light"` subtree under a dark root (the `/dev/design-system` side-by-side view) keeps white. Same fill in both families, white label on light, dark label on dark.
 
 11. **The two overlay scrims disagree** — `Modal` `bg-black/60 backdrop-blur-sm` (`modal-frame.tsx:98`) vs
     `BottomSheet` `bg-black/50`, no blur (`bottom-sheet.tsx:105`). Neither has a light override, so both

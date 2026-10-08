@@ -30,7 +30,7 @@ const SEMANTIC_ROWS: SemanticRow[] = [
     { name: 'warning', solid: 'bg-warning', border: 'border-warning/30', tint: 'bg-warning/10', text: 'text-warning',
         dark: '#f59e0b', light: '#92400e', role: 'Partial agreement · needs attention · admin' },
     { name: 'danger', solid: 'bg-danger', border: 'border-danger/30', tint: 'bg-danger/10', text: 'text-danger',
-        dark: '#ef4444', light: '#b91c1c', role: 'Conflict · destructive · "few free"' },
+        dark: '#f87171', light: '#b91c1c', role: 'Conflict · destructive · "few free"' },
     { name: 'busy', solid: 'bg-busy', border: 'border-busy/30', tint: 'bg-busy/10', text: 'text-busy',
         dark: '#8b5cf6', light: '#7c3aed', role: 'Someone is committed elsewhere this hour' },
     { name: 'slot', solid: 'bg-slot', border: 'border-slot/30', tint: 'bg-slot/10', text: 'text-slot',
@@ -93,7 +93,7 @@ function ButtonFillComparison(): JSX.Element {
                 </StateFrame>
             </DoBlock>
             <DontBlock title="tokenise a solid button fill">
-                <StateFrame label="bg-success text-white" note="Needs a raw text-white label (text-foreground goes #0f172a on light, 2.32:1), and no hover step reaches it.">
+                <StateFrame label="bg-success text-white" note="Needs a raw text-white label (text-foreground goes #0f172a on light, 2.32:1) — which the dark family repaints with --color-status-solid-label #0f172a (TDB:2052) — and no hover step reaches it.">
                     <button type="button" className="px-3 py-1 text-xs rounded bg-success text-white" data-testid="ds-button-token">Lock in</button>
                 </StateFrame>
             </DontBlock>
