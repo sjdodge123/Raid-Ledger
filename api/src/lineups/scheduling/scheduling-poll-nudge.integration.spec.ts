@@ -34,7 +34,7 @@ import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { NotificationService } from '../../notifications/notification.service';
 import { NotificationDedupService } from '../../notifications/notification-dedup.service';
 import { SchedulingPollNudgeService } from './scheduling-poll-nudge.service';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 /** Mirrors POLL_NUDGE_TTL_SECONDS — asserted verbatim so a ms/s slip fails. */
@@ -46,7 +46,7 @@ interface PollSetup {
   gameId: number;
   gameName: string;
   creatorId: number;
-  memberIds: number[];
+  memberIds: readonly [number, ...number[]];
 }
 
 interface SeedOptions {
@@ -200,7 +200,7 @@ function describeSchedulingPollNudge(): void {
       gameId: game.id,
       gameName: game.name,
       creatorId,
-      memberIds,
+      memberIds: nonEmpty(memberIds, 'member ids'),
     };
   }
 
@@ -283,7 +283,8 @@ function describeSchedulingPollNudge(): void {
 
   it('does NOT nudge a member who voted on a still-future slot', async () => {
     const poll = await seedPoll('future-vote', { members: 2 });
-    const [voter, nonVoter] = poll.memberIds;
+    const voter = at(poll.memberIds, 0);
+    const nonVoter = at(poll.memberIds, 1);
     const futureSlot = await addSlot(poll.matchId, 96);
     await castVote(futureSlot, voter);
 

@@ -13,6 +13,7 @@ import {
   isPollOrganiser,
   resolveLockInPageState,
 } from './scheduling-lock-in.helpers';
+import { at } from '../../common/testing/narrow';
 
 const NOW = new Date('2026-09-17T12:00:00.000Z');
 const PAST = new Date('2026-09-01T20:00:00.000Z');
@@ -157,7 +158,7 @@ describe('resolveLockInPageState', () => {
         pollStatus: 'closed',
         lineup: ORGANISER,
         caller: { id: 7 },
-        slots: [slots[0]],
+        slots: [at(slots, 0)],
         votes: [{ slotId: 1 }],
         now: NOW,
       }),

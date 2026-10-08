@@ -25,7 +25,7 @@ import {
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findSlotInMatch } from './scheduling-rally.helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 /** Far enough out that the slot is always "future" (ROK-1610's gate). */
 const FUTURE_SLOT = new Date('2099-10-10T21:00:00.000Z');
@@ -77,7 +77,7 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
   interface SeededPoll {
     lineupId: number;
     matchId: number;
-    slotIds: number[];
+    slotIds: readonly [number, ...number[]];
   }
 
   /**
@@ -141,7 +141,10 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     return {
       lineupId: lineup.id,
       matchId: match.id,
-      slotIds: slots.map((s) => s.id),
+      slotIds: nonEmpty(
+        slots.map((s) => s.id),
+        'slot ids',
+      ),
     };
   }
 
@@ -183,7 +186,8 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
       [FUTURE_SLOT, OTHER_FUTURE_SLOT],
       [voter.id, bystander.id],
     );
-    const [winningSlot, otherSlot] = poll.slotIds;
+    const winningSlot = at(poll.slotIds, 0);
+    const otherSlot = at(poll.slotIds, 1);
     await seedVote(winningSlot, testApp.seed.adminUser.id);
     await seedVote(winningSlot, voter.id);
     // The bystander voted for a DIFFERENT time — they must not be signed up.
@@ -254,7 +258,8 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     // column reverts to `timestamp` OR a raw reader drops `AT TIME ZONE 'UTC'`.
     const recentPast = new Date(Date.now() - 60 * 60 * 1000);
     const poll = await seedExpiredPoll([FUTURE_SLOT, recentPast]);
-    const [futureId, pastId] = poll.slotIds;
+    const futureId = at(poll.slotIds, 0);
+    const pastId = at(poll.slotIds, 1);
 
     const seen = await testApp.db.transaction(async (tx) => {
       await tx.execute(sql`SET LOCAL TIME ZONE 'America/New_York'`);
@@ -285,8 +290,9 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
 
   it('advertises the future leading slot to the organiser before they act', async () => {
     const poll = await seedExpiredPoll([PAST_SLOT, FUTURE_SLOT]);
+    const futureSlot = at(poll.slotIds, 1);
     await seedVote(poll.slotIds[0], testApp.seed.adminUser.id);
-    await seedVote(poll.slotIds[1], testApp.seed.adminUser.id);
+    await seedVote(futureSlot, testApp.seed.adminUser.id);
 
     const page = await testApp.request
       .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}`)
@@ -294,7 +300,7 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
 
     expect(page.body.pollStatus).toBe('closed');
     expect(page.body.canLockIn).toBe(true);
-    expect(page.body.lockInSlotId).toBe(poll.slotIds[1]);
+    expect(page.body.lockInSlotId).toBe(futureSlot);
   });
 
   // ── (b) every slot has passed ──────────────────────────────────────
@@ -319,17 +325,21 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
 
   it('refuses a future slot with zero votes, so no empty-roster event is announced', async () => {
     const poll = await seedExpiredPoll([FUTURE_SLOT, OTHER_FUTURE_SLOT]);
-    const [votedSlot, emptySlot] = poll.slotIds;
+    const votedSlot = at(poll.slotIds, 0);
+    const emptySlot = at(poll.slotIds, 1);
     await seedVote(votedSlot, testApp.seed.adminUser.id);
 
     const res = await lockIn(poll, emptySlot, adminToken);
 
     expect(res.status).toBe(400);
     expect(res.body.message).toContain('Nobody voted for that time');
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
     expect(match.linkedEventId).toBeNull();
     // The READ path never offered it either — the two paths agree.
     const page = await testApp.request
@@ -413,10 +423,13 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
     const res = await lockIn(poll, poll.slotIds[0], member.token);
 
     expect(res.status).toBe(403);
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
     expect(match.linkedEventId).toBeNull();
   });
 
@@ -441,10 +454,13 @@ describe('Expired-poll lock-in (integration, ROK-1610/ROK-1606)', () => {
 
     expect(res.status).toBe(403);
     expect(res.body.message).toContain('Only the poll creator or an operator');
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
     expect(match.linkedEventId).toBeNull();
   });
 

@@ -286,10 +286,13 @@ describe('Scheduling poll page — terminal states (integration, ROK-1545)', () 
     const res = await getPoll(poll, adminToken);
 
     expect(res.status).toBe(200);
-    const [match] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, poll.matchId));
+    const [match] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, poll.matchId)),
+      'match',
+    );
     expect(match.status).toBe('scheduling');
     expect(match.linkedEventId).toBeNull();
     expect(res.body.pollStatus).toBe('closed');

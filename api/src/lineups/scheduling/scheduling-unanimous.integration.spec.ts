@@ -39,7 +39,7 @@ import {
   UNANIMOUS_SUBTYPE,
   unanimousDedupKey,
 } from './scheduling-unanimous.helpers';
-import { nonEmpty } from '../../common/testing/narrow';
+import { defined, nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -285,7 +285,7 @@ function describeUnanimous(): void {
     const dms = await unanimousDmsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
     expect(dms[0]?.type).toBe('community_lineup');
-    expect(dms[0].title).toBe(`Everyone's in for ${poll.gameName}`);
+    expect(dms[0]?.title).toBe(`Everyone's in for ${poll.gameName}`);
     expect(dms[0]?.payload).toMatchObject({
       subtype: UNANIMOUS_SUBTYPE,
       reminderWindow: `unanimous-${poll.matchId}-${poll.slotId}`,
@@ -309,7 +309,7 @@ function describeUnanimous(): void {
     // the match's, and the stamp is the SLOT's instant, not the local wall
     // clock of whichever host ran this (`proposed_time` is zone-less UTC).
     const copy = /^All 3 members said yes to <t:(\d{9,11}):f>\. Lock it in\.$/;
-    const stamp = copy.exec(dm.message ?? '');
+    const stamp = copy.exec(defined(dm, 'unanimous DM').message ?? '');
     expect(stamp).not.toBeNull();
     expect(Number(stamp?.[1])).toBe(await slotEpochSeconds(poll.slotId));
   });
