@@ -24,10 +24,24 @@ import {
 const dialect = new PgDialect();
 let mockDb: MockDb;
 
-/** `ORDER BY` of the one query issued, as Postgres would receive it. */
-function orderByText(): string {
+/** `ORDER BY` keys of the one query issued, as Postgres would receive them. */
+function orderByKeys(): string[] {
   const chunks = mockDb.orderBy.mock.calls[0] as SQL[];
-  return chunks.map((c) => dialect.sqlToQuery(c).sql).join(', ');
+  return chunks.map((c) => dialect.sqlToQuery(c).sql);
+}
+
+/** The whole `ORDER BY`, keys joined. */
+function orderByText(): string {
+  return orderByKeys().join(', ');
+}
+
+/** Tier 1 of the two-tier rank: stamped after `bound` first, earliest first. */
+function afterBoundTier(bound: string): string {
+  const after = `"lfg_intents"."converted_at" > ${bound}`;
+  return [
+    `case when ${after} then 0 else 1 end`,
+    `case when ${after} then "lfg_intents"."converted_at" end asc nulls last`,
+  ].join(', ');
 }
 
 /** `WHERE` of the one query issued, as Postgres would receive it. */
@@ -43,11 +57,13 @@ beforeEach(() => {
 describe('conversionSincePosted (TDB:953)', () => {
   const row = { id: 'row-1', gameId: 42 };
 
-  it('the EARLIEST stamp in the window wins — converted_at asc, then id asc', async () => {
+  it('a strictly-later conversion outranks a grace-window corpse; the EARLIEST strictly-later wins (Codex P2)', async () => {
     await conversionSincePosted(mockDb as unknown as LfgDb, row);
 
+    // Tier 1 bounds on posted_at itself — NO grace — so a stamp inside the
+    // grace window (possibly an older group's corpse) ranks below it.
     expect(orderByText()).toBe(
-      '"lfg_intents"."converted_at" asc, "lfg_intents"."id" asc',
+      `${afterBoundTier('"lfg_group_messages"."posted_at"')}, "lfg_intents"."id" desc`,
     );
   });
 
@@ -73,11 +89,27 @@ describe('conversionSincePosted (TDB:953)', () => {
 describe('latestConversionTarget (TDB:953 / D9)', () => {
   const postedAt = new Date('2026-10-08T12:00:00Z');
 
-  it('a stamped match outranks a NULL one, earliest stamp first; NULL rows newest id first', async () => {
+  it("the row's OWN later conversion outranks an older corpse the expires_at leg admits (Codex P2)", async () => {
     await latestConversionTarget(mockDb as unknown as LfgDb, 42, postedAt);
 
+    // Tier 1 = stamped after postedAfter, earliest first; a corpse converted
+    // before the post (hands unexpired) can only reach tier 2.
+    expect(orderByKeys().slice(0, 2).join(', ')).toBe(afterBoundTier('$1'));
+    // ...bound on the SAME instant the WHERE's converted_at leg uses.
+    const [tier] = mockDb.orderBy.mock.calls[0] as [SQL, ...SQL[]];
+    const tierParams = dialect.sqlToQuery(tier).params;
+    const whereParams = dialect.sqlToQuery(
+      mockDb.where.mock.calls[0][0] as SQL,
+    ).params;
+    expect(tierParams).toEqual([whereParams[2]]);
+  });
+
+  it('NULL-stamped rows and the expires_at fallback rank last, newest id first (D9)', async () => {
+    await latestConversionTarget(mockDb as unknown as LfgDb, 42, postedAt);
+
+    // NULL > $1 is NULL, so the CASE falls to `else 1`: tier 2, id desc.
     expect(orderByText()).toBe(
-      '"lfg_intents"."converted_at" asc nulls last, "lfg_intents"."id" desc',
+      `${afterBoundTier('$1')}, "lfg_intents"."id" desc`,
     );
   });
 

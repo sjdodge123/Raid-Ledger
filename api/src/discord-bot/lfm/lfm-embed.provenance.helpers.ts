@@ -7,7 +7,7 @@
  * Re-exported through `lfm-embed.db-helpers` — import it from there, so the
  * unit specs' module mock covers it.
  */
-import { and, asc, desc, eq, gt, isNotNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, or, sql, type SQL } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import type { LfgDb } from '../../lfg/lfg-query.helpers';
 import type { LfgConversionTarget } from '../../lfg/lfg-write.helpers';
@@ -49,6 +49,30 @@ function toTarget(row: {
 export const OWN_CONVERSION_GRACE = sql.raw(`interval '2 minutes'`);
 
 /**
+ * TDB:953 — the ORDER BY both lookups share, in two tiers (Codex P2 on r2).
+ *
+ * The Codex case: an OLDER group converted before this row was posted, its
+ * hands still unexpired, and THIS row's own group converted later. The
+ * predicate admits both (the corpse via the `expires_at` leg or the grace),
+ * and a flat `converted_at ASC` returned the corpse — the row closed against
+ * the wrong event/poll. So a conversion stamped AFTER the bound outranks
+ * everything else:
+ * - tier 1, `afterBound` holds: `converted_at ASC` — the first conversion
+ *   after posting ended this row's group; a later one is a newer group's.
+ * - tier 2, everything else the predicate admits (NULL-stamped legacy rows,
+ *   the `expires_at` fallback, the grace window): `id DESC`, D9's newest-first.
+ *
+ * @param afterBound - `converted_at > <bound>`; a NULL stamp falls to tier 2.
+ */
+function afterBoundFirst(afterBound: SQL): SQL[] {
+  return [
+    sql`case when ${afterBound} then 0 else 1 end`,
+    sql`case when ${afterBound} then ${schema.lfgIntents.convertedAt} end asc nulls last`,
+    desc(schema.lfgIntents.id),
+  ];
+}
+
+/**
  * Conversion provenance for a game's ended group, or null (D9).
  *
  * Used only by the restart reconcile's below-the-floor path (`endedView`),
@@ -63,10 +87,10 @@ export const OWN_CONVERSION_GRACE = sql.raw(`interval '2 minutes'`);
  * to its row, and what still covers legacy rows converted before the stamp
  * existed (NULL, ruled 2026-10-08: no backfill).
  *
- * Order: `converted_at ASC NULLS LAST, id DESC`. A stamped match outranks a
- * NULL one (the stamp is the precise signal) and the EARLIEST stamp wins —
- * the first conversion after posting ended the row's group; a later one
- * belongs to a group formed after. NULL-stamped rows keep D9's newest-first.
+ * Order: {@link afterBoundFirst} with `converted_at > postedAfter` — a
+ * conversion stamped after posting outranks one the `expires_at` leg alone
+ * admits (an older group's corpse, or this group's spawn-order stamp), the
+ * EARLIEST such stamp winning; the rest keep D9's newest-first.
  *
  * @param db - Drizzle handle.
  * @param gameId - Game whose open row is being reconciled.
@@ -79,6 +103,7 @@ export async function latestConversionTarget(
   gameId: number,
   postedAfter: Date,
 ): Promise<LfgConversionTarget | null> {
+  const afterPost = gt(schema.lfgIntents.convertedAt, postedAfter);
   const [row] = await db
     .select(PROVENANCE)
     .from(schema.lfgIntents)
@@ -86,17 +111,11 @@ export async function latestConversionTarget(
       and(
         eq(schema.lfgIntents.gameId, gameId),
         eq(schema.lfgIntents.status, 'converted'),
-        or(
-          gt(schema.lfgIntents.convertedAt, postedAfter),
-          gt(schema.lfgIntents.expiresAt, postedAfter),
-        ),
+        or(afterPost, gt(schema.lfgIntents.expiresAt, postedAfter)),
         hasProvenance(),
       ),
     )
-    .orderBy(
-      sql`${schema.lfgIntents.convertedAt} asc nulls last`,
-      desc(schema.lfgIntents.id),
-    )
+    .orderBy(...afterBoundFirst(afterPost))
     .limit(1);
   return row ? toTarget(row) : null;
 }
@@ -108,7 +127,10 @@ export async function latestConversionTarget(
  * it matches STAMPED rows only, converted no earlier than
  * {@link OWN_CONVERSION_GRACE} before the row's `posted_at` — the group was
  * live when its message was posted, so such a conversion is its ending even
- * if a NEW group for the game has since crossed the floor. The FIRST match
+ * if a NEW group for the game has since crossed the floor. Order:
+ * {@link afterBoundFirst} with `converted_at > posted_at` (no grace) — a
+ * conversion strictly after the post outranks a grace-window stamp, which may
+ * be an older group's corpse (the Codex case); the FIRST strictly-later one
  * wins (a later one belongs to a group formed after). Compared in SQL against
  * the row's own `posted_at`: both are zone-less DB-clock stamps, so no JS
  * Date (and no millisecond truncation) ever sits on one side. A NULL legacy
@@ -137,7 +159,11 @@ export async function conversionSincePosted(
         hasProvenance(),
       ),
     )
-    .orderBy(asc(schema.lfgIntents.convertedAt), asc(schema.lfgIntents.id))
+    .orderBy(
+      ...afterBoundFirst(
+        gt(schema.lfgIntents.convertedAt, schema.lfgGroupMessages.postedAt),
+      ),
+    )
     .limit(1);
   return hit ? toTarget(hit) : null;
 }
