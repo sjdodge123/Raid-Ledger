@@ -7,6 +7,8 @@
  * one-line change in `CALENDARS_COPY.lede` below.
  */
 
+import type { CalendarOAuthErrorCode } from '@raid-ledger/contract';
+
 /** Approved K1 lede (describes read sync). */
 const LEDE_APPROVED = 'Connect a calendar and Raid Ledger fills in your time away for you.';
 /** Interim write-first lede, held for the Q-B ruling. */
@@ -57,11 +59,8 @@ export function connectionStatusLine(c: { status: keyof typeof CONNECTION_STATUS
     return c.accountLabel ? `${status} · ${c.accountLabel}` : status;
 }
 
-/**
- * `?error=<code>` from the OAuth callback redirect.
- * TODO(ROK-1592 2d): use CalendarOAuthErrorCodeSchema
- */
-export type CalendarOAuthErrorCode = 'state' | 'denied' | 'exchange' | 'scopes' | 'disabled' | 'unavailable';
+/** `?error=<code>` from the OAuth callback redirect (contract enum). */
+export type { CalendarOAuthErrorCode };
 
 export const OAUTH_ERROR_COPY: Record<CalendarOAuthErrorCode, string> = {
     state: 'That sign-in link expired or was already used. Connect again to retry.',

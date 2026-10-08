@@ -135,6 +135,23 @@ export type AppleConnectInput = z.infer<typeof AppleConnectInputSchema>;
 export const OAuthStartResponseSchema = z.object({ url: z.string().url() });
 export type OAuthStartResponse = z.infer<typeof OAuthStartResponseSchema>;
 
+/**
+ * `?error=<code>` on the OAuth callback's redirect to
+ * `/profile/gaming/calendars` (ROK-1592 L10). A closed set, so the page maps
+ * a code to copy and never echoes the query string.
+ */
+export const CalendarOAuthErrorCodeSchema = z.enum([
+  'state',
+  'denied',
+  'exchange',
+  'scopes',
+  'disabled',
+  'unavailable',
+]);
+export type CalendarOAuthErrorCode = z.infer<
+  typeof CalendarOAuthErrorCodeSchema
+>;
+
 /** `GET /users/me/calendars/events/:eventId` — our copy of one event. */
 export const EventCalendarCopySchema = z.object({
   provider: CalendarProviderSchema,
