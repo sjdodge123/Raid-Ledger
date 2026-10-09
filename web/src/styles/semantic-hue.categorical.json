@@ -119,5 +119,6 @@
   "pages/lfg/lfg-group-states.tsx": "\"Back to games\" and \"Open poll\" brand links text-emerald-400 / hover emerald-300 (the not-found and convert-failed states are on tokens)",
   "pages/game-detail/lfg-toggle-button.tsx": "LFG toggle \"on\" pill amber-300/95 + amber-950 ink / hover amber-200, and the idle hover border previewing it (selection accent, not a status)",
   "plugins/wow/slots/character-variant-badge.tsx": "WoW game-variant badge (Era / Classic / …) amber tag (a variant category label, promises nothing)",
-  "plugins/wow/slots/event-detail-content-sections.tsx": "WoW content-instance tag chips emerald (a categorical instance label; the level range inside is already text-success)"
+  "plugins/wow/slots/event-detail-content-sections.tsx": "WoW content-instance tag chips emerald (a categorical instance label; the level range inside is already text-success)",
+  "components/lfg/lfg-chip.tsx": "ROK-1453 AC2/D4 mandates the amber-300/95 + amber-950 tonal pill for the LFG chip so it stays distinct from the Wishlist / On-Sale warning badges (lfg-chip.test.tsx asserts not bg-warning); the LFM state is the sanctioned solid bg-emerald-700 fill"
 }
