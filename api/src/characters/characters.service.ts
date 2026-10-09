@@ -28,6 +28,7 @@ import * as crudH from './characters-crud.helpers';
 import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
 import { defined } from '../common/defined.helpers';
+import { withDisplayEquipment } from './characters-display-equipment.helpers';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -284,7 +285,11 @@ export class CharactersService {
       .limit(1);
     if (!character)
       throw new NotFoundException(`Character ${characterId} not found`);
-    const dto = await this.withDisplayEquipment(mapCharacterToDto(character));
+    const dto = await withDisplayEquipment(
+      mapCharacterToDto(character),
+      this.findCharacterSyncAdapter(character.gameVariant ?? undefined),
+      this.logger,
+    );
     const enrichmentRows =
       await this.enrichmentsService.getEnrichmentsForEntity(
         'character',
@@ -293,17 +298,6 @@ export class CharactersService {
     return enrichmentRows.length > 0
       ? { ...dto, enrichments: enrichmentRows }
       : dto;
-  }
-
-  /** ROK-1727 (D1): let the variant's plugin substitute displayed gear. */
-  private async withDisplayEquipment(dto: CharacterDto): Promise<CharacterDto> {
-    const adapter = this.findCharacterSyncAdapter(dto.gameVariant ?? undefined);
-    const equipment = await adapter?.resolveDisplayEquipment?.({
-      id: dto.id,
-      gameVariant: dto.gameVariant ?? null,
-      equipment: dto.equipment ?? null,
-    });
-    return equipment === undefined ? dto : { ...dto, equipment };
   }
 
   async syncAllCharacters(): Promise<{
