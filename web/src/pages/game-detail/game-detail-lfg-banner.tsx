@@ -20,7 +20,7 @@
  * COLOUR: every class below is one the ROK-464 light-mode block in
  * `index.css` remaps under `[data-scheme="light"]` (`bg-*-500/10`,
  * `border-*-500/30`, `text-*-400`), so the banner is legible on all twelve
- * schemes. Hover is `hover:opacity-90` — the chip's own theme-agnostic idiom
+ * schemes. Hover steps the border only (`hover:border-{token}/50`) — a whole-box `opacity-90` pulled the tokenised label under 4.5:1 on celestial
  * (`lfg-chip.tsx:31`) — rather than a tinted hover background, because the
  * hover-background overrides in that block cover a narrower set of shades.
  */
@@ -30,15 +30,15 @@ import type { LfgState } from '@raid-ledger/contract';
 import { effectiveLfgState, groupLine } from '../../components/lfg/lfg-chip-copy';
 
 const BOX_CLS =
-    'flex min-h-[44px] w-full flex-wrap items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90';
+    'flex min-h-[44px] w-full flex-wrap items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors';
 
 /**
  * Tonal fill per state, matching the chip's hues: emerald for a group that has
  * formed ("join them"), amber for one still recruiting ("they need you").
  */
 const STATE_CLS: Record<'lfg' | 'lfm', string> = {
-    lfm: 'bg-success/10 border-success/30 text-success',
-    lfg: 'bg-warning/10 border-warning/30 text-warning',
+    lfm: 'bg-success/10 border-success/30 text-success hover:border-success/50',
+    lfg: 'bg-warning/10 border-warning/30 text-warning hover:border-warning/50',
 };
 
 export interface GameDetailLfgBannerProps {
