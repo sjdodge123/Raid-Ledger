@@ -21,6 +21,7 @@ import {
 } from './ephemeral-voice.db-helpers';
 import { findActiveEventsByEphemeralChannel } from './voice-attendance-ephemeral.helpers';
 import { loadLfgNowEphemeralRow } from '../lfg-now/lfg-now.db-helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 describe('ephemeral-voice DB integration (ROK-1352)', () => {
   let app: TestApp;
@@ -43,19 +44,22 @@ describe('ephemeral-voice DB integration (ROK-1352)', () => {
   }): Promise<number> {
     const start = new Date(Date.now() + opts.startOffsetMin * 60_000);
     const end = new Date(Date.now() + opts.endOffsetMin * 60_000);
-    const [row] = await app.db
-      .insert(schema.events)
-      .values({
-        title: 'Ephemeral Test',
-        creatorId: app.seed.adminUser.id,
-        gameId: app.seed.game.id,
-        duration: [start, end],
-        ephemeralVoiceChannelId: opts.channelId ?? null,
-        ephemeralVoiceEnabled: opts.enabled ?? null,
-        recurrenceGroupId: opts.recurrenceGroupId ?? null,
-        cancelledAt: opts.cancelled ? new Date() : null,
-      } as never)
-      .returning({ id: schema.events.id });
+    const [row] = nonEmpty(
+      await app.db
+        .insert(schema.events)
+        .values({
+          title: 'Ephemeral Test',
+          creatorId: app.seed.adminUser.id,
+          gameId: app.seed.game.id,
+          duration: [start, end],
+          ephemeralVoiceChannelId: opts.channelId ?? null,
+          ephemeralVoiceEnabled: opts.enabled ?? null,
+          recurrenceGroupId: opts.recurrenceGroupId ?? null,
+          cancelledAt: opts.cancelled ? new Date() : null,
+        } as never)
+        .returning({ id: schema.events.id }),
+      'row',
+    );
     return row.id;
   }
 

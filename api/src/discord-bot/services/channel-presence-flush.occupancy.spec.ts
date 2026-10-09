@@ -95,6 +95,7 @@ import {
 } from './channel-presence-flush.helpers';
 import type { RecapInput } from './channel-presence-embed.recap.helpers';
 import type { RoomMember } from './channel-presence-occupancy.helpers';
+import { at } from '../../common/testing/narrow';
 
 /**
  * Room members for the ledger. Names only — the `gameId` / `activityName`
@@ -205,7 +206,7 @@ function embed(title: string): { toJSON: () => unknown } {
 /** The `RecapInput` the flush handed the renderer. */
 function recapInput(): RecapInput {
   expect(m.renderRecapMessage).toHaveBeenCalled();
-  return m.renderRecapMessage.mock.calls[0][0];
+  return at(m.renderRecapMessage.mock.calls, 0)[0];
 }
 
 beforeEach(() => {

@@ -21,6 +21,7 @@ import {
 } from './pug-invite-personalization.helpers';
 import { buildPugInviteEmbed } from './pug-invite.helpers';
 import { personalizedFieldName } from '../embeds/embed-personalized.helpers';
+import { defined } from '../../common/testing/narrow';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -265,13 +266,10 @@ const ALL_STATUSES: SignupStatus[] = [
 /** The signup statuses a captured WHERE clause would actually count. */
 function countedStatuses(where: SQL): SignupStatus[] {
   const { sql: text, params } = new PgDialect().sqlToQuery(where);
-  const at = (i: string): string => String(params[Number(i) - 1]);
-  const excluded = [...text.matchAll(/"status" <> \$(\d+)/g)].map((m) =>
-    at(m[1]),
-  );
-  const included = [...text.matchAll(/"status" = \$(\d+)/g)].map((m) =>
-    at(m[1]),
-  );
+  const statusOf = (m: RegExpMatchArray): string =>
+    String(params[Number(defined(m[1], 'status placeholder index')) - 1]);
+  const excluded = [...text.matchAll(/"status" <> \$(\d+)/g)].map(statusOf);
+  const included = [...text.matchAll(/"status" = \$(\d+)/g)].map(statusOf);
   return ALL_STATUSES.filter((s) =>
     included.length > 0 ? included.includes(s) : !excluded.includes(s),
   );

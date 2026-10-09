@@ -20,6 +20,7 @@ import {
   type EmbedState as ChromeState,
 } from '../embeds/embed-chrome.helpers';
 import { personalizedFieldName } from '../embeds/embed-personalized.helpers';
+import { at } from '../../common/testing/narrow';
 
 const OPEN = '▸'; // ▸
 const DOTTED = '◌'; // ◌
@@ -318,7 +319,7 @@ describe('buildEventEmbed — one event link per embed', () => {
         label?: string;
         url?: string;
       }[];
-      const last = components[components.length - 1];
+      const last = at(components, -1);
       expect(last.label).toBe('View Event');
       expect(last.url).toBe(`${CLIENT_URL}/events/${EVENT_ID}`);
     },

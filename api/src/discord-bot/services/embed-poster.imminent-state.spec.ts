@@ -34,7 +34,7 @@ describe('EmbedPosterService — first post derives its own state (ROK-1622)', (
   let service: EmbedPosterService;
   let embedFactory: { buildEventEmbed: jest.Mock };
   let insertValues: jest.Mock;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
 
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = new ActionRowBuilder<ButtonBuilder>();

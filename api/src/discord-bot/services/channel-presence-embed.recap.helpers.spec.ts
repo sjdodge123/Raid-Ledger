@@ -18,6 +18,7 @@ import { JUST_CHATTING_TITLE } from './channel-presence-embed.helpers';
 import { MAX_GROUP_EMBEDS } from './channel-presence-embed.lead.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
 import type { RoomRecap } from './channel-presence-room-recap.helpers';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 const CLIENT_URL = 'https://rl.example';
 const OPENED_AT = new Date('2026-09-02T20:55:00Z');
@@ -89,11 +90,14 @@ function render(
   now = NOW,
   endedAt: number | null = null,
 ) {
-  return buildRecapEmbeds(
-    { channelName: 'General', events, openedAt: OPENED_AT, endedAt },
-    CONTEXT,
-    now,
-  ).map((e) => e.data);
+  return nonEmpty(
+    buildRecapEmbeds(
+      { channelName: 'General', events, openedAt: OPENED_AT, endedAt },
+      CONTEXT,
+      now,
+    ).map((e) => e.data),
+    'recap embeds',
+  );
 }
 
 describe('buildRecapEmbeds — the lead embed', () => {
@@ -125,7 +129,7 @@ describe('buildRecapEmbeds — the lead embed', () => {
   it('says nothing started when the room never spawned a session', () => {
     const embeds = render([]);
     expect(embeds).toHaveLength(1);
-    expect(embeds[0].description).toBe('No session started.');
+    expect(embeds[0]?.description).toBe('No session started.');
   });
 
   it('carries no "no game detected" field — the room is empty (D3)', () => {
@@ -141,11 +145,14 @@ describe('buildRecapEmbeds — the lead embed', () => {
   });
 
   it('falls back to a generic channel name when the channel is gone', () => {
-    const [lead] = buildRecapEmbeds(
-      { channelName: null, events: [], openedAt: OPENED_AT, endedAt: null },
-      CONTEXT,
-      NOW,
-    ).map((e) => e.data);
+    const [lead] = nonEmpty(
+      buildRecapEmbeds(
+        { channelName: null, events: [], openedAt: OPENED_AT, endedAt: null },
+        CONTEXT,
+        NOW,
+      ).map((e) => e.data),
+      'lead',
+    );
     expect(lead.title).toBe('\u{1F50A} Voice channel · session ended');
   });
 });
@@ -167,7 +174,7 @@ describe('buildRecapEmbeds — the session embeds', () => {
   });
 
   it('drops the badges and reports attendance instead', () => {
-    const [, cod] = render([COD, DRG]);
+    const cod = at(render([COD, DRG]), 1);
     expect(cod.fields ?? []).toHaveLength(0);
     expect(cod.description).toContain('Attendance · 3 players');
     expect(cod.description).toContain('**roknua**');
@@ -192,7 +199,7 @@ describe('buildRecapEmbeds — the session embeds', () => {
       '2026-09-02T22:00:00Z',
       ['roknua', 'morrow'],
     );
-    const [, group] = render([chatting]);
+    const group = at(render([chatting]), 1);
     expect(group.title).toBe(JUST_CHATTING_TITLE);
     expect(group.url).toBeUndefined();
   });
@@ -224,7 +231,7 @@ describe('buildRecapEmbeds — a session still live when the room emptied (D8)',
   const closedAt = Date.parse('2026-09-02T22:30:00Z');
 
   it('ends it at the recap clock rather than believing a future end time', () => {
-    const [, group] = render([live], closedAt);
+    const group = at(render([live], closedAt), 1);
     expect(group.author?.name).toBe('■ ENDED · Quick Play · 1h 30m');
   });
 
@@ -246,7 +253,7 @@ describe('buildRecapEmbeds — a session still live when the room emptied (D8)',
     const later = render([live], closedAt + 90_000, closedAt);
 
     expect(later[0].description).toBe(first[0].description);
-    expect(later[1].author?.name).toBe('■ ENDED · Quick Play · 1h 30m');
+    expect(later[1]?.author?.name).toBe('■ ENDED · Quick Play · 1h 30m');
   });
 });
 
@@ -282,18 +289,21 @@ function renderRoom(
   events: EmbedEventData[] = [],
   rosterCap?: number,
 ) {
-  return buildRecapEmbeds(
-    {
-      channelName: 'General',
-      events,
-      openedAt: OPENED_AT,
-      endedAt: null,
-      room,
-    },
-    CONTEXT,
-    NOW,
-    rosterCap,
-  ).map((e) => e.data);
+  return nonEmpty(
+    buildRecapEmbeds(
+      {
+        channelName: 'General',
+        events,
+        openedAt: OPENED_AT,
+        endedAt: null,
+        room,
+      },
+      CONTEXT,
+      NOW,
+      rosterCap,
+    ).map((e) => e.data),
+    'recap embeds',
+  );
 }
 
 /** THREE_PLAYING's roster, as the participant line renders it (ROK-1608). */

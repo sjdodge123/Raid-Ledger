@@ -24,6 +24,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import { at } from '../../common/testing/narrow';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
 
       const result = service.getActiveRoster(10);
 
-      expect(result.participants[0].discordAvatarHash).toBeNull();
+      expect(at(result.participants, 0).discordAvatarHash).toBeNull();
     });
   });
 
@@ -183,7 +184,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       jest.setSystemTime(new Date('2026-03-01T18:01:30Z'));
 
       const result = service.getActiveRoster(10);
-      const p = result.participants[0];
+      const p = at(result.participants, 0);
 
       expect(p.totalDurationSeconds).toBeGreaterThanOrEqual(90);
     });
@@ -196,7 +197,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleLeave(10, 'discord-fin');
 
       const result = service.getActiveRoster(10);
-      const p = result.participants[0];
+      const p = at(result.participants, 0);
 
       expect(p.totalDurationSeconds).toBe(60);
     });
@@ -227,7 +228,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-sc1', 'SC1', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].sessionCount).toBe(1);
+      expect(result.participants[0]?.sessionCount).toBe(1);
     });
 
     it('sessionCount increments after rejoin', () => {
@@ -236,14 +237,14 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-sc2', 'SC2', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].sessionCount).toBe(2);
+      expect(result.participants[0]?.sessionCount).toBe(2);
     });
 
     it('userId is null when user is not linked to a Raid Ledger account', () => {
       service.handleJoin(10, 'discord-unlinked', 'Guest', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].userId).toBeNull();
+      expect(at(result.participants, 0).userId).toBeNull();
     });
 
     it('joinedAt reflects the firstJoinAt time of the session', () => {
@@ -252,14 +253,14 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleJoin(10, 'discord-join', 'JoinUser', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].joinedAt).toBe(joinTime.toISOString());
+      expect(at(result.participants, 0).joinedAt).toBe(joinTime.toISOString());
     });
 
     it('participant id matches discordUserId', () => {
       service.handleJoin(10, 'discord-id-check', 'IDCheckUser', null);
 
       const result = service.getActiveRoster(10);
-      expect(result.participants[0].id).toBe('discord-id-check');
+      expect(result.participants[0]?.id).toBe('discord-id-check');
     });
   });
 
@@ -273,7 +274,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       const result20 = service.getActiveRoster(20);
 
       expect(result10.participants).toHaveLength(1);
-      expect(result10.participants[0].discordUserId).toBe('discord-X');
+      expect(result10.participants[0]?.discordUserId).toBe('discord-X');
 
       expect(result20.participants).toHaveLength(2);
       expect(result20.eventId).toBe(20);

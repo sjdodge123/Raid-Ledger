@@ -22,6 +22,7 @@ import { NotificationService } from './notification.service';
 import { GameAffinityNotificationService } from './game-affinity-notification.service';
 import { StandalonePollNotificationService } from '../lineups/standalone-poll/standalone-poll-notification.service';
 import { runFollowupFanout } from './post-event-followup-fanout.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -32,14 +33,17 @@ let syntheticEventId = 900_000;
 
 async function mkUser(testApp: TestApp) {
   seq += 1;
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `80000000000000${String(seq).padStart(4, '0')}`,
-      username: `dd${seq}`,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `80000000000000${String(seq).padStart(4, '0')}`,
+        username: `dd${seq}`,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   return user;
 }
 
@@ -48,15 +52,21 @@ async function mkEndedEvent(
   creatorId: number,
   gameId: number,
 ) {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Raid Night',
-      creatorId,
-      gameId,
-      duration: [new Date(Date.now() - 3 * HOUR), new Date(Date.now() - HOUR)],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Raid Night',
+        creatorId,
+        gameId,
+        duration: [
+          new Date(Date.now() - 3 * HOUR),
+          new Date(Date.now() - HOUR),
+        ],
+      })
+      .returning(),
+    'event',
+  );
   return event;
 }
 

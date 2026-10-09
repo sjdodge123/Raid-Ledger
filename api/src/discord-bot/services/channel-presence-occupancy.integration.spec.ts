@@ -32,6 +32,7 @@ import {
 import { hydrateRoomRecap } from './channel-presence-room-recap.hydrate';
 import type { PresenceRow } from './channel-presence-store.helpers';
 import type { RoomMember } from './channel-presence-occupancy.helpers';
+import { nonEmpty } from '../../common/testing/narrow';
 
 /**
  * Room members for the ledger. Names only — the `gameId` / `activityName`
@@ -54,16 +55,19 @@ const MINUTE = 60_000;
 
 /** A `general-lobby` binding on the voice channel — the FK needs a real row. */
 async function insertBinding(db: Db): Promise<string> {
-  const [binding] = await db
-    .insert(schema.channelBindings)
-    .values({
-      guildId: GUILD_ID,
-      channelId: VOICE_CHANNEL_ID,
-      channelType: 'voice',
-      bindingPurpose: 'general-lobby',
-      config: { minPlayers: 2, gracePeriod: 60 },
-    })
-    .returning();
+  const [binding] = nonEmpty(
+    await db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: GUILD_ID,
+        channelId: VOICE_CHANNEL_ID,
+        channelType: 'voice',
+        bindingPurpose: 'general-lobby',
+        config: { minPlayers: 2, gracePeriod: 60 },
+      })
+      .returning(),
+    'binding',
+  );
   return binding.id;
 }
 
@@ -73,17 +77,20 @@ async function insertPresenceRow(
   bindingId: string,
   openedAt: Date,
 ): Promise<PresenceRow> {
-  const [row] = await db
-    .insert(schema.discordChannelPresenceMessages)
-    .values({
-      guildId: GUILD_ID,
-      voiceChannelId: VOICE_CHANNEL_ID,
-      bindingId,
-      textChannelId: TEXT_CHANNEL_ID,
-      messageId: 'rok1499-message',
-      openedAt,
-    })
-    .returning();
+  const [row] = nonEmpty(
+    await db
+      .insert(schema.discordChannelPresenceMessages)
+      .values({
+        guildId: GUILD_ID,
+        voiceChannelId: VOICE_CHANNEL_ID,
+        bindingId,
+        textChannelId: TEXT_CHANNEL_ID,
+        messageId: 'rok1499-message',
+        openedAt,
+      })
+      .returning(),
+    'presence row',
+  );
   return row;
 }
 
@@ -197,10 +204,13 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
       displayName: string,
       stay: { from: number; to: number | null },
     ): Promise<number> {
-      const [user] = await db
-        .insert(schema.users)
-        .values({ discordId, username: displayName, role: 'member' })
-        .returning();
+      const [user] = nonEmpty(
+        await db
+          .insert(schema.users)
+          .values({ discordId, username: displayName, role: 'member' })
+          .returning(),
+        'user',
+      );
       await seedStay(discordId, displayName, stay);
       return user.id;
     }
@@ -239,10 +249,13 @@ describe('channel presence occupancy (integration, ROK-1499)', () => {
     }
 
     it('summarises the span, the members and both mapped and unmapped games', async () => {
-      const [game] = await db
-        .insert(schema.games)
-        .values({ name: 'Deep Rock Galactic', slug: 'rok1499-drg' })
-        .returning();
+      const [game] = nonEmpty(
+        await db
+          .insert(schema.games)
+          .values({ name: 'Deep Rock Galactic', slug: 'rok1499-drg' })
+          .returning(),
+        'game',
+      );
       const ada = await seedMember('u1', 'Ada', { from: 0, to: 90 });
       const bo = await seedMember('u2', 'Bo', { from: 30, to: null });
       // Started BEFORE the room opened: the normal "launch the game, then join

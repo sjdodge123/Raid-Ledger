@@ -25,6 +25,7 @@ import {
 } from '../utils/push-content';
 import { buildQuickPlayEmbed } from './discord-embed-quickplay.helpers';
 import type { EmbedContext, EmbedEventData } from './discord-embed.factory';
+import { at } from '../../common/testing/narrow';
 
 const CLIENT_URL = 'https://rl.example';
 const START = '2026-09-02T18:00:00Z';
@@ -525,7 +526,7 @@ describe('buildQuickPlayEmbed — the channel surface stays impersonal', () => {
 
   it('is a channel embed, so a personalized field is rejected at write time', () => {
     const { embed } = buildQuickPlayEmbed(event(), CONTEXT, 'live');
-    const personalized = [...PERSONALIZED_FIELD_NAMES][0];
+    const personalized = at([...PERSONALIZED_FIELD_NAMES], 0);
     expect(() =>
       embed.addFields({ name: personalized, value: 'yes' }),
     ).toThrow();

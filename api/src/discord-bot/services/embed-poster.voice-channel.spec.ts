@@ -13,13 +13,14 @@ import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import { EMBED_STATES } from '../discord-bot.constants';
+import { at } from '../../common/testing/narrow';
 
 describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   let service: EmbedPosterService;
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
   let channelResolver: jest.Mocked<ChannelResolverService>;
   let clientService: jest.Mocked<DiscordBotClientService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
 
   const mockMessage = { id: 'msg-123' };
   const mockEmbed = new EmbedBuilder().setTitle('Test');
@@ -177,7 +178,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     await service.postEmbed(42, baseEvent, 3);
 
-    const eventDataArg = embedFactory.buildEventEmbed.mock.calls[0][0];
+    const eventDataArg = at(embedFactory.buildEventEmbed.mock.calls, 0)[0];
     // voiceChannelId should not be present (undefined) since resolver returned null
     expect(eventDataArg.voiceChannelId).toBeUndefined();
   });
