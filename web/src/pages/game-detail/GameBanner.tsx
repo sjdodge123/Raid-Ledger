@@ -176,7 +176,7 @@ function DetailsGrid({ modes, playerCount, platforms, crossplay, releaseDate }: 
             {modes.length > 0 && <div><span className="text-dim">Game Modes</span><p className="text-foreground">{modes.join(', ')}</p></div>}
             {playerCount && <div><span className="text-dim">Players</span><p className="text-foreground">{playerCount.min}-{playerCount.max}</p></div>}
             {platforms.length > 0 && <div><span className="text-dim">Platforms</span><p className="text-foreground">{platforms.join(', ')}</p></div>}
-            {crossplay !== null && <div><span className="text-dim">Crossplay</span><p className={`font-medium ${crossplay ? 'text-emerald-400' : 'text-secondary'}`}>{crossplay ? 'Supported' : 'Not Available'}</p></div>}
+            {crossplay !== null && <div><span className="text-dim">Crossplay</span><p className={`font-medium ${crossplay ? 'text-success' : 'text-secondary'}`}>{crossplay ? 'Supported' : 'Not Available'}</p></div>}
             {releaseDate && <div><span className="text-dim">Released</span><p className="text-foreground">{new Date(releaseDate).toLocaleDateString()}</p></div>}
         </div>
     );

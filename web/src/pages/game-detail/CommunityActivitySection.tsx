@@ -89,7 +89,7 @@ function NowPlayingRow({ players, count }: {
                         </Link>
                     ))}
                 </div>
-                <span className="text-sm text-emerald-400 font-medium">{count} playing now</span>
+                <span className="text-sm text-success font-medium">{count} playing now</span>
             </div>
         </div>
     );
