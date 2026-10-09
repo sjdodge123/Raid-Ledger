@@ -1,5 +1,5 @@
 {
-  "__total": 757,
+  "__total": 742,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -177,9 +177,7 @@
   "pages/profile/appearance-components.tsx": 5,
   "pages/profile/appearance-panel.tsx": 5,
   "pages/profile/characters-panel.tsx": 3,
-  "pages/profile/discord-panel.tsx": 6,
-  "pages/profile/identity-sections.tsx": 8,
-  "pages/profile/integrations-panel.tsx": 4,
+  "pages/profile/identity-sections.tsx": 3,
   "pages/public/PublicLineupPage.tsx": 13,
   "pages/scheduling-poll-page.tsx": 3,
   "pages/scheduling/EarlyCreateConfirmModal.tsx": 2,

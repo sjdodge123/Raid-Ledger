@@ -7,16 +7,16 @@ import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
 function DiscordLinkedState({ user }: { user: { username: string; discordId?: string | null; avatar?: string | null } }) {
     const discordAvatarUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
     return (
-        <div className="flex items-center gap-4 p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+        <div className="flex items-center gap-4 p-4 rounded-lg bg-success/5 border border-success/20">
             {discordAvatarUrl && (
-                <img src={discordAvatarUrl} alt="Discord avatar" className="w-12 h-12 rounded-full border-2 border-emerald-500/50"
+                <img src={discordAvatarUrl} alt="Discord avatar" className="w-12 h-12 rounded-full border-2 border-success/50"
                     onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
             )}
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground">{user.username}</p>
                 <p className="text-xs text-muted truncate">Discord ID: {user.discordId}</p>
             </div>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-success/5 text-success border border-success/30">
                 <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>

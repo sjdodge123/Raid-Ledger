@@ -70,5 +70,14 @@
   "components/profile/UserEventSignups.tsx": "Signup count chip + \"View all\" brand link (brand accent, promises nothing)",
   "components/profile/my-watched-games-section.tsx": "Brand spinner, brand link and the primary bg-emerald-600 CTA fill (Button primary)",
   "components/profile/profile-sidebar.tsx": "Active nav link emerald text + tint (selection accent); Game Time set/unset dot on tokens (S7b)",
-  "pages/character-detail-page.tsx": "Raid-role fills (healer emerald / dps red), manual-override pencil and level amber, gold main-character star (categorical game/marker colours); error box on tokens (S7b)"
+  "pages/character-detail-page.tsx": "Raid-role fills (healer emerald / dps red), manual-override pencil and level amber, gold main-character star (categorical game/marker colours); error box on tokens (S7b)",
+  "pages/profile-page.tsx": "Brand spinners and the primary bg-emerald-600 CTA fill (Button primary)",
+  "pages/profile/appearance-components.tsx": "Theme/scheme picker: selected-option emerald border + tint + check (selection accent on scheme preview swatches)",
+  "pages/profile/appearance-panel.tsx": "Theme/mode picker: selected-option emerald border + tint + check (selection accent on scheme preview swatches)",
+  "pages/profile/characters-panel.tsx": "Primary bg-emerald-600 CTA fill (Button primary) and brand spinner",
+  "pages/profile/identity-sections.tsx": "Avatar ring brand emerald, auto-heart toggle on-fill bg-emerald-600 + brand focus ring (brand toggle); linked/unlink/private-profile states on tokens (S7b)",
+  "pages/user-profile-page.tsx": "\"Show All\" brand link (brand accent, promises nothing)",
+  "pages/user-profile/activity-modal.tsx": "\"Most Played\" marker chip + \"Show All\" brand link (brand accent, promises nothing)",
+  "pages/user-profile/steam-wishlist-section.tsx": "\"Show All\" brand link (brand accent, promises nothing)",
+  "pages/user-profile/user-profile-extra-sections.tsx": "\"Show All\" brand link (brand accent, promises nothing)"
 }
