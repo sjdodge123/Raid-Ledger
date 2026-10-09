@@ -35,22 +35,22 @@ export interface HeroNextStepProps {
 const TONE_CLS: Record<HeroTone, string> = {
     action: 'bg-emerald-600/15 border-emerald-500/40 text-emerald-50',
     waiting: 'bg-cyan-600/10 border-cyan-500/30 text-cyan-50',
-    aborted: 'bg-red-600/15 border-red-500/40 text-red-50',
-    privacy: 'bg-amber-600/10 border-amber-500/30 text-amber-50',
+    aborted: 'bg-danger/10 border-danger/40 text-foreground',
+    privacy: 'bg-warning/10 border-warning/30 text-foreground',
 };
 
 const TONE_LABEL_CLS: Record<HeroTone, string> = {
     action: 'text-emerald-300',
     waiting: 'text-cyan-300',
-    aborted: 'text-red-300',
-    privacy: 'text-amber-300',
+    aborted: 'text-danger',
+    privacy: 'text-warning',
 };
 
 const CTA_CLS: Record<HeroTone, string> = {
     action: 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950',
     waiting: 'bg-emerald-500 hover:bg-emerald-400 text-emerald-950',
-    aborted: 'bg-red-500 hover:bg-red-400 text-white',
-    privacy: 'bg-amber-500 hover:bg-amber-400 text-amber-950',
+    aborted: 'bg-danger hover:bg-danger/90 text-white',
+    privacy: 'bg-warning hover:bg-warning/90 text-white',
 };
 
 function useScrolledPast(ref: React.RefObject<HTMLDivElement | null>): boolean {

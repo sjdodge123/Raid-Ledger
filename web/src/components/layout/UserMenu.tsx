@@ -82,7 +82,7 @@ function ProfileLink({ username, role, isImpersonating, onClose, userId }: {
                         <RoleBadge role={role} />
                     </div>
                     {isImpersonating
-                        ? <p className="text-amber-400 text-xs mt-0.5">Impersonating</p>
+                        ? <p className="text-warning text-xs mt-0.5">Impersonating</p>
                         : <p className="text-xs text-muted mt-0.5">View Profile</p>}
                 </div>
                 <svg className="w-4 h-4 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -107,7 +107,7 @@ function MySettingsLink({ onClose }: { onClose: () => void }) {
 
 function ExitImpersonationItem({ onExit }: { onExit: () => void }) {
     return (
-        <button onClick={onExit} className="flex items-center gap-2 w-full text-left px-4 py-2 text-amber-400 hover:bg-panel transition-colors font-medium">
+        <button onClick={onExit} className="flex items-center gap-2 w-full text-left px-4 py-2 text-warning hover:bg-panel transition-colors font-medium">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
             </svg>

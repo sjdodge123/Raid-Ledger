@@ -148,7 +148,7 @@ function ControlsSection({ onFeedbackClick, onClose }: { onFeedbackClick?: (() =
 function ExitImpersonationButton({ onExit }: { onExit: () => void }) {
     return (
         <div className="px-4 py-4 border-t border-edge-subtle">
-            <button onClick={onExit} className="flex items-center gap-3 w-full px-4 py-3 rounded-lg font-medium text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 transition-colors">
+            <button onClick={onExit} className="flex items-center gap-3 w-full px-4 py-3 rounded-lg font-medium text-warning bg-warning/10 hover:bg-warning/15 transition-colors">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
                 </svg>
@@ -256,7 +256,7 @@ function MoreDrawerBody({ s, onClose, onFeedbackClick, onOpenGameTime }: {
             {s.isImpersonating && <ExitImpersonationButton onExit={s.handleExitImpersonation} />}
             {s.isAuthenticated && (
                 <div className="px-4 py-6 border-t border-edge-subtle">
-                    <button onClick={s.handleLogout} className="w-full px-4 py-3 bg-red-500/15 text-red-400 font-medium rounded-lg hover:bg-red-500/25 transition-colors" data-testid="more-drawer-logout">Logout</button>
+                    <button onClick={s.handleLogout} className="w-full px-4 py-3 bg-danger/10 text-danger font-medium rounded-lg hover:bg-danger/15 transition-colors" data-testid="more-drawer-logout">Logout</button>
                 </div>
             )}
         </div>
