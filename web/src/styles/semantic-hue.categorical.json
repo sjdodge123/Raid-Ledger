@@ -79,5 +79,21 @@
   "pages/user-profile-page.tsx": "\"Show All\" brand link (brand accent, promises nothing)",
   "pages/user-profile/activity-modal.tsx": "\"Most Played\" marker chip + \"Show All\" brand link (brand accent, promises nothing)",
   "pages/user-profile/steam-wishlist-section.tsx": "\"Show All\" brand link (brand accent, promises nothing)",
-  "pages/user-profile/user-profile-extra-sections.tsx": "\"Show All\" brand link (brand accent, promises nothing)"
+  "pages/user-profile/user-profile-extra-sections.tsx": "\"Show All\" brand link (brand accent, promises nothing)",
+  "components/RootRedirect.tsx": "Brand loading spinner border-emerald-500 (spinner accent, not a success state)",
+  "components/auth/AuthGuard.tsx": "Brand loading spinner border-emerald-500 (spinner accent, not a success state)",
+  "components/auth/ProtectedRoute.tsx": "Brand loading spinner border-emerald-500 (spinner accent, not a success state)",
+  "components/shared/journey-hero/JourneyHero.tsx": "Journey CTA brand solid bg-emerald-600 (Button primary fill; deliberate keep, see the ROK-1586 comment above it)",
+  "components/shared/submit-bar/SubmitBar.tsx": "Ready-to-submit frame (emerald /25-/40 border + /5 tint on partial/pre) around the brand solid bg-emerald-600 CTA — call-to-action accent; the submitted 'post' state is neutral, so emerald never means success here",
+  "pages/auth-success-page.tsx": "Brand loading spinner border-emerald-500 (spinner accent, not a success state)",
+  "pages/create-event-page.tsx": "Brand loading spinner border-t-emerald-500 (spinner accent, not a success state)",
+  "pages/edit-event-page.tsx": "Brand loading spinner border-t-emerald-500 (spinner accent); the series-scope banner is on text-warning/bg-warning tokens",
+  "pages/event-metrics-page.tsx": "Brand back-links text-emerald-400 / hover emerald-300 (brand link); the load-error heading is on text-danger",
+  "pages/events-page.tsx": "Sort select brand focus ring focus:ring-emerald-500 (focus accent); the load-error heading is on text-danger",
+  "pages/events/EventsPageHeader.tsx": "\"Create Event\" brand solid CTA bg-emerald-600 / hover emerald-500 + its shadow-emerald-600/25 glow (Button primary fill)",
+  "pages/games-page-discover.tsx": "Curated-section left rule border-emerald-500/40 (decorative section accent)",
+  "pages/insights-hub-page.tsx": "Active tab solid bg-emerald-600 (selection tab)",
+  "pages/lineup-detail-page.tsx": "Private-visibility frame on the invitees section (amber /30 border + /5 tint, categorical visibility marker) + brand back-link text-emerald-400; the private-lineup nominate notice is on text-warning",
+  "pages/my-events-page.tsx": "\"Browse Events\" brand solid CTA bg-emerald-600 / hover emerald-500 (Button primary fill) + active tab solid bg-emerald-600 (selection tab); the load-error heading is on text-danger",
+  "pages/players-page.tsx": "Player-card name group-hover:text-emerald-400 (brand hover accent)"
 }
