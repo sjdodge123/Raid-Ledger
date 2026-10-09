@@ -182,8 +182,8 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             <PostEventSections event={page.event} eventId={page.eventId} isCancelled={derived.isCancelled} isAdHoc={voice.isAdHoc} canManageRoster={derived.canManageRoster} />
             <MobileQuickInfo event={page.event} roster={page.roster} isSignedUp={derived.isSignedUp} alphabetical={alphabetical} />
             {page.event.myConflicts && page.event.myConflicts.length > 0 && (
-                <div className="bg-amber-100 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded-lg p-3 mb-4">
-                    <p className="text-sm text-amber-600 dark:text-amber-300">
+                <div className="bg-warning/10 border border-warning/30 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-warning">
                         {page.event.myConflicts.map(c => `You're already signed up for ${c.title} at this time`).join('. ')}
                     </p>
                 </div>

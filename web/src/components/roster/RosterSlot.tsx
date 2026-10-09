@@ -31,8 +31,8 @@ function slotBorderClass(item: RosterAssignmentResponse | undefined, isCurrentUs
     if (!item) return isClickable ? 'border-dashed border-edge-strong bg-panel/20 hover:border-indigo-400 hover:bg-indigo-500/10' : 'border-dashed border-edge bg-panel/20';
     // ROK-1237: mirror the EventDetailRoster.tsx departed treatment so the
     // assignment grid and the attendee list agree on visual state.
-    if (item.signupStatus === 'departed') return 'border-dashed border-red-500/40 bg-red-900/10 opacity-60';
-    if (item.signupStatus === 'tentative') return 'border-dashed border-amber-500/60 bg-amber-900/10';
+    if (item.signupStatus === 'departed') return 'border-dashed border-danger/40 bg-danger/10 opacity-60';
+    if (item.signupStatus === 'tentative') return 'border-dashed border-warning/60 bg-warning/10';
     if (isCurrentUser) return 'border-emerald-400/50 bg-emerald-900/20';
     return 'border-edge bg-panel/80';
 }

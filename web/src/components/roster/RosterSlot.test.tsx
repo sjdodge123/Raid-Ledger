@@ -147,7 +147,7 @@ describe('RosterSlot — departed signup treatment (ROK-1237)', () => {
             />,
         );
         const slot = container.querySelector('.rounded-lg');
-        expect(slot?.className).toContain('border-red-500/40');
+        expect(slot?.className).toContain('border-danger/40');
         expect(slot?.className).toContain('opacity-60');
         // Door glyph (U+1F6AA) replaces the bare position number so the row
         // visually parallels the EventDetailRoster departed group.
