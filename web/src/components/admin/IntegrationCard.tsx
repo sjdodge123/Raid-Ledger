@@ -16,8 +16,8 @@ interface IntegrationCardProps {
 
 function statusBadgeClass(isLoading: boolean, isConfigured: boolean) {
     if (isLoading) return 'bg-overlay text-muted';
-    if (isConfigured) return 'bg-success/20 text-success shadow-[0_0_12px_rgba(16,185,129,0.4)]';
-    return 'bg-danger/20 text-danger shadow-[0_0_12px_rgba(239,68,68,0.4)] animate-pulse';
+    if (isConfigured) return 'bg-success/10 text-success shadow-[0_0_12px_rgba(16,185,129,0.4)]';
+    return 'bg-danger/10 text-danger shadow-[0_0_12px_rgba(239,68,68,0.4)] animate-pulse';
 }
 
 function statusBadgeLabel(isLoading: boolean, isConfigured: boolean) {

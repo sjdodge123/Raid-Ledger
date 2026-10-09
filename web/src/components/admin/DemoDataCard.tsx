@@ -56,7 +56,7 @@ function InstalledContent({ status, onClear, isClearing, isOperating }: {
                 <CountBadge label="Notifications" count={status.notifications} />
             </div>
             <button onClick={onClear} disabled={isOperating}
-                className="w-full py-3 px-4 bg-danger/10 hover:bg-danger/15 disabled:bg-danger/5 disabled:cursor-not-allowed text-danger font-semibold rounded-lg transition-colors border border-danger/50 flex items-center justify-center gap-2">
+                className="w-full py-3 px-4 bg-danger/10 hover:border-danger disabled:bg-danger/5 disabled:cursor-not-allowed text-danger font-semibold rounded-lg transition-colors border border-danger/50 flex items-center justify-center gap-2">
                 {isClearing && Spinner}{isClearing ? 'Deleting...' : 'Delete All Demo Data'}
             </button>
         </>

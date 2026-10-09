@@ -60,7 +60,7 @@ function BannerView({ latestVersion, currentVersion, latestReleaseUrl, onDismiss
     return (
         <div role="status" className="bg-warning/10 border border-warning/30 rounded-lg p-4 flex items-start justify-between gap-3">
             <BannerContent data={{ latestVersion, currentVersion, latestReleaseUrl }} />
-            <button onClick={onDismiss} className="text-warning/60 hover:text-warning transition-colors flex-shrink-0" aria-label="Dismiss update banner">
+            <button onClick={onDismiss} className="text-warning/80 hover:text-warning transition-colors flex-shrink-0" aria-label="Dismiss update banner">
                 {CloseIcon}
             </button>
         </div>
