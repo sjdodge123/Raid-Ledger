@@ -12,6 +12,7 @@
  * Only the boundary is mocked, with the same setup as the base spec; see
  * its header for why the render runs for real.
  */
+import { at } from '../../common/testing/narrow';
 import {
   mocked,
   VOICE,
@@ -88,8 +89,8 @@ describe('ChannelPresenceEmbedService — D8 empty → recap → close', () => {
 
     expect(mocked.markEmpty).toHaveBeenCalledTimes(1);
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    const embeds = mocked.editEmbeds.mock.calls[0][3];
-    expect(embeds[0].data.title).toContain('session ended');
+    const embeds = at(mocked.editEmbeds.mock.calls, 0)[3];
+    expect(embeds[0]?.data.title).toContain('session ended');
     expect(mocked.closeRow).not.toHaveBeenCalled();
   });
 
@@ -161,9 +162,9 @@ describe('ChannelPresenceEmbedService — D8 rejoin inside the grace, and the ev
     expect(mocked.clearEmpty).toHaveBeenCalledWith(expect.anything(), 'row-1');
     expect(mocked.sendEmbeds).not.toHaveBeenCalled();
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.editEmbeds.mock.calls[0][2]).toBe(MESSAGE);
-    const embeds = mocked.editEmbeds.mock.calls[0][3];
-    expect(embeds[0].data.title).not.toContain('session ended');
+    expect(mocked.editEmbeds.mock.calls[0]?.[2]).toBe(MESSAGE);
+    const embeds = at(mocked.editEmbeds.mock.calls, 0)[3];
+    expect(at(embeds, 0).data.title).not.toContain('session ended');
   });
 
   it('re-renders the recap when onEventEnded fires for the binding', async () => {
@@ -179,9 +180,9 @@ describe('ChannelPresenceEmbedService — D8 rejoin inside the grace, and the ev
 
     expect(getBindingById).toHaveBeenCalledWith(BINDING);
     expect(mocked.editEmbeds).toHaveBeenCalledTimes(1);
-    const embeds = mocked.editEmbeds.mock.calls[0][3];
+    const embeds = at(mocked.editEmbeds.mock.calls, 0)[3];
     expect(embeds).toHaveLength(2);
-    expect(embeds[1].data.author?.name).toContain('ENDED');
+    expect(embeds[1]?.data.author?.name).toContain('ENDED');
   });
 });
 
@@ -202,12 +203,12 @@ describe('ChannelPresenceEmbedService — D8 rejoin after the grace (ROK-1498)',
       expect.any(Date),
     );
     expect(mocked.sendEmbeds).toHaveBeenCalledTimes(1);
-    expect(mocked.sendEmbeds.mock.calls[0][1]).toBe(TEXT);
+    expect(mocked.sendEmbeds.mock.calls[0]?.[1]).toBe(TEXT);
     expect(mocked.editEmbeds).not.toHaveBeenCalled();
     expect(mocked.clearEmpty).not.toHaveBeenCalled();
     expect(mocked.openRow).toHaveBeenCalledTimes(1);
-    const embeds = mocked.sendEmbeds.mock.calls[0][2];
-    expect(embeds[0].data.title).not.toContain('session ended');
+    const embeds = at(mocked.sendEmbeds.mock.calls, 0)[2];
+    expect(at(embeds, 0).data.title).not.toContain('session ended');
   });
 
   it('does not resurrect a stale row even while a linked session is still live/grace_period (ROK-1498)', async () => {

@@ -21,7 +21,6 @@ import {
   waitFor,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import { LfgSignupListener } from './lfg-signup.listener';
 import {
   createGame,
@@ -29,7 +28,9 @@ import {
   readIntent,
   readIntentsForGame,
   setExpiresAt,
+  createMembers,
 } from './lfg.integration.spec-helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 let testApp: TestApp;
 
@@ -50,12 +51,9 @@ afterEach(async () => {
 
 type Member = { userId: number; token: string };
 
-async function members(...names: string[]): Promise<Member[]> {
-  const out: Member[] = [];
-  for (const name of names) {
-    out.push(await createMemberAndLogin(testApp, name, `${name}@test.local`));
-  }
-  return out;
+/** Logged-in members, one per name, as a positional tuple. */
+function members<N extends string[]>(...names: N) {
+  return createMembers(testApp, ...names);
 }
 
 async function raiseHand(m: Member, gameId: number): Promise<void> {
@@ -321,10 +319,13 @@ describe('POST /events with lfgGameId (ROK-1573)', () => {
     expect(await rosterByUser(eventId)).toEqual(
       everyone.map((id) => [id, 'player']),
     );
-    const [event] = await testApp.db
-      .select({ slotConfig: schema.events.slotConfig })
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId));
+    const [event] = nonEmpty(
+      await testApp.db
+        .select({ slotConfig: schema.events.slotConfig })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId)),
+      'event',
+    );
     expect(event.slotConfig).toEqual({ type: 'generic', player: 10 });
   });
 });

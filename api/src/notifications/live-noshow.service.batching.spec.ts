@@ -49,7 +49,7 @@ function makeSelectFromJoinWhere(resolvedValue: unknown[]) {
 
 describe('LiveNoShowService — batching', () => {
   let service: LiveNoShowService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;
@@ -503,7 +503,7 @@ describe('LiveNoShowService — batching', () => {
           payload: { absentPlayers: Array<{ displayName: string }> };
         }
       ).payload;
-      expect(payload.absentPlayers[0].displayName).toBe('Unknown');
+      expect(payload.absentPlayers[0]?.displayName).toBe('Unknown');
     });
 
     it('should process multiple live events independently', async () => {

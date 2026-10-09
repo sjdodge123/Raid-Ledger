@@ -184,8 +184,8 @@ describe('DiscordEmbedFactory — buildEventInvite details', () => {
       url?: string;
     }[];
     expect(components).toHaveLength(1);
-    expect(components[0].label).toBe('View Event');
-    expect(components[0].url).toBe('http://localhost:5173/events/42');
+    expect(components[0]?.label).toBe('View Event');
+    expect(components[0]?.url).toBe('http://localhost:5173/events/42');
   });
 
   it('should omit row when no client URL', () => {

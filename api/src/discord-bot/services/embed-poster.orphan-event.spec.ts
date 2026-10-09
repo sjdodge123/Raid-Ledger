@@ -20,7 +20,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 describe('EmbedPosterService — event deleted mid-post (ROK-1511)', () => {
   let service: EmbedPosterService;
   let clientService: jest.Mocked<DiscordBotClientService>;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'insert' | 'select', jest.Mock>;
   let warnSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
 

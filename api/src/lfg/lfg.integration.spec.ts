@@ -21,10 +21,7 @@ import {
   waitFor,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import {
-  createMemberAndLogin,
-  createFutureEvent,
-} from '../events/signups.integration.spec-helpers';
+import { createFutureEvent } from '../events/signups.integration.spec-helpers';
 import {
   LFG_EXPIRY_JOB_NAME,
   LFG_EXPIRY_CRON_EXPRESSION,
@@ -44,8 +41,10 @@ import {
   type LfgGroupSummaryDto,
   type LfgGroupDetailDto,
   type LfgHeartedGameDto,
+  createMembers,
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
+import { at } from '../common/testing/narrow';
 
 let testApp: TestApp;
 let adminToken: string;
@@ -86,14 +85,9 @@ function convert(token: string, gameId: number, body: object) {
     .send(body);
 }
 
-/** Create N logged-in members with predictable usernames. */
-async function members(...names: string[]) {
-  const out: Array<{ userId: number; token: string; username: string }> = [];
-  for (const name of names) {
-    const m = await createMemberAndLogin(testApp, name, `${name}@test.local`);
-    out.push({ ...m, username: name });
-  }
-  return out;
+/** Logged-in members, one per name, as a positional tuple. */
+function members<N extends string[]>(...names: N) {
+  return createMembers(testApp, ...names);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -278,8 +272,8 @@ describe('+1 expiry refresh', () => {
 
     const rows = await readIntentsForGame(testApp, game.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('active');
-    expect(daysFromNow(rows[0].expires_at)).toBeGreaterThan(
+    expect(rows[0]?.status).toBe('active');
+    expect(daysFromNow(at(rows, 0).expires_at)).toBeGreaterThan(
       LFG_EXPIRY_DAYS - 1,
     );
   });
@@ -446,7 +440,7 @@ describe('concurrency guard', () => {
 
     const rows = await readIntentsForGame(testApp, game.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0].status).toBe('active');
+    expect(rows[0]?.status).toBe('active');
     expect((await getGroup(a.token, game.id)).body).toMatchObject({
       activeCount: 1,
       state: 'lfg',
@@ -644,7 +638,7 @@ describe('GET /lfg/hearted', () => {
       gameName: 'Wanted Game',
       activeCount: 1,
     });
-    expect(rows[0].heartedAt).toEqual(expect.any(String));
+    expect(rows[0]?.heartedAt).toEqual(expect.any(String));
     expect(await countGameInterests(testApp)).toBe(interestsBefore);
   });
 });

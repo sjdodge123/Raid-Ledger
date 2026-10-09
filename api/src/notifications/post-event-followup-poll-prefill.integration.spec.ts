@@ -27,34 +27,44 @@ import {
   handlePollClick,
   type PostEventFollowupDeps,
 } from '../discord-bot/listeners/post-event-followup-interaction.handlers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const HOUR = 60 * 60 * 1000;
 let seq = 0;
 
 async function mkUser(testApp: TestApp) {
   seq += 1;
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `71000000000000${String(seq).padStart(4, '0')}`,
-      username: `pf${seq}`,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `71000000000000${String(seq).padStart(4, '0')}`,
+        username: `pf${seq}`,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
   return user;
 }
 
 /** An ended event with one attendee + the M2 sentinel row the cron creates. */
 async function mkEndedEventWithSentinel(testApp: TestApp, creatorId: number) {
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title: 'Ended Event',
-      creatorId,
-      gameId: testApp.seed.game.id,
-      duration: [new Date(Date.now() - 3 * HOUR), new Date(Date.now() - HOUR)],
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Ended Event',
+        creatorId,
+        gameId: testApp.seed.game.id,
+        duration: [
+          new Date(Date.now() - 3 * HOUR),
+          new Date(Date.now() - HOUR),
+        ],
+      })
+      .returning(),
+    'event',
+  );
   const attendee = await mkUser(testApp);
   await testApp.db
     .insert(schema.eventSignups)
@@ -67,28 +77,34 @@ async function mkEndedEventWithSentinel(testApp: TestApp, creatorId: number) {
 
 /** A real lineup + match so `match_id`'s FK resolves against actual rows. */
 async function mkMatch(testApp: TestApp, creatorId: number) {
-  const [lineup] = await testApp.db
-    .insert(schema.communityLineups)
-    .values({
-      title: 'Follow-up poll',
-      status: 'decided',
-      visibility: 'public',
-      createdBy: creatorId,
-      phaseDurationOverride: { standalone: true },
-      publicSlug: generatePublicSlug(),
-      publicShareEnabled: false,
-    })
-    .returning();
-  const [match] = await testApp.db
-    .insert(schema.communityLineupMatches)
-    .values({
-      lineupId: lineup.id,
-      gameId: testApp.seed.game.id,
-      status: 'scheduling',
-      thresholdMet: true,
-      voteCount: 0,
-    })
-    .returning();
+  const [lineup] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineups)
+      .values({
+        title: 'Follow-up poll',
+        status: 'decided',
+        visibility: 'public',
+        createdBy: creatorId,
+        phaseDurationOverride: { standalone: true },
+        publicSlug: generatePublicSlug(),
+        publicShareEnabled: false,
+      })
+      .returning(),
+    'lineup',
+  );
+  const [match] = nonEmpty(
+    await testApp.db
+      .insert(schema.communityLineupMatches)
+      .values({
+        lineupId: lineup.id,
+        gameId: testApp.seed.game.id,
+        status: 'scheduling',
+        thresholdMet: true,
+        voteCount: 0,
+      })
+      .returning(),
+    'match',
+  );
   return { lineupId: lineup.id, matchId: match.id };
 }
 
@@ -127,11 +143,14 @@ function mockInteraction(): ButtonInteraction {
 }
 
 async function getSentinel(testApp: TestApp, eventId: number) {
-  const [row] = await testApp.db
-    .select()
-    .from(schema.postEventFollowupSent)
-    .where(eq(schema.postEventFollowupSent.eventId, eventId))
-    .limit(1);
+  const [row] = nonEmpty(
+    await testApp.db
+      .select()
+      .from(schema.postEventFollowupSent)
+      .where(eq(schema.postEventFollowupSent.eventId, eventId))
+      .limit(1),
+    'post_event_followup_sent row',
+  );
   return row;
 }
 

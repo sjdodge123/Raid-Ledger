@@ -12,6 +12,7 @@ import { eq, isNull } from 'drizzle-orm';
 import { EventReminderService } from './event-reminder.service';
 import { loadReminderContext } from './event-reminder.helpers';
 import type { SignupStatus } from '../drizzle/schema/event-signups';
+import { nonEmpty } from '../common/testing/narrow';
 
 const ALL_SIGNUP_STATUSES: SignupStatus[] = [
   'signed_up',
@@ -27,15 +28,18 @@ async function createUser(
   username: string,
   overrides: Partial<typeof schema.users.$inferInsert> = {},
 ) {
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${username}@test.local`,
-      username,
-      role: 'member',
-      ...overrides,
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${username}@test.local`,
+        username,
+        role: 'member',
+        ...overrides,
+      })
+      .returning(),
+    'inserted user',
+  );
   return user;
 }
 
@@ -49,18 +53,21 @@ async function createEvent(
 ) {
   const start = new Date(Date.now() + startOffsetMs);
   const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
-  const [event] = await testApp.db
-    .insert(schema.events)
-    .values({
-      title,
-      creatorId,
-      duration: [start, end] as [Date, Date],
-      reminder15min: true,
-      reminder1hour: true,
-      reminder24hour: true,
-      ...overrides,
-    })
-    .returning();
+  const [event] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title,
+        creatorId,
+        duration: [start, end] as [Date, Date],
+        reminder15min: true,
+        reminder1hour: true,
+        reminder24hour: true,
+        ...overrides,
+      })
+      .returning(),
+    'inserted event',
+  );
   return event;
 }
 
@@ -162,7 +169,7 @@ function describeEventReminderPipeline() {
         .where(isNull(schema.events.cancelledAt));
 
       expect(candidates.length).toBe(1);
-      expect(candidates[0].title).toBe('Active Event');
+      expect(candidates[0]?.title).toBe('Active Event');
     });
 
     it('should include events with reminder flags enabled', async () => {
@@ -216,8 +223,8 @@ function describeEventReminderPipeline() {
         .where(eq(schema.notifications.userId, user.id));
 
       expect(notifs.length).toBe(1);
-      expect(notifs[0].type).toBe('event_reminder');
-      expect(notifs[0].title).toContain('Event Starting');
+      expect(notifs[0]?.type).toBe('event_reminder');
+      expect(notifs[0]?.title).toContain('Event Starting');
     });
 
     it('should persist disabled reminder flag correctly', async () => {
@@ -231,10 +238,13 @@ function describeEventReminderPipeline() {
         },
       );
 
-      const [persisted] = await testApp.db
-        .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, event.id));
+      const [persisted] = nonEmpty(
+        await testApp.db
+          .select()
+          .from(schema.events)
+          .where(eq(schema.events.id, event.id)),
+        'persisted',
+      );
 
       expect(persisted.reminder15min).toBe(false);
     });
@@ -279,8 +289,8 @@ function describeEventReminderPipeline() {
         .where(eq(schema.eventRemindersSent.eventId, event.id));
 
       expect(rows.length).toBe(1);
-      expect(rows[0].userId).toBe(user.id);
-      expect(rows[0].reminderType).toBe('1hour');
+      expect(rows[0]?.userId).toBe(user.id);
+      expect(rows[0]?.reminderType).toBe('1hour');
     });
 
     it('should return false on duplicate (same event+user+type)', async () => {
@@ -346,8 +356,8 @@ function describeEventReminderPipeline() {
 
       const result = await reminderService.getUserTimezones([user.id]);
       expect(result.length).toBe(1);
-      expect(result[0].userId).toBe(user.id);
-      expect(result[0].timezone).toBe('America/New_York');
+      expect(result[0]?.userId).toBe(user.id);
+      expect(result[0]?.timezone).toBe('America/New_York');
     });
 
     it('should fall back to UTC when preference is "auto"', async () => {
@@ -356,7 +366,7 @@ function describeEventReminderPipeline() {
 
       const result = await reminderService.getUserTimezones([user.id]);
       expect(result.length).toBe(1);
-      expect(result[0].timezone).toBe('UTC');
+      expect(result[0]?.timezone).toBe('UTC');
     });
 
     it('should return empty array when no timezone preference', async () => {

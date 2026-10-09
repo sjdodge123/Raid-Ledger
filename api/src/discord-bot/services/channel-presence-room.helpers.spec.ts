@@ -23,6 +23,7 @@ import {
   type RoomResolveDeps,
   type RoomSnapshot,
 } from './channel-presence-room.helpers';
+import { at } from '../../common/testing/narrow';
 
 jest.mock('./ad-hoc-notification.helpers', () => ({
   buildEmbedEventData: jest.fn(),
@@ -323,14 +324,14 @@ describe('resolveRoom — participant union', () => {
       lobbyBinding({ minPlayers: 2 }),
     );
 
-    expect(mockBuildEmbedEventData.mock.calls[0][1]).toBe(88);
-    expect(mockBuildEmbedEventData.mock.calls[0][2]).toEqual([
+    expect(mockBuildEmbedEventData.mock.calls[0]?.[1]).toBe(88);
+    expect(mockBuildEmbedEventData.mock.calls[0]?.[2]).toEqual([
       { discordUserId: 'u1', discordUsername: 'Ana', isActive: true },
       { discordUserId: 'u9', discordUsername: 'Zoe', isActive: false },
       { discordUserId: 'u2', discordUsername: 'Ben', isActive: true },
       { discordUserId: 'u3', discordUsername: 'Cara', isActive: true },
     ]);
-    expect(room.groups[0].eventData).toBe(EVENT_DATA);
+    expect(room.groups[0]?.eventData).toBe(EVENT_DATA);
   });
 });
 
@@ -440,7 +441,7 @@ describe('resolveRoom — DEMO_MODE override event hints (D12)', () => {
     );
 
     expect(room.groups.map((g) => g.eventId)).toEqual([42]);
-    expect(mockBuildEmbedEventData.mock.calls[0][1]).toBe(42);
+    expect(mockBuildEmbedEventData.mock.calls[0]?.[1]).toBe(42);
   });
 
   it('prefers the real linked event over a member-declared eventId', async () => {
@@ -609,8 +610,8 @@ describe('resolveRoom — art on the DEMO_MODE seam path', () => {
       },
     );
 
-    expect(room.groups[0].gameName).toBe('Valheim');
-    expect(room.groups[0].game).toEqual({
+    expect(room.groups[0]?.gameName).toBe('Valheim');
+    expect(room.groups[0]?.game).toEqual({
       id: 5,
       name: 'Valheim',
       coverUrl: '//img.example/vh.png',
@@ -633,6 +634,6 @@ describe('resolveRoom — art on the DEMO_MODE seam path', () => {
       lobbyBinding({ minPlayers: 2 }),
     );
 
-    expect(room.groups[0].game).toBeNull();
+    expect(at(room.groups, 0).game).toBeNull();
   });
 });

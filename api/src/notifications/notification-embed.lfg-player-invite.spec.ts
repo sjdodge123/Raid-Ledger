@@ -13,6 +13,7 @@ import { personalizedFieldName } from '../discord-bot/embeds/embed-personalized.
 import { LFG_INVITE_NOTIFICATION_TYPE } from '../lfg/lfg-invite.constants';
 import { buildExtraRows } from './notification-embed.buttons';
 import { addTypeSpecificFields } from './notification-embed.helpers';
+import { at, defined } from '../common/testing/narrow';
 import {
   LFG_INVITE_DECLINE_LABEL,
   LFG_INVITE_JOIN_LABEL,
@@ -214,7 +215,8 @@ describe('buildExtraRows for lfg_player_invite (ROK-1455 T-B3 / AC8)', () => {
     // a week hand (ROK-1471).
     expect(customIds(rows)).toContain(`${LFG_BUTTON_IDS.INVITE_JOIN}:7`);
     expect(customIds(rows)).not.toContain(`${LFG_BUTTON_IDS.JOIN}:7`);
-    expect((rows?.[0].components[1].data as { url?: string }).url).toBe(
+    const view = at(at(defined(rows, 'invite rows'), 0).components, 1);
+    expect((view.data as { url?: string }).url).toBe(
       'https://raid.example/lfg/deep-rock-galactic',
     );
   });

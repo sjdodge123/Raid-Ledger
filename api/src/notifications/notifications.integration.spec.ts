@@ -14,6 +14,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
 import { eq, and, not, isNull, lt } from 'drizzle-orm';
+import { nonEmpty } from '../common/testing/narrow';
 
 /** Helper to create a member user with local credentials and return their token. */
 async function createMemberAndLogin(
@@ -23,14 +24,17 @@ async function createMemberAndLogin(
 ): Promise<{ userId: number; token: string }> {
   const passwordHash = await bcrypt.hash('TestPassword123!', 4);
 
-  const [user] = await testApp.db
-    .insert(schema.users)
-    .values({
-      discordId: `local:${email}`,
-      username,
-      role: 'member',
-    })
-    .returning();
+  const [user] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `local:${email}`,
+        username,
+        role: 'member',
+      })
+      .returning(),
+    'user',
+  );
 
   await testApp.db.insert(schema.localCredentials).values({
     email,
@@ -68,16 +72,19 @@ describe('Event Reminders & Notifications (integration)', () => {
       const start = new Date(Date.now() + 60 * 60 * 1000); // 1h from now
       const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
 
-      const [event] = await testApp.db
-        .insert(schema.events)
-        .values({
-          title: 'Reminder Test Event',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [start, end] as [Date, Date],
-          reminder15min: true,
-          reminder1hour: true,
-        })
-        .returning();
+      const [event] = nonEmpty(
+        await testApp.db
+          .insert(schema.events)
+          .values({
+            title: 'Reminder Test Event',
+            creatorId: testApp.seed.adminUser.id,
+            duration: [start, end] as [Date, Date],
+            reminder15min: true,
+            reminder1hour: true,
+          })
+          .returning(),
+        'event',
+      );
 
       // First insert — should succeed
       const [first] = await testApp.db
@@ -97,7 +104,7 @@ describe('Event Reminders & Notifications (integration)', () => {
         .returning();
 
       expect(first).toBeDefined();
-      expect(first.eventId).toBe(event.id);
+      expect(first?.eventId).toBe(event.id);
 
       // Duplicate insert — should be a no-op (onConflictDoNothing)
       const duplicateResult = await testApp.db
@@ -131,14 +138,17 @@ describe('Event Reminders & Notifications (integration)', () => {
       const start = new Date(Date.now() + 60 * 60 * 1000);
       const end = new Date(start.getTime() + 3 * 60 * 60 * 1000);
 
-      const [event] = await testApp.db
-        .insert(schema.events)
-        .values({
-          title: 'Multi-Reminder Event',
-          creatorId: testApp.seed.adminUser.id,
-          duration: [start, end] as [Date, Date],
-        })
-        .returning();
+      const [event] = nonEmpty(
+        await testApp.db
+          .insert(schema.events)
+          .values({
+            title: 'Multi-Reminder Event',
+            creatorId: testApp.seed.adminUser.id,
+            duration: [start, end] as [Date, Date],
+          })
+          .returning(),
+        'event',
+      );
 
       // Insert different reminder types
       await testApp.db.insert(schema.eventRemindersSent).values({
@@ -294,15 +304,18 @@ describe('Event Reminders & Notifications (integration)', () => {
       );
 
       // Insert notification
-      const [notif] = await testApp.db
-        .insert(schema.notifications)
-        .values({
-          userId,
-          type: 'system',
-          title: 'Test Notification',
-          message: 'This should be marked read.',
-        })
-        .returning();
+      const [notif] = nonEmpty(
+        await testApp.db
+          .insert(schema.notifications)
+          .values({
+            userId,
+            type: 'system',
+            title: 'Test Notification',
+            message: 'This should be marked read.',
+          })
+          .returning(),
+        'notif',
+      );
 
       // Mark as read
       const markRes = await testApp.request
@@ -402,7 +415,7 @@ describe('Event Reminders & Notifications (integration)', () => {
         .returning();
 
       expect(deleted.length).toBe(1);
-      expect(deleted[0].title).toBe('Expired');
+      expect(deleted[0]?.title).toBe('Expired');
 
       // Verify remaining notifications
       const remaining = await testApp.db

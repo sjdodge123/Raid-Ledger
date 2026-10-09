@@ -2,6 +2,7 @@ import { DiscordNotificationEmbedService } from './discord-notification-embed.se
 import { SettingsService } from '../settings/settings.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
+import { at, defined } from '../common/testing/narrow';
 
 // Mock discord.js so we can test without real Discord connections
 jest.mock(
@@ -196,10 +197,13 @@ describe('DiscordNotificationEmbedService — features', () => {
         'Community',
       );
 
-      const rowJson = rows![0].toJSON() as unknown as {
+      const rowJson = at(
+        defined(rows, 'action rows'),
+        0,
+      ).toJSON() as unknown as {
         components: Array<{ customId: string; label: string; style: number }>;
       };
-      const roachBtn = rowJson.components[0];
+      const roachBtn = at(rowJson.components, 0);
       expect(roachBtn.customId).toContain('event_roachout');
       expect(roachBtn.customId).toContain('99');
       expect(roachBtn.label).toBe('Roach Out');
@@ -219,10 +223,13 @@ describe('DiscordNotificationEmbedService — features', () => {
         'Community',
       );
 
-      const rowJson = rows![0].toJSON() as unknown as {
+      const rowJson = at(
+        defined(rows, 'action rows'),
+        0,
+      ).toJSON() as unknown as {
         components: Array<{ customId: string }>;
       };
-      expect(rowJson.components[0].customId).toBe('event_roachout:123');
+      expect(rowJson.components[0]?.customId).toBe('event_roachout:123');
     });
 
     it('should return undefined rows for event_reminder without eventId', async () => {
@@ -252,11 +259,14 @@ describe('DiscordNotificationEmbedService — features', () => {
         'Community',
       );
 
-      const rowJson = rows![0].toJSON() as unknown as {
+      const rowJson = at(
+        defined(rows, 'action rows'),
+        0,
+      ).toJSON() as unknown as {
         components: Array<{ customId: string; label: string; style: number }>;
       };
       expect(rowJson.components).toHaveLength(2);
-      const lateBtn = rowJson.components[1];
+      const lateBtn = at(rowJson.components, 1);
       expect(lateBtn.customId).toBe('event_late:77');
       expect(lateBtn.label).toBe('Running Late');
       // ButtonStyle.Secondary = 2
@@ -322,7 +332,10 @@ describe('DiscordNotificationEmbedService — features', () => {
 
       expect(rows).toBeDefined();
       expect(rows).toHaveLength(1);
-      const rowJson = rows![0].toJSON() as unknown as {
+      const rowJson = at(
+        defined(rows, 'action rows'),
+        0,
+      ).toJSON() as unknown as {
         components: Array<{ customId: string; label: string; style: number }>;
       };
       expect(rowJson.components).toHaveLength(3);
@@ -391,10 +404,13 @@ describe('DiscordNotificationEmbedService — features', () => {
         'Community',
       );
 
-      const rowJson = rows![0].toJSON() as unknown as {
+      const rowJson = at(
+        defined(rows, 'action rows'),
+        0,
+      ).toJSON() as unknown as {
         components: Array<{ customId: string }>;
       };
-      expect(rowJson.components[0].customId).toBe('event_roachout:77');
+      expect(rowJson.components[0]?.customId).toBe('event_roachout:77');
     });
   });
 
@@ -516,7 +532,10 @@ describe('DiscordNotificationEmbedService — features', () => {
       expect(rows).toBeDefined();
       expect(rows).toHaveLength(1);
 
-      const rowJson = rows![0].toJSON() as unknown as {
+      const rowJson = at(
+        defined(rows, 'action rows'),
+        0,
+      ).toJSON() as unknown as {
         components: Array<{ label: string; url: string; style: number }>;
       };
       expect(rowJson.components).toHaveLength(2);

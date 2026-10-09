@@ -8,6 +8,7 @@
  */
 import { perfLog } from '../common/perf-logger';
 import { timedPhase } from './event-reminder-timing.helpers';
+import { at } from '../common/testing/narrow';
 
 jest.mock('../common/perf-logger', () => ({ perfLog: jest.fn() }));
 
@@ -28,7 +29,7 @@ describe('timedPhase', () => {
     await timedPhase('fetchCandidateEvents', {}, () => Promise.resolve(null));
 
     expect(perfLogMock).toHaveBeenCalledTimes(1);
-    const [category, operation] = perfLogMock.mock.calls[0];
+    const [category, operation] = at(perfLogMock.mock.calls, 0);
     expect(category).toBe('CRON');
     // Must match the existing EventReminderService_handleReminders line so the
     // phases group with the total they break down.
@@ -40,13 +41,13 @@ describe('timedPhase', () => {
       Promise.resolve(undefined),
     );
 
-    expect(perfLogMock.mock.calls[0][3]).toEqual({ events: 3 });
+    expect(perfLogMock.mock.calls[0]?.[3]).toEqual({ events: 3 });
   });
 
   it('reports a non-negative duration', async () => {
     await timedPhase('loadSettings', {}, () => Promise.resolve('UTC'));
 
-    expect(perfLogMock.mock.calls[0][2]).toBeGreaterThanOrEqual(0);
+    expect(perfLogMock.mock.calls[0]?.[2]).toBeGreaterThanOrEqual(0);
   });
 
   it('still times a phase that throws, and re-throws it', async () => {
@@ -58,7 +59,7 @@ describe('timedPhase', () => {
 
     // The failure must not swallow its own duration.
     expect(perfLogMock).toHaveBeenCalledTimes(1);
-    expect(perfLogMock.mock.calls[0][1]).toBe(
+    expect(perfLogMock.mock.calls[0]?.[1]).toBe(
       'EventReminderService_fetchCandidateEvents',
     );
   });

@@ -14,6 +14,7 @@ import {
   LFG_INVITE_JOIN_SPAWN_LABEL,
   buildLfgPlayerInviteRow,
 } from './notification-embed.lfg-player-invite';
+import { at } from '../common/testing/narrow';
 
 interface ButtonJson {
   custom_id?: string;
@@ -25,7 +26,7 @@ interface ButtonJson {
 function joinButton(payload: Record<string, unknown>): ButtonJson {
   const row = buildLfgPlayerInviteRow({ gameId: 42, ...payload });
   if (!row) throw new Error('expected an invite row for a valid gameId');
-  return row.components[0].toJSON() as ButtonJson;
+  return at(row.components, 0).toJSON() as ButtonJson;
 }
 
 describe('invite DM Join button — ROK-1619 AC7 indicator', () => {

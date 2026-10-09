@@ -53,7 +53,7 @@ function makeSoonEvent() {
 
 /** Wire up mockDb for a full handleReminders() run with two signed-up users. */
 function wireHandleRemindersDb(
-  mockDb: Record<string, jest.Mock>,
+  mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>,
   options: {
     users: { id: number; discordId: string | null }[];
     eventId?: number;
@@ -128,7 +128,7 @@ async function buildModule(opts: {
 }
 
 describe('EventReminderService — voice suppression (ROK-842)', () => {
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: Record<'delete' | 'insert' | 'select', jest.Mock>;
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;

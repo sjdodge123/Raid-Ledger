@@ -20,7 +20,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
-import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
 import {
   LFG_EXPIRY_JOB_NAME,
   createGame,
@@ -31,6 +30,7 @@ import {
   type LfgIntentResponseDto,
   type LfgGroupSummaryDto,
   type LfgGroupDetailDto,
+  createMembers,
 } from './lfg.integration.spec-helpers';
 import { LFG_EVENTS } from './lfg.constants';
 import { listLiveNowHands } from '../discord-bot/lfg-now/lfg-now-spawn.helpers';
@@ -70,13 +70,9 @@ function getGroup(token: string, gameId: number) {
     .set('Authorization', `Bearer ${token}`);
 }
 
-/** Create N logged-in members with predictable usernames. */
-async function members(...names: string[]) {
-  const out: Array<{ userId: number; token: string }> = [];
-  for (const name of names) {
-    out.push(await createMemberAndLogin(testApp, name, `${name}@test.local`));
-  }
-  return out;
+/** Logged-in members, one per name, as a positional tuple. */
+function members<N extends string[]>(...names: N) {
+  return createMembers(testApp, ...names);
 }
 
 /**
@@ -239,7 +235,7 @@ describe('AC1 — POST /lfg urgency and horizon', () => {
     const hands = await listLiveNowHands(testApp.db, game.id);
 
     expect(hands).toHaveLength(1);
-    expect(hands[0].userId).toBe(a.userId);
+    expect(hands[0]?.userId).toBe(a.userId);
   });
 
   // ROK-1616 AC7 — `ttl_minutes` is a now-only column. Accepting one here

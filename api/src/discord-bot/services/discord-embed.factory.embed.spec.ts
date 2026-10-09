@@ -146,7 +146,7 @@ describe('buildEventEmbed — footer & URL', () => {
     // masked link is dropped rather than duplicated.
     expect(json.description).not.toContain('[Open event');
     const components = built.row!.toJSON().components as { url?: string }[];
-    expect(components[components.length - 1].url).toBe(
+    expect(components[components.length - 1]?.url).toBe(
       'http://localhost:5173/events/42',
     );
   });
@@ -178,12 +178,12 @@ describe('buildEventEmbed — buttons', () => {
       style?: number;
     }[];
     expect(components).toHaveLength(4);
-    expect(components[0].label).toBe('Sign Up');
-    expect(components[0].style).toBe(3);
-    expect(components[1].label).toBe('Tentative');
-    expect(components[2].label).toBe('Decline');
-    expect(components[3].label).toBe('View Event');
-    expect(components[3].url).toBe('http://localhost:5173/events/42');
+    expect(components[0]?.label).toBe('Sign Up');
+    expect(components[0]?.style).toBe(3);
+    expect(components[1]?.label).toBe('Tentative');
+    expect(components[2]?.label).toBe('Decline');
+    expect(components[3]?.label).toBe('View Event');
+    expect(components[3]?.url).toBe('http://localhost:5173/events/42');
   });
 
   it('should use "view" button mode with only View Event link', () => {
@@ -192,7 +192,7 @@ describe('buildEventEmbed — buttons', () => {
     });
     const components = row!.toJSON().components as { label?: string }[];
     expect(components).toHaveLength(1);
-    expect(components[0].label).toBe('View Event');
+    expect(components[0]?.label).toBe('View Event');
   });
 
   it('should omit row with "none" button mode', () => {
@@ -221,7 +221,7 @@ describe('buildEventEmbed — custom & terminal-state buttons', () => {
     });
     const components = row!.toJSON().components as { label?: string }[];
     expect(components).toHaveLength(1);
-    expect(components[0].label).toBe('Custom Button');
+    expect(components[0]?.label).toBe('Custom Button');
   });
 
   it('should omit buttons for cancelled state regardless of button mode', () => {
@@ -305,7 +305,7 @@ describe('buildEventEmbed — URL & fallback edge cases', () => {
     expect(row).toBeDefined();
     const components = row!.toJSON().components as { label?: string }[];
     expect(components).toHaveLength(3);
-    expect(components[0].label).toBe('Sign Up');
+    expect(components[0]?.label).toBe('Sign Up');
     process.env.CLIENT_URL = origEnv;
   });
 

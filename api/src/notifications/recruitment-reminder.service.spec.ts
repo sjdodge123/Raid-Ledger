@@ -5,6 +5,7 @@ import {
   type RecruitmentReminderTestMocks,
 } from './recruitment-reminder.service.spec-helpers';
 import { DEFAULT_CLIENT_URL } from '../settings/settings-bot.helpers';
+import { at } from '../common/testing/narrow';
 
 // Mock discord.js — uses shared mock (includes Client + PermissionsBitField)
 jest.mock(
@@ -127,7 +128,7 @@ describe('RecruitmentReminderService', () => {
       // Only 2 DMs: users 5 and 7 (not 6)
       expect(mocks.mockNotificationService.create).toHaveBeenCalledTimes(2);
       const calls = mocks.mockNotificationService.create.mock.calls.map(
-        (c: Array<{ userId: number }>) => c[0].userId,
+        (c: Array<{ userId: number }>) => at(c, 0).userId,
       );
       expect(calls).toContain(5);
       expect(calls).toContain(7);

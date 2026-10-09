@@ -87,7 +87,7 @@ describe('GET /lfg/offers', () => {
       intentId: intent.id,
       eventId,
     });
-    expect(offers[0].playedAt).toEqual(expect.any(String));
+    expect(offers[0]?.playedAt).toEqual(expect.any(String));
   });
 
   it('produces NO offer for a session that started before the intent (AC7b)', async () => {

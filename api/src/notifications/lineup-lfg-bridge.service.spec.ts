@@ -11,6 +11,7 @@
  */
 import { LineupLfgBridgeService } from './lineup-lfg-bridge.service';
 import { LINEUP_EVENTS } from '../lineups/lineup-events.constants';
+import { at } from '../common/testing/narrow';
 import {
   LFG_BRIDGE_DEDUP_TTL_SECONDS,
   type BridgeCandidate,
@@ -169,7 +170,7 @@ describe('LineupLfgBridgeService (ROK-1457)', () => {
       ['lfg-bridge:user:9:game:1:lineup:42', LFG_BRIDGE_DEDUP_TTL_SECONDS],
     ]);
     expect(h.checkAndMarkSent.mock.invocationCallOrder[1]).toBeLessThan(
-      h.create.mock.invocationCallOrder[0],
+      at(h.create.mock.invocationCallOrder, 0),
     );
     expect(h.create).toHaveBeenCalledTimes(2);
   });

@@ -97,7 +97,7 @@ describe('an emptied room is re-flushed when its grace runs out (ROK-1692)', () 
 
     await jest.advanceTimersByTimeAsync(TICK);
     expect(flushes).toHaveBeenCalledTimes(2);
-    expect(flushes.mock.calls[1][0].channelId).toBe(VOICE);
+    expect(flushes.mock.calls[1]?.[0].channelId).toBe(VOICE);
 
     // That flush closed the row (it reported nothing pending): no more.
     await jest.advanceTimersByTimeAsync(TICK * 10);
@@ -178,7 +178,7 @@ describe('onBindingChanged — a binding write evicts the cached binding', () =>
     await service.flushNow();
 
     expect(flushes).toHaveBeenCalledTimes(2);
-    expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-new', 1));
+    expect(flushes.mock.calls[1]?.[0].binding).toEqual(lobby('b-new', 1));
   });
 
   it('without a binding-changed event, the cache keeps serving the deleted binding', async () => {
@@ -192,7 +192,7 @@ describe('onBindingChanged — a binding write evicts the cached binding', () =>
     service.markDirty(VOICE);
     await service.flushNow();
 
-    expect(flushes.mock.calls[1][0].binding).toEqual(lobby('b-old'));
+    expect(flushes.mock.calls[1]?.[0].binding).toEqual(lobby('b-old'));
   });
 
   it('onBindingChanged is subscribed to CHANNEL_BINDING_EVENTS.CHANGED', () => {

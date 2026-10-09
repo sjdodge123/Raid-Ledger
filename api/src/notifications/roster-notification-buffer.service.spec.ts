@@ -23,11 +23,15 @@ let selectChains: ReturnType<typeof makeSelectChain>[];
 
 /** Build a chainable Drizzle select that resolves via .limit(). */
 function makeSelectChain(rows: unknown[] = []) {
-  const chain: Record<string, jest.Mock> = {};
-  chain.from = jest.fn().mockReturnValue(chain);
-  chain.innerJoin = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockReturnValue(chain);
-  chain.limit = jest.fn().mockResolvedValue(rows);
+  const chain = {
+    from: jest.fn(),
+    innerJoin: jest.fn(),
+    where: jest.fn(),
+    limit: jest.fn().mockResolvedValue(rows),
+  };
+  chain.from.mockReturnValue(chain);
+  chain.innerJoin.mockReturnValue(chain);
+  chain.where.mockReturnValue(chain);
   return chain;
 }
 

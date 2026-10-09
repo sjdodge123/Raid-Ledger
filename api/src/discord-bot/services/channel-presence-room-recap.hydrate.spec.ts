@@ -17,6 +17,7 @@ import {
 } from './channel-presence-room-recap.hydrate';
 import type { PresenceRow } from './channel-presence-store.helpers';
 import { isBriefVisit } from './channel-presence-brief-visit';
+import { at, defined } from '../../common/testing/narrow';
 
 interface Op {
   kind: 'select';
@@ -95,7 +96,7 @@ describe('loadRoomActivities', () => {
       endedAt: ENDED,
     });
 
-    expect(render(m.ops[0].where)).toContain('"discord_id" in ($1, $2)');
+    expect(render(at(m.ops, 0).where)).toContain('"discord_id" in ($1, $2)');
   });
 
   it('matches sessions that OVERLAP the span, not ones that start inside it', async () => {
@@ -107,7 +108,7 @@ describe('loadRoomActivities', () => {
       endedAt: ENDED,
     });
 
-    const sql = render(m.ops[0].where);
+    const sql = render(at(m.ops, 0).where);
     // The normal case is "launch the game, THEN join voice": a
     // `started_at >= opened_at` predicate drops exactly that session.
     expect(sql).toContain('"started_at" < $3');
@@ -126,7 +127,9 @@ describe('loadRoomActivities', () => {
 
     // An orphaned `ended_at IS NULL` row is "still running" forever; without a
     // floor it inflates its game across the whole span on every recap.
-    const q = new PgDialect().sqlToQuery(m.ops[0].where!);
+    const q = new PgDialect().sqlToQuery(
+      defined(at(m.ops, 0).where, 'the activity where() clause'),
+    );
     expect(q.sql).toContain('"started_at" >= $2');
     expect(q.params[1]).toEqual(
       new Date(OPENED.getTime() - 24 * 60 * 60 * 1000).toISOString(),
@@ -310,7 +313,7 @@ describe('hydrateRoomRecap', () => {
     const recap = await hydrateRoomRecap(m.db, row, ENDED);
 
     // One id in the IN list even though two stays came back...
-    expect(render(m.ops[1].where)).toContain('"discord_id" in ($1)');
+    expect(render(at(m.ops, 1).where)).toContain('"discord_id" in ($1)');
     // ...and one member entry, with the gap excluded (1h + 1h, not 3h).
     expect(recap.members).toEqual([{ displayName: 'Ada', seconds: 7200 }]);
   });

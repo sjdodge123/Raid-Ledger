@@ -17,10 +17,7 @@ import {
   truncateAllTables,
   loginAsAdmin,
 } from '../common/testing/integration-helpers';
-import {
-  createMemberAndLogin,
-  createFutureEvent,
-} from '../events/signups.integration.spec-helpers';
+import { createFutureEvent } from '../events/signups.integration.spec-helpers';
 import {
   DAY_MS,
   createGame,
@@ -30,6 +27,7 @@ import {
   readIntentsForGame,
   setExpiresAt,
   type LfgIntentResponseDto,
+  createMembers,
 } from './lfg.integration.spec-helpers';
 
 let testApp: TestApp;
@@ -65,12 +63,9 @@ function getGroup(token: string, gameId: number) {
     .set('Authorization', `Bearer ${token}`);
 }
 
-async function members(...names: string[]) {
-  const out: Array<{ userId: number; token: string }> = [];
-  for (const name of names) {
-    out.push(await createMemberAndLogin(testApp, name, `${name}@test.local`));
-  }
-  return out;
+/** Logged-in members, one per name, as a positional tuple. */
+function members<N extends string[]>(...names: N) {
+  return createMembers(testApp, ...names);
 }
 
 /** Post an intent and immediately push it past its expiry (unswept by cron). */

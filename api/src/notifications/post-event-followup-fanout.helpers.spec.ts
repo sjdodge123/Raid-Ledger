@@ -6,6 +6,7 @@
  * companion-bot smoke test covers end-to-end delivery through the in-app mirror.
  */
 import { buildInputs } from './post-event-followup-fanout.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 describe('buildInputs (post-event follow-up DM copy)', () => {
   const RECIPIENTS = [11, 22];
@@ -14,11 +15,14 @@ describe('buildInputs (post-event follow-up DM copy)', () => {
 
   describe('event path ({ eventId })', () => {
     it('ROK-1422: appends the follow-up event start as <t:EPOCH:F> (+ :R)', () => {
-      const [input] = buildInputs(
-        RECIPIENTS,
-        "Baldur's Gate 3",
-        { eventId: 42 },
-        START_EPOCH,
+      const [input] = nonEmpty(
+        buildInputs(
+          RECIPIENTS,
+          "Baldur's Gate 3",
+          { eventId: 42 },
+          START_EPOCH,
+        ),
+        'input',
       );
       expect(input.message).toContain(`<t:${START_EPOCH}:F>`);
       expect(input.message).toContain(`<t:${START_EPOCH}:R>`);
@@ -43,11 +47,9 @@ describe('buildInputs (post-event follow-up DM copy)', () => {
     });
 
     it('omits the timestamp (no throw) when the start epoch is unknown', () => {
-      const [input] = buildInputs(
-        RECIPIENTS,
-        'Deadlock',
-        { eventId: 42 },
-        null,
+      const [input] = nonEmpty(
+        buildInputs(RECIPIENTS, 'Deadlock', { eventId: 42 }, null),
+        'input',
       );
       expect(input.message).not.toContain('<t:');
       expect(input.message).toBe('Sign up for the follow-up to **Deadlock**.');
@@ -56,12 +58,15 @@ describe('buildInputs (post-event follow-up DM copy)', () => {
 
   describe('poll path ({ lineupId, matchId })', () => {
     it('never carries a timestamp (no fixed time yet)', () => {
-      const [input] = buildInputs(
-        RECIPIENTS,
-        'Deadlock',
-        { lineupId: 1, matchId: 2, subtype: 'post_event_poll' },
-        // A stray epoch must still be ignored on the poll path.
-        START_EPOCH,
+      const [input] = nonEmpty(
+        buildInputs(
+          RECIPIENTS,
+          'Deadlock',
+          { lineupId: 1, matchId: 2, subtype: 'post_event_poll' },
+          // A stray epoch must still be ignored on the poll path.
+          START_EPOCH,
+        ),
+        'input',
       );
       expect(input.message).not.toContain('<t:');
       expect(input.title).toBe('Vote on a follow-up time');

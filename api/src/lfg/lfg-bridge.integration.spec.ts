@@ -33,6 +33,7 @@ import {
   bridgeDedupKey,
   findBridgeCandidates,
 } from './lfg-bridge.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -65,24 +66,30 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
 
   async function createUser(tag: string): Promise<number> {
     seq += 1;
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({ discordId: `local:${tag}-${seq}`, username: `${tag}-${seq}` })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({ discordId: `local:${tag}-${seq}`, username: `${tag}-${seq}` })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
   async function createLineup(title = 'Friday Night'): Promise<number> {
     seq += 1;
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title,
-        status: 'voting',
-        createdBy: testApp.seed.adminUser.id,
-        publicSlug: `br${Date.now().toString(36)}${seq}`.slice(0, 16),
-      })
-      .returning();
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title,
+          status: 'voting',
+          createdBy: testApp.seed.adminUser.id,
+          publicSlug: `br${Date.now().toString(36)}${seq}`.slice(0, 16),
+        })
+        .returning(),
+      'lineup',
+    );
     return lineup.id;
   }
 
@@ -109,16 +116,19 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
   }
 
   async function activeIntent(userId: number, gameId: number): Promise<number> {
-    const [row] = await testApp.db
-      .insert(schema.lfgIntents)
-      .values({
-        userId,
-        gameId,
-        status: 'active',
-        visibility: 'local',
-        expiresAt: new Date(Date.now() + LFG_EXPIRY_DAYS * DAY_MS),
-      })
-      .returning();
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.lfgIntents)
+        .values({
+          userId,
+          gameId,
+          status: 'active',
+          visibility: 'local',
+          expiresAt: new Date(Date.now() + LFG_EXPIRY_DAYS * DAY_MS),
+        })
+        .returning(),
+      'row',
+    );
     return row.id;
   }
 
@@ -221,7 +231,7 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
     await decide(lineupId, winner.id);
 
     expect(await bridgeNotifications(u3)).toEqual([]);
-    const [row, ...extra] = await bridgeNotifications(u1);
+    const [row, ...extra] = nonEmpty(await bridgeNotifications(u1), 'row');
     expect(extra).toEqual([]);
     expect(row.type).toBe('community_lineup');
     expect(row.payload).toMatchObject({
@@ -377,7 +387,7 @@ describe('Lineup → LFG bridge (ROK-1457, integration)', () => {
     expect({ notificationsForUser: rows.length }).toEqual({
       notificationsForUser: 1,
     });
-    expect(rows[0].payload.games.map((g) => g.gameName)).toEqual([
+    expect(rows[0]?.payload.games.map((g) => g.gameName)).toEqual([
       'Alpha',
       'Bravo',
       'Charlie',

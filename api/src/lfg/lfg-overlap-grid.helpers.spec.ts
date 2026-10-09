@@ -31,6 +31,7 @@ import {
   zonedHourToUtc,
 } from './lfg-zoned-time.helpers';
 import type { MemberSlots } from './lfg-overlap.helpers';
+import { at } from '../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 const NEW_YORK = 'America/New_York';
@@ -206,7 +207,7 @@ describe('hoursForDay', () => {
     'UTC',
   );
   const daysOf = () => days;
-  const day = days[0];
+  const day = () => at(days, 0);
 
   const index = (rows: Partial<GridRows>) =>
     indexGrid({ ...emptyRows(), ...rows }, daysOf);
@@ -220,7 +221,7 @@ describe('hoursForDay', () => {
       ],
     });
 
-    expect([...hoursForDay(1, day, idx)].sort()).toEqual([19, 20]);
+    expect([...hoursForDay(1, day(), idx)].sort()).toEqual([19, 20]);
   });
 
   it('lets a `blocked` override remove a template hour', () => {
@@ -229,7 +230,7 @@ describe('hoursForDay', () => {
       overrides: [{ userId: 1, date: MONDAY, hour: 19, status: 'blocked' }],
     });
 
-    expect([...hoursForDay(1, day, idx)]).toEqual([]);
+    expect([...hoursForDay(1, day(), idx)]).toEqual([]);
   });
 
   it('lets an `available` override add an hour the template lacks', () => {
@@ -237,7 +238,7 @@ describe('hoursForDay', () => {
       overrides: [{ userId: 1, date: MONDAY, hour: 21, status: 'available' }],
     });
 
-    expect([...hoursForDay(1, day, idx)]).toEqual([21]);
+    expect([...hoursForDay(1, day(), idx)]).toEqual([21]);
   });
 
   it('lets an absence outrank both the template and the overrides', () => {
@@ -247,7 +248,7 @@ describe('hoursForDay', () => {
       absences: [{ userId: 1, startDate: MONDAY, endDate: MONDAY }],
     });
 
-    expect([...hoursForDay(1, day, idx)]).toEqual([]);
+    expect([...hoursForDay(1, day(), idx)]).toEqual([]);
   });
 });
 

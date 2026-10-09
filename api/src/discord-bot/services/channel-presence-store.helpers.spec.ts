@@ -34,6 +34,7 @@ import {
   listOpenRows,
   type PresenceRow,
 } from './channel-presence-store.helpers';
+import { at } from '../../common/testing/narrow';
 
 const table = schema.discordChannelPresenceMessages;
 
@@ -180,7 +181,7 @@ describe('the one-open-row-per-room guarantee (AC1)', () => {
     await openRow(m.db, OPEN_INPUT);
 
     const idx = partialUniqueIndex();
-    const conflict = m.only('insert')[0].conflict;
+    const conflict = at(m.only('insert'), 0).conflict;
     const columns = table as unknown as Record<string, unknown>;
     expect(conflict?.target).toEqual(
       idx.columns.map((c) => columns[camel(c.name)]),
@@ -227,8 +228,8 @@ describe('openRow — insert shape and failure handling', () => {
 
     await openRow(m.db, { ...OPEN_INPUT, bindingId: null });
 
-    expect(m.only('insert')[0].table).toBe(table);
-    expect(m.only('insert')[0].values).toEqual({
+    expect(m.only('insert')[0]?.table).toBe(table);
+    expect(m.only('insert')[0]?.values).toEqual({
       guildId: 'g-1',
       voiceChannelId: 'vc-1',
       bindingId: null,
@@ -274,7 +275,7 @@ describe('findOpenRow / listOpenRows (reads)', () => {
     const found = await findOpenRow(m.db, 'g-1', 'vc-1');
 
     expect(found).toMatchObject({ id: 'row-1', payloadHash: 'abc123' });
-    const op = m.only('select')[0];
+    const op = at(m.only('select'), 0);
     expect(op.table).toBe(table);
     expect(op.limit).toBe(1);
     const { sql, params } = render(op.where);
@@ -297,7 +298,7 @@ describe('findOpenRow / listOpenRows (reads)', () => {
     const rows = await listOpenRows(m.db);
 
     expect(rows.map((r) => r.id)).toEqual(['a', 'b']);
-    const op = m.only('select')[0];
+    const op = at(m.only('select'), 0);
     const { sql, params } = render(op.where);
     expect(sql).toContain(`"status" = $1`);
     expect(params).toEqual(['open']);
@@ -308,13 +309,13 @@ describe('findOpenRow / listOpenRows (reads)', () => {
 describe('markEmpty / clearEmpty (the D8 grace window)', () => {
   it('stamps empty_since only while it is still null, so the first empty flush wins', async () => {
     const m = buildMockDb();
-    const at = new Date('2026-09-04T11:00:00Z');
+    const when = new Date('2026-09-04T11:00:00Z');
 
-    await markEmpty(m.db, 'row-1', at);
+    await markEmpty(m.db, 'row-1', when);
 
-    const op = m.only('update')[0];
+    const op = at(m.only('update'), 0);
     expect(op.table).toBe(table);
-    expect(op.set).toEqual({ emptySince: at, updatedAt: expect.any(Date) });
+    expect(op.set).toEqual({ emptySince: when, updatedAt: expect.any(Date) });
     const { sql, params } = render(op.where);
     expect(sql).toContain(`"empty_since" is null`);
     expect(params).toEqual(['row-1']);
@@ -325,7 +326,7 @@ describe('markEmpty / clearEmpty (the D8 grace window)', () => {
 
     await clearEmpty(m.db, 'row-1');
 
-    const op = m.only('update')[0];
+    const op = at(m.only('update'), 0);
     expect(op.set).toEqual({ emptySince: null, updatedAt: expect.any(Date) });
     expect(render(op.where).params).toEqual(['row-1']);
   });
@@ -338,7 +339,7 @@ describe('closeRow / savePayloadHash (writes that need a live row)', () => {
     await closeRow(m.db, 'row-1', 'missing');
 
     // [0] is the occupancy stamp (ROK-1499); the row's own close is [1].
-    const op = m.only('update')[1];
+    const op = at(m.only('update'), 1);
     expect(op.set).toEqual({
       status: 'closed',
       closeReason: 'missing',
@@ -357,13 +358,13 @@ describe('closeRow / savePayloadHash (writes that need a live row)', () => {
     // open index forever, so the stamp belongs HERE, not at four call sites
     // that can each forget it.
     const m = buildMockDb();
-    const at = new Date('2026-09-13T19:30:00Z');
+    const when = new Date('2026-09-13T19:30:00Z');
 
-    await closeRow(m.db, 'row-1', 'empty', at);
+    await closeRow(m.db, 'row-1', 'empty', when);
 
-    const stays = m.only('update')[0];
+    const stays = at(m.only('update'), 0);
     expect(stays.table).toBe(schema.discordChannelPresenceOccupancy);
-    expect(stays.set).toEqual({ leftAt: at });
+    expect(stays.set).toEqual({ leftAt: when });
     expect(render(stays.where).sql).toContain('"left_at" is null');
   });
 
@@ -372,7 +373,7 @@ describe('closeRow / savePayloadHash (writes that need a live row)', () => {
 
     await closeRow(m.db, 'row-1', 'missing');
 
-    expect(m.only('update')[0].set).toEqual({ leftAt: expect.any(Date) });
+    expect(m.only('update')[0]?.set).toEqual({ leftAt: expect.any(Date) });
   });
 
   it('stores the D5 payload hash on the open row only', async () => {
@@ -380,7 +381,7 @@ describe('closeRow / savePayloadHash (writes that need a live row)', () => {
 
     await savePayloadHash(m.db, 'row-1', 'deadbeef');
 
-    const op = m.only('update')[0];
+    const op = at(m.only('update'), 0);
     expect(op.set).toEqual({
       payloadHash: 'deadbeef',
       updatedAt: expect.any(Date),

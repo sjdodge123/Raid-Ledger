@@ -42,10 +42,12 @@ function createSelectWhereChain(rows: unknown[] = []) {
   return chain;
 }
 
-function createUpdateChain() {
-  const chain: Record<string, jest.Mock> = {};
-  chain.set = jest.fn().mockReturnValue(chain);
-  chain.where = jest.fn().mockResolvedValue(undefined);
+function createUpdateChain(): { set: jest.Mock; where: jest.Mock } {
+  const chain = {
+    set: jest.fn(),
+    where: jest.fn().mockResolvedValue(undefined),
+  };
+  chain.set.mockReturnValue(chain);
   return chain;
 }
 

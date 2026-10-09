@@ -24,6 +24,7 @@ import * as schema from '../drizzle/schema';
 import { generatePublicSlug } from '../lineups/public-lineup-slug.helpers';
 import { NotificationService } from './notification.service';
 import { SchedulingThresholdService } from './scheduling-threshold.service';
+import { nonEmpty } from '../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -64,14 +65,17 @@ function describeSchedulingThreshold(): void {
 
   async function createUser(label: string): Promise<number> {
     const suffix = `${label}-${++tag}`;
-    const [user] = await testApp.db
-      .insert(schema.users)
-      .values({
-        discordId: `discord:thresh-${suffix}`,
-        username: `thresh-${suffix}`,
-        role: 'member',
-      })
-      .returning();
+    const [user] = nonEmpty(
+      await testApp.db
+        .insert(schema.users)
+        .values({
+          discordId: `discord:thresh-${suffix}`,
+          username: `thresh-${suffix}`,
+          role: 'member',
+        })
+        .returning(),
+      'user',
+    );
     return user.id;
   }
 
@@ -86,33 +90,42 @@ function describeSchedulingThreshold(): void {
   ): Promise<PollSetup> {
     const creatorId = await createUser(`${label}-creator`);
     const gameName = `Threshold Game ${label}-${++tag}`;
-    const [game] = await testApp.db
-      .insert(schema.games)
-      .values({ name: gameName, slug: `thresh-${label}-${tag}` })
-      .returning();
-    const [lineup] = await testApp.db
-      .insert(schema.communityLineups)
-      .values({
-        title: 'Threshold Scheduling Poll',
-        status: 'decided',
-        visibility: 'public',
-        createdBy: creatorId,
-        includeSchedulingPhase: true,
-        publicSlug: generatePublicSlug(),
-        publicShareEnabled: false,
-      })
-      .returning();
-    const [match] = await testApp.db
-      .insert(schema.communityLineupMatches)
-      .values({
-        lineupId: lineup.id,
-        gameId: game.id,
-        status: 'scheduling',
-        thresholdMet: true,
-        voteCount: 1,
-        minVoteThreshold: opts.minVoteThreshold ?? null,
-      })
-      .returning();
+    const [game] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: gameName, slug: `thresh-${label}-${tag}` })
+        .returning(),
+      'game',
+    );
+    const [lineup] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineups)
+        .values({
+          title: 'Threshold Scheduling Poll',
+          status: 'decided',
+          visibility: 'public',
+          createdBy: creatorId,
+          includeSchedulingPhase: true,
+          publicSlug: generatePublicSlug(),
+          publicShareEnabled: false,
+        })
+        .returning(),
+      'lineup',
+    );
+    const [match] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupMatches)
+        .values({
+          lineupId: lineup.id,
+          gameId: game.id,
+          status: 'scheduling',
+          thresholdMet: true,
+          voteCount: 1,
+          minVoteThreshold: opts.minVoteThreshold ?? null,
+        })
+        .returning(),
+      'match',
+    );
 
     const memberIds = [creatorId];
     for (let i = 1; i < (opts.members ?? 3); i++) {
@@ -127,14 +140,17 @@ function describeSchedulingThreshold(): void {
         })),
       );
     }
-    const [slot] = await testApp.db
-      .insert(schema.communityLineupScheduleSlots)
-      .values({
-        matchId: match.id,
-        proposedTime: new Date(Date.now() + 72 * HOUR_MS),
-        suggestedBy: 'user',
-      })
-      .returning();
+    const [slot] = nonEmpty(
+      await testApp.db
+        .insert(schema.communityLineupScheduleSlots)
+        .values({
+          matchId: match.id,
+          proposedTime: new Date(Date.now() + 72 * HOUR_MS),
+          suggestedBy: 'user',
+        })
+        .returning(),
+      'slot',
+    );
 
     return {
       lineupId: lineup.id,
@@ -181,10 +197,13 @@ function describeSchedulingThreshold(): void {
   }
 
   async function stampOf(matchId: number): Promise<Date | null> {
-    const [row] = await testApp.db
-      .select()
-      .from(schema.communityLineupMatches)
-      .where(eq(schema.communityLineupMatches.id, matchId));
+    const [row] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(schema.communityLineupMatches)
+        .where(eq(schema.communityLineupMatches.id, matchId)),
+      'row',
+    );
     return row.thresholdNotifiedAt;
   }
 
@@ -198,10 +217,10 @@ function describeSchedulingThreshold(): void {
 
     const dms = await thresholdNotifsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
-    expect(dms[0].message).toBe(
+    expect(dms[0]?.message).toBe(
       `3 of 3 members have voted on your ${poll.gameName} poll`,
     );
-    expect(dms[0].payload).toMatchObject({
+    expect(dms[0]?.payload).toMatchObject({
       subtype: 'scheduling_poll_threshold_met',
       lineupId: poll.lineupId,
       matchId: poll.matchId,
@@ -245,7 +264,7 @@ function describeSchedulingThreshold(): void {
     const dms = await thresholdNotifsFor(poll.creatorId);
     expect(dms).toHaveLength(1);
     // 2 of 2 — the explicit threshold, not the 3 members on the match.
-    expect(dms[0].message).toBe(
+    expect(dms[0]?.message).toBe(
       `2 of 2 members have voted on your ${poll.gameName} poll`,
     );
   });

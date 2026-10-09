@@ -30,6 +30,7 @@ import { flushChannel } from './channel-presence-flush';
 import { listOccupancy } from './channel-presence-occupancy.helpers';
 import type { RoomResolveDeps } from './channel-presence-room.helpers';
 import { findOpenRow } from './channel-presence-store.helpers';
+import { at, nonEmpty } from '../../common/testing/narrow';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -126,20 +127,26 @@ const CONFIG = { minPlayers: 2, gracePeriod: 60 };
 
 /** Seed a game and a `general-lobby` binding, and wire the fake transport. */
 async function seedRecapRoom(db: Db): Promise<RecapRoom> {
-  const [game] = await db
-    .insert(schema.games)
-    .values({ name: 'Deep Rock Galactic', slug: 'rok1499e2e-drg' })
-    .returning();
-  const [row] = await db
-    .insert(schema.channelBindings)
-    .values({
-      guildId: GUILD_ID,
-      channelId: VOICE_CHANNEL_ID,
-      channelType: 'voice',
-      bindingPurpose: 'general-lobby',
-      config: CONFIG,
-    })
-    .returning();
+  const [game] = nonEmpty(
+    await db
+      .insert(schema.games)
+      .values({ name: 'Deep Rock Galactic', slug: 'rok1499e2e-drg' })
+      .returning(),
+    'game',
+  );
+  const [row] = nonEmpty(
+    await db
+      .insert(schema.channelBindings)
+      .values({
+        guildId: GUILD_ID,
+        channelId: VOICE_CHANNEL_ID,
+        channelType: 'voice',
+        bindingPurpose: 'general-lobby',
+        config: CONFIG,
+      })
+      .returning(),
+    'row',
+  );
   const transport = fakeTransport();
   const binding: ResolvedBinding = {
     bindingId: row.id,
@@ -195,10 +202,13 @@ function flushRoom(
 
 /** The presence row as the ledger now holds it, open or closed. */
 async function presenceRowById(db: Db, id: string) {
-  const [row] = await db
-    .select()
-    .from(schema.discordChannelPresenceMessages)
-    .where(eq(schema.discordChannelPresenceMessages.id, id));
+  const [row] = nonEmpty(
+    await db
+      .select()
+      .from(schema.discordChannelPresenceMessages)
+      .where(eq(schema.discordChannelPresenceMessages.id, id)),
+    'presence row',
+  );
   return row;
 }
 
@@ -309,5 +319,5 @@ describe('a brief visit end to end (integration, ROK-1692)', () => {
 function recapLead(transport: Transport): string {
   const last = transport.edited.at(-1);
   if (!last) throw new Error('No recap was published');
-  return last[0].data.description ?? '';
+  return at(last, 0).data.description ?? '';
 }
