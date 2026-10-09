@@ -3,6 +3,29 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-09 — Forever character fields — **additive**
+
+- **Additive (stays v1).** New optional keys in the `char` section (ROK-1742):
+  `who.gender` (`"male"` | `"female"`; omit when `UnitSex` is unknown);
+  `talents.nodes[]` gains `name?` (≤ 64), `spellId?`, `maxRanks?` (1–255),
+  `tree?` (0–2), `row?` (0–9), `col?` (0–3) and the raw `posX?` / `posY?`;
+  `data.quests?` = `{ completed: questId[] ≤ 10 000, inProgress: [{ questId,
+  title? ≤ 128, objectives? ≤ 10: [{ text ≤ 128, done, have?, need? }] }] ≤ 35 }`.
+  Every new object is `.strict()`; an export without the new keys decodes
+  exactly as before.
+- **Server ships first.** The addon may emit these keys only after
+  re-syncing this `schema.json` (and the fixtures) into its pinned copy;
+  until then an older server rejects them as unknown keys.
+- New constants `ADDON_QUESTS_COMPLETED_MAX = 10 000`,
+  `ADDON_QUESTS_IN_PROGRESS_MAX = 35`, `ADDON_QUEST_OBJECTIVES_MAX = 10`.
+  `quests.completed` is the one array allowed past the 2000 structural cap.
+- Talent position rule: CONTRACT.md §3. Raw `posX` / `posY` are
+  authoritative; `tree` / `row` / `col` are the addon's derived hint (the
+  pixel → index mapping is UNVERIFIED beyond Warrior).
+- Fixtures: new valid `char-forever-quests`, `char-forever-talents-named`;
+  new invalid `gender-unknown-value`. Every existing fixture unchanged
+  byte-for-byte.
+
 ## v1 — 2026-10-07 — two apply-time error codes — **additive**
 
 - **Additive (stays v1).** `AddonImportErrorCodeSchema` gains
