@@ -55,7 +55,7 @@ function ariaLabelFor(
 export function VoteToggleButton(props: VoteToggleButtonProps): JSX.Element {
   const { gameName, isVoted, disabled, onToggle } = props;
   const cls = isVoted
-    ? 'bg-emerald-600/15 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600/25'
+    ? 'bg-success/10 text-success border border-success/40 hover:bg-success/20'
     : 'bg-emerald-600 hover:bg-emerald-500 text-white border border-transparent';
   const handleClick = (e: MouseEvent<HTMLButtonElement>): void => {
     e.stopPropagation();

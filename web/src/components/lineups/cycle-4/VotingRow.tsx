@@ -161,7 +161,7 @@ export function VotingRow(props: VotingRowProps): JSX.Element {
       {isVoted && (
         <div
           aria-hidden="true"
-          className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500"
+          className="absolute left-0 top-0 bottom-0 w-1 bg-success"
         />
       )}
       <div className="px-4 py-3 flex items-center gap-3">

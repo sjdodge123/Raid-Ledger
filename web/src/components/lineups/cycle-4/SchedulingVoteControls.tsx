@@ -14,10 +14,10 @@
  * New pattern note (carried over with the control): `components/ui` has no
  * toggle/segmented primitive, and the §4.3 chip is a `rounded-full` pill that
  * does not sit next to the square `+ Vote` button. The pressed NO state uses
- * the house danger tint — `bg-red-500/10` + `border-red-500/30` +
- * `text-red-400` — and the pressed YES the solid `bg-emerald-600`; `red` and
- * `emerald` are sanctioned accents (`docs/design-system.md` §2.2) that
- * `index.css` repaints for the six light schemes, so neither is dark-only.
+ * the danger token tint — `bg-danger/10` + `border-danger/30` +
+ * `text-danger` (TDB:1770) — and the pressed YES the solid `bg-emerald-600`,
+ * a sanctioned accent fill (`docs/design-system.md` §2.2) that `index.css`
+ * repaints for the six light schemes, so neither is dark-only.
  * The `✓` / `✕` glyphs stay regardless: AC5 says the three answers must be
  * distinguishable without colour.
  *
@@ -116,7 +116,7 @@ function NoVoteButton(props: SchedulingVoteControlsProps): JSX.Element {
       }}
       className={`${BASE} ${
         noVoted
-          ? 'border-red-500/30 bg-red-500/10 text-red-400'
+          ? 'border-danger/30 bg-danger/10 text-danger'
           : 'border-edge bg-surface text-muted hover:border-edge-strong hover:text-foreground'
       } ${pending ? PENDING : ''}`}
     >

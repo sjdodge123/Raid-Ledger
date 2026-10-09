@@ -103,7 +103,7 @@ describe('SchedulingManageDropdown (ROK-1585)', () => {
         const items = within(menu()).getAllByRole('menuitem');
         expect(items[0]?.className).toContain('min-h-[40px]');
         expect(items).toHaveLength(3);
-        expect(items[2]?.className).toContain('text-red-400');
+        expect(items[2]?.className).toContain('text-danger');
         // Menu density: no sublines.
         expect(menu()).not.toHaveTextContent('invite more people');
     });

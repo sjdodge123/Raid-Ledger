@@ -294,7 +294,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
             {!canParticipate && (
                 <p
                     data-testid="voting-private-notice"
-                    className="text-xs text-amber-400"
+                    className="text-xs text-warning"
                 >
                     Private lineup — ask the creator for an invite to cast
                     votes.
@@ -303,7 +303,7 @@ export function VotingComposite(props: VotingCompositeProps): JSX.Element {
             {holdOpen && (
                 <p
                     data-testid="voting-hold-notice"
-                    className="text-xs text-amber-400"
+                    className="text-xs text-warning"
                 >
                     Voting closed on a tie —{' '}
                     {tie?.pickerName ?? 'the lineup creator'} picks from the tie

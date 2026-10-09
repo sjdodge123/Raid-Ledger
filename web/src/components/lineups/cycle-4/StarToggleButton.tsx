@@ -80,8 +80,8 @@ function StarGlyph({ filled }: { filled: boolean }): JSX.Element {
 export function StarToggleButton(props: StarToggleButtonProps): JSX.Element {
     const { gameName, isStarred, disabled, onToggle } = props;
     const cls = isStarred
-        ? 'text-amber-400 border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20'
-        : 'text-muted border-edge hover:text-amber-300 hover:border-amber-500/40';
+        ? 'text-warning border-warning/50 bg-warning/10 hover:bg-warning/20'
+        : 'text-muted border-edge hover:text-warning hover:border-warning/40';
     const handleClick = (e: MouseEvent<HTMLButtonElement>): void => {
         e.stopPropagation();
         if (disabled) return;
@@ -102,7 +102,7 @@ export function StarToggleButton(props: StarToggleButtonProps): JSX.Element {
             onClick={handleClick}
             onKeyDown={handleKeyDown}
             title="Your top pick — breaks a tie"
-            className={`flex-shrink-0 inline-flex items-center justify-center rounded-md border p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${cls} disabled:opacity-40 disabled:cursor-not-allowed`}
+            className={`flex-shrink-0 inline-flex items-center justify-center rounded-md border p-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-warning ${cls} disabled:opacity-40 disabled:cursor-not-allowed`}
         >
             <StarGlyph filled={isStarred} />
         </button>

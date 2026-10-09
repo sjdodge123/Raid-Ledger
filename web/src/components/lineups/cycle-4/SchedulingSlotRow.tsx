@@ -153,7 +153,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           {voted && (
             <span
               role="img"
-              className="ml-1.5 text-emerald-400"
+              className="ml-1.5 text-success"
               aria-label="You voted"
             >
               ✓
@@ -162,7 +162,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           {noVoted && (
             <span
               role="img"
-              className="ml-1.5 text-red-400"
+              className="ml-1.5 text-danger"
               aria-label="You said this time does not work"
             >
               ✕
@@ -174,7 +174,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
           {conflictEventNames.length > 0 && (
             <span
               data-testid="slot-conflicts"
-              className="min-w-0 break-words text-[11px] text-amber-400"
+              className="min-w-0 break-words text-[11px] text-warning"
             >
               ⚠ Conflicts with {formatConflictList(conflictEventNames)}
             </span>
@@ -211,7 +211,7 @@ export function SchedulingSlotRow(props: SchedulingSlotRowProps): JSX.Element {
         {!canVote && voted && (
           <span
             data-testid="slot-voted-mark"
-            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-300"
+            className="inline-flex items-center gap-1 rounded-md border border-success/40 bg-success/10 px-3 py-1.5 text-sm font-medium text-success"
           >
             ✓ Voted
           </span>

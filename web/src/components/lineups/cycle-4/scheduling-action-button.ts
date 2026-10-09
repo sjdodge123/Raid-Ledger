@@ -10,8 +10,8 @@
  * `bg-surface` with `text-foreground`.
  *
  * Below `lg` the three are equal `flex-1` columns of ONE full-width row; from
- * `lg` up they sit inline, right-aligned, at their intrinsic width. Colours are tokens (or the red family `index.css`
- * remaps per scheme), so both `default-dark` and `default-light` are covered.
+ * `lg` up they sit inline, right-aligned, at their intrinsic width. Colours are tokens (the destructive variant on
+ * `--color-danger`, TDB:1770), so both `default-dark` and `default-light` are covered.
  */
 
 /** Shared geometry/typography every scheduling hero action must carry. */
@@ -29,13 +29,12 @@ export const SCHEDULING_ACTION_BUTTON =
   `${SCHEDULING_ACTION_BUTTON_BASE} border-edge-strong text-foreground hover:bg-overlay`;
 
 /**
- * Destructive scheduling action — Cancel Poll. Same geometry, red family.
- * `border-red-500/30` + `hover:bg-red-500/20` are the two red utilities
- * `index.css` remaps for the light schemes (`:710`, `:698`), so the hover
- * tint is not a raw 10% red on white.
+ * Destructive scheduling action — Cancel Poll. Same geometry, on the
+ * danger token (TDB:1770): `--color-danger` repaints per scheme at any alpha,
+ * so the hover tint needs no hand-listed light mapping in `index.css`.
  */
 export const SCHEDULING_ACTION_BUTTON_DANGER =
-  `${SCHEDULING_ACTION_BUTTON_BASE} border-red-500/30 text-red-400 hover:bg-red-500/20`;
+  `${SCHEDULING_ACTION_BUTTON_BASE} border-danger/30 text-danger hover:bg-danger/10`;
 
 /**
  * ROK-1584 (H1-b): the phone hero's full-width "Manage poll ⋯" row. Below the
@@ -71,6 +70,6 @@ export const SCHEDULING_SHEET_ROW_BASE =
 export const SCHEDULING_SHEET_ROW =
   `${SCHEDULING_SHEET_ROW_BASE} text-foreground hover:bg-overlay`;
 
-/** Destructive sheet row — Cancel Poll. Same red family as the inline button. */
+/** Destructive sheet row — Cancel Poll. Same danger token as the inline button. */
 export const SCHEDULING_SHEET_ROW_DANGER =
-  `${SCHEDULING_SHEET_ROW_BASE} text-red-400 hover:bg-red-500/20`;
+  `${SCHEDULING_SHEET_ROW_BASE} text-danger hover:bg-danger/10`;

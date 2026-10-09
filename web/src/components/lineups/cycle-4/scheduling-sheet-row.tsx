@@ -30,7 +30,7 @@ const MENU_ROW_BASE =
   'flex w-full min-h-[40px] items-center gap-2 px-3 py-2 text-left text-sm ' +
   'font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 const MENU_ROW = `${MENU_ROW_BASE} text-foreground hover:bg-panel`;
-const MENU_ROW_DANGER = `${MENU_ROW_BASE} text-red-400 hover:bg-red-500/20`;
+const MENU_ROW_DANGER = `${MENU_ROW_BASE} text-danger hover:bg-danger/10`;
 
 /** Renders every {@link SchedulingSheetRow} below it as a `role="menuitem"`. */
 export function ManageMenuSurface({ children }: { children: ReactNode }): JSX.Element {

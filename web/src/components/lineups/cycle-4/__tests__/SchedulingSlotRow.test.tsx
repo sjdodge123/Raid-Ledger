@@ -160,9 +160,9 @@ describe('SchedulingSlotRow — pressed "doesn\'t work" state (ROK-1617 AC4)', (
     renderRow([], { noVoted: true });
 
     const no = screen.getByTestId('slot-no-toggle');
-    expect(no.className).toContain('bg-red-500/10');
-    expect(no.className).toContain('border-red-500/30');
-    expect(no.className).toContain('text-red-400');
+    expect(no.className).toContain('bg-danger/10');
+    expect(no.className).toContain('border-danger/30');
+    expect(no.className).toContain('text-danger');
     expect(no.className).not.toContain('bg-overlay');
   });
 
@@ -175,7 +175,7 @@ describe('SchedulingSlotRow — pressed "doesn\'t work" state (ROK-1617 AC4)', (
     renderRow([], { noVoted: false });
 
     const no = screen.getByTestId('slot-no-toggle');
-    expect(no.className).not.toContain('bg-red-500/10');
+    expect(no.className).not.toContain('bg-danger/10');
     expect(no.className).toContain('bg-surface');
   });
 });
