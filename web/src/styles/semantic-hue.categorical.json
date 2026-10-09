@@ -93,7 +93,7 @@
   "pages/events/EventsPageHeader.tsx": "\"Create Event\" brand solid CTA bg-emerald-600 / hover emerald-500 + its shadow-emerald-600/25 glow (Button primary fill)",
   "pages/games-page-discover.tsx": "Curated-section left rule border-emerald-500/40 (decorative section accent)",
   "pages/insights-hub-page.tsx": "Active tab solid bg-emerald-600 (selection tab)",
-  "pages/lineup-detail-page.tsx": "Private-visibility frame on the invitees section (amber /30 border + /5 tint, categorical visibility marker) + brand back-link text-emerald-400; the private-lineup nominate notice is on text-warning",
+  "pages/lineup-detail-page.tsx": "Brand back-link text-emerald-400 only; the private-lineup invitees frame and nominate notice are on warning tokens",
   "pages/my-events-page.tsx": "\"Browse Events\" brand solid CTA bg-emerald-600 / hover emerald-500 (Button primary fill) + active tab solid bg-emerald-600 (selection tab); the load-error heading is on text-danger",
   "pages/players-page.tsx": "Player-card name group-hover:text-emerald-400 (brand hover accent)"
 }

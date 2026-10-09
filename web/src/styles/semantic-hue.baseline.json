@@ -1,5 +1,5 @@
 {
-  "__total": 732,
+  "__total": 730,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -166,7 +166,7 @@
   "pages/lfg/LfgSuggestionsPanel.tsx": 2,
   "pages/lfg/lfg-action-buttons.ts": 5,
   "pages/lfg/lfg-group-states.tsx": 10,
-  "pages/lineup-detail-page.tsx": 3,
+  "pages/lineup-detail-page.tsx": 1,
   "pages/my-events-page.tsx": 3,
   "pages/onboarding-wizard-page.tsx": 2,
   "pages/onboarding-wizard/OnboardingBreadcrumbs.tsx": 6,

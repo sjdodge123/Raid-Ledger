@@ -59,7 +59,7 @@ function LineupInviteesSection({
       data-visibility={visibility}
       className={`mt-4 p-4 rounded-lg border ${
         isPrivate
-          ? 'border-amber-500/30 bg-amber-500/5'
+          ? 'border-warning/30 bg-warning/5'
           : 'border-edge bg-panel/40'
       }`}
     >
