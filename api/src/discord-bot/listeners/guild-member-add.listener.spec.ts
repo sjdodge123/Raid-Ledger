@@ -271,5 +271,25 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
 
       expect(mockNotifs.create).not.toHaveBeenCalled();
     });
+
+    it('ROK-1749: stamps guild_member_seen_at on join, even when nothing is reactivated', async () => {
+      mockDb.returning.mockResolvedValueOnce([]);
+      const listener = buildListener({
+        db: mockDb,
+        clientService: mockClientService,
+        usersService: mockUsers,
+        notificationService: mockNotifs,
+      });
+      const handler = triggerRegister(listener);
+
+      await handler(makeMockMember('123456789012345678'));
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(mockDb.set).toHaveBeenCalledWith({
+        guildMemberSeenAt: expect.any(Date),
+      });
+      // The reactivate write still carries only the deactivated_at clear.
+      expect(mockDb.set).toHaveBeenCalledWith({ deactivatedAt: null });
+    });
   });
 });
