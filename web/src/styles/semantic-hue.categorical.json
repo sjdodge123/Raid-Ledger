@@ -41,5 +41,10 @@
   "components/ui/loading-spinner.tsx": "Brand loading spinner arc (border-t-emerald-500); promises nothing",
   "components/ui/markdown-text.tsx": "Brand link colour in rendered markdown (text-emerald-400); not a status",
   "components/ui/pull-to-refresh.tsx": "Brand refresh spinner (text-emerald-400); promises nothing",
-  "components/ui/role-badge.tsx": "User role identity badges — Admin amber, Operator emerald (ROK-272); a role category, not a status"
+  "components/ui/role-badge.tsx": "User role identity badges — Admin amber, Operator emerald (ROK-272); a role category, not a status",
+  "components/common/ActivityTimeline.tsx": "Brand \"show more\" link (text-emerald-400 / hover emerald-300); not a status",
+  "components/common/HeroNextStep.tsx": "Kept: the action + waiting tones brand emerald \"your move\" tint and CTA fill (selection / primary, not success); aborted -> danger and privacy -> warning are tokens",
+  "components/common/TournamentBracket.tsx": "Kept: the champion slot gold (amber fill/stroke/text — trophy convention, promises nothing); match-winner highlight is the success token",
+  "components/common/activity-timeline-helpers.ts": "Activity-feed action-type colour map (created/decided emerald, removed/cancelled red/rose, carried-over/extended/rescheduled amber): one hue per action category, a legend not a status",
+  "lib/role-colors.ts": "Raid-role identity colours (tank/healer/dps convention: healer green, dps red); a role category, not a status"
 }
