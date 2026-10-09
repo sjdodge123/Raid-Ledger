@@ -86,8 +86,8 @@ function SetupProgressCard({ setup, isLoading }: {
 
 function BotStatusCard({ botData }: { botData: { connecting?: boolean | undefined; connected?: boolean | undefined; guildName?: string | undefined; memberCount?: number | null | undefined } | undefined }) {
     const dotClass = botData?.connecting
-        ? 'bg-warning shadow-[0_0_8px_rgba(245,158,11,0.6)] animate-pulse'
-        : botData?.connected ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.6)]';
+        ? 'bg-warning shadow-[0_0_8px_color-mix(in_oklab,var(--color-warning)_60%,transparent)] animate-pulse'
+        : botData?.connected ? 'bg-success shadow-[0_0_8px_color-mix(in_oklab,var(--color-success)_60%,transparent)]' : 'bg-danger shadow-[0_0_8px_color-mix(in_oklab,var(--color-danger)_60%,transparent)]';
 
     return (
         <div className="bg-surface border border-edge rounded-xl p-6">
