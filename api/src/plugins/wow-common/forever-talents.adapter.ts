@@ -61,7 +61,9 @@ function copyNode(n: ForeverTalentNodeInput): ForeverTalentNodeDto {
 /** Smallest posX of each sub-tree cluster, left → right. */
 function clusterOrigins(xs: number[]): number[] {
   const sorted = [...new Set(xs)].sort((a, b) => a - b);
-  return sorted.filter((x, i) => i === 0 || x - sorted[i - 1]! > TALENT_TREE_GAP);
+  return sorted.filter(
+    (x, i) => i === 0 || x - sorted[i - 1]! > TALENT_TREE_GAP,
+  );
 }
 
 /** Derive slots from raw posX/posY (caller guarantees every node has both). */
@@ -81,32 +83,54 @@ function deriveSlots(nodes: ForeverTalentNodeInput[]): Slot[] | null {
 /** D5 source order: addon hints on every node → positions on every node → none. */
 function pickSlots(nodes: ForeverTalentNodeInput[]): Slot[] | null {
   if (nodes.length === 0) return null;
-  const hinted = nodes.every((n) => n.tree !== undefined && n.row !== undefined && n.col !== undefined);
-  if (hinted) return nodes.map((n) => ({ tree: n.tree!, row: n.row!, col: n.col! }));
-  if (nodes.every((n) => n.posX !== undefined && n.posY !== undefined)) return deriveSlots(nodes);
+  const hinted = nodes.every(
+    (n) => n.tree !== undefined && n.row !== undefined && n.col !== undefined,
+  );
+  if (hinted)
+    return nodes.map((n) => ({ tree: n.tree!, row: n.row!, col: n.col! }));
+  if (nodes.every((n) => n.posX !== undefined && n.posY !== undefined))
+    return deriveSlots(nodes);
   return null;
 }
 
 /** In-range integers with no two nodes on the same (tree,row,col). */
 function slotsValid(slots: Slot[]): boolean {
-  const inRange = (v: number, max: number): boolean => Number.isInteger(v) && v >= 0 && v <= max;
+  const inRange = (v: number, max: number): boolean =>
+    Number.isInteger(v) && v >= 0 && v <= max;
   const ok = slots.every(
-    (s) => inRange(s.tree, TREE_COUNT - 1) && inRange(s.row, MAX_ROW) && inRange(s.col, MAX_COL),
+    (s) =>
+      inRange(s.tree, TREE_COUNT - 1) &&
+      inRange(s.row, MAX_ROW) &&
+      inRange(s.col, MAX_COL),
   );
-  return ok && new Set(slots.map((s) => `${s.tree}:${s.row}:${s.col}`)).size === slots.length;
+  return (
+    ok &&
+    new Set(slots.map((s) => `${s.tree}:${s.row}:${s.col}`)).size ===
+      slots.length
+  );
+}
+
+/** `spent = Σ rank` for each of the three sub-trees. */
+function treeSpend(nodes: ForeverTalentNodeDto[]): ForeverTalentsDto['trees'] {
+  return [0, 1, 2].map((index) => ({
+    index,
+    spent: nodes
+      .filter((n) => n.tree === index)
+      .reduce((sum, n) => sum + n.rank, 0),
+  }));
 }
 
 /** Map a talent snapshot onto the `format:'forever'` DTO; grid when resolvable, else list. */
-export function snapshotToForeverTalents(snapshot: ForeverTalentSnapshotInput): ForeverTalentsDto {
+export function snapshotToForeverTalents(
+  snapshot: ForeverTalentSnapshotInput,
+): ForeverTalentsDto {
   const picked = pickSlots(snapshot.nodes);
   const slots = picked && slotsValid(picked) ? picked : null;
-  const nodes = snapshot.nodes.map((n, i) => ({ ...copyNode(n), ...(slots ? slots[i] : {}) }));
-  const trees = slots
-    ? [0, 1, 2].map((index) => ({
-        index,
-        spent: nodes.filter((n) => n.tree === index).reduce((sum, n) => sum + n.rank, 0),
-      }))
-    : [];
+  const nodes = snapshot.nodes.map((n, i) => ({
+    ...copyNode(n),
+    ...(slots ? slots[i] : {}),
+  }));
+  const trees = slots ? treeSpend(nodes) : [];
   const dto: ForeverTalentsDto = {
     format: 'forever',
     source: 'addon',
@@ -116,6 +140,7 @@ export function snapshotToForeverTalents(snapshot: ForeverTalentSnapshotInput): 
     nodes,
   };
   if (snapshot.configId !== undefined) dto.configId = snapshot.configId;
-  if (snapshot.importString !== undefined) dto.importString = snapshot.importString;
+  if (snapshot.importString !== undefined)
+    dto.importString = snapshot.importString;
   return ForeverTalentsSchema.parse(dto);
 }

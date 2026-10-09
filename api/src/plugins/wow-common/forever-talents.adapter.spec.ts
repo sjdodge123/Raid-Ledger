@@ -20,7 +20,10 @@ interface Cell {
 
 /** posX/posY for a (tree,col,row) cell on the shared Forever coordinate set. */
 function pos(c: Cell, xOffset = 0): { posX: number; posY: number } {
-  return { posX: ORIGINS[c.tree]! + c.col * 600 + xOffset, posY: 2130 + c.row * 600 };
+  return {
+    posX: ORIGINS[c.tree]! + c.col * 600 + xOffset,
+    posY: 2130 + c.row * 600,
+  };
 }
 
 /** Every cell of the vanilla 3 trees × 4 cols × 7 rows layout. */
@@ -76,10 +79,15 @@ describe('snapshotToForeverTalents — derived grid', () => {
       ['col', 'maxRanks', 'nodeId', 'rank', 'row', 'tree'].sort(),
     );
   });
+});
 
+describe('snapshotToForeverTalents — inexact and sparse positions', () => {
   it('tolerates inexact posX (Paladin: 5020 + 5030 in one column, 13 distinct X, 50 nodes)', () => {
     const cells = allCells().filter(
-      (c) => c.col === 0 || c.row <= 2 || (c.tree === 0 && c.row === 3 && c.col <= 2),
+      (c) =>
+        c.col === 0 ||
+        c.row <= 2 ||
+        (c.tree === 0 && c.row === 3 && c.col <= 2),
     );
     expect(cells).toHaveLength(50);
     const nodes = cells.map((c, i) => ({
@@ -96,7 +104,9 @@ describe('snapshotToForeverTalents — derived grid', () => {
   });
 
   it('does not split a sparse sub-tree (only cols 0 and 3 → internal gap 1800)', () => {
-    const cells = allCells().filter((c) => c.tree !== 0 || c.col === 0 || c.col === 3);
+    const cells = allCells().filter(
+      (c) => c.tree !== 0 || c.col === 0 || c.col === 3,
+    );
     const out = snapshotToForeverTalents(snap(positioned(cells)));
     expect(out.layout).toBe('grid');
     expect(out.trees.map((t) => t.index)).toEqual([0, 1, 2]);
@@ -169,6 +179,15 @@ describe('snapshotToForeverTalents — list fallback', () => {
     expectList(nodes);
     expect(snapshotToForeverTalents(snap(nodes)).nodes).toEqual(nodes);
   });
+});
+
+describe('snapshotToForeverTalents — grid sanity bails', () => {
+  function expectList(nodes: ForeverTalentNodeInput[]): void {
+    const out = snapshotToForeverTalents(snap(nodes));
+    expect(out.layout).toBe('list');
+    expect(out.trees).toEqual([]);
+    expect(out.nodes.every((n) => n.tree === undefined)).toBe(true);
+  }
 
   it('two nodes colliding on (tree,row,col) → list', () => {
     const nodes = positioned(allCells());
@@ -204,7 +223,10 @@ describe('snapshotToForeverTalents — list fallback', () => {
   });
 
   it('omits configId/importString when the snapshot has none', () => {
-    const out = snapshotToForeverTalents({ capturedAt: CAPTURED_AT, nodes: [] });
+    const out = snapshotToForeverTalents({
+      capturedAt: CAPTURED_AT,
+      nodes: [],
+    });
     expect(out).toEqual({
       format: 'forever',
       source: 'addon',
