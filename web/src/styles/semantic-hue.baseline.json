@@ -1,5 +1,5 @@
 {
-  "__total": 668,
+  "__total": 664,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -178,7 +178,7 @@
   "pages/user-profile/activity-modal.tsx": 4,
   "pages/user-profile/steam-wishlist-section.tsx": 2,
   "pages/user-profile/user-profile-extra-sections.tsx": 2,
-  "plugins/wow/components/character-preview-card.tsx": 17,
+  "plugins/wow/components/character-preview-card.tsx": 16,
   "plugins/wow/components/item-detail-modal.tsx": 7,
   "plugins/wow/components/item-fallback-tooltip.tsx": 6,
   "plugins/wow/components/talent-display.tsx": 8,
@@ -187,6 +187,5 @@
   "plugins/wow/slots/character-variant-badge.tsx": 3,
   "plugins/wow/slots/equipment-constants.ts": 2,
   "plugins/wow/slots/equipment-grid.tsx": 1,
-  "plugins/wow/slots/event-detail-content-sections.tsx": 3,
-  "plugins/wow/slots/event-detail-signup-warnings.tsx": 3
+  "plugins/wow/slots/event-detail-content-sections.tsx": 3
 }

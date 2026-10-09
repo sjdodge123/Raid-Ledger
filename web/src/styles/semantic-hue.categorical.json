@@ -117,5 +117,7 @@
   "pages/lfg/LfgSuggestionsPanel.tsx": "Suggestion action: brand solid bg-emerald-600 / hover emerald-500 (Button primary fill)",
   "pages/lfg/lfg-action-buttons.ts": "LFG action buttons: brand solid bg-emerald-600 + matching border / hover emerald-500 (Button primary fill)",
   "pages/lfg/lfg-group-states.tsx": "\"Back to games\" and \"Open poll\" brand links text-emerald-400 / hover emerald-300 (the not-found and convert-failed states are on tokens)",
-  "pages/game-detail/lfg-toggle-button.tsx": "LFG toggle \"on\" pill amber-300/95 + amber-950 ink / hover amber-200, and the idle hover border previewing it (selection accent, not a status)"
+  "pages/game-detail/lfg-toggle-button.tsx": "LFG toggle \"on\" pill amber-300/95 + amber-950 ink / hover amber-200, and the idle hover border previewing it (selection accent, not a status)",
+  "plugins/wow/slots/character-variant-badge.tsx": "WoW game-variant badge (Era / Classic / …) amber tag (a variant category label, promises nothing)",
+  "plugins/wow/slots/event-detail-content-sections.tsx": "WoW content-instance tag chips emerald (a categorical instance label; the level range inside is already text-success)"
 }
