@@ -1,5 +1,5 @@
 {
-  "__total": 765,
+  "__total": 774,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -124,6 +124,7 @@
   "components/ui/markdown-text.tsx": 1,
   "components/ui/pull-to-refresh.tsx": 1,
   "components/ui/role-badge.tsx": 6,
+  "lib/event-utils.ts": 9,
   "lib/role-colors.ts": 6,
   "pages/admin-settings/UninstallConfirmModal.tsx": 3,
   "pages/admin-settings/dynamic-categories-panel-parts.tsx": 1,

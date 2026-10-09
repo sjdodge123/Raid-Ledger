@@ -226,7 +226,7 @@ describe('EventCard badge-overlay class (ROK-473) — part 1', () => {
     it('upcoming status badge has emerald color classes', () => {
         render(<EventCard event={createMockEvent()} signupCount={0} />);
         const badge = screen.getByTestId('event-status-badge');
-        expect(badge.className).toContain('bg-success/10');
+        expect(badge.className).toContain('bg-emerald-500/20');
     });
 
     it('live status badge has yellow color classes', () => {
@@ -236,7 +236,7 @@ describe('EventCard badge-overlay class (ROK-473) — part 1', () => {
         });
         render(<EventCard event={liveEvent} signupCount={0} />);
         const badge = screen.getByTestId('event-status-badge');
-        expect(badge.className).toContain('bg-warning/10');
+        expect(badge.className).toContain('bg-yellow-500/20');
     });
 
 });
@@ -266,7 +266,7 @@ describe('EventCard badge-overlay class (ROK-473) — part 2', () => {
         });
         render(<EventCard event={cancelledEvent} signupCount={0} />);
         const badge = screen.getByTestId('event-status-badge');
-        expect(badge.className).toContain('bg-danger/10');
+        expect(badge.className).toContain('bg-red-500/20');
     });
 
     it('game time badge has badge-overlay class when matchesGameTime is true', () => {

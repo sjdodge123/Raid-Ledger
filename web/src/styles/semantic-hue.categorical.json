@@ -46,5 +46,6 @@
   "components/common/HeroNextStep.tsx": "Kept: the action + waiting tones brand emerald \"your move\" tint and CTA fill (selection / primary, not success); aborted -> danger and privacy -> warning are tokens",
   "components/common/TournamentBracket.tsx": "Kept: the champion slot gold (amber fill/stroke/text — trophy convention, promises nothing); match-winner highlight is the success token",
   "components/common/activity-timeline-helpers.ts": "Activity-feed action-type colour map (created/decided emerald, removed/cancelled red/rose, carried-over/extended/rescheduled amber): one hue per action category, a legend not a status",
-  "lib/role-colors.ts": "Raid-role identity colours (tank/healer/dps convention: healer green, dps red); a role category, not a status"
+  "lib/role-colors.ts": "Raid-role identity colours (tank/healer/dps convention: healer green, dps red); a role category, not a status",
+  "lib/event-utils.ts": "Kept raw for now: STATUS_STYLES renders on the desktop event card cover art, where index.css .badge-overlay (ROK-493) keeps the dark-family colours by keying to these exact raw classes; a token here goes dark-on-art on the six light schemes. Tokenising needs a .badge-overlay token pin in index.css (out of TDB:1770 S6 scope)"
 }
