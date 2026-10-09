@@ -20,16 +20,9 @@ import { ForeverProbePanel } from './forever-probe-panel';
 type SaveFn = ReturnType<typeof useForeverConfig>['update']['mutateAsync'];
 type SaveDto = Parameters<SaveFn>[0];
 
-/**
- * ROK-1727: the Wowhead item resolver kill switch. Typed locally as optional
- * until the contract's forever-config schema carries `wowheadResolverEnabled`;
- * unset means ON (Lead decision D2).
- */
-type SavedConfig = WowForeverConfigResponseDto & { wowheadResolverEnabled?: boolean | undefined };
-
 /** The saved config as a PUT body, so one switch never resets another setting. */
-function savedDto(saved: SavedConfig, patch: Partial<SaveDto> & { wowheadResolverEnabled?: boolean | undefined }): SaveDto {
-    const dto: SaveDto & { wowheadResolverEnabled?: boolean | undefined } = {
+function savedDto(saved: WowForeverConfigResponseDto, patch: Partial<SaveDto>): SaveDto {
+    const dto: SaveDto = {
         namespacePrefix: saved.namespacePrefix,
         armoryImportEnabled: saved.armoryImportEnabled,
         ...(saved.wowheadResolverEnabled !== undefined && { wowheadResolverEnabled: saved.wowheadResolverEnabled }),
@@ -47,7 +40,7 @@ async function save(mutate: SaveFn, dto: SaveDto, success: string): Promise<void
     }
 }
 
-function PrefixForm({ saved, mutate, pending }: { saved: SavedConfig; mutate: SaveFn; pending: boolean }): JSX.Element {
+function PrefixForm({ saved, mutate, pending }: { saved: WowForeverConfigResponseDto; mutate: SaveFn; pending: boolean }): JSX.Element {
     const [prefix, setPrefix] = useState(saved.namespacePrefix);
     const [error, setError] = useState<string | undefined>();
     const onSubmit = (e: FormEvent): void => {
@@ -70,7 +63,7 @@ function PrefixForm({ saved, mutate, pending }: { saved: SavedConfig; mutate: Sa
     );
 }
 
-function ArmoryToggle({ saved, mutate, pending }: { saved: SavedConfig; mutate: SaveFn; pending: boolean }): JSX.Element {
+function ArmoryToggle({ saved, mutate, pending }: { saved: WowForeverConfigResponseDto; mutate: SaveFn; pending: boolean }): JSX.Element {
     const hintId = useId();
     const onChange = (next: boolean): void => {
         void save(mutate, savedDto(saved, { armoryImportEnabled: next }),
@@ -88,7 +81,7 @@ function ArmoryToggle({ saved, mutate, pending }: { saved: SavedConfig; mutate: 
     );
 }
 
-function ResolverToggle({ saved, mutate, pending }: { saved: SavedConfig; mutate: SaveFn; pending: boolean }): JSX.Element {
+function ResolverToggle({ saved, mutate, pending }: { saved: WowForeverConfigResponseDto; mutate: SaveFn; pending: boolean }): JSX.Element {
     const hintId = useId();
     const onChange = (next: boolean): void => {
         void save(mutate, savedDto(saved, { wowheadResolverEnabled: next }),
