@@ -65,7 +65,7 @@ export function VectorsNotReadyBanner() {
     return (
         <div
             data-testid="dynamic-categories-vectors-not-ready"
-            className="bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-lg p-4 text-sm"
+            className="bg-warning/10 border border-warning/30 text-warning rounded-lg p-4 text-sm"
         >
             Game taste vectors are still computing. Cron will resume next Sunday
             once vectors are populated.

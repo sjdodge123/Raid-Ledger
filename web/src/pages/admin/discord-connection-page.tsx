@@ -72,7 +72,7 @@ function DiscordConnectionContent() {
 export function LinkDiscordPrompt({ icon }: { icon: React.ReactNode }) {
     const { linkDiscord, isPending } = useDiscordLinkAction();
     return (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6">
+        <div className="bg-warning/10 border border-warning/30 rounded-xl p-6">
             <div className="flex items-start gap-4">
                 {icon}
                 <div className="flex-1">
