@@ -2464,3 +2464,7 @@ same day (#1278, #1279, #1280).
 
 - **low** `web/src/components/admin/admin-settings-layout.tsx:25` — muted text on the bloodmoon scheme measures 3.64:1 (3.75 before S4; both below AA for small text). Pre-existing: the muted token itself is light on bloodmoon's panel. `Suggested:` lift bloodmoon's `--color-muted` (or that line's text class) until ≥4.5 on panel; check the other muted-on-panel sites while there.
 - **low** `web/src/components/admin/IntegrationCard.tsx` (glow shadows) and `web/src/components/features/game-time/GameTimeWidget.tsx:115,124` (overlap-dot glow) — inline `rgba` emerald / red glows that the semantic-hue ratchet does not count; IntegrationCard's `animate-pulse` also fades the pill text through the glow. Pre-existing hardcoded colours. `Suggested:` one follow-up that expresses the glows via `color-mix(in srgb, var(--color-success) …)` on the tokens and drops the pulse on text-bearing elements (pairs with the calendar overlap-dot entry from S3).
+
+### 2026-10-09 — fix/theme-1770-s4 (surfaced during the TDB:1770 S4 fleet UI plan)
+
+- **low** — `web/src/components/admin/**` IntegrationCard not-configured pill: the pre-existing `animate-pulse` on the pill dims the label to **~2.3:1 for part of each cycle** (at rest it is 5.59 / 5.10 / 5.68 in default-dark / default-light / celestial after S4). Pre-existing animation, not a colour class. `Suggested:` pulse only a glow/ring pseudo-element and keep the label at full opacity (`motion-safe:` guard), then re-measure.
