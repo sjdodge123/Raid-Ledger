@@ -14,7 +14,7 @@
  * New pattern note (carried over with the control): `components/ui` has no
  * toggle/segmented primitive, and the §4.3 chip is a `rounded-full` pill that
  * does not sit next to the square `+ Vote` button. The pressed NO state uses
- * the danger token tint — `bg-danger/10` + `border-danger/30` +
+ * the danger token tint — `bg-danger/5` (not the usual /10: the leader card renders this toggle over its own `bg-success/10`, and a stacked /10 puts `text-danger` at 4.46:1 in default-light) + `border-danger/30` +
  * `text-danger` (TDB:1770) — and the pressed YES the solid `bg-emerald-600`,
  * a sanctioned accent fill (`docs/design-system.md` §2.2) that `index.css`
  * repaints for the six light schemes, so neither is dark-only.
@@ -116,7 +116,7 @@ function NoVoteButton(props: SchedulingVoteControlsProps): JSX.Element {
       }}
       className={`${BASE} ${
         noVoted
-          ? 'border-danger/30 bg-danger/10 text-danger'
+          ? 'border-danger/30 bg-danger/5 text-danger'
           : 'border-edge bg-surface text-muted hover:border-edge-strong hover:text-foreground'
       } ${pending ? PENDING : ''}`}
     >
