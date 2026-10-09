@@ -17,12 +17,13 @@
  * the same group differently. Only the leading 🎯 and the trailing call to
  * action are added here.
  *
- * COLOUR: every class below is one the ROK-464 light-mode block in
- * `index.css` remaps under `[data-scheme="light"]` (`bg-*-500/10`,
- * `border-*-500/30`, `text-*-400`), so the banner is legible on all twelve
- * schemes. Hover is `hover:opacity-90` — the chip's own theme-agnostic idiom
- * (`lfg-chip.tsx:31`) — rather than a tinted hover background, because the
- * hover-background overrides in that block cover a narrower set of shades.
+ * COLOUR: the state pair is on the semantic tokens (`success` for a formed
+ * group, `warning` for one still recruiting), which every scheme repaints.
+ * The fill is an OPAQUE 10% mix of the token over `--color-surface` rather
+ * than `bg-{token}/10`: the banner sits over the blurred cover art, and a
+ * translucent tint let a dark cover pull the label to 4.44:1 on celestial.
+ * Hover steps the border only (`hover:border-{token}/50`): a whole-box
+ * `opacity-90` pulled the tokenised label under 4.5:1 on celestial.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
@@ -30,15 +31,15 @@ import type { LfgState } from '@raid-ledger/contract';
 import { effectiveLfgState, groupLine } from '../../components/lfg/lfg-chip-copy';
 
 const BOX_CLS =
-    'flex min-h-[44px] w-full flex-wrap items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-opacity hover:opacity-90';
+    'flex min-h-[44px] w-full flex-wrap items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors';
 
 /**
  * Tonal fill per state, matching the chip's hues: emerald for a group that has
  * formed ("join them"), amber for one still recruiting ("they need you").
  */
 const STATE_CLS: Record<'lfg' | 'lfm', string> = {
-    lfm: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-    lfg: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+    lfm: 'bg-[color-mix(in_oklab,var(--color-success)_10%,var(--color-surface))] border-success/30 text-success hover:border-success/50',
+    lfg: 'bg-[color-mix(in_oklab,var(--color-warning)_10%,var(--color-surface))] border-warning/30 text-warning hover:border-warning/50',
 };
 
 export interface GameDetailLfgBannerProps {

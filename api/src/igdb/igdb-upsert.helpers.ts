@@ -15,6 +15,7 @@ import {
   buildBatchUpsertSet,
 } from './igdb-upsert-sets.helpers';
 import { normalizeForDedup } from './igdb-search-dedup.helpers';
+import { fetchCoversInChunks } from './igdb-cover-backfill.helpers';
 
 const logger = new Logger('IgdbUpsertHelpers');
 
@@ -357,10 +358,10 @@ export async function backfillMissingCovers(
   const missingCovers = await fetchMissingCoverGames(db);
   if (missingCovers.length === 0) return 0;
 
-  const ids = missingCovers.map((g) => g.igdbId).join(',');
-  const coverResults = await queryIgdb(
-    `fields id, cover.image_id; where id = (${ids}); limit ${missingCovers.length};`,
+  const ids = missingCovers.flatMap((g) =>
+    g.igdbId === null ? [] : [g.igdbId],
   );
+  const coverResults = await fetchCoversInChunks(ids, queryIgdb);
 
   let backfilled = 0;
   for (const game of coverResults) {

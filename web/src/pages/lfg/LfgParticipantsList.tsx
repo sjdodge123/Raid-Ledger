@@ -20,7 +20,7 @@ function UrgencyChip({ member, now }: { member: LfgMemberDto; now: number }): JS
     if (member.urgency === 'now') {
         const left = expiresIn(Date.parse(member.expiresAt) - now);
         return (
-            <span data-testid="lfg-participant-urgency" className="inline-flex items-center rounded-full border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-400">
+            <span data-testid="lfg-participant-urgency" className="inline-flex items-center rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
                 {`${LFG_COPY.nowStripTitle} · ${left}`}
             </span>
         );
