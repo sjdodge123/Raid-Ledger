@@ -74,7 +74,7 @@ function SetupProgressCard({ setup, isLoading }: {
             {setup && (
                 <>
                     <div className="w-full bg-overlay rounded-full h-2 mb-4">
-                        <div className="bg-success h-2 rounded-full transition-all duration-300" style={{ width: `${(setup.completedCount / setup.totalCount) * 100}%` }} />
+                        <div className="bg-emerald-500 h-2 rounded-full transition-all duration-300" style={{ width: `${(setup.completedCount / setup.totalCount) * 100}%` }} />
                     </div>
                     <div className="space-y-3">{setup.steps.map((step) => <SetupStepRow key={step.key} step={step} />)}</div>
                 </>

@@ -1,5 +1,5 @@
 {
-  "__total": 800,
+  "__total": 801,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -135,7 +135,7 @@
   "pages/admin/admin-setup-wizard.tsx": 6,
   "pages/admin/discord-auth-page.tsx": 1,
   "pages/admin/discord-connection-page.tsx": 1,
-  "pages/admin/discord-overview-page.tsx": 4,
+  "pages/admin/discord-overview-page.tsx": 5,
   "pages/admin/logs-panel.tsx": 9,
   "pages/admin/plugins/PluginCard.tsx": 9,
   "pages/auth-success-page.tsx": 1,

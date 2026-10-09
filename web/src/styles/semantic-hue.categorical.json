@@ -29,7 +29,7 @@
   "pages/admin/admin-setup-wizard.tsx": "Wizard stepper: brand emerald loading spinner, current-step solid + ring, visited-step tint and connector (navigation/selection accent, not a success state)",
   "pages/admin/discord-auth-page.tsx": "\"Manage Plugins\" brand link text-emerald-400",
   "pages/admin/discord-connection-page.tsx": "\"Manage Plugins\" brand link text-emerald-400",
-  "pages/admin/discord-overview-page.tsx": "\"Manage Plugins\" brand link + \"Send Test Message\" brand solid CTA emerald-600/500/800 (Button primary fill)",
+  "pages/admin/discord-overview-page.tsx": "\"Manage Plugins\" brand link + \"Send Test Message\" brand solid CTA emerald-600/500/800 (Button primary fill); setup progress bar (progress/data bar, raw brand like every other data bar)",
   "pages/admin/logs-panel.tsx": "Log-source service badges: api blue, nginx emerald, postgresql purple, redis orange, supervisor amber, slow-queries rose (categorical service identity)",
   "pages/admin/plugins/PluginCard.tsx": "Solid action fills: Install/Activate emerald-600 (Button primary), Deactivate amber-600 (accent fill); status pills already on tokens (S0)"
 }
