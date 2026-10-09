@@ -29,7 +29,7 @@ function SidebarLink({ child, active, onNavigate, gameTime }: {
         <Link to={child.to} onClick={onNavigate}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                 active ? 'text-emerald-400 bg-emerald-500/10 font-medium' : 'text-muted hover:text-foreground hover:bg-overlay/20'}`}>
-            {isGameTime && <span className={`w-2 h-2 rounded-full shrink-0 ${gameTime.isSet ? 'bg-emerald-400' : 'bg-red-400'}`} />}
+            {isGameTime && <span className={`w-2 h-2 rounded-full shrink-0 ${gameTime.isSet ? 'bg-success' : 'bg-danger'}`} />}
             <span className="min-w-0 flex-1">
                 <span className="block truncate">{child.label}</span>
                 {isGameTime && (

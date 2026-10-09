@@ -119,7 +119,7 @@ function DesktopActions({ character, onEdit, onDelete, isDeleting }: {
             <PluginSlot name="profile:character-actions" context={buildPluginContext(character)} />
             <button onClick={onEdit} className="px-3 py-1.5 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors">Edit</button>
             <button onClick={onDelete} disabled={isDeleting}
-                className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-950/50 rounded transition-colors">Delete</button>
+                className="px-3 py-1.5 text-sm text-danger hover:bg-danger/10 rounded transition-colors">Delete</button>
         </div>
     );
 }
@@ -134,7 +134,7 @@ function MobileActionsPanel({ character, onEdit, onDelete, isDeleting, onClose }
                 <button onClick={() => { onClose(); onEdit(); }}
                     className="min-w-[44px] min-h-[44px] px-4 py-2 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors">Edit</button>
                 <button onClick={() => { onClose(); onDelete(); }} disabled={isDeleting}
-                    className="min-w-[44px] min-h-[44px] px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-950/50 rounded transition-colors">Delete</button>
+                    className="min-w-[44px] min-h-[44px] px-4 py-2 text-sm text-danger hover:bg-danger/10 rounded transition-colors">Delete</button>
             </div>
         </div>
     );
