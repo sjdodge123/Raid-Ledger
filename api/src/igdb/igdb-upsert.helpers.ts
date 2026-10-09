@@ -15,6 +15,7 @@ import {
   buildBatchUpsertSet,
 } from './igdb-upsert-sets.helpers';
 import { normalizeForDedup } from './igdb-search-dedup.helpers';
+import { fetchCoversInChunks } from './igdb-cover-backfill.helpers';
 
 const logger = new Logger('IgdbUpsertHelpers');
 
@@ -342,38 +343,6 @@ async function fetchMissingCoverGames(db: PostgresJsDatabase<typeof schema>) {
         eq(schema.games.banned, false),
       ),
     );
-}
-
-/** IGDB rejects (HTTP 400) an id list or `limit` above 500 per query. */
-const IGDB_ID_QUERY_CHUNK = 500;
-
-/**
- * Query IGDB for cover image ids in chunks of ≤500 ids. One rejected chunk is
- * logged and skipped so the other chunks (and the rest of the sync) still run;
- * prod once had enough missing-cover rows for a single query to trip the cap
- * and abort the whole sync job, leaving new rows with no cover.
- */
-async function fetchCoversInChunks(
-  ids: number[],
-  queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
-): Promise<IgdbApiGame[]> {
-  const results: IgdbApiGame[] = [];
-  for (let i = 0; i < ids.length; i += IGDB_ID_QUERY_CHUNK) {
-    const chunk = ids.slice(i, i + IGDB_ID_QUERY_CHUNK);
-    try {
-      results.push(
-        ...(await queryIgdb(
-          `fields id, cover.image_id; where id = (${chunk.join(',')}); limit ${chunk.length};`,
-        )),
-      );
-    } catch (err) {
-      const reason = err instanceof Error ? err.message : String(err);
-      logger.warn(
-        `IGDB sync: cover backfill chunk of ${chunk.length} ids failed, skipping: ${reason}`,
-      );
-    }
-  }
-  return results;
 }
 
 /**

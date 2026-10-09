@@ -378,7 +378,9 @@ describe('backfillMissingCovers (IGDB 500-id query cap)', () => {
     const backfilled = await backfillMissingCovers(db, queryIgdb);
 
     expect(queryIgdb).toHaveBeenCalledTimes(2);
-    expect(queryIgdb.mock.calls[0]?.[0]).toMatch(/limit 500;$/);
+    expect(queryIgdb.mock.calls[0]?.[0]).toMatch(
+      /where id = \(1,2,.*,500\); limit 500;$/,
+    );
     expect(queryIgdb.mock.calls[0]?.[0]).not.toContain(',501)');
     expect(queryIgdb.mock.calls[1]?.[0]).toMatch(
       /where id = \(501\); limit 1;$/,
@@ -388,6 +390,20 @@ describe('backfillMissingCovers (IGDB 500-id query cap)', () => {
     expect(updateSet).toHaveBeenCalledWith({
       coverUrl: expect.stringContaining('/cocxj2.jpg'),
     });
+  });
+
+  it('rethrows when EVERY chunk is rejected (IGDB down ≠ nothing missing)', async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({ igdbId: i + 1 }));
+    const { db, update } = createBackfillMockDb(rows);
+    const queryIgdb = jest
+      .fn<Promise<IgdbApiGame[]>, [string]>()
+      .mockRejectedValue(new Error('IGDB API error: 401'));
+
+    await expect(backfillMissingCovers(db, queryIgdb)).rejects.toThrow(
+      'IGDB API error: 401',
+    );
+    expect(queryIgdb).toHaveBeenCalledTimes(2);
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('returns 0 and never queries IGDB when nothing is missing', async () => {
