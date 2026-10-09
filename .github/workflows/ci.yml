@@ -549,6 +549,11 @@ jobs:
       CORS_ORIGIN: http://localhost:5173
       # Testcontainer specs (backup.helpers.*) pull this instead of Docker Hub.
       RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
+      # Testcontainers' Ryuk reaper sidecar (testcontainers/ryuk) is another
+      # anonymous Docker Hub pull that hits the same rate limit (HTTP 500 on
+      # auth.docker.io). The specs stop their containers in afterAll and the
+      # runner VM is discarded after the job, so the reaper is not needed here.
+      TESTCONTAINERS_RYUK_DISABLED: 'true'
 
     steps:
       # Testcontainer specs pull RL_PGVECTOR_IMAGE (the private GHCR mirror)
