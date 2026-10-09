@@ -31,11 +31,11 @@ function StatCard({
             onClick={interactive ? onClick : undefined}
             onKeyDown={interactive ? (e) => handleStatKeyDown(e, onClick) : undefined}
             className={`bg-surface rounded-lg border border-edge p-4 ${
-                interactive ? 'cursor-pointer hover:border-amber-500/50 transition-colors' : ''
+                interactive ? 'cursor-pointer hover:border-warning/50 transition-colors' : ''
             }`}
         >
             <p className="text-sm text-muted mb-1">{label}</p>
-            <p className={`text-2xl font-bold ${accent ? 'text-amber-400' : 'text-foreground'}`}>
+            <p className={`text-2xl font-bold ${accent ? 'text-warning' : 'text-foreground'}`}>
                 {value}
             </p>
         </div>

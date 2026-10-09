@@ -93,7 +93,7 @@ function SuccessCardContent({ event, showDiscordCta, discordInviteUrl, discordJo
 }): JSX.Element {
     return (
         <div className="rounded-xl border border-edge bg-surface p-6 text-center shadow-lg">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/20 flex items-center justify-center">{CHECK_ICON}</div>
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success/20 flex items-center justify-center">{CHECK_ICON}</div>
             <h1 className="text-xl font-bold text-foreground mb-2">You're all set!</h1>
             <p className="text-sm text-foreground font-medium mb-1">{event?.title}</p>
             {event?.startTime && (
@@ -141,7 +141,7 @@ function DiscordJoinButton({ discordInviteUrl, discordJoinLabel, onDiscordJoinCl
 
 function DiscordJoinConfirmed() {
     return (
-        <div className="p-3 rounded-lg bg-emerald-600/10 border border-emerald-500/30 flex items-center justify-center gap-2 text-sm text-emerald-400">
+        <div className="p-3 rounded-lg bg-success/10 border border-success/30 flex items-center justify-center gap-2 text-sm text-success">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
             Discord invite opened
         </div>
