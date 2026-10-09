@@ -28,6 +28,10 @@ import {
   buildWho,
   wrapImportBytes,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.builder';
+import {
+  buildForeverQuestsPayload,
+  buildForeverTalentsPayload,
+} from '../src/plugins/wow-common/addon-import/testing/addon-fixture.forever';
 import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
 
 const OUT = join(__dirname, '../../packages/contract/ledgerlink/v1/fixtures');
@@ -84,6 +88,9 @@ const VALID: Record<string, () => string> = {
       buildCharPayload({ who: buildWho({ ruleset: 'roleplaying' }) }),
     ),
   'char-null-ruleset-no-guild': charNoGuild,
+  'char-forever-quests': () => buildImportString(buildForeverQuestsPayload()),
+  'char-forever-talents-named': () =>
+    buildImportString(buildForeverTalentsPayload()),
   'guild-1-page': () => guildPaste(40),
   'guild-3-pages': () => guildPaste(600),
   'guild-8-pages-2000-members': () => guildPaste(2000),
@@ -155,6 +162,14 @@ const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
       buildImportString({
         ...buildCharPayload(),
         who: { ...buildWho(), ruleset: 'rp' },
+      }),
+  ],
+  'gender-unknown-value': [
+    'INVALID_PAYLOAD',
+    () =>
+      buildImportString({
+        ...buildCharPayload(),
+        who: { ...buildWho(), gender: 'unknown' },
       }),
   ],
   'region-as-string': [
