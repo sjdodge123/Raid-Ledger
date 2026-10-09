@@ -134,6 +134,8 @@ export const CharacterSchema = z.object({
     renderUrl: z.string().nullable(),
     level: z.number().int().nullable(),
     race: z.string().max(50).nullable(),
+    /** ROK-1742: from the WoW addon's `who.gender`; absent/null = unknown. */
+    gender: z.enum(['male', 'female']).nullable().optional(),
     faction: z.enum(['alliance', 'horde']).nullable(),
     lastSyncedAt: z.string().datetime().nullable(),
     profileUrl: z.string().url().nullable(),
