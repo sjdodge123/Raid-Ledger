@@ -34,6 +34,7 @@ import {
   type LoadedCharacter,
 } from './addon-import.run';
 import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
+import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -101,30 +102,10 @@ export class AddonImportService {
     const binding = bindPaste(paste, character, request);
     const res = await this.run(userId, character, paste, binding, request);
     // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
-    if (!request.dryRun) this.enqueueGear(paste, res);
-    return res;
-  }
-
-  /**
-   * Resolve the char section's gear item ids when that section applied.
-   * Post-commit and best-effort: it must never fail an import that landed.
-   */
-  private enqueueGear(paste: DecodedAddonPaste, res: AddonImportResultDto) {
-    try {
-      const charStatus =
-        res.sections?.find((s) => s.section === 'char')?.status ??
-        (res.section === 'char' ? res.status : undefined);
-      if (charStatus !== 'applied') return;
-      const gear = paste.sections.char?.payload.data.gear ?? [];
-      const ids = gear.flatMap((g) => (g.itemId ? [g.itemId] : []));
-      if (ids.length > 0) this.itemMeta.enqueue(ids).catch((e) => this.warn(e));
-    } catch (err: unknown) {
-      this.warn(err);
+    if (!request.dryRun) {
+      enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
     }
-  }
-
-  private warn(err: unknown): void {
-    this.logger.warn(`Wowhead gear enqueue failed: ${String(err)}`);
+    return res;
   }
 
   /** Preview/apply every section + the binding's writes, in ONE tx. */
