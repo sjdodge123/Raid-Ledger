@@ -14,5 +14,7 @@
   "components/lineups/cycle-4/StarToggleButton.tsx": "Starred top pick: a selection accent (chip-on amber), not a status — design-system §2.2 categorical; S2 review ruling 2026-10-09",
   "components/admin/ChannelBindingList.tsx": "Channel behaviour badge map: General Lobby amber beside Announcements cyan / Activity Monitor purple (a category colour, promises nothing)",
   "components/admin/DynamicCategoryCard.tsx": "Taste-vector bar chart: positive bars emerald, negative bars red (a diverging chart series, not a status)",
-  "components/admin/onboarding/secure-account-step.tsx": "Password-strength meter ramp: Good is the yellow step between orange Fair and token Strong (amber bg-warning would be indistinguishable from orange-500 Fair in dark)"
+  "components/admin/onboarding/secure-account-step.tsx": "Password-strength meter ramp: Good is the yellow step between orange Fair and token Strong (amber bg-warning would be indistinguishable from orange-500 Fair in dark)",
+  "pages/cron-jobs/CronJobCard.tsx": "AI pill: emerald sparkles marking a cron that issues LLM calls (a feature marker, not a status; run state is the tokenised StatusBadge)",
+  "pages/cron-jobs/cron-utils.ts": "Cron job category badge map: Notifications amber, Maintenance green beside cyan / indigo / teal / purple / gray (a category colour, promises nothing)"
 }
