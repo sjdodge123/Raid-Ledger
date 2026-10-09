@@ -17,12 +17,10 @@
  * the same group differently. Only the leading 🎯 and the trailing call to
  * action are added here.
  *
- * COLOUR: every class below is one the ROK-464 light-mode block in
- * `index.css` remaps under `[data-scheme="light"]` (`bg-*-500/10`,
- * `border-*-500/30`, `text-*-400`), so the banner is legible on all twelve
- * schemes. Hover steps the border only (`hover:border-{token}/50`) — a whole-box `opacity-90` pulled the tokenised label under 4.5:1 on celestial
- * (`lfg-chip.tsx:31`) — rather than a tinted hover background, because the
- * hover-background overrides in that block cover a narrower set of shades.
+ * COLOUR: the state pair is on the semantic tokens (`success` for a formed
+ * group, `warning` for one still recruiting), which every scheme repaints.
+ * Hover steps the border only (`hover:border-{token}/50`): a whole-box
+ * `opacity-90` pulled the tokenised label under 4.5:1 on celestial.
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
