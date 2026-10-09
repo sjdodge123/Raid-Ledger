@@ -20,8 +20,8 @@ function AccessDenied() {
     const navigate = useNavigate();
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-red-400">Access Denied</h2>
+            <div className="bg-danger/10 border border-danger/30 rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-danger">Access Denied</h2>
                 <p className="text-muted mt-2">You must be an administrator to access this page.</p>
                 <button onClick={() => navigate('/')} className="mt-4 px-4 py-2 bg-overlay hover:bg-faint rounded-lg text-foreground transition-colors">Go Home</button>
             </div>

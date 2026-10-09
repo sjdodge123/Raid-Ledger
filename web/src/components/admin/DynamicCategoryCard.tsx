@@ -144,7 +144,7 @@ function CandidatePreview({
 }) {
     if (ids.length === 0) {
         return (
-            <p className="text-xs text-amber-400">
+            <p className="text-xs text-warning">
                 No candidate games matched — likely waiting on taste vectors.
             </p>
         );

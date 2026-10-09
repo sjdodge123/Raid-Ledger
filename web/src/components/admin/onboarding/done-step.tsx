@@ -7,7 +7,7 @@ interface DoneStepProps {
 }
 
 const CheckCircleIcon = (
-    <svg className="w-8 h-8 text-emerald-400" fill="currentColor" viewBox="0 0 20 20">
+    <svg className="w-8 h-8 text-success" fill="currentColor" viewBox="0 0 20 20">
         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
     </svg>
 );
@@ -32,7 +32,7 @@ function buildSummaryItems(steps: Record<string, boolean> | undefined, dataSourc
 function DoneBadge({ done }: { done: boolean }) {
     if (done) {
         return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-success/10 text-success">
                 <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                 </svg>
@@ -40,7 +40,7 @@ function DoneBadge({ done }: { done: boolean }) {
             </span>
         );
     }
-    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400">Skipped</span>;
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-warning/10 text-warning">Skipped</span>;
 }
 
 function SummaryItem({ item, goToStep }: { item: { label: string; done: boolean; wizardStep: number }; goToStep: (step: number) => void }) {
@@ -59,8 +59,8 @@ function SummaryItem({ item, goToStep }: { item: { label: string; done: boolean;
 function SkippedNotice({ hasSkipped }: { hasSkipped: boolean }) {
     if (!hasSkipped) return null;
     return (
-        <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
-            <p className="text-sm text-amber-400/80">
+        <div className="bg-warning/5 border border-warning/20 rounded-lg p-4">
+            <p className="text-sm text-warning">
                 You can complete the skipped items anytime in{' '}
                 <Link to="/admin/settings/general" className="font-medium underline underline-offset-2">Admin Settings</Link>.
             </p>
@@ -80,7 +80,7 @@ export function DoneStep({ onComplete, goToStep }: DoneStepProps) {
     return (
         <div className="space-y-8">
             <div className="text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-600/20 border-2 border-emerald-500/50 flex items-center justify-center">
+                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-success/20 border-2 border-success/50 flex items-center justify-center">
                     {CheckCircleIcon}
                 </div>
                 <h2 className="text-2xl font-bold text-foreground">You're All Set!</h2>

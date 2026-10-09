@@ -63,7 +63,7 @@ function InertBadge() {
 
 function MultiMonitorNote() {
     return (
-        <p className="text-xs text-amber-400 mt-1">
+        <p className="text-xs text-warning mt-1">
             Heads up: this channel monitors more than one game. While a scheduled event for one game is
             live, Quick Play pauses for the others on this channel until it ends. This is a supported setup.
         </p>
