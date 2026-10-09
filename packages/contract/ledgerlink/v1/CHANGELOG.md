@@ -20,8 +20,10 @@ Newest first. Every entry states **additive** or **breaking** (see
   `ADDON_QUESTS_IN_PROGRESS_MAX = 35`, `ADDON_QUEST_OBJECTIVES_MAX = 10`.
   `quests.completed` is the one array allowed past the 2000 structural cap.
 - Talent position rule: CONTRACT.md §3. Raw `posX` / `posY` are
-  authoritative; `tree` / `row` / `col` are the addon's derived hint (the
-  pixel → index mapping is UNVERIFIED beyond Warrior).
+  authoritative; `tree` / `row` / `col` are the addon's derived hint, by the
+  published rule (cluster `posX` by ~2200 gaps → sub-tree; `col` / `row` =
+  rounded 600-unit steps from the cluster min / `posY` 2130), confirmed on
+  Warrior, Druid and Paladin (beta build 70291).
 - Fixtures: new valid `char-forever-quests` (`completed` at the 10 000 cap,
   enchanted + socketed gear links), `char-forever-talents-named`; new
   invalid `gender-unknown-value`, `quests-completed-over-cap` (10 001 ids).

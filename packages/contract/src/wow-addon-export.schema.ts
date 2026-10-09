@@ -105,12 +105,11 @@ export const AddonGearItemSchema = z.object({
 /**
  * One talent node. ROK-1742 adds the display + layout keys, all optional.
  * Forever has ONE `C_Traits` tree per class, laid out as vanilla: 3 sub-trees
- * side by side × 4 columns (12 distinct posX) and 7+ tiers (distinct posY).
- * The addon derives `col12` = index of posX among the class tree's distinct
- * posX values, `tree = floor(col12 / 4)`, `col = col12 % 4`, and `row` = index
- * of posY among the distinct posY values (0 = top). That pixel → index
- * mapping is UNVERIFIED beyond Warrior (12 × 7), so the raw `posX`/`posY` are
- * always sent too and are authoritative; `tree`/`row`/`col` are hints.
+ * side by side × 4 columns, 7 tiers. The addon derives (CONTRACT.md §3):
+ * `tree` = cluster of posX split by gaps well over 600 (~2200), in tab order;
+ * `col = round((posX − cluster min) / 600)`; `row = round((posY − 2130) / 600)`.
+ * Confirmed on Warrior, Druid, Paladin (beta 70291). The raw `posX`/`posY`
+ * are always sent too and are authoritative; `tree`/`row`/`col` are hints.
  */
 export const AddonTalentNodeSchema = z.object({
     nodeId: id,

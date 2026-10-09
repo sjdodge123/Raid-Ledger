@@ -86,19 +86,21 @@ All numbers are JSON numbers (never strings); every "int" is an integer
 - `quests?` (additive, ROK-1742): `{ completed[] ≤ 10 000 questIds, inProgress[] ≤ 35: { questId, title? ≤ 128, objectives[]? ≤ 10: { text ≤ 128, done: boolean, have?, need? } }, completedTruncated?: boolean }`. When `quests` is present both arrays are required (empty is fine). `completed` = `GetAllCompletedQuestIDs()`; `have`/`need` = `numFulfilled`/`numRequired`. A character with more than `ADDON_QUESTS_COMPLETED_MAX` completed quests is not rejected by the addon: it sends the first 10 000 ids ascending and sets `completedTruncated: true` (absent = `false`).
 
 **Talent node position (ROK-1742).** Forever has one `C_Traits` tree per
-class, laid out like vanilla: **3 sub-trees side by side × 4 columns** (12
-distinct `posX`) and **7+ tiers** (distinct `posY`). The addon derives, over
-the whole class tree:
-- `col12` = index of the node's `posX` in the ascending list of distinct posX
-  values; `tree = floor(col12 / 4)`, `col = col12 % 4`;
-- `row` = index of `posY` in the ascending list of distinct posY values
-  (0 = top tier).
+class, laid out like vanilla: **3 sub-trees side by side × 4 columns** and
+**7 tiers**. The addon derives `tree`/`row`/`col` from the raw node
+position with this published rule:
+- **`tree`**: cluster the nodes' `posX` values by gaps well over 600 (the
+  gap between sub-trees is ~2200) → 3 clusters = 3 sub-trees, numbered
+  0–2 in the in-game tab order (left to right);
+- **`col`** = `round((posX − cluster min posX) / 600)` (0–3);
+- **`row`** = `round((posY − 2130) / 600)` (0–6, 0 = top tier).
 
-**UNVERIFIED:** this pixel → index mapping is confirmed for Warrior only (12
-distinct posX, 7 distinct posY). A sub-tree with an empty column would shift
-every later column. So the addon **always sends the raw `posX`/`posY`** with
-the derived `tree`/`row`/`col`; the server treats the raw position as
-authoritative and may recompute the grid without a wire change.
+Positions are not exact (e.g. `posX` 5020 and 5030 share a column — hence
+`round`, never an index into the distinct values) and node totals vary by
+class (50–52). Confirmed on Warrior, Druid and Paladin (beta build 70291).
+The addon **always sends the raw `posX`/`posY`** with the derived
+`tree`/`row`/`col`; the server treats the raw position as authoritative
+and may recompute the grid with this rule without a wire change.
 
 **`guild`** — `data`:
 - `name` 1–64, `rawRealm?` ≤ 64, `snapshotAt` (unix s)
