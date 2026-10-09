@@ -32,6 +32,7 @@ import { AddonImportService } from './addon-import/addon-import.service';
 import { AddonImportCreateService } from './addon-import/addon-import-create.service';
 import { AddonImportAuditService } from './addon-import/addon-import.audit';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
+import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule],
@@ -63,6 +64,7 @@ import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
     AddonImportCreateService,
     AddonImportAuditService,
     WowItemMetaService,
+    ForeverDisplayEquipmentService,
   ],
   exports: [
     BlizzardService,

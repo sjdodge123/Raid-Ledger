@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardService } from './blizzard.service';
 import { ALL_WOW_GAME_SLUGS } from './manifest';
@@ -22,6 +23,10 @@ async function setupEach() {
     providers: [
       BlizzardCharacterSyncAdapter,
       { provide: BlizzardService, useValue: mockBlizzardService },
+      {
+        provide: ForeverDisplayEquipmentService,
+        useValue: { resolve: jest.fn() },
+      },
     ],
   }).compile();
   adapter = module.get(BlizzardCharacterSyncAdapter);

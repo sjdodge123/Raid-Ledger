@@ -284,7 +284,7 @@ export class CharactersService {
       .limit(1);
     if (!character)
       throw new NotFoundException(`Character ${characterId} not found`);
-    const dto = mapCharacterToDto(character);
+    const dto = await this.withDisplayEquipment(mapCharacterToDto(character));
     const enrichmentRows =
       await this.enrichmentsService.getEnrichmentsForEntity(
         'character',
@@ -293,6 +293,17 @@ export class CharactersService {
     return enrichmentRows.length > 0
       ? { ...dto, enrichments: enrichmentRows }
       : dto;
+  }
+
+  /** ROK-1727 (D1): let the variant's plugin substitute displayed gear. */
+  private async withDisplayEquipment(dto: CharacterDto): Promise<CharacterDto> {
+    const adapter = this.findCharacterSyncAdapter(dto.gameVariant ?? undefined);
+    const equipment = await adapter?.resolveDisplayEquipment?.({
+      id: dto.id,
+      gameVariant: dto.gameVariant ?? null,
+      equipment: dto.equipment ?? null,
+    });
+    return equipment === undefined ? dto : { ...dto, equipment };
   }
 
   async syncAllCharacters(): Promise<{
