@@ -25,7 +25,7 @@ export function EventDetailSignupWarnings({
 
     if (warning.type === 'under') {
         return (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20">
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/20">
                 {warning.label}
             </span>
         );

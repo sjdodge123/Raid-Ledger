@@ -72,9 +72,9 @@ export function LfgPlayingNowCard({
     return (
         <div
             data-testid="lfg-playing-now"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-success/40 bg-success/10 p-4"
         >
-            <p className="text-sm font-semibold text-emerald-300">
+            <p className="text-sm font-semibold text-success">
                 <span data-testid="lfg-playing-now-title">
                     {LFG_COPY.playingNowTitle}
                 </span>
