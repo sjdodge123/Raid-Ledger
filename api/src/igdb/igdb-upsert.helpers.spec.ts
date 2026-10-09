@@ -1,7 +1,11 @@
 /**
  * Unit tests for igdb-upsert.helpers.ts — upsertSingleGameRow and upsertGamesFromApi.
  */
-import { upsertSingleGameRow, upsertGamesFromApi } from './igdb-upsert.helpers';
+import {
+  upsertSingleGameRow,
+  upsertGamesFromApi,
+  backfillMissingCovers,
+} from './igdb-upsert.helpers';
 import { withMockTransaction } from '../common/testing/drizzle-mock';
 import { mapApiGameToDbRow } from './igdb.mappers';
 import type { IgdbApiGame } from './igdb.constants';
@@ -346,5 +350,50 @@ describe('upsertGamesFromApi (batch path — ROK-1024)', () => {
     // The first-row values must NOT appear as literal JS strings in the set
     expect(setObj.name).not.toBe('Row A');
     expect(setObj.slug).not.toBe('row-a');
+  });
+});
+
+describe('backfillMissingCovers (IGDB 500-id query cap)', () => {
+  /** Mock DB: select().from().where() → the missing-cover rows; update().set().where() → ok. */
+  function createBackfillMockDb(rows: { igdbId: number | null }[]) {
+    const where = jest.fn().mockResolvedValue(rows);
+    const from = jest.fn().mockReturnValue({ where });
+    const select = jest.fn().mockReturnValue({ from });
+    const updateWhere = jest.fn().mockResolvedValue(undefined);
+    const updateSet = jest.fn().mockReturnValue({ where: updateWhere });
+    const update = jest.fn().mockReturnValue({ set: updateSet });
+    return { db: { select, update } as never, update, updateSet };
+  }
+
+  it('splits 501 missing ids into two IGDB queries and survives a rejected chunk', async () => {
+    const rows = Array.from({ length: 501 }, (_, i) => ({ igdbId: i + 1 }));
+    const { db, update, updateSet } = createBackfillMockDb(rows);
+    const queryIgdb = jest
+      .fn<Promise<IgdbApiGame[]>, [string]>()
+      .mockRejectedValueOnce(new Error('IGDB API error: 400'))
+      .mockResolvedValueOnce([
+        { id: 501, cover: { image_id: 'cocxj2' } } as IgdbApiGame,
+      ]);
+
+    const backfilled = await backfillMissingCovers(db, queryIgdb);
+
+    expect(queryIgdb).toHaveBeenCalledTimes(2);
+    expect(queryIgdb.mock.calls[0]?.[0]).toMatch(/limit 500;$/);
+    expect(queryIgdb.mock.calls[0]?.[0]).not.toContain(',501)');
+    expect(queryIgdb.mock.calls[1]?.[0]).toMatch(
+      /where id = \(501\); limit 1;$/,
+    );
+    expect(backfilled).toBe(1);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(updateSet).toHaveBeenCalledWith({
+      coverUrl: expect.stringContaining('/cocxj2.jpg'),
+    });
+  });
+
+  it('returns 0 and never queries IGDB when nothing is missing', async () => {
+    const { db } = createBackfillMockDb([]);
+    const queryIgdb = jest.fn<Promise<IgdbApiGame[]>, [string]>();
+    await expect(backfillMissingCovers(db, queryIgdb)).resolves.toBe(0);
+    expect(queryIgdb).not.toHaveBeenCalled();
   });
 });

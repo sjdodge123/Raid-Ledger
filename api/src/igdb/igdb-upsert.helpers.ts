@@ -344,6 +344,38 @@ async function fetchMissingCoverGames(db: PostgresJsDatabase<typeof schema>) {
     );
 }
 
+/** IGDB rejects (HTTP 400) an id list or `limit` above 500 per query. */
+const IGDB_ID_QUERY_CHUNK = 500;
+
+/**
+ * Query IGDB for cover image ids in chunks of ≤500 ids. One rejected chunk is
+ * logged and skipped so the other chunks (and the rest of the sync) still run;
+ * prod once had enough missing-cover rows for a single query to trip the cap
+ * and abort the whole sync job, leaving new rows with no cover.
+ */
+async function fetchCoversInChunks(
+  ids: number[],
+  queryIgdb: (body: string) => Promise<IgdbApiGame[]>,
+): Promise<IgdbApiGame[]> {
+  const results: IgdbApiGame[] = [];
+  for (let i = 0; i < ids.length; i += IGDB_ID_QUERY_CHUNK) {
+    const chunk = ids.slice(i, i + IGDB_ID_QUERY_CHUNK);
+    try {
+      results.push(
+        ...(await queryIgdb(
+          `fields id, cover.image_id; where id = (${chunk.join(',')}); limit ${chunk.length};`,
+        )),
+      );
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      logger.warn(
+        `IGDB sync: cover backfill chunk of ${chunk.length} ids failed, skipping: ${reason}`,
+      );
+    }
+  }
+  return results;
+}
+
 /**
  * Backfill missing cover art from IGDB.
  * @param db - Database connection
@@ -357,10 +389,10 @@ export async function backfillMissingCovers(
   const missingCovers = await fetchMissingCoverGames(db);
   if (missingCovers.length === 0) return 0;
 
-  const ids = missingCovers.map((g) => g.igdbId).join(',');
-  const coverResults = await queryIgdb(
-    `fields id, cover.image_id; where id = (${ids}); limit ${missingCovers.length};`,
+  const ids = missingCovers.flatMap((g) =>
+    g.igdbId === null ? [] : [g.igdbId],
   );
+  const coverResults = await fetchCoversInChunks(ids, queryIgdb);
 
   let backfilled = 0;
   for (const game of coverResults) {
