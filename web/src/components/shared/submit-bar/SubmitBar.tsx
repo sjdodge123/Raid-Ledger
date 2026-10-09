@@ -37,8 +37,8 @@ export interface SubmitBarProps {
 
 const WRAP_CLS: Record<SubmitKind, string> = {
   empty: 'border-edge bg-overlay/20 opacity-60',
-  partial: 'border-emerald-500/25 bg-emerald-500/5',
-  pre: 'border-emerald-500/40 bg-emerald-500/5',
+  partial: 'border-success/25 bg-success/5',
+  pre: 'border-success/40 bg-success/5',
   post: 'border-edge bg-overlay/30',
 };
 

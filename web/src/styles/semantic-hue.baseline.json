@@ -1,5 +1,5 @@
 {
-  "__total": 730,
+  "__total": 726,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -116,7 +116,7 @@
   "components/roster/RosterSlot.tsx": 5,
   "components/roster/SelectableCharacterCard.tsx": 1,
   "components/shared/journey-hero/JourneyHero.tsx": 1,
-  "components/shared/submit-bar/SubmitBar.tsx": 5,
+  "components/shared/submit-bar/SubmitBar.tsx": 1,
   "components/ui/StartupGate.tsx": 3,
   "components/ui/button.tsx": 4,
   "components/ui/fab.tsx": 3,
