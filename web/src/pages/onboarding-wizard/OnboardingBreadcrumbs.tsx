@@ -123,7 +123,7 @@ function RemoveCharButton({ gameId, removeCharacterStep }: {
             tabIndex={0}
             onClick={(e) => { e.stopPropagation(); removeCharacterStep(gameId); }}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); removeCharacterStep(gameId); } }}
-            className="ml-0.5 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-500/30 text-current opacity-60 hover:opacity-100 transition-all flex-shrink-0"
+            className="ml-0.5 w-6 h-6 flex items-center justify-center rounded-full hover:bg-danger/30 text-current opacity-60 hover:opacity-100 transition-all flex-shrink-0"
             title="Remove this character slot"
         >
             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

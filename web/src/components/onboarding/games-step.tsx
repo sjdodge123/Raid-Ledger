@@ -101,7 +101,7 @@ function GenreChips({
 
 function LocalSearchBanner() {
     return (
-        <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-yellow-900/30 border border-yellow-700/40 text-yellow-500 text-xs font-medium">
+        <div className="flex items-center gap-2 px-3 py-2 mb-3 rounded-lg bg-warning/10 border border-warning/40 text-warning text-xs font-medium">
             <svg
                 className="w-4 h-4 flex-shrink-0"
                 fill="none"

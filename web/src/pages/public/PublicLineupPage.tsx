@@ -26,8 +26,8 @@ const STATUS_LABELS = {
 
 const STATUS_CLASSES = {
     building: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-    voting: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-    decided: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+    voting: 'bg-warning/10 text-warning border-warning/40',
+    decided: 'bg-success/10 text-success border-success/40',
     archived: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/40',
 } as const;
 
@@ -64,9 +64,9 @@ function DecisionBlock({ gameName, coverUrl }: DecisionBlockProps) {
     return (
         <section
             data-testid="public-lineup-decision"
-            className="mt-6 p-4 rounded-lg border border-emerald-500/40 bg-emerald-500/5"
+            className="mt-6 p-4 rounded-lg border border-success/40 bg-success/5"
         >
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-400 mb-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-success mb-2">
                 Winning game
             </h2>
             <div className="flex items-center gap-3">

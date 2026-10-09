@@ -95,5 +95,14 @@
   "pages/insights-hub-page.tsx": "Active tab solid bg-emerald-600 (selection tab)",
   "pages/lineup-detail-page.tsx": "Brand back-link text-emerald-400 only; the private-lineup invitees frame and nominate notice are on warning tokens",
   "pages/my-events-page.tsx": "\"Browse Events\" brand solid CTA bg-emerald-600 / hover emerald-500 (Button primary fill) + active tab solid bg-emerald-600 (selection tab); the load-error heading is on text-danger",
-  "pages/players-page.tsx": "Player-card name group-hover:text-emerald-400 (brand hover accent)"
+  "pages/players-page.tsx": "Player-card name group-hover:text-emerald-400 (brand hover accent)",
+  "pages/invite/invite-character-step.tsx": "Selected-role toggle: brand solid bg-emerald-600 + border-emerald-500 (selection accent, not a success state)",
+  "pages/invite/invite-components.tsx": "Invite stepper (current solid emerald-600, completed tint + connector = brand progress, as the S5 wizard ruling) and the selected character card / role tag tint (selection accent)",
+  "pages/public/PublicLineupPage.tsx": "Brand text links: \"Made with Raid Ledger\" footer and \"Reload\" emerald-400 / hover emerald-300 (brand link, not success)",
+  "components/onboarding/connect-step.tsx": "Header icon medallion bg-emerald-500/20 + text-emerald-400 link icon (brand decoration, not a success state)",
+  "components/onboarding/steam-step.tsx": "Header icon medallion bg-emerald-500/20 + text-emerald-400 Steam icon (brand decoration, same as connect-step)",
+  "components/onboarding/games-step.tsx": "Genre filter chip active state brand solid bg-emerald-600 (selection accent) + brand loading spinner border-emerald-500",
+  "components/onboarding/gametime-step.tsx": "Brand loading spinner border-emerald-500",
+  "pages/onboarding-wizard/OnboardingBreadcrumbs.tsx": "Wizard stepper: current-step brand solid, visited-step text/hover tint/dot and visited tooltip label (brand progress, S5 wizard ruling)",
+  "pages/onboarding-wizard/onboarding-step-labels.tsx": "Wizard stepper visited-step dot bg-emerald-400 (brand progress, S5 wizard ruling)"
 }
