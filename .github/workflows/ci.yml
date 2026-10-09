@@ -168,22 +168,10 @@ jobs:
       # files (e.g. against the shared drizzle-mock) slip past the build step.
       # Run the full-project typecheck — same command validate-ci.sh uses —
       # so test-file tsc errors fail the PR instead of leaking to main.
-      # ROK-1161 phase 7: api/tsconfig.build.json (the Build API step) now
-      # carries noUncheckedIndexedAccess for shipped code, while this
-      # full-project typecheck keeps the tracked phase-8 override in
-      # api/tsconfig.json. No new step is needed: nest build already gates
-      # validate-ci run_build (api scope, --static) and this lint job.
+      # ROK-1161: noUncheckedIndexedAccess is on in api/tsconfig.json itself,
+      # so this step gates specs + test infra under it as well as shipped code.
       - name: Typecheck (full project, incl. tests)
         run: npx tsc --noEmit -p api/tsconfig.json
-
-      # ROK-1161 phase 8 ratchet: the full-project typecheck above keeps
-      # noUncheckedIndexedAccess OFF for specs + test infra until the flip.
-      # This step typechecks the spec dirs that are already clean with the flag
-      # ON, so they cannot regress; api/tsconfig.spec-nuia.json `exclude` lists
-      # the dirs still to convert. Same command validate-ci.sh's TypeScript
-      # step uses. Delete it with that config once `exclude` is empty.
-      - name: Typecheck (api specs, noUncheckedIndexedAccess ratchet)
-        run: npx tsc --noEmit -p api/tsconfig.spec-nuia.json
 
       # Playwright transpiles the smoke specs without typechecking them, so a
       # type error in scripts/smoke/**, scripts/*.ts or playwright.config.ts

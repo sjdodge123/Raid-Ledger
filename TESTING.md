@@ -47,6 +47,8 @@ type error fails the PR. Specs inherit `noUncheckedIndexedAccess` and
 with the helpers in `web/src/test/defined.ts`, and instead of writing an explicit
 `undefined` into an optional key, omit the key or use a conditional spread.
 
+**API spec typecheck:** `npx tsc --noEmit -p api/tsconfig.json` (run from the repo root — from `api/` npx resolves tsc 6) covers every api spec, fixture and `common/testing` helper under `noUncheckedIndexedAccess`, gated at 0 errors by `scripts/validate-ci.sh` and the CI lint job (the phase-8 `tsconfig.spec-nuia.json` ratchet is gone; the flag lives in `api/tsconfig.json`). Narrow index access with the helpers in `api/src/common/testing/narrow.ts` (`nonEmpty` / `at` / `defined`) — never an `as`-cast or a non-null `!`.
+
 Contract schema specs live in `packages/contract/src/__tests__/*.spec.ts` and run
 under their own node-environment Vitest config (`packages/contract/vitest.config.ts`,
 which includes `src/**` only so the compiled `dist/` copies never run twice). CI's

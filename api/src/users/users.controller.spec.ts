@@ -738,7 +738,7 @@ describe('UsersController', () => {
     it('should reset onboarding and return success', async () => {
       const resetSpy = jest
         .spyOn(usersService, 'resetOnboarding')
-        .mockResolvedValue(undefined as never);
+        .mockResolvedValue(undefined);
 
       const result = await meController.resetOnboarding(mockRequest as never);
 
