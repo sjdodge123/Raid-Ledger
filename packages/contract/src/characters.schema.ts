@@ -55,6 +55,18 @@ export const EquipmentItemSchema = z.object({
     setName: z.string().optional(),
     /** Item icon URL from Blizzard media API */
     iconUrl: z.string().optional(),
+    /**
+     * ROK-1727: Wowhead data env the item's name/icon came from
+     * (16 = WoW: Forever, 4 = Classic fallback). Absent ⇒ the
+     * character variant's default Wowhead domain.
+     */
+    wowheadEnv: z.union([z.literal(16), z.literal(4)]).optional(),
+    /**
+     * ROK-1727: false when name/quality/icon are placeholders
+     * (`Item #<id>`) because the item metadata is not resolved yet.
+     * Absent ⇒ resolved (Blizzard Armory data).
+     */
+    resolved: z.boolean().optional(),
 });
 
 export type EquipmentItemDto = z.infer<typeof EquipmentItemSchema>;
@@ -63,6 +75,11 @@ export const CharacterEquipmentSchema = z.object({
     equippedItemLevel: z.number().int().nullable(),
     items: z.array(EquipmentItemSchema),
     syncedAt: z.string().datetime(),
+    /**
+     * ROK-1727: where the equipment came from. Absent ⇒ 'armory'
+     * (back-compat for stored Blizzard jsonb).
+     */
+    source: z.enum(['armory', 'addon']).optional(),
 });
 
 export type CharacterEquipmentDto = z.infer<typeof CharacterEquipmentSchema>;
