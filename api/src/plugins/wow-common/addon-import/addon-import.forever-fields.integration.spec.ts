@@ -7,6 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { inflateSync } from 'node:zlib';
 import * as bcrypt from 'bcrypt';
 import { and, eq } from 'drizzle-orm';
 import {
@@ -28,12 +29,18 @@ const FIXTURES = join(
 );
 const fixtureText = (name: string): string =>
   readFileSync(join(FIXTURES, `${name}.txt`), 'utf8');
-const questsPayload = (): AddonCharExport =>
-  (
-    JSON.parse(
-      readFileSync(join(FIXTURES, 'char-forever-quests.json'), 'utf8'),
-    ) as { payload: AddonCharExport }
-  ).payload;
+/**
+ * The WIRE payload inside `char-forever-quests.txt`. Not the sibling `.json`
+ * `payload`: that is the server-normalised shape (gear `link` already parsed
+ * to `bonusIds`/`enchantId`/`gemIds`), which the strict wire schema rejects
+ * with 422 INVALID_PAYLOAD when re-posted as an export.
+ */
+const questsPayload = (): AddonCharExport => {
+  const body = fixtureText('char-forever-quests').trim().split('!').pop();
+  return JSON.parse(
+    inflateSync(Buffer.from(body ?? '', 'base64')).toString('utf8'),
+  ) as AddonCharExport;
+};
 
 let testApp: TestApp;
 let gameId: number;
@@ -185,14 +192,23 @@ describe('addon import — Forever fields (ROK-1742)', () => {
       gender: 'female',
     });
   });
+});
 
+describe('addon import — Forever fields re-import (ROK-1742)', () => {
   it('a later export with no who.gender keeps the stored gender', async () => {
     const { token, charId } = await memberWithChar('anakeep');
-    await apply(token, charId, fixtureText('char-forever-quests'));
+    const first = await apply(
+      token,
+      charId,
+      fixtureText('char-forever-quests'),
+    );
+    expect(first.status).toBe(200);
     const next = questsPayload();
+    expect(next.who.gender).toBe('female');
     delete next.who.gender;
     next.exportedAt += 3600;
     const res = await apply(token, charId, buildImportString(next));
+    expect(res.body.code).toBeUndefined();
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('applied');
     expect((await characterRow(charId)).gender).toBe('female');
