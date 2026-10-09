@@ -122,7 +122,7 @@ function InspectorHeader({ dayOfWeek, onRemove, onDone }: {
             <div className="flex items-center gap-2">
                 <button
                     type="button" onClick={onRemove}
-                    className="px-2 py-1 text-xs font-medium rounded border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="px-2 py-1 text-xs font-medium rounded border border-danger/40 text-danger hover:bg-danger/10 transition-colors"
                     data-testid="remove-block"
                 >
                     Remove

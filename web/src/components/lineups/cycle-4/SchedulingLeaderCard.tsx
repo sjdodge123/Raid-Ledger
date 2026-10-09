@@ -82,7 +82,7 @@ function CardShell({
             data-testid="scheduling-leader-card"
             className={`space-y-2 rounded-lg border p-3 ${
                 tinted
-                    ? 'border-emerald-500/30 bg-emerald-500/10'
+                    ? 'border-success/30 bg-success/10'
                     : 'border-edge bg-panel/40'
             }`}
         >
@@ -122,14 +122,14 @@ function LeaderBody(props: {
     const { label, isPast } = formatSlotTime(leader.slot.proposedTime);
     return (
         <>
-            <p className="text-xs font-medium uppercase tracking-wider text-emerald-400">
+            <p className="text-xs font-medium uppercase tracking-wider text-success">
                 <span data-testid="scheduling-leader-status">
                     {statusLabel(leader, readOnly)}
                 </span>
                 {leader.tied && (
                     <span
                         data-testid="scheduling-leader-tie"
-                        className="text-amber-400"
+                        className="text-warning"
                     >
                         {` · ${SLOT_TIE_RULE}`}
                     </span>
@@ -150,7 +150,7 @@ function LeaderBody(props: {
             {isPast && (
                 <p
                     data-testid="scheduling-leader-past"
-                    className="text-xs text-amber-400"
+                    className="text-xs text-warning"
                 >
                     This time has already passed.
                 </p>

@@ -32,7 +32,7 @@ function ProfileActions({ editor }: { editor: Editor }): JSX.Element {
                 Clear
             </button>
             {editor.isDirty && (
-                <button onClick={editor.discard} className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors text-amber-400 bg-amber-500/10 hover:bg-amber-500/20">Discard</button>
+                <button onClick={editor.discard} className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors text-warning bg-warning/10 hover:bg-warning/15">Discard</button>
             )}
             <button onClick={editor.save} disabled={!editor.isDirty || editor.isSaving} className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-sm font-medium rounded-lg transition-colors">
                 {editor.isSaving && <div className="w-3 h-3 border-2 border-muted border-t-foreground rounded-full animate-spin" />}

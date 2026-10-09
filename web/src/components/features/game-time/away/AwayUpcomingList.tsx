@@ -22,7 +22,7 @@ function RowAction({ row, label, onRemove, onIgnore, isDeleting }: RowHandlers &
     if (row.source === 'manual') {
         return (
             <button type="button" data-testid="away-row-remove" aria-label={`Remove ${label}`}
-                disabled={isDeleting} onClick={() => onRemove(row)} className={`${ROW_BTN} text-red-400 hover:underline`}>
+                disabled={isDeleting} onClick={() => onRemove(row)} className={`${ROW_BTN} text-danger hover:underline`}>
                 Remove
             </button>
         );

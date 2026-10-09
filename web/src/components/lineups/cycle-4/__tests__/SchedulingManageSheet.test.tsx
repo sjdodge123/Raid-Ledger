@@ -114,7 +114,7 @@ describe('SchedulingManageButton (ROK-1584)', () => {
             }
         }
         expect(SCHEDULING_SHEET_ROW_BASE).toContain('min-h-[52px]');
-        expect(rows[2]?.className).toContain('text-red-400');
+        expect(rows[2]?.className).toContain('text-danger');
     });
 
     it('sublines the rows with the invite hint and the not-yet-voted count', async () => {

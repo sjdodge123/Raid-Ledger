@@ -16,7 +16,7 @@ const GAME_TIME_ROUTE = '/profile/gaming/game-time';
 /** One-line nudge shown when the viewer's own game time no longer counts. */
 export function ViewerStaleHint(): JSX.Element {
   return (
-    <p data-testid="heatmap-stale-hint" className="text-xs text-amber-400">
+    <p data-testid="heatmap-stale-hint" className="text-xs text-warning">
       Your game time is stale —{' '}
       <Link to={GAME_TIME_ROUTE} className="underline underline-offset-2 hover:text-foreground">
         refresh it
