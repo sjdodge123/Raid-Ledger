@@ -32,6 +32,7 @@ import { AddonImportService } from './addon-import/addon-import.service';
 import { AddonImportCreateService } from './addon-import/addon-import-create.service';
 import { AddonImportAuditService } from './addon-import/addon-import.audit';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
+import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 
 @Module({
@@ -64,6 +65,8 @@ import { ForeverDisplayEquipmentService } from './forever-display-equipment.serv
     AddonImportCreateService,
     AddonImportAuditService,
     WowItemMetaService,
+    // Empty partial ⇒ real defaults; the integration TestApp overrides it.
+    { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },
     ForeverDisplayEquipmentService,
   ],
   exports: [
