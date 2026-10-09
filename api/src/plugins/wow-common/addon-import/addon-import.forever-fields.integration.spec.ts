@@ -55,8 +55,8 @@ async function ensureGame(): Promise<number> {
   return game.id;
 }
 
-/** A member + their token + a matching Forever character (no race/gender). */
-async function memberWithChar(username: string) {
+/** A member with no characters; returns their token. */
+async function member(username: string): Promise<string> {
   const email = `${username}@test.local`;
   const [user] = nonEmpty(
     await testApp.db
@@ -73,7 +73,12 @@ async function memberWithChar(username: string) {
   const login = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
-  const token = login.body.access_token as string;
+  return login.body.access_token as string;
+}
+
+/** A member + their token + a matching Forever character (no race/gender). */
+async function memberWithChar(username: string) {
+  const token = await member(username);
   const res = await testApp.request
     .post('/users/me/characters')
     .set('Authorization', `Bearer ${token}`)
@@ -161,6 +166,24 @@ describe('addon import — Forever fields (ROK-1742)', () => {
       gender: 'female',
     });
     expect(after.lastSyncedAt).toEqual(before.lastSyncedAt);
+  });
+
+  it('create-from-export writes the display race + gender on the new row', async () => {
+    const token = await member('anacreaterace');
+    const res = await testApp.request
+      .post('/plugins/wow/characters/addon-import')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        importString: fixtureText('char-forever-quests'),
+        dryRun: false,
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.target.action).toBe('create');
+    const created = await characterRow(res.body.target.characterId as string);
+    expect({ race: created.race, gender: created.gender }).toEqual({
+      race: 'Night Elf',
+      gender: 'female',
+    });
   });
 
   it('a later export with no who.gender keeps the stored gender', async () => {
