@@ -1,5 +1,5 @@
 import type { ForeverTalentNodeDto, ForeverTalentsDto } from '@raid-ledger/contract';
-import { foreverTreeNames } from '../lib/forever-talent-trees';
+import { foreverTreeNames, formatForeverRank } from '../lib/forever-talent-trees';
 
 type PositionedNode = ForeverTalentNodeDto & { tree: number; row: number; col: number };
 
@@ -15,11 +15,6 @@ function isPositioned(node: ForeverTalentNodeDto): node is PositionedNode {
 function cellClass(node: ForeverTalentNodeDto): string {
     if (node.rank === 0) return UNRANKED_CLASS;
     return node.maxRanks !== undefined && node.rank >= node.maxRanks ? MAXED_CLASS : RANKED_CLASS;
-}
-
-/** "rank/maxRanks", or the bare rank when the max is unknown. */
-export function formatForeverRank(node: ForeverTalentNodeDto): string {
-    return node.maxRanks !== undefined ? `${node.rank}/${node.maxRanks}` : `${node.rank}`;
 }
 
 function TalentCell({ node }: { node: PositionedNode }) {
@@ -59,7 +54,7 @@ function treeSpent(talents: ForeverTalentsDto, index: number, nodes: PositionedN
  * at ≥md (stacked below), each a 4-column CSS grid of tiers. Empty positions
  * render nothing. Expects `layout === 'grid'` (every node positioned).
  */
-export function ForeverTalentGrid({ talents, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null }) {
+export function ForeverTalentGrid({ talents, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null | undefined }) {
     const names = foreverTreeNames(characterClass);
     const positioned = talents.nodes.filter(isPositioned);
     return (

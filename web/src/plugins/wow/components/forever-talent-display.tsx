@@ -1,6 +1,7 @@
 import type { ForeverTalentsDto } from '@raid-ledger/contract';
 import { getWowheadTalentCalcUrl } from '../lib/wowhead-urls';
-import { ForeverTalentGrid, formatForeverRank } from './forever-talent-grid';
+import { formatForeverRank } from '../lib/forever-talent-trees';
+import { ForeverTalentGrid } from './forever-talent-grid';
 import { TalentPillSection, WowheadCalcLink } from './talent-display';
 
 const PILL_CLASS = 'bg-overlay border border-edge text-foreground';
@@ -41,7 +42,7 @@ function ForeverTalentList({ talents, points }: { talents: ForeverTalentsDto; po
  * plain Forever calc link — hard-coded `wow_forever`, D7; no build string, no
  * iframe), then the positioned grid or the list/summary fallback.
  */
-export function ForeverTalentDisplay({ talents, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null }) {
+export function ForeverTalentDisplay({ talents, characterClass }: { talents: ForeverTalentsDto; characterClass?: string | null | undefined }) {
     const points = talents.nodes.reduce((sum, n) => sum + n.rank, 0);
     const href = characterClass ? getWowheadTalentCalcUrl(characterClass, 'wow_forever') : null;
     return (

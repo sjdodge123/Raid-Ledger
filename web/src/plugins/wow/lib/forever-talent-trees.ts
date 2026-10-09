@@ -1,3 +1,5 @@
+import type { ForeverTalentNodeDto } from '@raid-ledger/contract';
+
 /**
  * WoW: Forever sub-tree names per class, in in-game tab order (ROK-1744 R-B).
  * Static vanilla data; the addon's `tree` index 0/1/2 maps to these in order.
@@ -20,4 +22,9 @@ const FALLBACK_NAMES = ['Tree 1', 'Tree 2', 'Tree 3'] as const;
 export function foreverTreeNames(characterClass: string | null | undefined): readonly string[] {
     const key = characterClass?.trim().toLowerCase() ?? '';
     return TREE_NAMES[key] ?? FALLBACK_NAMES;
+}
+
+/** "rank/maxRanks", or the bare rank when the max is unknown. */
+export function formatForeverRank(node: ForeverTalentNodeDto): string {
+    return node.maxRanks !== undefined ? `${node.rank}/${node.maxRanks}` : `${node.rank}`;
 }
