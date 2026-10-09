@@ -2444,3 +2444,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-09 — rl-infra (surfaced during the 2026-10-09 Lead session)
 
 - **med** `rl-infra` MCP server (`mcp-rl-fleet` claim heartbeat) — claims made from several worktrees in one session lapse one after another: slots 4 and 3 (claimed 02:19Z) stopped heart-beating at ~02:54Z, slot 1 (claimed 02:56Z) at 03:04Z, while the most recent claim (slot 2, 03:05Z) kept beating; the previous session saw the same drop at ~23:30Z. Looks like one heartbeat loop per server process that tracks only the latest claim. Consequence: `rl_env_destroy` of a story's own env needs `force:true`, and preserved operator envs lose their guard. Pre-existing (not this branch). `Suggested:` heart-beat every claim the server made (keyed by agent id / worktree), or make `rl_claim` return a warning when it replaces the heartbeat target.
+
+### 2026-10-09 — fix/theme-1770-s2 (surfaced during the TDB:1770 S2 fleet UI plan)
+
+- **low** — `web/src/components/features/game-time/away/AwayAddForm.tsx:22` (the "Add absence" primary button): the verify lane measured the button label at **3.65:1 in default-dark** (AA needs 4.5:1 for text-sm). Pre-existing — the button is outside the S2 slice (S2 only moved status colours to tokens) and its colour classes are untouched on main. `Suggested:` theme-slice follow-up for the game-time away panel: put the label on the token the primary buttons use elsewhere (`bg-primary text-primary-foreground` or the shared `Button` primitive) and re-measure in all 15 schemes.
