@@ -18,8 +18,27 @@ import { useForeverConfig } from '../hooks/use-forever-config';
 import { ForeverProbePanel } from './forever-probe-panel';
 
 type SaveFn = ReturnType<typeof useForeverConfig>['update']['mutateAsync'];
+type SaveDto = Parameters<SaveFn>[0];
 
-async function save(mutate: SaveFn, dto: Parameters<SaveFn>[0], success: string): Promise<void> {
+/**
+ * ROK-1727: the Wowhead item resolver kill switch. Typed locally as optional
+ * until the contract's forever-config schema carries `wowheadResolverEnabled`;
+ * unset means ON (Lead decision D2).
+ */
+type SavedConfig = WowForeverConfigResponseDto & { wowheadResolverEnabled?: boolean };
+
+/** The saved config as a PUT body, so one switch never resets another setting. */
+function savedDto(saved: SavedConfig, patch: Partial<SaveDto> & { wowheadResolverEnabled?: boolean }): SaveDto {
+    const dto: SaveDto & { wowheadResolverEnabled?: boolean } = {
+        namespacePrefix: saved.namespacePrefix,
+        armoryImportEnabled: saved.armoryImportEnabled,
+        ...(saved.wowheadResolverEnabled !== undefined && { wowheadResolverEnabled: saved.wowheadResolverEnabled }),
+        ...patch,
+    };
+    return dto;
+}
+
+async function save(mutate: SaveFn, dto: SaveDto, success: string): Promise<void> {
     try {
         await mutate(dto);
         toast.success(success);
@@ -28,7 +47,7 @@ async function save(mutate: SaveFn, dto: Parameters<SaveFn>[0], success: string)
     }
 }
 
-function PrefixForm({ saved, mutate, pending }: { saved: WowForeverConfigResponseDto; mutate: SaveFn; pending: boolean }): JSX.Element {
+function PrefixForm({ saved, mutate, pending }: { saved: SavedConfig; mutate: SaveFn; pending: boolean }): JSX.Element {
     const [prefix, setPrefix] = useState(saved.namespacePrefix);
     const [error, setError] = useState<string | undefined>();
     const onSubmit = (e: FormEvent): void => {
@@ -36,7 +55,7 @@ function PrefixForm({ saved, mutate, pending }: { saved: WowForeverConfigRespons
         const parsed = WowForeverNamespacePrefixSchema.safeParse(prefix);
         if (!parsed.success) { setError(parsed.error.issues[0]?.message ?? 'Invalid prefix'); return; }
         setError(undefined);
-        void save(mutate, { namespacePrefix: parsed.data, armoryImportEnabled: saved.armoryImportEnabled }, 'WoW Forever namespace saved');
+        void save(mutate, savedDto(saved, { namespacePrefix: parsed.data }), 'WoW Forever namespace saved');
     };
     return (
         <form onSubmit={onSubmit} noValidate className="space-y-3">
@@ -51,10 +70,10 @@ function PrefixForm({ saved, mutate, pending }: { saved: WowForeverConfigRespons
     );
 }
 
-function ArmoryToggle({ saved, mutate, pending }: { saved: WowForeverConfigResponseDto; mutate: SaveFn; pending: boolean }): JSX.Element {
+function ArmoryToggle({ saved, mutate, pending }: { saved: SavedConfig; mutate: SaveFn; pending: boolean }): JSX.Element {
     const hintId = useId();
     const onChange = (next: boolean): void => {
-        void save(mutate, { namespacePrefix: saved.namespacePrefix, armoryImportEnabled: next },
+        void save(mutate, savedDto(saved, { armoryImportEnabled: next }),
             next ? 'Armory import for WoW Forever turned on' : 'Armory import for WoW Forever turned off');
     };
     return (
@@ -69,6 +88,24 @@ function ArmoryToggle({ saved, mutate, pending }: { saved: WowForeverConfigRespo
     );
 }
 
+function ResolverToggle({ saved, mutate, pending }: { saved: SavedConfig; mutate: SaveFn; pending: boolean }): JSX.Element {
+    const hintId = useId();
+    const onChange = (next: boolean): void => {
+        void save(mutate, savedDto(saved, { wowheadResolverEnabled: next }),
+            next ? 'Wowhead item lookup turned on' : 'Wowhead item lookup turned off');
+    };
+    return (
+        <div className="flex items-center justify-between gap-4">
+            <div>
+                <p className="text-sm font-medium text-foreground">Wowhead item lookup</p>
+                <p id={hintId} className="text-sm text-secondary">Fetch names and icons for addon-imported gear from Wowhead.</p>
+            </div>
+            <Switch checked={saved.wowheadResolverEnabled ?? true} onChange={onChange} label="Wowhead item lookup"
+                aria-describedby={hintId} disabled={pending} />
+        </div>
+    );
+}
+
 /** The admin "WoW Forever" section; renders nothing until the saved config has loaded. */
 export function ForeverSettingsSection(): JSX.Element | null {
     const { config, update } = useForeverConfig();
@@ -78,6 +115,7 @@ export function ForeverSettingsSection(): JSX.Element | null {
             <h3 id="wow-forever-settings-heading" className="text-base font-semibold text-foreground">WoW Forever</h3>
             <PrefixForm key={config.data.namespacePrefix} saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
             <ArmoryToggle saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
+            <ResolverToggle saved={config.data} mutate={update.mutateAsync} pending={update.isPending} />
             <ForeverProbePanel />
         </section>
     );
