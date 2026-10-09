@@ -2,9 +2,9 @@ import type { EventPlanResponseDto, EventPlanStatus, PollMode } from '@raid-ledg
 
 export const STATUS_STYLES: Record<EventPlanStatus, { bg: string; text: string; label: string }> = {
     polling: { bg: 'bg-blue-500/15', text: 'text-blue-300', label: 'Polling' },
-    completed: { bg: 'bg-emerald-500/15', text: 'text-emerald-300', label: 'Completed' },
-    expired: { bg: 'bg-amber-500/15', text: 'text-amber-300', label: 'Expired' },
-    cancelled: { bg: 'bg-red-500/15', text: 'text-red-300', label: 'Cancelled' },
+    completed: { bg: 'bg-success/10', text: 'text-success', label: 'Completed' },
+    expired: { bg: 'bg-warning/10', text: 'text-warning', label: 'Expired' },
+    cancelled: { bg: 'bg-danger/10', text: 'text-danger', label: 'Cancelled' },
     draft: { bg: 'bg-gray-500/15', text: 'text-gray-300', label: 'Draft' },
 };
 

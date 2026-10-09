@@ -45,7 +45,7 @@ export function RolePicker({ selectedRoles, onToggleRole, showMismatchWarning, m
                 <p className="text-xs text-success mt-1.5">You'll be auto-assigned to the best available slot.</p>
             )}
             {showMismatchWarning && mismatchDefaultRole && mismatchSelectedRole && selectedRoles.length === 1 && (
-                <p className="text-xs text-amber-400/80 mt-1.5">
+                <p className="text-xs text-warning mt-1.5">
                     This character's default role is {mismatchDefaultRole}. Signing up as {mismatchSelectedRole} instead.
                 </p>
             )}

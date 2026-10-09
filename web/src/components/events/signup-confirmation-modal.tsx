@@ -270,7 +270,7 @@ function LoadingSkeleton() {
 
 function ErrorState({ error }: { error: unknown }) {
     return (
-        <div className="text-center py-8 text-red-400">
+        <div className="text-center py-8 text-danger">
             <p className="mb-2">Failed to load characters</p>
             <p className="text-sm text-muted">{error instanceof Error ? error.message : 'Please try again.'}</p>
         </div>
