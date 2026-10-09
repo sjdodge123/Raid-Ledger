@@ -11,10 +11,10 @@ interface DashboardEventCardProps {
 function FillBar({ percent }: { percent: number }) {
   const color =
     percent >= 80
-      ? "bg-emerald-500"
+      ? "bg-success"
       : percent >= 50
-        ? "bg-amber-500"
-        : "bg-red-500";
+        ? "bg-warning"
+        : "bg-danger";
 
   return (
     <div className="w-full h-2 bg-panel rounded-full overflow-hidden">
@@ -58,7 +58,7 @@ function MissingRolesBadges({ roles }: { roles: string[] }) {
   return (
     <div className="flex flex-wrap gap-1 mb-2">
       {roles.map((role) => (
-        <span key={role} className="px-2 py-0.5 text-xs bg-amber-500/15 text-amber-400 rounded-full">
+        <span key={role} className="px-2 py-0.5 text-xs bg-warning/15 text-warning rounded-full">
           need {role}
         </span>
       ))}
@@ -87,7 +87,7 @@ function EventCardActions({ eventId }: { eventId: number }) {
 
 function cardBorderClass(highlighted?: boolean) {
   return highlighted
-    ? "border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10"
+    ? "border-warning ring-2 ring-warning/30 shadow-lg shadow-warning/10"
     : "border-edge hover:border-dim";
 }
 

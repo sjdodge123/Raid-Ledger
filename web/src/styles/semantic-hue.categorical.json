@@ -104,5 +104,11 @@
   "components/onboarding/games-step.tsx": "Genre filter chip active state brand solid bg-emerald-600 (selection accent) + brand loading spinner border-emerald-500",
   "components/onboarding/gametime-step.tsx": "Brand loading spinner border-emerald-500",
   "pages/onboarding-wizard/OnboardingBreadcrumbs.tsx": "Wizard stepper: current-step brand solid, visited-step text/hover tint/dot and visited tooltip label (brand progress, S5 wizard ruling)",
-  "pages/onboarding-wizard/onboarding-step-labels.tsx": "Wizard stepper visited-step dot bg-emerald-400 (brand progress, S5 wizard ruling)"
+  "pages/onboarding-wizard/onboarding-step-labels.tsx": "Wizard stepper visited-step dot bg-emerald-400 (brand progress, S5 wizard ruling)",
+  "components/pugs/pug-avatar.tsx": "PUG amber identity accent on the \"Awaiting player\" avatar (categorical, consistent with the S3 RosterBuilder PUG ruling)",
+  "components/pugs/pug-card.tsx": "PUG amber identity accent: the Guest/Invite chip and the dashed guest-slot card (categorical, consistent with the S3 RosterBuilder PUG ruling); status dots and Remove already on tokens",
+  "components/players/NewMembersSection.tsx": "Brand hover accent: emerald avatar ring / glow and username hover text (decorative brand, not a success state)",
+  "components/players/mobile-player-card.tsx": "Brand hover accent: username group-hover text-emerald-400 (link hover, not success)",
+  "components/players/players-mobile-toolbar.tsx": "Active-filter indicator dot bg-emerald-500 on the Filters button (selection accent, not success)",
+  "components/characters/character-card-compact.tsx": "WoW faction (horde red pill), role fills (healer emerald-600 / DPS red-600), gold main-character star and amber level label (categorical identity, not status)"
 }
