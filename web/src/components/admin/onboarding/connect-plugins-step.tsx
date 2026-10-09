@@ -42,7 +42,7 @@ function PluginsErrorState({ onBack, onSkip }: { onBack: () => void; onSkip: () 
         <div className="space-y-6">
             <div>
                 <h2 className="text-xl font-semibold text-foreground">Install Plugins</h2>
-                <p className="text-sm text-red-400 mt-1">Failed to load plugins. You can configure them later in Admin Settings.</p>
+                <p className="text-sm text-danger mt-1">Failed to load plugins. You can configure them later in Admin Settings.</p>
             </div>
             <div className="flex items-center justify-between pt-4 border-t border-edge/30">
                 <button onClick={onBack} className="px-5 py-2.5 min-h-[44px] bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm">Back</button>

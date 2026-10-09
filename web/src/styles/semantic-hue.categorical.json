@@ -11,5 +11,8 @@
   "plugins/wow/slots/character-detail-header-badges.tsx": "WoW faction badge: Horde red (faction colour, promises nothing)",
   "plugins/wow/slots/equipment-constants.ts": "WoW item-quality colour map (Uncommon green)",
   "plugins/wow/slots/equipment-grid.tsx": "WoW equipment slot: enchant green (game tooltip convention)",
-  "components/lineups/cycle-4/StarToggleButton.tsx": "Starred top pick: a selection accent (chip-on amber), not a status — design-system §2.2 categorical; S2 review ruling 2026-10-09"
+  "components/lineups/cycle-4/StarToggleButton.tsx": "Starred top pick: a selection accent (chip-on amber), not a status — design-system §2.2 categorical; S2 review ruling 2026-10-09",
+  "components/admin/ChannelBindingList.tsx": "Channel behaviour badge map: General Lobby amber beside Announcements cyan / Activity Monitor purple (a category colour, promises nothing)",
+  "components/admin/DynamicCategoryCard.tsx": "Taste-vector bar chart: positive bars emerald, negative bars red (a diverging chart series, not a status)",
+  "components/admin/onboarding/secure-account-step.tsx": "Password-strength meter ramp: Good is the yellow step between orange Fair and token Strong (amber bg-warning would be indistinguishable from orange-500 Fair in dark)"
 }

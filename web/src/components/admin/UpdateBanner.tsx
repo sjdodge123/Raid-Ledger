@@ -5,7 +5,7 @@ const RELEASES_FALLBACK_URL = 'https://github.com/sjdodge123/Raid-Ledger/release
 const DISMISS_KEY_PREFIX = 'raid_ledger_update_banner_dismissed_v';
 
 const WarningIcon = (
-    <svg className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className="w-5 h-5 text-warning mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
     </svg>
 );
@@ -42,11 +42,11 @@ function BannerContent({ data }: { data: { latestVersion: string; currentVersion
         <div className="flex items-start gap-3">
             {WarningIcon}
             <div>
-                <p className="text-sm text-amber-300 font-medium">
+                <p className="text-sm text-warning font-medium">
                     A new version of Raid Ledger is available (v{data.latestVersion}). You are running v{data.currentVersion}.
                 </p>
                 <a href={href} target="_blank" rel="noopener noreferrer"
-                    className="text-sm text-amber-400 hover:text-amber-300 underline underline-offset-2 mt-1 inline-block">
+                    className="text-sm text-warning hover:text-foreground underline underline-offset-2 mt-1 inline-block">
                     View release notes
                 </a>
             </div>
@@ -58,9 +58,9 @@ function BannerView({ latestVersion, currentVersion, latestReleaseUrl, onDismiss
     latestVersion: string; currentVersion: string; latestReleaseUrl: string | null | undefined; onDismiss: () => void;
 }) {
     return (
-        <div role="status" className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 flex items-start justify-between gap-3">
+        <div role="status" className="bg-warning/10 border border-warning/30 rounded-lg p-4 flex items-start justify-between gap-3">
             <BannerContent data={{ latestVersion, currentVersion, latestReleaseUrl }} />
-            <button onClick={onDismiss} className="text-amber-400/60 hover:text-amber-300 transition-colors flex-shrink-0" aria-label="Dismiss update banner">
+            <button onClick={onDismiss} className="text-warning/60 hover:text-warning transition-colors flex-shrink-0" aria-label="Dismiss update banner">
                 {CloseIcon}
             </button>
         </div>

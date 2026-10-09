@@ -20,7 +20,7 @@ function CountBadge({ label, count }: { label: string; count: number }) {
 function DemoDataHeader({ isLoading, hasDemoData }: { isLoading: boolean; hasDemoData: boolean }) {
     const statusText = isLoading ? 'Loading...' : hasDemoData ? 'Sample data is installed' : 'No demo data installed';
     const badgeText = isLoading ? 'Loading...' : hasDemoData ? 'Installed' : 'Empty';
-    const badgeClass = hasDemoData ? 'bg-amber-500/20 text-amber-400' : 'bg-overlay text-muted';
+    const badgeClass = hasDemoData ? 'bg-warning/10 text-warning' : 'bg-overlay text-muted';
     return (
         <div className="p-4 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -56,7 +56,7 @@ function InstalledContent({ status, onClear, isClearing, isOperating }: {
                 <CountBadge label="Notifications" count={status.notifications} />
             </div>
             <button onClick={onClear} disabled={isOperating}
-                className="w-full py-3 px-4 bg-red-600/20 hover:bg-red-600/30 disabled:bg-red-800/20 disabled:cursor-not-allowed text-red-400 font-semibold rounded-lg transition-colors border border-red-600/50 flex items-center justify-center gap-2">
+                className="w-full py-3 px-4 bg-danger/10 hover:bg-danger/15 disabled:bg-danger/5 disabled:cursor-not-allowed text-danger font-semibold rounded-lg transition-colors border border-danger/50 flex items-center justify-center gap-2">
                 {isClearing && Spinner}{isClearing ? 'Deleting...' : 'Delete All Demo Data'}
             </button>
         </>

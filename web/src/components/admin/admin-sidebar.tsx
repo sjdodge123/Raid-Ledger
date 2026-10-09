@@ -96,8 +96,8 @@ export function StatusPill({ status }: { status: IntegrationStatus }) {
     if (status === 'loading') return null;
 
     const config = {
-        online: { label: 'Online', className: 'bg-emerald-500/20 text-emerald-400' },
-        offline: { label: 'Offline', className: 'bg-red-500/15 text-red-400' },
+        online: { label: 'Online', className: 'bg-success/10 text-success' },
+        offline: { label: 'Offline', className: 'bg-danger/10 text-danger' },
     } as const;
 
     const { label, className } = config[status];
