@@ -12,6 +12,7 @@ import {
   WowheadResolverDisabledError,
   type WowheadResolverDeps,
 } from './wow-item-meta.resolve';
+import { conflictSet } from './wow-item-meta.upsert';
 import type { WowItemMetaInsert, WowItemMetaRow } from './wowhead-item.types';
 import { isWowheadResolverEnabled } from './wowhead-resolver.settings';
 
@@ -132,24 +133,14 @@ export class WowItemMetaService {
     }
   }
 
-  /**
-   * Insert or update. An `error` outcome on an existing row only bumps the
-   * retry bookkeeping — a transient failure never erases a resolved name.
-   */
+  /** Insert or update, never downgrading stored metadata (see `conflictSet`). */
   private async upsert(row: WowItemMetaInsert): Promise<void> {
-    const retry = {
-      fetchedAt: row.fetchedAt,
-      nextRetryAt: row.nextRetryAt,
-      attempts: row.attempts,
-    };
-    const { status, env, name, quality, icon } = row;
-    const set =
-      status === 'error'
-        ? retry
-        : { ...retry, status, env, name, quality, icon };
     await this.db
       .insert(wowItemMeta)
       .values(row)
-      .onConflictDoUpdate({ target: wowItemMeta.itemId, set });
+      .onConflictDoUpdate({
+        target: wowItemMeta.itemId,
+        set: conflictSet(row),
+      });
   }
 }

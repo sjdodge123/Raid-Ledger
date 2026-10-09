@@ -124,6 +124,32 @@ describe('WowItemMetaService on a real DB (ROK-1727)', () => {
     expect(rows).toHaveLength(2);
   });
 
+  it('a due resolved row is never downgraded by a classic_fallback or not_found re-probe', async () => {
+    const due = new Date(Date.now() - 60_000);
+    const forever = {
+      status: 'resolved',
+      env: 16,
+      name: 'Forever',
+      fetchedAt: due,
+      nextRetryAt: due,
+    };
+    await testApp.db.insert(schema.wowItemMeta).values([
+      { itemId: 16921, ...forever },
+      { itemId: 16922, ...forever },
+    ]);
+    stubWowhead();
+    await expect(service.retryDue()).resolves.toBe(2);
+    for (const id of [16921, 16922]) {
+      const row = await rowOf(id);
+      expect(row).toMatchObject({
+        status: 'resolved',
+        env: 16,
+        name: 'Forever',
+      });
+      expect(row?.nextRetryAt?.getTime()).toBeGreaterThan(Date.now());
+    }
+  });
+
   it('kill switch "false" → enqueue and retryDue write nothing and never fetch', async () => {
     await testApp.app
       .get(SettingsService)
