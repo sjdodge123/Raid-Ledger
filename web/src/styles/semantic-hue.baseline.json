@@ -1,5 +1,5 @@
 {
-  "__total": 769,
+  "__total": 768,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -145,7 +145,7 @@
   "pages/events-page.tsx": 2,
   "pages/events/EventsPageHeader.tsx": 3,
   "pages/game-detail-page.tsx": 10,
-  "pages/game-detail/CommunityActivitySection.tsx": 2,
+  "pages/game-detail/CommunityActivitySection.tsx": 1,
   "pages/game-detail/CoopProseBlocks.tsx": 2,
   "pages/game-detail/GameBanner.tsx": 8,
   "pages/game-detail/GamePricingSummary.tsx": 6,

@@ -60,7 +60,7 @@
   "components/games/unified-game-card-parts.tsx": "Steam-available corner chip: emerald Steam glyph on a black/50 art chip (brand/store marker)",
   "components/games/unified-game-card.tsx": "Card hover + toggle-selected border/glow emerald (selection accent)",
   "pages/game-detail-page.tsx": "Kept: \"Want to Play\" toggle (heart-on red tint matching the card heart; brand solid bg-emerald-600 primary off-state) and brand links; Game Not Found error box is on danger tokens",
-  "pages/game-detail/CommunityActivitySection.tsx": "Period toggle selected segment brand solid bg-emerald-600 (selection accent) and \"N playing now\" presence accent (not a success state)",
+  "pages/game-detail/CommunityActivitySection.tsx": "Period toggle selected segment brand solid bg-emerald-600 (selection accent); the \"N playing now\" live-session count is on text-success",
   "pages/game-detail/CoopProseBlocks.tsx": "\"Show more\" brand link text-emerald-400",
   "pages/game-detail/GameBanner.tsx": "Rating band pill (75+/50+/below: a data scale like getRatingClasses) and \"View on Steam\" brand link; crossplay Supported is on text-success",
   "pages/game-detail/GamePricingSummary.tsx": "Price/deal data accents: current-best price and discount chip emerald (an on-sale deal is not success), ITAD brand link, historical-low yellow trend icon",
