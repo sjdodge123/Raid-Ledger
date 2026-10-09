@@ -3,6 +3,11 @@ import { z } from 'zod';
 // between files under the same export names. ESM live bindings make the
 // cycle safe — index.ts exports characters/blizzard before this file.
 import { WowForeverRulesetSchema } from './blizzard.schema.js';
+import {
+    ADDON_QUEST_OBJECTIVES_MAX,
+    ADDON_QUESTS_COMPLETED_MAX,
+    ADDON_QUESTS_IN_PROGRESS_MAX,
+} from './wow-addon-import.schema.js';
 
 // ============================================================
 // WoW: Forever addon export payload (ROK-1724)
@@ -70,6 +75,8 @@ export const AddonWhoSchema = z.object({
     ruleset: WowForeverRulesetSchema.nullable(),
     class: AddonClassTokenSchema,
     race: z.string().max(32),
+    /** `UnitSex`: 2 → male, 3 → female; 1 (unknown) → omit (ROK-1742). */
+    gender: z.enum(['male', 'female']).optional(),
     level,
     faction: AddonFactionSchema,
     /** Exporter's guild, if any — the raid-pull dedupe key (Q5). */
@@ -95,11 +102,36 @@ export const AddonGearItemSchema = z.object({
     ilvl: count.optional(),
 }).strict();
 
+/**
+ * One talent node. ROK-1742 adds the display + layout keys, all optional.
+ * Forever has ONE `C_Traits` tree per class, laid out as vanilla: 3 sub-trees
+ * side by side × 4 columns (12 distinct posX) and 7+ tiers (distinct posY).
+ * The addon derives `col12` = index of posX among the class tree's distinct
+ * posX values, `tree = floor(col12 / 4)`, `col = col12 % 4`, and `row` = index
+ * of posY among the distinct posY values (0 = top). That pixel → index
+ * mapping is UNVERIFIED beyond Warrior (12 × 7), so the raw `posX`/`posY` are
+ * always sent too and are authoritative; `tree`/`row`/`col` are hints.
+ */
 export const AddonTalentNodeSchema = z.object({
     nodeId: id,
     rank: count,
     entryId: id.optional(),
+    /** `C_Spell.GetSpellName(spellId)`. */
+    name: z.string().max(64).optional(),
+    /** entry → definitionID → spellID. */
+    spellId: z.number().int().positive().max(INT4_MAX).optional(),
+    maxRanks: z.number().int().min(1).max(255).optional(),
+    /** Sub-tree 0–2, derived from posX (see above). */
+    tree: z.number().int().min(0).max(2).optional(),
+    /** Tier 0–9 (0 = top), derived from posY. */
+    row: z.number().int().min(0).max(9).optional(),
+    /** Column 0–3 within the sub-tree, derived from posX. */
+    col: z.number().int().min(0).max(3).optional(),
+    /** Raw `C_Traits` node position, stored verbatim. */
+    posX: count.optional(),
+    posY: count.optional(),
 }).strict();
+export type AddonTalentNode = z.infer<typeof AddonTalentNodeSchema>;
 
 export const AddonTalentsSchema = z.object({
     configId: id.optional(),
@@ -117,10 +149,34 @@ export const AddonLockoutSchema = z.object({
 }).strict();
 export type AddonLockout = z.infer<typeof AddonLockoutSchema>;
 
+/** One quest-log objective; `have`/`need` from `numFulfilled`/`numRequired`. */
+export const AddonQuestObjectiveSchema = z.object({
+    text: z.string().max(128),
+    done: z.boolean(),
+    have: count.optional(),
+    need: count.optional(),
+}).strict();
+export type AddonQuestObjective = z.infer<typeof AddonQuestObjectiveSchema>;
+
+export const AddonQuestInProgressSchema = z.object({
+    questId: id,
+    title: z.string().max(128).optional(),
+    objectives: z.array(AddonQuestObjectiveSchema).max(ADDON_QUEST_OBJECTIVES_MAX).optional(),
+}).strict();
+export type AddonQuestInProgress = z.infer<typeof AddonQuestInProgressSchema>;
+
+/** ROK-1742. Optional as a whole; when present both arrays are required. */
+export const AddonQuestsSchema = z.object({
+    completed: z.array(id).max(ADDON_QUESTS_COMPLETED_MAX),
+    inProgress: z.array(AddonQuestInProgressSchema).max(ADDON_QUESTS_IN_PROGRESS_MAX),
+}).strict();
+export type AddonQuests = z.infer<typeof AddonQuestsSchema>;
+
 export const AddonCharDataSchema = z.object({
     gear: z.array(AddonGearItemSchema).max(19),
     talents: AddonTalentsSchema,
     lockouts: z.array(AddonLockoutSchema).max(100),
+    quests: AddonQuestsSchema.optional(),
 }).strict();
 export type AddonCharData = z.infer<typeof AddonCharDataSchema>;
 
