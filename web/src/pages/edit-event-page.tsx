@@ -57,8 +57,8 @@ const SCOPE_LABELS: Record<string, string> = {
 
 function SeriesScopeBanner({ scope }: { scope: SeriesScope }) {
     return (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3 mb-4" data-testid="series-scope-banner">
-            <p className="text-sm text-amber-300 font-medium">{SCOPE_LABELS[scope] ?? ''}</p>
+        <div className="bg-warning/10 border border-warning/30 rounded-lg px-4 py-3 mb-4" data-testid="series-scope-banner">
+            <p className="text-sm text-warning font-medium">{SCOPE_LABELS[scope] ?? ''}</p>
         </div>
     );
 }

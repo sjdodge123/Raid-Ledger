@@ -48,7 +48,7 @@ function MetricsError({ eventId, message }: { eventId: number; message: string }
     return (
         <div className="min-h-[50vh] flex items-center justify-center">
             <div className="text-center">
-                <h2 className="text-xl font-semibold text-red-400 mb-2">Failed to load event metrics</h2>
+                <h2 className="text-xl font-semibold text-danger mb-2">Failed to load event metrics</h2>
                 <p className="text-muted">{message}</p>
                 <Link to={`/events/${eventId}`} className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">Back to event</Link>
             </div>

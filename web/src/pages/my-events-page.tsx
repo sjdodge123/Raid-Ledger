@@ -21,7 +21,7 @@ type Tab = 'dashboard' | 'analytics';
 function MyEventsError({ message }: { message: string }) {
     return (
         <div className="min-h-[50vh] flex items-center justify-center">
-            <div className="text-center"><h2 className="text-xl font-semibold text-red-400 mb-2">Failed to load dashboard</h2><p className="text-muted">{message}</p></div>
+            <div className="text-center"><h2 className="text-xl font-semibold text-danger mb-2">Failed to load dashboard</h2><p className="text-muted">{message}</p></div>
         </div>
     );
 }

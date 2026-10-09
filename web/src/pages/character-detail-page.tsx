@@ -104,8 +104,8 @@ function CharacterDetailLoading() {
 function CharacterDetailError({ message, onBack }: { message: string; onBack: () => void }) {
     return (
         <div className="max-w-5xl mx-auto px-4 py-8">
-            <div className="bg-red-950/50 border border-red-900 rounded-lg p-6 text-center">
-                <p className="text-red-400">{message}</p>
+            <div className="bg-danger/10 border border-danger/40 rounded-lg p-6 text-center">
+                <p className="text-danger">{message}</p>
                 <button onClick={onBack} className="text-blue-400 hover:underline mt-2 inline-block">Go back</button>
             </div>
         </div>
