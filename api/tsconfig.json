@@ -20,13 +20,10 @@
     "noImplicitAny": true,
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true,
-    // ROK-1161 tracked override — phase 8 flips this to true and deletes the
-    // tsconfig.build.json override. OFF here only because this config also
-    // typechecks specs + test infra (CI "Typecheck (full project, incl. tests)",
-    // validate-ci run_typecheck, ESLint projectService). Measured at f82d72ae4:
-    // 5,912 errors — 5,876 in 527 *.spec.ts files + 36 in 11 spec-helpers /
-    // src/common/testing files. Shipped code is gated ON via tsconfig.build.json.
-    "noUncheckedIndexedAccess": false
+    // ROK-1161: on for every api file — shipped code, specs and test infra.
+    // Narrow with src/common/defined.helpers.ts (app code) or
+    // src/common/testing/narrow.ts (specs).
+    "noUncheckedIndexedAccess": true
   },
   "ts-node": {
     "files": true

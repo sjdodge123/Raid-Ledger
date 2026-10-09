@@ -1,12 +1,8 @@
 {
   "extends": "./tsconfig.json",
-  // ROK-1161 phase 7: noUncheckedIndexedAccess is ON for everything nest build
-  // compiles (all shipped api code: src non-spec, scripts/, seeds/,
-  // drizzle.config.ts). Gated by `npm run build -w api` (validate-ci run_build,
-  // the CI lint job's "Build API" step, Docker builds): nest build exits 1 on any
-  // type error. Specs + test infra keep the tracked override in tsconfig.json
-  // until phase 8.
-  "compilerOptions": { "noUncheckedIndexedAccess": true },
+  // nest build compiles shipped api code only (src non-spec, scripts/, seeds/,
+  // drizzle.config.ts). Compiler options, noUncheckedIndexedAccess included
+  // (ROK-1161), come from tsconfig.json.
   "exclude": [
     "node_modules",
     "test",
