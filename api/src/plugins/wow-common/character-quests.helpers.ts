@@ -95,46 +95,66 @@ function groupByInstance(
   return groups;
 }
 
+/** Lowest quest level among a group's completed quests (null when none). */
+function minLevel(group: CharacterQuestInstanceGroup): number | null {
+  const levels = group.completed
+    .map((q) => q.questLevel)
+    .filter((l): l is number => l !== null);
+  return levels.length ? Math.min(...levels) : null;
+}
+
+/** Build one instance group, or `null` when none of its quests is completed. */
+function buildGroup(
+  id: number,
+  rows: DungeonQuestDto[],
+  ctx: { lookup: Map<number, DungeonQuestDto>; completed: Set<number> },
+  names: (id: number) => string,
+): CharacterQuestInstanceGroup | null {
+  const done = rows
+    .filter((q) => ctx.completed.has(q.questId))
+    .sort((a, b) =>
+      byLevelThenName(
+        { level: a.questLevel, name: a.name },
+        { level: b.questLevel, name: b.name },
+      ),
+    )
+    .map((q) => toCompletedQuest(q, ctx.lookup, ctx.completed));
+  if (done.length === 0) return null;
+  return {
+    dungeonInstanceId: id,
+    instanceName: names(id),
+    completed: done,
+    knownCount: rows.length,
+  };
+}
+
 /** Build instance groups holding ≥1 completed quest (R-4), sorted per D8. */
 function buildGroups(
   known: DungeonQuestDto[],
   completed: Set<number>,
   names: (id: number) => string,
 ): CharacterQuestInstanceGroup[] {
-  const lookup = new Map(known.map((q) => [q.questId, q]));
-  const groups: Array<
-    CharacterQuestInstanceGroup & { minLevel: number | null }
-  > = [];
+  const ctx = { lookup: new Map(known.map((q) => [q.questId, q])), completed };
+  const groups: CharacterQuestInstanceGroup[] = [];
   for (const [id, rows] of groupByInstance(known)) {
-    const done = rows
-      .filter((q) => completed.has(q.questId))
-      .sort((a, b) =>
-        byLevelThenName(
-          { level: a.questLevel, name: a.name },
-          { level: b.questLevel, name: b.name },
-        ),
-      )
-      .map((q) => toCompletedQuest(q, lookup, completed));
-    if (done.length === 0) continue;
-    const levels = done
-      .map((q) => q.questLevel)
-      .filter((l): l is number => l !== null);
-    const minLevel = levels.length ? Math.min(...levels) : null;
-    groups.push({
-      dungeonInstanceId: id,
-      instanceName: names(id),
-      completed: done,
-      knownCount: rows.length,
-      minLevel,
-    });
+    const group = buildGroup(id, rows, ctx, names);
+    if (group) groups.push(group);
   }
-  groups.sort((a, b) =>
+  return groups.sort((a, b) =>
     byLevelThenName(
-      { level: a.minLevel, name: a.instanceName },
-      { level: b.minLevel, name: b.instanceName },
+      { level: minLevel(a), name: a.instanceName },
+      { level: minLevel(b), name: b.instanceName },
     ),
   );
-  return groups.map(({ minLevel: _minLevel, ...g }) => g);
+}
+
+/** True when the quest block is present and at least one list is non-empty. */
+function hasQuestData(
+  quests: ForeverQuestSnapshotInput['quests'],
+): quests is NonNullable<ForeverQuestSnapshotInput['quests']> {
+  return (
+    !!quests && (quests.completed.length > 0 || quests.inProgress.length > 0)
+  );
 }
 
 /**
@@ -147,12 +167,7 @@ export function buildCharacterQuests(
   names: (id: number) => string,
 ): CharacterQuestsDto | null {
   const quests = snapshot.quests;
-  if (
-    !quests ||
-    (quests.completed.length === 0 && quests.inProgress.length === 0)
-  ) {
-    return null;
-  }
+  if (!hasQuestData(quests)) return null;
   const completed = new Set(quests.completed);
   const completedKnown = buildGroups(knownQuests, completed, names);
   const inProgress = quests.inProgress.map(toLogEntry);

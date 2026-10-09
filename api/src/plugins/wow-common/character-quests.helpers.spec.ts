@@ -100,33 +100,33 @@ describe('buildCharacterQuests — quest log mapping', () => {
   });
 });
 
-describe('buildCharacterQuests — completed ∩ known', () => {
-  const known = [
-    quest({
-      questId: 1,
-      dungeonInstanceId: 100,
-      questLevel: 30,
-      name: 'Bravo',
-    }),
-    quest({
-      questId: 2,
-      dungeonInstanceId: 100,
-      questLevel: 25,
-      name: 'Alpha',
-    }),
-    quest({ questId: 3, dungeonInstanceId: 200, questLevel: 15 }),
-    quest({ questId: 4, dungeonInstanceId: 200, questLevel: 18 }),
-    quest({ questId: 5, dungeonInstanceId: 300, questLevel: 10 }),
-    quest({ questId: 6, dungeonInstanceId: null, questLevel: 1 }),
-  ];
-  const completed = [
-    ...Array.from({ length: 10_000 }, (_, i) => 100_000 + i),
-    1,
-    2,
-    3,
-    6,
-  ];
+const known = [
+  quest({
+    questId: 1,
+    dungeonInstanceId: 100,
+    questLevel: 30,
+    name: 'Bravo',
+  }),
+  quest({
+    questId: 2,
+    dungeonInstanceId: 100,
+    questLevel: 25,
+    name: 'Alpha',
+  }),
+  quest({ questId: 3, dungeonInstanceId: 200, questLevel: 15 }),
+  quest({ questId: 4, dungeonInstanceId: 200, questLevel: 18 }),
+  quest({ questId: 5, dungeonInstanceId: 300, questLevel: 10 }),
+  quest({ questId: 6, dungeonInstanceId: null, questLevel: 1 }),
+];
+const completed = [
+  ...Array.from({ length: 10_000 }, (_, i) => 100_000 + i),
+  1,
+  2,
+  3,
+  6,
+];
 
+describe('buildCharacterQuests — completed ∩ known', () => {
   it('groups by instance, skips null-instance and zero-completed groups', () => {
     const dto = buildCharacterQuests(snap(completed), known, names)!;
     expect(dto.completedKnown.map((g) => g.dungeonInstanceId)).toEqual([
@@ -137,7 +137,7 @@ describe('buildCharacterQuests — completed ∩ known', () => {
       'Name 100',
     ]);
     expect(dto.completedKnown.map((g) => g.knownCount)).toEqual([2, 2]);
-    expect(dto.completedKnown[1].completed.map((q) => q.name)).toEqual([
+    expect(dto.completedKnown[1]!.completed.map((q) => q.name)).toEqual([
       'Alpha',
       'Bravo',
     ]);
@@ -157,7 +157,9 @@ describe('buildCharacterQuests — completed ∩ known', () => {
     expect(dto.source).toBe('addon');
     expect(CharacterQuestsDtoSchema.safeParse(dto).success).toBe(true);
   });
+});
 
+describe('buildCharacterQuests — ordering and edge cases', () => {
   it('breaks group-order ties by instance name', () => {
     const tie = [
       quest({ questId: 7, dungeonInstanceId: 9 }),
@@ -204,7 +206,7 @@ describe('buildCharacterQuests — chains (D7)', () => {
 
   it('marks chain steps done from the completed set', () => {
     const dto = buildCharacterQuests(snap([10, 11]), chain, names)!;
-    const b = dto.completedKnown[0].completed.find((q) => q.questId === 11)!;
+    const b = dto.completedKnown[0]!.completed.find((q) => q.questId === 11)!;
     expect(b.chain).toEqual([
       { questId: 10, name: 'Quest 10', done: true },
       { questId: 11, name: 'Quest 11', done: true },
@@ -214,7 +216,7 @@ describe('buildCharacterQuests — chains (D7)', () => {
 
   it('always marks the completed quest itself done', () => {
     const dto = buildCharacterQuests(snap([12]), chain, names)!;
-    const c = dto.completedKnown[0].completed[0];
+    const c = dto.completedKnown[0]!.completed[0]!;
     expect(c.chain.map((s) => [s.questId, s.done])).toEqual([
       [10, false],
       [11, false],
@@ -224,8 +226,8 @@ describe('buildCharacterQuests — chains (D7)', () => {
 
   it('gives a standalone quest a chain of length <= 1', () => {
     const dto = buildCharacterQuests(snap([13]), chain, names)!;
-    expect(dto.completedKnown[0].completed[0].chain.length).toBeLessThanOrEqual(
-      1,
-    );
+    expect(
+      dto.completedKnown[0]!.completed[0]!.chain.length,
+    ).toBeLessThanOrEqual(1);
   });
 });
