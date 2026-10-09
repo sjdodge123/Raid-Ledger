@@ -27,7 +27,10 @@ function formatRelative(date: Date): string {
 
 function urgencyClasses(soon: boolean, expired: boolean): string {
   if (expired) {
-    return 'border-danger/40 bg-danger/10 text-danger';
+    // TDB:1770: /5, not the usual /10 — the banner renders nested in the
+    // leader card's bg-success/10, and danger/10 stacked on it put text-danger
+    // at 4.46:1 in default-light. /5 measures 4.9 light / 6.3 dark / 5.8 celestial there.
+    return 'border-danger/40 bg-danger/5 text-danger';
   }
   if (soon) {
     return 'border-warning/40 bg-warning/10 text-warning';
@@ -61,7 +64,7 @@ export function PollDeadlineBanner({ phaseDeadline }: Props): JSX.Element | null
       className={`px-4 py-2.5 rounded-lg border text-sm flex items-center gap-2 ${urgencyClasses(soon, expired)}`}
     >
       <span className="font-medium">{absolute}</span>
-      <span className="text-xs opacity-80">({relative})</span>
+      <span className="text-xs">({relative})</span>
     </div>
   );
 }
