@@ -68,6 +68,14 @@ describe('assertStructuralLimits — quests.completed exception', () => {
     ],
     ['a nested look-alike path', { x: completedAt(ADDON_JSON_MAX_ARRAY + 1) }],
     [
+      'a dotted look-alike key',
+      { data: { 'quests.completed': ids(ADDON_JSON_MAX_ARRAY + 1) } },
+    ],
+    [
+      'a fully dotted root key',
+      { 'data.quests.completed': ids(ADDON_JSON_MAX_ARRAY + 1) },
+    ],
+    [
       'completed inside an array',
       { data: { quests: [{ completed: ids(ADDON_JSON_MAX_ARRAY + 1) }] } },
     ],

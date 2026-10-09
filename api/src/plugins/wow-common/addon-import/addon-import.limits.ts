@@ -9,7 +9,11 @@ export const ADDON_JSON_MAX_ARRAY = 2000;
  * The ONE path allowed a longer array (ROK-1742 Lead ruling 1):
  * `GetAllCompletedQuestIDs()` exceeds 2000 on a levelled character.
  */
-const QUESTS_COMPLETED_PATH = 'data.quests.completed';
+const QUESTS_COMPLETED_PATH: readonly string[] = [
+  'data',
+  'quests',
+  'completed',
+];
 /** Object paths are tracked only this deep; below it nothing is excepted. */
 const PATH_TRACK_DEPTH = 3;
 
@@ -31,24 +35,36 @@ function checkString(value: string): void {
   }
 }
 
-/** `path` is the dotted key path from the root, or null once untracked. */
-function walk(value: unknown, depth: number, path: string | null): void {
+/** Segment-wise, so a literal dotted key never matches a nested path. */
+function isQuestsCompleted(path: readonly string[] | null): boolean {
+  return (
+    path !== null &&
+    path.length === QUESTS_COMPLETED_PATH.length &&
+    path.every((seg, i) => seg === QUESTS_COMPLETED_PATH[i])
+  );
+}
+
+/** `path` is the key segments from the root, or null once untracked. */
+function walk(
+  value: unknown,
+  depth: number,
+  path: readonly string[] | null,
+): void {
   if (typeof value === 'string') return checkString(value);
   if (value === null || typeof value !== 'object') return;
   if (depth > ADDON_JSON_MAX_DEPTH) reject('nested too deeply');
   if (Array.isArray(value)) {
-    const max =
-      path === QUESTS_COMPLETED_PATH
-        ? ADDON_QUESTS_COMPLETED_MAX
-        : ADDON_JSON_MAX_ARRAY;
+    const max = isQuestsCompleted(path)
+      ? ADDON_QUESTS_COMPLETED_MAX
+      : ADDON_JSON_MAX_ARRAY;
     if (value.length > max) reject('list too long');
     for (const item of value) walk(item, depth + 1, null);
     return;
   }
-  const track = path !== null && depth <= PATH_TRACK_DEPTH;
+  const track = path !== null && depth <= PATH_TRACK_DEPTH ? path : null;
   for (const [key, item] of Object.entries(value)) {
     checkString(key);
-    walk(item, depth + 1, track ? (path ? `${path}.${key}` : key) : null);
+    walk(item, depth + 1, track ? [...track, key] : null);
   }
 }
 
@@ -60,5 +76,5 @@ function walk(value: unknown, depth: number, path: string | null): void {
  * value.
  */
 export function assertStructuralLimits(json: unknown): void {
-  walk(json, 1, '');
+  walk(json, 1, []);
 }
