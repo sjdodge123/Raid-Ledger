@@ -140,7 +140,8 @@ export function EventDetailRoster({ roster, event }: EventDetailRosterProps): JS
             <ConfirmedGroup signups={confirmed} event={event} />
             <TentativeGroup signups={tentative} event={event} />
             <SimpleSignupGroup signups={pending} event={event} title="Pending" icon="&#8987;" itemClass="event-detail-roster__item--pending" />
-            <SimpleSignupGroup signups={departed} event={event} title="Departed" icon="&#128682;" itemClass="opacity-50" badge={{ text: 'departed', className: 'text-xs text-danger bg-danger/10 px-1.5 py-0.5 rounded' }} />
+            {/* Departed rows are de-emphasised with muted text, not a whole-row opacity: opacity-50 halved the badge to ~2.2:1 (TDB:1770). */}
+            <SimpleSignupGroup signups={departed} event={event} title="Departed" icon="&#128682;" itemClass="text-muted" badge={{ text: 'departed', className: 'text-xs text-danger bg-danger/10 px-1.5 py-0.5 rounded' }} />
             {roster?.signups.length === 0 && <RosterEmptyState />}
         </div>
     );
