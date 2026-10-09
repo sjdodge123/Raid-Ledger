@@ -64,7 +64,5 @@
   "pages/game-detail/CoopProseBlocks.tsx": "\"Show more\" brand link text-emerald-400",
   "pages/game-detail/GameBanner.tsx": "Rating band pill (75+/50+/below: a data scale like getRatingClasses) and \"View on Steam\" brand link; crossplay Supported is on text-success",
   "pages/game-detail/GamePricingSummary.tsx": "Price/deal data accents: current-best price and discount chip emerald (an on-sale deal is not success), ITAD brand link, historical-low yellow trend icon",
-  "pages/game-detail/game-detail-lfg-banner.tsx": "LFG state hues matching lfg-chip.tsx: emerald group formed (LFM) / amber still recruiting (LFG) — a category pair, still raw in the chip",
-  "pages/game-detail/lfg-toggle-button.tsx": "LFG toggle on-state solid amber-300/95 + amber-950 (chip-on selection accent, same tonal pill as YouWishlistedBadge) and amber idle hover border",
   "pages/game-detail/taste-vector/AxisBreakdown.tsx": "Taste-vector axis bar fill bg-emerald-500 (progress/data bar)"
 }
