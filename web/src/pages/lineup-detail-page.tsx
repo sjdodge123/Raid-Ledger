@@ -59,7 +59,7 @@ function LineupInviteesSection({
       data-visibility={visibility}
       className={`mt-4 p-4 rounded-lg border ${
         isPrivate
-          ? 'border-amber-500/30 bg-amber-500/5'
+          ? 'border-warning/30 bg-warning/5'
           : 'border-edge bg-panel/40'
       }`}
     >
@@ -264,7 +264,7 @@ function LineupDetailLoaded(props: LoadedProps): JSX.Element {
           {!canParticipate && (
             <p
               data-testid="nominate-private-notice"
-              className="mb-2 text-xs text-amber-400"
+              className="mb-2 text-xs text-warning"
             >
               Private lineup — ask the creator for an invite to nominate games.
             </p>
