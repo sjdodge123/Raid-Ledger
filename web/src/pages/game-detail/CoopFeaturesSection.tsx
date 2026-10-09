@@ -162,7 +162,7 @@ function Fact({ label, value, supported }: {
     return (
         <div>
             <span className="text-dim">{label}</span>
-            <p className={`font-medium ${supported ? 'text-emerald-400' : 'text-secondary'}`}>{value}</p>
+            <p className={`font-medium ${supported ? 'text-success' : 'text-secondary'}`}>{value}</p>
         </div>
     );
 }

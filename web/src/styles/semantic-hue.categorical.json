@@ -47,5 +47,22 @@
   "components/common/TournamentBracket.tsx": "Kept: the champion slot gold (amber fill/stroke/text — trophy convention, promises nothing); match-winner highlight is the success token",
   "components/common/activity-timeline-helpers.ts": "Activity-feed action-type colour map (created/decided emerald, removed/cancelled red/rose, carried-over/extended/rescheduled amber): one hue per action category, a legend not a status",
   "lib/role-colors.ts": "Raid-role identity colours (tank/healer/dps convention: healer green, dps red); a role category, not a status",
-  "lib/event-utils.ts": "Kept raw for now: STATUS_STYLES renders on the desktop event card cover art, where index.css .badge-overlay (ROK-493) keeps the dark-family colours by keying to these exact raw classes; a token here goes dark-on-art on the six light schemes. Tokenising needs a .badge-overlay token pin in index.css (out of TDB:1770 S6 scope)"
+  "lib/event-utils.ts": "Kept raw for now: STATUS_STYLES renders on the desktop event card cover art, where index.css .badge-overlay (ROK-493) keeps the dark-family colours by keying to these exact raw classes; a token here goes dark-on-art on the six light schemes. Tokenising needs a .badge-overlay token pin in index.css (out of TDB:1770 S6 scope)",
+  "components/games/DrawerCard.tsx": "Card hover accent: brand emerald border + glow (selection/hover accent, not a status)",
+  "components/games/GameRef.tsx": "Brand accent: row-action CTA tint (primary action, not success), name hover link colour and thumb hover border",
+  "components/games/InterestPlayerAvatars.tsx": "Brand accent: avatar hover ring and the \"N players interested\" link colour",
+  "components/games/ScreenshotGallery.tsx": "Thumbnail hover ring ring-emerald-500 (brand focus/hover accent)",
+  "components/games/TwitchStreamEmbed.tsx": "Live-stream red pulse dot + viewer dot (broadcast 'live' convention, not danger) and the selected-stream brand ring",
+  "components/games/drawer-action-row.tsx": "Research drawer primary CTA tint (brand primary action, not success)",
+  "components/games/game-badges.tsx": "YouWishlisted solid amber-300/95 + amber-950 label over cover art (TDB:2052 final ruling: tonal wishlist identity, contrast-measured over art)",
+  "components/games/game-card-constants.ts": "Rating band ramp: mid yellow-500/90 + black, low deliberately red-700 + white (TDB:2052 final ruling; rating bands are a data scale)",
+  "components/games/game-card-parts.tsx": "Heart (want-to-play) icon red fill (a favourite marker, not danger)",
+  "components/games/unified-game-card-parts.tsx": "Steam-available corner chip: emerald Steam glyph on a black/50 art chip (brand/store marker)",
+  "components/games/unified-game-card.tsx": "Card hover + toggle-selected border/glow emerald (selection accent)",
+  "pages/game-detail-page.tsx": "Kept: \"Want to Play\" toggle (heart-on red tint matching the card heart; brand solid bg-emerald-600 primary off-state) and brand links; Game Not Found error box is on danger tokens",
+  "pages/game-detail/CommunityActivitySection.tsx": "Period toggle selected segment brand solid bg-emerald-600 (selection accent); the \"N playing now\" live-session count is on text-success",
+  "pages/game-detail/CoopProseBlocks.tsx": "\"Show more\" brand link text-emerald-400",
+  "pages/game-detail/GameBanner.tsx": "Rating band pill (75+/50+/below: a data scale like getRatingClasses) and \"View on Steam\" brand link; crossplay Supported is on text-success",
+  "pages/game-detail/GamePricingSummary.tsx": "Price/deal data accents: current-best price and discount chip emerald (an on-sale deal is not success), ITAD brand link, historical-low yellow trend icon",
+  "pages/game-detail/taste-vector/AxisBreakdown.tsx": "Taste-vector axis bar fill bg-emerald-500 (progress/data bar)"
 }

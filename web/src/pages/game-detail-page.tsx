@@ -61,8 +61,8 @@ function GameDetailLoading(): JSX.Element {
 function GameNotFound(): JSX.Element {
     return (
         <div className="max-w-5xl mx-auto px-4 py-8">
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
-                <h2 className="text-xl font-semibold text-red-400">Game Not Found</h2>
+            <div className="bg-danger/10 border border-danger/30 rounded-lg p-6">
+                <h2 className="text-xl font-semibold text-danger">Game Not Found</h2>
                 <p className="text-muted mt-2">This game could not be found.</p>
                 <Link to="/games" className="mt-4 inline-block text-emerald-400 hover:text-emerald-300">Back to Games</Link>
             </div>
