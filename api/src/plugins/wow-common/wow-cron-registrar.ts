@@ -53,9 +53,7 @@ export class WowCronRegistrar implements CronRegistrar {
         name: 'wowhead-item-retry',
         // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
         cronExpression: '0 15 5 * * *',
-        handler: async () => {
-          await this.itemMeta.retryDue();
-        },
+        handler: () => this.itemMeta.retryDue().then(() => undefined),
       },
     ];
   }
