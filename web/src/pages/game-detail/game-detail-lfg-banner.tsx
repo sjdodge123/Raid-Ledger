@@ -37,8 +37,8 @@ const BOX_CLS =
  * formed ("join them"), amber for one still recruiting ("they need you").
  */
 const STATE_CLS: Record<'lfg' | 'lfm', string> = {
-    lfm: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400',
-    lfg: 'bg-amber-500/10 border-amber-500/30 text-amber-400',
+    lfm: 'bg-success/10 border-success/30 text-success',
+    lfg: 'bg-warning/10 border-warning/30 text-warning',
 };
 
 export interface GameDetailLfgBannerProps {

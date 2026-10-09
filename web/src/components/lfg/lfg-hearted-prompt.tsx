@@ -132,21 +132,21 @@ function JoinedNotice({
     return (
         <p
             data-testid="lfg-hearted-confirm"
-            className="flex flex-wrap items-center gap-2 text-sm text-amber-400 mb-2"
+            className="flex flex-wrap items-center gap-2 text-sm text-warning mb-2"
         >
             <span>
                 You&apos;re looking for {joined.name} — others can join you
             </span>
             <Link
                 to={`/lfg/${joined.slug}`}
-                className="underline hover:text-amber-300"
+                className="underline"
             >
                 See the group
             </Link>
             <DismissX
                 label="Dismiss confirmation"
                 onClick={onDismiss}
-                className="text-amber-400/70 hover:text-amber-300"
+                className="text-warning/90 hover:text-warning"
             />
         </p>
     );
@@ -198,7 +198,7 @@ function usePromptJoin() {
 function PromptHeader({ onDismiss }: { onDismiss: () => void }): JSX.Element {
     return (
         <div className="flex items-start justify-between gap-3 mb-2">
-            <p className="text-sm font-medium text-amber-400">
+            <p className="text-sm font-medium text-warning">
                 Up for one of your hearted games? Say so and others can join
                 you.
             </p>
@@ -366,7 +366,7 @@ export function LfgHeartedPrompt(): JSX.Element | null {
     return (
         <div
             data-testid="lfg-hearted-prompt"
-            className="mb-6 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30"
+            className="mb-6 p-4 rounded-xl bg-warning/10 border border-warning/30"
         >
             <PromptHeader onDismiss={dismiss} />
             {joined && <JoinedNotice joined={joined} onDismiss={clearJoined} />}
