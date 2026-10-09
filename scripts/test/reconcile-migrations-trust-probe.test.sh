@@ -144,7 +144,7 @@ docker run --rm -d \
     -e POSTGRES_PASSWORD=password \
     -e POSTGRES_DB=raid_ledger \
     -p 0:5432 \
-    pgvector/pgvector:pg16 >/dev/null || { echo "failed to start container"; exit 1; }
+    "${RL_PGVECTOR_IMAGE:-pgvector/pgvector:pg16}" >/dev/null || { echo "failed to start container"; exit 1; }
 
 # Readiness must be a TCP query against the real server, NOT socket-based
 # pg_isready. The postgres entrypoint runs initdb, brings up a TEMPORARY
