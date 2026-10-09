@@ -30,6 +30,8 @@ describe('DiscordNotificationProcessor', () => {
     recordFailure: jest.fn().mockResolvedValue(undefined),
     deactivateUser: jest.fn().mockResolvedValue(undefined),
     isUserDeactivated: jest.fn().mockResolvedValue(false),
+    // ROK-1749: default = a user seen in the guild (a real leaver on 50278).
+    isGuildMemberSeen: jest.fn().mockResolvedValue(true),
     resolveRecipientTimezone: jest.fn().mockResolvedValue('America/New_York'),
   };
 
@@ -411,6 +413,27 @@ describe('DiscordNotificationProcessor', () => {
     }
 
     describe('DiscordAPIError[50278] — user left the guild', () => {
+      it('ROK-1749: does NOT deactivate a user never seen in the guild — records a failure instead', async () => {
+        mockDiscordNotificationService.isGuildMemberSeen.mockResolvedValueOnce(
+          false,
+        );
+        mockClientService.sendEmbedDM.mockRejectedValueOnce(
+          makeDiscordApiError(50278, 'no mutual guilds (code 50278)'),
+        );
+
+        await expect(processor.process(buildJob())).resolves.toBeUndefined();
+
+        expect(
+          mockDiscordNotificationService.isGuildMemberSeen,
+        ).toHaveBeenCalledWith(1);
+        expect(
+          mockDiscordNotificationService.deactivateUser,
+        ).not.toHaveBeenCalled();
+        expect(
+          mockDiscordNotificationService.recordFailure,
+        ).toHaveBeenCalledWith(1);
+      });
+
       it('resolves cleanly (does NOT rethrow)', async () => {
         mockClientService.sendEmbedDM.mockRejectedValueOnce(
           makeDiscordApiError(
@@ -439,7 +462,7 @@ describe('DiscordNotificationProcessor', () => {
         ).toHaveBeenCalledTimes(1);
         expect(
           mockDiscordNotificationService.deactivateUser,
-        ).toHaveBeenCalledWith(1);
+        ).toHaveBeenCalledWith(1, 'dm-failure-50278');
       });
 
       it('does NOT call recordFailure (counter is irrelevant — user is gone)', async () => {
@@ -555,7 +578,7 @@ describe('DiscordNotificationProcessor', () => {
         ).toHaveBeenCalledTimes(1);
         expect(
           mockDiscordNotificationService.deactivateUser,
-        ).toHaveBeenCalledWith(1);
+        ).toHaveBeenCalledWith(1, 'dm-failure-10013');
       });
 
       it('does NOT call recordFailure (counter irrelevant — account deleted)', async () => {
@@ -603,7 +626,7 @@ describe('DiscordNotificationProcessor', () => {
         await expect(processor.process(job)).resolves.toBeUndefined();
         expect(
           mockDiscordNotificationService.deactivateUser,
-        ).toHaveBeenCalledWith(1);
+        ).toHaveBeenCalledWith(1, 'dm-failure-50278');
       });
 
       it('50007 with bare name → permanent-prefs-only', async () => {
@@ -633,7 +656,7 @@ describe('DiscordNotificationProcessor', () => {
         await expect(processor.process(job)).resolves.toBeUndefined();
         expect(
           mockDiscordNotificationService.deactivateUser,
-        ).toHaveBeenCalledWith(1);
+        ).toHaveBeenCalledWith(1, 'dm-failure-10013');
       });
     });
 

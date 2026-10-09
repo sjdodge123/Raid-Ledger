@@ -66,6 +66,7 @@ export class GuildMemberAddListener {
 
   private async handleGuildMemberAdd(member: GuildMember): Promise<void> {
     const discordId = member.user.id;
+    await this.stampGuildMemberSeen(discordId);
     // ROK-313: a BANNED user rejoining the guild must NOT be reactivated —
     // ban keeps deactivated_at set so they stay out of the Players list (auth is
     // separately blocked by banned_at). The `banned_at IS NULL` guard skips them.
@@ -85,6 +86,25 @@ export class GuildMemberAddListener {
       `ROK-1260: reactivated user ${row.id} (${row.username}) on guild rejoin`,
     );
     await this.writeAdminNotification(row);
+  }
+
+  /**
+   * ROK-1749: record that this Discord user was seen in the guild, making them
+   * a reconciliation / 50278-deactivation candidate from now on. Written for
+   * every join/rejoin (banned or not — the stamp is a membership fact, not a
+   * reactivation). Best-effort: a failure must never block reactivation.
+   */
+  private async stampGuildMemberSeen(discordId: string): Promise<void> {
+    try {
+      await this.db
+        .update(schema.users)
+        .set({ guildMemberSeenAt: new Date() })
+        .where(eq(schema.users.discordId, discordId));
+    } catch (err: unknown) {
+      this.logger.warn(
+        `ROK-1749: guild_member_seen_at stamp failed for discord ${discordId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+      );
+    }
   }
 
   private async writeAdminNotification(user: {

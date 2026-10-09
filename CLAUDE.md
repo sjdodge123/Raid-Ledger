@@ -297,7 +297,7 @@ Sentinel mechanics, `e2e_scope` and the CI-failure triage checklist: `docs/runbo
 
 ## Discord User Deactivation
 
-When a user leaves the Discord guild, `users.deactivated_at` must flip so they stop receiving DMs, get cancelled from upcoming signups, and disappear from the Players list. There is **no `GuildMemberRemove` listener** — three other layers (50278 classifier / GuildMemberAdd / daily cron) cover the gap. **Before adding a 4th, confirm one of the existing three is insufficient.** Layer table + line-level pointers: memory `reference_discord_deactivation_layers.md`.
+When a user leaves the Discord guild, `users.deactivated_at` must flip so they stop receiving DMs, get cancelled from upcoming signups, and disappear from the Players list. There is **no `GuildMemberRemove` listener** — three other layers (50278 classifier / GuildMemberAdd / daily cron) cover the gap. **The 50278 classifier and the daily sweep only deactivate users with `users.guild_member_seen_at` set** (stamped by GuildMemberAdd and by the sweep itself, ROK-1749) — a Discord-OAuth guest never in the guild (poll link / PUG invite) stays active. Every `deactivateUser(userId, reason)` caller passes a reason, shown in the admin notification. **Before adding a 4th, confirm one of the existing three is insufficient.** Layer table + line-level pointers: memory `reference_discord_deactivation_layers.md`.
 
 ## Discord Testing (tools/)
 

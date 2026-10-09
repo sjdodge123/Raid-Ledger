@@ -20,11 +20,26 @@
  * member's GLOBAL avatar hash (including clearing it when the avatar was
  * removed). This is not a new deactivation layer and adds no listener — it
  * reuses the list this sweep already pulls once a day.
+ *
+ * ROK-1749: the sweep is scoped to users who were actually guild members.
+ * Each pass first stamps `guild_member_seen_at` on every active user found in
+ * the member list, then only stamped users are reconciliation candidates — a
+ * Discord-OAuth guest (poll link / PUG invite) never in the guild stays active.
  */
 import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { and, eq, isNotNull, isNull, not, like, sql } from 'drizzle-orm';
+import {
+  and,
+  count,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  not,
+  like,
+  sql,
+} from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { CronJobService } from '../cron-jobs/cron-job.service';
@@ -34,6 +49,18 @@ import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
 
 const JOB_NAME = 'GuildReconciliationService_reconcileGuildMembers';
+
+/** Bound on the `discord_id IN (...)` list per stamp UPDATE (ROK-1749). */
+const STAMP_CHUNK = 500;
+
+/** Active (not deactivated) users with a real, guild-trackable snowflake. */
+const activeSnowflakeUser = () =>
+  and(
+    isNull(schema.users.deactivatedAt),
+    isNotNull(schema.users.discordId),
+    not(like(schema.users.discordId, 'local:%')),
+    not(like(schema.users.discordId, 'unlinked:%')),
+  );
 
 type ActiveUser = { id: number; discordId: string; avatar: string | null };
 
@@ -70,12 +97,15 @@ export class GuildReconciliationService {
       );
       return false;
     }
+    await this.stampSeenMembers([...members.keys()]);
     const candidates = await this.loadActiveDbUsers();
+    const skipped = await this.countNeverSeen();
     const gaps = candidates.filter((u) => !members.has(u.discordId));
     await this.deactivateGap(gaps);
     this.logger.log(
       `[ROK-1282] Reconciliation deactivated ${gaps.length} user(s) ` +
-        `(checked ${candidates.length} active DB user(s) against ${members.size} guild member(s))`,
+        `(checked ${candidates.length} active DB user(s) against ${members.size} guild member(s); ` +
+        `skipped ${skipped} never-seen-in-guild user(s))`,
     );
     await this.syncAvatars(candidates, members);
   }
@@ -95,9 +125,44 @@ export class GuildReconciliationService {
   }
 
   /**
-   * Active (not-yet-deactivated) users with a real Discord snowflake.
-   * Excludes both `local:%` (email-only accounts) and `unlinked:%`
-   * (previously linked users who unlinked) — neither is guild-trackable.
+   * ROK-1749: stamp `guild_member_seen_at` on every active user present in the
+   * fetched member list (chunked, bounded). Runs BEFORE candidates load, so
+   * the first sweep after deploy stamps every current member — no backfill.
+   */
+  private async stampSeenMembers(memberIds: string[]): Promise<void> {
+    const now = new Date();
+    for (let i = 0; i < memberIds.length; i += STAMP_CHUNK) {
+      await this.db
+        .update(schema.users)
+        .set({ guildMemberSeenAt: now })
+        .where(
+          and(
+            activeSnowflakeUser(),
+            inArray(
+              schema.users.discordId,
+              memberIds.slice(i, i + STAMP_CHUNK),
+            ),
+          ),
+        );
+    }
+  }
+
+  /** ROK-1749: active snowflake users never seen in the guild (log only). */
+  private async countNeverSeen(): Promise<number> {
+    const [row] = await this.db
+      .select({ n: count() })
+      .from(schema.users)
+      .where(
+        and(activeSnowflakeUser(), isNull(schema.users.guildMemberSeenAt)),
+      );
+    return Number(row?.n ?? 0);
+  }
+
+  /**
+   * Active (not-yet-deactivated) users with a real Discord snowflake who were
+   * seen in the guild at least once (ROK-1749 `guild_member_seen_at IS NOT
+   * NULL`). Excludes `local:%` (email-only) and `unlinked:%` (unlinked) ids —
+   * neither is guild-trackable — and never-seen OAuth guests.
    */
   private async loadActiveDbUsers(): Promise<ActiveUser[]> {
     const rows = await this.db
@@ -108,12 +173,7 @@ export class GuildReconciliationService {
       })
       .from(schema.users)
       .where(
-        and(
-          isNull(schema.users.deactivatedAt),
-          isNotNull(schema.users.discordId),
-          not(like(schema.users.discordId, 'local:%')),
-          not(like(schema.users.discordId, 'unlinked:%')),
-        ),
+        and(activeSnowflakeUser(), isNotNull(schema.users.guildMemberSeenAt)),
       );
     // SQL isNotNull(discordId) above guarantees non-null; Drizzle still infers
     // `string | null` from the nullable column, so assert the narrowed type.
@@ -124,7 +184,10 @@ export class GuildReconciliationService {
   private async deactivateGap(gaps: { id: number }[]): Promise<void> {
     for (const u of gaps) {
       try {
-        await this.discordNotificationService.deactivateUser(u.id);
+        await this.discordNotificationService.deactivateUser(
+          u.id,
+          'reconciliation-sweep',
+        );
       } catch (err: unknown) {
         this.logger.warn(
           `[ROK-1282] Failed to deactivate user ${u.id}: ${err instanceof Error ? err.message : String(err)}`,
