@@ -50,7 +50,7 @@ function ConnectSteamButton({ isRedirecting, onClick }: { isRedirecting: boolean
 /** Success feedback shown after returning from Steam auth. */
 function SteamSuccessMessage() {
     return (
-        <div className="flex items-center gap-2 justify-center text-emerald-400">
+        <div className="flex items-center gap-2 justify-center text-success">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
@@ -63,7 +63,7 @@ function SteamSuccessMessage() {
 function SteamErrorMessage({ message, onRetry }: { message: string | null; onRetry: () => void }) {
     return (
         <div className="space-y-3 text-center">
-            <p className="text-red-400 text-sm">{message || 'Something went wrong connecting Steam. Please try again.'}</p>
+            <p className="text-danger text-sm">{message || 'Something went wrong connecting Steam. Please try again.'}</p>
             <button onClick={onRetry}
                 className="px-4 py-2 min-h-[44px] bg-[#171a21] hover:bg-[#2a475e] text-white font-semibold rounded-lg transition-colors text-sm">
                 Retry

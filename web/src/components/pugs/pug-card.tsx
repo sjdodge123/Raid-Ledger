@@ -16,8 +16,8 @@ const PENDING_STATUS: StatusColor = { dot: 'bg-gray-400', label: 'Pending' };
 const STATUS_COLORS: Record<string, StatusColor> = {
     pending: PENDING_STATUS,
     invited: { dot: 'bg-blue-400', label: 'Invited' },
-    accepted: { dot: 'bg-emerald-400', label: 'Accepted' },
-    claimed: { dot: 'bg-green-400', label: 'Claimed' },
+    accepted: { dot: 'bg-success', label: 'Accepted' },
+    claimed: { dot: 'bg-success', label: 'Claimed' },
 };
 
 interface PugCardProps {
@@ -115,7 +115,7 @@ function PugCardMenu({ pug, inviteUrl, onEdit, onRemove, onRegenerateLink, onCop
                         {onEdit && <button onClick={(e) => menuAction(e, () => onEdit(pug))} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors rounded-t-lg">Edit</button>}
                         {inviteUrl && <button onClick={(e) => { menuAction(e, () => {}); onCopy(e); }} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors">Copy Link</button>}
                         {onRegenerateLink && inviteUrl && <button onClick={(e) => menuAction(e, () => onRegenerateLink(pug.id))} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors">Regenerate Link</button>}
-                        <button onClick={(e) => menuAction(e, () => onRemove?.(pug.id))} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors rounded-b-lg">Remove</button>
+                        <button onClick={(e) => menuAction(e, () => onRemove?.(pug.id))} className="w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger/10 transition-colors rounded-b-lg">Remove</button>
                     </div>
                 </>
             )}
