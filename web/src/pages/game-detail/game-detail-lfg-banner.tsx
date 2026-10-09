@@ -19,6 +19,9 @@
  *
  * COLOUR: the state pair is on the semantic tokens (`success` for a formed
  * group, `warning` for one still recruiting), which every scheme repaints.
+ * The fill is an OPAQUE 10% mix of the token over `--color-surface` rather
+ * than `bg-{token}/10`: the banner sits over the blurred cover art, and a
+ * translucent tint let a dark cover pull the label to 4.44:1 on celestial.
  * Hover steps the border only (`hover:border-{token}/50`): a whole-box
  * `opacity-90` pulled the tokenised label under 4.5:1 on celestial.
  */
@@ -35,8 +38,8 @@ const BOX_CLS =
  * formed ("join them"), amber for one still recruiting ("they need you").
  */
 const STATE_CLS: Record<'lfg' | 'lfm', string> = {
-    lfm: 'bg-success/10 border-success/30 text-success hover:border-success/50',
-    lfg: 'bg-warning/10 border-warning/30 text-warning hover:border-warning/50',
+    lfm: 'bg-[color-mix(in_oklab,var(--color-success)_10%,var(--color-surface))] border-success/30 text-success hover:border-success/50',
+    lfg: 'bg-[color-mix(in_oklab,var(--color-warning)_10%,var(--color-surface))] border-warning/30 text-warning hover:border-warning/50',
 };
 
 export interface GameDetailLfgBannerProps {
