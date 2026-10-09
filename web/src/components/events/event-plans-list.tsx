@@ -77,7 +77,7 @@ function PlanActions({ plan, onCancel, isCancelling, onRestart, isRestarting }: 
         <div className="flex flex-wrap gap-2 pt-1">
             {plan.status === 'polling' && (
                 <button type="button" onClick={() => confirmCancel(plan, onCancel)} disabled={isCancelling}
-                    className="px-4 py-2 text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    className="px-4 py-2 text-sm font-medium text-danger bg-danger/10 hover:border-danger/60 border border-danger/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     {isCancelling ? 'Cancelling...' : 'Cancel Plan'}
                 </button>
             )}
@@ -172,7 +172,7 @@ export function EventPlansList() {
     }, [games]);
 
     if (isLoading) return <PlansLoadingSkeleton />;
-    if (error) return <div className="text-center py-12"><p className="text-red-400">Failed to load plans: {error.message}</p></div>;
+    if (error) return <div className="text-center py-12"><p className="text-danger">Failed to load plans: {error.message}</p></div>;
     if (!plans || plans.length === 0) return <PlansEmptyState />;
 
     return (

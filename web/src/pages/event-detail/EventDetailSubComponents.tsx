@@ -167,8 +167,8 @@ export function MoreActionsMenu({ onReschedule, onCancel, onDelete }: {
                     <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
                     <div className="absolute right-0 top-full mt-1 z-50 w-48 rounded-lg border border-edge bg-surface shadow-lg">
                         <button onClick={() => act(onReschedule)} className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors rounded-t-lg">Reschedule</button>
-                        <button onClick={() => act(onCancel)} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors">Cancel Event</button>
-                        <button onClick={() => act(onDelete)} className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 transition-colors rounded-b-lg">Delete Event</button>
+                        <button onClick={() => act(onCancel)} className="w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger/10 transition-colors">Cancel Event</button>
+                        <button onClick={() => act(onDelete)} className="w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger/10 transition-colors rounded-b-lg">Delete Event</button>
                     </div>
                 </>
             )}
@@ -205,8 +205,8 @@ export function CancelledBanner({ event, isCancelled }: {
 }): JSX.Element | null {
     if (!isCancelled || !event.cancelledAt) return null;
     return (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-4">
-            <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
+        <div className="bg-danger/10 border border-danger/30 rounded-lg px-4 py-3 mb-4">
+            <div className="flex items-center gap-2 text-danger font-semibold text-sm">
                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                 </svg>
@@ -273,7 +273,7 @@ export function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortF
                         {avatarSignups && <AttendeeAvatars signups={avatarSignups} gameId={event.game?.id ?? undefined} totalCount={roster!.count} maxVisible={5} size="md" />}
                     </div>
                 </div>
-                {isSignedUp && <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full whitespace-nowrap shrink-0">&#10003; Signed up</span>}
+                {isSignedUp && <span className="text-xs font-medium text-success bg-success/10 px-2 py-1 rounded-full whitespace-nowrap shrink-0">&#10003; Signed up</span>}
             </div>
         </div>
     );

@@ -1,4 +1,9 @@
 {
+  "components/events/SignupCharacterCard.tsx": "Role colours (tank/healer/DPS chips), WoW faction colour (Horde red) and the gold main-character star marker: categorical, not a status",
+  "components/events/shared/roster-section.tsx": "Role colours on the healer/DPS slot steppers (categorical)",
+  "components/events/signup-role-picker.tsx": "Role colours on the tank/healer/DPS toggle buttons (categorical; the role-mismatch notice is on text-warning)",
+  "components/roster/RosterBuilder.tsx": "Role colours on the slot bars (healer green, DPS red) and the Guest Invites (PUG) section amber identity accent + legend swatch: categorical, not a status",
+  "components/roster/SelectableCharacterCard.tsx": "Gold main-character star marker (a marker, not a status)",
   "plugins/wow/components/item-detail-modal.tsx": "WoW item tooltip: quality colour, item-level yellow, stat/enchant green, set/flavour yellow (game UI convention)",
   "plugins/wow/components/item-fallback-tooltip.tsx": "WoW item tooltip: quality colour, item-level yellow, stat/enchant green, set/flavour yellow (game UI convention)",
   "plugins/wow/components/talent-display.tsx": "WoW talent tree: gold for maxed talent points and the gold \"View on Wowhead\" external link (game UI convention)",

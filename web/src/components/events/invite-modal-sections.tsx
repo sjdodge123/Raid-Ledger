@@ -21,8 +21,8 @@ function MemberAvatar({ member }: { member: DiscordMemberSearchResult }) {
 }
 
 function statusColor(status: string | null): string {
-    if (status === 'invited') return 'text-amber-400';
-    if (status === 'signed_up') return 'text-emerald-400';
+    if (status === 'invited') return 'text-warning';
+    if (status === 'signed_up') return 'text-success';
     return 'text-indigo-400';
 }
 

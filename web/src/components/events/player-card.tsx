@@ -115,7 +115,7 @@ function PlayerCharacterInfo({ player, raised }: { player: ViewerRosterAssignmen
 function RemoveButton({ username, onRemove, raised }: { username: string; onRemove: () => void; raised: boolean }) {
     return (
         <button onClick={(e) => { e.stopPropagation(); onRemove(); }}
-            className={`shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors${raise(raised)}`}
+            className={`shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-danger/10 hover:text-danger transition-colors${raise(raised)}`}
             aria-label={`Remove ${username} from slot`} title="Remove from slot">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -134,10 +134,10 @@ function PlayerCardBody({ player, raised }: { player: ViewerRosterAssignment; ra
             <div className="flex flex-wrap items-center gap-1.5">
                 <PlayerNameLink player={player} raised={raised} />
                 {isTentative && (
-                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raiseBadge(raised)}`} title="Tentative — may not attend">&#x23F3;</span>
+                    <span className={`shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning${raiseBadge(raised)}`} title="Tentative — may not attend">&#x23F3;</span>
                 )}
                 {isRunningLate && (
-                    <span className={`shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400${raiseBadge(raised)}`} title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
+                    <span className={`shrink-0 rounded-full bg-warning/10 px-1.5 py-0.5 text-xs font-medium text-warning${raiseBadge(raised)}`} title={lateTitle}>&#9200;{player.lateMinutes ? ` +${player.lateMinutes}m` : ''}</span>
                 )}
                 {preferredRoleBadges && <FlexibilityBadges preferredRoles={preferredRoleBadges} raised={raised} />}
             </div>

@@ -60,7 +60,7 @@ function RunningLateBadge({ signup }: { signup: Pick<SignupItem, 'runningLate' |
     const minutes = signup.lateMinutes ?? null;
     return (
         <span
-            className="shrink-0 text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded"
+            className="shrink-0 text-xs text-warning bg-warning/10 px-1.5 py-0.5 rounded"
             title={minutes ? `Running late (+${minutes} min)` : 'Running late'}
         >
             <span role="img" aria-hidden="true">&#9200;</span> late{minutes ? ` +${minutes}m` : ''}
@@ -140,7 +140,8 @@ export function EventDetailRoster({ roster, event }: EventDetailRosterProps): JS
             <ConfirmedGroup signups={confirmed} event={event} />
             <TentativeGroup signups={tentative} event={event} />
             <SimpleSignupGroup signups={pending} event={event} title="Pending" icon="&#8987;" itemClass="event-detail-roster__item--pending" />
-            <SimpleSignupGroup signups={departed} event={event} title="Departed" icon="&#128682;" itemClass="opacity-50" badge={{ text: 'departed', className: 'text-xs text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded' }} />
+            {/* Departed rows are de-emphasised with muted text, not a whole-row opacity: opacity-50 halved the badge to ~2.2:1 (TDB:1770). */}
+            <SimpleSignupGroup signups={departed} event={event} title="Departed" icon="&#128682;" itemClass="text-muted" badge={{ text: 'departed', className: 'text-xs text-danger bg-danger/10 px-1.5 py-0.5 rounded' }} />
             {roster?.signups.length === 0 && <RosterEmptyState />}
         </div>
     );
@@ -179,7 +180,7 @@ function TentativeGroup({ signups, event }: { signups: SignupItem[]; event: Even
         <div className="event-detail-roster__group">
             <h3><span role="img" aria-hidden="true">&#8987;</span> Tentative ({signups.length})</h3>
             <div className="space-y-2">
-                {signups.map((s) => <SignupEntry key={s.id} signup={s} event={event} showBadge={{ text: 'tentative', className: 'text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded' }} />)}
+                {signups.map((s) => <SignupEntry key={s.id} signup={s} event={event} showBadge={{ text: 'tentative', className: 'text-xs text-warning bg-warning/10 px-1.5 py-0.5 rounded' }} />)}
             </div>
         </div>
     );

@@ -40,7 +40,7 @@ function ParticipantMeta({ participant, isActive }: { participant: AdHocParticip
     <div className="flex items-center gap-3 text-xs text-muted flex-shrink-0">
       <span>joined {joinTime}</span>
       {participant.totalDurationSeconds !== null && <span>{formatDuration(participant.totalDurationSeconds)}</span>}
-      {isActive && <span className="w-2 h-2 rounded-full bg-emerald-500" />}
+      {isActive && <span className="w-2 h-2 rounded-full bg-success" />}
     </div>
   );
 }
@@ -48,7 +48,7 @@ function ParticipantMeta({ participant, isActive }: { participant: AdHocParticip
 function ParticipantRow({ participant, isActive }: { participant: AdHocParticipantDto; isActive: boolean }) {
   return (
     <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${
-      isActive ? 'bg-emerald-500/5 border border-emerald-500/10' : 'bg-overlay/50'
+      isActive ? 'bg-success/5 border border-success/10' : 'bg-overlay/50'
     }`}>
       <div className="flex items-center gap-2 min-w-0">
         <ParticipantAvatar participant={participant} />
@@ -65,7 +65,7 @@ function ParticipantGroup({ participants, isActive, label, count }: {
   if (participants.length === 0) return null;
   return (
     <div className="space-y-2">
-      <p className={`text-xs font-medium uppercase tracking-wide ${isActive ? 'text-emerald-400' : 'text-muted'}`}>
+      <p className={`text-xs font-medium uppercase tracking-wide ${isActive ? 'text-success' : 'text-muted'}`}>
         {label} ({count})
       </p>
       <div className="space-y-1">

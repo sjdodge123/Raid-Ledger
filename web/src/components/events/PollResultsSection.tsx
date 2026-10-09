@@ -3,7 +3,7 @@ import type { EventPlanResponseDto, PollOptionResult } from '@raid-ledger/contra
 
 function VoteBarLabel({ option, isWinner }: { option: PollOptionResult; isWinner?: boolean | undefined }) {
     return (
-        <span className={`truncate mr-2 ${isWinner ? 'text-emerald-300 font-medium' : 'text-foreground'}`}>
+        <span className={`truncate mr-2 ${isWinner ? 'text-success font-medium' : 'text-foreground'}`}>
             {isWinner && (
                 <svg className="inline w-4 h-4 mr-1 -mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
@@ -101,10 +101,10 @@ export function CompletedResultsSection({ plan }: { plan: EventPlanResponseDto }
         <div className="space-y-2">
             <h4 className="text-sm font-medium text-foreground">Result</h4>
             <div className="flex items-center gap-2 text-sm">
-                <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <svg className="w-4 h-4 text-success shrink-0" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
-                <span className="text-emerald-300 font-medium">{winningLabel}</span>
+                <span className="text-success font-medium">{winningLabel}</span>
             </div>
             {plan.createdEventId && (
                 <a href={`/events/${plan.createdEventId}`}
