@@ -79,7 +79,7 @@ describe('LineupOperatorMenu — phone sheet (ROK-1584)', () => {
         expect(Array.from(edit.classList)).toContain('min-h-[52px]');
         expect(
             screen.getByTestId('lineup-operator-menu-abort').className,
-        ).toContain('text-rose-300');
+        ).toContain('text-danger');
     });
 
     it('still opens the existing Edit modal from the sheet row', () => {

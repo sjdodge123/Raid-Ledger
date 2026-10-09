@@ -44,7 +44,7 @@ export function BracketView({ tiebreaker, lineupId }: Props): JSX.Element {
                     type="button"
                     onClick={() => forceResolve.mutate(lineupId)}
                     disabled={forceResolve.isPending}
-                    className="px-3 py-1.5 text-xs font-medium text-amber-400 border border-amber-500/40 rounded-lg hover:bg-amber-500/10 transition-colors disabled:opacity-50"
+                    className="px-3 py-1.5 text-xs font-medium text-warning border border-warning/40 rounded-lg hover:bg-warning/10 transition-colors disabled:opacity-50"
                 >
                     Force Resolve
                 </button>

@@ -67,7 +67,7 @@ export function TieReadinessCard({ lineupId }: Props): JSX.Element | null {
     return (
         <section
             aria-label="Tie readiness"
-            className="mb-4 rounded-lg border border-amber-700/60 bg-surface p-4"
+            className="mb-4 rounded-lg border border-warning/40 bg-surface p-4"
         >
             <CardHeader
                 voteCount={data.voteCount}

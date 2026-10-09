@@ -55,7 +55,7 @@ export function CoopFitHints({
                 {coop ? coop.label : 'No online co-op'}
             </span>
             {tooSmall && (
-                <span className="text-[10px] text-amber-400 whitespace-nowrap">
+                <span className="text-[10px] text-warning whitespace-nowrap">
                     May not fit your group of {participantCount}
                 </span>
             )}

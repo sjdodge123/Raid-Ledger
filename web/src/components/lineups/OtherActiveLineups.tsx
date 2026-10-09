@@ -36,12 +36,12 @@ function LineupChip({
         {lineup.title}
       </span>
       {lineup.visibility === 'private' && (
-        <span className="text-[10px] uppercase tracking-wider text-amber-300">
+        <span className="text-[10px] uppercase tracking-wider text-warning">
           Private
         </span>
       )}
       <span className="text-muted text-xs">{statusLabel(lineup.status)}</span>
-      <span className="text-emerald-400 text-xs font-medium">Open</span>
+      <span className="text-success text-xs font-medium">Open</span>
     </NavChip>
   );
 }

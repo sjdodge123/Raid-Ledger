@@ -112,7 +112,7 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
                     by <span className="text-secondary">{entry.nominatedBy.displayName}</span>
                 </span>
                 {priceText && (
-                    <span className="text-[11px] text-emerald-400">{priceText}</span>
+                    <span className="text-[11px] text-success">{priceText}</span>
                 )}
             </div>
             {isMine && (
@@ -125,7 +125,7 @@ function CardBody({ entry, canRemove, isMine, onRemove }: {
             )}
             {canRemove && (
                 <button type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(entry.gameId); }}
-                    className="text-[10px] text-red-400/60 hover:text-red-400 mt-1 transition-colors"
+                    className="text-[10px] text-danger/60 hover:text-danger mt-1 transition-colors"
                 >Remove</button>
             )}
         </div>
@@ -160,7 +160,7 @@ export function NominationCard({ entry, onRemove, participantCount }: Nomination
     const canRemove = isMine || isOperatorOrAdmin(user);
     const { tooSmall, max } = rosterFit(entry, participantCount);
     const fitClass = tooSmall
-        ? 'border border-amber-500/70 ring-1 ring-amber-500/30 hover:border-amber-400'
+        ? 'border border-warning/70 ring-1 ring-warning/30 hover:border-warning'
         : 'border border-edge hover:border-emerald-500/50';
 
     return (
@@ -171,7 +171,7 @@ export function NominationCard({ entry, onRemove, participantCount }: Nomination
         >
             <CardCover entry={entry} />
             {tooSmall && (
-                <p data-testid="nomination-fit-warning" className="px-2.5 pt-1.5 text-[10px] font-medium text-amber-400">
+                <p data-testid="nomination-fit-warning" className="px-2.5 pt-1.5 text-[10px] font-medium text-warning">
                     Fits {max} online · group is {participantCount}
                 </p>
             )}

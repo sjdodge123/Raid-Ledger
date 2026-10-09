@@ -17,7 +17,7 @@ export function UnlinkedSteamCount({ count }: UnlinkedSteamCountProps) {
 
     return (
         <span
-            className="text-sm text-amber-600 dark:text-amber-400"
+            className="text-sm text-warning"
             title={`${count} member${count === 1 ? '' : 's'} without Steam linked`}
         >
             {count} without Steam

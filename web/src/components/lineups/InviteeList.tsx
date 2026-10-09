@@ -94,7 +94,7 @@ function InviteeRow({
           aria-label={`Remove ${invitee.displayName}`}
           onClick={handleRemove}
           disabled={remove.isPending}
-          className="text-muted hover:text-red-400 transition-colors disabled:opacity-50"
+          className="text-muted hover:text-danger transition-colors disabled:opacity-50"
         >
           <svg
             className="w-4 h-4"

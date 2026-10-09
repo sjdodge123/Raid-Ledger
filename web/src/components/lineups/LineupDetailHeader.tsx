@@ -68,7 +68,7 @@ export function LineupDetailHeader({
           <span
             data-testid="lineup-private-badge"
             title="Invite-only lineup"
-            className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-600/20 text-amber-400 border border-amber-500/40"
+            className="px-2 py-0.5 text-xs font-semibold rounded bg-warning/10 text-warning border border-warning/40"
           >
             Private
           </span>

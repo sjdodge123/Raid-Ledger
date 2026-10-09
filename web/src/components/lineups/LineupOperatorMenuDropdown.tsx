@@ -40,7 +40,7 @@ function MenuItem({
   children: React.ReactNode;
 }): JSX.Element {
   const tone = danger
-    ? 'text-rose-300 hover:text-rose-200'
+    ? 'text-danger'
     : 'text-secondary hover:text-foreground';
   return (
     <button
@@ -89,7 +89,7 @@ export function ShareToggleItem({
       className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm text-secondary hover:bg-panel hover:text-foreground transition-colors disabled:opacity-50"
     >
       <span>Public link</span>
-      <span className={enabled ? 'text-emerald-300 text-xs' : 'text-dim text-xs'}>
+      <span className={enabled ? 'text-success text-xs' : 'text-dim text-xs'}>
         {enabled ? 'On' : 'Off'}
       </span>
     </button>
