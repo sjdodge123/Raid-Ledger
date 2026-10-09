@@ -13,7 +13,11 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { NotificationDedupService } from './notification-dedup.service';
 import { SettingsService } from '../settings/settings.service';
-import { deactivateUserViaModuleRef } from './discord-notification-deactivate.helpers';
+import {
+  deactivateUserViaModuleRef,
+  isGuildMemberSeen,
+  type DeactivationReason,
+} from './discord-notification-deactivate.helpers';
 import { resolveUserTimezone } from './timezone.helpers';
 import {
   buildDiscordDisabledPrefs,
@@ -146,13 +150,22 @@ export class DiscordNotificationService {
    * Cross-module deps are resolved via ModuleRef at call time to avoid
    * a 3-way Notification↔Users↔Events circular DI graph at boot.
    */
-  async deactivateUser(userId: number): Promise<void> {
+  async deactivateUser(
+    userId: number,
+    reason: DeactivationReason = 'unknown',
+  ): Promise<void> {
     await deactivateUserViaModuleRef(
       this.db,
       this.logger,
       this.moduleRef,
       userId,
+      reason,
     );
+  }
+
+  /** ROK-1749: has this user ever been seen in the guild roster? */
+  async isGuildMemberSeen(userId: number): Promise<boolean> {
+    return isGuildMemberSeen(this.db, userId);
   }
 
   /** Check if Discord channel is disabled for this notification type. */

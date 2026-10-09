@@ -41,7 +41,14 @@ async function createUserWithDiscordId(
 ): Promise<typeof schema.users.$inferSelect> {
   const [user] = await testApp.db
     .insert(schema.users)
-    .values({ discordId, username, role: 'member' })
+    // ROK-1749: a seen-in-guild member — only stamped users are sweep
+    // candidates. Never-seen guests are covered by their own cases.
+    .values({
+      discordId,
+      username,
+      role: 'member',
+      guildMemberSeenAt: new Date(),
+    })
     .returning();
   return defined(user, 'inserted user');
 }

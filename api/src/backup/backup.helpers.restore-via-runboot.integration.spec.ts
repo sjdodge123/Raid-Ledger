@@ -31,6 +31,7 @@ import * as os from 'node:os';
 
 import { runMigrations } from './backup.helpers';
 import { at } from '../common/testing/narrow';
+import { pgvectorImage } from '../common/testing/pgvector-image';
 
 const SKIP_BACKUP_INTEGRATION = process.env.SKIP_BACKUP_INTEGRATION === '1';
 const describeRestore = SKIP_BACKUP_INTEGRATION ? describe.skip : describe;
@@ -141,7 +142,7 @@ describeRestore(
     const savedEnv: Record<string, string | undefined> = {};
 
     beforeAll(async () => {
-      container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
+      container = await new PostgreSqlContainer(pgvectorImage())
         .withDatabase('raid_ledger_rok_1322')
         .withUsername('test')
         .withPassword('test')

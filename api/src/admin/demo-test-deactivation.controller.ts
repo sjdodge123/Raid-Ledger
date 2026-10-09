@@ -92,6 +92,9 @@ export class DemoTestDeactivationController {
           discordId: snowflake,
           username: `non-guild-${snowflake}`,
           role: 'member',
+          // ROK-1749: model a FORMER member (seen in the guild, since left) —
+          // only stamped users are 50278 / sweep deactivation candidates.
+          guildMemberSeenAt: new Date(),
         })
         .returning({ id: schema.users.id });
       const user = defined(inserted, 'non-guild user row');
