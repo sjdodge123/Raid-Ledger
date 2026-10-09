@@ -1,5 +1,5 @@
 {
-  "__total": 928,
+  "__total": 935,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 3,
   "components/admin/DemoDataCard.tsx": 11,
@@ -96,6 +96,7 @@
   "components/lineups/cycle-4/SchedulingSlotRow.tsx": 1,
   "components/lineups/cycle-4/SchedulingVoteControls.tsx": 3,
   "components/lineups/cycle-4/SchedulingVoteProgress.tsx": 1,
+  "components/lineups/cycle-4/StarToggleButton.tsx": 7,
   "components/lineups/cycle-4/VoteToggleButton.tsx": 3,
   "components/lineups/cycle-4/VotingRow.tsx": 2,
   "components/lineups/cycle-4/sticky-hero-buttons.tsx": 8,
