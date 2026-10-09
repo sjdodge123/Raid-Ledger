@@ -146,7 +146,7 @@ function JoinedNotice({
             <DismissX
                 label="Dismiss confirmation"
                 onClick={onDismiss}
-                className="text-warning hover:text-warning/90"
+                className="text-warning"
             />
         </p>
     );
