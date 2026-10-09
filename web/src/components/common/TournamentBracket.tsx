@@ -139,7 +139,7 @@ function EntryBox({ x, y, name, won, bye, pending, active }: {
     x: number; y: number; name: string; won: boolean;
     bye?: boolean; pending?: boolean; active?: boolean;
 }): JSX.Element {
-    const fill = won ? 'fill-success/15' : active ? 'fill-cyan-500/10' : 'fill-[var(--color-panel)]';
+    const fill = won ? 'fill-success/10' : active ? 'fill-cyan-500/10' : 'fill-[var(--color-panel)]';
     const stroke = won ? 'stroke-success/50' : active ? 'stroke-cyan-500/60' : 'stroke-[var(--color-edge)]';
     const sw = active ? 2 : 1;
     const text = pending ? 'text-muted italic' : bye ? 'text-muted italic'
