@@ -1,5 +1,5 @@
 {
-  "__total": 664,
+  "__total": 661,
   "components/RootRedirect.tsx": 1,
   "components/admin/ChannelBindingList.tsx": 2,
   "components/admin/DemoDataCard.tsx": 4,
@@ -155,7 +155,7 @@
   "pages/invite/invite-components.tsx": 8,
   "pages/lfg/LfgHeader.tsx": 2,
   "pages/lfg/LfgOverlapPanel.tsx": 4,
-  "pages/lfg/LfgPlayingNowCard.tsx": 5,
+  "pages/lfg/LfgPlayingNowCard.tsx": 2,
   "pages/lfg/LfgSuggestionsPanel.tsx": 2,
   "pages/lfg/lfg-action-buttons.ts": 5,
   "pages/lfg/lfg-group-states.tsx": 4,

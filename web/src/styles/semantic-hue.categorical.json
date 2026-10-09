@@ -113,7 +113,7 @@
   "components/characters/character-card-compact.tsx": "WoW faction (horde red pill), role fills (healer emerald-600 / DPS red-600), gold main-character star and amber level label (categorical identity, not status)",
   "pages/lfg/LfgHeader.tsx": "\"Game details\" brand link text-emerald-400 / hover emerald-300",
   "pages/lfg/LfgOverlapPanel.tsx": "Mon–Sun overlap strip: emerald fill depth encodes how much of the roster a day can field (sequential data scale, not a status)",
-  "pages/lfg/LfgPlayingNowCard.tsx": "Live-session card: emerald \"Playing now\" live accent (presence, like the live dots) + its Join CTA brand solid bg-emerald-600 / hover emerald-500 (Button primary fill)",
+  "pages/lfg/LfgPlayingNowCard.tsx": "Only the Join CTA brand solid bg-emerald-600 / hover emerald-500 fill remains raw; the live-session card frame + label are on success tokens",
   "pages/lfg/LfgSuggestionsPanel.tsx": "Suggestion action: brand solid bg-emerald-600 / hover emerald-500 (Button primary fill)",
   "pages/lfg/lfg-action-buttons.ts": "LFG action buttons: brand solid bg-emerald-600 + matching border / hover emerald-500 (Button primary fill)",
   "pages/lfg/lfg-group-states.tsx": "\"Back to games\" and \"Open poll\" brand links text-emerald-400 / hover emerald-300 (the not-found and convert-failed states are on tokens)",
