@@ -27,9 +27,9 @@ export function UninstallConfirmModal({ plugin, onClose, onConfirm, isPending }:
 
 function UninstallDeletionWarning(): JSX.Element {
     return (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-            <p className="text-sm text-red-400 font-medium mb-1">This action will permanently delete:</p>
-            <ul className="text-sm text-red-400/80 list-disc list-inside space-y-0.5">
+        <div className="bg-danger/10 border border-danger/30 rounded-lg p-3">
+            <p className="text-sm text-danger font-medium mb-1">This action will permanently delete:</p>
+            <ul className="text-sm text-danger list-disc list-inside space-y-0.5">
                 <li>All plugin settings and saved configuration</li>
                 <li>Integration credentials stored for this plugin</li>
             </ul>
@@ -42,9 +42,9 @@ function ConfiguredIntegrationsWarning({ integrations }: {
 }): JSX.Element | null {
     if (integrations.length === 0) return null;
     return (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-            <p className="text-sm text-amber-400 font-medium mb-1">Configured integrations that will lose credentials:</p>
-            <ul className="text-sm text-amber-400/80 list-disc list-inside space-y-0.5">
+        <div className="bg-warning/10 border border-warning/30 rounded-lg p-3">
+            <p className="text-sm text-warning font-medium mb-1">Configured integrations that will lose credentials:</p>
+            <ul className="text-sm text-warning list-disc list-inside space-y-0.5">
                 {integrations.map((i) => (<li key={i.key}>{i.name}</li>))}
             </ul>
         </div>

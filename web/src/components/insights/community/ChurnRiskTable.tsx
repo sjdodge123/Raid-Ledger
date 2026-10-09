@@ -51,7 +51,7 @@ export function ChurnRiskTable({ thresholdPct, atRisk, notEnoughHistory }: Props
                             <td className="py-2 pr-4 text-foreground">{row.username}</td>
                             <td className="py-2 pr-4 text-muted">{row.baselineHours.toFixed(1)}</td>
                             <td className="py-2 pr-4 text-muted">{row.recentHours.toFixed(1)}</td>
-                            <td className="py-2 text-red-400">{Math.round(row.dropPct)}%</td>
+                            <td className="py-2 text-danger">{Math.round(row.dropPct)}%</td>
                         </tr>
                     ))}
                 </tbody>

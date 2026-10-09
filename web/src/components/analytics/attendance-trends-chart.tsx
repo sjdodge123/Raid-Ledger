@@ -45,11 +45,11 @@ function SummaryStats({ summary }: { summary: { avgAttendanceRate: number; avgNo
         <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="text-center">
                 <p className="text-sm text-muted">Avg Attendance</p>
-                <p className="text-xl font-bold text-emerald-400">{Math.round(summary.avgAttendanceRate * 100)}%</p>
+                <p className="text-xl font-bold text-success">{Math.round(summary.avgAttendanceRate * 100)}%</p>
             </div>
             <div className="text-center">
                 <p className="text-sm text-muted">Avg No-Show</p>
-                <p className="text-xl font-bold text-red-400">{Math.round(summary.avgNoShowRate * 100)}%</p>
+                <p className="text-xl font-bold text-danger">{Math.round(summary.avgNoShowRate * 100)}%</p>
             </div>
             <div className="text-center">
                 <p className="text-sm text-muted">Total Events</p>
@@ -81,7 +81,7 @@ export function AttendanceTrendsChart() {
     const { data, isLoading, error } = useAttendanceTrends(period);
 
     if (error) {
-        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-red-400">Failed to load attendance trends.</p></div>;
+        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-danger">Failed to load attendance trends.</p></div>;
     }
 
     return (

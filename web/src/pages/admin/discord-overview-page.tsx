@@ -53,7 +53,7 @@ function DiscordOverviewContent() {
 function SetupStepRow({ step }: { step: { key: string; label: string; completed: boolean; settingsPath: string } }) {
     return (
         <div className="flex items-center gap-3">
-            <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs ${step.completed ? 'bg-emerald-500/20 text-emerald-400' : 'bg-overlay text-dim'}`}>
+            <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs ${step.completed ? 'bg-success/20 text-success' : 'bg-overlay text-dim'}`}>
                 {step.completed ? '✓' : '○'}
             </span>
             <Link to={step.settingsPath} className={`text-sm hover:underline ${step.completed ? 'text-muted' : 'text-foreground'}`}>{step.label}</Link>
@@ -86,8 +86,8 @@ function SetupProgressCard({ setup, isLoading }: {
 
 function BotStatusCard({ botData }: { botData: { connecting?: boolean | undefined; connected?: boolean | undefined; guildName?: string | undefined; memberCount?: number | null | undefined } | undefined }) {
     const dotClass = botData?.connecting
-        ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] animate-pulse'
-        : botData?.connected ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]' : 'bg-red-400 shadow-[0_0_8px_rgba(239,68,68,0.6)]';
+        ? 'bg-warning shadow-[0_0_8px_color-mix(in_oklab,var(--color-warning)_60%,transparent)] animate-pulse'
+        : botData?.connected ? 'bg-success shadow-[0_0_8px_color-mix(in_oklab,var(--color-success)_60%,transparent)]' : 'bg-danger shadow-[0_0_8px_color-mix(in_oklab,var(--color-danger)_60%,transparent)]';
 
     return (
         <div className="bg-surface border border-edge rounded-xl p-6">

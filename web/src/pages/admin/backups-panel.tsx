@@ -123,7 +123,7 @@ function FilterPills({ filter, setFilter, allBackups, dailyCount, migrationCount
 
 function BackupStates({ isLoading, isError, isEmpty, hasData }: { isLoading: boolean; isError: boolean; isEmpty: boolean; hasData: boolean }): JSX.Element | null {
     if (isLoading) return <div className="py-12 text-center text-muted text-sm">Loading backups...</div>;
-    if (isError) return <div className="py-12 text-center text-red-400 text-sm">Failed to load backups. Please try again.</div>;
+    if (isError) return <div className="py-12 text-center text-danger text-sm">Failed to load backups. Please try again.</div>;
     if (hasData && isEmpty) return <div className="py-12 text-center text-muted text-sm">No backup files found. Backups are created automatically at 2 AM daily. You can also create one manually.</div>;
     return null;
 }
@@ -175,9 +175,9 @@ function BackupRow({ backup, tz, onRestore, onDelete }: { backup: BackupFileDto;
 
 function DangerZone({ onShowResetModal }: { onShowResetModal: () => void }): JSX.Element {
     return (
-        <div className="mt-8 border border-red-500/30 rounded-xl overflow-hidden">
-            <div className="px-4 py-3 bg-red-500/5 border-b border-red-500/30">
-                <h3 className="text-sm font-semibold text-red-400 uppercase tracking-wider">Danger Zone</h3>
+        <div className="mt-8 border border-danger/30 rounded-xl overflow-hidden">
+            <div className="px-4 py-3 bg-danger/5 border-b border-danger/30">
+                <h3 className="text-sm font-semibold text-danger uppercase tracking-wider">Danger Zone</h3>
             </div>
             <div className="p-4 flex items-center justify-between gap-4">
                 <div>

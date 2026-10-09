@@ -110,7 +110,7 @@ function LogFilterPills({ filter, allCount, serviceCounts, onFilter }: {
 
 function LogsStatusMessages({ isLoading, isError, isEmpty }: { isLoading: boolean; isError: boolean; isEmpty: boolean }) {
   if (isLoading) return <div className="py-12 text-center text-muted text-sm">Loading logs...</div>;
-  if (isError) return <div className="py-12 text-center text-red-400 text-sm">Failed to load logs. Please try again.</div>;
+  if (isError) return <div className="py-12 text-center text-danger text-sm">Failed to load logs. Please try again.</div>;
   if (isEmpty) return <div className="py-12 text-center text-muted text-sm">No log files found. Logs are written when the container is running in production mode.</div>;
   return null;
 }
