@@ -81,7 +81,11 @@ function toCompletedQuest(
   };
 }
 
-/** Bucket known quests by non-null dungeon instance id. */
+/**
+ * Bucket known quests by non-null dungeon instance id. Null-instance rows are
+ * chain/pre-req steps: they stay in the chain lookup only, never in a group or
+ * the known counts.
+ */
 function groupByInstance(
   known: DungeonQuestDto[],
 ): Map<number, DungeonQuestDto[]> {
@@ -181,7 +185,8 @@ export function buildCharacterQuests(
         (n, g) => n + g.completed.length,
         0,
       ),
-      knownTotal: knownQuests.length,
+      knownTotal: knownQuests.filter((q) => q.dungeonInstanceId !== null)
+        .length,
       completedTotal: quests.completed.length,
       inProgress: inProgress.length,
     },

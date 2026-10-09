@@ -147,7 +147,7 @@ describe('buildCharacterQuests — completed ∩ known', () => {
     const dto = buildCharacterQuests(snap(completed), known, names)!;
     expect(dto.counts).toEqual({
       completedKnown: 3,
-      knownTotal: 6,
+      knownTotal: 5,
       completedTotal: 10_004,
       inProgress: 0,
     });
@@ -183,7 +183,7 @@ describe('buildCharacterQuests — ordering and edge cases', () => {
     expect(dto.completedKnown).toEqual([]);
     expect(dto.counts).toEqual({
       completedKnown: 0,
-      knownTotal: 6,
+      knownTotal: 5,
       completedTotal: 2,
       inProgress: 1,
     });
@@ -229,5 +229,24 @@ describe('buildCharacterQuests — chains (D7)', () => {
     expect(
       dto.completedKnown[0]!.completed[0]!.chain.length,
     ).toBeLessThanOrEqual(1);
+  });
+});
+
+describe('buildCharacterQuests — null-instance chain steps', () => {
+  it('counts a completed null-instance step only inside another chain', () => {
+    const rows = [
+      quest({ questId: 20, dungeonInstanceId: null, nextQuestId: 21 }),
+      quest({ questId: 21, dungeonInstanceId: 239, prevQuestId: 20 }),
+    ];
+    const dto = buildCharacterQuests(snap([20, 21]), rows, names)!;
+    const entries = dto.completedKnown.flatMap((g) => g.completed);
+    expect(entries.map((q) => q.questId)).toEqual([21]);
+    expect(dto.completedKnown.map((g) => g.knownCount)).toEqual([1]);
+    expect(dto.counts.knownTotal).toBe(1);
+    expect(dto.counts.completedKnown).toBe(1);
+    expect(entries[0]!.chain).toEqual([
+      { questId: 20, name: 'Quest 20', done: true },
+      { questId: 21, name: 'Quest 21', done: true },
+    ]);
   });
 });
