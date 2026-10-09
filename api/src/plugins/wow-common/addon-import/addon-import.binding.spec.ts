@@ -35,6 +35,8 @@ function char(
     class: 'Paladin',
     level: 60,
     addonGuid: GUID,
+    race: 'Human',
+    gender: null,
     ...over,
   };
 }
@@ -274,5 +276,41 @@ describe('bindToCharacter — class/level', () => {
       class: { from: null, to: 'Paladin' },
       level: { from: null, to: 60 },
     });
+  });
+});
+
+describe('bindToCharacter — race + gender (ROK-1742 R9)', () => {
+  it('sets race and gender when the stored ones are null', () => {
+    const r = bindToCharacter(
+      payload({ gender: 'female' }),
+      char({ race: null, gender: null }),
+      APPLY,
+    );
+    expect(r.setRace).toBe('Human');
+    expect(r.setGender).toBe('female');
+  });
+
+  it('keeps race and gender already stored with the same values', () => {
+    const r = bindToCharacter(
+      payload({ gender: 'male' }),
+      char({ race: 'Human', gender: 'male' }),
+      APPLY,
+    );
+    expect(r.setRace).toBeUndefined();
+    expect(r.setGender).toBeUndefined();
+  });
+
+  it('an absent who.gender never clears a stored gender', () => {
+    const r = bindToCharacter(payload(), char({ gender: 'female' }), APPLY);
+    expect(r.setGender).toBeUndefined();
+  });
+
+  it('follows a changed gender (barber shop)', () => {
+    const r = bindToCharacter(
+      payload({ gender: 'male' }),
+      char({ gender: 'female' }),
+      APPLY,
+    );
+    expect(r.setGender).toBe('male');
   });
 });

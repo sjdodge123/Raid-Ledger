@@ -203,6 +203,20 @@ describe('character-row binding updates', () => {
       level: 60,
     });
   });
+
+  it('maps race + gender (ROK-1742 R9); never touches lastSyncedAt', () => {
+    const set = bindingUpdates({
+      ...base,
+      setRace: 'NightElf',
+      setGender: 'female',
+    });
+    expect(set).toEqual({ race: 'NightElf', gender: 'female' });
+    expect(set).not.toHaveProperty('lastSyncedAt');
+  });
+
+  it('no setRace/setGender → race/gender untouched', () => {
+    expect(bindingUpdates(base)).not.toHaveProperty('gender');
+  });
 });
 
 /** The golden guild fixture — its roster includes the exporter (member #1). */

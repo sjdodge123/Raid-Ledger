@@ -28,6 +28,7 @@ const character: AddonBindingCharacter = {
   class: 'Paladin',
   level: 60,
   addonGuid: GUID,
+  race: 'Human',
 };
 const section = (
   who: Partial<AddonWho> = {},

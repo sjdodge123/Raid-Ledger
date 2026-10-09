@@ -86,6 +86,8 @@ export function previewCharacter(input: CreateImportInput): LoadedCharacter {
       class: titleCaseClass(who.class),
       level: who.level,
       addonGuid: who.guid,
+      race: who.race,
+      gender: who.gender ?? null,
     },
   };
 }
