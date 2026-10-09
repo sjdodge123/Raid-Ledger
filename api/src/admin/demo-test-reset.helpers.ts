@@ -63,7 +63,7 @@ async function countAll(db: Db, table: string): Promise<number> {
   const rows = await db.execute<{ count: string }>(
     sql.raw(`SELECT COUNT(*)::text AS count FROM ${table}`),
   );
-  const first = rows[0] as { count: string } | undefined;
+  const first = rows[0];
   return first ? parseInt(first.count, 10) : 0;
 }
 
