@@ -46,7 +46,7 @@ export function NotificationBell() {
             <button onClick={() => setIsOpen(!isOpen)} className="relative flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel" aria-label="Notifications">
                 <BellIcon />
                 {unreadCount > 0 && (
-                    <span className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold text-foreground bg-red-600 rounded-full">
+                    <span className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-xs font-bold text-white bg-danger rounded-full">
                         {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                 )}

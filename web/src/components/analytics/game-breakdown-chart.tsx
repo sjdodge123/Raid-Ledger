@@ -44,7 +44,7 @@ export function GameBreakdownChart() {
     const { data, isLoading, error } = useGameAttendance();
 
     if (error) {
-        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-red-400">Failed to load game attendance data.</p></div>;
+        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-danger">Failed to load game attendance data.</p></div>;
     }
 
     return (

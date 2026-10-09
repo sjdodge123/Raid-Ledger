@@ -6,7 +6,7 @@ function OffenderRow({ user }: { user: { userId: number; username: string; noSho
         <div key={user.userId} className="flex items-center justify-between py-2 px-3 bg-panel rounded-lg">
             <span className="text-foreground text-sm">{user.username}</span>
             <div className="flex items-center gap-3 text-sm">
-                <span className="text-red-400 font-semibold">{user.noShow} no-shows</span>
+                <span className="text-danger font-semibold">{user.noShow} no-shows</span>
                 <span className="text-muted">({rate}% of {user.totalEvents} events)</span>
             </div>
         </div>
@@ -22,7 +22,7 @@ export function NoShowPatterns() {
     const { data, isLoading, error } = useUserReliability(50, 0);
 
     if (error) {
-        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-red-400">Failed to load no-show patterns.</p></div>;
+        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-danger">Failed to load no-show patterns.</p></div>;
     }
 
     const repeatOffenders = getRepeatOffenders(data);

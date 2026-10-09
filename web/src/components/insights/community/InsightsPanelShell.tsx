@@ -34,7 +34,7 @@ export function InsightsPanelShell({ testid, title, status, emptyHint, children,
             </header>
             {status.isLoading && <SkeletonLine />}
             {status.isError && !isNoSnapshotYet(status.error) && (
-                <p className="text-sm text-red-400">Failed to load: {status.error?.message ?? 'unknown error'}</p>
+                <p className="text-sm text-danger">Failed to load: {status.error?.message ?? 'unknown error'}</p>
             )}
             {status.isError && isNoSnapshotYet(status.error) && (
                 <p className="text-sm text-muted">{emptyHint ?? 'No snapshot yet.'}</p>

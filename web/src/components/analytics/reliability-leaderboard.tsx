@@ -41,7 +41,7 @@ export function ReliabilityLeaderboard() {
     const sorted = data ? sortUsers(data.users, sortField, sortDir) : [];
 
     if (error) {
-        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-red-400">Failed to load reliability data.</p></div>;
+        return <div className="bg-surface rounded-lg border border-edge p-6"><p className="text-danger">Failed to load reliability data.</p></div>;
     }
 
     return (
@@ -94,10 +94,10 @@ function UserRow({ user, rank }: { user: UserReliabilityDto; rank: number }) {
     const ratePercent = Math.round(user.attendanceRate * 100);
     const rateColor =
         ratePercent >= 80
-            ? 'text-emerald-400'
+            ? 'text-success'
             : ratePercent >= 50
-              ? 'text-amber-400'
-              : 'text-red-400';
+              ? 'text-warning'
+              : 'text-danger';
 
     return (
         <tr className="border-b border-edge/50 hover:bg-panel/50 transition-colors">

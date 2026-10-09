@@ -16,5 +16,12 @@
   "components/admin/DynamicCategoryCard.tsx": "Taste-vector bar chart: positive bars emerald, negative bars red (a diverging chart series, not a status)",
   "components/admin/onboarding/secure-account-step.tsx": "Password-strength meter ramp: Good is the yellow step between orange Fair and token Strong (amber bg-warning would be indistinguishable from orange-500 Fair in dark)",
   "pages/cron-jobs/CronJobCard.tsx": "AI pill: emerald sparkles marking a cron that issues LLM calls (a feature marker, not a status; run state is the tokenised StatusBadge)",
-  "pages/cron-jobs/cron-utils.ts": "Cron job category badge map: Notifications amber, Maintenance green beside cyan / indigo / teal / purple / gray (a category colour, promises nothing)"
+  "pages/cron-jobs/cron-utils.ts": "Cron job category badge map: Notifications amber, Maintenance green beside cyan / indigo / teal / purple / gray (a category colour, promises nothing)",
+  "components/analytics/attendance-trends-chart.tsx": "Period toggle: selected segment is the brand solid bg-emerald-600 (selection accent, Button primary fill)",
+  "components/analytics/event-attendance-donut.tsx": "Donut legend swatches: bg-emerald/red/amber-400 dots match the chart's own slice hexes (#34D399/#F87171/#FBBF24) — data-series legend",
+  "components/analytics/roster-breakdown-table.tsx": "Voice classification series: full emerald, partial blue, late amber, early-leaver orange, no-show red (categorical, amber and orange would collapse into warning)",
+  "components/insights/community/SocialGraphCanvas.tsx": "\"View profile\" CTA: brand solid bg-emerald-600 / hover emerald-500 (Button primary fill)",
+  "components/insights/community/TemporalHeatmap.tsx": "Heatmap cell focus ring ring-emerald-500 pairs with the green rgba(34,197,94,a) activity scale (sequential data scale + brand focus)",
+  "components/notifications/NotificationDropdown.tsx": "Brand accent: \"Mark All Read\" link emerald-400/300 and the loading spinner border (brand link + spinner, not success)",
+  "components/notifications/NotificationItem.tsx": "Unread marker: brand emerald icon tint + dot (selection/unread accent, not a success state)"
 }

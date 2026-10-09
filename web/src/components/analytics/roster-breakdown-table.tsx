@@ -11,9 +11,9 @@ type SortField = 'username' | 'attendanceStatus' | 'voiceClassification' | 'voic
 type SortDir = 'asc' | 'desc';
 
 const STATUS_COLORS: Record<string, string> = {
-    attended: 'text-emerald-400',
-    no_show: 'text-red-400',
-    excused: 'text-amber-400',
+    attended: 'text-success',
+    no_show: 'text-danger',
+    excused: 'text-warning',
     unmarked: 'text-gray-500',
 };
 
