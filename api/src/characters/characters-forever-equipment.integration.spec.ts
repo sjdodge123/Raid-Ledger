@@ -93,7 +93,6 @@ describe('Forever addon equipment on GET /characters/:id (integration)', () => {
   beforeEach(async () => {
     await activateBlizzard(testApp);
     const meta = testApp.app.get(WowItemMetaService);
-    jest.spyOn(meta, 'isEnabled').mockResolvedValue(true);
     enqueue = jest.spyOn(meta, 'enqueue').mockResolvedValue(0);
   });
 

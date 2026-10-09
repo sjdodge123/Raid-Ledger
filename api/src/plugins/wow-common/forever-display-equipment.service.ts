@@ -94,12 +94,10 @@ export class ForeverDisplayEquipmentService {
   /** Fire-and-forget: never blocks or fails the read. */
   private enqueueInBackground(ids: number[]): void {
     if (ids.length === 0) return;
-    void this.itemMeta
-      .isEnabled()
-      .then((on) => (on ? this.itemMeta.enqueue(ids) : 0))
-      .catch((err: unknown) => {
-        this.logger.warn(`Wowhead enqueue failed: ${String(err)}`);
-      });
+    // `enqueue` checks the kill switch itself.
+    this.itemMeta.enqueue(ids).catch((err: unknown) => {
+      this.logger.warn(`Wowhead enqueue failed: ${String(err)}`);
+    });
   }
 }
 
