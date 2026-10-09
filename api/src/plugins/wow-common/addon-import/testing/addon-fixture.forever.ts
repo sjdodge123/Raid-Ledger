@@ -150,3 +150,12 @@ export function buildForeverQuestsPayload(
 ): AddonCharExport {
   return foreverChar('female', { quests: buildQuests(completed) });
 }
+
+/**
+ * `data.quests` as the addon sends it after cutting `completed` at the cap:
+ * a small id list + `completedTruncated: true` (ROK-1742 additive flag).
+ */
+export function buildForeverQuestsTruncatedPayload(): AddonCharExport {
+  const quests = { ...buildQuests(3), completedTruncated: true };
+  return foreverChar('female', { quests });
+}

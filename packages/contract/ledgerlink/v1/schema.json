@@ -429,6 +429,9 @@
                     ],
                     "additionalProperties": false
                   }
+                },
+                "completedTruncated": {
+                  "type": "boolean"
                 }
               },
               "required": [

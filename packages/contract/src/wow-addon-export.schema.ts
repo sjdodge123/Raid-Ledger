@@ -169,6 +169,11 @@ export type AddonQuestInProgress = z.infer<typeof AddonQuestInProgressSchema>;
 export const AddonQuestsSchema = z.object({
     completed: z.array(id).max(ADDON_QUESTS_COMPLETED_MAX),
     inProgress: z.array(AddonQuestInProgressSchema).max(ADDON_QUESTS_IN_PROGRESS_MAX),
+    /**
+     * Set by the addon when `completed` was cut to `ADDON_QUESTS_COMPLETED_MAX`
+     * ids (first ids ascending). Absent = `false` (additive, ROK-1742).
+     */
+    completedTruncated: z.boolean().optional(),
 }).strict();
 export type AddonQuests = z.infer<typeof AddonQuestsSchema>;
 

@@ -34,6 +34,7 @@ import {
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.builder';
 import {
   buildForeverQuestsPayload,
+  buildForeverQuestsTruncatedPayload,
   buildForeverTalentsPayload,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.forever';
 import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
@@ -93,6 +94,8 @@ const VALID: Record<string, () => string> = {
     ),
   'char-null-ruleset-no-guild': charNoGuild,
   'char-forever-quests': () => buildImportString(buildForeverQuestsPayload()),
+  'char-forever-quests-truncated': () =>
+    buildImportString(buildForeverQuestsTruncatedPayload()),
   'char-forever-talents-named': () =>
     buildImportString(buildForeverTalentsPayload()),
   'guild-1-page': () => guildPaste(40),

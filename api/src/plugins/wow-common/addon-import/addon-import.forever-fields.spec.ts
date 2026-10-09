@@ -134,6 +134,12 @@ describe('toCharSnapshotData — schema 2', () => {
     expect(out.quests?.inProgress[0]?.objectives?.[0]?.text).toBe('Slain: 0/1');
   });
 
+  it('keeps quests.completedTruncated (optional key, still schema 2)', () => {
+    const quests = { ...buildQuests(3), completedTruncated: true };
+    const data = { ...buildCharPayload().data, quests } as AddonCharData;
+    expect(toCharSnapshotData(data).quests?.completedTruncated).toBe(true);
+  });
+
   it('omits quests when the export has none', () => {
     const out = toCharSnapshotData(buildCharPayload().data);
     expect('quests' in out).toBe(false);

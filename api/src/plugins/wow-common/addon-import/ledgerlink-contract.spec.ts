@@ -51,6 +51,7 @@ describe('LedgerLink v1 golden fixtures — valid', () => {
   it('ships the agreed valid cases', () => {
     expect(names).toEqual([
       'char-forever-quests',
+      'char-forever-quests-truncated',
       'char-forever-talents-named',
       'char-normal',
       'char-null-ruleset-no-guild',

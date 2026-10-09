@@ -28,6 +28,10 @@ Newest first. Every entry states **additive** or **breaking** (see
   Every existing fixture unchanged byte-for-byte. Server-side only: the
   stored snapshot (schema 2) also keeps `enchantId` / `gemIds` parsed from
   the gear link; the wire format is unaffected.
+- `quests.completedTruncated?: boolean` (absent = `false`): set by the addon
+  when `completed` was cut to `ADDON_QUESTS_COMPLETED_MAX` ids (first ids
+  ascending); kept in the stored snapshot. New valid fixture
+  `char-forever-quests-truncated` (3 ids + `completedTruncated: true`).
 
 ## v1 — 2026-10-07 — two apply-time error codes — **additive**
 

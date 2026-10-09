@@ -83,7 +83,7 @@ All numbers are JSON numbers (never strings); every "int" is an integer
 - `gear[]` ≤ 19: `{ slot 1–19, itemId?, link? (≤ 512, raw `|Hitem:…|h`), ilvl? }`
 - `talents`: `{ configId?, importString? (≤ 2048), nodes[] ≤ 200: { nodeId, rank, entryId?, name? (≤ 64), spellId? (int ≥ 1), maxRanks? (1–255), tree? (0–2), row? (0–9), col? (0–3), posX?, posY? } }`
 - `lockouts[]` ≤ 100: `{ name ≤ 128, instanceId, difficultyId, resetAt (unix s), killed, total }`
-- `quests?` (additive, ROK-1742): `{ completed[] ≤ 10 000 questIds, inProgress[] ≤ 35: { questId, title? ≤ 128, objectives[]? ≤ 10: { text ≤ 128, done: boolean, have?, need? } } }`. When `quests` is present both arrays are required (empty is fine). `completed` = `GetAllCompletedQuestIDs()`; `have`/`need` = `numFulfilled`/`numRequired`.
+- `quests?` (additive, ROK-1742): `{ completed[] ≤ 10 000 questIds, inProgress[] ≤ 35: { questId, title? ≤ 128, objectives[]? ≤ 10: { text ≤ 128, done: boolean, have?, need? } }, completedTruncated?: boolean }`. When `quests` is present both arrays are required (empty is fine). `completed` = `GetAllCompletedQuestIDs()`; `have`/`need` = `numFulfilled`/`numRequired`. A character with more than `ADDON_QUESTS_COMPLETED_MAX` completed quests is not rejected by the addon: it sends the first 10 000 ids ascending and sets `completedTruncated: true` (absent = `false`).
 
 **Talent node position (ROK-1742).** Forever has one `C_Traits` tree per
 class, laid out like vanilla: **3 sub-trees side by side × 4 columns** (12
@@ -186,7 +186,7 @@ payload are unchanged — this only widens what one paste may contain.
 | `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS` | 600 | `exportedAt` spread across the sections of a mixed paste | `INVALID_PAYLOAD` |
 | `ADDON_IMPORT_MAX_DECODED_BYTES` | 1 048 576 | inflated JSON, **per page** | `DECODED_TOO_LARGE` |
 | guild `members` | 2000 | per page and merged | `INVALID_PAYLOAD` |
-| `ADDON_QUESTS_COMPLETED_MAX` | 10 000 | `char` `data.quests.completed` — the one array exempt from the 2000 structural cap | `INVALID_PAYLOAD` |
+| `ADDON_QUESTS_COMPLETED_MAX` | 10 000 | `char` `data.quests.completed` — the one array exempt from the 2000 structural cap; the addon cuts to the first 10 000 ids ascending and sets `quests.completedTruncated: true` | `INVALID_PAYLOAD` |
 | `ADDON_QUESTS_IN_PROGRESS_MAX` | 35 | `char` `data.quests.inProgress` | `INVALID_PAYLOAD` |
 | `ADDON_QUEST_OBJECTIVES_MAX` | 10 | objectives per in-progress quest | `INVALID_PAYLOAD` |
 | structural (server-internal, `addon-import.limits.ts`) | depth ≤ 12, arrays ≤ 2000 (except `quests.completed`, above), any string or key ≤ 2048 UTF-8 bytes | decoded JSON | `INVALID_PAYLOAD` |

@@ -66,6 +66,10 @@ describe('ROK-1742 — new fields accepted', () => {
         expect(ok(withData((d) => ({ ...d, quests: atCap })))).toBe(true);
     });
 
+    it.each([true, false])('accepts quests.completedTruncated %s', (completedTruncated) => {
+        expect(ok(withData((d) => ({ ...d, quests: { ...quests, completedTruncated } })))).toBe(true);
+    });
+
     it('pins the ruled caps (Lead rulings 2026-10-09)', () => {
         expect([ADDON_QUESTS_COMPLETED_MAX, ADDON_QUESTS_IN_PROGRESS_MAX, ADDON_QUEST_OBJECTIVES_MAX]).toEqual([10_000, 35, 10]);
     });
@@ -83,6 +87,7 @@ describe('ROK-1742 — new fields rejected', () => {
         ['an unknown key under quests', (d) => ({ ...d, quests: { ...quests, abandoned: [] } })],
         ['an unknown key on an in-progress quest', (d) => ({ ...d, quests: { ...quests, inProgress: [{ questId: 1, zone: 'x' }] } })],
         ['an unknown key on an objective', (d) => ({ ...d, quests: { ...quests, inProgress: [{ questId: 1, objectives: [{ ...objective, type: 'monster' }] }] } })],
+        ['a non-boolean completedTruncated', (d) => ({ ...d, quests: { ...quests, completedTruncated: 'yes' } })],
         ['quests without inProgress', (d) => ({ ...d, quests: { completed: [] } })],
         ['an objective text of 129 chars', (d) => ({ ...d, quests: { ...quests, inProgress: [{ questId: 1, objectives: [{ ...objective, text: 'x'.repeat(129) }] }] } })],
         ['tree 3', (d) => ({ ...d, talents: { nodes: [{ ...node, tree: 3 }] } })],
