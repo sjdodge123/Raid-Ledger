@@ -46,7 +46,9 @@ export function getMergeColor(group: string): string {
         case 'available': return 'rgba(16, 185, 129, 0.7)';
         case 'committed': return 'rgba(59, 130, 246, 0.7)';
         case 'committed-overlay': return 'rgba(51, 65, 85, 0.3)';
-        case 'blocked': return 'rgba(239, 68, 68, 0.5)';
+        // Matches the `bg-danger/50` cell fill (Tailwind compiles that to color-mix in oklab),
+        // so a merged blocked run and its seam repaint together in the light schemes (TDB:1770).
+        case 'blocked': return 'color-mix(in oklab, var(--color-danger) 50%, transparent)';
         case 'freed': return 'rgba(16, 185, 129, 0.4)';
         default: return 'var(--gt-split-bg)';
     }
