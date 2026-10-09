@@ -31,8 +31,8 @@ export function LfgNotFound(): JSX.Element {
             className="mx-auto max-w-4xl px-4 py-8"
             data-testid="lfg-not-found"
         >
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-6">
-                <h2 className="text-xl font-semibold text-red-400">
+            <div className="rounded-lg border border-danger/30 bg-danger/10 p-6">
+                <h2 className="text-xl font-semibold text-danger">
                     {LFG_COPY.notFoundTitle}
                 </h2>
                 <p className="mt-2 text-muted">{LFG_COPY.notFoundBody}</p>
@@ -89,9 +89,9 @@ export function PendingPollCard({
     return (
         <div
             data-testid="lfg-convert-retry"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/40 bg-warning/10 p-4"
         >
-            <p className="text-sm text-amber-400">{LFG_COPY.convertFailed}</p>
+            <p className="text-sm text-warning">{LFG_COPY.convertFailed}</p>
             <PendingPollActions pending={pending} onRetry={onRetry} />
         </div>
     );
