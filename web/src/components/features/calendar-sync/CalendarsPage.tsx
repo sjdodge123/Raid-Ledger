@@ -65,7 +65,7 @@ export function CalendarsPage(): JSX.Element {
     return (
         <PageFrame lede={C.lede}>
             {errorCode && <OAuthErrorBanner code={errorCode} onDismiss={dismissError} />}
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                 {google.length > 0 && (
                     <Section heading={C.connectedHeading}>
                         {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} />)}

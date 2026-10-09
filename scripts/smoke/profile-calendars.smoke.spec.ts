@@ -38,7 +38,12 @@ test('connected card → Manage → Disconnect → confirm removes the connectio
         await page.goto(PAGE);
         const card = page.locator(`[data-testid="calendar-connection-card"][data-connection-id="${id}"]`);
         await expect(card.getByTestId('calendar-connection-status')).toHaveText(`Connected · ${label}`);
-        await card.getByTestId('calendar-manage').click();
+        const manage = card.getByTestId('calendar-manage');
+        // A long account label must truncate, not widen the card: a phone-width
+        // grid blowout once pushed Manage off-screen where nothing could tap it.
+        await manage.scrollIntoViewIfNeeded();
+        await expect(manage).toBeInViewport({ ratio: 1 });
+        await manage.click();
         // Desktop: a role=menu item; phone: a sheet row. Both carry the same testid.
         await page.getByTestId('calendar-disconnect').filter({ visible: true }).click();
         await page.getByTestId('calendar-disconnect-confirm').click();
