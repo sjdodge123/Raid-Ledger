@@ -3,7 +3,10 @@
  * The endpoint is Wowhead's public tooltip backend — undocumented, not a
  * published API; limits are self-imposed (operator Q2, ≤1 req/s).
  */
-export type { WowItemMetaRow, WowItemMetaInsert } from '../../../drizzle/schema';
+export type {
+  WowItemMetaRow,
+  WowItemMetaInsert,
+} from '../../../drizzle/schema';
 
 /** Wowhead dataEnv ids: 16 = WoW: Forever (CLASSICPLUS), 4 = Classic. */
 export type WowheadEnv = 16 | 4;
@@ -13,10 +16,7 @@ export const WOWHEAD_ENV_CLASSIC: WowheadEnv = 4;
 
 /** `wow_item_meta.status` values. */
 export type WowItemMetaStatus =
-  | 'resolved'
-  | 'classic_fallback'
-  | 'not_found'
-  | 'error';
+  'resolved' | 'classic_fallback' | 'not_found' | 'error';
 
 /** Outcome of one tooltip request for one (item, env). */
 export type WowheadFetchResult =
