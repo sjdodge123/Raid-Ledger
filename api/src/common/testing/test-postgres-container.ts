@@ -13,6 +13,7 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
+import { pgvectorImage } from './pgvector-image';
 
 /**
  * Env var the jest `globalSetup` publishes the shared container's URI under.
@@ -39,7 +40,7 @@ export function ownedSharedTestDbUrl(): string | undefined {
 }
 
 export function startTestPostgres(): Promise<StartedPostgreSqlContainer> {
-  return new PostgreSqlContainer('pgvector/pgvector:pg16')
+  return new PostgreSqlContainer(pgvectorImage())
     .withDatabase('raid_ledger_test')
     .withUsername('test')
     .withPassword('test')

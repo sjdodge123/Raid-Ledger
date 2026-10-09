@@ -29,6 +29,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import { runMigrations } from './backup.helpers';
+import { pgvectorImage } from '../common/testing/pgvector-image';
 
 const SKIP_BACKUP_INTEGRATION = process.env.SKIP_BACKUP_INTEGRATION === '1';
 const describeLoudFailure = SKIP_BACKUP_INTEGRATION ? describe.skip : describe;
@@ -116,7 +117,7 @@ describeLoudFailure(
     const savedEnv: Record<string, string | undefined> = {};
 
     beforeAll(async () => {
-      container = await new PostgreSqlContainer('pgvector/pgvector:pg16')
+      container = await new PostgreSqlContainer(pgvectorImage())
         .withDatabase('raid_ledger_rok_1343')
         .withUsername('test')
         .withPassword('test')

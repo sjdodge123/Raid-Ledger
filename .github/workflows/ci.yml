@@ -130,6 +130,13 @@ jobs:
     if: >-
       github.event_name == 'push' ||
       needs.detect-changes.outputs.code == 'true'
+    # reconcile-migrations-trust-probe.test.sh pulls the pgvector image from the
+    # private GHCR mirror (Docker Hub's anonymous rate limit reddened CI).
+    permissions:
+      contents: read
+      packages: read
+    env:
+      RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
 
     steps:
       - name: Checkout code
@@ -229,6 +236,16 @@ jobs:
           for f in scripts/*.sh; do
             bash -n "$f" || exit 1
           done
+
+      # The trust-probe shell test pulls RL_PGVECTOR_IMAGE (the private GHCR mirror)
+      # through the runner's docker daemon, which needs a ghcr.io login —
+      # anonymous Docker Hub pulls hit `toomanyrequests` on shared runners.
+      - name: Log in to GHCR (pgvector mirror)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       # Behavioral shell tests. `bash -n` only proves a script PARSES — it
       # cannot catch a logic bug like validate-ci.sh's run_step reading exit
@@ -530,8 +547,20 @@ jobs:
       JWT_SECRET: ci-test-secret
       CLIENT_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
+      # Testcontainer specs (backup.helpers.*) pull this instead of Docker Hub.
+      RL_PGVECTOR_IMAGE: ghcr.io/sjdodge123/rl-ci-pgvector:pg16
 
     steps:
+      # Testcontainer specs pull RL_PGVECTOR_IMAGE (the private GHCR mirror)
+      # through the runner's docker daemon, which needs a ghcr.io login —
+      # anonymous Docker Hub pulls hit `toomanyrequests` on shared runners.
+      - name: Log in to GHCR (pgvector mirror)
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       # ROK-1144: backup.integration.spec.ts shells out to pg_dump/pg_restore.
       # Today it relies on ubuntu-latest shipping postgresql-client by default;
       # a future runner-image change could silently drop that binary and skip
