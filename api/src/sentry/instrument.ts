@@ -5,6 +5,7 @@
  */
 import * as Sentry from '@sentry/nestjs';
 import * as os from 'os';
+import { scrubSecrets } from './sentry-scrub.helpers';
 
 const SENTRY_DSN =
   'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
@@ -161,7 +162,12 @@ if (!telemetryDisabled && isProduction) {
       ) {
         event.fingerprint = ['discord-api-transient'];
       }
-      return event;
+      return scrubSecrets(event); // ROK-1592: redact tokens/secrets last
+    },
+    // ROK-1592: performance transactions (tracesSampleRate) carry request and
+    // span URLs too — e.g. the OAuth callback's `?code=…&state=…`.
+    beforeSendTransaction(event) {
+      return scrubSecrets(event);
     },
     // Filter out pg_catalog type introspection queries from the Postgres driver.
     // These are normal driver behavior (OID-to-JS type mapping) and trigger

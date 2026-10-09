@@ -18,7 +18,7 @@ import {
   InsightsHubPage, InsightsCommunityTab, InsightsEventsTab,
   UserProfilePage, OnboardingWizardPage,
   ProfileLayout, PreferencesPanel,
-  NotificationsPanel, ProfileGameTimePanel,
+  NotificationsPanel, ProfileGameTimePanel, CalendarsPanel,
   CharactersPanel, WatchedGamesPanel,
   AvatarPanel, IntegrationsPanel, AccountPanel,
   AdminSettingsLayout, AdminSetupWizard,
@@ -43,6 +43,7 @@ function ProfileRoutes() {
       <Route path="preferences" element={<PreferencesPanel />} />
       <Route path="notifications" element={<NotificationsPanel />} />
       <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />
+      <Route path="gaming/calendars" element={<CalendarsPanel />} />
       <Route path="gaming/characters" element={<CharactersPanel />} />
       <Route path="gaming/watched-games" element={<WatchedGamesPanel />} />
       <Route path="account" element={<AccountPanel />} />

@@ -22,6 +22,8 @@ vi.mock('../../hooks/use-onboarding-fte', () => ({
 
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: vi.fn(),
+    // ROK-1594: the sidebar reads the Calendar Sync overview, gated on a token.
+    getAuthToken: () => null,
 }));
 
 vi.mock('../../hooks/use-game-time', () => ({

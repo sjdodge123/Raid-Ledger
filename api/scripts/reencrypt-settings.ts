@@ -10,13 +10,19 @@
  *   node dist/scripts/reencrypt-settings.js --old-secret <old> --new-secret <new>
  *
  * The exported `reencryptAllSettings` function is also used by integration tests.
+ *
+ * ROK-1592: also rotates `calendar_connections.credentials_encrypted`
+ * (`reencryptCalendarCredentials`) — without it a JWT_SECRET rotation bricks
+ * every calendar connection. Boot-time script: fatal errors go to Sentry.
  */
 
+import '../src/sentry/instrument'; // MUST be first — installs Sentry handlers
+import * as Sentry from '@sentry/nestjs';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import postgres from 'postgres';
-import { appSettings } from '../src/drizzle/schema';
+import { appSettings, calendarConnections } from '../src/drizzle/schema';
 import {
   deriveKey,
   encryptWithKey,
@@ -87,6 +93,62 @@ async function reencryptRow(
   } catch {
     console.log(
       `[reencrypt]   ⏭️  ${row.key} — skipped (could not decrypt with old key)`,
+    );
+    return false;
+  }
+}
+
+/** Row shape returned by select from calendarConnections (ROK-1592). */
+interface CalendarCredentialRow {
+  id: number;
+  credentialsEncrypted: string;
+}
+
+/**
+ * ROK-1592: re-encrypt every calendar_connections credential blob from oldKey
+ * to newKey. Same skip rule as settings; logs the row id only, never content.
+ */
+export async function reencryptCalendarCredentials(
+  db: DrizzleDb,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<number> {
+  const rows: CalendarCredentialRow[] = await db
+    .select({
+      id: calendarConnections.id,
+      credentialsEncrypted: calendarConnections.credentialsEncrypted,
+    })
+    .from(calendarConnections);
+  let successCount = 0;
+  for (const row of rows) {
+    if (await reencryptCalendarRow(db, row, oldKey, newKey)) successCount++;
+  }
+  console.log(
+    `[reencrypt] calendar_connections: ${successCount}/${rows.length} re-encrypted`,
+  );
+  return successCount;
+}
+
+/** Re-encrypt one connection's credentials. Returns true on success. */
+async function reencryptCalendarRow(
+  db: DrizzleDb,
+  row: CalendarCredentialRow,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<boolean> {
+  try {
+    const plaintext = decryptWithKey(row.credentialsEncrypted, oldKey);
+    await db
+      .update(calendarConnections)
+      .set({
+        credentialsEncrypted: encryptWithKey(plaintext, newKey),
+        updatedAt: new Date(),
+      })
+      .where(eq(calendarConnections.id, row.id));
+    return true;
+  } catch {
+    console.log(
+      `[reencrypt]   ⏭️  calendar_connections#${row.id} — skipped (could not decrypt with old key)`,
     );
     return false;
   }
@@ -169,6 +231,7 @@ async function main(): Promise<void> {
 
   try {
     await reencryptAllSettings(db, oldKey, newKey);
+    await reencryptCalendarCredentials(db, oldKey, newKey);
   } finally {
     await sql.end();
   }
@@ -176,8 +239,10 @@ async function main(): Promise<void> {
 
 // Run main() only when executed directly (not when imported by tests)
 if (require.main === module) {
-  main().catch((err) => {
+  main().catch(async (err: unknown) => {
     console.error('[reencrypt] Fatal error:', err);
+    Sentry.captureException(err, { tags: { context: 'boot.reencrypt' } });
+    await Sentry.flush(2000);
     process.exit(1);
   });
 }

@@ -9,6 +9,7 @@ import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { useItadSettings } from '../../hooks/admin/use-itad-settings';
 import { useCooptimusSettings } from '../../hooks/admin/use-cooptimus-settings';
 import { useAdminCalendarSyncSettings } from '../../hooks/use-admin-calendar-sync';
+import { useCalendarSyncEnabled } from '../../hooks/use-calendar-sync';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
@@ -102,7 +103,8 @@ export function ProfileSubmenuContent({ pathname, onClose, onOpenGameTime }: {
     const navigate = useNavigate();
     const { user } = useAuth();
     const resetOnboarding = useResetOnboarding();
-    const sections = getSections(user?.id ?? 0);
+    const calendars = useCalendarSyncEnabled();
+    const sections = getSections(user?.id ?? 0, { calendars });
     // The drawer is `md:hidden`, so this summary is phone-only by construction.
     const { data: week } = useGameTime();
     const gameTime: GameTimeRowData = {

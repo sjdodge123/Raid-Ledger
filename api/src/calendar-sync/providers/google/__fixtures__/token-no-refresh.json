@@ -1,0 +1,7 @@
+{
+  "access_token": "ya29.FAKE-ACCESS-TOKEN-fixture",
+  "expires_in": 3599,
+  "scope": "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/calendar.app.created",
+  "token_type": "Bearer",
+  "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImZha2Uta2lkIiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL2FjY291bnRzLmdvb2dsZS5jb20iLCJhenAiOiJmYWtlLWNsaWVudC1pZC5hcHBzLmdvb2dsZXVzZXJjb250ZW50LmNvbSIsImF1ZCI6ImZha2UtY2xpZW50LWlkLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29tIiwic3ViIjoiMTA5ODc2NTQzMjEwOTg3NjU0MzIxIiwiZW1haWwiOiJyYWlkZXJAZXhhbXBsZS50ZXN0IiwiZW1haWxfdmVyaWZpZWQiOnRydWUsImlhdCI6NDEwMjQ0MTIwMCwiZXhwIjo0MTAyNDQ0ODAwfQ.ZmFrZS1zaWduYXR1cmU"
+}

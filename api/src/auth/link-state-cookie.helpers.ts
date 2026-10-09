@@ -4,6 +4,14 @@ import {
   LINK_REQUEST_EXPIRED_MESSAGE,
   type LinkProvider,
 } from './link-nonce.service';
+
+/**
+ * Flows that bind an OAuth state to the browser: the two account links, plus
+ * Calendar Sync's Google connect (ROK-1592 L4). Calendar has no link-start
+ * nonce, so it widens this type, not `LinkProvider` (whose JWT purposes are
+ * per link flow).
+ */
+export type LinkStateProvider = LinkProvider | 'calendar-google';
 import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
 
 /**
@@ -28,7 +36,7 @@ import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
 /** Matches the 10-minute signed-state age limit on both providers. */
 export const LINK_STATE_TTL_MS = 10 * 60 * 1000;
 
-export function linkStateCookieName(provider: LinkProvider): string {
+export function linkStateCookieName(provider: LinkStateProvider): string {
   return `rl_link_state_${provider}`;
 }
 
@@ -42,7 +50,7 @@ function sha256(value: string): string {
  */
 export function bindLinkStateToBrowser(
   res: Response,
-  provider: LinkProvider,
+  provider: LinkStateProvider,
 ): string {
   const r = crypto.randomBytes(32).toString('base64url');
   res.cookie(linkStateCookieName(provider), sha256(r), {
@@ -55,7 +63,7 @@ export function bindLinkStateToBrowser(
 /** Constant-time: does this browser hold the cookie for the state's `r`? */
 function stateCookieMatches(
   req: Request,
-  provider: LinkProvider,
+  provider: LinkStateProvider,
   r: unknown,
 ): boolean {
   if (typeof r !== 'string' || r.length === 0) return false;
@@ -75,7 +83,7 @@ function stateCookieMatches(
 export function assertLinkStateBoundToBrowser(
   req: Request,
   res: Response,
-  provider: LinkProvider,
+  provider: LinkStateProvider,
   r: unknown,
 ): void {
   if (!stateCookieMatches(req, provider, r)) {

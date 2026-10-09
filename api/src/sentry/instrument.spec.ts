@@ -143,6 +143,15 @@ function describeSentryInstrumentTs() {
       expect(regex.test('pg_catalog.pg_type')).toBe(true);
     });
 
+    it('ROK-1592: beforeSendTransaction runs scrubSecrets (spans: scrub spec)', () => {
+      const hook = initConfig(sentryInitMock)['beforeSendTransaction'];
+      const url = '/cb?code=SECRET-CODE&state=SECRET-STATE';
+      const out = (hook as (e: object) => unknown)({
+        spans: [{ description: url }],
+      });
+      expect(JSON.stringify(out)).not.toMatch(/SECRET-CODE|SECRET-STATE/);
+    });
+
     describe('beforeSend filter', () => {
       type SentryEvent = {
         exception?: { values?: { type?: string; value?: string }[] };
