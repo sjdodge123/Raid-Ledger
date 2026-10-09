@@ -58,7 +58,7 @@ export function ConnectivityBanner() {
     if (status !== 'offline' || !hasBeenOnline || dismissed) return null;
 
     return (
-        <div className="sticky top-0 z-50 flex items-center justify-between gap-2 bg-amber-600 px-4 py-2 text-sm text-white shadow-md">
+        <div className="sticky top-0 z-50 flex items-center justify-between gap-2 bg-warning px-4 py-2 text-sm text-white shadow-md">
             <span>
                 Unable to reach the server — retrying...
                 {elapsed && <span className="ml-2 opacity-80">({elapsed} ago)</span>}
@@ -66,7 +66,7 @@ export function ConnectivityBanner() {
             <button
                 type="button"
                 onClick={() => setDismissed(true)}
-                className="shrink-0 rounded p-1 hover:bg-amber-700 transition-colors"
+                className="shrink-0 rounded p-1 hover:bg-backdrop/20 transition-colors"
                 aria-label="Dismiss connectivity warning"
             >
                 <CloseIcon />

@@ -31,5 +31,15 @@
   "pages/admin/discord-connection-page.tsx": "\"Manage Plugins\" brand link text-emerald-400",
   "pages/admin/discord-overview-page.tsx": "\"Manage Plugins\" brand link + \"Send Test Message\" brand solid CTA emerald-600/500/800 (Button primary fill); setup progress bar (progress/data bar, raw brand like every other data bar)",
   "pages/admin/logs-panel.tsx": "Log-source service badges: api blue, nginx emerald, postgresql purple, redis orange, supervisor amber, slow-queries rose (categorical service identity)",
-  "pages/admin/plugins/PluginCard.tsx": "Solid action fills: Install/Activate emerald-600 (Button primary), Deactivate amber-600 (accent fill); status pills already on tokens (S0)"
+  "pages/admin/plugins/PluginCard.tsx": "Solid action fills: Install/Activate emerald-600 (Button primary), Deactivate amber-600 (accent fill); status pills already on tokens (S0)",
+  "components/layout/Header.tsx": "Brand chrome: active nav link and logo hover emerald, Login primary bg-emerald-600 fill (design-system §2.2); no status",
+  "components/layout/bottom-tab-bar.tsx": "Active-tab brand accent (emerald text + indicator bar); selection, not success",
+  "components/layout/more-drawer-submenus.tsx": "Active submenu item brand accent (emerald text + tint); selection, not success",
+  "components/ui/StartupGate.tsx": "Brand loading spinner (border-t-emerald-500) and the primary Retry fill (bg-emerald-600, design-system §2.2 solid accent button); no status",
+  "components/ui/button.tsx": "Button primary bg-emerald-600 / destructive bg-red-600 solid fills — the sanctioned raw accent buttons index.css keys its light repaint + forced-white label to (design-system §2.2)",
+  "components/ui/fab.tsx": "Primary FAB: bg-emerald-600 solid accent fill + its emerald glow and hover (design-system §2.2 solid accent button); brand, not success",
+  "components/ui/loading-spinner.tsx": "Brand loading spinner arc (border-t-emerald-500); promises nothing",
+  "components/ui/markdown-text.tsx": "Brand link colour in rendered markdown (text-emerald-400); not a status",
+  "components/ui/pull-to-refresh.tsx": "Brand refresh spinner (text-emerald-400); promises nothing",
+  "components/ui/role-badge.tsx": "User role identity badges — Admin amber, Operator emerald (ROK-272); a role category, not a status"
 }
