@@ -151,6 +151,7 @@ its error is now a `role="alert"` `text-danger` line, ROK-1651); the rest of the
   what the dark family already paints, and the light fill (`#065f46`, white 7.68:1) is darker than the dark one, so the
   label only gains contrast there (`JourneyHero.tsx:163`). This is the one
   exception to the `design-system-tokens.md` §1 "use `text-foreground` on a solid accent" rule.
+- **Hover on a solid status fill is the same token at `/90`** (`bg-danger hover:bg-danger/90`, `bg-warning hover:bg-warning/90` — `HeroNextStep` aborted / privacy actions, TDB:1770 S6). The label stays on `--color-status-solid-label` because `index.css` matches the `bg-*` utility, and a 10 % lift over the panel keeps every scheme's label ≥ 4.5:1; do not reach for a lighter shade (`-400`) or a tint (`/20`) — those are the soft-button idiom, not the solid one.
 - **DON'T put `text-white` on a raw `bg-emerald-500` / `bg-amber-500` / `bg-cyan-500` (any `/NN`) or `bg-cyan-600`.** None is
   repainted on the light schemes and white measures 2.2–3.6:1 on them (the `/games` "Best Price" chip was
   2.3:1, "You own" 2.34:1). Status chips use `bg-success` / `bg-warning` + `text-white` (`PriceBadge`, `OwnerBadge`,

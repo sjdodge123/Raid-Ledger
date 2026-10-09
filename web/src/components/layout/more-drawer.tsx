@@ -256,7 +256,7 @@ function MoreDrawerBody({ s, onClose, onFeedbackClick, onOpenGameTime }: {
             {s.isImpersonating && <ExitImpersonationButton onExit={s.handleExitImpersonation} />}
             {s.isAuthenticated && (
                 <div className="px-4 py-6 border-t border-edge-subtle">
-                    <button onClick={s.handleLogout} className="w-full px-4 py-3 bg-danger/10 text-danger font-medium rounded-lg hover:bg-danger/20 transition-colors" data-testid="more-drawer-logout">Logout</button>
+                    <button onClick={s.handleLogout} className="w-full px-4 py-3 bg-danger/10 text-danger font-medium rounded-lg hover:bg-danger/15 transition-colors" data-testid="more-drawer-logout">Logout</button>
                 </div>
             )}
         </div>
