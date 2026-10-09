@@ -46,36 +46,64 @@ function toId(field: string | undefined): number | null {
   return n > 0 && n <= INT4_MAX ? n : null;
 }
 
-/**
- * Parse `|Hitem:itemID:enchant:gem1..4:suffix:unique:linkLevel:spec:
- * modifiersMask:context:numBonusIDs:bonus1…|h`. Anything malformed yields
- * `itemId: null` / `bonusIds: []` rather than throwing.
- */
-export function parseItemLink(link: string): {
+/** Item link fields 1 (enchant) and 2-5 (gems); 0/empty = none. */
+const ENCHANT_FIELD = 1;
+const GEM_FIELDS = [2, 3, 4, 5] as const;
+
+export interface ParsedItemLink {
   itemId: number | null;
   bonusIds: number[];
-} {
-  const match = ITEM_LINK_RE.exec(link);
-  if (!match) return { itemId: null, bonusIds: [] };
-  const fields = (match[1] ?? '').split(':');
-  const itemId = toId(fields[0]);
+  /** Absent when the link carries no enchant. */
+  enchantId?: number;
+  /** Absent when the link carries no gem. */
+  gemIds?: number[];
+}
+
+function parseBonusIds(fields: string[]): number[] {
   const count = toId(fields[BONUS_COUNT_FIELD]);
-  if (count === null || count > MAX_BONUS_IDS) return { itemId, bonusIds: [] };
+  if (count === null || count > MAX_BONUS_IDS) return [];
   const raw = fields.slice(
     BONUS_COUNT_FIELD + 1,
     BONUS_COUNT_FIELD + 1 + count,
   );
   const ids = raw.map(toId);
-  if (ids.length !== count || ids.some((id) => id === null)) {
-    return { itemId, bonusIds: [] };
-  }
-  return { itemId, bonusIds: ids as number[] };
+  if (ids.length !== count || ids.some((id) => id === null)) return [];
+  return ids as number[];
+}
+
+function parseSockets(
+  fields: string[],
+): Omit<ParsedItemLink, 'itemId' | 'bonusIds'> {
+  const enchantId = toId(fields[ENCHANT_FIELD]);
+  const gemIds = GEM_FIELDS.map((i) => toId(fields[i])).filter(
+    (id): id is number => id !== null,
+  );
+  return {
+    ...(enchantId !== null ? { enchantId } : {}),
+    ...(gemIds.length > 0 ? { gemIds } : {}),
+  };
+}
+
+/**
+ * Parse `|Hitem:itemID:enchant:gem1..4:suffix:unique:linkLevel:spec:
+ * modifiersMask:context:numBonusIDs:bonus1…|h`. Anything malformed yields
+ * `itemId: null` / `bonusIds: []` / no enchant or gems rather than throwing.
+ */
+export function parseItemLink(link: string): ParsedItemLink {
+  const match = ITEM_LINK_RE.exec(link);
+  if (!match) return { itemId: null, bonusIds: [] };
+  const fields = (match[1] ?? '').split(':');
+  return {
+    itemId: toId(fields[0]),
+    bonusIds: parseBonusIds(fields),
+    ...parseSockets(fields),
+  };
 }
 
 function toSnapshotGear(
   item: AddonCharData['gear'][number],
 ): AddonSnapshotGearItem {
-  const parsed = item.link
+  const parsed: ParsedItemLink = item.link
     ? parseItemLink(item.link)
     : { itemId: null, bonusIds: [] };
   const itemId = item.itemId ?? parsed.itemId ?? undefined;
@@ -84,12 +112,15 @@ function toSnapshotGear(
     ...(itemId !== undefined ? { itemId } : {}),
     ...(item.ilvl !== undefined ? { ilvl: item.ilvl } : {}),
     bonusIds: parsed.bonusIds,
+    ...(parsed.enchantId !== undefined ? { enchantId: parsed.enchantId } : {}),
+    ...(parsed.gemIds ? { gemIds: parsed.gemIds } : {}),
   };
 }
 
 /**
- * Char `data` → the FROZEN `character_addon_snapshots.data` shape: gear
- * links parsed to `bonusIds` and dropped, every display string stripped.
+ * Char `data` → the FROZEN `character_addon_snapshots.data` shape (schema
+ * 2): gear links parsed to `bonusIds`/`enchantId`/`gemIds` and dropped,
+ * `quests` and named talent nodes kept, every display string stripped.
  * Re-validated against the frozen schema so a drift fails loudly here.
  */
 export function toCharSnapshotData(data: AddonCharData): AddonCharSnapshotData {
@@ -97,6 +128,8 @@ export function toCharSnapshotData(data: AddonCharData): AddonCharSnapshotData {
     gear: data.gear.map(toSnapshotGear),
     talents: data.talents,
     lockouts: data.lockouts,
+    // Omitted when absent so schema-1-shaped exports stay byte-identical.
+    ...(data.quests ? { quests: data.quests } : {}),
   });
   return AddonCharSnapshotDataSchema.parse(shaped);
 }

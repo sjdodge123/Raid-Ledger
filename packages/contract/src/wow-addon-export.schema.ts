@@ -250,11 +250,19 @@ export type AddonGuildExport = z.infer<typeof AddonGuildExportSchema>;
 export type AddonRaidExport = z.infer<typeof AddonRaidExportSchema>;
 
 // ============================================================
-// FROZEN: `character_addon_snapshots.data` (section 'char', schema 1).
+// FROZEN: `character_addon_snapshots.data` (section 'char').
 // ROK-1727 reads this shape. The import sanitises display strings and
 // replaces each gear `link` with its parsed `bonusIds`; the link itself is
 // never stored. Changing this shape needs a new `schema` number.
+// Schema 2 (ROK-1742) = schema 1 + optional `quests`, talent node
+// name/spell/position keys, gear `enchantId?/gemIds?`; schema-1 rows parse
+// unchanged.
 // ============================================================
+
+/** `character_addon_snapshots.schema` written for every new `char` row. */
+export const ADDON_CHAR_SNAPSHOT_SCHEMA = 2;
+/** Snapshot schema numbers a reader must accept. */
+export const AddonCharSnapshotSchemaNumberSchema = z.union([z.literal(1), z.literal(2)]);
 
 export const AddonSnapshotGearItemSchema = z.object({
     slot: z.number().int().min(1).max(19),
@@ -262,6 +270,10 @@ export const AddonSnapshotGearItemSchema = z.object({
     ilvl: count.optional(),
     /** Parsed from the item link; empty when there was no link. */
     bonusIds: z.array(z.number().int()).max(32),
+    /** Schema 2: link field 1, omitted when 0/absent. */
+    enchantId: id.optional(),
+    /** Schema 2: link fields 2-5, non-empty ids only; omitted when none. */
+    gemIds: z.array(id).max(4).optional(),
 }).strict();
 export type AddonSnapshotGearItem = z.infer<typeof AddonSnapshotGearItemSchema>;
 
@@ -269,5 +281,6 @@ export const AddonCharSnapshotDataSchema = z.object({
     gear: z.array(AddonSnapshotGearItemSchema).max(19),
     talents: AddonTalentsSchema,
     lockouts: z.array(AddonLockoutSchema).max(100),
+    quests: AddonQuestsSchema.optional(),
 }).strict();
 export type AddonCharSnapshotData = z.infer<typeof AddonCharSnapshotDataSchema>;
