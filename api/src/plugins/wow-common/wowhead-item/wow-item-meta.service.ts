@@ -9,6 +9,7 @@ import {
   defaultResolverDeps,
   resolveItem,
   WOWHEAD_RESOLVER_DEPS,
+  WowheadResolverDisabledError,
   type WowheadResolverDeps,
 } from './wow-item-meta.resolve';
 import type { WowItemMetaInsert, WowItemMetaRow } from './wowhead-item.types';
@@ -42,7 +43,11 @@ export class WowItemMetaService {
     @Inject(WOWHEAD_RESOLVER_DEPS)
     deps?: Partial<WowheadResolverDeps>,
   ) {
-    this.deps = { ...defaultResolverDeps(), ...deps };
+    this.deps = {
+      ...defaultResolverDeps(),
+      isEnabled: () => this.isEnabled(),
+      ...deps,
+    };
   }
 
   /** Cached rows for `ids` (one select), keyed by item id. */
@@ -100,17 +105,28 @@ export class WowItemMetaService {
     const results = await Promise.all(
       fresh.map((id) => this.resolveOne(id, meta.get(id)?.attempts ?? 0)),
     );
-    return results.filter(Boolean).length;
+    const stopped = results.filter((r) => r === 'disabled').length;
+    if (stopped > 0) {
+      this.logger.log(
+        `Wowhead resolver switched off mid-run; ${stopped} item(s) left untouched`,
+      );
+    }
+    return results.filter((r) => r === 'written').length;
   }
 
-  private async resolveOne(id: number, attempts: number): Promise<boolean> {
+  /** `disabled` = the kill switch flipped off before this item's fetch. */
+  private async resolveOne(
+    id: number,
+    attempts: number,
+  ): Promise<'written' | 'failed' | 'disabled'> {
     try {
       await this.upsert(await resolveItem(id, attempts, this.deps));
-      return true;
+      return 'written';
     } catch (err: unknown) {
+      if (err instanceof WowheadResolverDisabledError) return 'disabled';
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Wowhead item ${id} not stored: ${msg}`);
-      return false;
+      return 'failed';
     } finally {
       this.inFlight.delete(id);
     }

@@ -213,6 +213,28 @@ describe('WowItemMetaService — due selection + kill switch (ROK-1727)', () => 
     expect(writes).toEqual([]);
   });
 
+  it('kill switch flipped off mid-batch → exactly one fetch, the rest untouched, one log line', async () => {
+    const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
+    const due = [
+      row({ itemId: 5, nextRetryAt: after(-HOUR) }),
+      row({ itemId: 6, nextRetryAt: after(-HOUR) }),
+      row({ itemId: 7, nextRetryAt: after(-HOUR) }),
+    ];
+    const { service, writes, settings } = setup({ fetch, due });
+    // retryDue gate + item 5's pre-fetch check see ON; everything after, OFF.
+    settings.get
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue('false');
+    const log = jest
+      .spyOn(service['logger'], 'log')
+      .mockImplementation(() => undefined);
+    await expect(service.retryDue()).resolves.toBe(1);
+    expect(fetch.fn).toHaveBeenCalledTimes(1);
+    expect(writes.map((w) => w.row.itemId)).toEqual([5]);
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
   it('kill switch unset → ON (D2)', async () => {
     const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
     const { service } = setup({ fetch, setting: null });

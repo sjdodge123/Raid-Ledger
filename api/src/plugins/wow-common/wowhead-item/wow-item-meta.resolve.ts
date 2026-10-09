@@ -33,6 +33,16 @@ export interface WowheadResolverDeps {
   limiter: WowheadLimiter;
   wait: (ms: number) => Promise<void>;
   now: () => Date;
+  /** Kill switch, re-read before EVERY scheduled fetch (Codex MEDIUM). */
+  isEnabled: () => Promise<boolean>;
+}
+
+/** Thrown inside a limiter task when the kill switch is off: stop, write nothing. */
+export class WowheadResolverDisabledError extends Error {
+  constructor() {
+    super('Wowhead resolver switched off');
+    this.name = 'WowheadResolverDisabledError';
+  }
 }
 
 /** Nest token for overriding {@link WowheadResolverDeps} in tests. */
@@ -44,6 +54,7 @@ export function defaultResolverDeps(): WowheadResolverDeps {
     limiter: createWowheadLimiter(),
     wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now: () => new Date(),
+    isEnabled: () => Promise.resolve(true),
   };
 }
 
@@ -56,9 +67,10 @@ async function fetchWithRetry(
   let last: WowheadFetchResult = { kind: 'retryable', status: null };
   for (let tries = 0; tries < WOWHEAD_MAX_TRIES_PER_RUN; tries++) {
     if (tries > 0) await deps.wait(retryDelayMs(tries));
-    last = await deps.limiter.schedule(() =>
-      wowheadFetch.fetchWowheadItem(itemId, env, deps.fetchFn),
-    );
+    last = await deps.limiter.schedule(async () => {
+      if (!(await deps.isEnabled())) throw new WowheadResolverDisabledError();
+      return wowheadFetch.fetchWowheadItem(itemId, env, deps.fetchFn);
+    });
     if (last.kind !== 'retryable') return last;
   }
   return last;

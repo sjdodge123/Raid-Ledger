@@ -16,7 +16,11 @@ import { createWowheadLimiter } from '../../plugins/wow-common/wowhead-item/wowh
 /** The 404 body Wowhead returns for an unknown item. */
 export const WOWHEAD_MISS_BODY = { error: 'Entity not found' };
 
-export interface NoNetworkWowheadDeps extends WowheadResolverDeps {
+/** No `isEnabled`: the service's real kill-switch read stays in force. */
+export interface NoNetworkWowheadDeps extends Omit<
+  WowheadResolverDeps,
+  'isEnabled'
+> {
   /** Every URL the resolver asked for, in order. */
   readonly calls: string[];
 }
