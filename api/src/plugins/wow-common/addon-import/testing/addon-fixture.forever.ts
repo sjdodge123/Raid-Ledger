@@ -1,7 +1,8 @@
-import type {
-  AddonCharExport,
-  AddonQuests,
-  AddonTalentNode,
+import {
+  ADDON_QUESTS_COMPLETED_MAX,
+  type AddonCharExport,
+  type AddonQuests,
+  type AddonTalentNode,
 } from '@raid-ledger/contract';
 import { buildCharPayload, buildWho } from './addon-fixture.builder';
 
@@ -72,7 +73,7 @@ export function buildForeverTalentNodes(): AddonTalentNode[] {
   return FOREVER_TALENT_NODES.map((n) => ({ ...n }));
 }
 
-/** 40 completed ids (the level-8 probe saw 40) + 3 quests in the log. */
+/** `count` completed ids (the level-8 probe saw 40) + 3 quests in the log. */
 const IN_PROGRESS: AddonQuests['inProgress'] = [
   {
     questId: 2459,
@@ -99,8 +100,8 @@ const IN_PROGRESS: AddonQuests['inProgress'] = [
   { questId: 6344, title: 'Nessa Shadowsong' },
 ];
 
-export function buildQuests(): AddonQuests {
-  const completed = Array.from({ length: 40 }, (_, i) => 456 + i * 7);
+export function buildQuests(count = 40): AddonQuests {
+  const completed = Array.from({ length: count }, (_, i) => 456 + i * 7);
   return { completed, inProgress: structuredClone(IN_PROGRESS) };
 }
 
@@ -108,20 +109,44 @@ function foreverWho(gender: 'male' | 'female') {
   return buildWho({ class: 'WARRIOR', race: 'NightElf', gender, level: 8 });
 }
 
-/** Named + positioned talent nodes, `gender: male`, no quests. */
-export function buildForeverTalentsPayload(): AddonCharExport {
-  const base = buildCharPayload({ who: foreverWho('male') });
-  return {
-    ...base,
-    data: {
-      ...base.data,
-      talents: { configId: 7, nodes: buildForeverTalentNodes() },
-    },
-  };
+/**
+ * Enchanted + socketed links (link fields 1 and 2-5) so the fixtures pin
+ * the snapshot-2 `enchantId` / `gemIds` parse; ids are game data.
+ */
+export const FOREVER_ENCHANTED_LINK =
+  '|cff0070dd|Hitem:6120:1900:2000::::::8:0:0:0:1:7890|h[Recruit Shirt]|h|r';
+export const FOREVER_SOCKETED_LINK =
+  '|cff1eff00|Hitem:2105:0:3000:3001:::::8|h[Thug Shirt]|h|r';
+
+function foreverGear(): AddonCharExport['data']['gear'] {
+  return [
+    { slot: 5, link: FOREVER_ENCHANTED_LINK, ilvl: 5 },
+    { slot: 4, link: FOREVER_SOCKETED_LINK, ilvl: 4 },
+    { slot: 1, itemId: 16921, ilvl: 76 },
+  ];
 }
 
-/** `data.quests` present, `gender: female`. */
-export function buildForeverQuestsPayload(): AddonCharExport {
-  const base = buildCharPayload({ who: foreverWho('female') });
-  return { ...base, data: { ...base.data, quests: buildQuests() } };
+function foreverChar(
+  gender: 'male' | 'female',
+  data: Partial<AddonCharExport['data']>,
+): AddonCharExport {
+  const base = buildCharPayload({ who: foreverWho(gender) });
+  return { ...base, data: { ...base.data, gear: foreverGear(), ...data } };
+}
+
+/** Named + positioned talent nodes, `gender: male`, no quests. */
+export function buildForeverTalentsPayload(): AddonCharExport {
+  return foreverChar('male', {
+    talents: { configId: 7, nodes: buildForeverTalentNodes() },
+  });
+}
+
+/**
+ * `data.quests` present with `completed` at `ADDON_QUESTS_COMPLETED_MAX`
+ * (proves > 2000 is accepted, Lead ruling 1), `gender: female`.
+ */
+export function buildForeverQuestsPayload(
+  completed = ADDON_QUESTS_COMPLETED_MAX,
+): AddonCharExport {
+  return foreverChar('female', { quests: buildQuests(completed) });
 }

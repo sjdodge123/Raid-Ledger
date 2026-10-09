@@ -22,9 +22,12 @@ Newest first. Every entry states **additive** or **breaking** (see
 - Talent position rule: CONTRACT.md §3. Raw `posX` / `posY` are
   authoritative; `tree` / `row` / `col` are the addon's derived hint (the
   pixel → index mapping is UNVERIFIED beyond Warrior).
-- Fixtures: new valid `char-forever-quests`, `char-forever-talents-named`;
-  new invalid `gender-unknown-value`. Every existing fixture unchanged
-  byte-for-byte.
+- Fixtures: new valid `char-forever-quests` (`completed` at the 10 000 cap,
+  enchanted + socketed gear links), `char-forever-talents-named`; new
+  invalid `gender-unknown-value`, `quests-completed-over-cap` (10 001 ids).
+  Every existing fixture unchanged byte-for-byte. Server-side only: the
+  stored snapshot (schema 2) also keeps `enchantId` / `gemIds` parsed from
+  the gear link; the wire format is unaffected.
 
 ## v1 — 2026-10-07 — two apply-time error codes — **additive**
 

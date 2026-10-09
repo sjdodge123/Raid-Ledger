@@ -28,7 +28,8 @@
     "section": "char",
     "data": {
       "gear": [
-        {"slot":16,"itemId":19019,"ilvl":80,"bonusIds":[6646,7890]},
+        {"slot":5,"itemId":6120,"ilvl":5,"bonusIds":[7890],"enchantId":1900,"gemIds":[2000]},
+        {"slot":4,"itemId":2105,"ilvl":4,"bonusIds":[],"gemIds":[3000,3001]},
         {"slot":1,"itemId":16921,"ilvl":76,"bonusIds":[]}
       ],
       "talents": {

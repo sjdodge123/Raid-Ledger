@@ -85,6 +85,7 @@ describe('LedgerLink v1 golden fixtures — invalid', () => {
         'mixed-different-exporters',
         'mixed-11-tokens',
         'gender-unknown-value',
+        'quests-completed-over-cap',
       ]),
     );
   });
