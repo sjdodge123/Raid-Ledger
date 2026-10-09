@@ -58,5 +58,13 @@
   "components/games/game-card-constants.ts": "Rating band ramp: mid yellow-500/90 + black, low deliberately red-700 + white (TDB:2052 final ruling; rating bands are a data scale)",
   "components/games/game-card-parts.tsx": "Heart (want-to-play) icon red fill (a favourite marker, not danger)",
   "components/games/unified-game-card-parts.tsx": "Steam-available corner chip: emerald Steam glyph on a black/50 art chip (brand/store marker)",
-  "components/games/unified-game-card.tsx": "Card hover + toggle-selected border/glow emerald (selection accent)"
+  "components/games/unified-game-card.tsx": "Card hover + toggle-selected border/glow emerald (selection accent)",
+  "pages/game-detail-page.tsx": "Kept: \"Want to Play\" toggle (heart-on red tint matching the card heart; brand solid bg-emerald-600 primary off-state) and brand links; Game Not Found error box is on danger tokens",
+  "pages/game-detail/CommunityActivitySection.tsx": "Period toggle selected segment brand solid bg-emerald-600 (selection accent) and \"N playing now\" presence accent (not a success state)",
+  "pages/game-detail/CoopProseBlocks.tsx": "\"Show more\" brand link text-emerald-400",
+  "pages/game-detail/GameBanner.tsx": "Rating band pill (75+/50+/below: a data scale like getRatingClasses) and \"View on Steam\" brand link; crossplay Supported is on text-success",
+  "pages/game-detail/GamePricingSummary.tsx": "Price/deal data accents: current-best price and discount chip emerald (an on-sale deal is not success), ITAD brand link, historical-low yellow trend icon",
+  "pages/game-detail/game-detail-lfg-banner.tsx": "LFG state hues matching lfg-chip.tsx: emerald group formed (LFM) / amber still recruiting (LFG) — a category pair, still raw in the chip",
+  "pages/game-detail/lfg-toggle-button.tsx": "LFG toggle on-state solid amber-300/95 + amber-950 (chip-on selection accent, same tonal pill as YouWishlistedBadge) and amber idle hover border",
+  "pages/game-detail/taste-vector/AxisBreakdown.tsx": "Taste-vector axis bar fill bg-emerald-500 (progress/data bar)"
 }
