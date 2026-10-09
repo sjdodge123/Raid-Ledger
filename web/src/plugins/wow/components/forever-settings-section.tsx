@@ -25,11 +25,11 @@ type SaveDto = Parameters<SaveFn>[0];
  * until the contract's forever-config schema carries `wowheadResolverEnabled`;
  * unset means ON (Lead decision D2).
  */
-type SavedConfig = WowForeverConfigResponseDto & { wowheadResolverEnabled?: boolean };
+type SavedConfig = WowForeverConfigResponseDto & { wowheadResolverEnabled?: boolean | undefined };
 
 /** The saved config as a PUT body, so one switch never resets another setting. */
-function savedDto(saved: SavedConfig, patch: Partial<SaveDto> & { wowheadResolverEnabled?: boolean }): SaveDto {
-    const dto: SaveDto & { wowheadResolverEnabled?: boolean } = {
+function savedDto(saved: SavedConfig, patch: Partial<SaveDto> & { wowheadResolverEnabled?: boolean | undefined }): SaveDto {
+    const dto: SaveDto & { wowheadResolverEnabled?: boolean | undefined } = {
         namespacePrefix: saved.namespacePrefix,
         armoryImportEnabled: saved.armoryImportEnabled,
         ...(saved.wowheadResolverEnabled !== undefined && { wowheadResolverEnabled: saved.wowheadResolverEnabled }),
