@@ -13,6 +13,7 @@ import {
   sameName,
   titleCaseClass,
 } from './addon-import.binding-name';
+import { raceDisplayName } from './addon-import.race';
 
 /**
  * ROK-1724 §4.3 Binding — pure: decides whether a decoded export may land on
@@ -143,14 +144,16 @@ function rulesetOutcome(
 
 /**
  * ROK-1742 R9 — race/gender follow the export: written when present and
- * different. An absent `who.gender` (UnitSex unknown) never clears a stored one.
+ * different, the addon token mapped to the Armory display name (Night Elf,
+ * Undead) first. An absent `who.gender` (UnitSex unknown) never clears a stored one.
  */
 function raceGenderOutcome(
   who: AddonWho,
   character: AddonBindingCharacter,
   result: AddonBindingResult,
 ): void {
-  if (who.race && who.race !== character.race) result.setRace = who.race;
+  const race = who.race ? raceDisplayName(who.race) : null;
+  if (race && race !== character.race) result.setRace = race;
   if (who.gender && who.gender !== character.gender) {
     result.setGender = who.gender;
   }

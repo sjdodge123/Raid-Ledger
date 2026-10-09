@@ -300,6 +300,24 @@ describe('bindToCharacter — race + gender (ROK-1742 R9)', () => {
     expect(r.setGender).toBeUndefined();
   });
 
+  it('maps the race token to the Armory display name before writing', () => {
+    const r = bindToCharacter(
+      payload({ race: 'NightElf' }),
+      char({ race: null }),
+      APPLY,
+    );
+    expect(r.setRace).toBe('Night Elf');
+  });
+
+  it('a token matching the stored display name is not a change', () => {
+    const r = bindToCharacter(
+      payload({ race: 'Scourge' }),
+      char({ race: 'Undead' }),
+      APPLY,
+    );
+    expect(r.setRace).toBeUndefined();
+  });
+
   it('an absent who.gender never clears a stored gender', () => {
     const r = bindToCharacter(payload(), char({ gender: 'female' }), APPLY);
     expect(r.setGender).toBeUndefined();

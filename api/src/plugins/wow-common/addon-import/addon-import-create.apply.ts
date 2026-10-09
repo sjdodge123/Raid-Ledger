@@ -19,6 +19,7 @@ import {
   targetDto,
 } from './addon-import-create.helpers';
 import { titleCaseClass } from './addon-import.binding-name';
+import { raceDisplayName } from './addon-import.race';
 import type { DecodedAddonPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import type { AddonImportTx } from './addon-import-apply.types';
@@ -86,7 +87,7 @@ export function previewCharacter(input: CreateImportInput): LoadedCharacter {
       class: titleCaseClass(who.class),
       level: who.level,
       addonGuid: who.guid,
-      race: who.race,
+      race: raceDisplayName(who.race),
       gender: who.gender ?? null,
     },
   };

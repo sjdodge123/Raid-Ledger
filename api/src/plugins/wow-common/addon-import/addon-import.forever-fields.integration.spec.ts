@@ -157,7 +157,7 @@ describe('addon import — Forever fields (ROK-1742)', () => {
     await apply(token, charId, fixtureText('char-forever-quests'));
     const after = await characterRow(charId);
     expect({ race: after.race, gender: after.gender }).toEqual({
-      race: 'NightElf',
+      race: 'Night Elf',
       gender: 'female',
     });
     expect(after.lastSyncedAt).toEqual(before.lastSyncedAt);
