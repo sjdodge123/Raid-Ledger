@@ -17,14 +17,14 @@ function DiscordLinkedStatus({ user }: {
 }): JSX.Element {
     const avatarUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
     return (
-        <div className="flex items-center gap-4 p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+        <div className="flex items-center gap-4 p-4 rounded-lg bg-success/5 border border-success/20">
             {avatarUrl && (
-                <img src={avatarUrl} alt="Discord avatar" className="w-12 h-12 rounded-full border-2 border-emerald-500/50"
+                <img src={avatarUrl} alt="Discord avatar" className="w-12 h-12 rounded-full border-2 border-success/50"
                     onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }} />
             )}
             <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-foreground">{user.username}</p>
-                <p className="text-xs text-emerald-400">Discord linked</p>
+                <p className="text-xs text-success">Discord linked</p>
             </div>
         </div>
     );
