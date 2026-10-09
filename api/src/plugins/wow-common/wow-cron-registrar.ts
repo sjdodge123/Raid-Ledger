@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CharactersService } from '../../characters/characters.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
+import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
 import type { ForeverProbeResultDto } from '@raid-ledger/contract';
@@ -19,6 +20,7 @@ export class WowCronRegistrar implements CronRegistrar {
     private readonly charactersService: CharactersService,
     private readonly bossDataRefresh: BossDataRefreshService,
     private readonly foreverProbe: ForeverNamespaceProbeService,
+    private readonly itemMeta: WowItemMetaService,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
@@ -46,6 +48,14 @@ export class WowCronRegistrar implements CronRegistrar {
         cronExpression: '0 30 * * * *',
         handler: async () =>
           throwOnProbeError(await this.foreverProbe.runIfInLaunchWindow()),
+      },
+      {
+        name: 'wowhead-item-retry',
+        // Daily at 5:15 AM — re-probe due Wowhead item rows (ROK-1727)
+        cronExpression: '0 15 5 * * *',
+        handler: async () => {
+          await this.itemMeta.retryDue();
+        },
       },
     ];
   }

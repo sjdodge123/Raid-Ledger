@@ -25,6 +25,10 @@ import {
   WOW_FOREVER_NAMESPACE_PREFIX_KEY,
   type WowForeverConfigUpdatedPayload,
 } from './forever.settings';
+import {
+  isWowheadResolverEnabled,
+  setWowheadResolverEnabled,
+} from './wowhead-item/wowhead-resolver.settings';
 
 /**
  * Admin-controlled WoW: Forever runtime config (ROK-1717): the Blizzard
@@ -63,6 +67,7 @@ export class ForeverConfigService implements OnModuleInit {
       namespacePrefix,
       namespacePrefixIsDefault: namespacePrefix === FOREVER_NAMESPACE_ALIAS,
       armoryImportEnabled: await this.isArmoryImportEnabled(),
+      wowheadResolverEnabled: await isWowheadResolverEnabled(this.settings),
     };
   }
 
@@ -78,7 +83,8 @@ export class ForeverConfigService implements OnModuleInit {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message));
     }
-    const { namespacePrefix, armoryImportEnabled } = parsed.data;
+    const { namespacePrefix, armoryImportEnabled, wowheadResolverEnabled } =
+      parsed.data;
     await this.writeOrDelete(
       WOW_FOREVER_NAMESPACE_PREFIX_KEY,
       namespacePrefix === FOREVER_NAMESPACE_ALIAS ? null : namespacePrefix,
@@ -87,6 +93,9 @@ export class ForeverConfigService implements OnModuleInit {
       WOW_FOREVER_ARMORY_IMPORT_KEY,
       armoryImportEnabled ? 'true' : null,
     );
+    if (wowheadResolverEnabled !== undefined) {
+      await setWowheadResolverEnabled(this.settings, wowheadResolverEnabled);
+    }
     const payload: WowForeverConfigUpdatedPayload = { namespacePrefix };
     this.events.emit(WOW_FOREVER_CONFIG_UPDATED, payload);
     return this.getConfig();

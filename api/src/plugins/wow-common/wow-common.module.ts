@@ -31,6 +31,7 @@ import { AddonImportController } from './addon-import/addon-import.controller';
 import { AddonImportService } from './addon-import/addon-import.service';
 import { AddonImportCreateService } from './addon-import/addon-import-create.service';
 import { AddonImportAuditService } from './addon-import/addon-import.audit';
+import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule],
@@ -61,6 +62,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
     AddonImportService,
     AddonImportCreateService,
     AddonImportAuditService,
+    WowItemMetaService,
   ],
   exports: [
     BlizzardService,
@@ -68,6 +70,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
     BlizzardContentProvider,
     DungeonQuestsService,
     BossEncountersService,
+    WowItemMetaService,
   ],
 })
 export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
