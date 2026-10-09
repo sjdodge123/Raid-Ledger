@@ -25,7 +25,7 @@ export function getCellClasses(status?: string, hasEventOverlay?: boolean): stri
         case 'committed':
             return hasEventOverlay ? 'bg-overlay/30' : 'bg-blue-500/70';
         case 'blocked':
-            return 'bg-red-500/50';
+            return 'bg-danger/50';
         case 'freed':
             return 'bg-emerald-500/40 border border-dashed border-emerald-400';
         default:

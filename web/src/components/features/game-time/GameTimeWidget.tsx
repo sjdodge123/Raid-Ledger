@@ -112,16 +112,16 @@ function OverlapBadge({ hasOverlap }: { hasOverlap: boolean }) {
     if (hasOverlap) {
         return (
             <>
-                <svg className="w-4 h-4 text-emerald-400 shrink-0" style={{ filter: 'drop-shadow(0 0 4px rgba(52, 211, 153, 0.6))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-4 h-4 text-success shrink-0" style={{ filter: 'drop-shadow(0 0 4px rgba(52, 211, 153, 0.6))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Inside Game Time</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-success">Inside Game Time</span>
             </>
         );
     }
     return (
         <>
-            <svg className="w-4 h-4 text-amber-400 shrink-0" style={{ filter: 'drop-shadow(0 0 4px rgba(251, 191, 36, 0.5))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-4 h-4 text-warning shrink-0" style={{ filter: 'drop-shadow(0 0 4px rgba(251, 191, 36, 0.5))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <span className="text-xs font-semibold uppercase tracking-wide text-muted">Outside Game Time</span>
