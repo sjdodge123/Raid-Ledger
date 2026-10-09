@@ -27,10 +27,10 @@ function formatRelative(date: Date): string {
 
 function urgencyClasses(soon: boolean, expired: boolean): string {
   if (expired) {
-    return 'border-red-500/40 bg-red-500/10 text-red-300';
+    return 'border-danger/40 bg-danger/10 text-danger';
   }
   if (soon) {
-    return 'border-amber-500/40 bg-amber-500/10 text-amber-300';
+    return 'border-warning/40 bg-warning/10 text-warning';
   }
   return 'border-edge bg-panel/40 text-foreground';
 }
