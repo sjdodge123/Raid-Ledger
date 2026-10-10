@@ -31,13 +31,14 @@ const DISCORD_SE_ID = 'discord-se-77';
 
 /** A live scheduled-event projection, offsets in minutes from now. */
 function scheduledEvent(endInMin: number, extendedInMin: number | null) {
+  // One clock read: the skip-capped case needs extendedUntil and the cap
+  // (scheduledEnd + 6h) on the same base, or a ms tick flips it to `extend`.
+  const now = Date.now();
   return {
     id: 77,
     extendedUntil:
-      extendedInMin === null
-        ? null
-        : new Date(Date.now() + extendedInMin * MIN),
-    scheduledEnd: new Date(Date.now() + endInMin * MIN),
+      extendedInMin === null ? null : new Date(now + extendedInMin * MIN),
+    scheduledEnd: new Date(now + endInMin * MIN),
     matchedBy: 'game' as const,
     discordScheduledEventId: DISCORD_SE_ID,
   };
