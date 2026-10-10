@@ -59,6 +59,10 @@ export const RosterAssignmentResponseSchema = z.object({
         className: z.string().nullable(),
         role: z.string().nullable(),
         avatarUrl: z.string().nullable(),
+        /** ROK-1761: lets the web draw the Forever fallback portrait (additive, optional). */
+        race: z.string().max(50).nullable().optional(),
+        ruleset: z.string().nullable().optional(),
+        gameVariant: z.string().max(30).nullable().optional(),
     }).nullable(),
     /** ROK-452: Preferred roles the player is willing to play */
     preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).nullable().optional(),
