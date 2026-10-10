@@ -16,6 +16,8 @@ import {
   waitFor,
 } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
+import type { NoNetworkWowheadDeps } from '../../../common/testing/wowhead-no-network';
+import { WOWHEAD_RESOLVER_DEPS } from '../wowhead-item/wow-item-meta.resolve';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { AddonImportTx } from './addon-import-apply.types';
@@ -162,11 +164,17 @@ describe('addon import — char', () => {
     const token = await memberToken('anachar');
     const id = await createChar(token);
 
+    const wowhead = testApp.app.get<NoNetworkWowheadDeps>(
+      WOWHEAD_RESOLVER_DEPS,
+    );
+    wowhead.calls.length = 0;
+
     const preview = await post(token, id, fixture('char-normal'));
     expect(preview.status).toBe(200);
     expect(preview.body).toMatchObject({ section: 'char', status: 'preview' });
     expect(await rowCount(schema.characterAddonSnapshots)).toBe(0);
     expect((await charRow(id)).addonGuid).toBeNull();
+    expect(wowhead.calls).toEqual([]);
 
     const applied = await apply(token, id, fixture('char-normal'));
     expect(applied.status).toBe(200);
@@ -174,6 +182,18 @@ describe('addon import — char', () => {
     expect(applied.body.summary).toMatchObject({ gearCount: 2, lockouts: 1 });
     expect(await rowCount(schema.characterAddonSnapshots)).toBe(1);
     expect((await charRow(id)).addonGuid).toBe(FIXTURE_GUID);
+    // ROK-1727: the post-commit gear enqueue ran through the TestApp's
+    // no-network resolver (env 16 then env 4 miss per item) and settled
+    // before the next truncate — never a real nether.wowhead.com request.
+    await waitFor(async () => {
+      expect(await rowCount(schema.wowItemMeta)).toBe(2);
+    });
+    expect([...wowhead.calls].sort()).toEqual(
+      [19019, 16921]
+        .flatMap((i) => [4, 16].map((e) => `/item/${i}?dataEnv=${e}`))
+        .map((p) => `https://nether.wowhead.com/tooltip${p}`)
+        .sort(),
+    );
 
     const again = await apply(token, id, fixture('char-normal'));
     expect(again.body.status).toBe('noop');

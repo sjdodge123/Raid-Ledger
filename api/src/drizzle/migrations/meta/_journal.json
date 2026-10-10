@@ -1422,6 +1422,13 @@
       "when": 1791580973455,
       "tag": "0203_guild_member_seen_at",
       "breakpoints": true
+    },
+    {
+      "idx": 204,
+      "version": "7",
+      "when": 1791587337409,
+      "tag": "0204_wow_item_meta",
+      "breakpoints": true
     }
   ]
 }

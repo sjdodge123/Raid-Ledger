@@ -52,6 +52,8 @@ import {
   extractPortFromConnectionString,
 } from './socket-handle-audit';
 import { instrumentHttpServer, wrapAgentForSnapshot } from './socket-debug';
+import { WOWHEAD_RESOLVER_DEPS } from '../../plugins/wow-common/wowhead-item/wow-item-meta.resolve';
+import { noNetworkWowheadDeps } from './wowhead-no-network';
 // ROK-1264: `supertest-persistent-agent` is intentionally NOT wired here.
 // The helper + spec exist as ready-to-deploy machinery if a future targeted
 // investigation needs single-socket pinning, but applying it globally
@@ -228,6 +230,9 @@ async function buildNestApp(
     .useValue(db)
     .overrideProvider(REDIS_CLIENT)
     .useValue(redisMock.client)
+    // ROK-1727: no integration spec may call nether.wowhead.com.
+    .overrideProvider(WOWHEAD_RESOLVER_DEPS)
+    .useValue(noNetworkWowheadDeps())
     .compile();
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,

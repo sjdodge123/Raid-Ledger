@@ -28,6 +28,7 @@ import * as crudH from './characters-crud.helpers';
 import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
 import { defined } from '../common/defined.helpers';
+import { withDisplayEquipment } from './characters-display-equipment.helpers';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -284,7 +285,11 @@ export class CharactersService {
       .limit(1);
     if (!character)
       throw new NotFoundException(`Character ${characterId} not found`);
-    const dto = mapCharacterToDto(character);
+    const dto = await withDisplayEquipment(
+      mapCharacterToDto(character),
+      this.findCharacterSyncAdapter(character.gameVariant ?? undefined),
+      this.logger,
+    );
     const enrichmentRows =
       await this.enrichmentsService.getEnrichmentsForEntity(
         'character',
