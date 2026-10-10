@@ -278,7 +278,7 @@ describe('AC5 — GET /discord/threads/:threadId/messages', () => {
     expect(res.body.hasMore).toBe(false);
   });
 
-  it('403s a deactivated member holding a correct claim', async () => {
+  it('401s a deactivated member holding a correct claim (ROK-1753)', async () => {
     const { token, userId } = await createMemberAndLogin(
       testApp,
       'departed',
@@ -288,14 +288,16 @@ describe('AC5 — GET /discord/threads/:threadId/messages', () => {
     await seedForumThread(game.id, THREAD);
     await deactivateUser(testApp, userId);
 
-    // MUTATION: remove NotDeactivatedGuard from the controller's @UseGuards —
-    // this becomes a 200.
+    // ROK-1753: JwtStrategy rejects the deactivated session (401) before
+    // NotDeactivatedGuard (403) runs. MUTATION: drop the strategy's
+    // deactivated check — this becomes the guard's 403.
     const res = await getThread(
       token,
       THREAD,
       `surfaceKind=lfg-group&surfaceId=${game.id}`,
     );
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'USER_DEACTIVATED' });
   });
 
   it('400s a surface kind that is not in the enum and a limit over the max', async () => {
