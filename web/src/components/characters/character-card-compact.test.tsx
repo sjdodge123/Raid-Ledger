@@ -15,6 +15,12 @@ import type {
 } from '@raid-ledger/contract';
 import { CharacterCardCompact } from './character-card-compact';
 import { renderWithProviders } from '../../test/render-helpers';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
+import { usePluginStore } from '../../stores/plugin-store';
+
+vi.mock('../../hooks/use-game-registry', () => ({
+    useGameRegistry: () => ({ games: [{ id: 7, slug: 'world-of-warcraft-forever' }], isLoading: false, error: null }),
+}));
 
 vi.mock('../../plugins/wow/lib/profession-icons', () => ({
     getProfessionIconUrl: (slug: string | null | undefined) => {
@@ -123,5 +129,14 @@ describe('CharacterCardCompact — ProfessionBadges data flow', () => {
         expect(screen.queryByRole('img', { name: /tailoring/i })).toBeNull();
         expect(screen.queryByRole('img', { name: /cooking/i })).toBeNull();
         expect(screen.queryByRole('img', { name: /mining/i })).toBeNull();
+    });
+});
+
+describe('CharacterCardCompact — ROK-1751 Forever badge from the game slug', () => {
+    it('shows the Forever badge for a LedgerLink Forever character (null variant + ruleset)', () => {
+        activateWowPlugin();
+        renderWithProviders(<CharacterCardCompact character={makeCharacter({ gameId: 7, gameVariant: null, ruleset: null })} />);
+        expect(screen.getByText('Forever')).toBeInTheDocument();
+        usePluginStore.setState({ activeSlugs: new Set() });
     });
 });

@@ -70,6 +70,13 @@ describe('resolveWowVariant (D6)', () => {
         [{ gameVariant: 'retail' }, 'retail'],
         [{ gameVariant: null, ruleset: null }, null],
         [{}, null],
+        // ROK-1751: real LedgerLink exports carry ruleset null — the game slug decides.
+        [{ gameVariant: null, ruleset: null, gameSlug: 'world-of-warcraft-forever' }, 'wow_forever'],
+        [{ gameVariant: 'classic_era', ruleset: null, gameSlug: 'world-of-warcraft-forever' }, 'classic_era'],
+        [{ gameVariant: null, ruleset: 'pvp', gameSlug: 'world-of-warcraft-classic' }, 'wow_forever'],
+        [{ gameVariant: null, ruleset: null, gameSlug: 'world-of-warcraft-classic' }, null],
+        [{ gameVariant: null, ruleset: null, gameSlug: 'some-other-game' }, null],
+        [{ gameVariant: null, ruleset: null, gameSlug: null }, null],
     ])('%j → %j', (character, expected) => {
         expect(resolveWowVariant(character)).toBe(expected);
     });

@@ -81,15 +81,27 @@ export function getWowVariantIntegrations(variant: string | null | undefined): W
     return key ? WOW_VARIANT_INTEGRATIONS[key] : null;
 }
 
+/** The fields `resolveWowVariant` reads; all optional so any character-ish shape fits. */
+export interface WowVariantSource {
+    gameVariant?: string | null | undefined;
+    ruleset?: string | null | undefined;
+    /** The character's game slug (ROK-1751); the WoW: Forever game slug means Forever. */
+    gameSlug?: string | null | undefined;
+}
+
 /**
  * The effective variant of a character (D6). Manual WoW: Forever characters
  * (ROK-1721) are stored with `gameVariant: null` and a `ruleset`, so a
- * ruleset with no recognised variant means Forever.
+ * ruleset with no recognised variant means Forever. LedgerLink imports
+ * commonly carry `ruleset: null` too (ROK-1751), so the character's game slug
+ * is the last word — the same rule the API applies.
  */
-export function resolveWowVariant(character: { gameVariant?: string | null | undefined; ruleset?: string | null | undefined }): WowVariant | null {
+export function resolveWowVariant(character: WowVariantSource): WowVariant | null {
     const variant = normalizeWowVariant(character.gameVariant);
     if (variant) return variant;
-    return character.ruleset != null ? 'wow_forever' : null;
+    if (character.ruleset != null) return 'wow_forever';
+    const isForeverGame = !!character.gameSlug && slugToContentVariant(character.gameSlug) === 'wow_forever';
+    return isForeverGame ? 'wow_forever' : null;
 }
 
 /** Short card badge for a variant; null for retail and unknown variants. */
