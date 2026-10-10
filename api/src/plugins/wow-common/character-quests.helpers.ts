@@ -186,9 +186,7 @@ export function buildCharacterQuests(
   const completed = new Set(quests.completed);
   const completedKnown = buildGroups(knownQuests, completed, names);
   const lookup = new Map(knownQuests.map((q) => [q.questId, q]));
-  const inProgress = quests.inProgress.map((q) =>
-    toLogEntry(q, lookup, names),
-  );
+  const inProgress = quests.inProgress.map((q) => toLogEntry(q, lookup, names));
   return CharacterQuestsDtoSchema.parse({
     source: 'addon',
     syncedAt: snapshot.capturedAt,

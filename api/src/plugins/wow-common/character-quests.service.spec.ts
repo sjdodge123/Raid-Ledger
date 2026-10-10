@@ -101,6 +101,26 @@ describe('CharacterQuestsService.getForCharacter', () => {
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
   });
 
+  it('passes the quests slice, known rows and names into the builder', async () => {
+    loader.mockResolvedValue(snapshot({ gear: [], quests: QUESTS }));
+    const built = { marker: 'built' } as never;
+    builder.mockReturnValue(built);
+    const svc = new CharacterQuestsService(
+      makeDb([{ id: CHAR_ID }], [KNOWN_ROW]),
+    );
+    await expect(svc.getForCharacter(CHAR_ID)).resolves.toBe(built);
+    expect(loader).toHaveBeenCalledWith(expect.anything(), CHAR_ID);
+    expect(builder).toHaveBeenCalledWith(
+      { capturedAt: CAPTURED.toISOString(), quests: QUESTS },
+      [expect.objectContaining({ questId: 5001, dungeonInstanceId: 226 })],
+      instanceName,
+    );
+  });
+});
+
+describe('CharacterQuestsService.getForCharacter — malformed slice', () => {
+  beforeEach(() => jest.resetAllMocks());
+
   it.each([
     ['completed holds a string', { completed: [5001, 'x'], inProgress: [] }],
     [
@@ -119,21 +139,5 @@ describe('CharacterQuestsService.getForCharacter', () => {
     const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
     expect(builder).not.toHaveBeenCalled();
-  });
-
-  it('passes the quests slice, known rows and names into the builder', async () => {
-    loader.mockResolvedValue(snapshot({ gear: [], quests: QUESTS }));
-    const built = { marker: 'built' } as never;
-    builder.mockReturnValue(built);
-    const svc = new CharacterQuestsService(
-      makeDb([{ id: CHAR_ID }], [KNOWN_ROW]),
-    );
-    await expect(svc.getForCharacter(CHAR_ID)).resolves.toBe(built);
-    expect(loader).toHaveBeenCalledWith(expect.anything(), CHAR_ID);
-    expect(builder).toHaveBeenCalledWith(
-      { capturedAt: CAPTURED.toISOString(), quests: QUESTS },
-      [expect.objectContaining({ questId: 5001, dungeonInstanceId: 226 })],
-      instanceName,
-    );
   });
 });
