@@ -104,6 +104,8 @@ export * from './event-plans.schema.js';
 
 // Dungeon Quests (ROK-245)
 export * from './dungeon-quests.schema.js';
+// Character page quest tracking — WoW: Forever addon snapshot (ROK-1745)
+export * from './character-quests.schema.js';
 
 // Boss Encounters & Loot (ROK-244)
 export * from './boss-encounters.schema.js';

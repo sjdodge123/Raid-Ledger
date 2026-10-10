@@ -8,7 +8,6 @@
  * resolves snapshots imported before the resolver shipped).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterEquipmentDto } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -16,14 +15,12 @@ import * as schema from '../../drizzle/schema';
 import type { DisplayEquipmentRow } from '../plugin-host/extension-points';
 import { addonSnapshotToEquipment } from './addon-equipment.adapter';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
-import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
+import {
+  loadForeverCharSnapshot,
+  type CharSnapshot,
+} from './forever-char-snapshot.query';
 
 const FOREVER_VARIANT = 'wow_forever';
-
-type CharSnapshot = Pick<
-  schema.CharacterAddonSnapshotSelect,
-  'data' | 'capturedAt'
->;
 
 /** Gear item ids in a snapshot (entries without an itemId are skipped). */
 export function snapshotItemIds(snapshot: CharSnapshot): number[] {
@@ -58,7 +55,7 @@ export class ForeverDisplayEquipmentService {
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | undefined> {
     if (row.gameVariant && row.gameVariant !== FOREVER_VARIANT) return;
-    const snapshot = await this.loadCharSnapshot(row.id);
+    const snapshot = await loadForeverCharSnapshot(this.db, row.id);
     if (!snapshot || armoryIsNewer(row.equipment, snapshot.capturedAt)) {
       return undefined;
     }
@@ -68,27 +65,6 @@ export class ForeverDisplayEquipmentService {
       ids.filter((id) => !meta.has(id) || isDue(meta.get(id))),
     );
     return addonSnapshotToEquipment(snapshot, meta);
-  }
-
-  /** The `char` snapshot of a character on the Forever game, if any. */
-  private async loadCharSnapshot(
-    characterId: string,
-  ): Promise<CharSnapshot | undefined> {
-    const snap = schema.characterAddonSnapshots;
-    const [found] = await this.db
-      .select({ data: snap.data, capturedAt: snap.capturedAt })
-      .from(snap)
-      .innerJoin(schema.characters, eq(schema.characters.id, snap.characterId))
-      .innerJoin(schema.games, eq(schema.games.id, schema.characters.gameId))
-      .where(
-        and(
-          eq(snap.characterId, characterId),
-          eq(snap.section, 'char'),
-          eq(schema.games.slug, WOW_FOREVER_GAME_SLUG),
-        ),
-      )
-      .limit(1);
-    return found;
   }
 
   /** Fire-and-forget: never blocks or fails the read. */
