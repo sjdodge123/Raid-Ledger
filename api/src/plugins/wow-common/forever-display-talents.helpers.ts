@@ -3,7 +3,7 @@
  * snapshot nodes out of the raw jsonb and the D4 / origin sanity checks.
  */
 import {
-  TALENT_TREE_GAP,
+  clusterOrigins,
   type ForeverTalentNodeInput,
 } from './forever-talents.adapter';
 
@@ -63,11 +63,7 @@ export function storedTalentsAreNewer(
 
 /** Sub-tree origins of the positioned nodes (same gap rule as the adapter). */
 export function talentOrigins(nodes: ForeverTalentNodeInput[]): number[] {
-  const xs = nodes.flatMap((n) => (isNum(n.posX) ? [n.posX] : []));
-  const sorted = [...new Set(xs)].sort((a, b) => a - b);
-  return sorted.filter(
-    (x, i) => i === 0 || x - sorted[i - 1]! > TALENT_TREE_GAP,
-  );
+  return clusterOrigins(nodes.flatMap((n) => (isNum(n.posX) ? [n.posX] : [])));
 }
 
 /** True when positions exist and their origins differ from the known set. */

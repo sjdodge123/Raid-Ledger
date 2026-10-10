@@ -60,7 +60,7 @@ function copyNode(n: ForeverTalentNodeInput): ForeverTalentNodeDto {
 }
 
 /** Smallest posX of each sub-tree cluster, left → right. */
-function clusterOrigins(xs: number[]): number[] {
+export function clusterOrigins(xs: number[]): number[] {
   const sorted = [...new Set(xs)].sort((a, b) => a - b);
   return sorted.filter(
     (x, i) => i === 0 || x - sorted[i - 1]! > TALENT_TREE_GAP,
