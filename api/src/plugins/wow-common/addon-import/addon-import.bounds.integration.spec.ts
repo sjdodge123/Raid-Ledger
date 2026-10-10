@@ -191,7 +191,9 @@ describe('GUID squatting — option B (ROK-1756 finding 2)', () => {
       }),
     });
   });
+});
 
+describe('admin unlink — option B (ROK-1756 finding 2)', () => {
   it('admin unlink frees the GUID; the rightful owner then imports it', async () => {
     const squatter = await user('squatter');
     const squat = await applyNew(squatter.token, charString());
