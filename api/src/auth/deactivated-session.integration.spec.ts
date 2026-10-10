@@ -161,6 +161,59 @@ describe('ROK-1753 — POST /auth/refresh for a deactivated user', () => {
   });
 });
 
+describe('ROK-1753 — a banned (hence also deactivated) user keeps the ban path', () => {
+  /** Mirror banUserById + the ban orchestration: ban stamps BOTH columns,
+   *  drops the auth cache, then revokes every refresh family. */
+  async function banAndDeactivate(userId: number): Promise<void> {
+    await testApp.db
+      .update(schema.users)
+      .set({
+        bannedAt: new Date(),
+        banReason: 'griefing',
+        deactivatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId));
+    invalidateAuthUser(userId);
+    await testApp.app.get(RefreshTokenService).revokeAllForUser(userId);
+  }
+
+  it('refresh is the pre-ROK-1753 revoked-token 401, NOT USER_DEACTIVATED', async () => {
+    const user = await createMember('banned-refresh');
+    const raw = await issueRefresh(user.id);
+    await banAndDeactivate(user.id);
+
+    const res = await refresh(raw);
+
+    expect({
+      status: res.status,
+      code: res.body?.code,
+      message: res.body?.message,
+    }).toEqual({
+      status: 401,
+      code: undefined,
+      message: 'Invalid refresh token',
+    });
+  });
+
+  it('the access JWT gets the suspended reason, NOT USER_DEACTIVATED', async () => {
+    const user = await createMember('banned-bearer');
+    const token = bearer(user);
+    await banAndDeactivate(user.id);
+
+    const res = await hit(token, defined(GUARDED[2], 'me'));
+
+    expect({
+      status: res.status,
+      code: res.body?.code,
+      message: res.body?.message,
+    }).toEqual({
+      status: 401,
+      code: undefined,
+      message: 'Your account has been suspended: griefing',
+    });
+  });
+});
+
 describe('ROK-1764 — a bearer JWT without a numeric sub is a 401', () => {
   it('rejects a deferred-signup intent token presented as a bearer', async () => {
     const intent = testApp.app.get(IntentTokenService).generate(1, '123456');

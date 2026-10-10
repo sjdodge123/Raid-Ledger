@@ -76,8 +76,9 @@ export class RefreshTokenService {
    * vs unknown/expired (401 — caller throws). Returns the new token on
    * success, or null when the caller should reject with 401. Throws 409/503
    * (no revoke) for an in-window race beyond the one sibling / a Redis error.
-   * ROK-1753: a deactivated holder gets a 401 `USER_DEACTIVATED` BEFORE the
-   * consume, so nothing rotates or revokes and reactivation resumes the token.
+   * ROK-1753: a deactivated (not banned) holder gets a 401 `USER_DEACTIVATED`
+   * BEFORE the consume, so nothing rotates or revokes and reactivation
+   * resumes the token. A banned holder keeps the original ban behaviour.
    */
   async rotate(rawToken: string): Promise<IssuedRefreshToken | null> {
     const presentedHash = hashToken(rawToken);
@@ -127,15 +128,25 @@ export class RefreshTokenService {
 
   // ── internals ──────────────────────────────────────────────────────────
 
-  /** ROK-1753: does the presented token belong to a deactivated user? */
+  /**
+   * ROK-1753: does the presented token belong to a deactivated, NOT banned
+   * user? A ban also stamps `deactivatedAt`, so a banned holder falls through
+   * to the pre-ROK-1753 rotate path (same ban-first precedence as
+   * JwtStrategy). Runs for any hash, so a deactivated user's replayed
+   * consumed token skips reuse detection — harmless: deactivation already
+   * revoked every family, and detection resumes after reactivation.
+   */
   private async holderIsDeactivated(tokenHash: string): Promise<boolean> {
     const [row] = await this.db
-      .select({ deactivatedAt: schema.users.deactivatedAt })
+      .select({
+        deactivatedAt: schema.users.deactivatedAt,
+        bannedAt: schema.users.bannedAt,
+      })
       .from(schema.refreshTokens)
       .innerJoin(schema.users, eq(schema.users.id, schema.refreshTokens.userId))
       .where(eq(schema.refreshTokens.tokenHash, tokenHash))
       .limit(1);
-    return row?.deactivatedAt != null;
+    return row?.deactivatedAt != null && row.bannedAt == null;
   }
 
   /** Atomically consume the row if it is live; returns it or undefined. */
