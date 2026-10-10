@@ -43,6 +43,7 @@ import { buildTiebreakerDetail } from './tiebreaker-response.helpers';
 import {
   assertCallerMayTiebreak,
   assertMatchupVotable,
+  insertBracketVoteIfOpen,
 } from './tiebreaker-authz.helpers';
 import type { EligibilityCaller } from '../lineups-eligibility.helpers';
 import { findVetoes } from './tiebreaker-query.helpers';
@@ -193,11 +194,13 @@ export class TiebreakerService {
       throw new BadRequestException('No active tiebreaker');
     }
     await assertMatchupVotable(this.db, tb.id, dto.matchupId, dto.gameId);
-
-    await this.db
-      .insert(schema.communityLineupTiebreakerBracketVotes)
-      .values({ matchupId: dto.matchupId, userId, gameId: dto.gameId })
-      .onConflictDoNothing();
+    const { matchupId, gameId } = dto;
+    const vote = { tiebreakerId: tb.id, matchupId, userId, gameId };
+    if (!(await insertBracketVoteIfOpen(this.db, vote))) {
+      // Duplicate vote (no-op) or the round advanced after the pre-check:
+      // re-run the check so a now-closed matchup surfaces as a 400.
+      await assertMatchupVotable(this.db, tb.id, dto.matchupId, dto.gameId);
+    }
 
     // Check if current round is complete and auto-advance
     await this.checkAndAdvanceRound(tb, lineupId);
@@ -217,6 +220,9 @@ export class TiebreakerService {
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb || tb.status !== 'active') {
       throw new BadRequestException('No active tiebreaker');
+    }
+    if (tb.mode !== 'veto') {
+      throw new BadRequestException('Not a veto tiebreaker');
     }
 
     await submitVeto(this.db, tb, userId, dto.gameId);

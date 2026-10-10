@@ -8,7 +8,7 @@
  * reusing the private-lineup gate every other lineup write path runs.
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -69,4 +69,39 @@ export async function assertMatchupVotable(
   if (gameId !== matchup.gameAId && gameId !== matchup.gameBId) {
     throw new BadRequestException('Game is not in this matchup');
   }
+}
+
+export interface BracketVoteInput {
+  tiebreakerId: number;
+  matchupId: number;
+  userId: number;
+  gameId: number;
+}
+
+/**
+ * Insert a bracket vote ONLY while the matchup is still open (no winner, not
+ * a bye). `FOR UPDATE` locks the matchup row, so a concurrent round advance
+ * that sets `winner_game_id` either commits first (the re-checked WHERE then
+ * drops the row and nothing is written) or waits for this insert to finish.
+ * Returns false when nothing was written: matchup closed, or a duplicate vote.
+ */
+export async function insertBracketVoteIfOpen(
+  db: Db,
+  vote: BracketVoteInput,
+): Promise<boolean> {
+  const m = schema.communityLineupTiebreakerBracketMatchups;
+  const bv = schema.communityLineupTiebreakerBracketVotes;
+  const rows = await db.execute<{ id: number }>(sql`
+    INSERT INTO ${bv} (matchup_id, user_id, game_id)
+    SELECT ${m.id}, ${vote.userId}::int, ${vote.gameId}::int
+    FROM ${m}
+    WHERE ${m.id} = ${vote.matchupId}
+      AND ${m.tiebreakerId} = ${vote.tiebreakerId}
+      AND ${m.winnerGameId} IS NULL
+      AND ${m.isBye} = false
+    FOR UPDATE
+    ON CONFLICT DO NOTHING
+    RETURNING id
+  `);
+  return rows.length > 0;
 }
