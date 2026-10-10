@@ -140,3 +140,26 @@ describe('CharacterCardCompact — ROK-1751 Forever badge from the game slug', (
         usePluginStore.setState({ activeSlugs: new Set() });
     });
 });
+
+/** ROK-1761: event attendees pass flat props (no variant/ruleset) plus the event's game id. */
+describe('CharacterCardCompact — Forever portrait from portraitGameId (event attendees)', () => {
+    const flat = { id: 'c1', name: 'Fernwhisper', avatarUrl: null, race: 'Night Elf', className: 'Druid' };
+
+    it('a Forever event (registry slug) shows the tile instead of the placeholder', () => {
+        renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={7} />);
+        expect(screen.getByTestId('forever-portrait'), 'attendee card on a Forever event draws the tile').toHaveAttribute('aria-label', 'Fernwhisper');
+        expect(screen.getByTestId('forever-portrait-race').textContent).toBe('NE');
+    });
+
+    it('portraitGameId drives the portrait only — no Forever badge on the name row', () => {
+        activateWowPlugin();
+        renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={7} />);
+        expect(screen.queryByText('Forever'), 'variant badge unchanged for flat-props cards').toBeNull();
+        usePluginStore.setState({ activeSlugs: new Set() });
+    });
+
+    it('a non-Forever game id keeps the normal avatar', () => {
+        renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={99} />);
+        expect(screen.queryByTestId('forever-portrait')).toBeNull();
+    });
+});

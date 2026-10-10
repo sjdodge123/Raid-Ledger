@@ -35,6 +35,8 @@ interface CharacterCardCompactProps {
     professions?: CharacterProfessionsDto | null | undefined;
     /** Visual size variant: 'default' for standard, 'sm' for compact/onboarding. */
     size?: 'default' | 'sm';
+    /** ROK-1761: the event's game id, so a flat-props card (event attendees) can resolve the Forever portrait. Portrait only. */
+    portraitGameId?: number | null | undefined;
 }
 
 /**
@@ -50,6 +52,7 @@ interface ResolvedChar {
     level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
     spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
     isMain?: boolean | undefined; gameVariant: string | null; ruleset: string | null; gameId: number | null;
+    portraitGameId: number | null;
     professions?: CharacterProfessionsDto | null | undefined;
 }
 
@@ -63,6 +66,7 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
         role: c?.effectiveRole ?? props.role, itemLevel: c?.itemLevel ?? props.itemLevel,
         isMain: c?.isMain ?? props.isMain,
         gameVariant: c?.gameVariant ?? null, ruleset: c?.ruleset ?? null, gameId: c?.gameId ?? null,
+        portraitGameId: c?.gameId ?? props.portraitGameId ?? null,
         professions: c?.professions ?? props.professions ?? null,
     };
 }
@@ -120,7 +124,7 @@ export function CharacterCardCompact(props: CharacterCardCompactProps) {
     return (
         <Link to={`/characters/${c.charId}`}
             className={`bg-panel border border-edge rounded-lg ${isSm ? 'p-3' : 'p-4'} flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity`}>
-            <ForeverPortraitFallback size={isSm ? 'sm' : 'md'} character={{ name: c.charName, avatarUrl: c.avatarUrl, race: c.race, class: c.charClass, gameVariant: c.gameVariant, ruleset: c.ruleset, gameId: c.gameId }}>
+            <ForeverPortraitFallback size={isSm ? 'sm' : 'md'} character={{ name: c.charName, avatarUrl: c.avatarUrl, race: c.race, class: c.charClass, gameVariant: c.gameVariant, ruleset: c.ruleset, gameId: c.portraitGameId }}>
                 <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
             </ForeverPortraitFallback>
             <div className="min-w-0 overflow-hidden">

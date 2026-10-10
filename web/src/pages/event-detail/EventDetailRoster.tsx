@@ -112,7 +112,7 @@ function SignupEntry({ signup, event, showBadge }: {
             {signup.character && (
                 <CharacterCardCompact id={signup.character.id} name={signup.character.name} avatarUrl={signup.character.avatarUrl}
                     faction={signup.character.faction} level={signup.character.level} race={signup.character.race}
-                    className={signup.character.class} spec={signup.character.spec} role={signup.character.role} itemLevel={signup.character.itemLevel} />
+                    className={signup.character.class} spec={signup.character.spec} role={signup.character.role} itemLevel={signup.character.itemLevel} portraitGameId={event.game?.id} />
             )}
         </div>
     );
@@ -165,7 +165,7 @@ function ConfirmedGroup({ signups, event }: { signups: SignupItem[]; event: Even
                             <CharacterCardCompact id={s.character.id} name={s.character.name} avatarUrl={s.character.avatarUrl}
                                 faction={s.character.faction} level={s.character.level} race={s.character.race}
                                 className={s.character.class} spec={s.character.spec} role={s.character.role} itemLevel={s.character.itemLevel}
-                                professions={s.character.professions} />
+                                professions={s.character.professions} portraitGameId={event.game?.id} />
                         )}
                     </div>
                 ))}
