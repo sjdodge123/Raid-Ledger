@@ -1,0 +1,2 @@
+ALTER TABLE "community_lineups" ADD COLUMN "share_token" varchar(64);--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_community_lineups_share_token" ON "community_lineups" USING btree ("share_token") WHERE share_token IS NOT NULL;

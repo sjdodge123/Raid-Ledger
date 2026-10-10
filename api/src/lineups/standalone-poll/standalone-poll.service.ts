@@ -361,6 +361,8 @@ export class StandalonePollService {
       memberCount,
       status: 'scheduling',
       createdAt: new Date().toISOString(),
+      visibility: 'public',
+      shareToken: null,
     };
   }
 }
