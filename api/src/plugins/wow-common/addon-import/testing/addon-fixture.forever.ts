@@ -10,9 +10,11 @@ import { buildCharPayload, buildWho } from './addon-fixture.builder';
  * ROK-1742 fixture data for the additive Forever `char` fields. Synthetic
  * (CONTRACT.md §8) but beta-shaped: a level-8 Night Elf Warrior with real
  * game-data ids (node/entry/spell/quest ids are game data, not personal
- * data). Node 105926 → "Improved Intercept" and posX 6820 / posY 4530 come
- * from the addon's S3 probe; every other row/col/pos value is synthetic but
- * consistent with the 12-column × 7-tier rule in CONTRACT.md §3.
+ * data). Node 105926 → "Improved Intercept" comes from the addon's S3 probe.
+ * Positions sit on the known sub-tree origins (posX 1020 / 5020 / 9080,
+ * posY 2130) and every tree/row/col hint is what the CONTRACT.md §3 rule
+ * derives from THIS fixture's own posX/posY (ROK-1758: the golden file must
+ * agree with the published rule — `ledgerlink-contract.spec.ts` checks it).
  */
 const FOREVER_TALENT_NODES: readonly AddonTalentNode[] = [
   {
@@ -24,8 +26,8 @@ const FOREVER_TALENT_NODES: readonly AddonTalentNode[] = [
     maxRanks: 5,
     tree: 0,
     row: 0,
-    col: 1,
-    posX: 1980,
+    col: 0,
+    posX: 1020,
     posY: 2130,
   },
   {
@@ -37,9 +39,9 @@ const FOREVER_TALENT_NODES: readonly AddonTalentNode[] = [
     maxRanks: 2,
     tree: 1,
     row: 3,
-    col: 2,
-    posX: 6820,
-    posY: 4530,
+    col: 0,
+    posX: 5020,
+    posY: 3930,
   },
   {
     nodeId: 105940,
@@ -51,7 +53,7 @@ const FOREVER_TALENT_NODES: readonly AddonTalentNode[] = [
     tree: 1,
     row: 0,
     col: 2,
-    posX: 6820,
+    posX: 6220,
     posY: 2130,
   },
   {
@@ -63,8 +65,8 @@ const FOREVER_TALENT_NODES: readonly AddonTalentNode[] = [
     maxRanks: 5,
     tree: 2,
     row: 0,
-    col: 1,
-    posX: 8920,
+    col: 0,
+    posX: 9080,
     posY: 2130,
   },
 ];

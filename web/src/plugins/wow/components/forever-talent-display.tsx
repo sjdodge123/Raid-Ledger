@@ -3,6 +3,7 @@ import { getWowheadTalentCalcUrl } from '../lib/wowhead-urls';
 import { formatForeverRank } from '../lib/forever-talent-trees';
 import { ForeverTalentGrid } from './forever-talent-grid';
 import { TalentPillSection, WowheadCalcLink } from './talent-display';
+import { plural } from '../lib/plural';
 
 const PILL_CLASS = 'bg-overlay border border-edge text-foreground';
 
@@ -15,7 +16,7 @@ function sourceLine(syncedAt: string): string {
 function ForeverHeader({ points, syncedAt, href }: { points: number; syncedAt: string; href: string | null }) {
     return (
         <div className="flex flex-wrap items-center gap-3">
-            <span className="text-lg font-mono font-bold text-foreground">{points} points</span>
+            <span className="text-lg font-mono font-bold text-foreground">{plural(points, 'point')}</span>
             <span className="text-xs text-muted">{sourceLine(syncedAt)}</span>
             {href && <WowheadCalcLink href={href} />}
         </div>
@@ -26,13 +27,13 @@ function ForeverHeader({ points, syncedAt, href }: { points: number; syncedAt: s
 function ForeverTalentList({ talents, points }: { talents: ForeverTalentsDto; points: number }) {
     const ranked = talents.nodes.filter((n) => n.rank > 0);
     const named = ranked.filter((n) => n.name);
-    if (named.length === 0) return <p className="text-sm text-muted">{points} points in {ranked.length} talents</p>;
+    if (named.length === 0) return <p className="text-sm text-muted">{plural(points, 'point')} in {plural(ranked.length, 'talent')}</p>;
     const pills = named.map((n) => ({ name: `${n.name} ${formatForeverRank(n)}` }));
     const unnamed = ranked.length - named.length;
     return (
         <div className="space-y-2">
             <TalentPillSection label="Learned talents" talents={pills} pillClass={PILL_CLASS} />
-            {unnamed > 0 && <p className="text-xs text-muted">+{unnamed} unnamed talents</p>}
+            {unnamed > 0 && <p className="text-xs text-muted">+{plural(unnamed, 'unnamed talent')}</p>}
         </div>
     );
 }

@@ -1,4 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
+import { getTableColumns, sql, type SQL } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
@@ -31,6 +32,43 @@ interface DungeonQuestEntry {
   rewardType: string | null;
 }
 
+/** Every dataset field except the `questId` conflict key. */
+const REFRESHED_FIELDS = [
+  'dungeonInstanceId',
+  'name',
+  'questLevel',
+  'requiredLevel',
+  'expansion',
+  'questGiverNpc',
+  'questGiverZone',
+  'prevQuestId',
+  'nextQuestId',
+  'rewardsJson',
+  'objectives',
+  'classRestriction',
+  'raceRestriction',
+  'startsInsideDungeon',
+  'sharable',
+  'rewardXp',
+  'rewardGold',
+  'rewardType',
+] as const satisfies readonly Exclude<keyof DungeonQuestEntry, 'questId'>[];
+
+/**
+ * ROK-1758: `SET <col> = excluded.<col>` for every dataset field, so a
+ * corrected bundled JSON (e.g. a re-run Forever importer) reaches installs
+ * that already seeded. `id` and `created_at` are left alone.
+ */
+function buildRefreshSet(): Record<string, SQL> {
+  const columns = getTableColumns(wowClassicDungeonQuests);
+  return Object.fromEntries(
+    REFRESHED_FIELDS.map((key) => [
+      key,
+      sql`excluded.${sql.identifier(columns[key].name)}`,
+    ]),
+  );
+}
+
 /** ROK-1748: Forever rows (`expansion: 'forever'`), imported offline from Wowhead Forever. */
 const FOREVER_QUEST_FILE = 'forever-dungeon-quest-data.json';
 
@@ -55,8 +93,9 @@ export class DungeonQuestSeeder {
   ) {}
 
   /**
-   * Seed all dungeon quests from the bundled data file.
-   * Uses upsert (ON CONFLICT DO NOTHING) to be idempotent.
+   * Seed all dungeon quests from the bundled data files. Idempotent upsert
+   * keyed on questId: existing rows are refreshed from the JSON (ROK-1758),
+   * so `inserted` counts inserted + refreshed rows.
    */
   async seed(): Promise<{ inserted: number; total: number }> {
     const quests = [
@@ -64,13 +103,14 @@ export class DungeonQuestSeeder {
       ...(await readQuestFile(FOREVER_QUEST_FILE)),
     ];
     this.logger.log(`Seeding ${quests.length} dungeon quests...`);
+    const set = buildRefreshSet();
     let inserted = 0;
     for (let i = 0; i < quests.length; i += BATCH_SIZE) {
       const batch = quests.slice(i, i + BATCH_SIZE);
       const result = await this.db
         .insert(wowClassicDungeonQuests)
         .values(batch)
-        .onConflictDoNothing({ target: wowClassicDungeonQuests.questId })
+        .onConflictDoUpdate({ target: wowClassicDungeonQuests.questId, set })
         .returning({ id: wowClassicDungeonQuests.id });
       inserted += result.length;
     }
