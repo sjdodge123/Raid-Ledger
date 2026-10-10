@@ -46,7 +46,7 @@ function CharacterNameBadges({ character }: { character: CharacterDto }) {
                     {character.faction.charAt(0).toUpperCase() + character.faction.slice(1)}
                 </span>
             )}
-            <PluginSlot name="character-card:badges" context={{ gameVariant: character.gameVariant, ruleset: character.ruleset }} />
+            <PluginSlot name="character-card:badges" context={{ gameVariant: character.gameVariant, ruleset: character.ruleset, gameId: character.gameId }} />
         </div>
     );
 }
