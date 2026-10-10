@@ -33,6 +33,7 @@ function mapCoreFields(row: typeof schema.characters.$inferSelect) {
 function mapExtendedFields(row: typeof schema.characters.$inferSelect) {
   return {
     avatarUrl: row.avatarUrl,
+    addonLinked: row.addonGuid !== null,
     renderUrl: row.renderUrl ?? null,
     level: row.level,
     race: row.race,

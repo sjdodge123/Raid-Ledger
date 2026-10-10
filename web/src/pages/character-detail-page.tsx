@@ -152,7 +152,7 @@ function CharacterRoleBadge({ character, isOwner }: { character: { id: string; e
 
 /** Admin-only header actions (ROK-1756); a plugin filler self-filters, e.g. to addon-linked characters. */
 function CharacterAdminActions({ character }: { character: CharacterDto }) {
-    const addonLinked = (character as CharacterDto & { addonLinked?: boolean }).addonLinked;
+    const addonLinked = character.addonLinked;
     return (
         <div className="mt-3 flex flex-wrap items-center gap-2 empty:hidden">
             <PluginSlot name="character-detail:admin-actions" context={{ characterId: character.id, name: character.name, addonLinked }} />
