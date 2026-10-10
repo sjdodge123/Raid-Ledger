@@ -80,7 +80,7 @@ describe('CharacterQuestsService.getForCharacter', () => {
   });
 
   it('returns null when the character has no Forever snapshot', async () => {
-    loader.mockResolvedValue(undefined);
+    loader.mockResolvedValue(null);
     const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
     expect(builder).not.toHaveBeenCalled();
