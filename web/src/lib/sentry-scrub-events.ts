@@ -43,6 +43,24 @@ export function scrubTransactionEvent<T extends ScrubbableTransaction>(event: T)
     return event;
 }
 
+interface ScrubbableError {
+    transaction?: string;
+    request?: { url?: string };
+    contexts?: { trace?: { data?: unknown } };
+}
+
+/**
+ * beforeSend (error events). ROK-1750: browserTracing sets the scope's
+ * transaction name from `location.pathname`, so an error raised on
+ * `/p/poll/<t>` carries the share token in `transaction` (and the trace data).
+ */
+export function scrubErrorEvent<T extends ScrubbableError>(event: T): T {
+    if (event.transaction) event.transaction = scrubTokenFromUrl(event.transaction);
+    if (event.request?.url) event.request.url = scrubTokenFromUrl(event.request.url);
+    scrubStringValues(event.contexts?.trace?.data);
+    return event;
+}
+
 /**
  * Replay beforeAddRecordingEvent: a custom (type-5) event's payload
  * (performanceSpan / breadcrumb description, message, data). Replay passes

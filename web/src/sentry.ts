@@ -11,8 +11,9 @@
  */
 import './lib/magic-link-capture';
 import * as Sentry from '@sentry/react';
-import { scrubBreadcrumb, scrubTokenFromUrl } from './lib/sentry-scrub';
+import { scrubBreadcrumb } from './lib/sentry-scrub';
 import {
+    scrubErrorEvent,
     scrubRecordingEvent,
     scrubReplayEventUrls,
     scrubTransactionEvent,
@@ -60,14 +61,12 @@ if (!telemetryDisabled) {
             ) {
                 return null;
             }
-            // ROK-1366 backstop: scrub a `token=` from the error event's
-            // request.url. This covers request.url only. The join page's
-            // intent `?token=` stays in the address bar, so it still reaches
-            // the Replay Meta href (TECH-DEBT-BACKLOG.md, 2026-09-27).
-            if (event.request?.url) {
-                event.request.url = scrubTokenFromUrl(event.request.url);
-            }
-            return event;
+            // ROK-1366 backstop + ROK-1750: scrub a `token=` / poll share
+            // token from the error event's request.url, transaction name and
+            // trace data. The join page's intent `?token=` stays in the
+            // address bar, so it still reaches the Replay Meta href
+            // (TECH-DEBT-BACKLOG.md, 2026-09-27).
+            return scrubErrorEvent(event);
         },
         beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
         initialScope: {

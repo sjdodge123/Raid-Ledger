@@ -25,6 +25,7 @@ const PAGE_SCRUBBED = 'https://rl.test/events/42#token=[Filtered]';
 
 type Hook = (event: unknown) => unknown;
 interface InitConfig {
+    beforeSend?: Hook;
     beforeSendTransaction?: Hook;
     integrations: { name?: string; processEvent?: Hook }[];
 }
@@ -131,5 +132,23 @@ describe('ROK-1366: replay_event urls are scrubbed by an event processor', () =>
         } as unknown);
         expectNoSecret(out);
         expect((out as { urls: string[] }).urls[0]).toBe('https://rl.test/events/42');
+    });
+});
+
+describe('ROK-1750: beforeSend scrubs the poll share token from error events', () => {
+    // browserTracing names the pageload/navigation after location.pathname and
+    // sets it as the scope's transaction name, so an error raised on the
+    // share page carries the path token in event.transaction.
+    const SHARE_TOKEN = 'Abc_def-0123456789ABCDEFGHIJKLMNOPQRSTUVWXY';
+
+    it('scrubs event.transaction and trace data on an error event', () => {
+        const hook = config.beforeSend ?? identity;
+        const out = hook({
+            exception: { values: [{ type: 'TypeError', value: 'boom' }] },
+            transaction: `/p/poll/${SHARE_TOKEN}`,
+            contexts: { trace: { data: { 'url.full': `https://rl.test/p/poll/${SHARE_TOKEN}` } } },
+        }) as { transaction: string };
+        expect(JSON.stringify(out)).not.toContain(SHARE_TOKEN);
+        expect(out.transaction).toBe('/p/poll/[Filtered]');
     });
 });
