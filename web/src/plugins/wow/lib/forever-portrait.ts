@@ -9,18 +9,6 @@
 import type { WowVariant } from './wow-era';
 import { getClassIconUrl } from './class-icons';
 
-/**
- * Races the tile labels. A race outside this list (a new Forever race such as
- * Skyborne) degrades to the class icon alone rather than guessing a label.
- */
-export const WOW_KNOWN_RACES: ReadonlySet<string> = new Set([
-    'Human', 'Dwarf', 'Night Elf', 'Gnome', 'Draenei', 'Worgen', 'Pandaren',
-    'Orc', 'Undead', 'Tauren', 'Troll', 'Blood Elf', 'Goblin',
-    'Void Elf', 'Lightforged Draenei', 'Dark Iron Dwarf', 'Kul Tiran', 'Mechagnome',
-    'Nightborne', 'Highmountain Tauren', "Mag'har Orc", 'Zandalari Troll', 'Vulpera',
-    'Dracthyr', 'Earthen',
-]);
-
 /** What a character's avatar slot shows. `none` = the surface's existing avatar. */
 export type ForeverPortrait =
     | { kind: 'none' }
@@ -37,9 +25,19 @@ export interface ForeverPortraitInput {
     name: string;
 }
 
-/** "Night Elf" → "NE", "Human" → "H". */
+/**
+ * Up to two initials for ANY race string — no allowlist, because the addon
+ * import stores unknown race names verbatim (Skyborne). Splits on whitespace
+ * and camelCase: "Night Elf" → "NE", "NightElf" → "NE", "Skyborne" → "S".
+ */
 export function raceInitials(race: string): string {
-    return race.split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase()).join('').slice(0, 2);
+    return race
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase())
+        .join('')
+        .slice(0, 2);
 }
 
 /** Picks the Forever fallback; non-Forever characters and any character with a render get `none`. */
@@ -48,7 +46,10 @@ export function selectForeverPortrait(input: ForeverPortraitInput): ForeverPortr
     const race = input.race?.trim() ?? '';
     const cls = input.characterClass?.trim() ?? '';
     const classIconUrl = getClassIconUrl(cls);
-    if (!classIconUrl) return { kind: 'neutral', label: input.name };
-    if (!WOW_KNOWN_RACES.has(race)) return { kind: 'class-only', classIconUrl, label: cls };
-    return { kind: 'tile', classIconUrl, raceInitial: raceInitials(race), label: `${race} ${cls}` };
+    // Label = the character name, like every other character avatar (`alt={name}`).
+    const label = input.name;
+    if (!classIconUrl) return { kind: 'neutral', label };
+    const raceInitial = raceInitials(race);
+    if (!raceInitial) return { kind: 'class-only', classIconUrl, label };
+    return { kind: 'tile', classIconUrl, raceInitial, label };
 }

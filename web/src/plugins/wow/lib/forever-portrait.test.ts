@@ -13,17 +13,22 @@ describe('selectForeverPortrait (ROK-1761)', () => {
 
     it('returns the class + race tile when both are known', () => {
         expect(selectForeverPortrait({ variant: forever, race: 'Night Elf', characterClass: 'Mage', name: 'Ayla' }))
-            .toEqual({ kind: 'tile', classIconUrl: MAGE_ICON, raceInitial: 'NE', label: 'Night Elf Mage' });
+            .toEqual({ kind: 'tile', classIconUrl: MAGE_ICON, raceInitial: 'NE', label: 'Ayla' });
     });
 
     it('returns the class icon alone when the race is null', () => {
         expect(selectForeverPortrait({ variant: forever, race: null, characterClass: 'Mage', name: 'Ayla' }))
-            .toEqual({ kind: 'class-only', classIconUrl: MAGE_ICON, label: 'Mage' });
+            .toEqual({ kind: 'class-only', classIconUrl: MAGE_ICON, label: 'Ayla' });
     });
 
-    it('returns the class icon alone for a race it does not know (Skyborne)', () => {
-        expect(selectForeverPortrait({ variant: forever, race: 'Skyborne', characterClass: 'Mage', name: 'Ayla' }).kind)
-            .toBe('class-only');
+    it('returns the class icon alone when the race is empty or whitespace', () => {
+        expect(selectForeverPortrait({ variant: forever, race: '', characterClass: 'Mage', name: 'Ayla' }).kind).toBe('class-only');
+        expect(selectForeverPortrait({ variant: forever, race: '   ', characterClass: 'Mage', name: 'Ayla' }).kind).toBe('class-only');
+    });
+
+    it('labels any race the addon stored verbatim — Skyborne gets initial "S"', () => {
+        expect(selectForeverPortrait({ variant: forever, race: 'Skyborne', characterClass: 'Mage', name: 'Ayla' }))
+            .toEqual({ kind: 'tile', classIconUrl: MAGE_ICON, raceInitial: 'S', label: 'Ayla' });
     });
 
     it('returns the neutral glyph when the class is null or unknown', () => {
@@ -48,5 +53,14 @@ describe('selectForeverPortrait (ROK-1761)', () => {
     it('builds race initials from each word', () => {
         expect(raceInitials('Human')).toBe('H');
         expect(raceInitials('Blood Elf')).toBe('BE');
+        expect(raceInitials('Night Elf')).toBe('NE');
+        expect(raceInitials('Skyborne')).toBe('S');
+    });
+
+    it('splits camelCase race names and caps at two letters', () => {
+        expect(raceInitials('NightElf')).toBe('NE');
+        expect(raceInitials('HighmountainTauren')).toBe('HT');
+        expect(raceInitials('Dark Iron Dwarf')).toBe('DI');
+        expect(raceInitials('  ')).toBe('');
     });
 });
