@@ -22,7 +22,7 @@ const RUNNING_STEPS = new Set([
 export interface OllamaSetupState {
   running: boolean;
   step: string;
-  error?: string;
+  error?: string | undefined;
 }
 
 /**
@@ -87,7 +87,7 @@ export class OllamaSetupService implements OnModuleInit {
     return {
       running,
       step: step ?? '',
-      ...(error != null ? { error } : {}),
+      error: error ?? undefined,
     };
   }
 
