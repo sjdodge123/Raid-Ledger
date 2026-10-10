@@ -2,8 +2,8 @@
  * ROK-1763: the top-level boundary's fallback must show the "new version"
  * state for WebKit's failed-import error, not the generic crash screen.
  */
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ErrorFallback } from './ErrorFallback';
 
 describe('ErrorFallback', () => {
@@ -22,5 +22,27 @@ describe('ErrorFallback', () => {
         render(<ErrorFallback error={new Error('boom')} />);
         expect(screen.getByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
         expect(screen.getByText('boom')).toBeInTheDocument();
+    });
+
+    describe('Reload Page button', () => {
+        const originalLocation = window.location;
+        afterEach(() => {
+            Object.defineProperty(window, 'location', { configurable: true, writable: true, value: originalLocation });
+            sessionStorage.clear();
+        });
+
+        it('reloads once and keeps the auto-reload stamp so the reloaded page cannot loop', () => {
+            const reload = vi.fn();
+            Object.defineProperty(window, 'location', {
+                configurable: true,
+                writable: true,
+                value: { ...originalLocation, reload },
+            });
+            sessionStorage.setItem('chunk-reload-attempted', '1791659000000');
+            render(<ErrorFallback error={new TypeError('Importing a module script failed.')} />);
+            fireEvent.click(screen.getByRole('button', { name: 'Reload Page' }));
+            expect(reload).toHaveBeenCalledTimes(1);
+            expect(sessionStorage.getItem('chunk-reload-attempted')).toBe('1791659000000');
+        });
     });
 });
