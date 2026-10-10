@@ -3,12 +3,14 @@ import {
     fetchEnrichedQuests,
     fetchQuestProgress,
     fetchQuestCoverage,
+    fetchEventQuestPrereqs,
     updateQuestProgress,
 } from '../api-client';
 import type {
     EnrichedDungeonQuestDto,
     QuestProgressDto,
     QuestCoverageEntry,
+    EventQuestPrereqsResponse,
 } from '@raid-ledger/contract';
 
 /**
@@ -74,9 +76,25 @@ export function useQuestCoverage(eventId: number | undefined) {
     });
 }
 
+/** Only WoW: Forever events carry per-character pre-req state (ROK-1748 AC6). */
+const FOREVER_GAME_SLUG = 'world-of-warcraft-forever';
+
+/**
+ * Fetch the viewer's pre-req chain state for an event (ROK-1748 D11).
+ * Enabled only for WoW: Forever events — Classic events never request it.
+ */
+export function useQuestPrereqs(eventId: number | undefined, gameSlug: string | undefined) {
+    return useQuery<EventQuestPrereqsResponse>({
+        queryKey: ['quest-prereqs', eventId],
+        queryFn: () => fetchEventQuestPrereqs(eventId!),
+        enabled: !!eventId && gameSlug === FOREVER_GAME_SLUG,
+        staleTime: 1000 * 30,
+    });
+}
+
 /**
  * Mutation to update quest progress for the current user.
- * Invalidates both progress and coverage queries on success.
+ * Invalidates progress + coverage on success and the viewer's pre-req state on settle.
  */
 export function useUpdateQuestProgress(eventId: number | undefined) {
     const queryClient = useQueryClient();
@@ -90,6 +108,9 @@ export function useUpdateQuestProgress(eventId: number | undefined) {
         },
         onError: (error: Error) => {
             console.error('[QuestProgress] Update failed:', error.message);
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey: ['quest-prereqs', eventId] });
         },
     });
 }
