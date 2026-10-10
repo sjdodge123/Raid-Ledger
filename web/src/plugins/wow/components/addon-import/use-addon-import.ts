@@ -11,7 +11,7 @@
  * route Add Character uses — same dry-run/apply split, plus the resolved
  * `target` in the result and an optional picked `ruleset` in the request.
  */
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
     AddonImportErrorBodySchema,
     AddonImportNewResultSchema,
@@ -25,6 +25,7 @@ import {
     type WowForeverSelectableRuleset,
 } from '@raid-ledger/contract';
 import { fetchWithAuth } from '../../../../lib/api/fetch-api';
+import { resetUnresolvedEquipmentPoll } from '../../../../hooks/unresolved-equipment-poll';
 
 export type AddonImportConfirm = NonNullable<AddonImportRequestInput['confirm']>;
 
@@ -114,7 +115,10 @@ export function useAddonImportApply(characterId: string) {
     const queryClient = useQueryClient();
     return useMutation<AddonImportResultDto, AddonImportRequestError, AddonImportVariables>({
         mutationFn: (vars) => postAddonImport(characterId, requestBody(vars, false)),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['characters', characterId] }),
+        onSuccess: () => {
+            resetUnresolvedEquipmentPoll(characterId);
+            return queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+        },
     });
 }
 
@@ -134,10 +138,17 @@ export function useAddonImportNewApply() {
     const queryClient = useQueryClient();
     return useMutation<AddonImportNewResultDto, AddonImportRequestError, AddonImportNewVariables>({
         mutationFn: (vars) => postAddonImportNew(newRequestBody(vars, false)),
-        onSuccess: () => Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['me', 'characters'] }),
-            queryClient.invalidateQueries({ queryKey: ['characters'] }),
-            queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
-        ]),
+        onSuccess: () => {
+            resetUnresolvedEquipmentPoll();
+            return refreshAfterCreate(queryClient);
+        },
     });
+}
+
+function refreshAfterCreate(queryClient: QueryClient) {
+    return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['me', 'characters'] }),
+        queryClient.invalidateQueries({ queryKey: ['characters'] }),
+        queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
+    ]);
 }
