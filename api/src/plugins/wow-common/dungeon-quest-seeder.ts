@@ -31,6 +31,14 @@ interface DungeonQuestEntry {
   rewardType: string | null;
 }
 
+/** ROK-1748: Forever rows (`expansion: 'forever'`), imported offline from Wowhead Forever. */
+const FOREVER_QUEST_FILE = 'forever-dungeon-quest-data.json';
+
+async function readQuestFile(file: string): Promise<DungeonQuestEntry[]> {
+  const raw = await readFile(join(__dirname, 'data', file), 'utf-8');
+  return JSON.parse(raw) as DungeonQuestEntry[];
+}
+
 /**
  * Seeds the wow_classic_dungeon_quests table from the bundled JSON snapshot.
  * Called on plugin install; data dropped on plugin uninstall.
@@ -51,10 +59,10 @@ export class DungeonQuestSeeder {
    * Uses upsert (ON CONFLICT DO NOTHING) to be idempotent.
    */
   async seed(): Promise<{ inserted: number; total: number }> {
-    const dataPath = join(__dirname, 'data', 'dungeon-quest-data.json');
-    const quests = JSON.parse(
-      await readFile(dataPath, 'utf-8'),
-    ) as DungeonQuestEntry[];
+    const quests = [
+      ...(await readQuestFile('dungeon-quest-data.json')),
+      ...(await readQuestFile(FOREVER_QUEST_FILE)),
+    ];
     this.logger.log(`Seeding ${quests.length} dungeon quests...`);
     let inserted = 0;
     for (let i = 0; i < quests.length; i += BATCH_SIZE) {

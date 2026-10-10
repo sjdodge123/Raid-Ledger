@@ -20,6 +20,7 @@ import {
   buildItemDetailsMap,
   collectAllItemIds,
 } from './dungeon-quests.helpers';
+import { resolveQuestInstanceIds } from './forever-instance-aliases';
 import type {
   DungeonQuestDto,
   EnrichedDungeonQuestDto,
@@ -64,8 +65,7 @@ export class DungeonQuestsService {
     variant: string = 'classic_era',
   ): Promise<DungeonQuestDto[]> {
     const expansions = this.getExpansionsForVariant(variant);
-    const instanceIds = [instanceId];
-    if (instanceId > 10000) instanceIds.push(Math.floor(instanceId / 100));
+    const instanceIds = resolveQuestInstanceIds(instanceId);
 
     const rows = await this.db
       .select()
