@@ -37,7 +37,10 @@ const quests = [
     createQuest({ questId: 5, name: 'Shared Errand' }),
     createQuest({
         questId: 20, name: 'Chain Finale', prevQuestId: 10, sharable: false,
-        prerequisiteChain: [{ questId: 10, name: 'Chain Start' }, { questId: 20, name: 'Chain Finale' }],
+        prerequisiteChain: [
+            createQuest({ questId: 10, name: 'Chain Start', nextQuestId: 20, sharable: false }),
+            createQuest({ questId: 20, name: 'Chain Finale', prevQuestId: 10, sharable: false }),
+        ],
     }),
 ];
 
