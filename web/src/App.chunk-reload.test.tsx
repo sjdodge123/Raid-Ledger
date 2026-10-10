@@ -82,7 +82,11 @@ describe('stale-chunk reload guard across a reload', () => {
         // The reloaded page: App mounts first, then the route's import fails again.
         render(<App />);
         renderFailingRoute();
-        expect(await screen.findByText(`caught: ${WEBKIT_ERROR}`)).toBeInTheDocument();
+        // Settle on whichever happens: a second reload (the bug) or the boundary.
+        await vi.waitFor(() =>
+            expect(reload.mock.calls.length > 1 || screen.queryByText(/caught:/) !== null).toBe(true),
+        );
         expect(reload).toHaveBeenCalledTimes(1);
+        expect(screen.getByText(`caught: ${WEBKIT_ERROR}`)).toBeInTheDocument();
     });
 });
