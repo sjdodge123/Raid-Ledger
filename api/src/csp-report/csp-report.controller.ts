@@ -9,8 +9,9 @@ import {
 import * as Sentry from '@sentry/nestjs';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { isCloudflareBeaconCspReport } from './csp-report-noise.helpers';
+import { CSP_REPORT_ROUTE } from './csp-report.constants';
 
-@Controller('csp-report')
+@Controller(CSP_REPORT_ROUTE)
 @RateLimit('public')
 export class CspReportController {
   private readonly logger = new Logger(CspReportController.name);

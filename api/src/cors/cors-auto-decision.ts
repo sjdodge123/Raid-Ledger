@@ -6,10 +6,18 @@
  * not compared (nginx strips them, `monolith.conf.template:74`). Callers must
  * pass the raw `Host` header — never `req.hostname` / X-Forwarded-Host.
  */
+import { CSP_REPORT_ROUTE } from '../csp-report/csp-report.constants';
+
 export type CorsAutoMode = 'report' | 'enforce';
 
-/** The ONE constant the enforcement follow-up flips (after AC0). */
-export const DEFAULT_CORS_AUTO_MODE: CorsAutoMode = 'report';
+/**
+ * Unset/blank `CORS_AUTO_MODE`. Flipped report → enforce after AC0 (prod logs
+ * 2026-10-06..09: Host survives the proxy). Rollback: CORS_AUTO_MODE=report.
+ */
+export const DEFAULT_CORS_AUTO_MODE: CorsAutoMode = 'enforce';
+
+/** Path Node sees for CSP reports (nginx strips the `/api` prefix). */
+export const CSP_REPORT_PATH = `/${CSP_REPORT_ROUTE}`;
 
 export const DEV_LOCALHOST_ORIGINS: readonly string[] = [
   'http://localhost',
@@ -49,6 +57,17 @@ export function parseCorsAutoMode(
       'is not valid (use "report" or "enforce"); falling back to "report".',
   );
   return 'report';
+}
+
+/**
+ * True only for `POST /csp-report` (exact path). Browsers send CSP reports
+ * with `Origin: null` by spec (Reporting API / report-uri), so the same-origin
+ * check would reject every one (AC0: the only would-rejects in prod). Safe to
+ * exempt: the endpoint reads no cookies/JWT, has no guard, and only logs the
+ * body; the policy also withholds any CORS grant for it.
+ */
+export function isCspReportRequest(method: string, path: string): boolean {
+  return method === 'POST' && path === CSP_REPORT_PATH;
 }
 
 /** Lower-cased hostname of an http(s) Origin; null for `null`/garbage. */
